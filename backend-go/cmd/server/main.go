@@ -18,7 +18,10 @@ import (
 func main() {
 	log.Println("Starting Muebles Backend Server...")
 
-	cfg := config.LoadConfig()
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Invalid configuration, refusing to start: %v", err)
+	}
 
 	// Inicializar Base de Datos
 	store, err := storage.NewPostgresStore(cfg.DatabaseURL)
@@ -27,19 +30,23 @@ func main() {
 	}
 	defer store.Close()
 
-	// Crear usuario admin si no existe
-	store.EnsureAdminExists(context.Background())
+	// NOTE: the admin account is no longer provisioned at boot (seed removed).
+	// Create or rotate it with the dedicated CLI:
+	//   go run ./cmd/admin create --email <email>
+	//   go run ./cmd/admin reset-password --email <email>
 
 	// Crear Server API
-	serverAPI := api.NewServer(store, cfg.JWTSecret)
+	serverAPI := api.NewServer(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst)
 	handler := api.RegisterRoutes(serverAPI)
 
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:            ":" + cfg.Port,
+		Handler:         handler,
+		ReadTimeout:     10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:    10 * time.Second,
+		IdleTimeout:     120 * time.Second,
+		MaxHeaderBytes:  1 << 20, // 1 MiB
 	}
 
 	// Ejecución asíncrona del servidor
