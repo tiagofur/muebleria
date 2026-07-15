@@ -20,6 +20,52 @@ cotización con grupos de opciones y export directo al optimizador de corte.
 | Export | SheetJS / ExcelJS (`packages/excel`) |
 | Storage | JSON local atómico (`packages/storage`) |
 | Tests | Vitest |
+| Backend | Go 1.25 + Postgres (`backend-go/`) — Etapa 2 |
+
+---
+
+## Backend Go (Etapa 2)
+
+Servicio HTTP en `backend-go/` con Postgres para multi-usuario y paridad de
+cálculo. La lógica de dominio se está migrando a Go (`internal/domain`).
+
+### Variables de entorno (obligatorias en producción)
+
+Ver `.env.example` para la lista completa. Para desarrollo local:
+
+```bash
+cp .env.example .env.local
+# edita .env.local: JWT_SECRET="$(openssl rand -base64 48)"
+cd backend-go && ./dev.sh     # sourcea ../.env.local y arranca el server
+```
+
+`dev.sh` carga `.env.local` (raíz del repo) y soporta subcomandos:
+`serve` (default) | `build` | `admin reset-password --email …` | `test`.
+Vite (frontend) carga `.env.local` solo al hacer `pnpm dev`, exponiendo
+`VITE_API_BASE` a `session.ts`.
+
+Destacados:
+
+| Variable | Requerida | Notas |
+|----------|-----------|-------|
+| `JWT_SECRET` | **Sí** | ≥ 32 bytes. El server **se niega a arrancar** si falta o es muy corto. Generar con `openssl rand -base64 48`. |
+| `DATABASE_URL` | Recomendada | Default apunta al Postgres local de docker-compose (:5445). |
+| `CORS_ALLOWED_ORIGINS` | Recomendada | Allowlist separada por comas. Default: origins de dev de Vite. **Nunca `*` en prod.** |
+| `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | Opcional | Limita `/api/auth/login` y `/register` por IP. |
+| `VITE_API_BASE` | Opcional | Sobreescribe el API base del frontend (default `http://localhost:8080/api`). |
+
+### Cuenta admin
+
+El backend **ya no crea el admin al arrancar** (el seed con credencial hardcodeada
+fue removido). Provisioná o rotá la cuenta con el CLI dedicado:
+
+```bash
+cd backend-go
+./dev.sh admin create         --email admin@mitaller.com
+./dev.sh admin reset-password --email admin@mitaller.com
+```
+
+La contraseña se pide interactivamente (sin eco); en CI usa `ADMIN_PASSWORD`.
 
 ---
 
