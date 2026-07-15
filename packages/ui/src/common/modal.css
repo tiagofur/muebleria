@@ -1,0 +1,159 @@
+/**
+ * Modal — design.md §4.3
+ * Overlay + dialog panel. Tokens only. Open/close: scale + opacity.
+ */
+
+.ui-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+.ui-modal__overlay {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--surface-overlay);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.ui-modal {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(90vh, 100%);
+  margin: 0;
+  padding: 0;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-sans);
+  opacity: 0;
+  transform: scale(0.96);
+  overflow: hidden;
+}
+
+.ui-modal--sm {
+  max-width: 480px;
+}
+
+.ui-modal--md {
+  max-width: 680px;
+}
+
+.ui-modal--lg {
+  max-width: 900px;
+}
+
+/* Open / close motion (design.md §3.6) */
+@media (prefers-reduced-motion: no-preference) {
+  .ui-modal__overlay {
+    transition: opacity var(--duration-slow) var(--ease-out);
+  }
+
+  .ui-modal {
+    transition:
+      opacity var(--duration-slow) var(--ease-out),
+      transform var(--duration-slow) var(--ease-out);
+  }
+}
+
+.ui-modal-root.is-open .ui-modal__overlay {
+  opacity: 1;
+}
+
+.ui-modal-root.is-open .ui-modal {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ui-modal-root.is-closing .ui-modal__overlay {
+  opacity: 0;
+}
+
+.ui-modal-root.is-closing .ui-modal {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.ui-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+}
+
+.ui-modal__title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+.ui-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ui-modal__close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ui-modal__close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.ui-modal__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-5);
+  min-height: 0;
+}
+
+.ui-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+}

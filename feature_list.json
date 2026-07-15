@@ -1,0 +1,527 @@
+{
+  "project": "muebles",
+  "description": "Sistema de cotización y producción de muebles. Web (React) + Desktop (Electron) compartiendo dominio TypeScript en monorepo pnpm.",
+  "rules": {
+    "one_feature_at_a_time": true,
+    "require_tests_to_close": true,
+    "valid_status": [
+      "pending",
+      "in_progress",
+      "done",
+      "blocked"
+    ]
+  },
+  "features": [
+    {
+      "id": "F001",
+      "phase": 1,
+      "name": "scaffold_monorepo",
+      "title": "Scaffold monorepo TypeScript",
+      "description": "Inicializar la estructura de paquetes: pnpm workspaces, tsconfig base, packages/domain, packages/ui, packages/excel, packages/storage, apps/web, apps/desktop. Sin implementación — solo estructura y configuración.",
+      "acceptance": [
+        "Existe pnpm-workspace.yaml con los workspaces correctos",
+        "Existe tsconfig.base.json con strict: true y paths de paquetes",
+        "Cada package tiene su package.json con name @muebles/<pkg>",
+        "pnpm install termina sin errores",
+        "pnpm build (o tsc --noEmit) en todos los packages termina sin errores de config"
+      ],
+      "references": [
+        "docs/architecture.md",
+        "docs/prd.md §11"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F002",
+      "phase": 1,
+      "name": "domain_entities",
+      "title": "Entidades del dominio (tipos TypeScript)",
+      "description": "Definir todos los tipos e interfaces del dominio en packages/domain/src/types.ts: MaterialBoard, EdgeBand, Hardware, OptionGroup, Module, BoardPart, HardwareLine, Project, ProjectItem. Sin lógica aún.",
+      "acceptance": [
+        "Existen todos los tipos del §7.1 del PRD",
+        "Los tipos son inmutables (readonly donde aplica)",
+        "tsc --noEmit pasa sin errores en packages/domain",
+        "Test de compilación: importar y construir objetos de ejemplo"
+      ],
+      "references": [
+        "docs/prd.md §7.1",
+        "docs/conventions.md"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F003",
+      "phase": 1,
+      "name": "domain_engine",
+      "title": "Motor de dominio: resolución BOM + costos",
+      "description": "Implementar en packages/domain/src/engine.ts: (1) resolveBom(module, optionChoices, catalog) → ResolvedBom, (2) calcLineCost(resolvedPart, catalog) → costos de línea, (3) calcProjectBreakdown(project, modules, catalog) → QuoteBreakdown. Incluye validaciones (VAL-01 a VAL-07 del PRD).",
+      "acceptance": [
+        "resolveBom asigna material correcto por optionRole",
+        "Lanza error descriptivo si falta choice en grupo required",
+        "calcLineCost: areaM2, edgeMl, boardCost, edgeCost, hardwareCost correctos",
+        "calcProjectBreakdown: directCost, salePrice según fórmulas PRD §13",
+        "Golden test: MOD-GAB-01 + MOD-CAJ-01 con datos de plantilla → totales coinciden",
+        "pnpm --filter @muebles/domain test pasa al 100%"
+      ],
+      "references": [
+        "docs/prd.md §13",
+        "docs/verification.md",
+        "Plantilla_Muebles.xlsx"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F004",
+      "phase": 1,
+      "name": "excel_optimizer_export",
+      "title": "Export Optimizer XLSX",
+      "description": "Implementar packages/excel/src/optimizerExport.ts: toma ProductionCutRow[] y genera el .xlsx con las columnas A–J exactas de Plantilla_Optimizer.xlsx. Solo piezas de tablero, sin herrajes.",
+      "acceptance": [
+        "Columnas A–J en el orden correcto (Cantidad, Largo, Ancho, Descripcion, Materia Prima, veta, L1, L2, W1, W2)",
+        "Herrajes ausentes del output (EXP-05 del PRD)",
+        "qty_pieza × qty_proyecto aplicado (EXP-02)",
+        "Orden determinista por módulo, luego part code (EXP-04)",
+        "Test de fixture: export de MOD-GAB-01 × 1 → comparar con fixture JSON/XLSX esperado",
+        "El archivo resultante abre en Excel/LibreOffice sin error"
+      ],
+      "references": [
+        "docs/prd.md §14",
+        "Plantilla_Optimizer.xlsx"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F005",
+      "phase": 1,
+      "name": "storage_layer",
+      "title": "Capa de persistencia JSON versionada",
+      "description": "Implementar packages/storage/src/workspace.ts: load/save del workspace completo (catálogos + módulos + proyectos) con escritura atómica y campo schemaVersion para migraciones futuras.",
+      "acceptance": [
+        "save() es atómico: escribe a .tmp y rename (PER-01, NFR-03)",
+        "load() devuelve workspace vacío con semilla si el archivo no existe",
+        "schemaVersion presente en el JSON guardado (NFR-10)",
+        "Test unitario con tempdir real (no mocks de fs)",
+        "Datos semilla incluyen MOD-GAB-01, MOD-CAJ-01 y catálogos de plantilla"
+      ],
+      "references": [
+        "docs/prd.md §9.6, §10 NFR-03 NFR-10",
+        "docs/conventions.md"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F006",
+      "phase": 2,
+      "name": "ui_catalogs",
+      "title": "UI — Catálogos (materiales, cantos, herrajes)",
+      "description": "Pantallas ABM para MaterialBoard, EdgeBand, Hardware en packages/ui. Tabla + formulario. Soft-delete / desactivar (CAT-05). Validación de código único (CAT-04).",
+      "acceptance": [
+        "CRUD completo para los 3 catálogos (CAT-01 a CAT-06)",
+        "Soft-delete: ítems inactivos ocultos en pickers por defecto",
+        "Validación de código único en el cliente",
+        "Datos semilla visibles al abrir la app por primera vez"
+      ],
+      "references": [
+        "docs/prd.md §9.1",
+        "docs/prd.md §12"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F007",
+      "phase": 2,
+      "name": "ui_option_groups",
+      "title": "UI — Grupos de opciones",
+      "description": "Pantalla para gestionar OptionGroups: crear/editar grupos (code, name, kind, required) y asignar miembros filtrados por kind. Semilla: Interiores, Frentes, Bisagras, Correderas.",
+      "acceptance": [
+        "CRUD de grupos (OPT-01)",
+        "Picker de miembros filtrado por kind correcto (OPT-02)",
+        "Grupos semilla presentes (OPT-03)",
+        "Grupo requerido sin elección bloquea preview de precio (OPT-05)"
+      ],
+      "references": [
+        "docs/prd.md §9.1b"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F008",
+      "phase": 2,
+      "name": "ui_module_editor",
+      "title": "UI — Editor de mueble (módulo plantilla)",
+      "description": "Pantalla para crear/editar Module: piezas de tablero con optionRole, herrajes con optionRole, dimensiones externas opcionales. Preview de costo con defaults de opción.",
+      "acceptance": [
+        "CRUD de módulos (MOD-01 a MOD-04)",
+        "Picker de optionRole muestra solo los grupos disponibles",
+        "Preview de costo calculado con motor de dominio (MOD-06)",
+        "MOD-GAB-01 y MOD-CAJ-01 en datos semilla con roles correctos (MOD-07)"
+      ],
+      "references": [
+        "docs/prd.md §9.2",
+        "docs/prd.md §12"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F009",
+      "phase": 2,
+      "name": "ui_quotation",
+      "title": "UI — Cotización y proyectos",
+      "description": "Pantallas de lista de proyectos y editor de cotización: agregar muebles × cantidad, pickers de opciones por grupo, totales en vivo. Validaciones antes de exportar.",
+      "acceptance": [
+        "CRUD de proyectos (PRJ-01 a PRJ-03)",
+        "Picker de opciones muestra solo el grupo correcto (OPT-04, PRJ-03)",
+        "Totales actualizados en vivo al cambiar opciones (PRJ-06, UX-03)",
+        "Dos ítems del mismo mueble con distintas opciones permitidos (PRJ-10)",
+        "Cambio de opción recalcula sin tocar el módulo maestro (PRJ-09)"
+      ],
+      "references": [
+        "docs/prd.md §9.3",
+        "docs/prd.md §12"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F010",
+      "phase": 2,
+      "name": "ui_export",
+      "title": "UI — Export Optimizer desde interfaz",
+      "description": "Botón de exportar en la pantalla de cotización. Web: descarga del .xlsx (EXP-07). Desktop: diálogo de guardar archivo Electron (EXP-06). Bloqueo con lista de errores si validación falla.",
+      "acceptance": [
+        "Export funciona en web (browser download) y desktop (Electron dialog)",
+        "Si hay errores de validación, se muestra lista accionable (módulo, pieza, campo)",
+        "Export bloqueado si faltan opciones requeridas (VAL-01 a VAL-07, EXP-05)"
+      ],
+      "references": [
+        "docs/prd.md §9.4 §9.5",
+        "docs/prd.md §8.3"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F011",
+      "phase": 2,
+      "name": "seed_data",
+      "title": "Datos semilla completos (MOD-GAB-01, MOD-CAJ-01, catálogos)",
+      "description": "Poblar el workspace semilla con todos los datos de Plantilla_Muebles.xlsx: materiales (Arauco, Maderado, MDF), cantos, herrajes demo, grupos de opciones con miembros, MOD-GAB-01 y MOD-CAJ-01 con roles correctos.",
+      "acceptance": [
+        "App nueva abre con datos semilla sin error (CAT-06, OPT-03, MOD-07)",
+        "Una cotización de MOD-GAB-01 × 1 con choices de plantilla reproduce el precio de la plantilla Excel",
+        "Export de esa cotización produce el Optimizer.xlsx esperado"
+      ],
+      "references": [
+        "docs/prd.md §5",
+        "Plantilla_Muebles.xlsx",
+        "Plantilla_Optimizer.xlsx"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F012",
+      "phase": 3,
+      "name": "quote_snapshot",
+      "title": "Snapshot de cotización (congelar precios al cerrar)",
+      "description": "Al cambiar estado de proyecto a 'quoted'/'accepted', guardar snapshot de precios unitarios usados. Proyectos cerrados no recalculan aunque cambien los catálogos.",
+      "acceptance": [
+        "Proyectos draft recalculan con catálogo actual",
+        "Proyectos closed conservan precios del momento del cierre",
+        "Escenario B del PRD reproducible sin Excel"
+      ],
+      "references": [
+        "docs/prd.md §7.4 §6.2"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F013",
+      "phase": 3,
+      "name": "hardware_list_export",
+      "title": "Export lista de herrajes",
+      "description": "Generar CSV/XLSX con herrajes agregados del proyecto (hardware code, description, qty total, costo).",
+      "acceptance": [
+        "Lista generada con qty × ítem de proyecto correctas (EXP-08)",
+        "Formato usable directamente para compras"
+      ],
+      "references": [
+        "docs/prd.md §9.5 EXP-08"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F014",
+      "phase": 3,
+      "name": "waste_percent",
+      "title": "Merma % por material",
+      "description": "Campo wastePercent en MaterialBoard. Motor aplica (1 + waste/100) al calcular boardCost. MVP = 0% por defecto.",
+      "acceptance": [
+        "Campo editable en UI de catálogo de materiales",
+        "boardCost = areaM2 × costPerM2 × (1 + waste/100)",
+        "Test unitario con waste 10% reproducible"
+      ],
+      "references": [
+        "docs/prd.md §7.4 §13.2"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F015",
+      "phase": 3,
+      "name": "duplicate_module_project",
+      "title": "Duplicar módulo / proyecto",
+      "description": "Acción 'Duplicar' en editor de mueble y en lista de proyectos. Copia profunda con nuevo code/nombre sugerido.",
+      "acceptance": [
+        "Duplicar módulo crea copia con code sugerido (ej. MOD-GAB-01-COPY) (MOD-05)",
+        "Duplicar proyecto crea copia en draft con todos los ítems y opciones",
+        "El módulo original no se modifica"
+      ],
+      "references": [
+        "docs/prd.md §9.2 MOD-05"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F016",
+      "phase": 4,
+      "name": "ui_design_system",
+      "title": "UI — Design system: tokens, reset, Inter, Lucide",
+      "description": "Establecer el design system base según docs/design.md. Crear packages/ui/src/design-system/tokens.css con todas las variables CSS (colores HSL, tipografía Inter, sombras, spacing, radios, animaciones). Crear reset.css. Instalar lucide-react en @muebles/ui. Actualizar app.css del shell web. No romper ninguna feature existente.",
+      "acceptance": [
+        "Existe packages/ui/src/design-system/tokens.css con variables --brand-*, --surface-*, --text-*, --shadow-*, --space-*, --radius-*, --duration-*, --ease-*",
+        "Existe packages/ui/src/design-system/reset.css importado globalmente",
+        "Inter cargada desde Google Fonts en apps/web/index.html",
+        "lucide-react instalado en packages/ui/package.json",
+        "La app visual no regresiona: todos los tests siguen verdes",
+        "Los colores genéricos (#1a73e8, #f0f2f5, system-ui) eliminados de app.css y reemplazados por tokens"
+      ],
+      "references": [
+        "docs/design.md §3.1 §3.2 §3.3 §3.4 §3.5 §3.6 §3.7"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F017",
+      "phase": 4,
+      "name": "ui_layout_sidebar",
+      "title": "UI — Layout: sidebar + top bar (reemplaza tabs)",
+      "description": "Crear AppShell con sidebar lateral (240px, fondo oscuro --surface-sidebar) y top bar (56px). El sidebar agrupa: TRABAJO (Home, Cotizaciones, Muebles) y CONFIG (Materiales, Cantos, Herrajes, Grupos de opciones). Cada ítem del sidebar tiene su icono Lucide correspondiente. El ítem activo muestra borde izquierdo --brand-400. El sidebar es colapsable en mobile (<900px) con hamburger menu. Eliminar la navegación por tabs del App.tsx.",
+      "acceptance": [
+        "El layout usa sidebar izquierdo + content area, no tabs horizontales",
+        "El sidebar tiene dos secciones: TRABAJO y CONFIG con iconos Lucide",
+        "El ítem activo tiene borde izquierdo de color brand visible",
+        "En viewport <900px el sidebar colapsa y hay botón hamburger",
+        "La navegación entre secciones funciona igual que antes",
+        "pnpm --filter @muebles/web test pasa sin errores"
+      ],
+      "references": [
+        "docs/design.md §4.1",
+        "docs/design.md §3.7"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F018",
+      "phase": 4,
+      "name": "ui_modal_component",
+      "title": "UI — Componente Modal reutilizable",
+      "description": "Crear packages/ui/src/common/Modal.tsx: overlay con backdrop (--surface-overlay), animación scale-up, header sticky con título y botón X, body scrollable, footer sticky con slot para acciones. Tres tamaños: sm (480px), md (680px), lg (900px). Focus trap: Tab no sale del modal. Cierre con Esc y click en overlay. Accesible: role=dialog, aria-modal, aria-labelledby.",
+      "acceptance": [
+        "El Modal renderiza con animación de apertura (scale + opacity) y cierre",
+        "Esc cierra el modal",
+        "Click en el overlay/backdrop cierra el modal",
+        "Tab y Shift+Tab quedan atrapados dentro del modal (focus trap)",
+        "El body del documento no hace scroll mientras el modal está abierto",
+        "Los tres tamaños sm/md/lg funcionan",
+        "aria-modal y aria-labelledby correctamente asignados"
+      ],
+      "references": [
+        "docs/design.md §4.3"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F019",
+      "phase": 4,
+      "name": "ui_toast_system",
+      "title": "UI — Sistema de toasts / notificaciones",
+      "description": "Crear packages/ui/src/common/Toast.tsx y ToastProvider con contexto React. Los toasts aparecen en top-right, se apilan (máx 3), tienen auto-dismiss a 4s con progress bar, y tipos: success (verde), info (azul), warning (ámbar). Exportar hook useToast() para usar desde cualquier componente. Integrar en App.tsx para disparar toasts después de crear/editar/desactivar/exportar.",
+      "acceptance": [
+        "useToast().toast({ type, message }) muestra el toast en top-right",
+        "Los toasts se auto-descartan a los 4s",
+        "Máximo 3 toasts simultáneos (el más antiguo sale)",
+        "Los 4 tipos (success, info, warning, error) tienen colores correctos según tokens",
+        "La animación de entrada y salida funciona",
+        "Crear un material muestra toast 'Creado correctamente'",
+        "Exportar Optimizer muestra toast de success o los errores quedan inline"
+      ],
+      "references": [
+        "docs/design.md §4.4"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F020",
+      "phase": 4,
+      "name": "ui_catalogs_modal_list",
+      "title": "UI — Catálogos refactorizados: lista + búsqueda + modal",
+      "description": "Refactorizar MaterialsCatalog, EdgesCatalog, HardwareCatalog y OptionGroupsScreen para seguir el patrón: lista (tabla con hover actions) + SearchInput + filtros de status (chips Todos/Activos/Inactivos) + EmptyState + modal SM para crear/editar. Eliminar el formulario siempre visible al costado. El click en una row expande un detail panel inline con toda la info. Los botones Editar/Desactivar/Reactivar abren modal o actúan directamente.",
+      "acceptance": [
+        "Ningún catálogo muestra el form inline permanente al lado de la tabla",
+        "SearchInput filtra resultados en tiempo real con debounce 150ms",
+        "Los chips Todos/Activos/Inactivos reemplazan el checkbox 'mostrar inactivos'",
+        "Crear material/canto/herraje/grupo abre modal SM",
+        "Editar abre modal SM con datos precargados",
+        "EmptyState con icono Lucide y CTA aparece cuando no hay ítems",
+        "Hover en row revela botones de acción (sin columna permanente de acciones)",
+        "Todos los tests existentes de helpers siguen verdes"
+      ],
+      "references": [
+        "docs/design.md §4.2 §4.5 §4.6 §5.3"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F021",
+      "phase": 4,
+      "name": "ui_modules_cards_detail",
+      "title": "UI — Muebles: cards + vista detalle + modal editor",
+      "description": "Rediseñar ModulesScreen para usar cards en lugar de tabla (cada card muestra código, nombre, nº piezas, nº herrajes, costo estimado con preview de dominio). Click en card va a vista detalle (page completa o panel expandido) que muestra todas las piezas y herrajes en modo read-only. Botón 'Editar' en el detalle abre modal LG con el editor actual. Botón '+ Nuevo mueble' en header abre modal LG con form vacío.",
+      "acceptance": [
+        "La lista de módulos usa cards, no tabla",
+        "Cada card muestra: código (monospace), nombre, nº piezas de tablero, nº herrajes, costo estimado",
+        "Click en card → vista detalle con piezas y herrajes en modo lectura",
+        "Botón 'Editar' en detalle → modal LG con editor completo",
+        "Botón '+ Nuevo mueble' → modal LG con form vacío",
+        "El preview de costo sigue calculándose vía motor de dominio en el shell",
+        "EmptyState cuando no hay módulos"
+      ],
+      "references": [
+        "docs/design.md §6.3",
+        "docs/design.md §4.2"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F022",
+      "phase": 4,
+      "name": "ui_projects_cards_detail",
+      "title": "UI — Cotizaciones: cards ricas + detalle de proyecto + modales",
+      "description": "Rediseñar ProjectsScreen: lista de proyectos como cards ricas (nombre, cliente, status badge coloreado, nº ítems, precio total, fecha). Click en card → página de detalle completa con header (nombre+cliente+status+acciones), sección de ítems (cada mueble como card con opciones y precio parcial), panel de totales (sticky o prominente), botón exportar. 'Editar metadatos' abre modal MD. 'Agregar mueble' abre modal MD. Eliminar pide confirmación inline.",
+      "acceptance": [
+        "Lista de proyectos usa cards, no tabla",
+        "Cada card muestra: nombre, cliente, badge de status con color correcto, nº muebles, precio total, fecha de actualización",
+        "Click en card → página detalle de cotización (no reemplaza lista, sino navega a ella)",
+        "Botón '+ Nuevo proyecto' → modal MD con metadatos",
+        "Botón 'Editar proyecto' en detalle → modal MD",
+        "Botón '+ Agregar mueble' en detalle → modal MD con picker de módulo, cantidad y opciones",
+        "Panel de totales visible en la página de detalle (precios calculados vía dominio)",
+        "Botón exportar prominente con estado disabled + mensaje cuando hay errores de validación",
+        "EmptyState cuando no hay proyectos",
+        "Todos los tests de projectHelpers siguen verdes"
+      ],
+      "references": [
+        "docs/design.md §6.2",
+        "docs/design.md §4.2 §4.3 §5.2"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F023",
+      "phase": 4,
+      "name": "ui_dashboard",
+      "title": "UI — Dashboard / Home (pantalla de inicio)",
+      "description": "Crear packages/ui/src/dashboard/Dashboard.tsx como pantalla inicial de la app. Contenido: (1) fila de stat cards — Proyectos activos (draft+quoted), Total cotizado del mes (suma de sale prices), Módulos en catálogo, Materiales activos; (2) sección 'Cotizaciones recientes' — últimos 5 proyectos como mini-cards clicables; (3) acciones rápidas — botones '+ Nueva cotización', '+ Nuevo mueble'. La app abre aquí en lugar de en Materiales.",
+      "acceptance": [
+        "La app abre en el Dashboard, no en Materiales",
+        "Los 4 stat cards muestran números correctos derivados del workspace",
+        "Las cotizaciones recientes son los últimos 5 proyectos ordenados por updatedAt",
+        "Click en una cotización reciente navega al detalle del proyecto",
+        "Los botones de acciones rápidas navegan a la sección correcta o abren modal de creación",
+        "El Dashboard se actualiza en tiempo real cuando cambian los datos (reactivo al workspace state)",
+        "Responsive: en mobile los stat cards van en 2 columnas"
+      ],
+      "references": [
+        "docs/design.md §6.1",
+        "docs/design.md §5.1"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F024",
+      "phase": 5,
+      "name": "go_backend_postgres",
+      "title": "Backend Go + Postgres, Auth y Gestión de Clientes",
+      "description": "Implementar backend completo en Go con soporte Postgres (tablas relacionales, migraciones). Añadir autenticación JWT de usuarios, registro CRUD de clientes, rediseño de tableros (medidas físicas y merma) y motor de cotización Go.",
+      "acceptance": [
+        "El backend en Go conecta exitosamente con Postgres y levanta en puerto 8080",
+        "Endpoints de login y signup emiten/validan JWT con bcrypt",
+        "El motor de cálculo financiero en Go coincide exactamente con el dominio TypeScript",
+        "Soporte en frontend para LoginScreen, CustomersScreen y selector de cliente en cotizaciones",
+        "Adaptador APIWorkspaceRepository para sincronización HTTP"
+      ],
+      "references": [
+        "docs/technical_design.md",
+        "docs/architecture.md"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F025",
+      "phase": 6,
+      "name": "module_hierarchical_categories",
+      "title": "Categorización Jerárquica de Muebles (3 Niveles)",
+      "description": "Implementar un sistema dinámico de categorías y subcategorías configurables por el usuario (máximo 3 niveles). Incluye soporte Postgres, endpoints de la API en Go, adaptación de storage e interfaz de administración jerárquica con filtros en cascada al buscar y agregar muebles.",
+      "acceptance": [
+        "El usuario puede crear, editar y organizar categorías de hasta 3 niveles",
+        "El backend en Go valida la profundidad máxima de 3 niveles al crear o reubicar categorías",
+        "ModulesScreen muestra un panel de filtrado por árbol de categorías y selector en cascada",
+        "El modal para agregar muebles a cotizaciones permite filtrar por la jerarquía configurada",
+        "Se mantiene compatibilidad para muebles existentes sin clasificar"
+      ],
+      "references": [
+        "docs/technical_design.md",
+        "docs/architecture.md"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F026",
+      "phase": 6,
+      "name": "auth_register_admin_approval",
+      "title": "Registro con aprobación admin y roles",
+      "description": "Flujo de registro (pending) + aprobación por admin. Roles en backend: admin, user (y vendedor/diseñador/carpintero). Admin seed tiagofur@gmail.com. UI: RegisterScreen + UsersScreen (solo admin).",
+      "acceptance": [
+        "POST /api/auth/register crea usuario role=user active=false",
+        "Login de cuenta pendiente devuelve 403 con mensaje claro",
+        "Admin puede listar, aprobar, cambiar rol y rechazar usuarios pendientes",
+        "Admin seed existe (tiagofur@gmail.com) con role=admin active=true",
+        "LoginScreen enlaza a RegisterScreen; tras registro muestra mensaje de éxito",
+        "UsersScreen visible solo para role=admin en el shell autenticado",
+        "Roles soportados: admin, user, vendedor, disenador, carpintero"
+      ],
+      "references": [
+        "docs/technical_design.md",
+        "docs/design.md §6.6"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F027",
+      "phase": 3,
+      "name": "material_default_edge_band",
+      "title": "Cintilla default por id en material + alta rápida",
+      "description": "MaterialBoard.defaultEdgeBandId (FK) reemplaza el match por nombre. Resolver de cantos: EDGE override → defaultEdgeBandId. UI de materiales: selector de cintilla + botón Crear cintilla (crea EdgeBand y vincula).",
+      "acceptance": [
+        "MaterialBoard.defaultEdgeBandId opcional en domain + seed plantilla con links por id",
+        "resolveEdgeBandId usa defaultEdgeBandId; nunca name === material.name",
+        "ABM material: select de edges activos + botón Crear cintilla que crea y vincula",
+        "API mapper snake_case default_edge_band_id",
+        "Migración PG default_edge_band_id + storage Go CRUD"
+      ],
+      "references": [
+        "docs/prd.md §7.1",
+        "docs/prd.md §13.5"
+      ],
+      "status": "done"
+    }
+  ]
+}

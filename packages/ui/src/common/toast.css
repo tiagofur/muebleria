@@ -1,0 +1,204 @@
+/**
+ * Toasts — design.md §4.4
+ * Top-right stack, max 3, progress bar, type colors from tokens.
+ */
+
+.ui-toast-viewport {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: min(24rem, calc(100vw - var(--space-8)));
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.ui-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 16rem;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  padding-bottom: calc(var(--space-3) + 3px);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  overflow: hidden;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateX(0.75rem);
+}
+
+/* —— Type accents (tokens §3.2 semantic) —— */
+.ui-toast--success {
+  border-color: var(--success-500);
+  background: var(--success-50);
+}
+
+.ui-toast--success .ui-toast__icon {
+  color: var(--success-700);
+}
+
+.ui-toast--info {
+  border-color: var(--info-500);
+  background: var(--info-50);
+}
+
+.ui-toast--info .ui-toast__icon {
+  color: var(--info-700);
+}
+
+.ui-toast--warning {
+  border-color: var(--warning-500);
+  background: var(--warning-50);
+}
+
+.ui-toast--warning .ui-toast__icon {
+  color: var(--warning-700);
+}
+
+.ui-toast--error {
+  border-color: var(--danger-500);
+  background: var(--danger-50);
+}
+
+.ui-toast--error .ui-toast__icon {
+  color: var(--danger-700);
+}
+
+.ui-toast__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--text-secondary);
+}
+
+.ui-toast__message {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.ui-toast__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  margin-top: -2px;
+  margin-right: calc(var(--space-1) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ui-toast__close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ui-toast__close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Progress bar — shrinks over TOAST_DURATION_MS */
+.ui-toast__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  transform-origin: left center;
+  background: currentColor;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.ui-toast--success .ui-toast__progress {
+  color: var(--success-500);
+}
+
+.ui-toast--info .ui-toast__progress {
+  color: var(--info-500);
+}
+
+.ui-toast--warning .ui-toast__progress {
+  color: var(--warning-500);
+}
+
+.ui-toast--error .ui-toast__progress {
+  color: var(--danger-500);
+}
+
+/* —— Motion (§3.6) —— */
+@media (prefers-reduced-motion: no-preference) {
+  .ui-toast {
+    transition:
+      opacity var(--duration-normal) var(--ease-out),
+      transform var(--duration-normal) var(--ease-out);
+  }
+
+  .ui-toast.is-visible .ui-toast__progress {
+    animation-name: ui-toast-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+}
+
+.ui-toast.is-enter {
+  opacity: 0;
+  transform: translateX(0.75rem);
+}
+
+.ui-toast.is-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.ui-toast.is-exit {
+  opacity: 0;
+  transform: translateX(0.75rem);
+}
+
+@keyframes ui-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast.is-enter,
+  .ui-toast.is-visible,
+  .ui-toast.is-exit {
+    opacity: 1;
+    transform: none;
+  }
+
+  .ui-toast__progress {
+    display: none;
+  }
+}

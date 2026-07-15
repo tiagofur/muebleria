@@ -1,0 +1,42 @@
+/* StatusChips — design.md §4.6 */
+
+.ui-status-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+
+.ui-status-chips__chip {
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ui-status-chips__chip:hover {
+  color: var(--text-primary);
+  background: var(--surface-card);
+}
+
+.ui-status-chips__chip.is-selected {
+  background: var(--surface-card);
+  color: var(--text-brand);
+  border-color: var(--border-default);
+  font-weight: var(--weight-semibold);
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-status-chips__chip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}

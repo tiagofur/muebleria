@@ -1,0 +1,133 @@
+/**
+ * Design system tokens — source of truth: docs/design.md §3.1–3.6
+ * Use these variables only; do not hardcode colors/spacing/radii in feature CSS.
+ */
+
+:root {
+  /* —— Typography (§3.1) —— */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  --text-xs: 0.6875rem; /* 11px — badges, captions secundarios */
+  --text-sm: 0.75rem; /* 12px — labels de campo */
+  --text-base: 0.875rem; /* 14px — cuerpo de texto principal */
+  --text-md: 1rem; /* 16px — títulos de sección */
+  --text-lg: 1.125rem; /* 18px — títulos de página */
+  --text-xl: 1.375rem; /* 22px — títulos de pantalla */
+  --text-2xl: 1.75rem; /* 28px — números hero (precios, totales) */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* —— Brand (§3.2) —— */
+  --brand-50: hsl(245 100% 97%);
+  --brand-100: hsl(245 96% 93%);
+  --brand-200: hsl(245 92% 85%);
+  --brand-300: hsl(245 86% 74%);
+  --brand-400: hsl(245 78% 63%);
+  --brand-500: hsl(245 58% 51%); /* PRIMARY */
+  --brand-600: hsl(245 55% 43%);
+  --brand-700: hsl(245 52% 36%);
+  --brand-800: hsl(245 48% 28%);
+  --brand-900: hsl(245 44% 20%);
+
+  --accent-400: hsl(170 65% 48%);
+  --accent-500: hsl(170 60% 40%); /* ACCENT */
+  --accent-600: hsl(170 55% 33%);
+
+  /* —— Surfaces —— */
+  --surface-app: hsl(220 20% 97%);
+  --surface-sidebar: hsl(230 18% 16%);
+  --surface-card: hsl(0 0% 100%);
+  --surface-input: hsl(220 14% 98%);
+  --surface-hover: hsl(220 14% 95%);
+  --surface-selected: hsl(245 100% 97%);
+  --surface-overlay: hsla(230 20% 10% / 0.55);
+
+  /* —— Text —— */
+  --text-primary: hsl(230 18% 12%);
+  --text-secondary: hsl(230 12% 40%);
+  --text-muted: hsl(230 10% 58%);
+  --text-disabled: hsl(230 10% 74%);
+  --text-inverse: hsl(0 0% 100%);
+  --text-brand: var(--brand-600);
+
+  /* —— Semantic —— */
+  --success-50: hsl(145 60% 96%);
+  --success-500: hsl(145 58% 38%);
+  --success-700: hsl(145 55% 28%);
+
+  --warning-50: hsl(38 100% 96%);
+  --warning-500: hsl(38 92% 50%);
+  --warning-700: hsl(38 80% 38%);
+
+  --danger-50: hsl(0 80% 97%);
+  --danger-500: hsl(0 72% 51%);
+  --danger-700: hsl(0 65% 40%);
+
+  --info-50: hsl(210 100% 96%);
+  --info-500: hsl(210 100% 45%);
+  --info-700: hsl(210 90% 36%);
+
+  /* —— Borders —— */
+  --border-subtle: hsl(220 16% 92%);
+  --border-default: hsl(220 14% 86%);
+  --border-strong: hsl(220 12% 74%);
+  --border-brand: var(--brand-400);
+
+  /* —— Shadows (§3.3) —— */
+  --shadow-xs: 0 1px 2px hsla(230 20% 12% / 0.05);
+  --shadow-sm:
+    0 1px 3px hsla(230 20% 12% / 0.08), 0 1px 2px hsla(230 20% 12% / 0.04);
+  --shadow-md:
+    0 4px 8px hsla(230 20% 12% / 0.08), 0 2px 4px hsla(230 20% 12% / 0.04);
+  --shadow-lg:
+    0 10px 20px hsla(230 20% 12% / 0.1), 0 4px 8px hsla(230 20% 12% / 0.04);
+  --shadow-xl:
+    0 20px 40px hsla(230 20% 12% / 0.12), 0 8px 16px hsla(230 20% 12% / 0.06);
+  --shadow-focus: 0 0 0 3px hsla(245 58% 51% / 0.25);
+
+  /* —— Spacing (§3.4) —— */
+  --space-1: 0.25rem; /* 4px */
+  --space-2: 0.5rem; /* 8px */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem; /* 48px */
+  --space-16: 4rem; /* 64px */
+
+  /* —— Border radius (§3.5) —— */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* —— Motion (§3.6) —— */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+
+  --transition-colors:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+  --transition-shadow: box-shadow var(--duration-fast) var(--ease-out);
+  --transition-transform: transform var(--duration-normal) var(--ease-spring);
+  --transition-opacity: opacity var(--duration-fast) var(--ease-out);
+}

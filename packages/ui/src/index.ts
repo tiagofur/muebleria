@@ -1,0 +1,178 @@
+/**
+ * Shared React UI components (no business logic).
+ */
+
+export { Placeholder } from './placeholder';
+export const PACKAGE_NAME = '@muebles/ui' as const;
+
+export {
+  ActiveBadge,
+  CatalogPicker,
+  CatalogTable,
+  EdgesCatalog,
+  filterActiveForPicker,
+  filterCatalogItems,
+  findActiveCodeConflict,
+  HardwareCatalog,
+  MaterialsCatalog,
+  matchesCodeOrName,
+  normalizeCode,
+  validateNonNegativeNumber,
+  validateRequiredName,
+  validateUniqueCode,
+  type ActiveFilterable,
+  type CatalogColumn,
+  type CatalogPickerOption,
+  type CatalogPickerProps,
+  type CatalogStatusFilter,
+  type CatalogTableProps,
+  type CodedCatalogItem,
+  type EdgeDraft,
+  type EdgesCatalogProps,
+  type FilterCatalogOptions,
+  type HardwareDraft,
+  type HardwareCatalogProps,
+  type MaterialDraft,
+  type MaterialsCatalogProps,
+  type SearchableCoded,
+} from './catalogs';
+
+export {
+  canShowPricePreview,
+  filterOptionIdsByMembers,
+  findOptionGroupCodeConflict,
+  membersForKind,
+  optionGroupKindLabel,
+  OptionGroupsScreen,
+  PricePreviewGate,
+  requiredGroupCodesForModule,
+  SEED_OPTION_GROUP_CODES,
+  validateOptionGroupCode,
+  type CatalogMember,
+  type OptionGroupDraft,
+  type OptionGroupsScreenProps,
+  type PricePreviewGateProps,
+  type PricePreviewGateResult,
+} from './optionGroups';
+
+export {
+  ModulesScreen,
+  boardPartToDraft,
+  defaultOptionChoicesForModule,
+  edgesFromFlags,
+  emptyBoardPartDraft,
+  emptyCategoryDraft,
+  emptyHardwareLineDraft,
+  emptyModuleDraft,
+  filterModulesByQuery,
+  flattenCategoriesForSelect,
+  flagsFromEdges,
+  findModuleCodeConflict,
+  formatModuleMoney,
+  hardwareLineToDraft,
+  moduleToDraft,
+  optionGroupsByKind,
+  optionGroupsForBoardParts,
+  optionGroupsForHardware,
+  parseOptionalNumber,
+  SEED_MODULE_CODES,
+  suggestPartCode,
+  validateModuleCode,
+  type BoardPartDraft,
+  type CategoryDraft,
+  type HardwareLineDraft,
+  type ModuleDraft,
+  type ModulesScreenProps,
+} from './modules';
+
+export {
+  ProjectsScreen,
+  ExportIssueList,
+  PROJECT_STATUSES,
+  canShowProjectPricePreview,
+  countItemsWithModule,
+  customersForProjectPicker,
+  defaultChoicesForNewItem,
+  emptyAddItemDraft,
+  emptyProjectDraft,
+  filterProjectsByQuery,
+  findModuleById,
+  formatIsoDate,
+  formatProjectMoney,
+  groupsForModuleItem,
+  optionsForGroup,
+  projectStatusBadgeClass,
+  projectStatusLabel,
+  projectToDraft,
+  resolveCustomerName,
+  validateItemQuantity,
+  validateProjectDraft,
+  type AddItemDraft,
+  type ExportIssueListProps,
+  type ProjectDraft,
+  type ProjectsScreenProps,
+} from './projects';
+
+export {
+  AppShell,
+  APP_NAV_SECTIONS,
+  labelForNavId,
+  resolveNavSections,
+  type AppNavId,
+  type AppShellProps,
+} from './shell';
+
+export {
+  EmptyState,
+  Modal,
+  SearchInput,
+  StatusChips,
+  ToastProvider,
+  useDebouncedValue,
+  useToast,
+  SEARCH_DEBOUNCE_MS,
+  TOAST_DURATION_MS,
+  TOAST_EXIT_MS,
+  TOAST_MAX,
+  type EmptyStateProps,
+  type ModalProps,
+  type ModalSize,
+  type SearchInputProps,
+  type StatusChipsProps,
+  type ToastInput,
+  type ToastItem,
+  type ToastType,
+} from './common';
+
+export {
+  CustomersScreen,
+  type CustomerDraft,
+  type CustomersScreenProps,
+} from './customers';
+
+export {
+  Dashboard,
+  countActiveMaterials,
+  countActiveProjects,
+  countModules,
+  formatDashboardMoney,
+  selectRecentProjects,
+  sumMonthlyQuotedTotal,
+  type DashboardProps,
+  type DashboardRecentProject,
+  type DashboardStats,
+} from './dashboard';
+
+export {
+  LoginScreen,
+  RegisterScreen,
+  type LoginScreenProps,
+  type RegisterScreenProps,
+} from './auth';
+
+export {
+  UsersScreen,
+  type UserFilter,
+  type UserRow,
+  type UsersScreenProps,
+} from './users';

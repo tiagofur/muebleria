@@ -1,0 +1,187 @@
+/**
+ * UsersScreen styles — admin user management panel.
+ * Uses design tokens from tokens.css (docs/design.md §3).
+ */
+
+.users-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--warning-500);
+  color: hsl(0 0% 100%);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  vertical-align: middle;
+}
+
+.users-toast {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 1000;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  pointer-events: none;
+}
+
+.users-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+
+.users-table th {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-app);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.users-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.users-table tr:last-child td {
+  border-bottom: none;
+}
+
+.users-table__row--pending td {
+  background: var(--warning-50);
+}
+
+.users-table__name {
+  font-weight: var(--weight-medium);
+}
+
+.users-table__email {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+}
+
+.users-table__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.users-role-select {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.users-role-badge {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.status-badge--active {
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.status-badge--pending {
+  background: var(--warning-50);
+  color: var(--warning-700);
+}
+
+/* Generic buttons (reusable btn classes) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  border: 1px solid transparent;
+}
+
+.btn--sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.btn--success {
+  background: var(--success-500);
+  color: hsl(0 0% 100%);
+  border-color: var(--success-500);
+}
+
+.btn--success:hover:not(:disabled) {
+  background: var(--success-700);
+  border-color: var(--success-700);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--danger-500);
+  border-color: var(--danger-500);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-50);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn { transition: none; }
+}

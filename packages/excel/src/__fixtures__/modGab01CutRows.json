@@ -1,0 +1,98 @@
+[
+  {
+    "quantity": 1,
+    "lengthMm": 720,
+    "widthMm": 590,
+    "description": "Costado Derecho",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 1,
+    "L2": 1,
+    "W1": 1,
+    "W2": 1
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 720,
+    "widthMm": 590,
+    "description": "Costado Izquierdo",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 1,
+    "L2": 1,
+    "W1": 1,
+    "W2": 1
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 689,
+    "widthMm": 269,
+    "description": "Respaldo Gabinete",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 0,
+    "L2": 0,
+    "W1": 0,
+    "W2": 0
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 590,
+    "widthMm": 269,
+    "description": "Piso Gabinete",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 0,
+    "L2": 0,
+    "W1": 1,
+    "W2": 1
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 520,
+    "widthMm": 269,
+    "description": "Entrepano Gabinete",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 0,
+    "L2": 0,
+    "W1": 0,
+    "W2": 1
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 269,
+    "widthMm": 120,
+    "description": "Manguete Frontal",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 1,
+    "L2": 1,
+    "W1": 0,
+    "W2": 0
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 269,
+    "widthMm": 120,
+    "description": "Manguete Posterior",
+    "materialName": "ARAUCO BLANCO",
+    "grain": 0,
+    "L1": 1,
+    "L2": 1,
+    "W1": 0,
+    "W2": 0
+  },
+  {
+    "quantity": 1,
+    "lengthMm": 717,
+    "widthMm": 296,
+    "description": "Puerta Gabinete",
+    "materialName": "MADERADO FRENTE",
+    "grain": 1,
+    "L1": 1,
+    "L2": 1,
+    "W1": 1,
+    "W2": 1
+  }
+]

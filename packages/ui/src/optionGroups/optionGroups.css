@@ -1,0 +1,75 @@
+/* Option groups screen + price preview gate */
+
+.option-members {
+  margin: 0;
+  padding: 0.65rem var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.option-members legend {
+  padding: 0 0.35rem;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.option-members__list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.option-members__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+.option-members__item input {
+  margin-top: 0.15rem;
+}
+
+.option-members__summary {
+  margin: 0.65rem 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.price-preview-gate {
+  border-radius: var(--radius-md);
+  padding: 0.85rem var(--space-4);
+  font-family: var(--font-sans);
+}
+
+.price-preview-gate--blocked {
+  background: var(--danger-50);
+  border: 1px solid hsl(0 55% 85%);
+  color: var(--danger-700);
+}
+
+.price-preview-gate--ok {
+  background: var(--success-50);
+  border: 1px solid hsl(145 40% 78%);
+  color: var(--success-700);
+}
+
+.price-preview-gate__message {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-base);
+}
+
+.price-preview-gate__missing {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: var(--text-base);
+  list-style: disc;
+}

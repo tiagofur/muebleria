@@ -1,0 +1,66 @@
+/* SearchInput — design.md §4.6 */
+
+.ui-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 12rem;
+  flex: 1 1 14rem;
+  max-width: 22rem;
+}
+
+.ui-search__icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.ui-search__input {
+  width: 100%;
+  font: inherit;
+  font-size: var(--text-base);
+  padding: 0.45rem var(--space-8) 0.45rem 2.25rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  transition: var(--transition-colors);
+}
+
+.ui-search__input::placeholder {
+  color: var(--text-muted);
+}
+
+.ui-search__input:focus-visible {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.ui-search__clear {
+  position: absolute;
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.ui-search__clear:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.ui-search__clear:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}

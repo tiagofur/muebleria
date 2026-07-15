@@ -1,0 +1,278 @@
+/**
+ * Domain entity types — pure structural contracts (no calculation logic).
+ */
+
+// --- Literal unions ---
+
+export type HardwareUnit = 'piece' | 'set' | 'meter';
+
+export type OptionGroupKind = 'board' | 'hardware' | 'edge';
+
+export type Grain = 0 | 1;
+
+export type EdgeSide = 'L1' | 'L2' | 'W1' | 'W2';
+
+export type ProjectStatus = 'draft' | 'quoted' | 'accepted';
+
+export type OptionChoices = { readonly [optionGroupCode: string]: string };
+
+// --- Catalog entities ---
+
+export interface MaterialBoard {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly widthMm: number;
+  readonly lengthMm: number;
+  readonly thicknessMm: number;
+  readonly grainDefault: boolean;
+  readonly boardPrice: number;
+  readonly wastePercent: number;
+  readonly costPerM2: number;
+  /**
+   * Default edge band for this board when a part has edge flags on and the
+   * project does not override with an EDGE option choice. Linked by id — never by name.
+   */
+  readonly defaultEdgeBandId?: string;
+  readonly notes?: string;
+  readonly active: boolean;
+}
+
+export interface EdgeBand {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly thicknessMm: number;
+  readonly costPerMl: number;
+  readonly notes?: string;
+  readonly active: boolean;
+}
+
+export interface Hardware {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly unit: HardwareUnit;
+  readonly costPerUnit: number;
+  readonly notes?: string;
+  readonly active: boolean;
+}
+
+/** Backend roles: admin | user (default on self-register) | specialty roles. */
+export type UserRole =
+  | 'admin'
+  | 'user'
+  | 'vendedor'
+  | 'disenador'
+  | 'carpintero';
+
+export interface User {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
+  readonly role: UserRole;
+  readonly active: boolean;
+}
+
+export interface Customer {
+  readonly id: string;
+  readonly name: string;
+  readonly email?: string;
+  readonly phone?: string;
+  readonly address?: string;
+  readonly notes?: string;
+  readonly active: boolean;
+}
+
+export interface OptionGroup {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly kind: OptionGroupKind;
+  readonly required: boolean;
+  readonly optionIds: readonly string[];
+}
+
+// --- Module categories (hierarchical, max 3 levels) ---
+
+/**
+ * User-defined category for classifying module templates.
+ * Roots have no parentId; depth is 1..3 (root = 1).
+ */
+export interface ModuleCategory {
+  readonly id: string;
+  readonly name: string;
+  /** Parent category id; omit/undefined for root-level categories. */
+  readonly parentId?: string;
+  readonly sortOrder: number;
+}
+
+// --- Module template ---
+
+export interface EdgeAssignment {
+  readonly side: EdgeSide;
+  readonly enabled: boolean;
+}
+
+export interface BoardPart {
+  readonly id: string;
+  readonly code?: string;
+  readonly description: string;
+  readonly quantity: number;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly grain: Grain;
+  readonly edges: readonly EdgeAssignment[];
+  readonly optionRole: string;
+}
+
+export interface HardwareLine {
+  readonly id: string;
+  readonly quantity: number;
+  readonly descriptionOverride?: string;
+  readonly optionRole: string;
+  readonly hardwareId?: string;
+}
+
+export interface ExternalDims {
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}
+
+export interface Module {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  /** Optional leaf-or-any-level category (MOD-09). Unset = uncategorized. */
+  readonly categoryId?: string;
+  readonly externalDims?: ExternalDims;
+  readonly baseLaborCost?: number;
+  readonly boardParts: readonly BoardPart[];
+  readonly hardwareLines: readonly HardwareLine[];
+  readonly notes?: string;
+}
+
+// --- Project / quotation ---
+
+export interface ProjectItem {
+  readonly id: string;
+  readonly moduleId: string;
+  readonly quantity: number;
+  readonly optionChoices: OptionChoices;
+}
+
+export interface Project {
+  readonly id: string;
+  readonly name: string;
+  readonly customerId: string;
+  readonly createdBy?: string;
+  readonly currency: string;
+  readonly marginFactor: number;
+  readonly laborFixedCost: number;
+  readonly status: ProjectStatus;
+  readonly items: readonly ProjectItem[];
+  readonly notes?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  /** Present when closed (quoted/accepted); ignored while draft. */
+  readonly priceSnapshot?: QuotePriceSnapshot;
+}
+
+// --- Workspace containers (persistable shape) ---
+
+export interface Catalog {
+  readonly materials: readonly MaterialBoard[];
+  readonly edges: readonly EdgeBand[];
+  readonly hardware: readonly Hardware[];
+  readonly optionGroups: readonly OptionGroup[];
+  readonly modules: readonly Module[];
+  /** Hierarchical module categories (MOD-09). Empty/omitted = no taxonomy. */
+  readonly categories?: readonly ModuleCategory[];
+  readonly customers?: readonly Customer[];
+  readonly users?: readonly User[];
+}
+
+export interface Workspace {
+  readonly schemaVersion: number;
+  readonly catalog: Catalog;
+  readonly projects: readonly Project[];
+}
+
+// --- Resolution / quote DTOs (calculated shapes; no logic here) ---
+
+export interface ResolvedBoardPart {
+  readonly id: string;
+  readonly code?: string;
+  readonly description: string;
+  readonly quantity: number;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly grain: Grain;
+  readonly edges: readonly EdgeAssignment[];
+  readonly optionRole: string;
+  readonly materialId: string;
+  readonly edgeBandId?: string;
+}
+
+export interface ResolvedHardwareLine {
+  readonly id: string;
+  readonly quantity: number;
+  readonly descriptionOverride?: string;
+  readonly optionRole: string;
+  readonly hardwareId: string;
+}
+
+export interface ResolvedBom {
+  readonly boardParts: readonly ResolvedBoardPart[];
+  readonly hardwareLines: readonly ResolvedHardwareLine[];
+}
+
+export interface QuoteBreakdown {
+  readonly materialsCost: number;
+  readonly edgeTotal: number;
+  readonly hardwareTotal: number;
+  readonly directCost: number;
+  readonly laborModular: number;
+  readonly laborFixedCost: number;
+  readonly marginFactor: number;
+  readonly salePrice: number;
+}
+
+/**
+ * Frozen quote prices captured when a project is closed (quoted/accepted).
+ * PRD §7.4 cost policy — closed projects ignore catalog price changes.
+ */
+export interface QuotePriceSnapshot {
+  readonly capturedAt: string; // ISO
+  readonly breakdown: QuoteBreakdown;
+  /** Optional unit prices used for audit */
+  readonly materialCostPerM2?: Readonly<Record<string, number>>; // materialId -> costPerM2
+  readonly edgeCostPerMl?: Readonly<Record<string, number>>;
+  readonly hardwareCostPerUnit?: Readonly<Record<string, number>>;
+}
+
+/** Flat cut-list row for Optimizer export (columns A–J). */
+export interface ProductionCutRow {
+  readonly quantity: number;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly description: string;
+  readonly materialName: string;
+  readonly grain: Grain;
+  readonly L1: 0 | 1;
+  readonly L2: 0 | 1;
+  readonly W1: 0 | 1;
+  readonly W2: 0 | 1;
+}
+
+/** Aggregated hardware line for purchase-list export (EXP-08). */
+export interface HardwarePurchaseRow {
+  readonly hardwareId: string;
+  readonly code: string;
+  readonly description: string;
+  readonly unit: HardwareUnit;
+  readonly quantity: number;
+  readonly costPerUnit: number;
+  readonly lineCost: number;
+}
