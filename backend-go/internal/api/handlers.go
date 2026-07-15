@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -13,14 +14,20 @@ import (
 )
 
 type Server struct {
-	Store     *storage.PostgresStore
-	JWTSecret string
+	Store           *storage.PostgresStore
+	JWTSecret       string
+	allowedOrigins  []string
+	rateLimitRPS    float64
+	rateLimitBurst  int
 }
 
-func NewServer(store *storage.PostgresStore, jwtSecret string) *Server {
+func NewServer(store *storage.PostgresStore, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
 	return &Server{
-		Store:     store,
-		JWTSecret: jwtSecret,
+		Store:          store,
+		JWTSecret:      jwtSecret,
+		allowedOrigins: allowedOrigins,
+		rateLimitRPS:   rateLimitRPS,
+		rateLimitBurst: rateLimitBurst,
 	}
 }
 
@@ -39,6 +46,14 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)
+}
+
+// respondWithInternalError logs the real error server-side but returns a generic
+// message to the client. Internal error strings (DB driver text, constraint
+// names, etc.) must never reach the client (#5).
+func respondWithInternalError(w http.ResponseWriter, err error, op string) {
+	log.Printf("internal error in %s: %v", op, err)
+	respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 }
 
 // --- AUTH ---
@@ -69,7 +84,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to hash password")
+		respondWithInternalError(w, err, "register: hash password")
 		return
 	}
 
@@ -87,7 +102,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusConflict, "email already registered")
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		respondWithInternalError(w, err, "handler")
 		return
 	}
 
@@ -136,7 +151,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, err := auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to generate token")
+		respondWithInternalError(w, err, "login: generate token")
 		return
 	}
 
@@ -153,7 +168,7 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListCustomers(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -167,7 +182,7 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 		c.Active = true
 		err := s.Store.CreateCustomer(r.Context(), &c)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, c)
@@ -205,7 +220,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, c)
@@ -213,7 +228,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeactivateCustomer(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "customer deactivated"})
@@ -230,7 +245,7 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListMaterialBoards(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -244,7 +259,7 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 		m.Active = true
 		err := s.Store.CreateMaterialBoard(r.Context(), &m)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, m)
@@ -282,7 +297,7 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, m)
@@ -290,7 +305,7 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeactivateMaterialBoard(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "material board deactivated"})
@@ -307,7 +322,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListProjects(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -328,7 +343,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		p.Status = domain.StatusDraft
 		err := s.Store.CreateProject(r.Context(), &p)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, p)
@@ -362,7 +377,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.UpdateProject(r.Context(), id, &p)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, p)
@@ -370,7 +385,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeleteProject(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "project deleted"})
@@ -401,13 +416,15 @@ func (s *Server) HandleProjectCalculate(w http.ResponseWriter, r *http.Request) 
 
 	catalog, err := s.Store.GetFullCatalog(r.Context())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to load catalog: "+err.Error())
+		respondWithInternalError(w, err, "calculate: load catalog")
 		return
 	}
 
 	breakdown, err := engine.CalcProjectBreakdown(*p, catalog)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "failed to calculate breakdown: "+err.Error())
+		// Calculation errors are business-validation failures (bad inputs), not
+		// internal leaks — surface a clean, actionable message.
+		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -421,7 +438,7 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListEdgeBands(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -439,7 +456,7 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, e)
@@ -481,7 +498,7 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, e)
@@ -489,7 +506,7 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeactivateEdgeBand(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "edge band deactivated"})
@@ -506,7 +523,7 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListHardwares(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -524,7 +541,7 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, h)
@@ -566,7 +583,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, h)
@@ -574,7 +591,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeactivateHardware(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "hardware deactivated"})
@@ -591,7 +608,7 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListOptionGroups(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -608,7 +625,7 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, og)
@@ -650,7 +667,7 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, og)
@@ -658,7 +675,7 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeleteOptionGroup(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "option group deleted"})
@@ -675,7 +692,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		catalog, err := s.Store.GetFullCatalog(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, catalog.Modules)
@@ -692,7 +709,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, m)
@@ -734,7 +751,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, m)
@@ -742,7 +759,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		err := s.Store.DeleteModule(r.Context(), id)
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "module deleted"})
@@ -759,7 +776,7 @@ func (s *Server) HandleCategories(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		list, err := s.Store.ListCategories(r.Context())
 		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -778,7 +795,7 @@ func (s *Server) HandleCategories(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusCreated, c)
@@ -824,7 +841,7 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, c)
@@ -836,7 +853,7 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithInternalError(w, err, "handler")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "category deleted"})
@@ -856,7 +873,7 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := s.Store.ListUsers(r.Context())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		respondWithInternalError(w, err, "handler")
 		return
 	}
 	respondWithJSON(w, http.StatusOK, list)
@@ -874,7 +891,7 @@ func (s *Server) HandleAdminUserApprove(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.Store.ApproveUser(r.Context(), id); err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		respondWithInternalError(w, err, "handler")
 		return
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user approved"})
@@ -903,7 +920,7 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Store.UpdateUserRole(r.Context(), id, body.Role); err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		respondWithInternalError(w, err, "handler")
 		return
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
@@ -921,7 +938,7 @@ func (s *Server) HandleAdminUserReject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Store.RejectUser(r.Context(), id); err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		respondWithInternalError(w, err, "handler")
 		return
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user rejected"})

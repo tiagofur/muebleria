@@ -6,7 +6,14 @@
 export const SESSION_STORAGE_KEY = 'muebles_session';
 export const TOKEN_STORAGE_KEY = 'muebles_token';
 export const USER_STORAGE_KEY = 'muebles_user';
-export const DEFAULT_API_BASE = 'http://localhost:8080/api';
+
+/**
+ * API base URL. Overridable per environment via Vite's `VITE_API_BASE` in
+ * `.env.local` (e.g. `VITE_API_BASE=https://staging-api.test/api`). Falls back
+ * to the local dev backend when unset.
+ */
+export const DEFAULT_API_BASE: string =
+  import.meta.env.VITE_API_BASE ?? 'http://localhost:8080/api';
 
 export type SessionMode = 'guest' | 'auth';
 

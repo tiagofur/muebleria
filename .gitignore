@@ -30,6 +30,9 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 
+# Local agent/harness state (plans, scratch)
+.zcode/
+
 # Electron
 apps/desktop/dist-electron/
 

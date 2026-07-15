@@ -31,6 +31,41 @@ func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*doma
 	return &u, nil
 }
 
+// GetUserByEmailAnyState is like GetUserByEmail but returns the user regardless
+// of its active flag and never returns ErrPendingApproval. Used by the admin CLI
+// (cmd/admin) to locate a user — including inactive ones — for password rotation.
+func (s *PostgresStore) GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error) {
+	query := `
+		SELECT id, email, password_hash, name, role, active, created_at, updated_at
+		FROM users
+		WHERE email = $1;
+	`
+	row := s.Pool.QueryRow(ctx, query, email)
+	var u domain.User
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+// UpdateUserPassword sets a new password hash for the given user id.
+// Used by the admin CLI to rotate credentials.
+func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id string, passwordHash string) error {
+	result, err := s.Pool.Exec(ctx,
+		`UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, passwordHash, id)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
 func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
 		SELECT id, email, password_hash, name, role, active, created_at, updated_at

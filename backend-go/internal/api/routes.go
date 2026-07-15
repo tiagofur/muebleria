@@ -7,9 +7,13 @@ import (
 func RegisterRoutes(server *Server) http.Handler {
 	mux := http.NewServeMux()
 
-	// Endpoints públicos (Auth)
-	mux.HandleFunc("POST /api/auth/register", server.HandleRegister)
-	mux.HandleFunc("POST /api/auth/login", server.HandleLogin)
+	// Rate limiting on auth endpoints to blunt brute-force / credential
+	// stuffing (#6). Applied per client-IP before the handler runs.
+	authRL := RateLimitMiddleware(server.rateLimitRPS, server.rateLimitBurst)
+
+	// Endpoints públicos (Auth) — with rate limiting
+	mux.Handle("POST /api/auth/register", authRL(http.HandlerFunc(server.HandleRegister)))
+	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
 
 	// Endpoints protegidos por JWT
 	authMW := AuthMiddleware(server.JWTSecret)
@@ -80,6 +84,6 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 
-	// Aplicar CORS a toda la aplicación
-	return CORSMiddleware(mux)
+	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
+	return CORSMiddleware(server.allowedOrigins)(mux)
 }
