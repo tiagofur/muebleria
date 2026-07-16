@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type {
   Customer,
   EdgeBand,
@@ -66,6 +67,7 @@ import {
 import {
   APIWorkspaceRepository,
   LocalStorageWorkspaceRepository,
+  breakdownFromApi,
   createSeedWorkspace,
 } from '@muebles/storage';
 import {
@@ -76,6 +78,15 @@ import {
   buildOptimizerExport,
   downloadOptimizerXlsx,
 } from './exportOptimizer';
+import {
+  entityIdFromPath,
+  entityPath,
+  isEntitySection,
+  navFromPath,
+  pathForNav,
+  projectPath,
+  type EntitySection,
+} from './routes';
 import {
   clearSession,
   DEFAULT_API_BASE,
@@ -182,7 +193,7 @@ function computeModuleCostPreview(
     id: 'module-preview-project',
     name: 'Preview módulo',
     customerId: 'Preview',
-    currency: 'UYU',
+    currency: 'MXN',
     marginFactor: 1.35,
     laborFixedCost: 0,
     status: 'draft',
@@ -466,14 +477,34 @@ function AppContent({
       });
   }, [repository]);
 
-  const [navId, setNavId] = useState<AppNavId>('home');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navId: AppNavId = navFromPath(location.pathname) ?? 'home';
+  const routeEntityId =
+    isEntitySection(navId)
+      ? entityIdFromPath(location.pathname, navId)
+      : null;
+  const routeProjectId =
+    navId === 'projects' ? routeEntityId : null;
+  const routeModuleId = navId === 'modules' ? routeEntityId : null;
+
+  // Keep the address bar on a known section path (bookmarkable SPA routes).
+  useEffect(() => {
+    const resolved = navFromPath(location.pathname);
+    if (resolved === null) {
+      navigate(pathForNav('home'), { replace: true });
+      return;
+    }
+    if (resolved === 'users' && !showAdminUsers) {
+      navigate(pathForNav('home'), { replace: true });
+    }
+  }, [location.pathname, navigate, showAdminUsers]);
+
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    null,
-  );
+  // Calculate / export target follows URL detail when present.
+  const selectedProjectId = routeProjectId;
   const [exportErrors, setExportErrors] = useState<readonly ExportIssue[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
-  const [projectsOpenId, setProjectsOpenId] = useState<string | null>(null);
   const [projectsCreateKey, setProjectsCreateKey] = useState(0);
   const [modulesCreateKey, setModulesCreateKey] = useState(0);
 
@@ -515,7 +546,7 @@ function AppContent({
         if (!res.ok) {
           throw new Error(`No se pudo recalcular (${res.status})`);
         }
-        const data = (await res.json()) as QuoteBreakdown;
+        const data = breakdownFromApi((await res.json()) as Record<string, unknown>);
         if (active) {
           setBackendBreakdown(data);
           setBreakdownError(null);
@@ -561,33 +592,37 @@ function AppContent({
 
   const patchCatalog = useCallback(
     (patch: Partial<Workspace['catalog']>) => {
+      // Never put fetch/save inside the setState updater — Strict Mode re-runs
+      // updaters in dev and would double-fire network calls.
       setWorkspace((prev) => {
         if (!prev) return prev;
-        const nextCatalog = { ...prev.catalog, ...patch };
-        repository.saveCatalog(nextCatalog).catch((err) => {
-          console.error("Error al guardar catálogo:", err);
-          toast({ type: 'error', message: 'Error de conexión al sincronizar cambios' });
+        return { ...prev, catalog: { ...prev.catalog, ...patch } };
+      });
+      if (!workspace) return;
+      const nextCatalog = { ...workspace.catalog, ...patch };
+      repository.saveCatalog(nextCatalog).catch((err) => {
+        console.error('Error al guardar catálogo:', err);
+        toast({
+          type: 'error',
+          message: 'Error de conexión al sincronizar cambios',
         });
-        return {
-          ...prev,
-          catalog: nextCatalog,
-        };
       });
     },
-    [repository, toast],
+    [repository, toast, workspace],
   );
 
-  const patchProjects = useCallback((next: readonly Project[]) => {
-    setWorkspace((prev) => {
-      if (!prev) return prev;
+  const patchProjects = useCallback(
+    (next: readonly Project[]) => {
+      setWorkspace((prev) => (prev ? { ...prev, projects: next } : prev));
+      // Side effects outside setState updater (Strict Mode safe).
       for (const p of next) {
         repository.saveProject(p).catch((err) => {
-          console.error("Error al guardar proyecto:", err);
+          console.error('Error al guardar proyecto:', err);
         });
       }
-      return { ...prev, projects: next };
-    });
-  }, [repository]);
+    },
+    [repository],
+  );
 
   const modulePreview = useMemo(() => {
     if (!editingModuleId || !catalog) {
@@ -673,21 +708,22 @@ function AppContent({
     }));
   }, [projects, customers, projectEstimates]);
 
-  const onDashboardOpenProject = useCallback((projectId: string) => {
-    setProjectsOpenId(projectId);
-    setNavId('projects');
-  }, []);
+  const onDashboardOpenProject = useCallback(
+    (projectId: string) => {
+      navigate(projectPath(projectId));
+    },
+    [navigate],
+  );
 
   const onDashboardNewProject = useCallback(() => {
-    setProjectsOpenId(null);
     setProjectsCreateKey((k) => k + 1);
-    setNavId('projects');
-  }, []);
+    navigate(pathForNav('projects'));
+  }, [navigate]);
 
   const onDashboardNewModule = useCallback(() => {
     setModulesCreateKey((k) => k + 1);
-    setNavId('modules');
-  }, []);
+    navigate(pathForNav('modules'));
+  }, [navigate]);
 
   const groupLabels = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1024,97 +1060,108 @@ function AppContent({
   };
 
   const createProject = (draft: ProjectDraft) => {
+    if (!workspace) return;
     const now = new Date().toISOString();
-    let createdName = draft.name.trim();
+    // Build id + payload OUTSIDE setState — React Strict Mode re-runs updaters
+    // in dev; newId()/save inside the updater created two different projects.
+    const resolved = resolveCustomerFromDraft(
+      draft,
+      workspace.catalog.customers ?? [],
+    );
+    const catalog = { ...workspace.catalog, customers: resolved.customers };
+    const meta = draftToProjectMeta(draft, resolved.customerId);
+    const base: Project = {
+      id: newId(),
+      ...meta,
+      status: 'draft',
+      items: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    // Capture snapshot if created already as quoted/accepted (PRD §7.4).
+    const project = transitionProjectStatus(base, meta.status, catalog, now);
+
     setWorkspace((prev) => {
       if (!prev) return prev;
-      const resolved = resolveCustomerFromDraft(
-        draft,
-        prev.catalog.customers ?? [],
-      );
-      const catalog = { ...prev.catalog, customers: resolved.customers };
-      const meta = draftToProjectMeta(draft, resolved.customerId);
-      createdName = meta.name;
-      const base: Project = {
-        id: newId(),
-        ...meta,
-        status: 'draft',
-        items: [],
-        createdAt: now,
-        updatedAt: now,
-      };
-      // Capture snapshot if created already as quoted/accepted (PRD §7.4).
-      const project = transitionProjectStatus(
-        base,
-        meta.status,
-        catalog,
-        now,
-      );
-
-      // Persistir de forma asíncrona
-      repository.saveCatalog(catalog).catch(() => {});
-      repository.saveProject(project).catch(() => {});
-
       return {
         ...prev,
-        catalog,
+        catalog: { ...prev.catalog, customers: resolved.customers },
         projects: [...prev.projects, project],
       };
     });
-    toast({ type: 'success', message: `✓ "${createdName}" creado` });
+
+    repository.saveCatalog(catalog).catch((err) => {
+      console.error('Error al guardar catálogo:', err);
+    });
+    // POST-only create — no PUT 404 probe in the console.
+    repository.createProject(project).catch((err) => {
+      console.error('Error al crear proyecto:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo guardar el proyecto en el servidor',
+      });
+    });
+    toast({ type: 'success', message: `✓ "${meta.name}" creado` });
   };
 
   const updateProject = (id: string, draft: ProjectDraft) => {
+    if (!workspace) return;
     const now = new Date().toISOString();
+    const resolved = resolveCustomerFromDraft(
+      draft,
+      workspace.catalog.customers ?? [],
+    );
+    const catalog = { ...workspace.catalog, customers: resolved.customers };
+    const meta = draftToProjectMeta(draft, resolved.customerId);
+
+    const existing = workspace.projects.find((p) => p.id === id);
+    if (!existing) return;
+
+    const withMeta: Project = {
+      ...existing,
+      name: meta.name,
+      customerId: meta.customerId,
+      currency: meta.currency,
+      marginFactor: meta.marginFactor,
+      laborFixedCost: meta.laborFixedCost,
+      notes: meta.notes,
+      updatedAt: now,
+    };
+    // Status change captures or clears priceSnapshot (PRD §7.4).
+    const updatedProject = transitionProjectStatus(
+      withMeta,
+      meta.status,
+      catalog,
+      now,
+    );
+
     setWorkspace((prev) => {
       if (!prev) return prev;
-      const resolved = resolveCustomerFromDraft(
-        draft,
-        prev.catalog.customers ?? [],
-      );
-      const catalog = { ...prev.catalog, customers: resolved.customers };
-      const meta = draftToProjectMeta(draft, resolved.customerId);
-
-      let updatedProject: Project | null = null;
-      const updatedProjects = prev.projects.map((p) => {
-        if (p.id !== id) return p;
-        const withMeta: Project = {
-          ...p,
-          name: meta.name,
-          customerId: meta.customerId,
-          currency: meta.currency,
-          marginFactor: meta.marginFactor,
-          laborFixedCost: meta.laborFixedCost,
-          notes: meta.notes,
-          updatedAt: now,
-        };
-        // Status change captures or clears priceSnapshot (PRD §7.4).
-        updatedProject = transitionProjectStatus(withMeta, meta.status, catalog, now);
-        return updatedProject;
-      });
-
-      // Persistir de forma asíncrona
-      repository.saveCatalog(catalog).catch(() => {});
-      if (updatedProject) {
-        repository.saveProject(updatedProject).catch(() => {});
-      }
-
       return {
         ...prev,
-        catalog,
-        projects: updatedProjects,
+        catalog: { ...prev.catalog, customers: resolved.customers },
+        projects: prev.projects.map((p) =>
+          p.id === id ? updatedProject : p,
+        ),
       };
+    });
+
+    repository.saveCatalog(catalog).catch((err) => {
+      console.error('Error al guardar catálogo:', err);
+    });
+    repository.saveProject(updatedProject).catch((err) => {
+      console.error('Error al guardar proyecto:', err);
     });
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const deleteProject = (id: string) => {
     repository.deleteProject(id).catch((err) => {
-      console.error("Error al eliminar proyecto:", err);
+      console.error('Error al eliminar proyecto:', err);
     });
     patchProjects(projects.filter((p) => p.id !== id));
     if (selectedProjectId === id) {
-      setSelectedProjectId(null);
+      navigate(pathForNav('projects'));
     }
     toast({ type: 'info', message: 'Proyecto eliminado' });
   };
@@ -1127,7 +1174,16 @@ function AppContent({
       itemIdFactory: newId,
       nowIso: new Date().toISOString(),
     });
-    patchProjects([...projects, copy]);
+    setWorkspace((prev) =>
+      prev ? { ...prev, projects: [...prev.projects, copy] } : prev,
+    );
+    repository.createProject(copy).catch((err) => {
+      console.error('Error al duplicar proyecto:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo guardar el duplicado en el servidor',
+      });
+    });
     toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
   };
 
@@ -1226,23 +1282,39 @@ function AppContent({
     }
   }, [selectedProject, catalog, toast]);
 
-  const onProjectSelectionChange = useCallback((projectId: string | null) => {
-    setSelectedProjectId(projectId);
-    setExportErrors([]);
-    if (projectId === null) {
-      setProjectsOpenId(null);
-    }
-  }, []);
+  const onEntitySelectionChange = useCallback(
+    (section: EntitySection, id: string | null) => {
+      if (section === 'projects') {
+        setExportErrors([]);
+      }
+      const target = id ? entityPath(section, id) : pathForNav(section);
+      if (location.pathname !== target) {
+        navigate(target);
+      }
+    },
+    [location.pathname, navigate],
+  );
+
+  const onProjectSelectionChange = useCallback(
+    (projectId: string | null) => {
+      onEntitySelectionChange('projects', projectId);
+    },
+    [onEntitySelectionChange],
+  );
+
+  const onModuleSelectionChange = useCallback(
+    (moduleId: string | null) => {
+      onEntitySelectionChange('modules', moduleId);
+    },
+    [onEntitySelectionChange],
+  );
 
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
-      setNavId(id);
-      if (id !== 'projects') {
-        setProjectsOpenId(null);
-      }
+      navigate(pathForNav(id));
     },
-    [showAdminUsers],
+    [navigate, showAdminUsers],
   );
 
   const sessionLabel =
@@ -1311,6 +1383,7 @@ function AppContent({
     <AppShell
       activeId={navId}
       onNavigate={onNavigate}
+      hrefForNav={pathForNav}
       meta={`Semilla plantilla · schema v${workspace.schemaVersion} · ${sessionLabel}`}
       onLogout={onLogout}
       showAdminUsers={showAdminUsers}
@@ -1333,6 +1406,8 @@ function AppContent({
           onUpdate={updateMaterial}
           onDeactivate={(id) => setMaterialActive(id, false)}
           onReactivate={(id) => setMaterialActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
         />
       ) : null}
       {navId === 'edges' ? (
@@ -1342,6 +1417,8 @@ function AppContent({
           onUpdate={updateEdge}
           onDeactivate={(id) => setEdgeActive(id, false)}
           onReactivate={(id) => setEdgeActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('edges', id)}
         />
       ) : null}
       {navId === 'hardware' ? (
@@ -1351,6 +1428,8 @@ function AppContent({
           onUpdate={updateHardware}
           onDeactivate={(id) => setHardwareActive(id, false)}
           onReactivate={(id) => setHardwareActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
         />
       ) : null}
       {navId === 'optionGroups' ? (
@@ -1362,6 +1441,10 @@ function AppContent({
           onCreate={createOptionGroup}
           onUpdate={updateOptionGroup}
           onDelete={deleteOptionGroup}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) =>
+            onEntitySelectionChange('optionGroups', id)
+          }
         />
       ) : null}
       {navId === 'customers' ? (
@@ -1371,6 +1454,8 @@ function AppContent({
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}
           onReactivate={(id) => setCustomerActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('customers', id)}
         />
       ) : null}
       {navId === 'users' && showAdminUsers && authToken ? (
@@ -1390,6 +1475,8 @@ function AppContent({
           onDeleteCategory={deleteCategory}
           onDuplicate={duplicateModuleById}
           onEditingChange={setEditingModuleId}
+          onSelectionChange={onModuleSelectionChange}
+          openModuleId={routeModuleId}
           costPreview={modulePreview.costPreview}
           previewBlocked={modulePreview.previewBlocked}
           missingGroups={modulePreview.missingGroups}
@@ -1427,7 +1514,7 @@ function AppContent({
           exportErrors={exportErrors}
           exportBusy={exportBusy}
           projectEstimates={projectEstimates}
-          openProjectId={projectsOpenId}
+          openProjectId={routeProjectId}
           requestCreateKey={projectsCreateKey}
         />
       ) : null}

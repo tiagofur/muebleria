@@ -229,9 +229,18 @@ export function ProjectsScreen({
     onSelectionChange?.(selectedId);
   }, [selectedId, onSelectionChange]);
 
-  // Open project detail from shell (Dashboard → Cotizaciones)
+  // Sync detail selection from shell URL / dashboard handoff.
+  // null = list view (e.g. `/projects`); id = detail (`/projects/:id`).
   useEffect(() => {
-    if (!openProjectId) return;
+    if (openProjectId == null || openProjectId === '') {
+      setSelectedId(null);
+      setConfirmDelete(false);
+      setConfirmRemoveItemId(null);
+      setItemError(null);
+      setAddItemModalOpen(false);
+      setMetaModalOpen(false);
+      return;
+    }
     if (!projects.some((p) => p.id === openProjectId)) return;
     setSelectedId(openProjectId);
     setConfirmDelete(false);
@@ -928,34 +937,14 @@ export function ProjectsScreen({
               Duplicar
             </button>
           ) : null}
-          {confirmDelete ? (
-            <span className="project-inline-confirm">
-              <span className="project-inline-confirm__text">¿Eliminar?</span>
-              <button
-                type="button"
-                className="btn btn--small btn--danger"
-                onClick={() => handleDelete(project.id)}
-              >
-                Confirmar
-              </button>
-              <button
-                type="button"
-                className="btn btn--small"
-                onClick={() => setConfirmDelete(false)}
-              >
-                Cancelar
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 size={16} strokeWidth={1.5} aria-hidden />
-              Eliminar
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn--danger"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={16} strokeWidth={1.5} aria-hidden />
+            Eliminar
+          </button>
         </div>
       </div>
 
@@ -1307,6 +1296,39 @@ export function ProjectsScreen({
         }
       >
         {renderAddItemForm()}
+      </Modal>
+
+      <Modal
+        open={confirmDelete && selectedProject != null}
+        onClose={() => setConfirmDelete(false)}
+        title="Eliminar proyecto"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                if (selectedProject) handleDelete(selectedProject.id);
+              }}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar{' '}
+          <strong>{selectedProject?.name ?? 'este proyecto'}</strong>? Esta
+          acción no se puede deshacer.
+        </p>
       </Modal>
     </section>
   );

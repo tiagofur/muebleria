@@ -24,3 +24,8 @@ export {
   useDebouncedValue,
   SEARCH_DEBOUNCE_MS,
 } from './useDebouncedValue';
+export {
+  useRoutableEntitySelection,
+  type UseRoutableEntitySelectionOptions,
+  type UseRoutableEntitySelectionResult,
+} from './useRoutableEntitySelection';

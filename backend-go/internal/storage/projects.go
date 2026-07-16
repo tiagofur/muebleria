@@ -179,16 +179,97 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 			p.Notes = *notes
 		}
 
-		// Cargar items del proyecto de forma rápida (simplificada, en endpoints individuales se cargará en detalle)
-		if p.Items == nil {
-			p.Items = []domain.ProjectItem{}
+		// Load items so FE reload keeps line items (calculate + UI depend on them).
+		items, err := s.loadProjectItems(ctx, p.ID)
+		if err != nil {
+			return nil, err
 		}
+		p.Items = items
 		list = append(list, p)
 	}
 	if list == nil {
 		list = []domain.Project{}
 	}
 	return list, nil
+}
+
+// loadProjectItems returns all line items + option choices for a project.
+func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) ([]domain.ProjectItem, error) {
+	itemQuery := `
+		SELECT id, module_id, quantity
+		FROM project_items
+		WHERE project_id = $1;
+	`
+	rows, err := s.Pool.Query(ctx, itemQuery, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []domain.ProjectItem{}
+	for rows.Next() {
+		var item domain.ProjectItem
+		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity); err != nil {
+			return nil, err
+		}
+
+		choicesQuery := `
+			SELECT option_group_code, choice_entity_id
+			FROM project_item_choices
+			WHERE project_item_id = $1;
+		`
+		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID)
+		if err != nil {
+			return nil, err
+		}
+		item.OptionChoices = make(map[string]string)
+		for cRows.Next() {
+			var code, choiceID string
+			if err := cRows.Scan(&code, &choiceID); err == nil {
+				item.OptionChoices[code] = choiceID
+			}
+		}
+		cRows.Close()
+
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// replaceProjectItemsTx deletes existing items and inserts the payload set.
+// Uses client-provided item ids when present so FE ids stay stable.
+func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, items []domain.ProjectItem) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_items WHERE project_id = $1`, projectID); err != nil {
+		return fmt.Errorf("error clearing project items: %w", err)
+	}
+	for i := range items {
+		item := &items[i]
+		var err error
+		if item.ID != "" {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO project_items (id, project_id, module_id, quantity)
+				VALUES ($1, $2, $3, $4)
+			`, item.ID, projectID, item.ModuleID, item.Quantity)
+		} else {
+			err = tx.QueryRow(ctx, `
+				INSERT INTO project_items (project_id, module_id, quantity)
+				VALUES ($1, $2, $3)
+				RETURNING id
+			`, projectID, item.ModuleID, item.Quantity).Scan(&item.ID)
+		}
+		if err != nil {
+			return fmt.Errorf("error inserting project item: %w", err)
+		}
+		for gcode, cid := range item.OptionChoices {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id)
+				VALUES ($1, $2, $3)
+			`, item.ID, gcode, cid); err != nil {
+				return fmt.Errorf("error inserting project item choice: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
@@ -212,46 +293,11 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		p.Notes = *notes
 	}
 
-	// Cargar ítems
-	itemQuery := `
-		SELECT id, module_id, quantity
-		FROM project_items
-		WHERE project_id = $1;
-	`
-	rows, err := s.Pool.Query(ctx, itemQuery, p.ID)
+	items, err := s.loadProjectItems(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var item domain.ProjectItem
-		err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity)
-		if err != nil {
-			return nil, err
-		}
-
-		// Cargar elecciones de este ítem
-		choicesQuery := `
-			SELECT option_group_code, choice_entity_id
-			FROM project_item_choices
-			WHERE project_item_id = $1;
-		`
-		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID)
-		if err != nil {
-			return nil, err
-		}
-		item.OptionChoices = make(map[string]string)
-		for cRows.Next() {
-			var code, choiceID string
-			if err := cRows.Scan(&code, &choiceID); err == nil {
-				item.OptionChoices[code] = choiceID
-			}
-		}
-		cRows.Close()
-
-		p.Items = append(p.Items, item)
-	}
+	p.Items = items
 
 	// Cargar snapshot si existe
 	snapQuery := `
@@ -310,23 +356,46 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 }
 
 func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) error {
-	query := `
-		INSERT INTO projects (name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, created_at, updated_at;
-	`
 	var createdBy *string
 	if p.CreatedBy != "" {
 		createdBy = &p.CreatedBy
 	}
 
-	err := s.Pool.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
-		Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Prefer the client-provided id so the FE id stays stable (matches every
+	// other Create* resource). Without this the DB generated its own id, the FE
+	// kept the one it minted, and later calls (calculate, update) 404'd.
+	if p.ID != "" {
+		query := `
+			INSERT INTO projects (id, name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING created_at, updated_at;
+		`
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
+			Scan(&p.CreatedAt, &p.UpdatedAt)
+	} else {
+		query := `
+			INSERT INTO projects (name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id, created_at, updated_at;
+		`
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
+			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
+	}
 	if err != nil {
 		return fmt.Errorf("error creating project: %w", err)
 	}
 
-	return nil
+	if err := replaceProjectItemsTx(ctx, tx, p.ID, p.Items); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, item *domain.ProjectItem) error {
@@ -399,8 +468,18 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $8;
 	`
-	_, err = tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, id)
 	if err != nil {
+		return err
+	}
+	// Critical for FE upsert: PUT on a missing id must 404 so the client POSTs
+	// create. Without this, Exec succeeds with 0 rows, upsert thinks the project
+	// exists, calculate later 404s, and the row is never written.
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("project not found")
+	}
+
+	if err := replaceProjectItemsTx(ctx, tx, id, p.Items); err != nil {
 		return err
 	}
 

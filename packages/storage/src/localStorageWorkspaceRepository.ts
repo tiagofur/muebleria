@@ -57,6 +57,10 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     return this.getWorkspace().projects;
   }
 
+  async createProject(project: Project): Promise<void> {
+    return this.saveProject(project);
+  }
+
   async saveProject(project: Project): Promise<void> {
     const ws = this.getWorkspace();
     const exists = ws.projects.some((p) => p.id === project.id);

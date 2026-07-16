@@ -47,7 +47,7 @@ const gabOnlyProject: Project = {
   ],
 };
 
-async function loadWorkbook(buffer: Buffer): Promise<ExcelJS.Workbook> {
+async function loadWorkbook(buffer: Uint8Array): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   // exceljs Buffer typing expects ArrayBuffer-like in some versions
   await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
@@ -108,7 +108,7 @@ describe('optimizerExport', () => {
   it('fixture: export MOD-GAB-01 × 1 serializes expected A–J values', async () => {
     const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
     const buffer = await optimizerExport(rows);
-    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(buffer).toBeInstanceOf(Uint8Array);
     expect(buffer.byteLength).toBeGreaterThan(1000);
 
     const workbook = await loadWorkbook(buffer);

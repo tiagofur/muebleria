@@ -18,6 +18,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  QuoteBreakdown,
 } from '@muebles/domain';
 
 function num(v: unknown, fallback = 0): number {
@@ -326,7 +327,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     name: str(raw.name),
     customerId: str(raw.customer_id ?? raw.customerId),
     createdBy: str(raw.created_by ?? raw.createdBy) || undefined,
-    currency: str(raw.currency, 'UYU'),
+    currency: str(raw.currency, 'MXN'),
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
     status: (['draft', 'quoted', 'accepted'].includes(status)
@@ -348,6 +349,27 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
             : {},
       };
     }),
+  };
+}
+
+// --- Quote breakdown (calculate endpoint) ---
+
+/**
+ * Map the Go backend's /projects/{id}/calculate response to the domain
+ * QuoteBreakdown. The backend emits snake_case (`materials_cost`...); the FE
+ * domain expects camelCase (`materialsCost`...). Both shapes are accepted so a
+ * future backend switch to camelCase won't break this.
+ */
+export function breakdownFromApi(raw: Record<string, unknown>): QuoteBreakdown {
+  return {
+    materialsCost: num(raw.materials_cost ?? raw.materialsCost),
+    edgeTotal: num(raw.edge_total ?? raw.edgeTotal),
+    hardwareTotal: num(raw.hardware_total ?? raw.hardwareTotal),
+    directCost: num(raw.direct_cost ?? raw.directCost),
+    laborModular: num(raw.labor_modular ?? raw.laborModular),
+    laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
+    marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1),
+    salePrice: num(raw.sale_price ?? raw.salePrice),
   };
 }
 

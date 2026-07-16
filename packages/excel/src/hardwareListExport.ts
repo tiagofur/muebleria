@@ -5,6 +5,7 @@
 import ExcelJS from 'exceljs';
 import type { HardwarePurchaseRow, HardwareUnit } from '@muebles/domain';
 import { ValidationError } from '@muebles/domain';
+import { workbookBytes } from './optimizerExport';
 
 /** Purchase-list column headers (Código → Costo total). */
 export const HARDWARE_LIST_HEADERS = [
@@ -61,7 +62,7 @@ function styleHeaderCell(cell: ExcelJS.Cell, value: string): void {
  */
 export async function hardwareListExport(
   rows: readonly HardwarePurchaseRow[],
-): Promise<Buffer> {
+): Promise<Uint8Array> {
   if (rows.length === 0) {
     throw new ValidationError('no hay herrajes para exportar', {
       field: 'rows',
@@ -113,8 +114,8 @@ export async function hardwareListExport(
     excelRow.height = 15;
   });
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  const raw = await workbook.xlsx.writeBuffer();
+  return workbookBytes(raw as ArrayBuffer | Uint8Array);
 }
 
 function csvEscape(value: string | number): string {

@@ -99,6 +99,13 @@ export interface ModulesScreenProps {
    * (Dashboard quick action). 0 / undefined = no request.
    */
   readonly requestCreateKey?: number;
+  /**
+   * Open detail for this module id when set (URL `/modules/:id` or shell handoff).
+   * null / '' = list view.
+   */
+  readonly openModuleId?: string | null;
+  /** Notifies parent when detail selection changes (for URL sync). */
+  readonly onSelectionChange?: (moduleId: string | null) => void;
 }
 
 function CostPreviewPanel({
@@ -196,6 +203,8 @@ export function ModulesScreen({
   groupLabels,
   moduleEstimates = {},
   requestCreateKey = 0,
+  openModuleId = null,
+  onSelectionChange,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -292,6 +301,21 @@ export function ModulesScreen({
       setSelectedId(null);
     }
   }, [modules, selectedId]);
+
+  // Notify shell of detail selection (URL sync).
+  useEffect(() => {
+    onSelectionChange?.(selectedId);
+  }, [selectedId, onSelectionChange]);
+
+  // Sync detail from shell URL (`/modules` vs `/modules/:id`).
+  useEffect(() => {
+    if (openModuleId == null || openModuleId === '') {
+      setSelectedId(null);
+      return;
+    }
+    if (!modules.some((m) => m.id === openModuleId)) return;
+    setSelectedId(openModuleId);
+  }, [openModuleId, modules]);
 
   // Open create modal from shell (Dashboard quick action)
   useEffect(() => {

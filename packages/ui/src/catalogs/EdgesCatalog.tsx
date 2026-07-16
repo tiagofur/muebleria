@@ -11,6 +11,7 @@ import {
   SearchInput,
   StatusChips,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../common';
 import {
   filterCatalogItems,
@@ -54,6 +55,8 @@ export interface EdgesCatalogProps {
   readonly onUpdate: (id: string, draft: EdgeDraft) => void;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
 }
 
 export function EdgesCatalog({
@@ -62,12 +65,20 @@ export function EdgesCatalog({
   onUpdate,
   onDeactivate,
   onReactivate,
+  openEntityId = null,
+  onSelectionChange,
 }: EdgesCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const edgeIds = useMemo(() => edges.map((e) => e.id), [edges]);
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: edgeIds,
+    });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EdgeDraft>(emptyDraft);
@@ -104,7 +115,7 @@ export function EdgesCatalog({
   };
 
   const toggleExpand = (item: EdgeBand) => {
-    setExpandedId((prev) => (prev === item.id ? null : item.id));
+    toggleSelectedId(item.id);
   };
 
   const validate = (): string | null => {

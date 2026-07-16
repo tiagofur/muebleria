@@ -99,7 +99,7 @@ export function emptyProjectDraft(): ProjectDraft {
     name: '',
     customerId: '',
     customerName: '',
-    currency: 'UYU',
+    currency: 'MXN',
     marginFactor: '1.35',
     laborFixedCost: '0',
     status: 'draft',
@@ -221,8 +221,10 @@ export function filterProjectsByQuery(
 }
 
 /** Format a money amount for project cards / totals (2 decimals). */
-export function formatProjectMoney(n: number): string {
-  return n.toFixed(2);
+export function formatProjectMoney(n: number | undefined | null): string {
+  // Non-finite/missing values render as 0.00 rather than crashing the render —
+  // the backend breakdown may omit a field, or a local calc may yield NaN.
+  return (typeof n === 'number' && Number.isFinite(n) ? n : 0).toFixed(2);
 }
 
 /**

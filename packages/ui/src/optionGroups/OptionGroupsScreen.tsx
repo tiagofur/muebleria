@@ -16,6 +16,7 @@ import {
   Modal,
   SearchInput,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../common';
 import { validateRequiredName } from '../catalogs/catalogHelpers';
 import { CatalogTable, type CatalogColumn } from '../catalogs/CatalogTable';
@@ -74,6 +75,8 @@ export interface OptionGroupsScreenProps {
   readonly onCreate: (draft: OptionGroupDraft) => void;
   readonly onUpdate: (id: string, draft: OptionGroupDraft) => void;
   readonly onDelete: (id: string) => void;
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
 }
 
 export function OptionGroupsScreen({
@@ -84,11 +87,22 @@ export function OptionGroupsScreen({
   onCreate,
   onUpdate,
   onDelete,
+  openEntityId = null,
+  onSelectionChange,
 }: OptionGroupsScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const optionGroupIds = useMemo(
+    () => optionGroups.map((g) => g.id),
+    [optionGroups],
+  );
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: optionGroupIds,
+    });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<OptionGroupDraft>(emptyDraft);
@@ -135,7 +149,7 @@ export function OptionGroupsScreen({
   };
 
   const toggleExpand = (item: OptionGroup) => {
-    setExpandedId((prev) => (prev === item.id ? null : item.id));
+    toggleSelectedId(item.id);
   };
 
   const setKind = (kind: OptionGroupKind) => {

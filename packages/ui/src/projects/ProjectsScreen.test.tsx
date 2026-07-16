@@ -470,14 +470,21 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByRole('heading', { name: 'Nuevo proyecto' })).toBeTruthy();
   });
 
-  it('asks inline confirmation before delete', async () => {
+  it('opens SM confirm modal before delete', async () => {
     const user = userEvent.setup();
     const { onDelete } = renderScreen();
 
     await user.click(screen.getByTestId('project-card-prj-1'));
     await user.click(screen.getByRole('button', { name: /^Eliminar$/i }));
-    expect(screen.getByText('¿Eliminar?')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Eliminar proyecto' }),
+    ).toBeTruthy();
+    expect(within(dialog).getByText(/Cocina Ana/)).toBeTruthy();
+    // Toolbar still has "Eliminar"; confirm is the danger button in the dialog.
+    await user.click(
+      within(dialog).getByRole('button', { name: /^Eliminar$/i }),
+    );
     expect(onDelete).toHaveBeenCalledWith('prj-1');
   });
 });

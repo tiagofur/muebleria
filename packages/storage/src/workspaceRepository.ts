@@ -15,6 +15,9 @@ export interface WorkspaceRepository {
   saveCatalog(catalog: Catalog): Promise<void>;
 
   getProjects(): Promise<readonly Project[]>;
+  /** Create a new project (POST). Prefer this over saveProject for first write. */
+  createProject(project: Project): Promise<void>;
+  /** Update existing project (upsert PUT→POST fallback for other adapters). */
   saveProject(project: Project): Promise<void>;
   deleteProject(projectId: string): Promise<void>;
 }

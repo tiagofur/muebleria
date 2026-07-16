@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from '@muebles/ui';
 import '@muebles/ui/design-system/tokens.css';
 import '@muebles/ui/design-system/reset.css';
@@ -13,8 +14,10 @@ if (!rootEl) {
 
 createRoot(rootEl).render(
   <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    <BrowserRouter>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </BrowserRouter>
   </StrictMode>,
 );

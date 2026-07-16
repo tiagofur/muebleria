@@ -350,6 +350,18 @@
   font-weight: var(--weight-medium);
 }
 
+.project-confirm-modal__text {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.project-confirm-modal__text strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
 /* —— Item cards —— */
 
 .project-item-list {

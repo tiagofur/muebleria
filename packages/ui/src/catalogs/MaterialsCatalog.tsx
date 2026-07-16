@@ -16,6 +16,7 @@ import {
   SearchInput,
   StatusChips,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../common';
 import {
   filterCatalogItems,
@@ -90,6 +91,9 @@ export interface MaterialsCatalogProps {
   readonly onReactivate: (id: string) => void;
   /** Creates an edge band and returns its new id (for linking as default). */
   readonly onCreateEdge: (draft: EdgeDraft) => string;
+  /** URL handoff: `/materials/:id` expands that row. */
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
 }
 
 export function MaterialsCatalog({
@@ -100,12 +104,20 @@ export function MaterialsCatalog({
   onDeactivate,
   onReactivate,
   onCreateEdge,
+  openEntityId = null,
+  onSelectionChange,
 }: MaterialsCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const materialIds = useMemo(() => materials.map((m) => m.id), [materials]);
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: materialIds,
+    });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<MaterialDraft>(emptyDraft);
@@ -206,7 +218,7 @@ export function MaterialsCatalog({
   };
 
   const toggleExpand = (item: MaterialBoard) => {
-    setExpandedId((prev) => (prev === item.id ? null : item.id));
+    toggleSelectedId(item.id);
   };
 
   const validate = (): string | null => {

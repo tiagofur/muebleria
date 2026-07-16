@@ -108,6 +108,10 @@ export class JSONFileStorage implements WorkspaceRepository {
     return workspace.projects;
   }
 
+  async createProject(project: Project): Promise<void> {
+    return this.saveProject(project);
+  }
+
   async saveProject(project: Project): Promise<void> {
     const workspace = await this.load();
     const index = workspace.projects.findIndex((p) => p.id === project.id);
