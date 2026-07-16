@@ -3,7 +3,7 @@
 .catalog-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--density-page-gap);
   font-family: var(--font-sans);
   color: var(--text-primary);
 }
@@ -13,7 +13,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--density-toolbar-gap);
 }
 
 .catalog-page__title {
@@ -26,7 +26,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--density-toolbar-gap);
   flex: 1 1 auto;
   justify-content: flex-end;
 }
@@ -35,7 +35,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--density-filter-gap);
   width: 100%;
 }
 
@@ -43,7 +43,7 @@
 .catalog-layout {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--density-page-gap);
   min-width: 0;
 }
 
@@ -63,7 +63,8 @@
 
 .catalog-table th,
 .catalog-table td {
-  padding: 0.55rem var(--space-3);
+  padding: var(--density-table-pad-y) var(--density-table-pad-x);
+  min-height: var(--density-row-min-height);
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
@@ -148,10 +149,10 @@
 }
 
 .catalog-row-detail {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--density-card-pad) var(--space-4);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: var(--space-3) var(--space-5);
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--space-2) var(--space-4);
   font-size: var(--text-base);
 }
 
@@ -192,7 +193,7 @@
 .catalog-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--density-form-gap);
 }
 
 .catalog-form__title {
@@ -217,7 +218,7 @@
 .catalog-form__field select,
 .catalog-form__field textarea {
   font: inherit;
-  padding: 0.45rem 0.55rem;
+  padding: var(--density-control-pad-y) var(--density-control-pad-x);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-input);
@@ -368,7 +369,7 @@
 .btn {
   font: inherit;
   font-size: var(--text-base);
-  padding: 0.4rem var(--space-3);
+  padding: var(--density-btn-pad-y) var(--density-btn-pad-x);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
   background: var(--surface-card);

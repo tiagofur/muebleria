@@ -219,6 +219,27 @@ Escala de 4px base. Siempre usar variables; nunca valores ad-hoc.
 --space-16: 4rem;     /* 64px */
 ```
 
+#### 3.4.1 Densidad compacta (product app / taller)
+
+Default del producto: **herramienta densa**, no landing. Tokens semánticos en `tokens.css` (issue #49):
+
+| Token | Uso |
+|-------|-----|
+| `--density-page-gap` | Gap vertical de pantalla (`catalog-page`, listas) |
+| `--density-toolbar-gap` / `--density-filter-gap` | Header + filtros |
+| `--density-table-pad-y` / `--density-table-pad-x` | Celdas de catálogo |
+| `--density-row-min-height` | Altura mínima de fila (~32px) |
+| `--density-card-pad` / `--density-card-gap` / `--density-card-grid-gap` | Cards de cotización/mueble |
+| `--density-modal-header-*` / `--density-modal-body` / `--density-modal-footer-*` | Modales SM/MD/LG |
+| `--density-form-gap` | Stack de campos en forms |
+| `--density-btn-pad-*` / `--density-control-pad-*` | Botones y controles de fila |
+
+**Reglas:**
+- Preferir `--density-*` en tablas, toolbars, cards y modales de alta frecuencia.
+- Cuerpo de texto mínimo `--text-base` (14px); labels pueden usar `--text-sm` (12px). Compact ≠ ilegible.
+- Toggle «Cómoda / Compacta» es fase 2 (no en este slice); hoy la app **es** compacta por defecto.
+- Solo tokens; sin hex ni `px` sueltos en feature CSS.
+
 ---
 
 ### 3.5 Border Radius

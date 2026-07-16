@@ -38,6 +38,27 @@ describe('design system (F016)', () => {
     expect(css).toContain('--font-sans:');
     expect(css).toContain('--duration-fast:');
     expect(css).toContain('--ease-out:');
+
+    // Compact density (issue #49)
+    expect(css).toContain('--density-table-pad-y:');
+    expect(css).toContain('--density-page-gap:');
+    expect(css).toContain('--density-modal-body:');
+    expect(css).toContain('--density-card-pad:');
+    expect(css).toContain('--density-row-min-height:');
+  });
+
+  it('catalog tables and modals use density tokens (issue #49)', () => {
+    const catalogs = read(join(uiRoot, 'src/catalogs/catalogs.css'));
+    const modal = read(join(uiRoot, 'src/common/modal.css'));
+    expect(catalogs).toContain('var(--density-table-pad-y)');
+    expect(catalogs).toContain('var(--density-page-gap)');
+    expect(catalogs).toContain('var(--density-btn-pad-y)');
+    expect(modal).toContain('var(--density-modal-body)');
+    expect(modal).toContain('var(--density-modal-header-y)');
+    // No ad-hoc table cell padding left on th/td base rule
+    expect(catalogs).not.toMatch(
+      /\.catalog-table th,\s*\.catalog-table td\s*\{[^}]*padding:\s*0\.55rem/,
+    );
   });
 
   it('reset.css exists and sets a sensible base on body', () => {

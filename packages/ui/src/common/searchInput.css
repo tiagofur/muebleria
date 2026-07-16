@@ -20,7 +20,8 @@
   width: 100%;
   font: inherit;
   font-size: var(--text-base);
-  padding: 0.45rem var(--space-8) 0.45rem 2.25rem;
+  padding: var(--density-control-pad-y) var(--space-8)
+    var(--density-control-pad-y) 2.25rem;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-input);

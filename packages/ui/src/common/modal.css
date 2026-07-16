@@ -97,7 +97,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--density-modal-header-y) var(--density-modal-header-x);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-card);
 }
@@ -140,7 +140,7 @@
 .ui-modal__body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: var(--space-5);
+  padding: var(--density-modal-body);
   min-height: 0;
 }
 
@@ -148,12 +148,12 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: var(--density-toolbar-gap);
   flex: 0 0 auto;
   position: sticky;
   bottom: 0;
   z-index: 1;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--density-modal-footer-y) var(--density-modal-footer-x);
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-card);
 }
