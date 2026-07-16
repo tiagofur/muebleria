@@ -1,24 +1,24 @@
 # Sesión actual
 
-- **Branch:** `feat/piece-labels-edge-banding-96`
-- **Issue:** [#96](https://github.com/tiagofur/muebleria/issues/96) — F046 etiquetas + encintado
-- **Estado:** implementado — listo para review / PR
+- **Branch:** `feat/project-material-summary-97`
+- **Issue:** [#97](https://github.com/tiagofur/muebleria/issues/97) — F047 resumen m² / herrajes
+- **Estado:** implementado — conflictos con main resueltos (unión F046+F047)
+- **PR:** https://github.com/tiagofur/muebleria/pull/114
+- **PR anterior mergeado:** https://github.com/tiagofur/muebleria/pull/113 (F046 / #96)
 
-## Entregado
+## Entregado F047
 
-1. Domain: `PieceLabel`, `formatEdgeBandingInstruction`, `generatePieceLabels` (solo tablero)
-2. PDF: `pieceLabelsPdfExport` en `@muebles/excel`
-3. Web: `buildPieceLabelsExport` + botón **Etiquetas** en detalle de proyecto y cola de producción
-4. Tests domain / excel / web verdes
+- Domain: `generateProjectMaterialSummary` (m² por material, ML cantos, herrajes)
+- UI: panel “Resumen de materiales” en detalle (costos solo si `showCosts`)
+- Shell: calcula con domain cuando el preview no está bloqueado
+- Tests domain + UI
 
-## Criterios
+## Ya en main (F046)
 
-- [x] Una etiqueta por línea de pieza de tablero (sin herrajes)
-- [x] Instrucción de encintado con lados L1/L2/W1/W2 + canto resuelto
-- [x] Export PDF usable (producción / ingeniero, accepted|produced)
-- [x] Tests de dominio + PDF
+1. Domain: `PieceLabel`, `formatEdgeBandingInstruction`, `generatePieceLabels`
+2. PDF: `pieceLabelsPdfExport` + botón **Etiquetas**
+3. Merge conflict resolution kept both F046 and F047 surfaces
 
-## No hecho (fuera de F046)
+## Siguiente
 
-- Go parity del generator
-- H02/H03 (#97/#98)
+- H03 / #98 cut-list enrich (PR #115) — rebasar después de mergear #114

@@ -248,6 +248,47 @@ describe('ProjectsScreen F022', () => {
     expect(within(card).getByText('$202.50 MXN')).toBeTruthy();
   });
 
+  it('shows material summary when shell provides F047 data', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      materialSummary: {
+        materials: [
+          {
+            materialId: 'mat-1',
+            code: 'TAB-A',
+            name: 'Arauco Blanco',
+            areaM2: 1.25,
+            edgeMl: 3.2,
+            boardCost: 100,
+          },
+        ],
+        edges: [],
+        hardware: [
+          {
+            hardwareId: 'hw-1',
+            code: 'HER-1',
+            description: 'Bisagra',
+            unit: 'piece',
+            quantity: 4,
+            costPerUnit: 10,
+            lineCost: 40,
+          },
+        ],
+        totalAreaM2: 1.25,
+        totalEdgeMl: 0,
+        totalBoardCost: 100,
+        totalEdgeCost: 0,
+        totalHardwareCost: 40,
+      },
+      showCosts: true,
+    });
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const summary = screen.getByTestId('project-material-summary');
+    expect(summary.textContent).toContain('Arauco Blanco');
+    expect(summary.textContent).toContain('1.250 m²');
+    expect(summary.textContent).toContain('Bisagra');
+  });
+
   it('opens detail on card click with sticky chrome and back navigation', async () => {
     const user = userEvent.setup();
     const { onSelectionChange } = renderScreen();

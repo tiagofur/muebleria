@@ -890,8 +890,26 @@
         "docs/roadmap-engineering-structures.md",
         "https://github.com/tiagofur/muebleria/issues/96"
       ],
-      "status": "in_progress",
+      "status": "done",
       "github_issue": 96
+    },
+    {
+      "id": "F047",
+      "phase": 9,
+      "name": "project_material_summary",
+      "title": "Resumen de materiales del proyecto (m² y herrajes)",
+      "description": "Resumen consolidado: m² por material y totales de herrajes. Issue #97 / H02.",
+      "acceptance": [
+        "Agregación m² por material alineada al BOM resuelto",
+        "Totales de herrajes por hardware del catálogo",
+        "Visible en detalle de proyecto y/o export simple",
+        "Tests de agregación en domain"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/97"
+      ],
+      "status": "done",
+      "github_issue": 97
     }
   ]
 }

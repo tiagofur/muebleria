@@ -12,14 +12,17 @@ import type {
   Grain,
   Hardware,
   HardwareLine,
+  EdgeUsageRow,
   HardwarePurchaseRow,
   MaterialBoard,
+  MaterialUsageRow,
   Module,
   OptionChoices,
   OptionGroup,
   PieceLabel,
   ProductionCutRow,
   Project,
+  ProjectMaterialSummary,
   ProjectStatus,
   QuoteBreakdown,
   QuotePriceSnapshot,
@@ -1207,6 +1210,178 @@ export function generatePieceLabels(
   });
 
   return sortable.map((entry) => entry.label);
+}
+
+/**
+ * Consolidated m² / edge ML / hardware totals for planning (F047 / #97).
+ * Board metrics use the same resolveBom + calcBoardLineCost path as quotes.
+ * Hardware reuses generateHardwareList (EXP-08).
+ */
+export function generateProjectMaterialSummary(
+  project: Project,
+  catalog: Catalog,
+): ProjectMaterialSummary {
+  const materialMap = new Map<
+    string,
+    {
+      material: MaterialBoard;
+      areaM2: number;
+      edgeMl: number;
+      boardCost: number;
+    }
+  >();
+  const edgeMap = new Map<
+    string,
+    {
+      code: string;
+      name: string;
+      edgeMl: number;
+      edgeCost: number;
+    }
+  >();
+
+  for (const item of project.items) {
+    if (!(item.quantity > 0)) {
+      throw new ValidationError(
+        `Project item quantity must be > 0 (got ${item.quantity})`,
+        {
+          projectId: project.id,
+          projectItemId: item.id,
+          field: 'quantity',
+        },
+      );
+    }
+
+    const module = findModule(catalog, item.moduleId);
+    if (!module) {
+      throw new ResolutionError(
+        `Module not found for project item: ${item.moduleId}`,
+        {
+          projectId: project.id,
+          projectItemId: item.id,
+          moduleId: item.moduleId,
+          field: 'moduleId',
+        },
+      );
+    }
+
+    const bom = resolveBom(
+      module,
+      effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
+      catalog,
+    );
+
+    for (const part of bom.boardParts) {
+      const line = calcBoardLineCost(part, catalog, item.quantity);
+      const material = findMaterial(catalog, part.materialId);
+      if (!material) {
+        throw new ResolutionError(
+          `Material not found: ${part.materialId}`,
+          {
+            projectId: project.id,
+            partId: part.id,
+            materialId: part.materialId,
+            field: 'materialId',
+          },
+        );
+      }
+
+      const prev = materialMap.get(material.id);
+      if (prev) {
+        prev.areaM2 += line.areaM2;
+        prev.edgeMl += line.edgeMl;
+        prev.boardCost += line.boardCost;
+      } else {
+        materialMap.set(material.id, {
+          material,
+          areaM2: line.areaM2,
+          edgeMl: line.edgeMl,
+          boardCost: line.boardCost,
+        });
+      }
+
+      if (part.edgeBandId && line.edgeMl > 0) {
+        const edge = findEdgeBand(catalog, part.edgeBandId);
+        if (!edge) {
+          throw new ResolutionError(
+            `Edge band not found: ${part.edgeBandId}`,
+            {
+              projectId: project.id,
+              partId: part.id,
+              edgeBandId: part.edgeBandId,
+              field: 'edgeBandId',
+            },
+          );
+        }
+        const ePrev = edgeMap.get(edge.id);
+        if (ePrev) {
+          ePrev.edgeMl += line.edgeMl;
+          ePrev.edgeCost += line.edgeCost;
+        } else {
+          edgeMap.set(edge.id, {
+            code: edge.code,
+            name: edge.name,
+            edgeMl: line.edgeMl,
+            edgeCost: line.edgeCost,
+          });
+        }
+      }
+    }
+  }
+
+  const materials: MaterialUsageRow[] = [...materialMap.entries()]
+    .map(([materialId, row]) => ({
+      materialId,
+      code: row.material.code,
+      name: row.material.name,
+      areaM2: row.areaM2,
+      edgeMl: row.edgeMl,
+      boardCost: row.boardCost,
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  const edges: EdgeUsageRow[] = [...edgeMap.entries()]
+    .map(([edgeBandId, row]) => ({
+      edgeBandId,
+      code: row.code,
+      name: row.name,
+      edgeMl: row.edgeMl,
+      edgeCost: row.edgeCost,
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  let hardware: HardwarePurchaseRow[] = [];
+  try {
+    hardware = generateHardwareList(project, catalog);
+  } catch (err) {
+    // No hardware lines is ok for a board-only project
+    if (
+      err instanceof ValidationError &&
+      typeof err.message === 'string' &&
+      err.message.includes('no hay herrajes')
+    ) {
+      hardware = [];
+    } else {
+      throw err;
+    }
+  }
+
+  const totalAreaM2 = materials.reduce((s, m) => s + m.areaM2, 0);
+  const totalEdgeMl = edges.reduce((s, e) => s + e.edgeMl, 0);
+  const totalBoardCost = materials.reduce((s, m) => s + m.boardCost, 0);
+  const totalEdgeCost = edges.reduce((s, e) => s + e.edgeCost, 0);
+  const totalHardwareCost = hardware.reduce((s, h) => s + h.lineCost, 0);
+
+  return {
+    materials,
+    edges,
+    hardware,
+    totalAreaM2,
+    totalEdgeMl,
+    totalBoardCost,
+    totalEdgeCost,
+    totalHardwareCost,
+  };
 }
 
 /**

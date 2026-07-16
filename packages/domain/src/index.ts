@@ -37,6 +37,9 @@ export type {
   ProductionCutRow,
   HardwarePurchaseRow,
   PieceLabel,
+  MaterialUsageRow,
+  EdgeUsageRow,
+  ProjectMaterialSummary,
 } from './types';
 
 export {
@@ -122,6 +125,7 @@ export {
   generatePieceLabels,
   formatEdgeBandingInstruction,
   generateHardwareList,
+  generateProjectMaterialSummary,
   validateBoardPart,
   validateHardwareLine,
   validateModule,
