@@ -641,3 +641,11 @@ describe('@muebles/web F013 export lista de herrajes', () => {
     expect(result.issues.some((i) => i.field === 'optionChoices')).toBe(true);
   });
 });
+
+describe('F041 engineer production exports', () => {
+  it('App gates production export with canExportProductionForProject', () => {
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc).toContain('canExportProductionForProject');
+    expect(appSrc).toContain('roleCanExportProduction');
+  });
+});

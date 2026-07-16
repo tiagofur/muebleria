@@ -41,6 +41,7 @@ import {
   roleCanAccessNav,
   roleCanAssignOwner,
   roleCanDeleteProject,
+  canExportProductionForProject,
   roleCanExportProduction,
   roleCanMarkProduced,
   roleCanMutateCatalog,
@@ -1600,6 +1601,18 @@ function AppContent({
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
+      // F041: production cut-list only for roles+statuses allowed.
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
       setExportBusy(true);
       setExportErrors([]);
       try {
@@ -1631,7 +1644,7 @@ function AppContent({
         setExportBusy(false);
       }
     },
-    [selectedProject, projects, catalog, toast],
+    [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
   const handleExportHardwareList = useCallback(
@@ -1641,6 +1654,17 @@ function AppContent({
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
       setExportBusy(true);
       setExportErrors([]);
       try {
@@ -1671,7 +1695,7 @@ function AppContent({
         setExportBusy(false);
       }
     },
-    [selectedProject, projects, catalog, toast],
+    [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
   const handleExportCommercialQuote = useCallback(async () => {

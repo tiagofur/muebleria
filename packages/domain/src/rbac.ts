@@ -99,6 +99,24 @@ export function roleCanExportProduction(role: string | null | undefined): boolea
   );
 }
 
+/**
+ * Production Excel (Optimizer / herrajes) only for plant-ready statuses (F041).
+ * Draft/quoted are commercial only — not production cut lists.
+ */
+export function projectAllowsProductionExport(
+  status: string | null | undefined,
+): boolean {
+  return status === 'accepted' || status === 'produced';
+}
+
+/** Combined gate: role may export production AND project status allows it. */
+export function canExportProductionForProject(
+  role: string | null | undefined,
+  status: string | null | undefined,
+): boolean {
+  return roleCanExportProduction(role) && projectAllowsProductionExport(status);
+}
+
 export function roleCanAccessSettings(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_ventas' || role === 'ingeniero';
 }
