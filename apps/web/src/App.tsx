@@ -108,6 +108,7 @@ import {
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
+import { buildPieceLabelsExport } from './exportPieceLabels';
 import {
   buildOptimizerExport,
   deliverExcelFile,
@@ -1785,6 +1786,61 @@ function AppContent({
     [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
+  const handleExportPieceLabels = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildPieceLabelsExport(
+          project,
+          catalog,
+          customers,
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          if (projectId != null) {
+            toast({
+              type: 'error',
+              message: 'No se pudo exportar etiquetas: revisá el pedido',
+            });
+          }
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+  );
+
   const handleExportCommercialQuote = useCallback(async () => {
     if (!selectedProject || !catalog) return;
     setExportBusy(true);
@@ -1964,6 +2020,9 @@ function AppContent({
             }}
             onExportHardware={(id) => {
               void handleExportHardwareList(id);
+            }}
+            onExportPieceLabels={(id) => {
+              void handleExportPieceLabels(id);
             }}
             onMarkProduced={markProjectProduced}
             exportBusy={exportBusy}
@@ -2180,6 +2239,13 @@ function AppContent({
             canExportProduction
               ? () => {
                   void handleExportHardwareList();
+                }
+              : undefined
+          }
+          onExportPieceLabels={
+            canExportProduction
+              ? () => {
+                  void handleExportPieceLabels();
                 }
               : undefined
           }

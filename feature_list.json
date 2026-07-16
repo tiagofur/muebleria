@@ -869,8 +869,29 @@
         "docs/prd.md §6.2",
         "https://github.com/tiagofur/muebleria/issues/90"
       ],
-      "status": "in_progress",
+      "status": "done",
       "github_issue": 90
+    },
+    {
+      "id": "F046",
+      "phase": 9,
+      "name": "piece_labels_edge_banding",
+      "title": "Etiquetas de pieza con instrucción de encintado",
+      "description": "Generar etiquetas por pieza de tablero del BOM resuelto: código, medidas, material e instrucción de encintado (lados + canto). Export usable en producción. Issue #96 / H01.",
+      "acceptance": [
+        "generatePieceLabels produce una etiqueta por línea de pieza de tablero (sin herrajes)",
+        "Instrucción de encintado refleja lados habilitados y canto resuelto cuando aplica",
+        "Export PDF/imprimible o descarga desde detalle de proyecto (roles de producción)",
+        "Tests de dominio del contenido de etiqueta",
+        "Estados accepted/produced según política de export de producción"
+      ],
+      "references": [
+        "docs/prd.md §6.7",
+        "docs/roadmap-engineering-structures.md",
+        "https://github.com/tiagofur/muebleria/issues/96"
+      ],
+      "status": "in_progress",
+      "github_issue": 96
     }
   ]
 }

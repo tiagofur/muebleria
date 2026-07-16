@@ -19,8 +19,10 @@ import {
   calcLineCost,
   calcProjectBreakdown,
   captureQuoteSnapshot,
+  formatEdgeBandingInstruction,
   generateCutRows,
   generateHardwareList,
+  generatePieceLabels,
   isProjectClosed,
   resolveBom,
   transitionProjectStatus,
@@ -967,6 +969,114 @@ describe('golden: Plantilla_Muebles.xlsx', () => {
     expect(puerta?.materialId).toBe(IDS.matMaderado);
     expect(puerta?.edgeBandId).toBe(IDS.edgeMaderado);
     expect(bisagra?.hardwareId).toBe(IDS.hwBisagra);
+  });
+});
+
+describe('formatEdgeBandingInstruction (F046)', () => {
+  it('returns Sin encintar when no sides enabled', () => {
+    expect(
+      formatEdgeBandingInstruction({
+        L1: false,
+        L2: false,
+        W1: false,
+        W2: false,
+      }),
+    ).toBe('Sin encintar');
+  });
+
+  it('lists sides and edge band when known', () => {
+    expect(
+      formatEdgeBandingInstruction(
+        { L1: true, L2: true, W1: false, W2: false },
+        { code: 'CAN-A', name: 'Edge A', thicknessMm: 0.5 },
+      ),
+    ).toBe('Encintar L1 y L2 con Edge A 0.5 mm (CAN-A)');
+  });
+
+  it('asks to define edge when sides on but no band', () => {
+    expect(
+      formatEdgeBandingInstruction({
+        L1: true,
+        L2: false,
+        W1: true,
+        W2: true,
+      }),
+    ).toBe('Encintar L1, W1 y W2 (definir canto)');
+  });
+});
+
+describe('generatePieceLabels (F046 / #96)', () => {
+  const gabOnlyProject: Project = {
+    id: 'proj-gab-only-labels',
+    name: 'Gab only labels',
+    customerId: 'Test',
+    currency: 'MXN',
+    marginFactor: 1.35,
+    laborFixedCost: 0,
+    status: 'accepted',
+    items: [
+      {
+        id: 'item-gab',
+        moduleId: IDS.modGab,
+        quantity: 1,
+        optionChoices: plantillaChoices,
+      },
+    ],
+    createdAt: '2026-07-15T00:00:00.000Z',
+    updatedAt: '2026-07-15T00:00:00.000Z',
+  };
+
+  it('emits one label per board part without hardware', () => {
+    const labels = generatePieceLabels(
+      gabOnlyProject,
+      plantillaCatalogWithModules,
+    );
+    expect(labels).toHaveLength(modGab01.boardParts.length);
+    for (const label of labels) {
+      expect(label.description.toLowerCase()).not.toContain('bisagra');
+      expect(label.materialName.length).toBeGreaterThan(0);
+      expect(label.edgeBandingInstruction.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('multiplies quantity by project item quantity', () => {
+    const labels = generatePieceLabels(
+      {
+        ...gabOnlyProject,
+        items: [
+          {
+            id: 'item-gab',
+            moduleId: IDS.modGab,
+            quantity: 2,
+            optionChoices: plantillaChoices,
+          },
+        ],
+      },
+      plantillaCatalogWithModules,
+    );
+    const costado = labels.find((l) => l.description === 'Costado Derecho');
+    expect(costado?.quantity).toBe(2);
+  });
+
+  it('includes edge banding instruction with resolved edge', () => {
+    const labels = generatePieceLabels(
+      gabOnlyProject,
+      plantillaCatalogWithModules,
+    );
+    const withEdge = labels.find((l) => l.L1 || l.L2 || l.W1 || l.W2);
+    expect(withEdge).toBeDefined();
+    expect(withEdge!.edgeBandingInstruction).toMatch(/^Encintar /);
+    expect(withEdge!.edgeBandCode).toBeTruthy();
+  });
+
+  it('throws when no board parts', () => {
+    const empty: Project = {
+      ...gabOnlyProject,
+      items: [],
+    };
+    expect(() =>
+      generatePieceLabels(empty, plantillaCatalogWithModules),
+    ).toThrow(ValidationError);
   });
 });
 
