@@ -451,3 +451,20 @@ func (c *createUserCapture) CreateUser(_ context.Context, u *domain.User) error 
 func mustHash(pw string) (string, error) {
 	return auth.HashPassword(pw)
 }
+
+
+func TestDecodeJSONBody_RejectsOversized(t *testing.T) {
+	// Build a body larger than maxJSONBodyBytes.
+	big := strings.Repeat("a", maxJSONBodyBytes+10)
+	body := strings.NewReader(`{"name":"` + big + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/x", body)
+	rr := httptest.NewRecorder()
+	var dst map[string]string
+	ok := decodeJSONBody(rr, req, &dst)
+	if ok {
+		t.Fatal("expected decodeJSONBody to fail for oversized body")
+	}
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", rr.Code)
+	}
+}

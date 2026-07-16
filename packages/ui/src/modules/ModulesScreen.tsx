@@ -32,7 +32,6 @@ import {
 import {
   ChevronLeft,
   Copy,
-  FolderTree,
   Layers,
   Package,
   Pencil,
@@ -123,7 +122,7 @@ function CostPreviewPanel({
 }): ReactNode {
   if (allowEmptyHint && !costPreview && !previewBlocked) {
     return (
-      <p className="catalog-empty" style={{ margin: 0 }}>
+      <p className="catalog-empty catalog-empty--flush">
         Guardá el mueble para ver el preview de costo con defaults de opción.
       </p>
     );
@@ -144,7 +143,7 @@ function CostPreviewPanel({
       </h4>
       {previewBlocked || !costPreview ? (
         <>
-          <p style={{ margin: 0, fontSize: 'var(--text-base)' }}>
+          <p className="module-cost-preview__blocked-msg">
             Preview bloqueado: faltan grupos o no se pudo calcular.
           </p>
           {missingGroups.length > 0 ? (
@@ -217,6 +216,9 @@ export function ModulesScreen({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ModuleDraft>(emptyModuleDraft);
   const [error, setError] = useState<string | null>(null);
+  /** MD modal: list + manage actions (not mixed into the filter sidebar). */
+  const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
+  /** SM modal: create/edit single category form. */
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
     null,
@@ -620,8 +622,7 @@ export function ModulesScreen({
           </div>
         </div>
         <div
-          className="module-editor__grid"
-          style={{ marginTop: '0.65rem' }}
+          className="module-editor__grid module-editor__grid--spaced"
           data-testid="module-category-cascade"
         >
           <div className="catalog-form__field">
@@ -674,7 +675,7 @@ export function ModulesScreen({
             </div>
           ) : null}
         </div>
-        <div className="catalog-form__field" style={{ marginTop: '0.65rem' }}>
+        <div className="catalog-form__field catalog-form__field--spaced">
           <label htmlFor="mod-notes">Notas</label>
           <input
             id="mod-notes"
@@ -1188,8 +1189,11 @@ export function ModulesScreen({
     if (nodes.length === 0) return null;
     return (
       <ul
-        className="module-category-tree__list"
-        style={{ paddingLeft: depth === 0 ? 0 : 'var(--space-3)' }}
+        className={
+          depth === 0
+            ? 'module-category-tree__list'
+            : 'module-category-tree__list module-category-tree__list--nested'
+        }
       >
         {nodes.map((node) => {
           const active = categoryFilter === node.id;
@@ -1219,6 +1223,14 @@ export function ModulesScreen({
     );
   };
 
+  const openManageCategories = () => {
+    setManageCategoriesOpen(true);
+  };
+
+  const closeManageCategories = () => {
+    setManageCategoriesOpen(false);
+  };
+
   const openCreateCategory = () => {
     setEditingCategoryId(null);
     setCategoryDraft(emptyCategoryDraft());
@@ -1242,6 +1254,62 @@ export function ModulesScreen({
     setEditingCategoryId(null);
     setCategoryDraft(emptyCategoryDraft());
     setCategoryError(null);
+  };
+
+  const renderManageCategoryRows = (
+    parentId: string | undefined,
+    depth: number,
+  ): ReactNode => {
+    const nodes = childrenOf(categories, parentId);
+    if (nodes.length === 0) return null;
+    return (
+      <ul
+        className={
+          depth === 0
+            ? 'module-category-manage__list'
+            : 'module-category-manage__list module-category-manage__list--nested'
+        }
+        data-testid={depth === 0 ? 'manage-categories-list' : undefined}
+      >
+        {nodes.map((node) => (
+          <li key={node.id}>
+            <div className="module-category-manage__row">
+              <div className="module-category-manage__row-main">
+                <span className="module-category-manage__name">
+                  {node.name}
+                </span>
+                <span className="module-category-manage__meta">
+                  Nivel {depth + 1}
+                </span>
+              </div>
+              <span className="module-category-manage__actions">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => openEditCategory(node)}
+                  aria-label={`Editar ${node.name}`}
+                  data-testid={`manage-category-edit-${node.id}`}
+                >
+                  <Pencil size={14} strokeWidth={1.5} />
+                </button>
+                {onDeleteCategory ? (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--small"
+                    onClick={() => setConfirmDeleteCategoryId(node.id)}
+                    aria-label={`Eliminar ${node.name}`}
+                    data-testid={`manage-category-delete-${node.id}`}
+                  >
+                    <Trash2 size={14} strokeWidth={1.5} />
+                  </button>
+                ) : null}
+              </span>
+            </div>
+            {renderManageCategoryRows(node.id, depth + 1)}
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   const handleCategorySubmit = (e: FormEvent) => {
@@ -1278,11 +1346,11 @@ export function ModulesScreen({
             <button
               type="button"
               className="btn"
-              onClick={openCreateCategory}
+              onClick={openManageCategories}
               data-testid="manage-categories"
             >
-              <FolderTree size={16} strokeWidth={1.5} aria-hidden />
-              Categorías
+              <Pencil size={16} strokeWidth={1.5} aria-hidden />
+              Editar categorías
             </button>
           ) : null}
           <button
@@ -1302,7 +1370,20 @@ export function ModulesScreen({
           aria-label="Filtro por categorías"
           data-testid="category-filter-panel"
         >
-          <h3 className="module-category-tree__title">Categorías</h3>
+          <div className="module-category-tree__header">
+            <h3 className="module-category-tree__title">Filtrar</h3>
+            {onCreateCategory ? (
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                onClick={openManageCategories}
+                aria-label="Editar categorías"
+                data-testid="category-filter-edit"
+              >
+                <Pencil size={14} strokeWidth={1.5} aria-hidden />
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
             className={
@@ -1328,44 +1409,11 @@ export function ModulesScreen({
           </button>
           {categories.length === 0 ? (
             <p className="module-category-tree__empty">
-              Sin categorías. Creá la jerarquía con el botón Categorías.
+              Sin categorías. Usá «Editar categorías» para crear la jerarquía.
             </p>
           ) : (
             renderCategoryTree(undefined, 0)
           )}
-          {onCreateCategory && categories.length > 0 ? (
-            <ul className="module-category-tree__admin" aria-label="Editar categorías">
-              {flatCategories.map((row) => {
-                const cat = categories.find((c) => c.id === row.id);
-                if (!cat) return null;
-                return (
-                  <li key={row.id} className="module-category-tree__admin-row">
-                    <span>{row.label}</span>
-                    <span className="module-category-tree__admin-actions">
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--small"
-                        onClick={() => openEditCategory(cat)}
-                        aria-label={`Editar ${cat.name}`}
-                      >
-                        <Pencil size={14} strokeWidth={1.5} />
-                      </button>
-                      {onDeleteCategory ? (
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--small"
-                          onClick={() => setConfirmDeleteCategoryId(cat.id)}
-                          aria-label={`Eliminar ${cat.name}`}
-                        >
-                          <Trash2 size={14} strokeWidth={1.5} />
-                        </button>
-                      ) : null}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
         </aside>
 
         <div className="module-list-main">
@@ -1453,6 +1501,52 @@ export function ModulesScreen({
         }
       >
         {renderEditorForm()}
+      </Modal>
+
+      <Modal
+        open={manageCategoriesOpen}
+        onClose={closeManageCategories}
+        title="Gestionar categorías"
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={closeManageCategories}
+            >
+              Cerrar
+            </button>
+            {onCreateCategory ? (
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={openCreateCategory}
+                data-testid="manage-categories-new"
+              >
+                <Plus size={16} strokeWidth={1.5} aria-hidden />
+                Nueva categoría
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        <div
+          className="module-category-manage"
+          data-testid="manage-categories-modal"
+        >
+          <p className="module-category-manage__hint">
+            Organizá la jerarquía de muebles (hasta 3 niveles). El panel lateral
+            solo filtra la lista.
+          </p>
+          {categories.length === 0 ? (
+            <p className="module-category-manage__empty">
+              Todavía no hay categorías. Creá la primera con «Nueva categoría».
+            </p>
+          ) : (
+            renderManageCategoryRows(undefined, 0)
+          )}
+        </div>
       </Modal>
 
       <Modal

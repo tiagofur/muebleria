@@ -20,13 +20,19 @@ export function LoginScreen({
 }: LoginScreenProps): ReactNode {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (email.trim() && password.trim()) {
-      void onLogin(email.trim(), password);
+    setLocalError(null);
+    if (!email.trim() || !password.trim()) {
+      setLocalError('Completá email y contraseña');
+      return;
     }
+    void onLogin(email.trim(), password);
   };
+
+  const displayError = error ?? localError;
 
   return (
     <div className="login-screen">
@@ -42,9 +48,9 @@ export function LoginScreen({
         </header>
 
         <form className="login-form" onSubmit={handleSubmit}>
-          {error ? (
+          {displayError ? (
             <div className="login-error" role="alert">
-              {error}
+              {displayError}
             </div>
           ) : null}
 
