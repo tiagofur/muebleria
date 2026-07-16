@@ -64,6 +64,31 @@ node packages/excel/src/__fixtures__/smokeExport.mjs
 # → abre en LibreOffice/Excel y verifica visualmente columnas A-J
 ```
 
+### Nivel 6 — Desktop Electron en dev (F032 / #38)
+
+Shell delgado: misma UI que web (Vite) + diálogo nativo de guardar para Excel.
+
+```bash
+# Terminal 1 — UI compartida
+pnpm --filter @muebles/web dev
+
+# Terminal 2 — host Electron (espera a :5173 y abre ventana)
+pnpm --filter @muebles/desktop dev:app
+```
+
+Smoke manual:
+
+1. La ventana carga la misma app que el browser en `http://localhost:5173`.
+2. Abrí una cotización y **Exportar Optimizer** → diálogo nativo Guardar → archivo `.xlsx` en disco.
+3. Cancelar el diálogo no escribe archivo y muestra toast de cancelación.
+4. El shell **no** calcula costos: solo IPC `excel:showSaveDialog` / `excel:writeExcelFile`.
+
+Tests unitarios del package (sin abrir GUI):
+
+```bash
+pnpm --filter @muebles/desktop test
+```
+
 ## Anti-patrones (no hacer)
 
 - ❌ "He implementado la función, debería funcionar." → falta evidencia ejecutable.

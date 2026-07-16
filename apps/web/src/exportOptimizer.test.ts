@@ -9,6 +9,7 @@ import type { Project } from '@muebles/domain';
 import { createSeedWorkspace } from '@muebles/storage/seed';
 import {
   buildOptimizerExport,
+  deliverExcelFile,
   downloadOptimizerXlsx,
   optimizerFileName,
 } from './exportOptimizer';
@@ -136,5 +137,62 @@ describe('downloadOptimizerXlsx', () => {
     expect(click).toHaveBeenCalledOnce();
     expect(removeChild).toHaveBeenCalledWith(anchor);
     expect(revoke).toHaveBeenCalledWith('blob:mock-url');
+  });
+});
+
+describe('deliverExcelFile (EXP-06 / EXP-07)', () => {
+  it('uses Electron save dialog when electronAPI is injected', async () => {
+    const writeExcelFile = vi.fn(async () => undefined);
+    const showSaveDialog = vi.fn(async () => '/tmp/out.xlsx');
+    const status = await deliverExcelFile(
+      new Uint8Array([9, 8, 7]),
+      'optimizer-demo.xlsx',
+      undefined,
+      { showSaveDialog, writeExcelFile },
+    );
+    expect(status).toBe('saved');
+    expect(showSaveDialog).toHaveBeenCalledWith({
+      defaultPath: 'optimizer-demo.xlsx',
+    });
+    expect(writeExcelFile).toHaveBeenCalledOnce();
+    const [, buffer] = writeExcelFile.mock.calls[0]!;
+    expect(buffer).toBeInstanceOf(ArrayBuffer);
+  });
+
+  it('returns cancelled when save dialog is aborted', async () => {
+    const status = await deliverExcelFile(
+      new Uint8Array([1]),
+      'x.xlsx',
+      undefined,
+      {
+        showSaveDialog: async () => undefined,
+        writeExcelFile: async () => undefined,
+      },
+    );
+    expect(status).toBe('cancelled');
+  });
+
+  it('falls back to browser download without electronAPI', async () => {
+    const click = vi.fn();
+    const anchor = {
+      href: '',
+      download: '',
+      rel: '',
+      click,
+    } as unknown as HTMLAnchorElement;
+    const status = await deliverExcelFile(
+      new Uint8Array([1, 2]),
+      'optimizer-web.xlsx',
+      {
+        createObjectURL: () => 'blob:x',
+        revokeObjectURL: () => undefined,
+        createElement: () => anchor,
+        appendChild: () => undefined,
+        removeChild: () => undefined,
+      },
+      undefined,
+    );
+    expect(status).toBe('downloaded');
+    expect(click).toHaveBeenCalledOnce();
   });
 });

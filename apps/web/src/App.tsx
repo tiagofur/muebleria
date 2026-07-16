@@ -84,17 +84,11 @@ import {
   breakdownFromApi,
   createSeedWorkspace,
 } from '@muebles/storage';
-import {
-  buildCommercialQuoteExport,
-  downloadCommercialQuoteXlsx,
-} from './exportCommercialQuote';
-import {
-  buildHardwareListExport,
-  downloadHardwareListXlsx,
-} from './exportHardwareList';
+import { buildCommercialQuoteExport } from './exportCommercialQuote';
+import { buildHardwareListExport } from './exportHardwareList';
 import {
   buildOptimizerExport,
-  downloadOptimizerXlsx,
+  deliverExcelFile,
 } from './exportOptimizer';
 import {
   entityIdFromPath,
@@ -1424,10 +1418,17 @@ function AppContent({
         setExportErrors(result.issues);
         return;
       }
-      downloadOptimizerXlsx(result.bytes, result.fileName);
+      const delivery = await deliverExcelFile(result.bytes, result.fileName);
+      if (delivery === 'cancelled') {
+        toast({ type: 'info', message: 'Export cancelado' });
+        return;
+      }
       toast({
         type: 'success',
-        message: `✓ ${result.fileName} descargado`,
+        message:
+          delivery === 'saved'
+            ? `✓ ${result.fileName} guardado`
+            : `✓ ${result.fileName} descargado`,
       });
     } finally {
       setExportBusy(false);
@@ -1444,10 +1445,17 @@ function AppContent({
         setExportErrors(result.issues);
         return;
       }
-      downloadHardwareListXlsx(result.bytes, result.fileName);
+      const delivery = await deliverExcelFile(result.bytes, result.fileName);
+      if (delivery === 'cancelled') {
+        toast({ type: 'info', message: 'Export cancelado' });
+        return;
+      }
       toast({
         type: 'success',
-        message: `✓ ${result.fileName} descargado`,
+        message:
+          delivery === 'saved'
+            ? `✓ ${result.fileName} guardado`
+            : `✓ ${result.fileName} descargado`,
       });
     } finally {
       setExportBusy(false);
@@ -1468,10 +1476,17 @@ function AppContent({
         setExportErrors(result.issues);
         return;
       }
-      downloadCommercialQuoteXlsx(result.bytes, result.fileName);
+      const delivery = await deliverExcelFile(result.bytes, result.fileName);
+      if (delivery === 'cancelled') {
+        toast({ type: 'info', message: 'Export cancelado' });
+        return;
+      }
       toast({
         type: 'success',
-        message: `✓ ${result.fileName} descargado`,
+        message:
+          delivery === 'saved'
+            ? `✓ ${result.fileName} guardado`
+            : `✓ ${result.fileName} descargado`,
       });
     } finally {
       setExportBusy(false);
