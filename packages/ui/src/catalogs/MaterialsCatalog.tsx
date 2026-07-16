@@ -117,6 +117,8 @@ export interface MaterialsCatalogProps {
    * 0 / undefined = no request.
    */
   readonly requestCreateKey?: number;
+  /** F035: hide ABM when false (read-only list). */
+  readonly canMutate?: boolean;
 }
 
 export function MaterialsCatalog({
@@ -131,6 +133,7 @@ export function MaterialsCatalog({
   openEntityId = null,
   onSelectionChange,
   requestCreateKey = 0,
+  canMutate = true,
 }: MaterialsCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -348,10 +351,12 @@ export function MaterialsCatalog({
       <div className="catalog-page__header">
         <h2 className="catalog-page__title">Materiales (tableros)</h2>
         <div className="catalog-page__toolbar">
+          {canMutate ? (
           <button type="button" className="btn btn--primary" onClick={startCreate}>
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nuevo material
           </button>
+          ) : null}
         </div>
       </div>
 

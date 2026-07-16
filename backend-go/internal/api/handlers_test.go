@@ -18,24 +18,27 @@ import (
 // instead of silently passing. This mirrors the httptest.ResponseRecorder style
 // of middleware_test.go and avoids any database dependency.
 type stubStore struct {
-	createCustomerErr     error
-	createMaterialErr     error
-	createProjectErr      error
-	updateProjectErr      error
-	customerReturnedByID  *domain.Customer
-	customerGetByIDErr    error
-	projectReturnedByID   *domain.Project
-	projectGetByIDErr     error
-	listCustomers         []domain.Customer
-	listProjects          []domain.Project
-	lastCreatedCustomer   *domain.Customer
-	lastCreatedProject    *domain.Project
-	materialReturnedByID  *domain.MaterialBoard
-	materialGetByIDErr    error
+	createCustomerErr    error
+	createMaterialErr    error
+	createProjectErr     error
+	updateProjectErr     error
+	customerReturnedByID *domain.Customer
+	customerGetByIDErr   error
+	projectReturnedByID  *domain.Project
+	projectGetByIDErr    error
+	listCustomers        []domain.Customer
+	listProjects         []domain.Project
+	lastCreatedCustomer  *domain.Customer
+	lastCreatedProject   *domain.Project
+	materialReturnedByID *domain.MaterialBoard
+	materialGetByIDErr   error
 	// Auth test hooks
-	getUserByEmail        *domain.User
-	getUserByEmailErr     error
-	createUserErr         error
+	getUserByEmail      *domain.User
+	getUserByEmailErr   error
+	createUserErr       error
+	listUsers           []domain.User
+	createMaterialOK    bool
+	deleteProjectCalled bool
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -47,7 +50,11 @@ func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) erro
 	return nil
 }
 func (s *stubStore) CreateMaterialBoard(ctx context.Context, m *domain.MaterialBoard) error {
-	return s.createMaterialErr
+	if s.createMaterialErr != nil {
+		return s.createMaterialErr
+	}
+	s.createMaterialOK = true
+	return nil
 }
 func (s *stubStore) CreateProject(ctx context.Context, p *domain.Project) error {
 	if s.createProjectErr != nil {
@@ -83,13 +90,23 @@ func (s *stubStore) CreateUser(context.Context, *domain.User) error {
 	return s.createUserErr
 }
 func (s *stubStore) ListUsers(context.Context) ([]domain.User, error) {
-	s.stubNotUsed("ListUsers"); return nil, nil
+	if s.listUsers != nil {
+		return s.listUsers, nil
+	}
+	return []domain.User{}, nil
 }
-func (s *stubStore) ApproveUser(context.Context, string) error { s.stubNotUsed("ApproveUser"); return nil }
+func (s *stubStore) ApproveUser(context.Context, string) error {
+	s.stubNotUsed("ApproveUser")
+	return nil
+}
 func (s *stubStore) UpdateUserRole(context.Context, string, domain.UserRole) error {
-	s.stubNotUsed("UpdateUserRole"); return nil
+	s.stubNotUsed("UpdateUserRole")
+	return nil
 }
-func (s *stubStore) RejectUser(context.Context, string) error { s.stubNotUsed("RejectUser"); return nil }
+func (s *stubStore) RejectUser(context.Context, string) error {
+	s.stubNotUsed("RejectUser")
+	return nil
+}
 func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {
 	if s.listCustomers != nil {
 		return s.listCustomers, nil
@@ -103,88 +120,116 @@ func (s *stubStore) DeactivateCustomer(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListMaterialBoards(context.Context) ([]domain.MaterialBoard, error) {
-	s.stubNotUsed("ListMaterialBoards"); return nil, nil
+	s.stubNotUsed("ListMaterialBoards")
+	return nil, nil
 }
 func (s *stubStore) UpdateMaterialBoard(context.Context, string, *domain.MaterialBoard) error {
-	s.stubNotUsed("UpdateMaterialBoard"); return nil
+	s.stubNotUsed("UpdateMaterialBoard")
+	return nil
 }
 func (s *stubStore) DeactivateMaterialBoard(context.Context, string) error {
-	s.stubNotUsed("DeactivateMaterialBoard"); return nil
+	s.stubNotUsed("DeactivateMaterialBoard")
+	return nil
 }
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {
-	s.stubNotUsed("ListEdgeBands"); return nil, nil
+	s.stubNotUsed("ListEdgeBands")
+	return nil, nil
 }
 func (s *stubStore) GetEdgeBandByID(context.Context, string) (*domain.EdgeBand, error) {
-	s.stubNotUsed("GetEdgeBandByID"); return nil, nil
+	s.stubNotUsed("GetEdgeBandByID")
+	return nil, nil
 }
 func (s *stubStore) CreateEdgeBand(context.Context, *domain.EdgeBand) error {
-	s.stubNotUsed("CreateEdgeBand"); return nil
+	s.stubNotUsed("CreateEdgeBand")
+	return nil
 }
 func (s *stubStore) UpdateEdgeBand(context.Context, string, *domain.EdgeBand) error {
-	s.stubNotUsed("UpdateEdgeBand"); return nil
+	s.stubNotUsed("UpdateEdgeBand")
+	return nil
 }
 func (s *stubStore) DeactivateEdgeBand(context.Context, string) error {
-	s.stubNotUsed("DeactivateEdgeBand"); return nil
+	s.stubNotUsed("DeactivateEdgeBand")
+	return nil
 }
 func (s *stubStore) ListHardwares(context.Context) ([]domain.Hardware, error) {
-	s.stubNotUsed("ListHardwares"); return nil, nil
+	s.stubNotUsed("ListHardwares")
+	return nil, nil
 }
 func (s *stubStore) GetHardwareByID(context.Context, string) (*domain.Hardware, error) {
-	s.stubNotUsed("GetHardwareByID"); return nil, nil
+	s.stubNotUsed("GetHardwareByID")
+	return nil, nil
 }
 func (s *stubStore) CreateHardware(context.Context, *domain.Hardware) error {
-	s.stubNotUsed("CreateHardware"); return nil
+	s.stubNotUsed("CreateHardware")
+	return nil
 }
 func (s *stubStore) UpdateHardware(context.Context, string, *domain.Hardware) error {
-	s.stubNotUsed("UpdateHardware"); return nil
+	s.stubNotUsed("UpdateHardware")
+	return nil
 }
 func (s *stubStore) DeactivateHardware(context.Context, string) error {
-	s.stubNotUsed("DeactivateHardware"); return nil
+	s.stubNotUsed("DeactivateHardware")
+	return nil
 }
 func (s *stubStore) ListOptionGroups(context.Context) ([]domain.OptionGroup, error) {
-	s.stubNotUsed("ListOptionGroups"); return nil, nil
+	s.stubNotUsed("ListOptionGroups")
+	return nil, nil
 }
 func (s *stubStore) GetOptionGroupByID(context.Context, string) (*domain.OptionGroup, error) {
-	s.stubNotUsed("GetOptionGroupByID"); return nil, nil
+	s.stubNotUsed("GetOptionGroupByID")
+	return nil, nil
 }
 func (s *stubStore) CreateOptionGroup(context.Context, *domain.OptionGroup) error {
-	s.stubNotUsed("CreateOptionGroup"); return nil
+	s.stubNotUsed("CreateOptionGroup")
+	return nil
 }
 func (s *stubStore) UpdateOptionGroup(context.Context, string, *domain.OptionGroup) error {
-	s.stubNotUsed("UpdateOptionGroup"); return nil
+	s.stubNotUsed("UpdateOptionGroup")
+	return nil
 }
 func (s *stubStore) DeleteOptionGroup(context.Context, string) error {
-	s.stubNotUsed("DeleteOptionGroup"); return nil
+	s.stubNotUsed("DeleteOptionGroup")
+	return nil
 }
 func (s *stubStore) ListCategories(context.Context) ([]domain.ModuleCategory, error) {
-	s.stubNotUsed("ListCategories"); return nil, nil
+	s.stubNotUsed("ListCategories")
+	return nil, nil
 }
 func (s *stubStore) GetCategoryByID(context.Context, string) (*domain.ModuleCategory, error) {
-	s.stubNotUsed("GetCategoryByID"); return nil, nil
+	s.stubNotUsed("GetCategoryByID")
+	return nil, nil
 }
 func (s *stubStore) CreateCategory(context.Context, *domain.ModuleCategory) error {
-	s.stubNotUsed("CreateCategory"); return nil
+	s.stubNotUsed("CreateCategory")
+	return nil
 }
 func (s *stubStore) UpdateCategory(context.Context, string, *domain.ModuleCategory) error {
-	s.stubNotUsed("UpdateCategory"); return nil
+	s.stubNotUsed("UpdateCategory")
+	return nil
 }
 func (s *stubStore) DeleteCategory(context.Context, string) error {
-	s.stubNotUsed("DeleteCategory"); return nil
+	s.stubNotUsed("DeleteCategory")
+	return nil
 }
 func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
-	s.stubNotUsed("GetFullCatalog"); return domain.Catalog{}, nil
+	s.stubNotUsed("GetFullCatalog")
+	return domain.Catalog{}, nil
 }
 func (s *stubStore) GetModuleByID(context.Context, string) (*domain.Module, error) {
-	s.stubNotUsed("GetModuleByID"); return nil, nil
+	s.stubNotUsed("GetModuleByID")
+	return nil, nil
 }
 func (s *stubStore) CreateModule(context.Context, *domain.Module) error {
-	s.stubNotUsed("CreateModule"); return nil
+	s.stubNotUsed("CreateModule")
+	return nil
 }
 func (s *stubStore) UpdateModule(context.Context, string, *domain.Module) error {
-	s.stubNotUsed("UpdateModule"); return nil
+	s.stubNotUsed("UpdateModule")
+	return nil
 }
 func (s *stubStore) DeleteModule(context.Context, string) error {
-	s.stubNotUsed("DeleteModule"); return nil
+	s.stubNotUsed("DeleteModule")
+	return nil
 }
 func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 	if s.listProjects != nil {
@@ -202,6 +247,7 @@ func (s *stubStore) UpdateProject(context.Context, string, *domain.Project) erro
 	return nil
 }
 func (s *stubStore) DeleteProject(context.Context, string) error {
+	s.deleteProjectCalled = true
 	return nil
 }
 
@@ -217,7 +263,7 @@ var _ Store = (*stubStore)(nil)
 func TestHandleCustomersDuplicateKeyReturns409(t *testing.T) {
 	srv := &Server{Store: &stubStore{createCustomerErr: dupErr("error creating customer")}}
 	body := strings.NewReader(`{"id":"11111111-2222-3333-4444-555555555555","name":"Dup","active":true}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/customers", body)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/customers", body), "admin", string(domain.RoleAdmin))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -234,7 +280,7 @@ func TestHandleCustomersDuplicateKeyReturns409(t *testing.T) {
 func TestHandleMaterialsDuplicateKeyReturns409(t *testing.T) {
 	srv := &Server{Store: &stubStore{createMaterialErr: dupErr("error creating material board")}}
 	body := strings.NewReader(`{"code":"MAT-DUP","name":"Dup","width_mm":100,"length_mm":100,"thickness_mm":18,"board_price":10}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -251,7 +297,7 @@ func TestHandleMaterialsDuplicateKeyReturns409(t *testing.T) {
 func TestHandleCustomersCreateSuccess(t *testing.T) {
 	srv := &Server{Store: &stubStore{createCustomerErr: nil}}
 	body := strings.NewReader(`{"id":"22222222-3333-4444-5555-666666666666","name":"Nuevo","active":true}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/customers", body)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/customers", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -272,7 +318,7 @@ func TestHandleCustomersCreateSuccess(t *testing.T) {
 func TestHandleProjectsDuplicateKeyReturns409(t *testing.T) {
 	srv := &Server{Store: &stubStore{createProjectErr: dupErr("error creating project")}}
 	body := strings.NewReader(`{"id":"77777777-8888-9999-0000-111111111111","name":"Dup","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/projects", body)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -294,7 +340,7 @@ func TestHandleProjectsCreateEchoesClientId(t *testing.T) {
 	srv := &Server{Store: &stubStore{createProjectErr: nil}}
 	const sentID = "88888888-9999-0000-1111-222222222222"
 	body := strings.NewReader(`{"id":"` + sentID + `","name":"Nuevo","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/projects", body)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -322,7 +368,7 @@ func TestHandleProjectsCreateEchoesClientId(t *testing.T) {
 func TestHandleProjectByIDUpdateNotFoundReturns404(t *testing.T) {
 	srv := &Server{Store: &stubStore{projectGetByIDErr: errors.New("no rows in result set")}}
 	body := strings.NewReader(`{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","name":"Ghost","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
-	req := httptest.NewRequest(http.MethodPut, "/api/projects/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", body)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", body), "admin", string(domain.RoleAdmin))
 	req.SetPathValue("id", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -473,6 +519,128 @@ func TestOwnership_AdminReassignProjectOwner(t *testing.T) {
 	}
 }
 
+// --- F035 product RBAC matrix ---
+
+func TestRBAC_VendedorCannotCreateMaterial(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterials(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403 body=%s", rr.Code, rr.Body.String())
+	}
+	if store.createMaterialOK {
+		t.Fatal("store must not create material for vendedor")
+	}
+}
+
+func TestRBAC_ProduccionCannotCreateMaterial(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "p1", string(domain.RoleProduccion))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterials(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403", rr.Code)
+	}
+}
+
+func TestRBAC_IngenieroCanCreateMaterial(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterials(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status %d want 201 body=%s", rr.Code, rr.Body.String())
+	}
+	if !store.createMaterialOK {
+		t.Fatal("expected material created")
+	}
+}
+
+func TestRBAC_VendedorCannotDeleteProject(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
+		},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/projects/p1", nil), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403 body=%s", rr.Code, rr.Body.String())
+	}
+	if store.deleteProjectCalled {
+		t.Fatal("delete must not run for vendedor")
+	}
+}
+
+func TestRBAC_GerenteCanDeleteProject(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
+		},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/projects/p1", nil), "g1", string(domain.RoleGerenteVentas))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d want 200 body=%s", rr.Code, rr.Body.String())
+	}
+	if !store.deleteProjectCalled {
+		t.Fatal("gerente delete should run")
+	}
+}
+
+func TestRBAC_ProduccionCannotAccessCustomers(t *testing.T) {
+	srv := &Server{Store: &stubStore{listCustomers: []domain.Customer{{ID: "c1"}}}}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/customers", nil), "p1", string(domain.RoleProduccion))
+	rr := httptest.NewRecorder()
+	srv.HandleCustomers(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403", rr.Code)
+	}
+}
+
+func TestRBAC_GerenteCanAssignOwnerOnCreate(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"44444444-5555-6666-7777-888888888888","name":"Asignado","active":true,"owner_user_id":"v2"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/customers", body), "g1", string(domain.RoleGerenteVentas))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleCustomers(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+	if store.lastCreatedCustomer == nil || store.lastCreatedCustomer.OwnerUserID != "v2" {
+		t.Fatalf("gerente assign: %#v", store.lastCreatedCustomer)
+	}
+}
+
+func TestRBAC_ExportProductionDeniedToVendedor_Domain(t *testing.T) {
+	// Client-side export; domain gate is the contract for UI + future API.
+	if domain.RoleCanExportProduction(domain.RoleVendedor) {
+		t.Fatal("vendedor must not export production")
+	}
+	if !domain.RoleCanExportProduction(domain.RoleIngeniero) {
+		t.Fatal("ingeniero exports production")
+	}
+}
+
 // --- Issue #19 auth hardening ---
 
 func TestHandleLogin_Uniform401ForMissingUser(t *testing.T) {
@@ -609,7 +777,6 @@ func (c *createUserCapture) CreateUser(_ context.Context, u *domain.User) error 
 func mustHash(pw string) (string, error) {
 	return auth.HashPassword(pw)
 }
-
 
 func TestDecodeJSONBody_RejectsOversized(t *testing.T) {
 	// Build a body larger than maxJSONBodyBytes.

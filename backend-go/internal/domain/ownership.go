@@ -1,15 +1,19 @@
 package domain
 
 // RoleSeesAllOwners reports whether the role may list/read every customer and project.
-// Until F035 (gerente_ventas), only vendedor is portfolio-scoped.
+// Vendedor is portfolio-scoped; user (sin puesto) sees none of others' rows.
 func RoleSeesAllOwners(role UserRole) bool {
-	return role != RoleVendedor
+	switch role {
+	case RoleAdmin, RoleGerenteVentas, RoleIngeniero, RoleProduccion:
+		return true
+	default:
+		return false
+	}
 }
 
 // RoleCanAssignOwner reports whether the role may set or reassign ownerUserId.
-// Admin only until F035 introduces gerente_ventas.
 func RoleCanAssignOwner(role UserRole) bool {
-	return role == RoleAdmin
+	return role == RoleAdmin || role == RoleGerenteVentas
 }
 
 // ResolveOwnerOnCreate applies OWN rules for create payloads.
@@ -39,7 +43,7 @@ func ResolveOwnerOnUpdate(actorRole UserRole, existingOwner, requestedOwner stri
 	return existingOwner
 }
 
-// CanAccessOwnedResource is true when the actor may read/mutate the row.
+// CanAccessOwnedResource is true when the actor may read/mutate the row (portfolio layer).
 func CanAccessOwnedResource(actorID string, actorRole UserRole, ownerUserID string) bool {
 	if RoleSeesAllOwners(actorRole) {
 		return true

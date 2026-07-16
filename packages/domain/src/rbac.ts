@@ -1,0 +1,157 @@
+/**
+ * Product RBAC matrix (F035 / #67).
+ * Portfolio ownership (F034) layers on top for vendedor.
+ */
+
+export type ProductRole =
+  | 'admin'
+  | 'user'
+  | 'vendedor'
+  | 'gerente_ventas'
+  | 'ingeniero'
+  | 'produccion';
+
+export const PRODUCT_ROLES: readonly ProductRole[] = [
+  'admin',
+  'user',
+  'vendedor',
+  'gerente_ventas',
+  'ingeniero',
+  'produccion',
+] as const;
+
+/** Assignable job titles from admin panel (includes sin puesto). */
+export const ASSIGNABLE_ROLES: readonly ProductRole[] = PRODUCT_ROLES;
+
+export function isValidUserRole(role: string | null | undefined): role is ProductRole {
+  return (
+    role === 'admin' ||
+    role === 'user' ||
+    role === 'vendedor' ||
+    role === 'gerente_ventas' ||
+    role === 'ingeniero' ||
+    role === 'produccion'
+  );
+}
+
+export function roleCanManageUsers(role: string | null | undefined): boolean {
+  return role === 'admin';
+}
+
+export function roleCanMutateCatalog(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'ingeniero';
+}
+
+export function roleCanMutateModules(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'ingeniero';
+}
+
+export function roleCanAccessCustomers(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas' || role === 'vendedor';
+}
+
+export function roleCanMutateCustomers(role: string | null | undefined): boolean {
+  return roleCanAccessCustomers(role);
+}
+
+export function roleCanAccessProjects(role: string | null | undefined): boolean {
+  return (
+    role === 'admin' ||
+    role === 'gerente_ventas' ||
+    role === 'vendedor' ||
+    role === 'ingeniero' ||
+    role === 'produccion'
+  );
+}
+
+export function roleCanMutateProjects(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas' || role === 'vendedor';
+}
+
+export function roleCanDeleteProject(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas';
+}
+
+export function roleCanExportProduction(role: string | null | undefined): boolean {
+  return (
+    role === 'admin' ||
+    role === 'ingeniero' ||
+    role === 'produccion' ||
+    role === 'gerente_ventas'
+  );
+}
+
+export function roleCanAccessSettings(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas' || role === 'ingeniero';
+}
+
+export function roleCanAccessCatalogNav(role: string | null | undefined): boolean {
+  return (
+    role === 'admin' ||
+    role === 'ingeniero' ||
+    role === 'gerente_ventas' ||
+    role === 'vendedor'
+  );
+}
+
+export function roleCanAccessModulesNav(role: string | null | undefined): boolean {
+  return (
+    role === 'admin' ||
+    role === 'ingeniero' ||
+    role === 'gerente_ventas' ||
+    role === 'vendedor'
+  );
+}
+
+/** Spanish labels for taller UI. */
+export function roleLabelEs(role: string | null | undefined): string {
+  const map: Record<string, string> = {
+    admin: 'Admin',
+    user: 'Sin puesto',
+    vendedor: 'Vendedor',
+    gerente_ventas: 'Gerente de ventas',
+    ingeniero: 'Ingeniero',
+    produccion: 'Producción',
+  };
+  if (!role) return '—';
+  return map[role] ?? role;
+}
+
+/** Nav section ids that a role may open (guest = all). */
+export function navIdsForRole(role: string | null | undefined): ReadonlySet<string> {
+  if (role == null) {
+    // guest / local mode — full tool
+    return new Set([
+      'home',
+      'projects',
+      'customers',
+      'modules',
+      'materials',
+      'edges',
+      'hardware',
+      'optionGroups',
+      'settings',
+      'users',
+    ]);
+  }
+  const ids = new Set<string>(['home']);
+  if (roleCanAccessProjects(role)) ids.add('projects');
+  if (roleCanAccessCustomers(role)) ids.add('customers');
+  if (roleCanAccessModulesNav(role)) ids.add('modules');
+  if (roleCanAccessCatalogNav(role)) {
+    ids.add('materials');
+    ids.add('edges');
+    ids.add('hardware');
+    ids.add('optionGroups');
+  }
+  if (roleCanAccessSettings(role)) ids.add('settings');
+  if (roleCanManageUsers(role)) ids.add('users');
+  return ids;
+}
+
+export function roleCanAccessNav(
+  role: string | null | undefined,
+  navId: string,
+): boolean {
+  return navIdsForRole(role).has(navId);
+}

@@ -246,6 +246,46 @@ Auth multi-usuario (registro + aprobación admin + roles) está en F026.
 
 ---
 
+### 6.6 Etapa 3 — Roles de producto y RBAC (F035+)
+
+Multi-usuario con **puestos de taller**, no solo labels de cuenta.
+
+#### 6.6.1 Roles
+
+| Código | Nombre UI | Notas |
+|--------|-----------|--------|
+| `admin` | Admin | Usuarios, todo el sistema |
+| `gerente_ventas` | Gerente de ventas | Portafolios de todos; asigna owner; delete proyecto |
+| `vendedor` | Vendedor | Solo su portafolio (F034); sin ABM catálogo; sin export producción |
+| `ingeniero` | Ingeniero | Catálogos + muebles plantilla; export producción |
+| `produccion` | Producción | Cola de fabricación (F038); export corte/herrajes |
+| `user` | Sin puesto | Cuenta aprobada sin rol de trabajo hasta asignación admin |
+
+Migración legacy: `disenador` → `ingeniero`, `carpintero` → `produccion`.
+
+#### 6.6.2 Matriz mínima (API + UI)
+
+| Capacidad | admin | gerente | vendedor | ingeniero | produccion | sin puesto |
+|-----------|:-----:|:-------:|:--------:|:---------:|:----------:|:----------:|
+| Admin usuarios | ✓ | — | — | — | — | — |
+| ABM catálogo / módulos | ✓ | — | — | ✓ | — | — |
+| Clientes CRM | ✓ | ✓ | propio | — | — | — |
+| Cotizaciones mutar | ✓ | ✓ | propio | — | — | — |
+| Eliminar cotización | ✓ | ✓ | — | — | — | — |
+| Export Optimizer / herrajes | ✓ | ✓ | — | ✓ | ✓ | — |
+| Ver todos los owners | ✓ | ✓ | — | ✓ | ✓ | — |
+| Asignar owner | ✓ | ✓ | — | — | — | — |
+
+Mutaciones denegadas → **403**. Filas fuera de portafolio (vendedor) → **404** (sin filtrar por existencia).
+
+Features dependientes: F036 produced/reopen, F037 dashboard gerente, F038 cola producción, F039 costos ocultos, F040 imágenes, F041 exports ingeniero.
+
+#### 6.6.3 Nav por rol
+
+Sidebar filtrada por `navIdsForRole` (domain). Deep-link denegado redirige a Inicio con mensaje en español de taller. Guest local sigue con acceso completo (sin RBAC de API).
+
+---
+
 ## 7. Modelo de dominio (producto)
 
 ### 7.0 Idea central: catálogo vs cotización

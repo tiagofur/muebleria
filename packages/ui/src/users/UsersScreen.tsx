@@ -32,7 +32,24 @@ export interface UsersScreenProps {
   readonly token: string;
 }
 
-const ROLES = ['user', 'admin', 'vendedor', 'disenador', 'carpintero'] as const;
+/** Product roles (F035) — admin assigns puesto from panel. */
+const ROLES = [
+  'user',
+  'admin',
+  'vendedor',
+  'gerente_ventas',
+  'ingeniero',
+  'produccion',
+] as const;
+
+const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
+  user: 'Sin puesto',
+  admin: 'Admin',
+  vendedor: 'Vendedor',
+  gerente_ventas: 'Gerente de ventas',
+  ingeniero: 'Ingeniero',
+  produccion: 'Producción',
+};
 
 export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -207,7 +224,9 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         aria-label={`Rol de ${u.name}`}
                       >
                         {ROLES.map((r) => (
-                          <option key={r} value={r}>{r}</option>
+                          <option key={r} value={r}>
+                            {ROLE_LABELS[r]}
+                          </option>
                         ))}
                       </select>
                     ) : (

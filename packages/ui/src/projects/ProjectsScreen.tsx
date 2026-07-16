@@ -175,6 +175,10 @@ export interface ProjectsScreenProps {
   readonly requestCreateKey?: number;
   /** Workshop defaults for new quotation drafts (F031). */
   readonly workshopSettings?: WorkshopSettings | null;
+  /** F035: hide create/edit/duplicate when false. */
+  readonly canMutate?: boolean;
+  /** F035: hide delete (gerente/admin only). */
+  readonly canDelete?: boolean;
 }
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -226,6 +230,8 @@ export function ProjectsScreen({
   requestCreateKey = 0,
   loading = false,
   workshopSettings = null,
+  canMutate = true,
+  canDelete = true,
 }: ProjectsScreenProps): ReactNode {
   const metaFormId = useId();
   const addItemFormId = useId();
@@ -920,6 +926,7 @@ export function ProjectsScreen({
       <div className="catalog-page__header">
         <h2 className="catalog-page__title">Cotizaciones</h2>
         <div className="catalog-page__toolbar">
+          {canMutate ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -928,6 +935,7 @@ export function ProjectsScreen({
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nueva cotización
           </button>
+          ) : null}
         </div>
       </div>
 
@@ -1112,6 +1120,7 @@ export function ProjectsScreen({
           >
             {exportBusy ? 'Exportando…' : 'Exportar cotización'}
           </button>
+          {canMutate ? (
           <button
             type="button"
             className="btn"
@@ -1120,7 +1129,8 @@ export function ProjectsScreen({
             <Pencil size={16} strokeWidth={1.5} aria-hidden />
             Editar
           </button>
-          {onDuplicate ? (
+          ) : null}
+          {canMutate && onDuplicate ? (
             <button
               type="button"
               className="btn"
@@ -1130,6 +1140,7 @@ export function ProjectsScreen({
               Duplicar
             </button>
           ) : null}
+          {canDelete ? (
           <button
             type="button"
             className="btn btn--danger"
@@ -1138,6 +1149,7 @@ export function ProjectsScreen({
             <Trash2 size={16} strokeWidth={1.5} aria-hidden />
             Eliminar
           </button>
+          ) : null}
         </div>
       </header>
 

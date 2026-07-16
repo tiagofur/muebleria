@@ -7,10 +7,23 @@ func TestRoleSeesAllOwners(t *testing.T) {
 	if RoleSeesAllOwners(RoleVendedor) {
 		t.Fatal("vendedor must be scoped")
 	}
-	for _, role := range []UserRole{RoleAdmin, RoleUser, RoleDisenador, RoleCarpintero} {
+	if RoleSeesAllOwners(RoleUser) {
+		t.Fatal("user without job must not see all owners")
+	}
+	for _, role := range []UserRole{RoleAdmin, RoleGerenteVentas, RoleIngeniero, RoleProduccion} {
 		if !RoleSeesAllOwners(role) {
 			t.Fatalf("%s should see all owners", role)
 		}
+	}
+}
+
+func TestRoleCanAssignOwner(t *testing.T) {
+	t.Parallel()
+	if !RoleCanAssignOwner(RoleAdmin) || !RoleCanAssignOwner(RoleGerenteVentas) {
+		t.Fatal("admin and gerente assign owners")
+	}
+	if RoleCanAssignOwner(RoleVendedor) || RoleCanAssignOwner(RoleIngeniero) {
+		t.Fatal("vendedor/ingeniero cannot assign")
 	}
 }
 
@@ -21,6 +34,9 @@ func TestResolveOwnerOnCreate(t *testing.T) {
 	}
 	if got := ResolveOwnerOnCreate("admin", RoleAdmin, "v1"); got != "v1" {
 		t.Fatalf("admin can assign: got %q", got)
+	}
+	if got := ResolveOwnerOnCreate("g1", RoleGerenteVentas, "v2"); got != "v2" {
+		t.Fatalf("gerente can assign: got %q", got)
 	}
 	if got := ResolveOwnerOnCreate("admin", RoleAdmin, ""); got != "admin" {
 		t.Fatalf("admin defaults to self: got %q", got)
@@ -34,6 +50,9 @@ func TestResolveOwnerOnUpdate(t *testing.T) {
 	}
 	if got := ResolveOwnerOnUpdate(RoleAdmin, "old", "new"); got != "new" {
 		t.Fatalf("admin reassign: got %q", got)
+	}
+	if got := ResolveOwnerOnUpdate(RoleGerenteVentas, "old", "new"); got != "new" {
+		t.Fatalf("gerente reassign: got %q", got)
 	}
 	if got := ResolveOwnerOnUpdate(RoleAdmin, "old", ""); got != "old" {
 		t.Fatalf("admin empty keeps existing: got %q", got)

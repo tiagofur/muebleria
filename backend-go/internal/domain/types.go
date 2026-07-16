@@ -16,17 +16,18 @@ const (
 type UserRole string
 
 const (
-	RoleAdmin      UserRole = "admin"
-	RoleUser       UserRole = "user"
-	RoleVendedor   UserRole = "vendedor"
-	RoleDisenador  UserRole = "disenador"
-	RoleCarpintero UserRole = "carpintero"
+	RoleAdmin         UserRole = "admin"
+	RoleUser          UserRole = "user" // approved account without job title
+	RoleVendedor      UserRole = "vendedor"
+	RoleGerenteVentas UserRole = "gerente_ventas"
+	RoleIngeniero     UserRole = "ingeniero"
+	RoleProduccion    UserRole = "produccion"
 )
 
-// IsValidUserRole reports whether role is an allowed account role.
+// IsValidUserRole reports whether role is an allowed account role (F035 product roles).
 func IsValidUserRole(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleUser, RoleVendedor, RoleDisenador, RoleCarpintero:
+	case RoleAdmin, RoleUser, RoleVendedor, RoleGerenteVentas, RoleIngeniero, RoleProduccion:
 		return true
 	default:
 		return false
@@ -56,13 +57,13 @@ type User struct {
 }
 
 type Customer struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Email       string    `json:"email,omitempty"`
-	Phone       string    `json:"phone,omitempty"`
-	Address     string    `json:"address,omitempty"`
-	Notes       string    `json:"notes,omitempty"`
-	Active      bool      `json:"active"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email,omitempty"`
+	Phone   string `json:"phone,omitempty"`
+	Address string `json:"address,omitempty"`
+	Notes   string `json:"notes,omitempty"`
+	Active  bool   `json:"active"`
 	// OwnerUserID is the portfolio owner (F034 / OWN-*). Vendedor-scoped lists use this.
 	OwnerUserID string    `json:"owner_user_id,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -70,16 +71,16 @@ type Customer struct {
 }
 
 type MaterialBoard struct {
-	ID                string    `json:"id"`
-	Code              string    `json:"code"`
-	Name              string    `json:"name"`
-	WidthMm           int       `json:"width_mm"`
-	LengthMm          int       `json:"length_mm"`
-	ThicknessMm       int       `json:"thickness_mm"`
-	GrainDefault      bool      `json:"grain_default"`
-	BoardPrice        float64   `json:"board_price"`
-	WastePercent      float64   `json:"waste_percent"`
-	CostPerM2         float64   `json:"cost_per_m2"`
+	ID           string  `json:"id"`
+	Code         string  `json:"code"`
+	Name         string  `json:"name"`
+	WidthMm      int     `json:"width_mm"`
+	LengthMm     int     `json:"length_mm"`
+	ThicknessMm  int     `json:"thickness_mm"`
+	GrainDefault bool    `json:"grain_default"`
+	BoardPrice   float64 `json:"board_price"`
+	WastePercent float64 `json:"waste_percent"`
+	CostPerM2    float64 `json:"cost_per_m2"`
 	// DefaultEdgeBandID links the default edge band by id (never by name).
 	DefaultEdgeBandID string    `json:"default_edge_band_id,omitempty"`
 	Notes             string    `json:"notes,omitempty"`
@@ -127,12 +128,12 @@ type EdgeAssignment struct {
 }
 
 type BoardPart struct {
-	ID          string           `json:"id"`
-	Code        string           `json:"code,omitempty"`
-	Description string           `json:"description"`
-	Quantity    int              `json:"quantity"`
-	LengthMm    int              `json:"length_mm"`
-	WidthMm     int              `json:"width_mm"`
+	ID          string `json:"id"`
+	Code        string `json:"code,omitempty"`
+	Description string `json:"description"`
+	Quantity    int    `json:"quantity"`
+	LengthMm    int    `json:"length_mm"`
+	WidthMm     int    `json:"width_mm"`
 	// Grain (veta) is inherited from the resolved material's GrainDefault —
 	// never set per piece. Mirrors how edge band is resolved from material.
 	Edges      []EdgeAssignment `json:"edges"`
@@ -158,19 +159,19 @@ type ModuleCategory struct {
 }
 
 type Module struct {
-	ID             string         `json:"id"`
-	Code           string         `json:"code"`
-	Name           string         `json:"name"`
-	BaseLaborCost  float64        `json:"base_labor_cost"`
-	WidthMm        int            `json:"width_mm,omitempty"`
-	HeightMm       int            `json:"height_mm,omitempty"`
-	DepthMm        int            `json:"depth_mm,omitempty"`
-	CategoryID     string         `json:"categoryId,omitempty"`
-	BoardParts     []BoardPart    `json:"board_parts"`
-	HardwareLines  []HardwareLine `json:"hardware_lines"`
-	Notes          string         `json:"notes,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID            string         `json:"id"`
+	Code          string         `json:"code"`
+	Name          string         `json:"name"`
+	BaseLaborCost float64        `json:"base_labor_cost"`
+	WidthMm       int            `json:"width_mm,omitempty"`
+	HeightMm      int            `json:"height_mm,omitempty"`
+	DepthMm       int            `json:"depth_mm,omitempty"`
+	CategoryID    string         `json:"categoryId,omitempty"`
+	BoardParts    []BoardPart    `json:"board_parts"`
+	HardwareLines []HardwareLine `json:"hardware_lines"`
+	Notes         string         `json:"notes,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 type ProjectItem struct {
@@ -181,24 +182,24 @@ type ProjectItem struct {
 }
 
 type Project struct {
-	ID             string             `json:"id"`
-	Name           string             `json:"name"`
-	CustomerID     string             `json:"customer_id"`
-	CreatedBy      string             `json:"created_by,omitempty"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	CustomerID string `json:"customer_id"`
+	CreatedBy  string `json:"created_by,omitempty"`
 	// OwnerUserID is the portfolio owner (F034). May differ from CreatedBy after reassignment.
-	OwnerUserID    string             `json:"owner_user_id,omitempty"`
-	Currency       string             `json:"currency"`
-	MarginFactor   float64            `json:"margin_factor"`
-	LaborFixedCost float64            `json:"labor_fixed_cost"`
-	Status         ProjectStatus      `json:"status"`
-	Items          []ProjectItem      `json:"items"`
+	OwnerUserID    string        `json:"owner_user_id,omitempty"`
+	Currency       string        `json:"currency"`
+	MarginFactor   float64       `json:"margin_factor"`
+	LaborFixedCost float64       `json:"labor_fixed_cost"`
+	Status         ProjectStatus `json:"status"`
+	Items          []ProjectItem `json:"items"`
 	// ProjectLevelChoices are defaults for all line items (F029 / #35).
 	// Effective: item.OptionChoices[role] if set, else ProjectLevelChoices[role].
-	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
-	Notes          string             `json:"notes,omitempty"`
-	PriceSnapshot  *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
+	ProjectLevelChoices map[string]string   `json:"project_level_choices,omitempty"`
+	Notes               string              `json:"notes,omitempty"`
+	PriceSnapshot       *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
+	CreatedAt           time.Time           `json:"created_at"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 }
 
 type QuoteBreakdown struct {
@@ -213,11 +214,11 @@ type QuoteBreakdown struct {
 }
 
 type QuotePriceSnapshot struct {
-	CapturedAt           time.Time          `json:"captured_at"`
-	Breakdown            QuoteBreakdown     `json:"breakdown"`
-	MaterialCostPerM2    map[string]float64 `json:"material_cost_per_m2,omitempty"`
-	EdgeCostPerMl        map[string]float64 `json:"edge_cost_per_ml,omitempty"`
-	HardwareCostPerUnit  map[string]float64 `json:"hardware_cost_per_unit,omitempty"`
+	CapturedAt          time.Time          `json:"captured_at"`
+	Breakdown           QuoteBreakdown     `json:"breakdown"`
+	MaterialCostPerM2   map[string]float64 `json:"material_cost_per_m2,omitempty"`
+	EdgeCostPerMl       map[string]float64 `json:"edge_cost_per_ml,omitempty"`
+	HardwareCostPerUnit map[string]float64 `json:"hardware_cost_per_unit,omitempty"`
 }
 
 type Catalog struct {
@@ -263,8 +264,8 @@ type ResolvedHardwareLine struct {
 
 // ResolvedBom is the fully resolved module BOM.
 type ResolvedBom struct {
-	BoardParts     []ResolvedBoardPart     `json:"board_parts"`
-	HardwareLines  []ResolvedHardwareLine  `json:"hardware_lines"`
+	BoardParts    []ResolvedBoardPart    `json:"board_parts"`
+	HardwareLines []ResolvedHardwareLine `json:"hardware_lines"`
 }
 
 // ProductionCutRow is a flat Optimizer cut-list row (columns A–J).
