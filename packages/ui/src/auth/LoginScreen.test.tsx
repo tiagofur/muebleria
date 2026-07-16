@@ -109,6 +109,12 @@ describe('LoginScreen', () => {
     expect(screen.getByRole('alert').textContent).toContain('Credenciales inválidas');
   });
 
+  it('uses BrandMark not emoji (issue #53)', () => {
+    const src = readFileSync(loginTsxPath, 'utf8');
+    expect(src).toContain('BrandMark');
+    expect(src).not.toContain('🪑');
+  });
+
   it('uses co-located token CSS without inline styles or hardcoded brand blue', () => {
     const tsx = readFileSync(loginTsxPath, 'utf8');
     const css = readFileSync(loginCssPath, 'utf8');

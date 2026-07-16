@@ -124,6 +124,7 @@ export {
 } from './shell';
 
 export {
+  BrandMark,
   EmptyState,
   ErrorBoundary,
   formatMoneyDisplay,
@@ -142,6 +143,7 @@ export {
   TOAST_DURATION_MS,
   TOAST_EXIT_MS,
   TOAST_MAX,
+  type BrandMarkProps,
   type EmptyStateProps,
   type ErrorBoundaryProps,
   type FormatMoneyDisplayOptions,

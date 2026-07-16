@@ -33,10 +33,7 @@
   min-height: calc(56px - var(--space-4));
 }
 
-.app-sidebar__brand-mark {
-  font-size: var(--text-lg);
-  line-height: 1;
-}
+/* Brand mark styles live in common/brandMark.css (issue #53) */
 
 .app-sidebar__brand-text {
   font-size: var(--text-md);

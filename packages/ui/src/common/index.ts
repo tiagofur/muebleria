@@ -2,6 +2,7 @@
  * Shared presentational primitives (modal, toast, search, empty state, etc.).
  */
 
+export { BrandMark, type BrandMarkProps } from './BrandMark';
 export { Modal, type ModalProps, type ModalSize } from './Modal';
 export {
   ToastProvider,

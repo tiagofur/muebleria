@@ -261,7 +261,6 @@ Default del producto: **herramienta densa**, no landing. Tokens semánticos en `
 --ease-out:    cubic-bezier(0.0, 0, 0.2, 1);
 --ease-in:     cubic-bezier(0.4, 0, 1, 1);
 --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
---ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
 --duration-fast:   150ms;
 --duration-normal: 250ms;
@@ -271,14 +270,15 @@ Default del producto: **herramienta densa**, no landing. Tokens semánticos en `
                        background-color var(--duration-fast) var(--ease-out),
                        border-color var(--duration-fast) var(--ease-out);
 --transition-shadow:   box-shadow var(--duration-fast) var(--ease-out);
---transition-transform:transform var(--duration-normal) var(--ease-spring);
+--transition-transform:transform var(--duration-normal) var(--ease-out);
 --transition-opacity:  opacity var(--duration-fast) var(--ease-out);
 ```
 
 **Reglas:**
+- **Sin bounce / spring** (issue #55): no easings con overshoot; product UI calm/operational
 - Hover de botones y links → `--transition-colors` + `--duration-fast`
 - Hover de cards (shadow elevation) → `--transition-shadow`
-- Apertura de modales → `opacity` + `transform scale` con `--duration-slow`
+- Apertura de modales → `opacity` + `transform scale` con `--duration-slow` + `--ease-out`
 - Slide-in de drawers → `transform translateX` con `--duration-slow`
 - Siempre envolver en `@media (prefers-reduced-motion: no-preference)`
 
@@ -385,6 +385,7 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», …
 
 - **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo `--brand-400`
+- **Brand chrome (issue #53):** `BrandMark` monochrome (tile + paneles) + wordmark «Muebles» — **sin emoji**; mismo mark en Login/Register y favicon web
 - **TopBar**: `--surface-card` con `--shadow-sm`; acciones opcionales (`headerActions`, p. ej. **Salir**)
 - **Content**: `--surface-app`, padding `--space-6`
 - **Entrada por defecto:** `home` (Dashboard), no Materiales

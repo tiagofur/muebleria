@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Mail, LogIn, WifiOff } from 'lucide-react';
+import { BrandMark } from '../common/BrandMark';
 import './login.css';
 
 export interface LoginScreenProps {
@@ -38,10 +39,8 @@ export function LoginScreen({
     <div className="login-screen">
       <div className="login-card">
         <header className="login-card__header">
-          <span className="login-card__mark" aria-hidden>
-            🪑
-          </span>
-          <h2 className="login-card__title">Muebles Carpintería</h2>
+          <BrandMark size={40} className="login-card__mark" />
+          <h2 className="login-card__title">Muebles</h2>
           <p className="login-card__subtitle">
             Iniciá sesión para sincronizar tus cotizaciones
           </p>

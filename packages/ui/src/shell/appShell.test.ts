@@ -113,6 +113,12 @@ describe('AppShell source structure (F017)', () => {
     expect(tsx).not.toContain('app-nav__tab');
   });
 
+  it('uses BrandMark instead of emoji logo (issue #53)', () => {
+    const tsx = read('AppShell.tsx');
+    expect(tsx).toContain('BrandMark');
+    expect(tsx).not.toContain('🪑');
+  });
+
   it('active item uses is-active and Lucide strokeWidth 1.5', () => {
     const tsx = read('AppShell.tsx');
     expect(tsx).toContain('is-active');

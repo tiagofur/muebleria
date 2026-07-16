@@ -26,6 +26,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
+import { BrandMark } from '../common/BrandMark';
 import './appShell.css';
 
 /** Stable nav destinations for AppShell (shell wires screens). */
@@ -214,9 +215,7 @@ export function AppShell({
         aria-label="Navegación principal"
       >
         <div className="app-sidebar__brand">
-          <span className="app-sidebar__brand-mark" aria-hidden>
-            🪑
-          </span>
+          <BrandMark size={32} className="app-sidebar__brand-mark" />
           <span className="app-sidebar__brand-text">Muebles</span>
         </div>
 
