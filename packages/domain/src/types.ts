@@ -176,6 +176,12 @@ export interface Project {
   readonly laborFixedCost: number;
   readonly status: ProjectStatus;
   readonly items: readonly ProjectItem[];
+  /**
+   * Default option choices for all line items (F029 / #35).
+   * Effective per item: item.optionChoices[role] || projectLevelChoices[role].
+   * Empty/missing line values inherit the project default.
+   */
+  readonly projectLevelChoices?: OptionChoices;
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

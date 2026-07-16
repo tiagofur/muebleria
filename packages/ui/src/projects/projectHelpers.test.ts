@@ -21,6 +21,8 @@ import {
   projectStatusLabel,
   projectToDraft,
   resolveCustomerName,
+  setItemOptionChoice,
+  setProjectLevelChoice,
   validateItemQuantity,
   validateProjectDraft,
 } from './projectHelpers';
@@ -570,5 +572,63 @@ describe('canShowProjectPricePreview', () => {
     };
     const gate = canShowProjectPricePreview(project, [moduleGab], groups);
     expect(gate.ok).toBe(true);
+  });
+
+  it('F029: opens when empty line inherits complete project-level defaults', () => {
+    const project: Project = {
+      ...baseProject(),
+      projectLevelChoices: {
+        INTERIOR: 'mat-a',
+        FRENTE: 'mat-c',
+        BISAGRA: 'hw-1',
+      },
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: {},
+        },
+      ],
+    };
+    const gate = canShowProjectPricePreview(project, [moduleGab], groups);
+    expect(gate.ok).toBe(true);
+  });
+
+  it('F029: line override still blocks if other required groups missing', () => {
+    const project: Project = {
+      ...baseProject(),
+      projectLevelChoices: { INTERIOR: 'mat-a' },
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: { FRENTE: 'mat-c' },
+        },
+      ],
+    };
+    const gate = canShowProjectPricePreview(project, [moduleGab], groups);
+    expect(gate.ok).toBe(false);
+    if (!gate.ok) {
+      expect(gate.missingGroups).toEqual(expect.arrayContaining(['BISAGRA']));
+    }
+  });
+});
+
+describe('setItemOptionChoice / setProjectLevelChoice (F029)', () => {
+  it('setItemOptionChoice removes key when empty (inherit)', () => {
+    expect(
+      setItemOptionChoice({ INTERIOR: 'mat-a', FRENTE: 'mat-c' }, 'INTERIOR', ''),
+    ).toEqual({ FRENTE: 'mat-c' });
+  });
+
+  it('setProjectLevelChoice sets and clears keys', () => {
+    expect(setProjectLevelChoice(undefined, 'INTERIOR', 'mat-a')).toEqual({
+      INTERIOR: 'mat-a',
+    });
+    expect(
+      setProjectLevelChoice({ INTERIOR: 'mat-a' }, 'INTERIOR', ''),
+    ).toEqual({});
   });
 });

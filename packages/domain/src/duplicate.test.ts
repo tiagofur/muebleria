@@ -216,6 +216,23 @@ describe('duplicateProject', () => {
     );
   });
 
+  it('F029: copies projectLevelChoices shallow-cloned', () => {
+    const original = {
+      ...sampleProject(),
+      projectLevelChoices: { INTERIOR: 'mat-a', FRENTE: 'mat-b' },
+    };
+    const copy = duplicateProject(original, {
+      newId: 'prj-copy',
+      itemIdFactory: () => 'item-x',
+      nowIso: '2026-07-15T12:00:00.000Z',
+    });
+    expect(copy.projectLevelChoices).toEqual({
+      INTERIOR: 'mat-a',
+      FRENTE: 'mat-b',
+    });
+    expect(copy.projectLevelChoices).not.toBe(original.projectLevelChoices);
+  });
+
   it('does not alter referenced master modules when project is duplicated', () => {
     const master = sampleModule({ id: 'mod-gab', code: 'MOD-GAB-01' });
     const masterBefore = structuredClone(master);

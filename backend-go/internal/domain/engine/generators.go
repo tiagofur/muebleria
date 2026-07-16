@@ -35,7 +35,7 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 			return nil, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		bom, err := ResolveBom(module, item.OptionChoices, catalog)
+		bom, err := ResolveBom(module, choicesForItem(project, item), catalog)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +110,7 @@ func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]dom
 			return nil, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		bom, err := ResolveBom(module, item.OptionChoices, catalog)
+		bom, err := ResolveBom(module, choicesForItem(project, item), catalog)
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +174,7 @@ func collectUsedUnitPrices(project domain.Project, catalog domain.Catalog) (
 		if !ok {
 			continue
 		}
-		bom, resolveErr := ResolveBom(module, item.OptionChoices, catalog)
+		bom, resolveErr := ResolveBom(module, choicesForItem(project, item), catalog)
 		if resolveErr != nil {
 			return nil, nil, nil, resolveErr
 		}

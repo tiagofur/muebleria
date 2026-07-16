@@ -44,6 +44,8 @@ export {
   withWorkshopSettings,
 } from './workshopSettings';
 
+export { effectiveOptionChoices } from './optionChoices';
+
 export type { CategoryFilterId } from './categories';
 export {
   MAX_CATEGORY_DEPTH,

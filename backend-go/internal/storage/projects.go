@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -190,12 +191,59 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 			return nil, err
 		}
 		p.Items = items
+		level, err := s.loadProjectLevelChoices(ctx, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.ProjectLevelChoices = level
 		list = append(list, p)
 	}
 	if list == nil {
 		list = []domain.Project{}
 	}
 	return list, nil
+}
+
+// loadProjectLevelChoices returns project-wide option defaults (F029).
+func (s *PostgresStore) loadProjectLevelChoices(ctx context.Context, projectID string) (map[string]string, error) {
+	query := `
+		SELECT option_group_code, choice_entity_id
+		FROM project_level_choices
+		WHERE project_id = $1;
+	`
+	rows, err := s.Pool.Query(ctx, query, projectID)
+	if err != nil {
+		// Table may not exist yet on old DBs mid-migrate — treat as empty.
+		return map[string]string{}, nil
+	}
+	defer rows.Close()
+	out := make(map[string]string)
+	for rows.Next() {
+		var code, choiceID string
+		if err := rows.Scan(&code, &choiceID); err == nil {
+			out[code] = choiceID
+		}
+	}
+	return out, nil
+}
+
+// replaceProjectLevelChoicesTx rewrites project-level option defaults.
+func replaceProjectLevelChoicesTx(ctx context.Context, tx pgx.Tx, projectID string, choices map[string]string) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_level_choices WHERE project_id = $1`, projectID); err != nil {
+		return fmt.Errorf("error clearing project level choices: %w", err)
+	}
+	for code, cid := range choices {
+		if strings.TrimSpace(code) == "" || strings.TrimSpace(cid) == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id)
+			VALUES ($1, $2, $3)
+		`, projectID, code, cid); err != nil {
+			return fmt.Errorf("error inserting project level choice: %w", err)
+		}
+	}
+	return nil
 }
 
 // loadProjectItems returns all line items + option choices for a project.
@@ -306,6 +354,12 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	}
 	p.Items = items
 
+	level, err := s.loadProjectLevelChoices(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	p.ProjectLevelChoices = level
+
 	// Cargar snapshot si existe
 	snapQuery := `
 		SELECT captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price
@@ -403,6 +457,9 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	if err := replaceProjectItemsTx(ctx, tx, p.ID, p.Items); err != nil {
 		return err
 	}
+	if err := replaceProjectLevelChoicesTx(ctx, tx, p.ID, p.ProjectLevelChoices); err != nil {
+		return err
+	}
 
 	return tx.Commit(ctx)
 }
@@ -489,6 +546,9 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	}
 
 	if err := replaceProjectItemsTx(ctx, tx, id, p.Items); err != nil {
+		return err
+	}
+	if err := replaceProjectLevelChoicesTx(ctx, tx, id, p.ProjectLevelChoices); err != nil {
 		return err
 	}
 

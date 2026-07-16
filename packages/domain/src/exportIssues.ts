@@ -8,6 +8,7 @@ import {
   validateBoardPart,
   validateHardwareLine,
 } from './engine';
+import { effectiveOptionChoices } from './optionChoices';
 import type {
   Catalog,
   Module,
@@ -108,8 +109,13 @@ function collectItemStructuralIssues(
   item: ProjectItem,
   catalog: Catalog,
   issues: ExportIssue[],
+  projectLevelChoices?: OptionChoices,
 ): Module | undefined {
   const before = issues.length;
+  const choices = effectiveOptionChoices(
+    item.optionChoices,
+    projectLevelChoices,
+  );
 
   if (!(item.quantity > 0)) {
     issues.push({
@@ -171,18 +177,12 @@ function collectItemStructuralIssues(
     }
   }
 
-  collectMissingChoiceIssues(
-    module,
-    item.optionChoices,
-    catalog,
-    item.id,
-    issues,
-  );
+  collectMissingChoiceIssues(module, choices, catalog, item.id, issues);
 
   // Resolve BOM only when local structure/options look complete (VAL-06, refs, edges).
   if (issues.length === before) {
     try {
-      resolveBom(module, item.optionChoices, catalog);
+      resolveBom(module, choices, catalog);
     } catch (error) {
       pushDomainError(issues, error, {
         moduleCode: module.code,
@@ -214,7 +214,12 @@ export function collectExportIssues(
   }
 
   for (const item of project.items) {
-    const module = collectItemStructuralIssues(item, catalog, issues);
+    const module = collectItemStructuralIssues(
+      item,
+      catalog,
+      issues,
+      project.projectLevelChoices,
+    );
     if (module) {
       boardPartSlots += module.boardParts.length;
     }

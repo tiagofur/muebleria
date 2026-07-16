@@ -1,13 +1,26 @@
 # Sesión actual
 
-- **Branch:** feat/ux-density-compact-49
-- **Issue:** [#49](https://github.com/tiagofur/muebleria/issues/49) — Densidad compact de product app
+- **Branch:** `feat/project-level-options-35`
+- **Feature:** F029 — project_level_option_choices (#35)
+- **Estado:** in_progress
+
+## Plan
+
+1. Domain: `effectiveOptionChoices` + engine/export/snapshot merge
+2. Go: `EffectiveOptionChoices` + Postgres `project_level_choices` + API mapper
+3. UI: bloque opciones del proyecto + pickers de línea con heredar/override
+4. Tests domain/UI/Go + verificación monorepo
+5. PR Closes #35
 
 ## Hecho
-- Tokens `--density-*` en `tokens.css` + `design.md` §3.4.1
-- Aplicado: catálogos (page/table/form/btn), modales, search, cards módulos/proyectos, tabla usuarios
-- Tests de contrato density
 
-## Fuera de este slice
-- Toggle Cómoda/Compacta (fase 2 del issue)
-- #50 workspace chrome sticky (issue aparte)
+- TS domain `optionChoices.ts` + engine paths + exportIssues + duplicate
+- Go engine/storage/migration 000008 + apiMappers
+- ProjectsScreen project-level block + line inherit + Override badge
+- App `onUpdateProjectLevelChoices`
+- Tests: optionChoices, exportIssues F029, helpers, ProjectsScreen F029, Go option_choices
+
+## Próximo
+
+- `pnpm test` / typecheck / `go test`
+- Reviewer + PR

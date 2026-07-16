@@ -188,6 +188,9 @@ type Project struct {
 	LaborFixedCost float64            `json:"labor_fixed_cost"`
 	Status         ProjectStatus      `json:"status"`
 	Items          []ProjectItem      `json:"items"`
+	// ProjectLevelChoices are defaults for all line items (F029 / #35).
+	// Effective: item.OptionChoices[role] if set, else ProjectLevelChoices[role].
+	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
 	Notes          string             `json:"notes,omitempty"`
 	PriceSnapshot  *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
 	CreatedAt      time.Time          `json:"created_at"`

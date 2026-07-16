@@ -6,6 +6,7 @@ import {
   calcProjectBreakdown,
   domainErrorToExportIssue,
   DomainError,
+  effectiveOptionChoices,
   isProjectClosed,
   type Catalog,
   type Customer,
@@ -120,11 +121,15 @@ export async function buildCommercialQuoteExport(
 
     const items = project.items.map((item) => {
       const mod = catalog.modules.find((m) => m.id === item.moduleId);
+      const choices = effectiveOptionChoices(
+        item.optionChoices,
+        project.projectLevelChoices,
+      );
       return {
         moduleCode: mod?.code ?? item.moduleId,
         moduleName: mod?.name ?? 'Mueble desconocido',
         quantity: item.quantity,
-        optionsSummary: optionsSummary(item.optionChoices, catalog),
+        optionsSummary: optionsSummary(choices, catalog),
       };
     });
 

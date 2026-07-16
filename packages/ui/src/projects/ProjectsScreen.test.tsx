@@ -180,6 +180,7 @@ function renderScreen(
   const onAddItem = vi.fn();
   const onUpdateItem = vi.fn();
   const onRemoveItem = vi.fn();
+  const onUpdateProjectLevelChoices = vi.fn();
   const onSelectionChange = vi.fn();
   const onExport = vi.fn();
   const onExportHardware = vi.fn();
@@ -199,6 +200,7 @@ function renderScreen(
       onAddItem={onAddItem}
       onUpdateItem={onUpdateItem}
       onRemoveItem={onRemoveItem}
+      onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
       onSelectionChange={onSelectionChange}
       breakdown={null}
       projectEstimates={{ 'prj-1': 202.5, 'prj-2': null }}
@@ -216,6 +218,7 @@ function renderScreen(
     onAddItem,
     onUpdateItem,
     onRemoveItem,
+    onUpdateProjectLevelChoices,
     onSelectionChange,
     onExport,
     onExportHardware,
@@ -468,6 +471,52 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-detail')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
+  });
+
+  it('F029: project-level options block and line override badge', async () => {
+    const user = userEvent.setup();
+    const projectsWithLevel: Project[] = [
+      {
+        ...projects[0]!,
+        projectLevelChoices: { INTERIOR: 'mat-b' },
+        items: [
+          {
+            id: 'item-1',
+            moduleId: 'mod-1',
+            quantity: 2,
+            optionChoices: { INTERIOR: 'mat-a', FRENTE: 'mat-c' },
+          },
+        ],
+      },
+    ];
+    const { onUpdateProjectLevelChoices, onUpdateItem } = renderScreen({
+      projects: projectsWithLevel,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.getByTestId('project-level-options')).toBeTruthy();
+    expect(screen.getByText('Opciones del proyecto')).toBeTruthy();
+    expect(screen.getAllByText('Override').length).toBeGreaterThanOrEqual(1);
+
+    await user.selectOptions(
+      screen.getByTestId('project-level-choice-INTERIOR'),
+      'mat-a',
+    );
+    expect(onUpdateProjectLevelChoices).toHaveBeenCalledWith('prj-1', {
+      INTERIOR: 'mat-a',
+    });
+
+    await user.selectOptions(
+      screen.getByTestId('item-choice-item-1-INTERIOR'),
+      '',
+    );
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      'prj-1',
+      expect.objectContaining({
+        id: 'item-1',
+        optionChoices: { FRENTE: 'mat-c' },
+      }),
+    );
   });
 
   it('opens create modal from requestCreateKey prop', () => {

@@ -67,6 +67,25 @@ describe('collectExportIssues', () => {
     expect(issues.some((i) => i.moduleCode === 'MOD-GAB-01')).toBe(true);
   });
 
+  it('F029: empty line inherits project-level choices for export validation', () => {
+    const level = gabOnlyProject.items[0]!.optionChoices;
+    const project: Project = {
+      ...gabOnlyProject,
+      projectLevelChoices: level,
+      items: [
+        {
+          id: 'item-gab',
+          moduleId: IDS.modGab,
+          quantity: 1,
+          optionChoices: {},
+        },
+      ],
+    };
+    expect(collectExportIssues(project, plantillaCatalogWithModules)).toEqual(
+      [],
+    );
+  });
+
   it('VAL-05: empty project items', () => {
     const project: Project = { ...gabOnlyProject, items: [] };
     const issues = collectExportIssues(project, plantillaCatalogWithModules);
