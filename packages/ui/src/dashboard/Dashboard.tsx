@@ -1,6 +1,7 @@
 /**
  * App home dashboard — presentation only; stats precomputed by shell (F023).
  * Empty workspace: «Primeros pasos» checklist (issue #33).
+ * Role-focused home variants (F043 / #88).
  */
 
 import type { ProjectStatus } from '@muebles/domain';
@@ -10,10 +11,12 @@ import {
   Circle,
   DollarSign,
   FileText,
+  ImageOff,
   Layers,
   LayoutDashboard,
   Package,
   Plus,
+  Store,
 } from 'lucide-react';
 import { EmptyState, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
@@ -46,6 +49,14 @@ export type DashboardStats = {
   readonly activeMaterials: number;
 };
 
+/**
+ * Home copy + blocks by product role (F043).
+ * - default: taller genérico / gerente
+ * - sales: vendedor — cotizar + vitrina
+ * - engineering: ingeniero — catálogo + plantillas sin foto
+ */
+export type DashboardHomeMode = 'default' | 'sales' | 'engineering';
+
 export type DashboardProps = {
   readonly stats: DashboardStats;
   readonly recentProjects: readonly DashboardRecentProject[];
@@ -65,6 +76,16 @@ export type DashboardProps = {
    * Omit for vendedor / roles without multi-owner dashboard.
    */
   readonly ownerBreakdown?: readonly OwnerPortfolioRow[];
+  /** Role-focused home layout (F043). */
+  readonly homeMode?: DashboardHomeMode;
+  /** Sales: open furniture showcase (vitrina). */
+  readonly onOpenShowcase?: () => void;
+  /** Engineering: open materials list (not create). */
+  readonly onOpenMaterials?: () => void;
+  /** Engineering: open modules editor list. */
+  readonly onOpenModules?: () => void;
+  /** Engineering: count of module templates without imageUrl. */
+  readonly modulesWithoutPhotoCount?: number;
 };
 
 function StatusBadge({ status }: { readonly status: ProjectStatus }): ReactNode {
@@ -99,6 +120,11 @@ export function Dashboard({
   onNewMaterial,
   loading = false,
   ownerBreakdown,
+  homeMode = 'default',
+  onOpenShowcase,
+  onOpenMaterials,
+  onOpenModules,
+  modulesWithoutPhotoCount = 0,
 }: DashboardProps): ReactNode {
   if (loading) {
     return (
@@ -108,10 +134,24 @@ export function Dashboard({
     );
   }
 
-  const showGettingStarted = shouldShowGettingStarted({
-    modulesCount: stats.modulesCount,
-    projectsCount,
-  });
+  const isSales = homeMode === 'sales';
+  const isEngineering = homeMode === 'engineering';
+
+  /** Sales home skips taller onboarding checklist — focus quotes. */
+  const showGettingStarted =
+    !isSales &&
+    shouldShowGettingStarted({
+      modulesCount: stats.modulesCount,
+      projectsCount,
+    });
+
+  const subtitle = showGettingStarted
+    ? 'Empezá el flujo del taller: material → mueble → cotización'
+    : isSales
+      ? 'Tus cotizaciones, el total del mes y la vitrina para armar propuestas'
+      : isEngineering
+        ? 'Catálogo y plantillas: materiales, muebles y fotos para la vitrina'
+        : 'Resumen del workspace y accesos rápidos';
 
   const steps: readonly GettingStartedStep[] = [
     {
@@ -166,11 +206,7 @@ export function Dashboard({
           />
           <div>
             <h2 className="dashboard__title">Inicio</h2>
-            <p className="dashboard__subtitle">
-              {showGettingStarted
-                ? 'Empezá el flujo del taller: material → mueble → cotización'
-                : 'Resumen del workspace y accesos rápidos'}
-            </p>
+            <p className="dashboard__subtitle">{subtitle}</p>
           </div>
         </div>
         {/* Empty workspace: no header primary — sole primary lives on the active checklist step. */}
@@ -186,6 +222,17 @@ export function Dashboard({
           >
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nueva cotización
+          </button>
+          ) : null}
+          {isSales && onOpenShowcase ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={onOpenShowcase}
+            data-testid="dashboard-open-showcase"
+          >
+            <Store size={16} strokeWidth={1.5} aria-hidden />
+            Ver vitrina
           </button>
           ) : null}
           {onNewModule ? (
@@ -274,7 +321,15 @@ export function Dashboard({
         </section>
       ) : (
         <>
-          <ul className="dashboard__stats" aria-label="Indicadores">
+          <ul
+            className={
+              isSales
+                ? 'dashboard__stats dashboard__stats--sales'
+                : 'dashboard__stats'
+            }
+            aria-label="Indicadores"
+            data-testid={isSales ? 'dashboard-stats-sales' : 'dashboard-stats'}
+          >
             <li className="dashboard-stat" data-testid="stat-active-projects">
               <span className="dashboard-stat__icon" aria-hidden>
                 <FileText size={18} strokeWidth={1.5} />
@@ -289,26 +344,87 @@ export function Dashboard({
               <span className="dashboard-stat__icon" aria-hidden>
                 <DollarSign size={18} strokeWidth={1.5} />
               </span>
-              <p className="dashboard-stat__label">Total cotizado del mes</p>
+              <p className="dashboard-stat__label">
+                {isSales ? 'Tu total del mes' : 'Total cotizado del mes'}
+              </p>
               <p className="dashboard-stat__value">
                 {formatDashboardMoney(stats.monthlyQuotedTotal)}
               </p>
             </li>
-            <li className="dashboard-stat" data-testid="stat-modules">
-              <span className="dashboard-stat__icon" aria-hidden>
-                <Package size={18} strokeWidth={1.5} />
-              </span>
-              <p className="dashboard-stat__label">Muebles en catálogo</p>
-              <p className="dashboard-stat__value">{stats.modulesCount}</p>
-            </li>
-            <li className="dashboard-stat" data-testid="stat-materials">
-              <span className="dashboard-stat__icon" aria-hidden>
-                <Layers size={18} strokeWidth={1.5} />
-              </span>
-              <p className="dashboard-stat__label">Materiales activos</p>
-              <p className="dashboard-stat__value">{stats.activeMaterials}</p>
-            </li>
+            {!isSales ? (
+              <li className="dashboard-stat" data-testid="stat-modules">
+                <span className="dashboard-stat__icon" aria-hidden>
+                  <Package size={18} strokeWidth={1.5} />
+                </span>
+                <p className="dashboard-stat__label">Muebles en catálogo</p>
+                <p className="dashboard-stat__value">{stats.modulesCount}</p>
+              </li>
+            ) : null}
+            {!isSales ? (
+              <li className="dashboard-stat" data-testid="stat-materials">
+                <span className="dashboard-stat__icon" aria-hidden>
+                  <Layers size={18} strokeWidth={1.5} />
+                </span>
+                <p className="dashboard-stat__label">Materiales activos</p>
+                <p className="dashboard-stat__value">{stats.activeMaterials}</p>
+              </li>
+            ) : null}
           </ul>
+
+          {isEngineering ? (
+            <section
+              className="dashboard__section"
+              aria-labelledby="dashboard-eng-shortcuts-title"
+              data-testid="dashboard-engineering-shortcuts"
+            >
+              <h3
+                id="dashboard-eng-shortcuts-title"
+                className="dashboard__section-title"
+              >
+                Catálogo del taller
+              </h3>
+              <p className="dashboard__section-lead">
+                Atajos a materiales y plantillas de muebles (editor técnico, no
+                la vitrina de ventas).
+              </p>
+              <div className="dashboard-shortcuts">
+                {onOpenMaterials ? (
+                  <button
+                    type="button"
+                    className="dashboard-shortcut"
+                    onClick={onOpenMaterials}
+                    data-testid="dashboard-open-materials"
+                  >
+                    <Layers size={18} strokeWidth={1.5} aria-hidden />
+                    <span>Materiales</span>
+                  </button>
+                ) : null}
+                {onOpenModules ? (
+                  <button
+                    type="button"
+                    className="dashboard-shortcut"
+                    onClick={onOpenModules}
+                    data-testid="dashboard-open-modules"
+                  >
+                    <Package size={18} strokeWidth={1.5} aria-hidden />
+                    <span>Muebles</span>
+                  </button>
+                ) : null}
+              </div>
+              {modulesWithoutPhotoCount > 0 ? (
+                <p
+                  className="dashboard-photo-reminder"
+                  data-testid="dashboard-modules-without-photo"
+                >
+                  <ImageOff size={16} strokeWidth={1.5} aria-hidden />
+                  {modulesWithoutPhotoCount === 1
+                    ? '1 plantilla sin foto en la vitrina.'
+                    : `${modulesWithoutPhotoCount} plantillas sin foto en la vitrina.`}{' '}
+                  Subí imagen desde el editor de muebles para que ventas las vea.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           {ownerBreakdown && ownerBreakdown.length > 0 ? (
             <section
