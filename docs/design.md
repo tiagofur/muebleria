@@ -418,6 +418,23 @@ Cada lista con más de ~10 ítems esperados tiene:
 - Filtro de estado como chips toggle: `[Todos] [Activos] [Inactivos]`
 - Búsqueda client-side con debounce 150ms
 
+### 4.7 Estados de carga (loading)
+
+Patrones reutilizables en `@muebles/ui` (`Spinner`, `PageLoading`, `InlineLoading`, `ListSkeleton`, `submitBusyLabel`):
+
+| Caso | Componente | Uso |
+|------|------------|-----|
+| Gate de workspace / pantalla entera | `PageLoading` (`fullPage`) | Primera carga del shell |
+| Sección de catálogo / lista | `PageLoading` o `ListSkeleton` | Async de pantalla (Usuarios, etc.) |
+| Panel inline (totales, toolbar) | `InlineLoading` | Recálculo, refresh parcial |
+| Botón de guardar async | `disabled` + `submitBusyLabel` | Evitar doble submit |
+
+Reglas:
+- Solo tokens del design system (sin Tailwind / hex).
+- Respetar `prefers-reduced-motion` en spinners/skeletons.
+- Empty y error son estados **distintos** del loading (ver §4.5 y toasts §4.4).
+- El busy es *durante* la operación; el toast de éxito/error va al terminar.
+
 ---
 
 ## 5. Componentes del Design System

@@ -87,6 +87,21 @@ describe('@muebles/ui package surface', () => {
     expect(TOAST_MAX).toBe(3);
   });
 
+  it('exports loading primitives (issue #30)', async () => {
+    const {
+      Spinner,
+      PageLoading,
+      InlineLoading,
+      ListSkeleton,
+      submitBusyLabel,
+    } = await import('./index');
+    expect(typeof Spinner).toBe('function');
+    expect(typeof PageLoading).toBe('function');
+    expect(typeof InlineLoading).toBe('function');
+    expect(typeof ListSkeleton).toBe('function');
+    expect(submitBusyLabel(true, 'Guardar')).toBe('Guardando…');
+  });
+
   it('exports catalog list primitives (F020)', async () => {
     const {
       SearchInput,

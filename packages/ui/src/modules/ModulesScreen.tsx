@@ -40,7 +40,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { validateNonNegativeNumber, validateRequiredName } from '../catalogs/catalogHelpers';
-import { EmptyState, Modal, SearchInput, useDebouncedValue } from '../common';
+import {
+  EmptyState,
+  Modal,
+  PageLoading,
+  SearchInput,
+  useDebouncedValue,
+} from '../common';
 import '../catalogs/catalogs.css';
 import {
   emptyBoardPartDraft,
@@ -65,6 +71,8 @@ import './modules.css';
 export type { ModuleDraft, BoardPartDraft, HardwareLineDraft, CategoryDraft };
 
 export interface ModulesScreenProps {
+  /** When true, show section loading (workspace/async gate). */
+  readonly loading?: boolean;
   readonly modules: readonly Module[];
   readonly optionGroups: readonly OptionGroup[];
   readonly hardware: readonly Hardware[];
@@ -204,6 +212,7 @@ export function ModulesScreen({
   requestCreateKey = 0,
   openModuleId = null,
   onSelectionChange,
+  loading = false,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -1479,6 +1488,14 @@ export function ModulesScreen({
       </div>
     </>
   );
+
+  if (loading) {
+    return (
+      <section className="catalog-page" aria-label="Muebles (módulos)">
+        <PageLoading label="Cargando muebles…" data-testid="modules-loading" />
+      </section>
+    );
+  }
 
   return (
     <section className="catalog-page" aria-label="Muebles (módulos)">

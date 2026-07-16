@@ -25,4 +25,11 @@ describe('UsersScreen (F026 admin approval)', () => {
     expect(css).toContain('var(--success-');
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
+
+  it('uses PageLoading for async list load (issue #30)', () => {
+    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
+    expect(src).toContain('PageLoading');
+    expect(src).toContain('users-loading');
+    expect(src).not.toMatch(/style=\{\{[^}]*textAlign/);
+  });
 });
