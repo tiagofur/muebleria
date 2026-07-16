@@ -36,6 +36,7 @@ import {
   Package,
   Pencil,
   Plus,
+  SearchX,
   Settings2,
   Trash2,
 } from 'lucide-react';
@@ -1581,9 +1582,17 @@ export function ModulesScreen({
               onAction={startCreate}
             />
           ) : isFilterEmpty ? (
-            <p className="module-filter-empty">
-              No hay muebles que coincidan con el filtro o la búsqueda.
-            </p>
+            <EmptyState
+              variant="no-results"
+              icon={SearchX}
+              title="Sin resultados"
+              description="No hay muebles que coincidan con el filtro o la búsqueda."
+              actionLabel="Limpiar filtros"
+              onAction={() => {
+                setSearch('');
+                setCategoryFilter(null);
+              }}
+            />
           ) : (
             <ul className="module-card-grid" aria-label="Lista de muebles">
               {filtered.map((mod) => (

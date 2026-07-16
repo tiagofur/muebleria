@@ -4,7 +4,7 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { Hardware, HardwareUnit } from '@muebles/domain';
-import { Eye, EyeOff, Pencil, Plus, Settings2 } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   EmptyState,
   Modal,
@@ -218,9 +218,17 @@ export function HardwareCatalog({
             onAction={startCreate}
           />
         ) : isFilterEmpty ? (
-          <p className="catalog-empty-filter">
-            No hay herrajes que coincidan con la búsqueda o el filtro.
-          </p>
+          <EmptyState
+            variant="no-results"
+            icon={SearchX}
+            title="Sin resultados"
+            description="No hay herrajes que coincidan con la búsqueda o el filtro."
+            actionLabel="Limpiar filtros"
+            onAction={() => {
+              setSearch('');
+              setStatus('active');
+            }}
+          />
         ) : (
           <CatalogTable
             columns={columns}

@@ -154,7 +154,29 @@ describe('EmptyState', () => {
     );
     expect(screen.getByText('No hay materiales')).toBeTruthy();
     expect(screen.getByText('Agregá el primero.')).toBeTruthy();
+    expect(screen.getByTestId('empty-state').getAttribute('data-variant')).toBe(
+      'empty',
+    );
     await user.click(screen.getByRole('button', { name: /Agregar material/ }));
+    expect(onAction).toHaveBeenCalledOnce();
+  });
+
+  it('no-results variant clears filters without a plus icon', async () => {
+    const onAction = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <EmptyState
+        variant="no-results"
+        title="Sin resultados"
+        description="No hay ítems que coincidan."
+        actionLabel="Limpiar filtros"
+        onAction={onAction}
+      />,
+    );
+    expect(screen.getByTestId('empty-state-no-results')).toBeTruthy();
+    const btn = screen.getByRole('button', { name: /^Limpiar filtros$/ });
+    expect(btn.className).not.toMatch(/btn--primary/);
+    await user.click(btn);
     expect(onAction).toHaveBeenCalledOnce();
   });
 });
