@@ -31,6 +31,8 @@ import {
   validateCatalogEntityCodes,
   validateModule,
   validateStructure,
+  evaluatePartFormula,
+  resolveStructure,
 } from './engine';
 import { ResolutionError, ValidationError } from './errors';
 import type {
@@ -38,6 +40,7 @@ import type {
   EdgeAssignment,
   Module,
   Project,
+  Structure,
 } from './types';
 
 const ALL_EDGES: readonly EdgeAssignment[] = [
@@ -1567,3 +1570,173 @@ describe('generateHardwareList', () => {
     );
   });
 });
+
+describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
+  const testEdges: EdgeAssignment[] = [
+    { side: 'L1', enabled: false },
+    { side: 'L2', enabled: false },
+    { side: 'W1', enabled: false },
+    { side: 'W2', enabled: false },
+  ];
+
+  const mockStructure: Structure = {
+    id: 'struct-under-test',
+    code: 'EST-TEST',
+    name: 'Estructura Test Presets',
+    externalDims: { width: 500, height: 720, depth: 560 },
+    presets: [
+      { id: 'pr-300', name: 'Preset 300', width: 300, height: 720, depth: 560 },
+      { id: 'pr-600', name: 'Preset 600', width: 600, height: 720, depth: 560 },
+    ],
+    boardParts: [
+      {
+        id: 'bp-costado',
+        code: 'P01',
+        description: 'Costado Lateral',
+        quantity: 2,
+        lengthMm: 720,
+        widthMm: 560,
+        edges: testEdges,
+        optionRole: 'board_base',
+        lengthFormula: 'H',
+        widthFormula: 'D',
+      },
+      {
+        id: 'bp-base',
+        code: 'P02',
+        description: 'Base Estructura',
+        quantity: 1,
+        lengthMm: 464, // Default (500 - 36)
+        widthMm: 560,
+        edges: testEdges,
+        optionRole: 'board_base',
+        lengthFormula: 'W - 36',
+        widthFormula: 'D',
+      },
+      {
+        id: 'bp-entrepano',
+        code: 'P03',
+        description: 'Entrepaño Regulable',
+        quantity: 1,
+        lengthMm: 462, // Default (500 - 36 - 2)
+        widthMm: 550, // Default (560 - 10)
+        edges: testEdges,
+        optionRole: 'board_base',
+        lengthFormula: 'W - 36 - 2',
+        widthFormula: 'D - 10',
+      },
+    ],
+  };
+
+  describe('evaluatePartFormula', () => {
+    const dims = { W: 500, H: 720, D: 560 };
+
+    it('evaluates basic variables and simple arithmetic', () => {
+      expect(evaluatePartFormula('W', dims)).toBe(500);
+      expect(evaluatePartFormula('H', dims)).toBe(720);
+      expect(evaluatePartFormula('D', dims)).toBe(560);
+      expect(evaluatePartFormula('W - 36', dims)).toBe(464);
+      expect(evaluatePartFormula('W - 2 * 18', dims)).toBe(464);
+      expect(evaluatePartFormula('W - 36 - 2', dims)).toBe(462);
+      expect(evaluatePartFormula('D - 10', dims)).toBe(550);
+      expect(evaluatePartFormula('(W - 36) / 2', dims)).toBe(232);
+    });
+
+    it('rounds results to nearest millimeter', () => {
+      expect(evaluatePartFormula('W / 3', dims)).toBe(167); // 500 / 3 = 166.67 -> 167
+    });
+
+    it('throws ValidationError for invalid characters or injection attempts', () => {
+      expect(() => evaluatePartFormula('W + alert(1)', dims)).toThrow(ValidationError);
+      expect(() => evaluatePartFormula('W; 100', dims)).toThrow(ValidationError);
+      expect(() => evaluatePartFormula('W + X', dims)).toThrow(ValidationError);
+    });
+
+    it('throws ValidationError for empty formulas', () => {
+      expect(() => evaluatePartFormula('', dims)).toThrow(ValidationError);
+      expect(() => evaluatePartFormula('  ', dims)).toThrow(ValidationError);
+    });
+  });
+
+  describe('resolveStructure', () => {
+    it('resolves parts correctly for a valid preset (300)', () => {
+      const parts = resolveStructure(mockStructure, { width: 300, height: 720, depth: 560 });
+      expect(parts).toHaveLength(3);
+
+      const lateral = parts.find((p) => p.id === 'bp-costado')!;
+      expect(lateral.lengthMm).toBe(720); // H
+      expect(lateral.widthMm).toBe(560);  // D
+
+      const base = parts.find((p) => p.id === 'bp-base')!;
+      expect(base.lengthMm).toBe(264); // 300 - 36
+
+      const entrepano = parts.find((p) => p.id === 'bp-entrepano')!;
+      expect(entrepano.lengthMm).toBe(262); // 300 - 36 - 2
+      expect(entrepano.widthMm).toBe(550);  // 560 - 10
+    });
+
+    it('resolves parts correctly for a valid preset (600)', () => {
+      const parts = resolveStructure(mockStructure, { width: 600, height: 720, depth: 560 });
+
+      const base = parts.find((p) => p.id === 'bp-base')!;
+      expect(base.lengthMm).toBe(564); // 600 - 36
+
+      const entrepano = parts.find((p) => p.id === 'bp-entrepano')!;
+      expect(entrepano.lengthMm).toBe(562); // 600 - 36 - 2
+    });
+
+    it('rejects dimensions not in the preset list', () => {
+      expect(() =>
+        resolveStructure(mockStructure, { width: 400, height: 720, depth: 560 })
+      ).toThrow(ValidationError);
+      expect(() =>
+        resolveStructure(mockStructure, { width: 400, height: 720, depth: 560 })
+      ).toThrow(/no están permitidas/i);
+    });
+
+    it('validates fallback to externalDims if presets list is empty', () => {
+      const structNoPresets: Structure = {
+        ...mockStructure,
+        presets: [],
+      };
+      // Matches default externalDims exactly -> should resolve
+      const parts = resolveStructure(structNoPresets, { width: 500, height: 720, depth: 560 });
+      expect(parts[1]!.lengthMm).toBe(464);
+
+      // Differs from default -> should throw
+      expect(() =>
+        resolveStructure(structNoPresets, { width: 600, height: 720, depth: 560 })
+      ).toThrow(/no coinciden con las medidas por defecto/i);
+    });
+  });
+
+  describe('validateStructure preset & formulas checks', () => {
+    it('passes validation for valid structure with formulas and presets', () => {
+      expect(() => validateStructure(mockStructure)).not.toThrow();
+    });
+
+    it('rejects preset with invalid dimension <= 0', () => {
+      const badStruct: Structure = {
+        ...mockStructure,
+        presets: [{ id: 'bad', width: 0, height: 720, depth: 560 }],
+      };
+      expect(() => validateStructure(badStruct)).toThrow(ValidationError);
+      expect(() => validateStructure(badStruct)).toThrow(/dimensiones del preset/i);
+    });
+
+    it('rejects board part with invalid characters in lengthFormula', () => {
+      const badStruct: Structure = {
+        ...mockStructure,
+        boardParts: [
+          {
+            ...mockStructure.boardParts[0]!,
+            lengthFormula: 'H + hello',
+          },
+        ],
+      };
+      expect(() => validateStructure(badStruct)).toThrow(ValidationError);
+      expect(() => validateStructure(badStruct)).toThrow(/caracteres no válidos/i);
+    });
+  });
+});
+

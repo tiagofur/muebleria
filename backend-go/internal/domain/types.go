@@ -141,8 +141,10 @@ type BoardPart struct {
 	WidthMm     int    `json:"width_mm"`
 	// Grain (veta) is inherited from the resolved material's GrainDefault —
 	// never set per piece. Mirrors how edge band is resolved from material.
-	Edges      []EdgeAssignment `json:"edges"`
-	OptionRole string           `json:"option_role"`
+	Edges         []EdgeAssignment `json:"edges"`
+	OptionRole    string           `json:"option_role"`
+	LengthFormula string           `json:"length_formula,omitempty"`
+	WidthFormula  string           `json:"width_formula,omitempty"`
 }
 
 type HardwareLine struct {
@@ -181,20 +183,29 @@ type Module struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+type DimensionPreset struct {
+	ID       string `json:"id"`
+	Name     string `json:"name,omitempty"`
+	WidthMm  int    `json:"width_mm"`
+	HeightMm int    `json:"height_mm"`
+	DepthMm  int    `json:"depth_mm"`
+}
+
 // Structure is a reusable engineering body (cuerpo) — F049 / #99.
 // Not composed into modules until H07; dual path keeps fixed modules working.
 type Structure struct {
-	ID         string      `json:"id"`
-	Code       string      `json:"code"`
-	Name       string      `json:"name"`
-	WidthMm    int         `json:"width_mm,omitempty"`
-	HeightMm   int         `json:"height_mm,omitempty"`
-	DepthMm    int         `json:"depth_mm,omitempty"`
-	BoardParts []BoardPart `json:"board_parts"`
-	Notes      string      `json:"notes,omitempty"`
-	Active     bool        `json:"active"`
-	CreatedAt  time.Time   `json:"created_at"`
-	UpdatedAt  time.Time   `json:"updated_at"`
+	ID         string            `json:"id"`
+	Code       string            `json:"code"`
+	Name       string            `json:"name"`
+	WidthMm    int               `json:"width_mm,omitempty"`
+	HeightMm   int               `json:"height_mm,omitempty"`
+	DepthMm    int               `json:"depth_mm,omitempty"`
+	BoardParts []BoardPart       `json:"board_parts"`
+	Presets    []DimensionPreset `json:"presets,omitempty"`
+	Notes      string            `json:"notes,omitempty"`
+	Active     bool              `json:"active"`
+	CreatedAt  time.Time         `json:"created_at"`
+	UpdatedAt  time.Time         `json:"updated_at"`
 }
 
 type ProjectItem struct {

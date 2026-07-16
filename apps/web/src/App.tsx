@@ -224,7 +224,16 @@ function draftToStructure(id: string, draft: StructureDraft): Structure {
       widthMm: p.widthMm,
       edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
       optionRole: p.optionRole.trim(),
+      lengthFormula: p.lengthFormula?.trim() || undefined,
+      widthFormula: p.widthFormula?.trim() || undefined,
     })),
+    presets: draft.presets && draft.presets.length > 0 ? draft.presets.map((pr) => ({
+      id: pr.id,
+      name: pr.name?.trim() || undefined,
+      width: pr.width,
+      height: pr.height,
+      depth: pr.depth,
+    })) : undefined,
   };
 }
 

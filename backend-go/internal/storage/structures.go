@@ -34,7 +34,7 @@ func edgeFlagsFromPart(p domain.BoardPart) (l1, l2, w1, w2 bool) {
 
 func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID string) ([]domain.BoardPart, error) {
 	partsQuery := `
-		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2
+		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula
 		FROM structure_board_parts
 		WHERE structure_id = $1
 		ORDER BY code NULLS LAST, description;
@@ -49,12 +49,19 @@ func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID stri
 	for pRows.Next() {
 		var p domain.BoardPart
 		var code *string
+		var lengthFormula, widthFormula *string
 		var l1, l2, w1, w2 bool
-		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2); err != nil {
+		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2, &lengthFormula, &widthFormula); err != nil {
 			return nil, err
 		}
 		if code != nil {
 			p.Code = *code
+		}
+		if lengthFormula != nil {
+			p.LengthFormula = *lengthFormula
+		}
+		if widthFormula != nil {
+			p.WidthFormula = *widthFormula
 		}
 		p.Edges = edgesFromFlags(l1, l2, w1, w2)
 		parts = append(parts, p)
@@ -65,7 +72,38 @@ func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID stri
 	return parts, pRows.Err()
 }
 
-// ListStructures returns all engineering structures with board parts (F049).
+func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID string) ([]domain.DimensionPreset, error) {
+	presetsQuery := `
+		SELECT id, name, width_mm, height_mm, depth_mm
+		FROM structure_presets
+		WHERE structure_id = $1
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+	`
+	rows, err := s.Pool.Query(ctx, presetsQuery, structureID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var presets []domain.DimensionPreset
+	for rows.Next() {
+		var pr domain.DimensionPreset
+		var name *string
+		if err := rows.Scan(&pr.ID, &name, &pr.WidthMm, &pr.HeightMm, &pr.DepthMm); err != nil {
+			return nil, err
+		}
+		if name != nil {
+			pr.Name = *name
+		}
+		presets = append(presets, pr)
+	}
+	if presets == nil {
+		presets = []domain.DimensionPreset{}
+	}
+	return presets, rows.Err()
+}
+
+// ListStructures returns all engineering structures with board parts and presets (F049/F050).
 func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, created_at, updated_at
@@ -103,6 +141,13 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 			return nil, err
 		}
 		st.BoardParts = parts
+
+		presets, err := s.loadStructurePresets(ctx, st.ID)
+		if err != nil {
+			return nil, err
+		}
+		st.Presets = presets
+
 		out = append(out, st)
 	}
 	if out == nil {
@@ -142,6 +187,13 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 		return nil, err
 	}
 	st.BoardParts = parts
+
+	presets, err := s.loadStructurePresets(ctx, st.ID)
+	if err != nil {
+		return nil, err
+	}
+	st.Presets = presets
+
 	return &st, nil
 }
 
@@ -169,12 +221,11 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	if st.DepthMm > 0 {
 		d = st.DepthMm
 	}
-	// JSON omit of active unmarshals false; new structures default active.
 	active := true
 	if st.Active {
 		active = true
 	}
-	_ = st.Active // explicit false still creates as active for F049 ABM simplicity
+	_ = st.Active
 	active = true
 
 	if st.ID != "" {
@@ -200,20 +251,38 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 		if p.ID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12);
-			`, p.ID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
+			`, p.ID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11);
-			`, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
+			`, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting structure part: %w", err)
 		}
 	}
+
+	for _, pr := range st.Presets {
+		if pr.ID != "" {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm)
+				VALUES ($1,$2,$3,$4,$5,$6);
+			`, pr.ID, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+		} else {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm)
+				VALUES ($1,$2,$3,$4,$5);
+			`, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+		}
+		if err != nil {
+			return fmt.Errorf("error inserting structure preset: %w", err)
+		}
+	}
+
 	return tx.Commit(ctx)
 }
 
@@ -251,23 +320,44 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 		return err
 	}
 
+	if _, err := tx.Exec(ctx, `DELETE FROM structure_presets WHERE structure_id = $1;`, id); err != nil {
+		return err
+	}
+
 	for _, p := range st.BoardParts {
 		l1, l2, w1, w2 := edgeFlagsFromPart(p)
 		if p.ID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12);
-			`, p.ID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
+			`, p.ID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11);
-			`, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
+			`, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
 		}
 		if err != nil {
 			return fmt.Errorf("error replacing structure parts: %w", err)
+		}
+	}
+
+	for _, pr := range st.Presets {
+		if pr.ID != "" {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm)
+				VALUES ($1,$2,$3,$4,$5,$6);
+			`, pr.ID, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+		} else {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm)
+				VALUES ($1,$2,$3,$4,$5);
+			`, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+		}
+		if err != nil {
+			return fmt.Errorf("error replacing structure presets: %w", err)
 		}
 	}
 

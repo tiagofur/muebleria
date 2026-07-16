@@ -162,6 +162,7 @@ describe('StructuresScreen', () => {
       heightMm: 720,
       depthMm: 560,
       active: true,
+      presets: [],
       boardParts: [
         expect.objectContaining({
           code: 'PIEZA-1',
@@ -170,6 +171,12 @@ describe('StructuresScreen', () => {
           lengthMm: 720,
           widthMm: 560,
           optionRole: 'LATERAL',
+          lengthFormula: '',
+          widthFormula: '',
+          edgeL1: false,
+          edgeL2: false,
+          edgeW1: false,
+          edgeW2: false,
         }),
       ],
     });
@@ -196,4 +203,86 @@ describe('StructuresScreen', () => {
     expect(screen.queryByText('EST-GAB-720')).toBeNull();
     expect(screen.getByText('EST-ALTO-600')).toBeTruthy();
   });
+
+  it('allows managing presets and formulas in modal', () => {
+    const onCreate = vi.fn();
+    render(
+      <StructuresScreen
+        structures={[]}
+        optionGroups={[{ id: 'g-lateral', code: 'LATERAL', name: 'Grupo Lateral', kind: 'board', options: [] }]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />
+    );
+
+    // Click Nueva Estructura
+    fireEvent.click(screen.getByTestId('create-structure-btn'));
+
+    // Fill basic details
+    fireEvent.change(screen.getByTestId('input-code'), { target: { value: 'EST-PRESETS' } });
+    fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'Estructura con Presets' } });
+
+    // Add preset
+    fireEvent.click(screen.getByTestId('add-preset-btn'));
+    expect(screen.getByTestId('preset-item-0')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('preset-name-0'), { target: { value: 'Ancho 300' } });
+    fireEvent.change(screen.getByTestId('preset-width-0'), { target: { value: '300' } });
+    fireEvent.change(screen.getByTestId('preset-height-0'), { target: { value: '720' } });
+    fireEvent.change(screen.getByTestId('preset-depth-0'), { target: { value: '560' } });
+
+    // Add board part with formulas
+    fireEvent.click(screen.getByTestId('add-part-btn'));
+    fireEvent.change(screen.getByTestId('part-code-0'), { target: { value: 'P01' } });
+    fireEvent.change(screen.getByTestId('part-desc-0'), { target: { value: 'Costado' } });
+    fireEvent.change(screen.getByTestId('part-qty-0'), { target: { value: '2' } });
+    fireEvent.change(screen.getByTestId('part-length-0'), { target: { value: '720' } });
+    fireEvent.change(screen.getByTestId('part-width-0'), { target: { value: '560' } });
+    fireEvent.change(screen.getByTestId('part-role-0'), { target: { value: 'LATERAL' } });
+
+    // Fill length and width formulas
+    fireEvent.change(screen.getByTestId('part-length-formula-0'), { target: { value: 'H' } });
+    fireEvent.change(screen.getByTestId('part-width-formula-0'), { target: { value: 'D - 10' } });
+
+    // Verify preview resolved text is shown
+    expect(screen.getByTestId('part-resolved-preview-0')).toBeTruthy();
+
+    // Submit
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(onCreate).toHaveBeenCalledWith({
+      code: 'EST-PRESETS',
+      name: 'Estructura con Presets',
+      notes: '',
+      widthMm: 0,
+      heightMm: 0,
+      depthMm: 0,
+      active: true,
+      presets: [
+        {
+          id: expect.any(String),
+          name: 'Ancho 300',
+          width: 300,
+          height: 720,
+          depth: 560,
+        },
+      ],
+      boardParts: [
+        expect.objectContaining({
+          code: 'P01',
+          description: 'Costado',
+          quantity: 2,
+          lengthMm: 720,
+          widthMm: 560,
+          optionRole: 'LATERAL',
+          lengthFormula: 'H',
+          widthFormula: 'D - 10',
+        }),
+      ],
+    });
+  });
 });
+
