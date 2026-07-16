@@ -214,3 +214,9 @@ export {
   type UserRow,
   type UsersScreenProps,
 } from './users';
+
+export {
+  StructuresScreen,
+  type StructureDraft,
+  type StructuresScreenProps,
+} from './structures';

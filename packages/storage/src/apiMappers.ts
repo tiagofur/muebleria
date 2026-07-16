@@ -280,6 +280,42 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   };
 }
 
+// --- Structures (F049 / #99) ---
+
+export function structureToApi(st: import('@muebles/domain').Structure): Record<string, unknown> {
+  return {
+    id: st.id,
+    code: st.code,
+    name: st.name,
+    width_mm: st.externalDims?.width ?? 0,
+    height_mm: st.externalDims?.height ?? 0,
+    depth_mm: st.externalDims?.depth ?? 0,
+    notes: st.notes ?? '',
+    active: st.active !== false,
+    board_parts: st.boardParts.map(boardPartToApi),
+  };
+}
+
+export function structureFromApi(raw: Record<string, unknown>): import('@muebles/domain').Structure {
+  const parts = raw.board_parts ?? raw.boardParts;
+  const w = num(raw.width_mm ?? raw.widthMm);
+  const h = num(raw.height_mm ?? raw.heightMm);
+  const d = num(raw.depth_mm ?? raw.depthMm);
+  const hasDims = w > 0 || h > 0 || d > 0;
+  const activeRaw = raw.active;
+  return {
+    id: str(raw.id),
+    code: str(raw.code),
+    name: str(raw.name),
+    notes: str(raw.notes) || undefined,
+    externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
+    active: activeRaw === false ? false : true,
+    boardParts: Array.isArray(parts)
+      ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
+      : [],
+  };
+}
+
 // --- Customers ---
 
 export function customerToApi(c: Customer): Record<string, unknown> {
@@ -441,6 +477,7 @@ export function catalogFromApi(parts: {
   hardware: unknown;
   optionGroups: unknown;
   modules: unknown;
+  structures?: unknown;
   categories: unknown;
   customers: unknown;
 }): Catalog {
@@ -453,6 +490,7 @@ export function catalogFromApi(parts: {
     hardware: asRows(parts.hardware).map(hardwareFromApi),
     optionGroups: asRows(parts.optionGroups).map(optionGroupFromApi),
     modules: asRows(parts.modules).map(moduleFromApi),
+    structures: asRows(parts.structures).map(structureFromApi),
     categories: asRows(parts.categories).map(categoryFromApi),
     customers: asRows(parts.customers).map(customerFromApi),
   };

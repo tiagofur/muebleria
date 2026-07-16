@@ -188,6 +188,7 @@ describe('project drafts and validation', () => {
       defaultMarginFactor: 1.5,
       defaultLaborFixedCost: 1200,
       defaultCurrency: 'MXN',
+      vendedorCanViewCosts: false,
     });
     expect(d.marginFactor).toBe('1.5');
     expect(d.laborFixedCost).toBe('1200');

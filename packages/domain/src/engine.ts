@@ -29,6 +29,7 @@ import type {
   ResolvedBoardPart,
   ResolvedBom,
   ResolvedHardwareLine,
+  Structure,
 } from './types';
 
 const EDGE_OPTION_ROLE = 'EDGE';
@@ -423,6 +424,54 @@ export function validateModule(module: Module): void {
   }
 }
 
+/**
+ * Validate engineering Structure (cuerpo) — F049 / #99.
+ * Same part rules as modules; no hardware lines on structures.
+ */
+export function validateStructure(structure: Structure): void {
+  if (!structure.code?.trim()) {
+    throw new ValidationError('Structure code must not be empty', {
+      structureId: structure.id,
+      field: 'code',
+    });
+  }
+  if (!structure.name?.trim()) {
+    throw new ValidationError('Structure name must not be empty', {
+      structureId: structure.id,
+      structureCode: structure.code,
+      field: 'name',
+    });
+  }
+  if (structure.boardParts.length === 0) {
+    throw new ValidationError(
+      'Structure must have at least one board part',
+      {
+        structureId: structure.id,
+        structureCode: structure.code,
+        field: 'boardParts',
+      },
+    );
+  }
+
+  for (const part of structure.boardParts) {
+    validateBoardPart(part, structure.code);
+    if (!part.description?.trim()) {
+      throw new ValidationError('Board part description must not be empty', {
+        structureCode: structure.code,
+        partId: part.id,
+        field: 'description',
+      });
+    }
+    if (!part.optionRole?.trim()) {
+      throw new ValidationError('Board part optionRole must not be empty', {
+        structureCode: structure.code,
+        partId: part.id,
+        field: 'optionRole',
+      });
+    }
+  }
+}
+
 export function validateCatalogEntityCodes(catalog: Catalog): void {
   for (const m of catalog.materials) {
     if (!m.code?.trim() || !m.name?.trim()) {
@@ -458,6 +507,9 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
   }
   for (const mod of catalog.modules) {
     validateModule(mod);
+  }
+  for (const st of catalog.structures ?? []) {
+    validateStructure(st);
   }
 }
 

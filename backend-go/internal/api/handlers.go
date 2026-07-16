@@ -1083,6 +1083,101 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- STRUCTURES / CUERPOS (F049 / #99) ---
+
+func (s *Server) HandleStructures(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		list, err := s.Store.ListStructures(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, list)
+
+	case http.MethodPost:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar estructuras") {
+			return
+		}
+		var st domain.Structure
+		if !decodeJSONBody(w, r, &st) {
+			return
+		}
+		err := s.Store.CreateStructure(r.Context(), &st)
+		if err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, st)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		st, err := s.Store.GetStructureByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "structure not found")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, st)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar estructuras") {
+			return
+		}
+		var st domain.Structure
+		if !decodeJSONBody(w, r, &st) {
+			return
+		}
+		err := s.Store.UpdateStructure(r.Context(), id, &st)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, st)
+
+	case http.MethodDelete:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar estructuras") {
+			return
+		}
+		err := s.Store.DeleteStructure(r.Context(), id)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]string{"message": "structure deleted"})
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 // --- MODULE CATEGORIES (F025) ---
 
 func (s *Server) HandleCategories(w http.ResponseWriter, r *http.Request) {

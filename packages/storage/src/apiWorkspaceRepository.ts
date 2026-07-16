@@ -12,6 +12,7 @@ import {
   hardwareToApi,
   materialToApi,
   moduleToApi,
+  structureToApi,
   optionGroupToApi,
   projectFromApi,
   projectToApi,
@@ -112,6 +113,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       modules,
       customers,
       categories,
+      structures,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -120,6 +122,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/modules'),
       fetchJson('/customers'),
       fetchJson('/catalog/categories'),
+      fetchJson('/catalog/structures').catch(() => []),
     ]);
 
     return catalogFromApi({
@@ -128,6 +131,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       hardware,
       optionGroups,
       modules,
+      structures,
       categories,
       customers,
     });
@@ -227,6 +231,14 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         `/catalog/option-groups/${og.id}`,
         '/catalog/option-groups',
         optionGroupToApi(og),
+      );
+    }
+
+    for (const st of catalog.structures ?? []) {
+      await this.upsert(
+        `/catalog/structures/${st.id}`,
+        '/catalog/structures',
+        structureToApi(st),
       );
     }
 

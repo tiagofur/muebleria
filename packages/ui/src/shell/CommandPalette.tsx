@@ -275,7 +275,7 @@ export function useCommandPaletteHotkey(
         tag === 'SELECT' ||
         target?.isContentEditable;
       // Still allow Cmd+K from inputs to open palette (Linear-style)
-      if (isEditable && event.key === '/' && !event.metaKey && !event.ctrlKey) {
+      if (isEditable && (event.key as string) === '/' && !event.metaKey && !event.ctrlKey) {
         return;
       }
 

@@ -142,7 +142,7 @@ describe('downloadOptimizerXlsx', () => {
 
 describe('deliverExcelFile (EXP-06 / EXP-07)', () => {
   it('uses Electron save dialog when electronAPI is injected', async () => {
-    const writeExcelFile = vi.fn(async () => undefined);
+    const writeExcelFile = vi.fn(async (_path: string, _buf: ArrayBuffer) => undefined);
     const showSaveDialog = vi.fn(async () => '/tmp/out.xlsx');
     const status = await deliverExcelFile(
       new Uint8Array([9, 8, 7]),

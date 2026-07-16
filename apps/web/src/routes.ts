@@ -11,6 +11,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   projects: '/projects',
   customers: '/customers',
   modules: '/modules',
+  structures: '/structures',
   materials: '/materials',
   edges: '/edges',
   hardware: '/hardware',
@@ -26,6 +27,7 @@ const ENTITY_SECTIONS: readonly EntitySection[] = [
   'projects',
   'customers',
   'modules',
+  'structures',
   'materials',
   'edges',
   'hardware',
@@ -51,6 +53,10 @@ export function projectPath(projectId: string): string {
 
 export function modulePath(moduleId: string): string {
   return entityPath('modules', moduleId);
+}
+
+export function structurePath(structureId: string): string {
+  return entityPath('structures', structureId);
 }
 
 function normalizePathname(pathname: string): string {
@@ -82,6 +88,10 @@ export function projectIdFromPath(pathname: string): string | null {
 
 export function moduleIdFromPath(pathname: string): string | null {
   return entityIdFromPath(pathname, 'modules');
+}
+
+export function structureIdFromPath(pathname: string): string | null {
+  return entityIdFromPath(pathname, 'structures');
 }
 
 /**

@@ -45,12 +45,14 @@ describe('AppShell nav model (F017)', () => {
       'projects',
       'customers',
       'modules',
+      'structures',
     ]);
     expect(trabajo.items.map((i) => i.label)).toEqual([
       'Inicio',
       'Cotizaciones',
       'Clientes',
       'Muebles',
+      'Estructuras',
     ]);
 
     expect(config.items.map((i) => i.id)).toEqual([
