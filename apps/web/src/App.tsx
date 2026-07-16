@@ -81,6 +81,10 @@ import {
   createSeedWorkspace,
 } from '@muebles/storage';
 import {
+  buildCommercialQuoteExport,
+  downloadCommercialQuoteXlsx,
+} from './exportCommercialQuote';
+import {
   buildHardwareListExport,
   downloadHardwareListXlsx,
 } from './exportHardwareList';
@@ -1371,6 +1375,30 @@ function AppContent({
     }
   }, [selectedProject, catalog, toast]);
 
+  const handleExportCommercialQuote = useCallback(async () => {
+    if (!selectedProject || !catalog) return;
+    setExportBusy(true);
+    setExportErrors([]);
+    try {
+      const result = await buildCommercialQuoteExport(
+        selectedProject,
+        catalog,
+        customers,
+      );
+      if (!result.ok) {
+        setExportErrors(result.issues);
+        return;
+      }
+      downloadCommercialQuoteXlsx(result.bytes, result.fileName);
+      toast({
+        type: 'success',
+        message: `✓ ${result.fileName} descargado`,
+      });
+    } finally {
+      setExportBusy(false);
+    }
+  }, [selectedProject, catalog, customers, toast]);
+
   const onEntitySelectionChange = useCallback(
     (section: EntitySection, id: string | null) => {
       if (section === 'projects') {
@@ -1596,6 +1624,7 @@ function AppContent({
           groupLabels={groupLabels}
           onExport={handleExportOptimizer}
           onExportHardware={handleExportHardwareList}
+          onExportCommercialQuote={handleExportCommercialQuote}
           exportErrors={exportErrors}
           exportBusy={exportBusy}
           projectEstimates={projectEstimates}

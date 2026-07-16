@@ -194,7 +194,7 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 | Duplicar módulo / proyecto | Hecho | F015 |
 | Merma % por material en costo | Hecho | F014 |
 | Opciones a nivel **proyecto** + override por línea | **Pendiente** | [#35](https://github.com/tiagofur/muebleria/issues/35) · F029 |
-| PDF o Excel de cotización comercial (simple) | **Pendiente** | [#36](https://github.com/tiagofur/muebleria/issues/36) · F030 |
+| PDF o Excel de cotización comercial (simple) | **Hecho (Excel)** | [#36](https://github.com/tiagofur/muebleria/issues/36) · F030 — XLSX cliente; PDF opcional futuro |
 
 ### 6.2b Mejoras de producto abiertas (no bloquean MVP)
 

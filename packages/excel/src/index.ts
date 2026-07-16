@@ -1,5 +1,5 @@
 /**
- * Excel adapter — Optimizer cut-list and hardware purchase-list writers.
+ * Excel adapter — Optimizer, hardware list, commercial quote writers.
  */
 
 export const PACKAGE_NAME = '@muebles/excel' as const;
@@ -14,3 +14,10 @@ export {
   hardwareListExportCsv,
   HARDWARE_LIST_HEADERS,
 } from './hardwareListExport';
+
+export {
+  commercialQuoteExport,
+  type CommercialQuoteExportInput,
+  type CommercialQuoteLine,
+  type CommercialQuoteTotals,
+} from './commercialQuoteExport';
