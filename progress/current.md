@@ -1,13 +1,11 @@
 # Sesión actual
 
-- **Branch:** `feat/project-produced-68`
-- **Issue:** [#68](https://github.com/tiagofur/muebleria/issues/68) — F036 produced + reopen/delete
+- **Branch:** `feat/gerente-dashboard-69`
+- **Issue:** [#69](https://github.com/tiagofur/muebleria/issues/69) — Dashboard gerente (F037)
 - **Estado:** implementado, listo PR
 
 ## Hecho
-- ProjectStatus + produced (TS/Go/DB 000011)
-- isProjectClosed incluye produced; snapshot en accepted→produced
-- roleCanReopen / roleCanMarkProduced
-- API PUT: reopen 403 vendedor; mark produced para prod/eng
-- UI: badge, Marcar en producción, Reabrir confirm
-- PRD §6.6.4
+- `aggregatePortfolioByOwner` + tabla «Por responsable»
+- Solo admin/gerente ven el desglose multi-owner
+- Vendedor: stats del portafolio filtrado (API F034), sin tabla global
+- Tests helpers + Dashboard + rbac

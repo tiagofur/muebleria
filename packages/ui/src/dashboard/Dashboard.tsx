@@ -26,6 +26,7 @@ import {
 import {
   formatDashboardMoney,
   shouldShowGettingStarted,
+  type OwnerPortfolioRow,
 } from './dashboardHelpers';
 import './dashboard.css';
 
@@ -59,6 +60,11 @@ export type DashboardProps = {
   readonly onNewMaterial?: () => void;
   /** When true, show loading instead of stats (workspace gate). */
   readonly loading?: boolean;
+  /**
+   * Gerente/admin portfolio breakdown by owner (F037).
+   * Omit for vendedor / roles without multi-owner dashboard.
+   */
+  readonly ownerBreakdown?: readonly OwnerPortfolioRow[];
 };
 
 function StatusBadge({ status }: { readonly status: ProjectStatus }): ReactNode {
@@ -92,6 +98,7 @@ export function Dashboard({
   onNewModule,
   onNewMaterial,
   loading = false,
+  ownerBreakdown,
 }: DashboardProps): ReactNode {
   if (loading) {
     return (
@@ -302,6 +309,60 @@ export function Dashboard({
               <p className="dashboard-stat__value">{stats.activeMaterials}</p>
             </li>
           </ul>
+
+          {ownerBreakdown && ownerBreakdown.length > 0 ? (
+            <section
+              className="dashboard__section"
+              aria-labelledby="dashboard-owners-title"
+              data-testid="dashboard-owner-breakdown"
+            >
+              <h3
+                id="dashboard-owners-title"
+                className="dashboard__section-title"
+              >
+                Por responsable
+              </h3>
+              <p className="dashboard__section-lead">
+                Cotizaciones del taller agrupadas por quien las lleva (mes
+                actual en el total cotizado).
+              </p>
+              <div className="dashboard-owners-wrap">
+                <table className="dashboard-owners-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Responsable</th>
+                      <th scope="col">Puesto</th>
+                      <th scope="col">Activas</th>
+                      <th scope="col">Cotizado del mes</th>
+                      <th scope="col">Total cotiz.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ownerBreakdown.map((row) => (
+                      <tr
+                        key={row.ownerUserId}
+                        data-testid={`dashboard-owner-${row.ownerUserId}`}
+                      >
+                        <td className="dashboard-owners-table__name">
+                          {row.ownerName}
+                        </td>
+                        <td>{row.ownerRoleLabel}</td>
+                        <td className="dashboard-owners-table__num">
+                          {row.activeProjects}
+                        </td>
+                        <td className="dashboard-owners-table__num">
+                          {formatDashboardMoney(row.monthlyQuotedTotal)}
+                        </td>
+                        <td className="dashboard-owners-table__num">
+                          {row.projectsTotal}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           <section
             className="dashboard__section"

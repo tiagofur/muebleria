@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectStatus } from '@muebles/domain';
 import {
+  aggregatePortfolioByOwner,
   countActiveMaterials,
   countActiveProjects,
   countModules,
@@ -14,8 +15,14 @@ function project(
   id: string,
   status: ProjectStatus,
   updatedAt: string,
-): { id: string; status: ProjectStatus; updatedAt: string } {
-  return { id, status, updatedAt };
+  ownerUserId?: string,
+): {
+  id: string;
+  status: ProjectStatus;
+  updatedAt: string;
+  ownerUserId?: string;
+} {
+  return { id, status, updatedAt, ownerUserId };
 }
 
 describe('dashboardHelpers (F023)', () => {
@@ -112,5 +119,45 @@ describe('dashboardHelpers (F023)', () => {
     expect(formatDashboardMoney(202.5)).toBe('$202.50 MXN');
     expect(formatDashboardMoney(1250.5)).toBe('$1,250.50 MXN');
     expect(formatDashboardMoney(0)).toBe('$0.00 MXN');
+  });
+
+  it('aggregatePortfolioByOwner groups by owner with name and role (F037)', () => {
+    const now = new Date('2026-07-15T12:00:00.000Z');
+    const projects = [
+      project('p1', 'quoted', '2026-07-01T00:00:00.000Z', 'v1'),
+      project('p2', 'accepted', '2026-07-10T00:00:00.000Z', 'v1'),
+      project('p3', 'draft', '2026-07-05T00:00:00.000Z', 'v2'),
+      project('p4', 'quoted', '2026-07-08T00:00:00.000Z', 'g1'),
+    ];
+    const estimates = { p1: 100, p2: 200, p3: 50, p4: 300 };
+    const owners = [
+      { id: 'v1', name: 'Ana Vendedora', role: 'vendedor' },
+      { id: 'v2', name: 'Luis Vendedor', role: 'vendedor' },
+      { id: 'g1', name: 'María Gerente', role: 'gerente_ventas' },
+    ];
+    const rows = aggregatePortfolioByOwner(
+      projects,
+      estimates,
+      owners,
+      (role) =>
+        role === 'gerente_ventas'
+          ? 'Gerente de ventas'
+          : role === 'vendedor'
+            ? 'Vendedor'
+            : role ?? '—',
+      now,
+    );
+    expect(rows).toHaveLength(3);
+    // sorted by monthly total desc: g1 300, v1 300, v2 0 — tie g1 vs v1 by name
+    const g1 = rows.find((r) => r.ownerUserId === 'g1')!;
+    expect(g1.ownerName).toBe('María Gerente');
+    expect(g1.ownerRoleLabel).toBe('Gerente de ventas');
+    expect(g1.monthlyQuotedTotal).toBe(300);
+    const v1 = rows.find((r) => r.ownerUserId === 'v1')!;
+    expect(v1.monthlyQuotedTotal).toBe(300);
+    expect(v1.activeProjects).toBe(1); // quoted only among active
+    const v2 = rows.find((r) => r.ownerUserId === 'v2')!;
+    expect(v2.activeProjects).toBe(1);
+    expect(v2.monthlyQuotedTotal).toBe(0);
   });
 });

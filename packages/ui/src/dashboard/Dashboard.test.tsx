@@ -85,6 +85,30 @@ afterEach(() => {
 });
 
 describe('Dashboard (F023)', () => {
+  it('shows owner breakdown for gerente portfolio (F037)', () => {
+    renderDashboard({
+      ownerBreakdown: [
+        {
+          ownerUserId: 'v1',
+          ownerName: 'Ana Vendedora',
+          ownerRoleLabel: 'Vendedor',
+          activeProjects: 2,
+          monthlyQuotedTotal: 500,
+          projectsTotal: 4,
+        },
+      ],
+    });
+    expect(screen.getByTestId('dashboard-owner-breakdown')).toBeTruthy();
+    expect(screen.getByText('Por responsable')).toBeTruthy();
+    expect(screen.getByText('Ana Vendedora')).toBeTruthy();
+    expect(screen.getByText('Vendedor')).toBeTruthy();
+  });
+
+  it('hides owner breakdown when not provided (vendedor)', () => {
+    renderDashboard({ ownerBreakdown: undefined });
+    expect(screen.queryByTestId('dashboard-owner-breakdown')).toBeNull();
+  });
+
   it('renders four stat cards with correct numbers', () => {
     renderDashboard();
     expect(screen.getByTestId('stat-active-projects').textContent).toContain('3');

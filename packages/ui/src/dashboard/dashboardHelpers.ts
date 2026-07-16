@@ -9,6 +9,24 @@ export type ProjectLike = {
   readonly id: string;
   readonly status: ProjectStatus;
   readonly updatedAt: string;
+  /** Portfolio owner (F034/F037). Empty/missing = unassigned. */
+  readonly ownerUserId?: string;
+};
+
+export type OwnerDirectoryEntry = {
+  readonly id: string;
+  readonly name: string;
+  readonly role?: string;
+};
+
+export type OwnerPortfolioRow = {
+  readonly ownerUserId: string;
+  readonly ownerName: string;
+  /** Spanish role label or raw role code. */
+  readonly ownerRoleLabel: string;
+  readonly activeProjects: number;
+  readonly monthlyQuotedTotal: number;
+  readonly projectsTotal: number;
 };
 
 export type ActiveFlag = {
@@ -103,6 +121,79 @@ export function sumMonthlyQuotedTotal(
  */
 export function formatDashboardMoney(n: number): string {
   return formatMoneyDisplay(n);
+}
+
+function isMonthlyClosedStatus(status: ProjectStatus): boolean {
+  return status === 'quoted' || status === 'accepted' || status === 'produced';
+}
+
+/**
+ * Portfolio breakdown by owner for gerente/admin home (F037).
+ * Pure aggregation — sale estimates come from the shell.
+ */
+export function aggregatePortfolioByOwner(
+  projects: readonly ProjectLike[],
+  estimates: Readonly<Record<string, number | null | undefined>>,
+  owners: readonly OwnerDirectoryEntry[],
+  roleLabel: (role: string | undefined) => string,
+  now: Date = new Date(),
+): readonly OwnerPortfolioRow[] {
+  const currentKey = yearMonthKey(now);
+  const nameById = new Map(owners.map((o) => [o.id, o.name]));
+  const roleById = new Map(owners.map((o) => [o.id, o.role]));
+
+  type Acc = {
+    activeProjects: number;
+    monthlyQuotedTotal: number;
+    projectsTotal: number;
+  };
+  const byOwner = new Map<string, Acc>();
+
+  for (const project of projects) {
+    const ownerId = project.ownerUserId?.trim() || '__unassigned__';
+    let acc = byOwner.get(ownerId);
+    if (!acc) {
+      acc = { activeProjects: 0, monthlyQuotedTotal: 0, projectsTotal: 0 };
+      byOwner.set(ownerId, acc);
+    }
+    acc.projectsTotal += 1;
+    if (project.status === 'draft' || project.status === 'quoted') {
+      acc.activeProjects += 1;
+    }
+    if (
+      currentKey &&
+      isMonthlyClosedStatus(project.status) &&
+      yearMonthKey(project.updatedAt) === currentKey
+    ) {
+      const sale = estimates[project.id];
+      if (typeof sale === 'number' && Number.isFinite(sale)) {
+        acc.monthlyQuotedTotal += sale;
+      }
+    }
+  }
+
+  const rows: OwnerPortfolioRow[] = [];
+  for (const [ownerUserId, acc] of byOwner) {
+    const isUnassigned = ownerUserId === '__unassigned__';
+    const role = isUnassigned ? undefined : roleById.get(ownerUserId);
+    rows.push({
+      ownerUserId,
+      ownerName: isUnassigned
+        ? 'Sin responsable'
+        : nameById.get(ownerUserId) || ownerUserId,
+      ownerRoleLabel: isUnassigned ? '—' : roleLabel(role),
+      activeProjects: acc.activeProjects,
+      monthlyQuotedTotal: acc.monthlyQuotedTotal,
+      projectsTotal: acc.projectsTotal,
+    });
+  }
+
+  return rows.sort((a, b) => {
+    if (b.monthlyQuotedTotal !== a.monthlyQuotedTotal) {
+      return b.monthlyQuotedTotal - a.monthlyQuotedTotal;
+    }
+    return a.ownerName.localeCompare(b.ownerName, 'es');
+  });
 }
 
 /**

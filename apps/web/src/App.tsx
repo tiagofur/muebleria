@@ -47,6 +47,8 @@ import {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
+  roleCanViewPortfolioDashboard,
+  roleLabelEs,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -66,6 +68,7 @@ import {
   ToastProvider,
   canShowPricePreview,
   canShowProjectPricePreview,
+  aggregatePortfolioByOwner,
   countActiveMaterials,
   countActiveProjects,
   countModules,
@@ -492,6 +495,8 @@ function AppContent({
     session === 'guest' || roleCanMarkProduced(actorRole);
   const canExportProduction =
     session === 'guest' || roleCanExportProduction(actorRole);
+  const canViewPortfolioDashboard =
+    session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
 
   const repository = useMemo(() => {
     return session === 'auth'
@@ -837,6 +842,22 @@ function AppContent({
       salePrice: projectEstimates[project.id] ?? null,
     }));
   }, [projects, customers, projectEstimates]);
+
+  /** F037: multi-owner portfolio table for gerente/admin only. */
+  const dashboardOwnerBreakdown = useMemo(() => {
+    if (!canViewPortfolioDashboard) return undefined;
+    return aggregatePortfolioByOwner(
+      projects,
+      projectEstimates,
+      assignableOwners,
+      (role) => roleLabelEs(role),
+    );
+  }, [
+    canViewPortfolioDashboard,
+    projects,
+    projectEstimates,
+    assignableOwners,
+  ]);
 
   const onDashboardOpenProject = useCallback(
     (projectId: string) => {
@@ -1750,6 +1771,7 @@ function AppContent({
           onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
           onNewModule={canMutateModules ? onDashboardNewModule : undefined}
           onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
+          ownerBreakdown={dashboardOwnerBreakdown}
         />
       ) : null}
       {navId === 'materials' ? (

@@ -297,6 +297,15 @@ Sidebar filtrada por `navIdsForRole` (domain). Deep-link denegado redirige a Ini
 
 Precios congelados en `quoted` / `accepted` / `produced` (`priceSnapshot`). Export Optimizer y herrajes en **accepted** y **produced** (reimpresión).
 
+#### 6.6.5 Home por rol (F037+)
+
+| Rol | Home |
+|-----|------|
+| `gerente_ventas` / `admin` | Totales del período + tabla **Por responsable** (`ownerUserId`, nombre, puesto) |
+| `vendedor` | Resumen de su portafolio (sin desglose de otros) |
+| `produccion` | Cola de fabricación (F038) |
+
+
 ---
 
 ## 7. Modelo de dominio (producto)

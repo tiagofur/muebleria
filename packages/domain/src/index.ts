@@ -75,6 +75,7 @@ export {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
+  roleCanViewPortfolioDashboard,
   roleLabelEs,
 } from './rbac';
 
