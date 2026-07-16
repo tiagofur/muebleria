@@ -82,6 +82,11 @@ export interface Customer {
   readonly address?: string;
   readonly notes?: string;
   readonly active: boolean;
+  /**
+   * Portfolio owner user id (F034 / OWN-*).
+   * Vendedor only sees customers they own; admin can assign/reassign.
+   */
+  readonly ownerUserId?: string;
 }
 
 export interface OptionGroup {
@@ -171,6 +176,10 @@ export interface Project {
   readonly name: string;
   readonly customerId: string;
   readonly createdBy?: string;
+  /**
+   * Portfolio owner user id (F034 / OWN-*). May differ from createdBy after reassignment.
+   */
+  readonly ownerUserId?: string;
   readonly currency: string;
   readonly marginFactor: number;
   readonly laborFixedCost: number;

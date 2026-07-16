@@ -34,7 +34,10 @@ import {
   calcProjectBreakdown,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
+  resolveOwnerOnCreate,
+  resolveOwnerOnUpdate,
   resolveWorkshopSettings,
+  roleCanAssignOwner,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -265,6 +268,7 @@ function resolveCustomerFromDraft(
     id: newId(),
     name: trimmed,
     active: true,
+    ownerUserId: draft.ownerUserId?.trim() || undefined,
   };
   return { customerId: created.id, customers: [...customers, created] };
 }
@@ -458,6 +462,7 @@ function AppContent({
     [session],
   );
   const showAdminUsers = session === 'auth' && isAdminRole(authUser?.role);
+  const canAssignOwner = roleCanAssignOwner(authUser?.role);
 
   const repository = useMemo(() => {
     return session === 'auth'
@@ -469,6 +474,66 @@ function AppContent({
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(
     null,
   );
+  const [assignableOwners, setAssignableOwners] = useState<
+    readonly { id: string; name: string; role?: string }[]
+  >([]);
+
+  useEffect(() => {
+    if (!canAssignOwner || !authToken) {
+      setAssignableOwners([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`${DEFAULT_API_BASE}/admin/users`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`users ${res.status}`);
+        return res.json() as Promise<
+          { id: string; name: string; role?: string; active?: boolean }[]
+        >;
+      })
+      .then((users) => {
+        if (cancelled) return;
+        const active = users.filter((u) => u.active !== false);
+        setAssignableOwners(
+          active.map((u) => ({
+            id: u.id,
+            name: u.name || u.id,
+            role: u.role,
+          })),
+        );
+      })
+      .catch((err) => {
+        console.error('Failed to load assignable owners:', err);
+        if (!cancelled && authUser) {
+          setAssignableOwners([
+            {
+              id: authUser.id,
+              name: authUser.name || authUser.email,
+              role: authUser.role,
+            },
+          ]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canAssignOwner, authToken, authUser]);
+
+  const ownerLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const u of assignableOwners) {
+      map[u.id] = u.name;
+    }
+    if (authUser) {
+      map[authUser.id] = authUser.name || authUser.email;
+    }
+    return map;
+  }, [assignableOwners, authUser]);
 
   useEffect(() => {
     setWorkspace(null);
@@ -1131,6 +1196,11 @@ function AppContent({
   };
 
   const createCustomer = (draft: CustomerDraft) => {
+    const ownerUserId = resolveOwnerOnCreate(
+      authUser?.id,
+      authUser?.role,
+      draft.ownerUserId,
+    );
     const item: Customer = {
       id: newId(),
       name: draft.name.trim(),
@@ -1139,6 +1209,7 @@ function AppContent({
       address: draft.address.trim() || undefined,
       notes: draft.notes.trim() || undefined,
       active: true,
+      ownerUserId,
     };
     patchCatalog((c) => ({
       ...c,
@@ -1148,6 +1219,12 @@ function AppContent({
   };
 
   const updateCustomer = (id: string, draft: CustomerDraft) => {
+    const existing = customers.find((c) => c.id === id);
+    const ownerUserId = resolveOwnerOnUpdate(
+      authUser?.role,
+      existing?.ownerUserId,
+      draft.ownerUserId,
+    );
     patchCatalog((cat) => ({
       ...cat,
       customers: (cat.customers ?? []).map((c) =>
@@ -1159,6 +1236,7 @@ function AppContent({
               phone: draft.phone.trim() || undefined,
               address: draft.address.trim() || undefined,
               notes: draft.notes.trim() || undefined,
+              ownerUserId,
             }
           : c,
       ),
@@ -1215,9 +1293,16 @@ function AppContent({
     );
     const catalog = { ...workspace.catalog, customers: resolved.customers };
     const meta = draftToProjectMeta(draft, resolved.customerId);
+    const ownerUserId = resolveOwnerOnCreate(
+      authUser?.id,
+      authUser?.role,
+      draft.ownerUserId,
+    );
     const base: Project = {
       id: newId(),
       ...meta,
+      ownerUserId,
+      createdBy: authUser?.id,
       status: 'draft',
       items: [],
       createdAt: now,
@@ -1272,6 +1357,11 @@ function AppContent({
       marginFactor: meta.marginFactor,
       laborFixedCost: meta.laborFixedCost,
       notes: meta.notes,
+      ownerUserId: resolveOwnerOnUpdate(
+        authUser?.role,
+        existing.ownerUserId,
+        draft.ownerUserId,
+      ),
       updatedAt: now,
     };
     // Status change captures or clears priceSnapshot (PRD §7.4).
@@ -1665,6 +1755,10 @@ function AppContent({
           onReactivate={(id) => setCustomerActive(id, true)}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('customers', id)}
+          canAssignOwner={canAssignOwner}
+          assignableOwners={assignableOwners}
+          currentUserId={authUser?.id ?? ''}
+          ownerLabels={ownerLabels}
         />
       ) : null}
       {navId === 'users' && showAdminUsers && authToken ? (
@@ -1710,6 +1804,9 @@ function AppContent({
           edges={edges}
           hardware={hardware}
           customers={customers}
+          canAssignOwner={canAssignOwner}
+          assignableOwners={assignableOwners}
+          ownerLabels={ownerLabels}
           onCreate={createProject}
           onUpdate={updateProject}
           onDelete={deleteProject}

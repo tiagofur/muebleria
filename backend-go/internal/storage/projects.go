@@ -159,7 +159,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, created_at, updated_at
 		FROM projects
 		ORDER BY updated_at DESC;
 	`
@@ -173,13 +173,17 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 	for rows.Next() {
 		var p domain.Project
 		var createdBy *string
+		var ownerID *string
 		var notes *string
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
 		if createdBy != nil {
 			p.CreatedBy = *createdBy
+		}
+		if ownerID != nil {
+			p.OwnerUserID = *ownerID
 		}
 		if notes != nil {
 			p.Notes = *notes
@@ -329,20 +333,24 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, created_at, updated_at
 		FROM projects
 		WHERE id = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var p domain.Project
 	var createdBy *string
+	var ownerID *string
 	var notes *string
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	if createdBy != nil {
 		p.CreatedBy = *createdBy
+	}
+	if ownerID != nil {
+		p.OwnerUserID = *ownerID
 	}
 	if notes != nil {
 		p.Notes = *notes
@@ -423,6 +431,10 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	if p.CreatedBy != "" {
 		createdBy = &p.CreatedBy
 	}
+	var owner *string
+	if p.OwnerUserID != "" {
+		owner = &p.OwnerUserID
+	}
 
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -435,19 +447,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, currency, margin_factor, labor_fixed_cost, status, notes)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -529,12 +541,17 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	}
 	defer tx.Rollback(ctx)
 
+	var owner *string
+	if p.OwnerUserID != "" {
+		owner = &p.OwnerUserID
+	}
 	query := `
 		UPDATE projects
-		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $8;
+		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7,
+		    owner_user_id = $8, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $9;
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, id)
 	if err != nil {
 		return err
 	}

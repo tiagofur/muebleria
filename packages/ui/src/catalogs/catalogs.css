@@ -48,13 +48,28 @@
 }
 
 .catalog-table-wrap {
-  /* Scrollport for sticky headers (issue #56); keep horizontal scroll */
+  /* Scrollport for sticky headers (issue #56) + horizontal affordance (#34) */
   overflow: auto;
   max-height: min(70vh, calc(100vh - 14rem));
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--surface-card);
+  background-color: var(--surface-card);
   box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  /* Edge fades hint that more columns may be off-screen */
+  background-image:
+    linear-gradient(to right, var(--surface-card), transparent),
+    linear-gradient(to left, var(--surface-card), transparent);
+  background-position:
+    left center,
+    right center;
+  background-repeat: no-repeat;
+  background-size:
+    1.25rem 100%,
+    1.25rem 100%;
+  background-attachment: local, local;
 }
 
 .catalog-table {
@@ -63,6 +78,13 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--text-base);
+}
+
+/* Phone: ensure multi-column catalogs can scroll instead of crushing cells */
+@media (max-width: 639px) {
+  .catalog-table {
+    min-width: 32rem;
+  }
 }
 
 .catalog-table th,
@@ -443,6 +465,42 @@
   width: 1.75rem;
   height: 1.75rem;
   justify-content: center;
+}
+
+/* Touch-friendly targets on phone / tablet portrait (issue #34) — denser desktop unchanged */
+@media (max-width: 767px) {
+  .btn {
+    min-height: var(--touch-min);
+  }
+
+  .btn--small {
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+    padding-inline: var(--space-3);
+    justify-content: center;
+  }
+
+  .btn--icon {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
+
+  .catalog-table__actions {
+    gap: var(--space-2);
+  }
+
+  .catalog-table th,
+  .catalog-table td {
+    min-height: var(--touch-min);
+  }
+
+  .catalog-page__header,
+  .catalog-page__toolbar,
+  .catalog-page__filters {
+    gap: var(--space-3);
+  }
 }
 
 .catalog-picker {

@@ -24,6 +24,12 @@ type stubStore struct {
 	updateProjectErr      error
 	customerReturnedByID  *domain.Customer
 	customerGetByIDErr    error
+	projectReturnedByID   *domain.Project
+	projectGetByIDErr     error
+	listCustomers         []domain.Customer
+	listProjects          []domain.Project
+	lastCreatedCustomer   *domain.Customer
+	lastCreatedProject    *domain.Project
 	materialReturnedByID  *domain.MaterialBoard
 	materialGetByIDErr    error
 	// Auth test hooks
@@ -33,13 +39,23 @@ type stubStore struct {
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
-	return s.createCustomerErr
+	if s.createCustomerErr != nil {
+		return s.createCustomerErr
+	}
+	cp := *c
+	s.lastCreatedCustomer = &cp
+	return nil
 }
 func (s *stubStore) CreateMaterialBoard(ctx context.Context, m *domain.MaterialBoard) error {
 	return s.createMaterialErr
 }
 func (s *stubStore) CreateProject(ctx context.Context, p *domain.Project) error {
-	return s.createProjectErr
+	if s.createProjectErr != nil {
+		return s.createProjectErr
+	}
+	cp := *p
+	s.lastCreatedProject = &cp
+	return nil
 }
 func (s *stubStore) GetCustomerByID(ctx context.Context, id string) (*domain.Customer, error) {
 	return s.customerReturnedByID, s.customerGetByIDErr
@@ -75,13 +91,16 @@ func (s *stubStore) UpdateUserRole(context.Context, string, domain.UserRole) err
 }
 func (s *stubStore) RejectUser(context.Context, string) error { s.stubNotUsed("RejectUser"); return nil }
 func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {
-	s.stubNotUsed("ListCustomers"); return nil, nil
+	if s.listCustomers != nil {
+		return s.listCustomers, nil
+	}
+	return []domain.Customer{}, nil
 }
 func (s *stubStore) UpdateCustomer(context.Context, string, *domain.Customer) error {
-	s.stubNotUsed("UpdateCustomer"); return nil
+	return nil
 }
 func (s *stubStore) DeactivateCustomer(context.Context, string) error {
-	s.stubNotUsed("DeactivateCustomer"); return nil
+	return nil
 }
 func (s *stubStore) ListMaterialBoards(context.Context) ([]domain.MaterialBoard, error) {
 	s.stubNotUsed("ListMaterialBoards"); return nil, nil
@@ -168,10 +187,13 @@ func (s *stubStore) DeleteModule(context.Context, string) error {
 	s.stubNotUsed("DeleteModule"); return nil
 }
 func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
-	s.stubNotUsed("ListProjects"); return nil, nil
+	if s.listProjects != nil {
+		return s.listProjects, nil
+	}
+	return []domain.Project{}, nil
 }
 func (s *stubStore) GetProjectByID(context.Context, string) (*domain.Project, error) {
-	s.stubNotUsed("GetProjectByID"); return nil, nil
+	return s.projectReturnedByID, s.projectGetByIDErr
 }
 func (s *stubStore) UpdateProject(context.Context, string, *domain.Project) error {
 	if s.updateProjectErr != nil {
@@ -180,7 +202,7 @@ func (s *stubStore) UpdateProject(context.Context, string, *domain.Project) erro
 	return nil
 }
 func (s *stubStore) DeleteProject(context.Context, string) error {
-	s.stubNotUsed("DeleteProject"); return nil
+	return nil
 }
 
 // dupErr mimics the wrapped error the storage layer returns on a unique
@@ -298,7 +320,7 @@ func TestHandleProjectsCreateEchoesClientId(t *testing.T) {
 // Regression: UpdateProject used to return nil when RowsAffected==0, upsert
 // treated it as success, and POST /calculate 404'd on a phantom FE-only id.
 func TestHandleProjectByIDUpdateNotFoundReturns404(t *testing.T) {
-	srv := &Server{Store: &stubStore{updateProjectErr: errors.New("project not found")}}
+	srv := &Server{Store: &stubStore{projectGetByIDErr: errors.New("no rows in result set")}}
 	body := strings.NewReader(`{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","name":"Ghost","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/projects/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", body)
 	req.SetPathValue("id", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
@@ -312,6 +334,142 @@ func TestHandleProjectByIDUpdateNotFoundReturns404(t *testing.T) {
 	}
 	if msg := errorBody(t, rr); !strings.Contains(msg, "not found") {
 		t.Errorf("error message = %q, want it to mention 'not found'", msg)
+	}
+}
+
+func withClaims(req *http.Request, userID, role string) *http.Request {
+	claims := &auth.Claims{UserID: userID, Role: role, Email: userID + "@test.com"}
+	return req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
+}
+
+func TestOwnership_VendedorListFiltersOthers(t *testing.T) {
+	store := &stubStore{
+		listCustomers: []domain.Customer{
+			{ID: "c1", Name: "Mine", OwnerUserID: "v1"},
+			{ID: "c2", Name: "Theirs", OwnerUserID: "v2"},
+		},
+		listProjects: []domain.Project{
+			{ID: "p1", Name: "Mine", OwnerUserID: "v1"},
+			{ID: "p2", Name: "Theirs", OwnerUserID: "v2"},
+		},
+	}
+	srv := &Server{Store: store}
+
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/customers", nil), "v1", string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+	srv.HandleCustomers(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("customers status %d", rr.Code)
+	}
+	var customers []domain.Customer
+	if err := json.Unmarshal(rr.Body.Bytes(), &customers); err != nil {
+		t.Fatal(err)
+	}
+	if len(customers) != 1 || customers[0].ID != "c1" {
+		t.Fatalf("vendedor customer filter: %#v", customers)
+	}
+
+	req = withClaims(httptest.NewRequest(http.MethodGet, "/api/projects", nil), "v1", string(domain.RoleVendedor))
+	rr = httptest.NewRecorder()
+	srv.HandleProjects(rr, req)
+	var projects []domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &projects); err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 || projects[0].ID != "p1" {
+		t.Fatalf("vendedor project filter: %#v", projects)
+	}
+}
+
+func TestOwnership_AdminListSeesAll(t *testing.T) {
+	store := &stubStore{
+		listCustomers: []domain.Customer{
+			{ID: "c1", OwnerUserID: "v1"},
+			{ID: "c2", OwnerUserID: "v2"},
+		},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/customers", nil), "admin", string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+	srv.HandleCustomers(rr, req)
+	var customers []domain.Customer
+	if err := json.Unmarshal(rr.Body.Bytes(), &customers); err != nil {
+		t.Fatal(err)
+	}
+	if len(customers) != 2 {
+		t.Fatalf("admin should see all: %#v", customers)
+	}
+}
+
+func TestOwnership_VendedorForcedOwnerOnCreate(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"22222222-3333-4444-5555-666666666666","name":"Nuevo","active":true,"owner_user_id":"other"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/customers", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleCustomers(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+	if store.lastCreatedCustomer == nil || store.lastCreatedCustomer.OwnerUserID != "v1" {
+		t.Fatalf("expected owner forced to v1, got %#v", store.lastCreatedCustomer)
+	}
+}
+
+func TestOwnership_AdminCanAssignOwnerOnCreate(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"33333333-4444-5555-6666-777777777777","name":"Asignado","active":true,"owner_user_id":"v2"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/customers", body), "admin", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleCustomers(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status %d", rr.Code)
+	}
+	if store.lastCreatedCustomer == nil || store.lastCreatedCustomer.OwnerUserID != "v2" {
+		t.Fatalf("admin assign: %#v", store.lastCreatedCustomer)
+	}
+}
+
+func TestOwnership_VendedorCannotGetOtherCustomer(t *testing.T) {
+	store := &stubStore{
+		customerReturnedByID: &domain.Customer{ID: "c2", Name: "Theirs", OwnerUserID: "v2"},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/customers/c2", nil), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "c2")
+	rr := httptest.NewRecorder()
+	srv.HandleCustomerByID(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status %d want 404", rr.Code)
+	}
+}
+
+func TestOwnership_AdminReassignProjectOwner(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
+		},
+	}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"owner_user_id":"v2"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "admin", string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+	var got domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.OwnerUserID != "v2" {
+		t.Fatalf("reassign owner: %#v", got)
 	}
 }
 
