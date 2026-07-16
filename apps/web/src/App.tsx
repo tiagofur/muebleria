@@ -106,6 +106,7 @@ import {
   createSeedWorkspace,
 } from '@muebles/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
+import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import {
   buildOptimizerExport,
@@ -1815,6 +1816,41 @@ function AppContent({
     }
   }, [selectedProject, catalog, customers, toast]);
 
+  const handleExportCommercialQuotePdf = useCallback(
+    async (variant: 'detailed' | 'summary') => {
+      if (!selectedProject || !catalog) return;
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildCommercialQuotePdfExport(
+          selectedProject,
+          catalog,
+          customers,
+          variant,
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, catalog, customers, toast],
+  );
+
   const onEntitySelectionChange = useCallback(
     (section: EntitySection, id: string | null) => {
       if (section === 'projects') {
@@ -2149,6 +2185,13 @@ function AppContent({
           }
           onExportCommercialQuote={
             useProductionQueue ? undefined : handleExportCommercialQuote
+          }
+          onExportCommercialQuotePdf={
+            useProductionQueue
+              ? undefined
+              : (variant) => {
+                  void handleExportCommercialQuotePdf(variant);
+                }
           }
           exportErrors={exportErrors}
           exportBusy={exportBusy}

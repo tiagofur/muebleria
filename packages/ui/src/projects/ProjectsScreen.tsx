@@ -154,6 +154,14 @@ export interface ProjectsScreenProps {
    * Shell owns breakdown → xlsx → download.
    */
   readonly onExportCommercialQuote?: () => void | Promise<void>;
+  /**
+   * Commercial quote PDF for client (F045 / #90).
+   * - detailed: listado de muebles + total de venta
+   * - summary: solo datos del proyecto + total de venta
+   */
+  readonly onExportCommercialQuotePdf?: (
+    variant: 'detailed' | 'summary',
+  ) => void | Promise<void>;
   readonly exportErrors?: readonly ExportIssue[];
   readonly exportBusy?: boolean;
   /** When true, export buttons stay disabled (shell already blocked). */
@@ -231,6 +239,7 @@ export function ProjectsScreen({
   onExport,
   onExportHardware,
   onExportCommercialQuote,
+  onExportCommercialQuotePdf,
   exportErrors = [],
   exportBusy = false,
   exportBlocked = false,
@@ -1158,6 +1167,48 @@ export function ProjectsScreen({
             data-testid="project-chrome-export-quote"
           >
             {exportBusy ? 'Exportando…' : 'Exportar cotización'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={
+              !onExportCommercialQuotePdf ||
+              exportBusy ||
+              exportBlocked ||
+              project.items.length === 0
+            }
+            title={
+              onExportCommercialQuotePdf
+                ? 'PDF con listado de muebles y total de venta (cliente)'
+                : 'PDF no disponible en este shell'
+            }
+            onClick={() => {
+              void onExportCommercialQuotePdf?.('detailed');
+            }}
+            data-testid="project-chrome-export-quote-pdf-list"
+          >
+            {exportBusy ? 'Exportando…' : 'PDF listado'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={
+              !onExportCommercialQuotePdf ||
+              exportBusy ||
+              exportBlocked ||
+              project.items.length === 0
+            }
+            title={
+              onExportCommercialQuotePdf
+                ? 'PDF resumen: datos del proyecto y total, sin listado de muebles'
+                : 'PDF no disponible en este shell'
+            }
+            onClick={() => {
+              void onExportCommercialQuotePdf?.('summary');
+            }}
+            data-testid="project-chrome-export-quote-pdf-summary"
+          >
+            {exportBusy ? 'Exportando…' : 'PDF resumen'}
           </button>
           {canMutate ? (
           <button
