@@ -21,6 +21,7 @@ import {
   type CatalogMember,
   type PricePreviewGateResult,
 } from '../optionGroups/optionGroupHelpers';
+import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 import {
   matchesCodeOrName,
   validateNonNegativeNumber,
@@ -220,11 +221,15 @@ export function filterProjectsByQuery(
   });
 }
 
-/** Format a money amount for project cards / totals (2 decimals). */
-export function formatProjectMoney(n: number | undefined | null): string {
-  // Non-finite/missing values render as 0.00 rather than crashing the render —
-  // the backend breakdown may omit a field, or a local calc may yield NaN.
-  return (typeof n === 'number' && Number.isFinite(n) ? n : 0).toFixed(2);
+/**
+ * Format project money for display — shared formatMoneyDisplay (#51).
+ * Optional currency defaults to MXN (product default).
+ */
+export function formatProjectMoney(
+  n: number | undefined | null,
+  currency?: string,
+): string {
+  return formatMoneyDisplay(n, { currency });
 }
 
 /**

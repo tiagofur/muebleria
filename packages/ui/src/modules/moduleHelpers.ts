@@ -17,6 +17,7 @@ import {
   matchesCodeOrName,
   normalizeCode,
 } from '../catalogs/catalogHelpers';
+import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 
 export type BoardPartDraft = {
   id: string;
@@ -313,7 +314,7 @@ export function flattenCategoriesForSelect(
   return out;
 }
 
-/** Format a money amount for module cards / previews (2 decimals). */
-export function formatModuleMoney(n: number): string {
-  return n.toFixed(2);
+/** Format module money for display — shared formatMoneyDisplay (#51). */
+export function formatModuleMoney(n: number | null | undefined): string {
+  return formatMoneyDisplay(n);
 }

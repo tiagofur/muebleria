@@ -968,7 +968,9 @@ export function ProjectsScreen({
                 : 'workspace-chrome__total-value'
             }
           >
-            {chromeSale == null ? '—' : formatProjectMoney(chromeSale)}
+            {chromeSale == null
+              ? '—'
+              : formatProjectMoney(chromeSale, project.currency)}
           </span>
         </div>
         <div className="workspace-chrome__actions">
@@ -1234,27 +1236,51 @@ export function ProjectsScreen({
               <dl className="project-totals__grid">
                 <div>
                   <dt>Materiales</dt>
-                  <dd>{formatProjectMoney(breakdown.materialsCost)}</dd>
+                  <dd>
+                    {formatProjectMoney(
+                      breakdown.materialsCost,
+                      project.currency,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Cantos</dt>
-                  <dd>{formatProjectMoney(breakdown.edgeTotal)}</dd>
+                  <dd>
+                    {formatProjectMoney(breakdown.edgeTotal, project.currency)}
+                  </dd>
                 </div>
                 <div>
                   <dt>Herrajes</dt>
-                  <dd>{formatProjectMoney(breakdown.hardwareTotal)}</dd>
+                  <dd>
+                    {formatProjectMoney(
+                      breakdown.hardwareTotal,
+                      project.currency,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Costo directo</dt>
-                  <dd>{formatProjectMoney(breakdown.directCost)}</dd>
+                  <dd>
+                    {formatProjectMoney(breakdown.directCost, project.currency)}
+                  </dd>
                 </div>
                 <div>
                   <dt>MO modular</dt>
-                  <dd>{formatProjectMoney(breakdown.laborModular)}</dd>
+                  <dd>
+                    {formatProjectMoney(
+                      breakdown.laborModular,
+                      project.currency,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>MO fija</dt>
-                  <dd>{formatProjectMoney(breakdown.laborFixedCost)}</dd>
+                  <dd>
+                    {formatProjectMoney(
+                      breakdown.laborFixedCost,
+                      project.currency,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Factor margen</dt>
@@ -1263,7 +1289,7 @@ export function ProjectsScreen({
                 <div className="project-totals__sale-row">
                   <dt>Precio de venta</dt>
                   <dd className="project-totals__sale">
-                    {formatProjectMoney(breakdown.salePrice)}
+                    {formatProjectMoney(breakdown.salePrice, project.currency)}
                   </dd>
                 </div>
               </dl>

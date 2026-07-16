@@ -15,6 +15,7 @@ import type { EdgeBand, MaterialBoard } from '@muebles/domain';
 import { Eye, EyeOff, Layers, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   EmptyState,
+  formatMoneyDisplay,
   Modal,
   SearchInput,
   StatusChips,
@@ -318,7 +319,7 @@ export function MaterialsCatalog({
       {
         key: 'boardPrice',
         header: 'Precio Hoja',
-        render: (r) => `$${r.boardPrice.toFixed(2)}`,
+        render: (r) => formatMoneyDisplay(r.boardPrice),
       },
       {
         key: 'waste',
@@ -328,7 +329,7 @@ export function MaterialsCatalog({
       {
         key: 'cost',
         header: 'Costo/m²',
-        render: (r) => `$${r.costPerM2.toFixed(2)}`,
+        render: (r) => formatMoneyDisplay(r.costPerM2),
       },
       {
         key: 'status',
@@ -436,7 +437,7 @@ export function MaterialsCatalog({
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Precio Tablero</span>
                   <span className="catalog-row-detail__value">
-                    ${row.boardPrice.toFixed(2)}
+                    {formatMoneyDisplay(row.boardPrice)}
                   </span>
                 </div>
                 <div className="catalog-row-detail__field">
@@ -448,7 +449,7 @@ export function MaterialsCatalog({
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Costo / m² (con merma)</span>
                   <span className="catalog-row-detail__value">
-                    ${row.costPerM2.toFixed(2)}
+                    {formatMoneyDisplay(row.costPerM2)}
                   </span>
                 </div>
                 <div className="catalog-row-detail__field">
@@ -760,13 +761,14 @@ export function MaterialsCatalog({
           <div className="catalog-form__field">
             <label>Costo / m² calculado (con merma)</label>
             <div className="catalog-form__calculated-value">
-              $
-              {getCostPerM2({
-                widthMm: draft.widthMm,
-                lengthMm: draft.lengthMm,
-                boardPrice: draft.boardPrice,
-                wastePercent: draft.wastePercent,
-              }).toFixed(2)}
+              {formatMoneyDisplay(
+                getCostPerM2({
+                  widthMm: draft.widthMm,
+                  lengthMm: draft.lengthMm,
+                  boardPrice: draft.boardPrice,
+                  wastePercent: draft.wastePercent,
+                }),
+              )}
             </div>
           </div>
           <div className="catalog-form__field">

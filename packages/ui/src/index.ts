@@ -126,6 +126,7 @@ export {
 export {
   EmptyState,
   ErrorBoundary,
+  formatMoneyDisplay,
   InlineLoading,
   ListSkeleton,
   Modal,
@@ -143,6 +144,7 @@ export {
   TOAST_MAX,
   type EmptyStateProps,
   type ErrorBoundaryProps,
+  type FormatMoneyDisplayOptions,
   type InlineLoadingProps,
   type ListSkeletonProps,
   type PageLoadingProps,

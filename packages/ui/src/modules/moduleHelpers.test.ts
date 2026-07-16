@@ -205,7 +205,7 @@ describe('filterModulesByQuery / formatModuleMoney (F021)', () => {
   });
 
   it('formats money with 2 decimals', () => {
-    expect(formatModuleMoney(202.5)).toBe('202.50');
-    expect(formatModuleMoney(0)).toBe('0.00');
+    expect(formatModuleMoney(202.5)).toBe('$202.50 MXN');
+    expect(formatModuleMoney(0)).toBe('$0.00 MXN');
   });
 });
