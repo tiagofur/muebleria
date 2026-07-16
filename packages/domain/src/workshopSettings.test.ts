@@ -12,6 +12,7 @@ describe('workshopSettings (F031 / #37)', () => {
       DEFAULT_WORKSHOP_SETTINGS,
     );
     expect(resolveWorkshopSettings(null)).toEqual(DEFAULT_WORKSHOP_SETTINGS);
+    expect(DEFAULT_WORKSHOP_SETTINGS.vendedorCanViewCosts).toBe(false);
   });
 
   it('merges partial settings and normalizes currency', () => {
@@ -25,7 +26,19 @@ describe('workshopSettings (F031 / #37)', () => {
       defaultMarginFactor: 1.5,
       defaultLaborFixedCost: 100,
       defaultCurrency: 'MXN',
+      vendedorCanViewCosts: false,
     });
+  });
+
+  it('preserves vendedorCanViewCosts flag (F044)', () => {
+    expect(
+      resolveWorkshopSettings({
+        defaultMarginFactor: 1.35,
+        defaultLaborFixedCost: 0,
+        defaultCurrency: 'MXN',
+        vendedorCanViewCosts: true,
+      }).vendedorCanViewCosts,
+    ).toBe(true);
   });
 
   it('rejects invalid numbers and falls back to defaults', () => {

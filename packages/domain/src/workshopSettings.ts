@@ -8,11 +8,12 @@ export const DEFAULT_WORKSHOP_SETTINGS: WorkshopSettings = {
   defaultMarginFactor: 1.35,
   defaultLaborFixedCost: 0,
   defaultCurrency: 'MXN',
+  vendedorCanViewCosts: false,
 };
 
 /** Merge partial/legacy settings with product defaults. */
 export function resolveWorkshopSettings(
-  settings?: WorkshopSettings | null,
+  settings?: Partial<WorkshopSettings> | WorkshopSettings | null,
 ): WorkshopSettings {
   if (!settings) return { ...DEFAULT_WORKSHOP_SETTINGS };
   const margin = settings.defaultMarginFactor;
@@ -30,6 +31,10 @@ export function resolveWorkshopSettings(
     defaultCurrency: currency
       ? currency.toUpperCase()
       : DEFAULT_WORKSHOP_SETTINGS.defaultCurrency,
+    vendedorCanViewCosts:
+      typeof settings.vendedorCanViewCosts === 'boolean'
+        ? settings.vendedorCanViewCosts
+        : DEFAULT_WORKSHOP_SETTINGS.vendedorCanViewCosts,
   };
 }
 

@@ -237,6 +237,25 @@ type Catalog struct {
 	Categories   []ModuleCategory `json:"categories,omitempty"`
 }
 
+
+// WorkshopSettings is taller-wide defaults (F031 + F044 COST-02).
+type WorkshopSettings struct {
+	DefaultMarginFactor   float64 `json:"default_margin_factor"`
+	DefaultLaborFixedCost float64 `json:"default_labor_fixed_cost"`
+	DefaultCurrency       string  `json:"default_currency"`
+	VendedorCanViewCosts  bool    `json:"vendedor_can_view_costs"`
+}
+
+// DefaultWorkshopSettings matches TS DEFAULT_WORKSHOP_SETTINGS.
+func DefaultWorkshopSettings() WorkshopSettings {
+	return WorkshopSettings{
+		DefaultMarginFactor:   1.35,
+		DefaultLaborFixedCost: 0,
+		DefaultCurrency:       "MXN",
+		VendedorCanViewCosts:  false,
+	}
+}
+
 // Grain is 0|1 for Optimizer export (inherited from material.GrainDefault).
 type Grain int
 

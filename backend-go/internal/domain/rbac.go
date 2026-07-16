@@ -72,12 +72,12 @@ func RoleCanMarkProduced(role UserRole) bool {
 	}
 }
 
-// RoleCanViewCosts — unit costs, margin, direct cost (COST-01 / F039).
-// Vendedor and sin puesto only see sale price.
-func RoleCanViewCosts(role UserRole) bool {
+// RoleCanViewCosts — unit costs, margin, direct cost (COST-01 / F039 + COST-02 / F044).
+// Vendedor and sin puesto only see sale price unless vendedorCanViewCosts is true.
+func RoleCanViewCosts(role UserRole, vendedorCanViewCosts bool) bool {
 	switch role {
 	case RoleVendedor, RoleUser:
-		return false
+		return vendedorCanViewCosts
 	default:
 		return true
 	}

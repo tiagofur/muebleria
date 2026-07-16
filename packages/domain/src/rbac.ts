@@ -139,11 +139,25 @@ export function roleUsesProductionQueue(
 }
 
 /**
- * Workshop cost structure (unit costs, margin, direct cost) — COST-01 / F039.
- * Vendedor (and sin puesto) only see sale price, not cost stack.
+ * Optional workshop setting for COST-02 (F044).
+ * When true, vendedor/user may see the cost stack; default is hide (COST-01).
  */
-export function roleCanViewCosts(role: string | null | undefined): boolean {
-  if (role === 'vendedor' || role === 'user') return false;
+export type CostVisibilityOptions = {
+  readonly vendedorCanViewCosts?: boolean;
+};
+
+/**
+ * Workshop cost structure (unit costs, margin, direct cost) — COST-01 / F039
+ * + COST-02 / F044 workshop flag for vendedor.
+ * Vendedor (and sin puesto) only see sale price unless `vendedorCanViewCosts`.
+ */
+export function roleCanViewCosts(
+  role: string | null | undefined,
+  options?: CostVisibilityOptions,
+): boolean {
+  if (role === 'vendedor' || role === 'user') {
+    return options?.vendedorCanViewCosts === true;
+  }
   // Guest / local shell passes null — full workshop tool.
   if (role == null) return true;
   return (

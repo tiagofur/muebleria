@@ -1,7 +1,6 @@
 import type { Catalog, Project, Workspace, WorkshopSettings } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
-  resolveWorkshopSettings,
   withWorkshopSettings,
 } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
@@ -17,38 +16,10 @@ import {
   projectFromApi,
   projectToApi,
   sortCategoriesForSave,
+  workshopSettingsFromApi,
+  workshopSettingsToApi,
 } from './apiMappers';
 import { SCHEMA_VERSION } from './seed';
-
-/** Settings persist client-side until API has a dedicated endpoint (F031). */
-const SETTINGS_STORAGE_KEY = 'muebles_workshop_settings';
-
-function readLocalSettings(): WorkshopSettings {
-  if (typeof globalThis === 'undefined' || !('localStorage' in globalThis)) {
-    return { ...DEFAULT_WORKSHOP_SETTINGS };
-  }
-  try {
-    const raw = globalThis.localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_WORKSHOP_SETTINGS };
-    return resolveWorkshopSettings(JSON.parse(raw) as WorkshopSettings);
-  } catch {
-    return { ...DEFAULT_WORKSHOP_SETTINGS };
-  }
-}
-
-function writeLocalSettings(settings: WorkshopSettings): void {
-  if (typeof globalThis === 'undefined' || !('localStorage' in globalThis)) {
-    return;
-  }
-  try {
-    globalThis.localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify(resolveWorkshopSettings(settings)),
-    );
-  } catch {
-    // ignore
-  }
-}
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
@@ -77,21 +48,49 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async load(): Promise<Workspace> {
     const catalog = await this.getCatalog();
     const projects = await this.getProjects();
+    const settings = await this.getWorkshopSettings();
     return withWorkshopSettings({
       schemaVersion: SCHEMA_VERSION,
       catalog,
       projects,
-      settings: readLocalSettings(),
+      settings,
     });
   }
 
   async save(workspace: Workspace): Promise<void> {
     if (workspace.settings) {
-      writeLocalSettings(workspace.settings);
+      await this.saveWorkshopSettings(workspace.settings);
     }
     await this.saveCatalog(workspace.catalog);
     for (const p of workspace.projects) {
       await this.saveProject(p);
+    }
+  }
+
+  async getWorkshopSettings(): Promise<WorkshopSettings> {
+    const headers = this.getHeaders();
+    try {
+      const res = await fetch(`${this.baseUrl}/settings`, { headers });
+      if (!res.ok) {
+        return { ...DEFAULT_WORKSHOP_SETTINGS };
+      }
+      return workshopSettingsFromApi(await res.json());
+    } catch {
+      return { ...DEFAULT_WORKSHOP_SETTINGS };
+    }
+  }
+
+  async saveWorkshopSettings(settings: WorkshopSettings): Promise<void> {
+    const headers = this.getHeaders();
+    const res = await fetch(`${this.baseUrl}/settings`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(workshopSettingsToApi(settings)),
+    });
+    if (!res.ok) {
+      throw new Error(
+        `Failed to save settings: ${res.status} ${res.statusText}`,
+      );
     }
   }
 

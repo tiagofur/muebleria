@@ -80,4 +80,8 @@ type Store interface {
 	CreateProject(ctx context.Context, p *domain.Project) error
 	UpdateProject(ctx context.Context, id string, p *domain.Project) error
 	DeleteProject(ctx context.Context, id string) error
+
+	// Workshop settings (F031 defaults + F044 COST-02 flag)
+	GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error)
+	UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error)
 }

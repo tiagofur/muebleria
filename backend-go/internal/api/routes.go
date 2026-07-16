@@ -87,6 +87,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/media", authMW(http.HandlerFunc(server.HandleMediaUpload)))
 	mux.Handle("GET /api/media/{name}", authMW(http.HandlerFunc(server.HandleMediaGet)))
 
+	// Workshop settings (F031 defaults + F044 COST-02 flag)
+	mux.Handle("GET /api/settings", authMW(http.HandlerFunc(server.HandleWorkshopSettings)))
+	mux.Handle("PUT /api/settings", authMW(http.HandlerFunc(server.HandleWorkshopSettings)))
+
 	// Admin — Gestión de usuarios (solo admin; live role from DB)
 	adminMW := AdminMiddleware(server.JWTSecret, server.Store)
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))

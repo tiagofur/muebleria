@@ -306,9 +306,11 @@ Precios congelados en `quoted` / `accepted` / `produced` (`priceSnapshot`). Expo
 | `produccion` | **Listos para fabricar** (F038): accepted → export corte/herrajes → marcar produced |
 
 
-#### 6.6.6 Costos al vendedor (COST-01 / F039)
+#### 6.6.6 Costos al vendedor (COST-01 / F039 + COST-02 / F044)
 
-El rol `vendedor` (y `user` sin puesto) **no** recibe ni ve en UI: `costPerM2`, `costPerUnit`, `costPerMl`, `board_price`, costo directo, factor de margen, desglose de costos. **Sí** ve precio de venta. Admin / gerente / ingeniero / producción ven la estructura de costos del taller.
+Por defecto el rol `vendedor` (y `user` sin puesto) **no** recibe ni ve en UI: `costPerM2`, `costPerUnit`, `costPerMl`, `board_price`, costo directo, factor de margen, desglose de costos. **Sí** ve precio de venta. Admin / gerente / ingeniero / producción ven la estructura de costos del taller.
+
+**COST-02 (F044):** en Ajustes del taller, el flag `vendedorCanViewCosts` (default `false`) permite que vendedor/user vean la misma estructura de costos cuando está activo. Persistido en servidor (`GET`/`PUT /api/settings`); la redaction de API y el `showCosts` de UI usan el mismo criterio.
 
 #### 6.6.7 Exports de producción (F041)
 

@@ -24,6 +24,9 @@ export function SettingsScreen({
   const [margin, setMargin] = useState(String(settings.defaultMarginFactor));
   const [labor, setLabor] = useState(String(settings.defaultLaborFixedCost));
   const [currency, setCurrency] = useState(settings.defaultCurrency);
+  const [vendedorCanViewCosts, setVendedorCanViewCosts] = useState(
+    settings.vendedorCanViewCosts,
+  );
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -31,6 +34,7 @@ export function SettingsScreen({
     setMargin(String(settings.defaultMarginFactor));
     setLabor(String(settings.defaultLaborFixedCost));
     setCurrency(settings.defaultCurrency);
+    setVendedorCanViewCosts(settings.vendedorCanViewCosts);
   }, [settings]);
 
   const onSubmit = (event: FormEvent) => {
@@ -55,6 +59,7 @@ export function SettingsScreen({
       defaultMarginFactor: marginFactor,
       defaultLaborFixedCost: laborFixedCost,
       defaultCurrency: cur,
+      vendedorCanViewCosts,
     });
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 2000);
@@ -138,6 +143,23 @@ export function SettingsScreen({
             autoComplete="off"
           />
           <span className="settings-hint">Código de moneda (ej. MXN).</span>
+        </div>
+
+        <div className="catalog-form__field settings-form__checkbox">
+          <label htmlFor="settings-vendedor-costs" className="settings-checkbox">
+            <input
+              id="settings-vendedor-costs"
+              type="checkbox"
+              checked={vendedorCanViewCosts}
+              onChange={(e) => setVendedorCanViewCosts(e.target.checked)}
+              data-testid="settings-vendedor-can-view-costs"
+            />
+            <span>Vendedor puede ver costos del taller</span>
+          </label>
+          <span className="settings-hint">
+            Por defecto el vendedor solo ve precio de venta (COST-01). Activá esto
+            si el taller quiere que vea unitarios, margen y desglose.
+          </span>
         </div>
 
         <div className="settings-actions">

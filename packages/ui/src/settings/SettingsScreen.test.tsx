@@ -14,9 +14,10 @@ const base = {
   defaultMarginFactor: 1.35,
   defaultLaborFixedCost: 0,
   defaultCurrency: 'MXN',
+  vendedorCanViewCosts: false,
 };
 
-describe('SettingsScreen (#37)', () => {
+describe('SettingsScreen (#37 / F044)', () => {
   it('renders defaults and saves valid values', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -30,12 +31,14 @@ describe('SettingsScreen (#37)', () => {
     await user.type(margin, '1.5');
     await user.clear(screen.getByLabelText(/Mano de obra fija/i));
     await user.type(screen.getByLabelText(/Mano de obra fija/i), '200');
+    await user.click(screen.getByTestId('settings-vendedor-can-view-costs'));
     await user.click(screen.getByTestId('settings-save'));
 
     expect(onSave).toHaveBeenCalledWith({
       defaultMarginFactor: 1.5,
       defaultLaborFixedCost: 200,
       defaultCurrency: 'MXN',
+      vendedorCanViewCosts: true,
     });
   });
 

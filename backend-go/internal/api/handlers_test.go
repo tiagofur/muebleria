@@ -40,6 +40,8 @@ type stubStore struct {
 	listUsers           []domain.User
 	createMaterialOK    bool
 	deleteProjectCalled bool
+	// F044 workshop settings (nil → defaults, flag false)
+	workshopSettings *domain.WorkshopSettings
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -252,6 +254,19 @@ func (s *stubStore) UpdateProject(context.Context, string, *domain.Project) erro
 func (s *stubStore) DeleteProject(context.Context, string) error {
 	s.deleteProjectCalled = true
 	return nil
+}
+
+func (s *stubStore) GetWorkshopSettings(context.Context) (domain.WorkshopSettings, error) {
+	if s.workshopSettings != nil {
+		return *s.workshopSettings, nil
+	}
+	return domain.DefaultWorkshopSettings(), nil
+}
+
+func (s *stubStore) UpsertWorkshopSettings(_ context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error) {
+	cp := ws
+	s.workshopSettings = &cp
+	return ws, nil
 }
 
 // dupErr mimics the wrapped error the storage layer returns on a unique
@@ -723,6 +738,61 @@ func TestF039_VendedorMaterialsListRedactsCosts(t *testing.T) {
 	_ = json.Unmarshal(rr2.Body.Bytes(), &list2)
 	if len(list2) != 1 || list2[0].BoardPrice != 100 {
 		t.Fatalf("admin should see board_price: %#v", list2)
+	}
+}
+
+func TestF044_VendedorMaterialsShowCostsWhenFlagOn(t *testing.T) {
+	flagOn := domain.DefaultWorkshopSettings()
+	flagOn.VendedorCanViewCosts = true
+	store := &stubStore{
+		listMaterials: []domain.MaterialBoard{
+			{ID: "m1", Code: "M1", Name: "Board", BoardPrice: 100, CostPerM2: 25, Active: true},
+		},
+		workshopSettings: &flagOn,
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/materials", nil), "v1", string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+	srv.HandleMaterials(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d", rr.Code)
+	}
+	var list []domain.MaterialBoard
+	if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].BoardPrice != 100 || list[0].CostPerM2 != 25 {
+		t.Fatalf("expected costs visible with flag: %#v", list)
+	}
+}
+
+func TestF044_SettingsPutRequiresAccess(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"default_margin_factor":1.4,"default_labor_fixed_cost":0,"default_currency":"MXN","vendedor_can_view_costs":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/settings", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleWorkshopSettings(rr, req)
+	if rr.Code != http.StatusForbidden && rr.Code != http.StatusUnauthorized {
+		// requirePermission typically 403
+		if rr.Code != 403 {
+			t.Fatalf("vendedor must not put settings, status=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	req2 := withClaims(httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"default_margin_factor":1.4,"default_labor_fixed_cost":0,"default_currency":"MXN","vendedor_can_view_costs":true}`)), "a1", string(domain.RoleAdmin))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	srv.HandleWorkshopSettings(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("admin put settings status=%d body=%s", rr2.Code, rr2.Body.String())
+	}
+	var got domain.WorkshopSettings
+	if err := json.Unmarshal(rr2.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.VendedorCanViewCosts {
+		t.Fatalf("flag not saved: %#v", got)
 	}
 }
 

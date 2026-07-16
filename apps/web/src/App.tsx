@@ -506,10 +506,6 @@ function AppContent({
     session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
   const useProductionQueue =
     session === 'auth' && roleUsesProductionQueue(actorRole);
-  /** Guest/local: full costs; auth uses COST-01 matrix (F039). */
-  const showCosts =
-    session === 'guest' || roleCanViewCosts(actorRole);
-
   const repository = useMemo(() => {
     return session === 'auth'
       ? new APIWorkspaceRepository(DEFAULT_API_BASE)
@@ -725,6 +721,12 @@ function AppContent({
     [useProductionQueue, projects],
   );
   const workshopSettings = resolveWorkshopSettings(workspace?.settings);
+  /** Guest/local: full costs; auth uses COST-01 + COST-02 flag (F039/F044). */
+  const showCosts =
+    session === 'guest' ||
+    roleCanViewCosts(actorRole, {
+      vendedorCanViewCosts: workshopSettings.vendedorCanViewCosts,
+    });
 
   // Latest workspace for patches — avoids stale closures (#15).
   const workspaceRef = useRef(workspace);

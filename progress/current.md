@@ -1,6 +1,11 @@
 # Sesión actual
 
-- **Branch:** `feat/polish-showcase-home-88`
-- **Issue:** [#88](https://github.com/tiagofur/muebleria/issues/88) — F043 pulir vitrina + home por rol
-- **Estado:** implementado — PR https://github.com/tiagofur/muebleria/pull/93
-- **F042:** done (merge #92)
+- **Branch:** `feat/vendedor-view-costs-flag-89`
+- **Issue:** [#89](https://github.com/tiagofur/muebleria/issues/89) — F044 flag vendedor ve costos
+- **Estado:** implementado — PR https://github.com/tiagofur/muebleria/pull/94
+
+## Hecho
+
+- `vendedorCanViewCosts` default false; roleCanViewCosts TS/Go
+- API settings + migration 000013 + redaction condicional
+- Ajustes UI + showCosts
