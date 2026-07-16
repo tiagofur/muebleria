@@ -116,11 +116,15 @@ export {
 export {
   AppShell,
   APP_NAV_SECTIONS,
+  CommandPalette,
   labelForNavId,
   resolveNavSections,
+  useCommandPaletteHotkey,
   type AppNavId,
   type AppShellProps,
   type AppShellSessionUser,
+  type CommandPaletteItem,
+  type CommandPaletteProps,
 } from './shell';
 
 export {
