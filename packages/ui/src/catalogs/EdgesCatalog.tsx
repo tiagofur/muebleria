@@ -4,7 +4,7 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { EdgeBand } from '@muebles/domain';
-import { Eye, EyeOff, Minus, Pencil, Plus } from 'lucide-react';
+import { Eye, EyeOff, Minus, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   EmptyState,
   Modal,
@@ -211,9 +211,17 @@ export function EdgesCatalog({
             onAction={startCreate}
           />
         ) : isFilterEmpty ? (
-          <p className="catalog-empty-filter">
-            No hay cantos que coincidan con la búsqueda o el filtro.
-          </p>
+          <EmptyState
+            variant="no-results"
+            icon={SearchX}
+            title="Sin resultados"
+            description="No hay cantos que coincidan con la búsqueda o el filtro."
+            actionLabel="Limpiar filtros"
+            onAction={() => {
+              setSearch('');
+              setStatus('active');
+            }}
+          />
         ) : (
           <CatalogTable
             columns={columns}

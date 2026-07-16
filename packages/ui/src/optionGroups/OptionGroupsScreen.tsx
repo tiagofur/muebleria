@@ -11,7 +11,7 @@ import type {
   OptionGroup,
   OptionGroupKind,
 } from '@muebles/domain';
-import { Pencil, Plus, ToggleLeft, Trash2 } from 'lucide-react';
+import { Pencil, Plus, SearchX, ToggleLeft, Trash2 } from 'lucide-react';
 import {
   EmptyState,
   Modal,
@@ -307,9 +307,14 @@ export function OptionGroupsScreen({
             onAction={startCreate}
           />
         ) : isFilterEmpty ? (
-          <p className="catalog-empty-filter">
-            No hay grupos que coincidan con la búsqueda.
-          </p>
+          <EmptyState
+            variant="no-results"
+            icon={SearchX}
+            title="Sin resultados"
+            description="No hay grupos que coincidan con la búsqueda."
+            actionLabel="Limpiar filtros"
+            onAction={() => setSearch('')}
+          />
         ) : (
           <CatalogTable
             columns={columns}

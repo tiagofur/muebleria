@@ -1,4 +1,4 @@
-/* EmptyState — design.md §4.5 */
+/* EmptyState — design.md §4.5 (empty | no-results) */
 
 .ui-empty {
   display: flex;
@@ -23,6 +23,12 @@
   border-radius: var(--radius-full);
   background: var(--brand-50);
   color: var(--brand-500);
+}
+
+/* Filter/search miss: calmer secondary treatment */
+.ui-empty--no-results .ui-empty__icon-wrap {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
 .ui-empty__icon {

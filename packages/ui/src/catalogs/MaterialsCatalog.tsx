@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { EdgeBand, MaterialBoard } from '@muebles/domain';
-import { Eye, EyeOff, Layers, Pencil, Plus } from 'lucide-react';
+import { Eye, EyeOff, Layers, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   EmptyState,
   Modal,
@@ -376,9 +376,17 @@ export function MaterialsCatalog({
             onAction={startCreate}
           />
         ) : isFilterEmpty ? (
-          <p className="catalog-empty-filter">
-            No hay materiales que coincidan con la búsqueda o el filtro.
-          </p>
+          <EmptyState
+            variant="no-results"
+            icon={SearchX}
+            title="Sin resultados"
+            description="No hay materiales que coincidan con la búsqueda o el filtro."
+            actionLabel="Limpiar filtros"
+            onAction={() => {
+              setSearch('');
+              setStatus('active');
+            }}
+          />
         ) : (
           <CatalogTable
             columns={columns}

@@ -1,6 +1,6 @@
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { Customer } from '@muebles/domain';
-import { Eye, EyeOff, Pencil, Plus, Users } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Plus, SearchX, Users } from 'lucide-react';
 import {
 	EmptyState,
 	formatEmpty,
@@ -192,9 +192,17 @@ export function CustomersScreen({
 						onAction={startCreate}
 					/>
 				) : isFilterEmpty ? (
-					<p className="catalog-empty-filter">
-						No hay clientes que coincidan con la búsqueda o el filtro.
-					</p>
+					<EmptyState
+						variant="no-results"
+						icon={SearchX}
+						title="Sin resultados"
+						description="No hay clientes que coincidan con la búsqueda o el filtro."
+						actionLabel="Limpiar filtros"
+						onAction={() => {
+							setSearch('');
+							setStatus('active');
+						}}
+					/>
 				) : (
 					<CatalogTable
 						columns={columns}
