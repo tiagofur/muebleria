@@ -46,7 +46,7 @@ describe('AppShell nav model (F017)', () => {
       'modules',
     ]);
     expect(trabajo.items.map((i) => i.label)).toEqual([
-      'Home',
+      'Inicio',
       'Cotizaciones',
       'Clientes',
       'Muebles',
@@ -82,7 +82,7 @@ describe('AppShell nav model (F017)', () => {
   });
 
   it('labelForNavId resolves known destinations', () => {
-    expect(labelForNavId('home')).toBe('Home');
+    expect(labelForNavId('home')).toBe('Inicio');
     expect(labelForNavId('projects')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
     expect(labelForNavId('optionGroups')).toBe('Grupos');

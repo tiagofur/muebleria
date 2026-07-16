@@ -302,7 +302,7 @@ export function OptionGroupsScreen({
           <EmptyState
             icon={ToggleLeft}
             title="No hay grupos de opciones"
-            description="Definí grupos para que los módulos puedan elegir materiales, cantos o herrajes."
+            description="Definí grupos para que los muebles puedan elegir materiales, cantos o herrajes."
             actionLabel="Agregar grupo"
             onAction={startCreate}
           />

@@ -149,7 +149,7 @@ export function customersForProjectPicker(
 
 export function validateProjectDraft(draft: ProjectDraft): string | null {
   const nameErr = validateRequiredName(draft.name);
-  if (nameErr) return 'El nombre del proyecto es obligatorio.';
+  if (nameErr) return 'El nombre de la cotización es obligatorio.';
 
   const customerId = draft.customerId.trim();
   const newCustomerName = (draft.customerName ?? '').trim();
@@ -172,7 +172,7 @@ export function validateProjectDraft(draft: ProjectDraft): string | null {
   if (laborErr) return laborErr;
 
   if (!PROJECT_STATUSES.includes(draft.status)) {
-    return 'Estado de proyecto inválido.';
+    return 'Estado de cotización inválido.';
   }
 
   return null;

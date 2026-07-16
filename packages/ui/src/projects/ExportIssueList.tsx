@@ -22,7 +22,7 @@ function issueKey(issue: ExportIssue, index: number): string {
 
 function formatIssueMeta(issue: ExportIssue): string {
   const parts: string[] = [];
-  if (issue.moduleCode) parts.push(`módulo ${issue.moduleCode}`);
+  if (issue.moduleCode) parts.push(`mueble ${issue.moduleCode}`);
   if (issue.partCode) parts.push(`pieza ${issue.partCode}`);
   else if (issue.partId) parts.push(`pieza ${issue.partId}`);
   if (issue.field) parts.push(`campo ${issue.field}`);

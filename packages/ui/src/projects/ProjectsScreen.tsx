@@ -745,7 +745,7 @@ export function ProjectsScreen({
             label="Mueble"
             placeholder={
               modulesForAdd.length === 0
-                ? 'Sin módulos en este filtro'
+                ? 'Sin muebles en este filtro'
                 : 'Seleccionar mueble…'
             }
             searchPlaceholder="Buscar mueble…"
@@ -1082,7 +1082,7 @@ export function ProjectsScreen({
                         Ítem {index + 1}:{' '}
                         {mod
                           ? `${mod.name} — ${mod.code}`
-                          : `Módulo desconocido (${item.moduleId})`}
+                          : `Mueble desconocido (${item.moduleId})`}
                       </h4>
                       {confirmRemoveItemId === item.id ? (
                         <span className="project-inline-confirm">
@@ -1334,7 +1334,7 @@ export function ProjectsScreen({
       <Modal
         open={metaModalOpen}
         onClose={closeMetaModal}
-        title={metaEditingId ? 'Editar proyecto' : 'Nuevo proyecto'}
+        title={metaEditingId ? 'Editar cotización' : 'Nueva cotización'}
         size="md"
         footer={
           <>
@@ -1381,7 +1381,7 @@ export function ProjectsScreen({
       <Modal
         open={confirmDelete && selectedProject != null}
         onClose={() => setConfirmDelete(false)}
-        title="Eliminar proyecto"
+        title="Eliminar cotización"
         size="sm"
         footer={
           <>
@@ -1406,7 +1406,7 @@ export function ProjectsScreen({
       >
         <p className="project-confirm-modal__text">
           ¿Seguro que querés eliminar{' '}
-          <strong>{selectedProject?.name ?? 'este proyecto'}</strong>? Esta
+          <strong>{selectedProject?.name ?? 'esta cotización'}</strong>? Esta
           acción no se puede deshacer.
         </p>
       </Modal>

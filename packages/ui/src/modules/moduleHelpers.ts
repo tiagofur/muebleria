@@ -219,7 +219,7 @@ export function validateModuleCode(
   }
   const conflict = findModuleCodeConflict(trimmed, modules, excludeId);
   if (conflict) {
-    return `Ya existe un módulo con el código "${conflict.code}".`;
+    return `Ya existe un mueble con el código "${conflict.code}".`;
   }
   return null;
 }
