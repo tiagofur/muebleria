@@ -10,6 +10,7 @@ import {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
+  roleCanViewPortfolioDashboard,
   roleLabelEs,
 } from './rbac';
 
@@ -59,5 +60,12 @@ describe('rbac (F035)', () => {
     expect(roleCanMarkProduced('produccion')).toBe(true);
     expect(roleCanMarkProduced('ingeniero')).toBe(true);
     expect(roleCanMarkProduced('vendedor')).toBe(false);
+  });
+
+  it('portfolio dashboard is gerente/admin only (F037)', () => {
+    expect(roleCanViewPortfolioDashboard('gerente_ventas')).toBe(true);
+    expect(roleCanViewPortfolioDashboard('admin')).toBe(true);
+    expect(roleCanViewPortfolioDashboard('vendedor')).toBe(false);
+    expect(roleCanViewPortfolioDashboard('produccion')).toBe(false);
   });
 });

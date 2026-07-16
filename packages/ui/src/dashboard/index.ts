@@ -10,6 +10,7 @@ export {
 } from './Dashboard';
 
 export {
+  aggregatePortfolioByOwner,
   countActiveMaterials,
   countActiveProjects,
   countModules,
@@ -19,5 +20,7 @@ export {
   sumMonthlyQuotedTotal,
   yearMonthKey,
   type ActiveFlag,
+  type OwnerDirectoryEntry,
+  type OwnerPortfolioRow,
   type ProjectLike,
 } from './dashboardHelpers';

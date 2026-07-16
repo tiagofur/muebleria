@@ -179,6 +179,7 @@ export {
 export {
   Dashboard,
   countActiveMaterials,
+  aggregatePortfolioByOwner,
   countActiveProjects,
   countModules,
   formatDashboardMoney,

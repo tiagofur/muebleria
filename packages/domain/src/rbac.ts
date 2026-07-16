@@ -103,6 +103,16 @@ export function roleCanAccessSettings(role: string | null | undefined): boolean 
   return role === 'admin' || role === 'gerente_ventas' || role === 'ingeniero';
 }
 
+/**
+ * Home portfolio dashboard: totals + breakdown by owner (F037).
+ * Admin and gerente see all owners; others do not get the multi-owner table.
+ */
+export function roleCanViewPortfolioDashboard(
+  role: string | null | undefined,
+): boolean {
+  return role === 'admin' || role === 'gerente_ventas';
+}
+
 export function roleCanAccessCatalogNav(role: string | null | undefined): boolean {
   return (
     role === 'admin' ||
