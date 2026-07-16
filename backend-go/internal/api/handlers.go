@@ -13,6 +13,17 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
+// actorCanViewCosts resolves COST-01/COST-02 for the request actor (F039 + F044).
+func (s *Server) actorCanViewCosts(r *http.Request) bool {
+	role := actorRole(claimsFromRequest(r))
+	ws, err := s.Store.GetWorkshopSettings(r.Context())
+	flag := false
+	if err == nil {
+		flag = ws.VendedorCanViewCosts
+	}
+	return domain.RoleCanViewCosts(role, flag)
+}
+
 // maxJSONBodyBytes caps request bodies to avoid OOM from huge payloads (issue #20).
 const maxJSONBodyBytes = 1 << 20 // 1 MiB
 
@@ -371,7 +382,7 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactMaterialsList(list)
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -415,7 +426,7 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "material board not found")
 			return
 		}
-		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactMaterialCosts(m)
 		}
 		respondWithJSON(w, http.StatusOK, m)
@@ -473,7 +484,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filtered := filterProjectsByOwner(list, uid, role)
-		if !domain.RoleCanViewCosts(role) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectsList(filtered)
 		}
 		respondWithJSON(w, http.StatusOK, filtered)
@@ -506,7 +517,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !domain.RoleCanViewCosts(role) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&p)
 		}
 		respondWithJSON(w, http.StatusCreated, p)
@@ -541,7 +552,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		if !domain.RoleCanViewCosts(role) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(p)
 		}
 		respondWithJSON(w, http.StatusOK, p)
@@ -614,7 +625,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !domain.RoleCanViewCosts(role) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&p)
 		}
 		respondWithJSON(w, http.StatusOK, p)
@@ -688,7 +699,7 @@ func (s *Server) HandleProjectCalculate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+	if !s.actorCanViewCosts(r) {
 		domain.RedactQuoteBreakdown(&breakdown)
 	}
 	respondWithJSON(w, http.StatusOK, breakdown)
@@ -704,7 +715,7 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactEdgesList(list)
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -748,7 +759,7 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "edge band not found")
 			return
 		}
-		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactEdgeCosts(e)
 		}
 		respondWithJSON(w, http.StatusOK, e)
@@ -802,7 +813,7 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactHardwareList(list)
 		}
 		respondWithJSON(w, http.StatusOK, list)
@@ -846,7 +857,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "hardware not found")
 			return
 		}
-		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		if !s.actorCanViewCosts(r) {
 			domain.RedactHardwareCosts(h)
 		}
 		respondWithJSON(w, http.StatusOK, h)
@@ -1289,4 +1300,37 @@ func (s *Server) HandleAdminUserReject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user rejected"})
+}
+
+// HandleWorkshopSettings: GET/PUT /api/settings (F031 + F044 COST-02).
+func (s *Server) HandleWorkshopSettings(w http.ResponseWriter, r *http.Request) {
+	role := actorRole(claimsFromRequest(r))
+	switch r.Method {
+	case http.MethodGet:
+		// Any authenticated user may read settings (needed for cost visibility on client).
+		ws, err := s.Store.GetWorkshopSettings(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, ws)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.RoleCanAccessSettings(role), "no tenés permiso para editar ajustes del taller") {
+			return
+		}
+		var ws domain.WorkshopSettings
+		if !decodeJSONBody(w, r, &ws) {
+			return
+		}
+		saved, err := s.Store.UpsertWorkshopSettings(r.Context(), ws)
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, saved)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }

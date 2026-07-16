@@ -1,6 +1,12 @@
 # Sesión actual
 
-- **Branch:** `feat/polish-showcase-home-88`
-- **Issue:** [#88](https://github.com/tiagofur/muebleria/issues/88) — F043 pulir vitrina + home por rol
-- **Estado:** implementado — PR https://github.com/tiagofur/muebleria/pull/93
-- **F042:** done (merge #92)
+- **Branch:** `feat/vendedor-view-costs-flag-89`
+- **Issue:** [#89](https://github.com/tiagofur/muebleria/issues/89) — F044 flag vendedor ve costos
+- **Estado:** implementando
+
+## Alcance
+
+- `WorkshopSettings.vendedorCanViewCosts` (default false)
+- `roleCanViewCosts(role, { vendedorCanViewCosts })` TS + Go
+- API `GET/PUT /api/settings` + migration 000013
+- UI Ajustes checkbox; `showCosts` en App

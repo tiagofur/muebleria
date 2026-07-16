@@ -19,7 +19,9 @@ import type {
   ProjectItem,
   ProjectStatus,
   QuoteBreakdown,
+  WorkshopSettings,
 } from '@muebles/domain';
+import { resolveWorkshopSettings } from '@muebles/domain';
 
 function num(v: unknown, fallback = 0): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -374,6 +376,41 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
             : {},
       };
     }),
+  };
+}
+
+// --- Workshop settings (GET/PUT /api/settings) ---
+
+export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
+  const row =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return resolveWorkshopSettings({
+    defaultMarginFactor: num(
+      row.default_margin_factor ?? row.defaultMarginFactor,
+      1.35,
+    ),
+    defaultLaborFixedCost: num(
+      row.default_labor_fixed_cost ?? row.defaultLaborFixedCost,
+    ),
+    defaultCurrency: str(
+      row.default_currency ?? row.defaultCurrency,
+      'MXN',
+    ),
+    vendedorCanViewCosts: bool(
+      row.vendedor_can_view_costs ?? row.vendedorCanViewCosts,
+    ),
+  });
+}
+
+export function workshopSettingsToApi(
+  settings: WorkshopSettings,
+): Record<string, unknown> {
+  const s = resolveWorkshopSettings(settings);
+  return {
+    default_margin_factor: s.defaultMarginFactor,
+    default_labor_fixed_cost: s.defaultLaborFixedCost,
+    default_currency: s.defaultCurrency,
+    vendedor_can_view_costs: s.vendedorCanViewCosts,
   };
 }
 

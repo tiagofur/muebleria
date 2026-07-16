@@ -4,11 +4,14 @@ import "testing"
 
 func TestRoleCanViewCosts(t *testing.T) {
 	t.Parallel()
-	if RoleCanViewCosts(RoleVendedor) || RoleCanViewCosts(RoleUser) {
-		t.Fatal("vendedor/user must not view costs")
+	if RoleCanViewCosts(RoleVendedor, false) || RoleCanViewCosts(RoleUser, false) {
+		t.Fatal("vendedor/user must not view costs by default")
 	}
-	if !RoleCanViewCosts(RoleAdmin) || !RoleCanViewCosts(RoleIngeniero) {
-		t.Fatal("admin/ingeniero view costs")
+	if !RoleCanViewCosts(RoleVendedor, true) || !RoleCanViewCosts(RoleUser, true) {
+		t.Fatal("vendedor/user view costs when workshop flag on (F044)")
+	}
+	if !RoleCanViewCosts(RoleAdmin, false) || !RoleCanViewCosts(RoleIngeniero, false) {
+		t.Fatal("admin/ingeniero view costs even when flag off")
 	}
 }
 

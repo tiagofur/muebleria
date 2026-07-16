@@ -81,6 +81,7 @@ export {
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,
+  type CostVisibilityOptions,
 } from './rbac';
 
 export type { CategoryFilterId } from './categories';

@@ -231,6 +231,11 @@ export interface WorkshopSettings {
   readonly defaultMarginFactor: number;
   readonly defaultLaborFixedCost: number;
   readonly defaultCurrency: string;
+  /**
+   * When true, product role `vendedor` (and `user`) may see workshop costs
+   * (COST-02 / F044). Default false — COST-01 parity (F039).
+   */
+  readonly vendedorCanViewCosts: boolean;
 }
 
 export interface Workspace {

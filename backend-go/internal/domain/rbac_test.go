@@ -69,10 +69,13 @@ func TestRBAC_CustomersAccess(t *testing.T) {
 
 func TestRBAC_ViewCosts(t *testing.T) {
 	t.Parallel()
-	if RoleCanViewCosts(RoleVendedor) {
+	if RoleCanViewCosts(RoleVendedor, false) {
 		t.Fatal("vendedor no costs")
 	}
-	if !RoleCanViewCosts(RoleGerenteVentas) {
+	if !RoleCanViewCosts(RoleVendedor, true) {
+		t.Fatal("vendedor costs when flag on")
+	}
+	if !RoleCanViewCosts(RoleGerenteVentas, false) {
 		t.Fatal("gerente sees costs")
 	}
 }

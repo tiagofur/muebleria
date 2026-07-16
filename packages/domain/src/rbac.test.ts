@@ -98,4 +98,21 @@ describe('rbac (F035)', () => {
     expect(roleCanViewCosts('gerente_ventas')).toBe(true);
     expect(roleCanViewCosts(null)).toBe(true);
   });
+
+  it('vendedor sees costs only when workshop flag is on (F044 / COST-02)', () => {
+    expect(roleCanViewCosts('vendedor', { vendedorCanViewCosts: false })).toBe(
+      false,
+    );
+    expect(roleCanViewCosts('vendedor', { vendedorCanViewCosts: true })).toBe(
+      true,
+    );
+    expect(roleCanViewCosts('user', { vendedorCanViewCosts: true })).toBe(true);
+    // Flag must not restrict roles that already see costs.
+    expect(roleCanViewCosts('ingeniero', { vendedorCanViewCosts: false })).toBe(
+      true,
+    );
+    expect(roleCanViewCosts('admin', { vendedorCanViewCosts: false })).toBe(
+      true,
+    );
+  });
 });
