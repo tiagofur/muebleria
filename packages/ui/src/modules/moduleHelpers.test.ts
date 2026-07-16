@@ -9,6 +9,8 @@ import {
   flagsFromEdges,
   findModuleCodeConflict,
   formatModuleMoney,
+  nextGridEnterTarget,
+  modulePartGridInputId,
   moduleToDraft,
   optionGroupsForBoardParts,
   optionGroupsForHardware,
@@ -207,5 +209,30 @@ describe('filterModulesByQuery / formatModuleMoney (F021)', () => {
   it('formats money with 2 decimals', () => {
     expect(formatModuleMoney(202.5)).toBe('$202.50 MXN');
     expect(formatModuleMoney(0)).toBe('$0.00 MXN');
+  });
+});
+
+describe('module grid keyboard helpers (F033 / #39)', () => {
+  it('moves Enter focus to same field on next row', () => {
+    expect(
+      nextGridEnterTarget({
+        rowIds: ['a', 'b', 'c'],
+        currentRowId: 'a',
+        field: 'qty',
+      }),
+    ).toEqual({ kind: 'focus', rowId: 'b', field: 'qty' });
+    expect(
+      nextGridEnterTarget({
+        rowIds: ['a', 'b'],
+        currentRowId: 'b',
+        field: 'length',
+      }),
+    ).toEqual({ kind: 'addRow', field: 'length' });
+  });
+
+  it('builds stable part input ids', () => {
+    expect(modulePartGridInputId('p1', 'qty')).toBe('part-qty-p1');
+    expect(modulePartGridInputId('p1', 'length')).toBe('part-l-p1');
+    expect(modulePartGridInputId('p1', 'width')).toBe('part-w-p1');
   });
 });

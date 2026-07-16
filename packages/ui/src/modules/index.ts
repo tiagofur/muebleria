@@ -33,4 +33,8 @@ export {
   SEED_MODULE_CODES,
   suggestPartCode,
   validateModuleCode,
+  nextGridEnterTarget,
+  modulePartGridInputId,
+  moduleHardwareGridInputId,
+  MODULE_PART_GRID_FIELDS,
 } from './moduleHelpers';
