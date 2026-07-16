@@ -33,6 +33,15 @@ pnpm-debug.log*
 # Local agent/harness state (plans, scratch)
 .zcode/
 
+# Impeccable live/critique session state (keep config tracked)
+.impeccable/live/sessions/
+.impeccable/live/annotations/
+.impeccable/live/server.json
+.impeccable/critique/
+.impeccable-live/
+.impeccable-live.json
+
+
 # Electron
 apps/desktop/dist-electron/
 
