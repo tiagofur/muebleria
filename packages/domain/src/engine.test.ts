@@ -673,10 +673,11 @@ describe('calcProjectBreakdown', () => {
 describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
   const frozenAt = '2026-07-15T12:00:00.000Z';
 
-  it('isProjectClosed is true for quoted and accepted only', () => {
+  it('isProjectClosed is true for quoted, accepted, and produced', () => {
     expect(isProjectClosed('draft')).toBe(false);
     expect(isProjectClosed('quoted')).toBe(true);
     expect(isProjectClosed('accepted')).toBe(true);
+    expect(isProjectClosed('produced')).toBe(true);
   });
 
   it('draft plantilla project has live salePrice; close freezes it', () => {
@@ -775,6 +776,33 @@ describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
     expect(accepted.status).toBe('accepted');
     expect(accepted.priceSnapshot).toBe(snapshot);
     expect(accepted.priceSnapshot?.capturedAt).toBe(frozenAt);
+  });
+
+  it('accepted → produced keeps snapshot; produced → draft clears (F036)', () => {
+    const draft: Project = { ...plantillaProject, status: 'draft' };
+    const accepted = transitionProjectStatus(
+      draft,
+      'accepted',
+      plantillaCatalogWithModules,
+      frozenAt,
+    );
+    const snapshot = accepted.priceSnapshot;
+    const produced = transitionProjectStatus(
+      accepted,
+      'produced',
+      plantillaCatalogWithModules,
+      '2026-07-16T00:00:00.000Z',
+    );
+    expect(produced.status).toBe('produced');
+    expect(produced.priceSnapshot).toBe(snapshot);
+
+    const reopened = transitionProjectStatus(
+      produced,
+      'draft',
+      plantillaCatalogWithModules,
+    );
+    expect(reopened.status).toBe('draft');
+    expect(reopened.priceSnapshot).toBeUndefined();
   });
 
   it('captureQuoteSnapshot records unit prices for used materials/edges/hardware', () => {

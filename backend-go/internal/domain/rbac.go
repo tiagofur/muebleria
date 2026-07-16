@@ -57,6 +57,21 @@ func RoleCanDeleteProject(role UserRole) bool {
 	return role == RoleAdmin || role == RoleGerenteVentas
 }
 
+// RoleCanReopenProject — closed → draft (clears snapshot). Admin / gerente only.
+func RoleCanReopenProject(role UserRole) bool {
+	return role == RoleAdmin || role == RoleGerenteVentas
+}
+
+// RoleCanMarkProduced — accepted → produced (click-only; no export gate).
+func RoleCanMarkProduced(role UserRole) bool {
+	switch role {
+	case RoleAdmin, RoleGerenteVentas, RoleIngeniero, RoleProduccion:
+		return true
+	default:
+		return false
+	}
+}
+
 // RoleCanExportProduction — Optimizer / hardware list (not vendedor).
 func RoleCanExportProduction(role UserRole) bool {
 	switch role {

@@ -344,7 +344,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     currency: str(raw.currency, 'MXN'),
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
-    status: (['draft', 'quoted', 'accepted'].includes(status)
+    status: (['draft', 'quoted', 'accepted', 'produced'].includes(status)
       ? status
       : 'draft') as ProjectStatus,
     notes: str(raw.notes) || undefined,

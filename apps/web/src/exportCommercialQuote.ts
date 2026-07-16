@@ -27,6 +27,7 @@ const STATUS_LABELS: Record<Project['status'], string> = {
   draft: 'Borrador',
   quoted: 'Cotizado',
   accepted: 'Aceptado',
+  produced: 'En producción',
 };
 
 /** Safe file name: cotizacion-{projectName}.xlsx */

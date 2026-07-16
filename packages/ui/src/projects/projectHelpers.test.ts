@@ -320,12 +320,14 @@ describe('project drafts and validation', () => {
     expect(projectStatusLabel('draft')).toBe('Borrador');
     expect(projectStatusLabel('quoted')).toBe('Cotizado');
     expect(projectStatusLabel('accepted')).toBe('Aceptado');
+    expect(projectStatusLabel('produced')).toBe('En producción');
   });
 
   it('projectStatusBadgeClass maps design.md §5.2 classes', () => {
     expect(projectStatusBadgeClass('draft')).toBe('badge-draft');
     expect(projectStatusBadgeClass('quoted')).toBe('badge-quoted');
     expect(projectStatusBadgeClass('accepted')).toBe('badge-accepted');
+    expect(projectStatusBadgeClass('produced')).toBe('badge-produced');
   });
 
   it('emptyAddItemDraft seeds first option choices for module', () => {

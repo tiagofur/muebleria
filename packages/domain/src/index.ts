@@ -69,10 +69,12 @@ export {
   roleCanDeleteProject,
   roleCanExportProduction,
   roleCanManageUsers,
+  roleCanMarkProduced,
   roleCanMutateCatalog,
   roleCanMutateCustomers,
   roleCanMutateModules,
   roleCanMutateProjects,
+  roleCanReopenProject,
   roleLabelEs,
 } from './rbac';
 

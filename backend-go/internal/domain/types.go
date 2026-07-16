@@ -43,6 +43,7 @@ const (
 	StatusDraft    ProjectStatus = "draft"
 	StatusQuoted   ProjectStatus = "quoted"
 	StatusAccepted ProjectStatus = "accepted"
+	StatusProduced ProjectStatus = "produced"
 )
 
 type User struct {

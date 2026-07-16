@@ -641,6 +641,70 @@ func TestRBAC_ExportProductionDeniedToVendedor_Domain(t *testing.T) {
 	}
 }
 
+func TestF036_VendedorCannotReopenProject(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusAccepted,
+		},
+	}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"draft","owner_user_id":"v1"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403 body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestF036_ProduccionCanMarkProduced(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusAccepted,
+		},
+	}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"produced","owner_user_id":"v1"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "prod1", string(domain.RoleProduccion))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d want 200 body=%s", rr.Code, rr.Body.String())
+	}
+	var got domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.StatusProduced {
+		t.Fatalf("status = %q want produced", got.Status)
+	}
+}
+
+func TestF036_VendedorCannotMarkProduced(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusAccepted,
+		},
+	}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"produced","owner_user_id":"v1"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403 body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 // --- Issue #19 auth hardening ---
 
 func TestHandleLogin_Uniform401ForMissingUser(t *testing.T) {

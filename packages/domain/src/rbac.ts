@@ -72,6 +72,24 @@ export function roleCanDeleteProject(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_ventas';
 }
 
+/** Reopen closed quote to draft (clears snapshot). Admin / gerente only (F036). */
+export function roleCanReopenProject(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas';
+}
+
+/**
+ * Mark accepted → produced (click-only, no export gate).
+ * Admin, gerente, ingeniero, produccion (F036).
+ */
+export function roleCanMarkProduced(role: string | null | undefined): boolean {
+  return (
+    role === 'admin' ||
+    role === 'gerente_ventas' ||
+    role === 'ingeniero' ||
+    role === 'produccion'
+  );
+}
+
 export function roleCanExportProduction(role: string | null | undefined): boolean {
   return (
     role === 'admin' ||

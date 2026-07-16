@@ -59,13 +59,13 @@ func hasAnyEdgeEnabled(edges []domain.EdgeAssignment) bool {
 func CalcBoardLineMetrics(part domain.BoardPart, qtyMultiplier int) (float64, float64) {
 	qty := part.Quantity * qtyMultiplier
 	flags := edgeFlags(part.Edges)
-	
+
 	areaM2 := float64(qty*part.LengthMm*part.WidthMm) / 1000000.0
-	
+
 	lSum := flags["L1"] + flags["L2"]
 	wSum := flags["W1"] + flags["W2"]
 	edgeMl := float64(qty*(lSum*part.LengthMm+wSum*part.WidthMm)) / 1000.0
-	
+
 	return areaM2, edgeMl
 }
 
@@ -189,7 +189,7 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 	}
 
 	// Si el proyecto ya está cerrado (quoted/accepted) y tiene un snapshot, se devuelve el snapshot congelado
-	if (project.Status == domain.StatusQuoted || project.Status == domain.StatusAccepted) && project.PriceSnapshot != nil {
+	if IsProjectClosed(project.Status) && project.PriceSnapshot != nil {
 		return project.PriceSnapshot.Breakdown, nil
 	}
 

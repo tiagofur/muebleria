@@ -522,9 +522,6 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para editar cotizaciones") {
-			return
-		}
 		existing, err := s.Store.GetProjectByID(r.Context(), id)
 		if err != nil {
 			// 404 lets the FE upsert fall through to POST create.
@@ -543,7 +540,46 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &p) {
 			return
 		}
+
+		// F036 status transitions: reopen / mark produced vs general mutate.
+		statusChanging := p.Status != "" && p.Status != existing.Status
+		if statusChanging {
+			reopen := engine.IsProjectClosed(existing.Status) && p.Status == domain.StatusDraft
+			markProduced := p.Status == domain.StatusProduced
+			if reopen {
+				if !requirePermission(w, domain.RoleCanReopenProject(role), "no tenés permiso para reabrir cotizaciones") {
+					return
+				}
+			} else if markProduced {
+				if !requirePermission(w, domain.RoleCanMarkProduced(role), "no tenés permiso para marcar en producción") {
+					return
+				}
+				// Production queue roles may only flip status (not rewrite BOM).
+				if !domain.RoleCanMutateProjects(role) {
+					next := *existing
+					next.Status = domain.StatusProduced
+					if next.PriceSnapshot == nil && existing.PriceSnapshot != nil {
+						next.PriceSnapshot = existing.PriceSnapshot
+					}
+					// Keep closed→closed snapshot; engine-equivalent without catalog re-freeze.
+					p = next
+				}
+			} else if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para editar cotizaciones") {
+				return
+			}
+		} else if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para editar cotizaciones") {
+			return
+		}
+
 		p.OwnerUserID = domain.ResolveOwnerOnUpdate(role, existing.OwnerUserID, p.OwnerUserID)
+		// Reopen must clear snapshot even if client resends one.
+		if statusChanging && p.Status == domain.StatusDraft && engine.IsProjectClosed(existing.Status) {
+			p.PriceSnapshot = nil
+		}
+		// Preserve snapshot when moving accepted → produced if client omitted it.
+		if statusChanging && p.Status == domain.StatusProduced && p.PriceSnapshot == nil {
+			p.PriceSnapshot = existing.PriceSnapshot
+		}
 		err = s.Store.UpdateProject(r.Context(), id, &p)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
