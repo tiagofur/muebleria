@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   calcProjectBreakdown,
@@ -35,6 +38,54 @@ import {
 } from './exportHardwareList';
 import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
 
+const here = dirname(fileURLToPath(import.meta.url));
+
+describe('@muebles/web reliability (issues #11–#13)', () => {
+  it('#11: App calculate path uses DEFAULT_API_BASE + readAuthToken (no hardcode)', () => {
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc).not.toMatch(/localhost:8080\/api\/projects/);
+    expect(appSrc).not.toMatch(/localStorage\.getItem\(['"]muebles_token['"]\)/);
+    expect(appSrc).toContain('DEFAULT_API_BASE');
+    expect(appSrc).toContain('readAuthToken()');
+    expect(appSrc).toContain(
+      '`${DEFAULT_API_BASE}/projects/${selectedProjectId}/calculate`',
+    );
+  });
+
+  it('#11: apps/web src has no hardcoded calculate host', () => {
+    // DEFAULT_API_BASE may still mention localhost as env fallback in session.ts.
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc.includes('http://localhost:8080')).toBe(false);
+  });
+
+  it('#12: breakdown loading/error props wired to ProjectsScreen', () => {
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc).toContain('breakdownLoading={breakdownLoading}');
+    expect(appSrc).toContain('breakdownError={breakdownError}');
+    expect(appSrc).toContain("type: 'error'");
+    expect(appSrc).toMatch(/mostrando valores locales/);
+  });
+
+  it('#13: root ErrorBoundary wraps App in main.tsx', () => {
+    const mainSrc = readFileSync(join(here, 'main.tsx'), 'utf8');
+    expect(mainSrc).toContain('ErrorBoundary');
+    expect(mainSrc).toMatch(/<ErrorBoundary>[\s\S]*<App\s*\/>/);
+  });
+
+  it('#13: workspace load failure offers explicit recover (no silent seed)', () => {
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc).toContain('workspaceLoadError');
+    expect(appSrc).toContain('Usar datos demo');
+    // Load catch must set error, not auto-seed.
+    const loadCatch = appSrc.match(
+      /repository[\s\S]*?\.catch\(\(err\) => \{([\s\S]*?)\}\);/,
+    );
+    expect(loadCatch?.[1]).toBeTruthy();
+    expect(loadCatch?.[1]).toContain('setWorkspaceLoadError');
+    expect(loadCatch?.[1]).not.toContain('createSeedWorkspace');
+  });
+});
+
 describe('@muebles/web F006 shell wiring', () => {
   it('resolves workspace packages', () => {
     expect(domainName).toBe('@muebles/domain');
@@ -43,7 +94,7 @@ describe('@muebles/web F006 shell wiring', () => {
 
   it('loads plantilla seed catalogs on first open (CAT-06)', () => {
     const ws = createSeedWorkspace();
-    expect(ws.schemaVersion).toBe(1);
+    expect(ws.schemaVersion).toBe(2);
     expect(ws.catalog.materials.length).toBeGreaterThan(0);
     expect(ws.catalog.edges.length).toBeGreaterThan(0);
     expect(ws.catalog.hardware.length).toBeGreaterThan(0);

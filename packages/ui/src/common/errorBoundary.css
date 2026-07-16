@@ -1,0 +1,60 @@
+/* Error boundary fallback — tokens only (design.md) */
+
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--surface-app);
+  color: var(--text-primary);
+}
+
+.error-boundary__card {
+  max-width: 28rem;
+  width: 100%;
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.error-boundary__icon {
+  color: var(--danger-500);
+  margin-bottom: var(--space-3);
+}
+
+.error-boundary__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.error-boundary__message {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.error-boundary__detail {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--danger-50);
+  border: 1px solid var(--danger-500);
+  color: var(--danger-700);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  word-break: break-word;
+}
+
+.error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}

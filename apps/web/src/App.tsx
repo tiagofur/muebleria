@@ -132,7 +132,6 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
       quantity: p.quantity,
       lengthMm: p.lengthMm,
       widthMm: p.widthMm,
-      grain: p.grain,
       edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
       optionRole: p.optionRole.trim(),
     })),
@@ -439,21 +438,31 @@ function AppContent({
 
   const repository = useMemo(() => {
     return session === 'auth'
-      ? new APIWorkspaceRepository()
+      ? new APIWorkspaceRepository(DEFAULT_API_BASE)
       : new LocalStorageWorkspaceRepository();
   }, [session]);
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setWorkspace(null);
-    repository.load()
+    setWorkspaceLoadError(null);
+    repository
+      .load()
       .then((ws) => {
         setWorkspace(ws);
       })
       .catch((err) => {
-        console.error("Failed to load workspace:", err);
-        setWorkspace(createSeedWorkspace());
+        // Do not silently seed — surface failure and offer explicit recover (#13).
+        console.error('Failed to load workspace:', err);
+        setWorkspaceLoadError(
+          err instanceof Error
+            ? err.message
+            : 'No se pudo cargar el espacio de trabajo',
+        );
       });
   }, [repository]);
 
@@ -468,8 +477,10 @@ function AppContent({
   const [projectsCreateKey, setProjectsCreateKey] = useState(0);
   const [modulesCreateKey, setModulesCreateKey] = useState(0);
 
-  const [backendBreakdown, setBackendBreakdown] = useState<QuoteBreakdown | null>(null);
+  const [backendBreakdown, setBackendBreakdown] =
+    useState<QuoteBreakdown | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
 
   const selectedProject = useMemo(() => {
     if (!workspace?.projects) return undefined;
@@ -479,29 +490,46 @@ function AppContent({
   useEffect(() => {
     if (session !== 'auth' || !selectedProjectId || !selectedProject) {
       setBackendBreakdown(null);
+      setBreakdownError(null);
+      setBreakdownLoading(false);
       return;
     }
 
     let active = true;
     setBreakdownLoading(true);
+    setBreakdownError(null);
 
     const fetchBreakdown = async () => {
       try {
-        const token = localStorage.getItem('muebles_token');
-        const res = await fetch(`http://localhost:8080/api/projects/${selectedProjectId}/calculate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token ? `Bearer ${token}` : '',
+        const token = readAuthToken();
+        const res = await fetch(
+          `${DEFAULT_API_BASE}/projects/${selectedProjectId}/calculate`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
           },
-        });
-        if (!res.ok) throw new Error('Error calculating breakdown in backend');
-        const data = await res.json();
+        );
+        if (!res.ok) {
+          throw new Error(`No se pudo recalcular (${res.status})`);
+        }
+        const data = (await res.json()) as QuoteBreakdown;
         if (active) {
-          setBackendBreakdown(data as QuoteBreakdown);
+          setBackendBreakdown(data);
+          setBreakdownError(null);
         }
       } catch (err) {
-        console.error("Backend calculation error:", err);
+        console.error('Backend calculation error:', err);
+        if (active) {
+          // Fall back to local domain breakdown; surface error in panel + toast.
+          setBackendBreakdown(null);
+          const message =
+            'No se pudo recalcular en el servidor; mostrando valores locales';
+          setBreakdownError(message);
+          toast({ type: 'error', message });
+        }
       } finally {
         if (active) {
           setBreakdownLoading(false);
@@ -509,13 +537,15 @@ function AppContent({
       }
     };
 
-    const timeoutId = setTimeout(fetchBreakdown, 300);
+    const timeoutId = setTimeout(() => {
+      void fetchBreakdown();
+    }, 300);
 
     return () => {
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [selectedProjectId, selectedProject, session]);
+  }, [selectedProjectId, selectedProject, session, toast]);
 
   // Derive catalog slices safely so hooks below always run (Rules of Hooks).
   // Early return for loading MUST stay after every useCallback/useMemo.
@@ -1222,16 +1252,57 @@ function AppContent({
         : 'Sesión'
       : 'Invitado';
 
-  // Loading gate AFTER all hooks — never return early before useCallback/useMemo.
+  // Loading / recover gate AFTER all hooks — never return early before useCallback/useMemo.
+  if (workspaceLoadError) {
+    return (
+      <div
+        className="workspace-load-error"
+        role="alert"
+        data-testid="workspace-load-error"
+      >
+        <div className="workspace-load-error__card">
+          <h1 className="workspace-load-error__title">
+            No se pudo cargar el espacio de trabajo
+          </h1>
+          <p className="workspace-load-error__message">{workspaceLoadError}</p>
+          <div className="workspace-load-error__actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                window.location.reload();
+              }}
+            >
+              Reintentar
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => {
+                setWorkspace(createSeedWorkspace());
+                setWorkspaceLoadError(null);
+              }}
+            >
+              Usar datos demo
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!workspace || !catalog) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-          <p className="text-slate-400 font-medium animate-pulse text-sm">
-            Cargando espacio de trabajo...
-          </p>
-        </div>
+      <div
+        className="workspace-loading"
+        role="status"
+        aria-busy="true"
+        data-testid="workspace-loading"
+      >
+        <div className="workspace-loading__spinner" aria-hidden />
+        <p className="workspace-loading__label">
+          Cargando espacio de trabajo…
+        </p>
       </div>
     );
   }
@@ -1346,6 +1417,8 @@ function AppContent({
           onRemoveItem={removeProjectItem}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
+          breakdownLoading={breakdownLoading}
+          breakdownError={breakdownError}
           previewBlocked={projectQuote.previewBlocked}
           missingGroups={projectQuote.missingGroups}
           groupLabels={groupLabels}

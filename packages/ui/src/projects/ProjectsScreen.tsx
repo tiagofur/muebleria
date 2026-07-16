@@ -33,9 +33,11 @@ import {
   type CategoryFilterId,
 } from '@muebles/domain';
 import {
+  AlertCircle,
   ChevronLeft,
   Copy,
   FileText,
+  Loader2,
   Package,
   Pencil,
   Plus,
@@ -99,6 +101,13 @@ export interface ProjectsScreenProps {
   readonly onSelectionChange?: (projectId: string | null) => void;
   /** Domain QuoteBreakdown from shell (PRJ-06, UX-03). Null when blocked/unavailable. */
   readonly breakdown?: QuoteBreakdown | null;
+  /** Live backend recalculation in flight (auth session). */
+  readonly breakdownLoading?: boolean;
+  /**
+   * Backend recalculation failed; panel may still show local/fallback totals.
+   * Parent owns toast; this prop drives the totals panel alert.
+   */
+  readonly breakdownError?: string | null;
   readonly previewBlocked?: boolean;
   readonly missingGroups?: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
@@ -162,6 +171,8 @@ export function ProjectsScreen({
   onRemoveItem,
   onSelectionChange,
   breakdown = null,
+  breakdownLoading = false,
+  breakdownError = null,
   previewBlocked = false,
   missingGroups = [],
   groupLabels,
@@ -1117,7 +1128,34 @@ export function ProjectsScreen({
                 </span>
               ) : null}
             </div>
+            {breakdownLoading ? (
+              <p
+                className="project-totals__loading"
+                role="status"
+                aria-busy="true"
+                data-testid="breakdown-loading"
+              >
+                <Loader2
+                  className="project-totals__spinner"
+                  size={16}
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+                Recalculando…
+              </p>
+            ) : null}
           </div>
+
+          {breakdownError ? (
+            <p
+              className="project-totals__error"
+              role="alert"
+              data-testid="breakdown-error"
+            >
+              <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
+              <span>{breakdownError}</span>
+            </p>
+          ) : null}
 
           <PricePreviewGate
             requiredGroupCodes={previewBlocked ? missingGroups : []}
@@ -1166,7 +1204,9 @@ export function ProjectsScreen({
               <p className="project-totals__empty">
                 {project.items.length === 0
                   ? 'Agregá muebles para ver totales.'
-                  : 'No se pudo calcular el desglose con las opciones actuales.'}
+                  : breakdownLoading
+                    ? 'Calculando desglose…'
+                    : 'No se pudo calcular el desglose con las opciones actuales.'}
               </p>
             )}
           </PricePreviewGate>
