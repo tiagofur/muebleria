@@ -34,6 +34,10 @@ export {
   type UseRoutableEntitySelectionResult,
 } from './useRoutableEntitySelection';
 export { EMPTY_PLACEHOLDER, formatEmpty } from './formatEmpty';
+export {
+  formatMoneyDisplay,
+  type FormatMoneyDisplayOptions,
+} from './formatMoneyDisplay';
 export { Spinner, type SpinnerProps, type SpinnerSize } from './Spinner';
 export { PageLoading, type PageLoadingProps } from './PageLoading';
 export { InlineLoading, type InlineLoadingProps } from './InlineLoading';

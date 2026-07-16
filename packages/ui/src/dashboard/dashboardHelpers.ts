@@ -3,6 +3,7 @@
  */
 
 import type { ProjectStatus } from '@muebles/domain';
+import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 
 export type ProjectLike = {
   readonly id: string;
@@ -94,16 +95,10 @@ export function sumMonthlyQuotedTotal(
 }
 
 /**
- * Format money for dashboard stats (locale thousands + 2 decimals + MXN).
- * Display-only; no domain conversion. Uses es-MX grouping for scanability.
+ * Format money for dashboard stats — delegates to shared formatMoneyDisplay (#51).
  */
 export function formatDashboardMoney(n: number): string {
-  const value = Number.isFinite(n) ? n : 0;
-  const amount = value.toLocaleString('es-MX', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return `$${amount} MXN`;
+  return formatMoneyDisplay(n);
 }
 
 /**

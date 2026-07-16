@@ -7,6 +7,7 @@ import type { EdgeBand } from '@muebles/domain';
 import { Eye, EyeOff, Minus, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   EmptyState,
+  formatMoneyDisplay,
   Modal,
   SearchInput,
   StatusChips,
@@ -163,7 +164,7 @@ export function EdgesCatalog({
       {
         key: 'cost',
         header: 'Costo/ML',
-        render: (r) => r.costPerMl,
+        render: (r) => formatMoneyDisplay(r.costPerMl),
       },
       {
         key: 'status',
@@ -249,7 +250,9 @@ export function EdgesCatalog({
                 </div>
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Costo / ML</span>
-                  <span className="catalog-row-detail__value">{row.costPerMl}</span>
+                  <span className="catalog-row-detail__value">
+                    {formatMoneyDisplay(row.costPerMl)}
+                  </span>
                 </div>
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Estado</span>

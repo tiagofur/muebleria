@@ -130,7 +130,7 @@ const projects: Project[] = [
     id: 'prj-1',
     name: 'Cocina Ana',
     customerId: 'cust-ana',
-    currency: 'UYU',
+    currency: 'MXN',
     marginFactor: 1.35,
     laborFixedCost: 0,
     status: 'draft',
@@ -149,7 +149,7 @@ const projects: Project[] = [
     id: 'prj-2',
     name: 'Dormitorio',
     customerId: 'cust-bruno',
-    currency: 'UYU',
+    currency: 'MXN',
     marginFactor: 1.4,
     laborFixedCost: 100,
     status: 'quoted',
@@ -237,7 +237,7 @@ describe('ProjectsScreen F022', () => {
     expect(within(card).getByText('Ana López')).toBeTruthy();
     expect(within(card).getByText('Borrador')).toBeTruthy();
     expect(within(card).getByText(/1 mueble/)).toBeTruthy();
-    expect(within(card).getByText('202.50')).toBeTruthy();
+    expect(within(card).getByText('$202.50 MXN')).toBeTruthy();
   });
 
   it('opens detail on card click with sticky chrome and back navigation', async () => {
@@ -401,11 +401,11 @@ describe('ProjectsScreen F022', () => {
     await user.click(screen.getByTestId('project-card-prj-1'));
     const totals = screen.getByLabelText('Totales de cotización');
     expect(within(totals).getByText('Precio de venta')).toBeTruthy();
-    expect(within(totals).getByText('202.50')).toBeTruthy();
+    expect(within(totals).getByText('$202.50 MXN')).toBeTruthy();
     // Export lives in sticky workspace chrome (issue #50)
     expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
     expect(screen.getByTestId('project-detail-total').textContent).toMatch(
-      /202\.50/,
+      /\$202\.50 MXN/,
     );
   });
 
@@ -434,7 +434,7 @@ describe('ProjectsScreen F022', () => {
     const alert = screen.getByTestId('breakdown-error');
     expect(alert.getAttribute('role')).toBe('alert');
     expect(alert.textContent).toMatch(/valores locales/i);
-    expect(screen.getAllByText('202.50').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('$202.50 MXN').length).toBeGreaterThanOrEqual(1);
   });
 
   it('disables export and shows message when preview blocked', async () => {

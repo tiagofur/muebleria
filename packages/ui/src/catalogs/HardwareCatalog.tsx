@@ -7,6 +7,7 @@ import type { Hardware, HardwareUnit } from '@muebles/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   EmptyState,
+  formatMoneyDisplay,
   Modal,
   SearchInput,
   StatusChips,
@@ -170,7 +171,7 @@ export function HardwareCatalog({
       {
         key: 'cost',
         header: 'Costo unit.',
-        render: (r) => r.costPerUnit,
+        render: (r) => formatMoneyDisplay(r.costPerUnit),
       },
       {
         key: 'status',
@@ -257,7 +258,7 @@ export function HardwareCatalog({
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Costo unitario</span>
                   <span className="catalog-row-detail__value">
-                    {row.costPerUnit}
+                    {formatMoneyDisplay(row.costPerUnit)}
                   </span>
                 </div>
                 <div className="catalog-row-detail__field">

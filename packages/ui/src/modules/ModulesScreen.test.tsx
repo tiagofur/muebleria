@@ -195,7 +195,7 @@ describe('ModulesScreen structure (F021)', () => {
     expect(within(card).getByText('Bajo mesada 600')).toBeTruthy();
     expect(within(card).getByText(/2 piezas/)).toBeTruthy();
     expect(within(card).getByText(/1 herraje/)).toBeTruthy();
-    expect(within(card).getByText('202.50')).toBeTruthy();
+    expect(within(card).getByText('$202.50 MXN')).toBeTruthy();
 
     const card2 = screen.getByTestId('module-card-mod-2');
     expect(within(card2).getByText('Sin estimado')).toBeTruthy();
@@ -270,7 +270,9 @@ describe('ModulesScreen navigation + modals (F021)', () => {
       'value',
       'MOD-GAB-01',
     );
-    expect(within(dialog).getByText(/Precio de venta: 202.50/)).toBeTruthy();
+    expect(
+      within(dialog).getByText(/Precio de venta: \$202\.50 MXN/),
+    ).toBeTruthy();
   });
 
   it('opens Modal LG empty form from + Nuevo mueble', async () => {
