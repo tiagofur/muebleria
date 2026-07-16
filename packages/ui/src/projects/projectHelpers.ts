@@ -13,7 +13,9 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  WorkshopSettings,
 } from '@muebles/domain';
+import { DEFAULT_WORKSHOP_SETTINGS } from '@muebles/domain';
 import {
   canShowPricePreview,
   membersForKind,
@@ -95,14 +97,21 @@ export function resolveCustomerName(
   return found?.name ?? customerId;
 }
 
-export function emptyProjectDraft(): ProjectDraft {
+/**
+ * Empty draft for a new quotation.
+ * Uses workshop settings when provided (F031); does not mutate existing projects.
+ */
+export function emptyProjectDraft(
+  settings?: WorkshopSettings | null,
+): ProjectDraft {
+  const s = settings ?? DEFAULT_WORKSHOP_SETTINGS;
   return {
     name: '',
     customerId: '',
     customerName: '',
-    currency: 'MXN',
-    marginFactor: '1.35',
-    laborFixedCost: '0',
+    currency: s.defaultCurrency || 'MXN',
+    marginFactor: String(s.defaultMarginFactor),
+    laborFixedCost: String(s.defaultLaborFixedCost),
     status: 'draft',
     notes: '',
   };

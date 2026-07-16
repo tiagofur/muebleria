@@ -1,4 +1,9 @@
-import type { Catalog, Project, Workspace } from '@muebles/domain';
+import type { Catalog, Project, Workspace, WorkshopSettings } from '@muebles/domain';
+import {
+  DEFAULT_WORKSHOP_SETTINGS,
+  resolveWorkshopSettings,
+  withWorkshopSettings,
+} from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import {
   catalogFromApi,
@@ -14,6 +19,36 @@ import {
   sortCategoriesForSave,
 } from './apiMappers';
 import { SCHEMA_VERSION } from './seed';
+
+/** Settings persist client-side until API has a dedicated endpoint (F031). */
+const SETTINGS_STORAGE_KEY = 'muebles_workshop_settings';
+
+function readLocalSettings(): WorkshopSettings {
+  if (typeof globalThis === 'undefined' || !('localStorage' in globalThis)) {
+    return { ...DEFAULT_WORKSHOP_SETTINGS };
+  }
+  try {
+    const raw = globalThis.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_WORKSHOP_SETTINGS };
+    return resolveWorkshopSettings(JSON.parse(raw) as WorkshopSettings);
+  } catch {
+    return { ...DEFAULT_WORKSHOP_SETTINGS };
+  }
+}
+
+function writeLocalSettings(settings: WorkshopSettings): void {
+  if (typeof globalThis === 'undefined' || !('localStorage' in globalThis)) {
+    return;
+  }
+  try {
+    globalThis.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(resolveWorkshopSettings(settings)),
+    );
+  } catch {
+    // ignore
+  }
+}
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
@@ -42,14 +77,18 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async load(): Promise<Workspace> {
     const catalog = await this.getCatalog();
     const projects = await this.getProjects();
-    return {
+    return withWorkshopSettings({
       schemaVersion: SCHEMA_VERSION,
       catalog,
       projects,
-    };
+      settings: readLocalSettings(),
+    });
   }
 
   async save(workspace: Workspace): Promise<void> {
+    if (workspace.settings) {
+      writeLocalSettings(workspace.settings);
+    }
     await this.saveCatalog(workspace.catalog);
     for (const p of workspace.projects) {
       await this.saveProject(p);

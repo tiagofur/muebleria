@@ -18,6 +18,7 @@ import {
   Menu,
   Minus,
   Package,
+  Settings,
   Settings2,
   ShieldCheck,
   ToggleLeft,
@@ -45,6 +46,7 @@ export type AppNavId =
   | 'edges'
   | 'hardware'
   | 'optionGroups'
+  | 'settings'
   | 'users';
 
 export type AppShellSessionUser = {
@@ -133,6 +135,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'edges', label: 'Cantos', icon: Minus },
       { id: 'hardware', label: 'Herrajes', icon: Settings2 },
       { id: 'optionGroups', label: 'Grupos', icon: ToggleLeft },
+      { id: 'settings', label: 'Ajustes', icon: Settings },
     ],
   },
 ] as const;

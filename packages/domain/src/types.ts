@@ -197,10 +197,22 @@ export interface Catalog {
   readonly users?: readonly User[];
 }
 
+/**
+ * Global workshop defaults for new quotations (F031 / #37).
+ * Does not mutate existing projects when changed.
+ */
+export interface WorkshopSettings {
+  readonly defaultMarginFactor: number;
+  readonly defaultLaborFixedCost: number;
+  readonly defaultCurrency: string;
+}
+
 export interface Workspace {
   readonly schemaVersion: number;
   readonly catalog: Catalog;
   readonly projects: readonly Project[];
+  /** Optional; older workspaces omit this and use product defaults. */
+  readonly settings?: WorkshopSettings;
 }
 
 // --- Resolution / quote DTOs (calculated shapes; no logic here) ---

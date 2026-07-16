@@ -128,6 +128,11 @@ export {
 } from './shell';
 
 export {
+  SettingsScreen,
+  type SettingsScreenProps,
+} from './settings';
+
+export {
   BrandMark,
   EmptyState,
   ErrorBoundary,

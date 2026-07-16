@@ -24,6 +24,7 @@ import type {
   Project,
   ProjectItem,
   QuoteBreakdown,
+  WorkshopSettings,
 } from '@muebles/domain';
 import {
   cascadeOptions,
@@ -155,6 +156,8 @@ export interface ProjectsScreenProps {
    * (Dashboard quick action). 0 / undefined = no request.
    */
   readonly requestCreateKey?: number;
+  /** Workshop defaults for new quotation drafts (F031). */
+  readonly workshopSettings?: WorkshopSettings | null;
 }
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -201,6 +204,7 @@ export function ProjectsScreen({
   openProjectId = null,
   requestCreateKey = 0,
   loading = false,
+  workshopSettings = null,
 }: ProjectsScreenProps): ReactNode {
   const metaFormId = useId();
   const addItemFormId = useId();
@@ -212,7 +216,9 @@ export function ProjectsScreen({
   const [addCategoryL3, setAddCategoryL3] = useState('');
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ProjectDraft>(emptyProjectDraft);
+  const [draft, setDraft] = useState<ProjectDraft>(() =>
+    emptyProjectDraft(workshopSettings),
+  );
   /** When true, meta form uses free-text name to create a customer on submit. */
   const [newCustomerMode, setNewCustomerMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,7 +277,7 @@ export function ProjectsScreen({
   useEffect(() => {
     if (!requestCreateKey) return;
     setMetaEditingId(null);
-    setDraft(emptyProjectDraft());
+    setDraft(emptyProjectDraft(workshopSettings));
     setNewCustomerMode(false);
     setError(null);
     setMetaModalOpen(true);
@@ -297,7 +303,7 @@ export function ProjectsScreen({
   const closeMetaModal = () => {
     setMetaModalOpen(false);
     setMetaEditingId(null);
-    setDraft(emptyProjectDraft());
+    setDraft(emptyProjectDraft(workshopSettings));
     setNewCustomerMode(false);
     setError(null);
   };
@@ -338,7 +344,7 @@ export function ProjectsScreen({
 
   const startCreate = () => {
     setMetaEditingId(null);
-    setDraft(emptyProjectDraft());
+    setDraft(emptyProjectDraft(workshopSettings));
     setNewCustomerMode(false);
     setError(null);
     setMetaModalOpen(true);

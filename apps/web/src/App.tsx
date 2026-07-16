@@ -26,6 +26,7 @@ import type {
   Project,
   ProjectItem,
   QuoteBreakdown,
+  WorkshopSettings,
   Workspace,
 } from '@muebles/domain';
 import {
@@ -33,6 +34,7 @@ import {
   calcProjectBreakdown,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
+  resolveWorkshopSettings,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -47,6 +49,7 @@ import {
   Dashboard,
   LoginScreen,
   RegisterScreen,
+  SettingsScreen,
   UsersScreen,
   ToastProvider,
   canShowPricePreview,
@@ -605,6 +608,7 @@ function AppContent({
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
+  const workshopSettings = resolveWorkshopSettings(workspace?.settings);
 
   // Latest workspace for patches — avoids stale closures (#15).
   const workspaceRef = useRef(workspace);
@@ -1186,6 +1190,26 @@ function AppContent({
     }
   };
 
+  const saveWorkshopSettings = useCallback(
+    (settings: WorkshopSettings) => {
+      const resolved = resolveWorkshopSettings(settings);
+      const prev = workspaceRef.current;
+      if (!prev) return;
+      const next: Workspace = { ...prev, settings: resolved };
+      workspaceRef.current = next;
+      setWorkspace(next);
+      repository.save(next).catch((err) => {
+        console.error('Error al guardar ajustes:', err);
+        toast({
+          type: 'error',
+          message: 'No se pudieron guardar los ajustes',
+        });
+      });
+      toast({ type: 'success', message: '✓ Preferencias del taller guardadas' });
+    },
+    [repository, toast],
+  );
+
   const createProject = (draft: ProjectDraft) => {
     if (!workspace) return;
     const now = new Date().toISOString();
@@ -1612,6 +1636,12 @@ function AppContent({
       {navId === 'users' && showAdminUsers && authToken ? (
         <UsersScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
       ) : null}
+      {navId === 'settings' ? (
+        <SettingsScreen
+          settings={workshopSettings}
+          onSave={saveWorkshopSettings}
+        />
+      ) : null}
       {navId === 'modules' ? (
         <ModulesScreen
           modules={modules}
@@ -1668,6 +1698,7 @@ function AppContent({
           projectEstimates={projectEstimates}
           openProjectId={routeProjectId}
           requestCreateKey={projectsCreateKey}
+          workshopSettings={workshopSettings}
         />
       ) : null}
     </AppShell>

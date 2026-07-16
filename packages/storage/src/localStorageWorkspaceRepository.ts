@@ -3,6 +3,7 @@
  */
 
 import type { Catalog, Project, Workspace } from '@muebles/domain';
+import { withWorkshopSettings } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import { createSeedWorkspace } from './seed';
 
@@ -16,7 +17,7 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     try {
       const raw = globalThis.localStorage.getItem(LOCAL_STORAGE_KEY);
       if (raw) {
-        return JSON.parse(raw) as Workspace;
+        return withWorkshopSettings(JSON.parse(raw) as Workspace);
       }
     } catch {
       // ignore

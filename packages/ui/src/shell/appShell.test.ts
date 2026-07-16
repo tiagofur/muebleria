@@ -12,6 +12,7 @@ import {
   Layers,
   Minus,
   Package,
+  Settings,
   Settings2,
   ToggleLeft,
   Users,
@@ -57,12 +58,14 @@ describe('AppShell nav model (F017)', () => {
       'edges',
       'hardware',
       'optionGroups',
+      'settings',
     ]);
     expect(config.items.map((i) => i.label)).toEqual([
       'Materiales',
       'Cantos',
       'Herrajes',
       'Grupos',
+      'Ajustes',
     ]);
   });
 
@@ -79,6 +82,7 @@ describe('AppShell nav model (F017)', () => {
     expect(byId.edges).toBe(Minus);
     expect(byId.hardware).toBe(Settings2);
     expect(byId.optionGroups).toBe(ToggleLeft);
+    expect(byId.settings).toBe(Settings);
   });
 
   it('labelForNavId resolves known destinations', () => {
@@ -86,6 +90,7 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('projects')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
     expect(labelForNavId('optionGroups')).toBe('Grupos');
+    expect(labelForNavId('settings')).toBe('Ajustes');
     expect(labelForNavId('users')).toBe('Usuarios');
   });
 

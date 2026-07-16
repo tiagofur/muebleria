@@ -175,9 +175,21 @@ const catalogs = {
 describe('project drafts and validation', () => {
   it('empty draft has sensible defaults', () => {
     const d = emptyProjectDraft();
+    // defaults from DEFAULT_WORKSHOP_SETTINGS
     expect(d.status).toBe('draft');
     expect(d.currency).toBe('MXN');
     expect(d.marginFactor).toBe('1.35');
+  });
+
+  it('empty draft uses workshop settings when provided', () => {
+    const d = emptyProjectDraft({
+      defaultMarginFactor: 1.5,
+      defaultLaborFixedCost: 1200,
+      defaultCurrency: 'MXN',
+    });
+    expect(d.marginFactor).toBe('1.5');
+    expect(d.laborFixedCost).toBe('1200');
+    expect(d.currency).toBe('MXN');
   });
 
   it('projectToDraft maps customerId as primary picker value', () => {
