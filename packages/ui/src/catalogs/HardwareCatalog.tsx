@@ -6,6 +6,7 @@ import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { Hardware, HardwareUnit } from '@muebles/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
+  CatalogImage,
   EmptyState,
   formatMoneyDisplay,
   Modal,
@@ -35,6 +36,8 @@ export type HardwareDraft = {
   name: string;
   unit: HardwareUnit;
   costPerUnit: number;
+  /** Relative media path (F040/F042). */
+  imageUrl: string;
   notes: string;
 };
 
@@ -43,6 +46,7 @@ const emptyDraft = (): HardwareDraft => ({
   name: '',
   unit: 'piece',
   costPerUnit: 0,
+  imageUrl: '',
   notes: '',
 });
 
@@ -52,6 +56,7 @@ function toDraft(item: Hardware): HardwareDraft {
     name: item.name,
     unit: item.unit,
     costPerUnit: item.costPerUnit,
+    imageUrl: item.imageUrl ?? '',
     notes: item.notes ?? '',
   };
 }
@@ -67,6 +72,9 @@ export interface HardwareCatalogProps {
   /** F035: hide ABM when false. */
   readonly canMutate?: boolean;
   readonly showCosts?: boolean;
+  /** F042: upload catalog image. */
+  readonly onUploadImage?: (file: File) => Promise<string>;
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
 export function HardwareCatalog({
@@ -79,6 +87,8 @@ export function HardwareCatalog({
   onSelectionChange,
   canMutate = true,
   showCosts = true,
+  onUploadImage,
+  resolveImageUrl = (u) => u,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -161,6 +171,17 @@ export function HardwareCatalog({
   const columns: CatalogColumn<Hardware>[] = useMemo(
     () => [
       {
+        key: 'image',
+        header: 'Foto',
+        render: (r) => (
+          <CatalogImage
+            src={resolveImageUrl(r.imageUrl)}
+            alt={r.name}
+            size="sm"
+          />
+        ),
+      },
+      {
         key: 'code',
         header: 'Código',
         render: (r) => (
@@ -184,7 +205,7 @@ export function HardwareCatalog({
         render: (r) => <ActiveBadge active={r.active} />,
       },
     ],
-    [],
+    [resolveImageUrl],
   );
   const visibleColumns = useMemo(
     () => (showCosts ? columns : columns.filter((c) => c.key !== 'cost')),
@@ -250,6 +271,14 @@ export function HardwareCatalog({
             onRowClick={toggleExpand}
             renderExpandedDetail={(row) => (
               <>
+                <div className="catalog-row-detail__field">
+                  <span className="catalog-row-detail__label">Foto</span>
+                  <CatalogImage
+                    src={resolveImageUrl(row.imageUrl)}
+                    alt={row.name}
+                    size="md"
+                  />
+                </div>
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Código</span>
                   <span className="catalog-row-detail__value catalog-row-detail__value--mono">
@@ -390,6 +419,37 @@ export function HardwareCatalog({
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               required
             />
+          </div>
+          <div className="catalog-form__field" data-testid="hardware-image-field">
+            <label htmlFor="hw-image">Foto</label>
+            <div className="catalog-form__image-row">
+              <CatalogImage
+                src={resolveImageUrl(draft.imageUrl || undefined)}
+                alt={draft.name || 'Herraje'}
+                size="md"
+              />
+              {canMutate && onUploadImage ? (
+                <input
+                  id="hw-image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void onUploadImage(file)
+                      .then((url) => setDraft({ ...draft, imageUrl: url }))
+                      .catch(() => {
+                        /* shell toasts */
+                      });
+                    e.target.value = '';
+                  }}
+                />
+              ) : (
+                <p className="catalog-form__hint">
+                  {draft.imageUrl ? 'Foto cargada' : 'Sin foto'}
+                </p>
+              )}
+            </div>
           </div>
           <div className="catalog-form__field">
             <label htmlFor="hw-unit">Unidad</label>

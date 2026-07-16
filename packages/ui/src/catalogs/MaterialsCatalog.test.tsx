@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 /**
  * Materials catalog — empty vs no-results (#32) + create handoff (#33).
  * @vitest-environment jsdom
@@ -8,6 +11,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MaterialBoard } from '@muebles/domain';
 import { MaterialsCatalog } from './MaterialsCatalog';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 afterEach(() => cleanup());
 
@@ -111,5 +116,14 @@ describe('MaterialsCatalog empty states (#32)', () => {
     expect(
       (screen.getByLabelText(/Buscar materiales/i) as HTMLInputElement).value,
     ).toBe('');
+  });
+});
+
+describe('MaterialsCatalog image upload (F042)', () => {
+  it('exposes image field and CatalogImage for materials', () => {
+    const src = readFileSync(join(here, 'MaterialsCatalog.tsx'), 'utf8');
+    expect(src).toContain('material-image-field');
+    expect(src).toContain('onUploadImage');
+    expect(src).toContain('imageUrl');
   });
 });

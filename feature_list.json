@@ -793,8 +793,26 @@
         "docs/prd.md §4.2.3",
         "https://github.com/tiagofur/muebleria/issues/73"
       ],
-      "status": "in_progress",
+      "status": "done",
       "github_issue": 73
+    },
+    {
+      "id": "F042",
+      "phase": 8,
+      "name": "catalog_image_upload_materials_hardware",
+      "title": "Subida de imagen en materiales y herrajes",
+      "description": "UI upload materials/hardware via POST /api/media",
+      "acceptance": [
+        "Upload material/herraje",
+        "RBAC",
+        "Thumbnail",
+        "No base64"
+      ],
+      "status": "in_progress",
+      "github_issue": 87,
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/87"
+      ]
     }
   ]
 }
