@@ -288,6 +288,26 @@ export function ModulesScreen({
     return filterModulesByQuery(byCat, debouncedSearch);
   }, [modules, categories, categoryFilter, debouncedSearch]);
 
+  /** Counts over full catalog (search only filters cards, not the tree). */
+  const categoryFilterCounts = useMemo(() => {
+    const byCategoryId = new Map<string, number>();
+    for (const cat of categories) {
+      byCategoryId.set(
+        cat.id,
+        filterModulesByCategory(modules, cat.id, categories).length,
+      );
+    }
+    return {
+      all: modules.length,
+      uncategorized: filterModulesByCategory(
+        modules,
+        UNCATEGORIZED_FILTER,
+        categories,
+      ).length,
+      byCategoryId,
+    };
+  }, [modules, categories]);
+
   const draftCascade = useMemo(
     () => cascadeFromCategoryId(draft.categoryId || undefined, categories),
     [draft.categoryId, categories],
@@ -1302,6 +1322,7 @@ export function ModulesScreen({
       >
         {nodes.map((node) => {
           const active = categoryFilter === node.id;
+          const count = categoryFilterCounts.byCategoryId.get(node.id) ?? 0;
           return (
             <li key={node.id}>
               <button
@@ -1318,7 +1339,13 @@ export function ModulesScreen({
                 }
                 data-testid={`category-filter-${node.id}`}
               >
-                {node.name}
+                <span className="module-category-tree__label">{node.name}</span>
+                <span
+                  className="module-category-tree__count"
+                  data-testid={`category-filter-count-${node.id}`}
+                >
+                  {count}
+                </span>
               </button>
               {renderCategoryTree(node.id, depth + 1)}
             </li>
@@ -1497,8 +1524,15 @@ export function ModulesScreen({
                 : 'module-category-tree__item'
             }
             onClick={() => setCategoryFilter(null)}
+            data-testid="category-filter-all"
           >
-            Todas
+            <span className="module-category-tree__label">Todas</span>
+            <span
+              className="module-category-tree__count"
+              data-testid="category-filter-count-all"
+            >
+              {categoryFilterCounts.all}
+            </span>
           </button>
           <button
             type="button"
@@ -1510,7 +1544,13 @@ export function ModulesScreen({
             onClick={() => setCategoryFilter(UNCATEGORIZED_FILTER)}
             data-testid="category-filter-uncategorized"
           >
-            Sin categoría
+            <span className="module-category-tree__label">Sin categoría</span>
+            <span
+              className="module-category-tree__count"
+              data-testid="category-filter-count-uncategorized"
+            >
+              {categoryFilterCounts.uncategorized}
+            </span>
           </button>
           {categories.length === 0 ? (
             <p className="module-category-tree__empty">

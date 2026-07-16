@@ -352,6 +352,36 @@ describe('ModulesScreen categories (F025)', () => {
     expect(screen.queryByTestId('module-card-mod-2')).toBeNull();
   });
 
+  it('shows subtree counts on each filter option over the full catalog', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      onCreateCategory: vi.fn(),
+    });
+
+    // Fixture: mod-1 under cat-child (Cocina subtree), mod-2 uncategorized
+    expect(screen.getByTestId('category-filter-count-all').textContent).toBe(
+      '2',
+    );
+    expect(
+      screen.getByTestId('category-filter-count-uncategorized').textContent,
+    ).toBe('1');
+    expect(
+      screen.getByTestId('category-filter-count-cat-root').textContent,
+    ).toBe('1');
+    expect(
+      screen.getByTestId('category-filter-count-cat-child').textContent,
+    ).toBe('1');
+
+    // Search filters cards only — tree counts stay on full catalog
+    await user.type(screen.getByLabelText(/Buscar muebles/i), 'zzzz-no-match');
+    expect(screen.getByTestId('category-filter-count-all').textContent).toBe(
+      '2',
+    );
+    expect(
+      screen.getByTestId('category-filter-count-uncategorized').textContent,
+    ).toBe('1');
+  });
+
   it('opens manage-categories modal for create/edit/delete, not inline admin', async () => {
     const user = userEvent.setup();
     const onCreateCategory = vi.fn();
