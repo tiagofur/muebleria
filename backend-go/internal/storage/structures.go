@@ -248,12 +248,16 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 
 	for _, p := range st.BoardParts {
 		l1, l2, w1, w2 := edgeFlagsFromPart(p)
-		if p.ID != "" {
+		partID := p.ID
+		if !isValidUUID(partID) {
+			partID = ""
+		}
+		if partID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
 				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
 				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, p.ID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+			`, partID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
@@ -267,11 +271,15 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	}
 
 	for _, pr := range st.Presets {
-		if pr.ID != "" {
+		presetID := pr.ID
+		if !isValidUUID(presetID) {
+			presetID = ""
+		}
+		if presetID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm)
 				VALUES ($1,$2,$3,$4,$5,$6);
-			`, pr.ID, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+			`, presetID, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm)
@@ -326,12 +334,16 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 
 	for _, p := range st.BoardParts {
 		l1, l2, w1, w2 := edgeFlagsFromPart(p)
-		if p.ID != "" {
+		partID := p.ID
+		if !isValidUUID(partID) {
+			partID = ""
+		}
+		if partID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
 				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
 				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, p.ID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+			`, partID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
@@ -345,11 +357,15 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	}
 
 	for _, pr := range st.Presets {
-		if pr.ID != "" {
+		presetID := pr.ID
+		if !isValidUUID(presetID) {
+			presetID = ""
+		}
+		if presetID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm)
 				VALUES ($1,$2,$3,$4,$5,$6);
-			`, pr.ID, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+			`, presetID, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm)
@@ -374,4 +390,11 @@ func (s *PostgresStore) DeleteStructure(ctx context.Context, id string) error {
 		return fmt.Errorf("structure not found")
 	}
 	return nil
+}
+
+func isValidUUID(id string) bool {
+	if len(id) != 36 {
+		return false
+	}
+	return id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-'
 }
