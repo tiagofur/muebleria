@@ -48,7 +48,9 @@
 }
 
 .catalog-table-wrap {
-  overflow-x: auto;
+  /* Scrollport for sticky headers (issue #56); keep horizontal scroll */
+  overflow: auto;
+  max-height: min(70vh, calc(100vh - 14rem));
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-card);
@@ -57,7 +59,9 @@
 
 .catalog-table {
   width: 100%;
-  border-collapse: collapse;
+  /* separate + 0 spacing: sticky thead works reliably across browsers */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-base);
 }
 
@@ -71,10 +75,15 @@
 }
 
 .catalog-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: var(--surface-hover);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
   color: var(--text-secondary);
+  /* Edge while content scrolls under header */
+  box-shadow: 0 1px 0 var(--border-subtle);
 }
 
 .catalog-table tr:last-child td {

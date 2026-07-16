@@ -584,6 +584,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 - **Rutas nav:** `materials` | `edges` | `hardware` | `optionGroups`
 - **Paths:** `packages/ui/src/catalogs/`, `packages/ui/src/optionGroups/`
 - **Patrón común:** tabla + SearchInput + chips Todos/Activos/Inactivos + Modal **SM** crear/editar + expand de fila (detalle read-only en row expand donde aplique)
+- **Tabla (issue #56):** `.catalog-table-wrap` es scrollport (`overflow: auto` + `max-height`); `th` con `position: sticky; top: 0`, fondo sólido y `border-collapse: separate` para sticky fiable; filas densas vía tokens `--density-table-*`
 - **Materiales / Cantos / Herrajes:** `CatalogTable`, desactivar/reactivar, badges de activo
 - **Grupos de opciones:** pantalla propia con tabla/listado y modal; preview de precio gated por `PricePreviewGate` cuando faltan resoluciones
 - **EmptyState** con CTA «+ Agregar…»
