@@ -170,3 +170,20 @@ describe('AppShell CSS (F017)', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 });
+
+describe('AppShell session identity (issue #29)', () => {
+  it('renders identity block for auth and guest in source', () => {
+    const src = read('AppShell.tsx');
+    expect(src).toMatch(/sessionMode/);
+    expect(src).toMatch(/app-session-identity/);
+    expect(src).toMatch(/WifiOff/);
+    expect(src).toMatch(/roleLabel/);
+  });
+
+  it('styles identity with design tokens', () => {
+    const css = read('appShell.css');
+    expect(css).toMatch(/\.app-topbar__identity/);
+    expect(css).toMatch(/var\(--surface-card\)/);
+    expect(css).toMatch(/var\(--text-secondary\)/);
+  });
+});

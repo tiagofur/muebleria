@@ -232,3 +232,9 @@
 - **Cambios:** session register/user role; SessionGate RegisterScreen; AppShell Usuarios admin; UsersScreen; domain UserRole `user`; IsValidUserRole; tests; handoff impl/review/close F026.
 - **Verificación:** `./init.sh` verde; UI 182; web 56; go api/auth/domain OK; smoke API register→approve→login.
 - **Cierre:** F026 `done`. Admin seed `tiagofur@gmail.com` / `asd123`.
+
+## 2026-07-15 — Auditoría PRD + backlog F029–F033 / issues #35–#39
+- **Agente:** Grok (sesión documentación).
+- **Cambios:** `docs/prd.md` actualizado al estado real (MVP hecho, v1.1 parcial, Etapa 2 avanzada); `feature_list.json` añade F029–F033 pending; `progress/current.md` refleja backlog.
+- **GitHub:** issues abiertos #35 opciones proyecto, #36 cotización comercial, #37 Ajustes, #38 Electron empaquetado, #39 atajos grilla.
+- **Próximo:** F029 (#35) según harness (menor id pending).

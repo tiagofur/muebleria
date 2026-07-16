@@ -42,6 +42,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { CatalogPicker } from '../catalogs/CatalogPicker';
 import {
   EmptyState,
   InlineLoading,
@@ -538,41 +539,46 @@ export function ProjectsScreen({
           />
         </div>
         <div className="catalog-form__field">
-          <label htmlFor="prj-client">Cliente</label>
           {newCustomerMode ? (
-            <input
-              id="prj-client"
-              value={draft.customerName ?? ''}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  customerId: '',
-                  customerName: e.target.value,
-                })
-              }
-              placeholder="Nombre del nuevo cliente"
-              autoComplete="organization"
-            />
+            <>
+              <label htmlFor="prj-client">Cliente</label>
+              <input
+                id="prj-client"
+                value={draft.customerName ?? ''}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    customerId: '',
+                    customerName: e.target.value,
+                  })
+                }
+                placeholder="Nombre del nuevo cliente"
+                autoComplete="organization"
+              />
+            </>
           ) : (
-            <select
+            <CatalogPicker
               id="prj-client"
+              label="Cliente"
+              placeholder="Seleccionar cliente…"
+              searchPlaceholder="Buscar cliente…"
               value={draft.customerId}
-              onChange={(e) =>
+              onChange={(customerId) =>
                 setDraft({
                   ...draft,
-                  customerId: e.target.value,
+                  customerId,
                   customerName: '',
                 })
               }
-            >
-              <option value="">Seleccionar cliente…</option>
-              {pickerCustomers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {!c.active ? ' (inactivo)' : ''}
-                </option>
-              ))}
-            </select>
+              items={pickerCustomers.map((c) => ({
+                id: c.id,
+                code: '',
+                name: c.name,
+                active: c.active,
+                subtitle: c.email || undefined,
+              }))}
+              data-testid="project-customer-picker"
+            />
           )}
           <div className="catalog-form__field catalog-form__row-check">
             <input
@@ -733,25 +739,32 @@ export function ProjectsScreen({
       ) : null}
       <div className="project-editor__grid">
         <div className="catalog-form__field">
-          <label htmlFor="add-module">Mueble</label>
-          <select
+          <CatalogPicker
             id="add-module"
+            label="Mueble"
+            placeholder={
+              modulesForAdd.length === 0
+                ? 'Sin módulos en este filtro'
+                : 'Seleccionar mueble…'
+            }
+            searchPlaceholder="Buscar mueble…"
             value={
               modulesForAdd.some((m) => m.id === addItem.moduleId)
                 ? addItem.moduleId
-                : modulesForAdd[0]?.id ?? ''
+                : ''
             }
-            onChange={(e) => selectModuleForAdd(e.target.value)}
-          >
-            {modulesForAdd.length === 0 ? (
-              <option value="">Sin módulos en este filtro</option>
-            ) : null}
-            {modulesForAdd.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} — {m.code}
-              </option>
-            ))}
-          </select>
+            onChange={(moduleId) => {
+              if (moduleId) selectModuleForAdd(moduleId);
+            }}
+            items={modulesForAdd.map((m) => ({
+              id: m.id,
+              code: m.code,
+              name: m.name,
+              active: true,
+            }))}
+            disabled={modulesForAdd.length === 0}
+            data-testid="add-item-module-picker"
+          />
         </div>
         <div className="catalog-form__field">
           <label htmlFor="add-qty">Cantidad</label>

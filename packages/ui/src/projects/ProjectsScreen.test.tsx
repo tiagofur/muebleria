@@ -262,21 +262,19 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Nuevo proyecto' })).toBeTruthy();
 
-    const clientSelect = screen.getByLabelText('Cliente');
-    expect(clientSelect.tagName).toBe('SELECT');
+    const clientTrigger = screen.getByLabelText('Cliente');
+    expect(clientTrigger.tagName).toBe('BUTTON');
+    await user.click(clientTrigger);
+    const listbox = screen.getByRole('listbox');
     expect(
-      within(clientSelect as HTMLElement).getByRole('option', {
-        name: 'Ana López',
-      }),
+      within(listbox).getByRole('option', { name: /Ana López/i }),
     ).toBeTruthy();
     expect(
-      within(clientSelect as HTMLElement).queryByRole('option', {
-        name: /inactivo/i,
-      }),
+      within(listbox).queryByRole('option', { name: /inactivo/i }),
     ).toBeNull();
+    await user.click(within(listbox).getByRole('option', { name: /^Bruno$/i }));
 
     await user.type(screen.getByLabelText('Nombre'), 'Oficina');
-    await user.selectOptions(clientSelect, 'cust-bruno');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(onCreate).toHaveBeenCalledWith(
@@ -327,14 +325,15 @@ describe('ProjectsScreen F022', () => {
     await user.click(screen.getByRole('button', { name: /Editar proyecto/i }));
     expect(screen.getByRole('heading', { name: 'Editar proyecto' })).toBeTruthy();
 
-    const clientSelect = screen.getByLabelText('Cliente') as HTMLSelectElement;
-    expect(clientSelect.tagName).toBe('SELECT');
-    expect(clientSelect.value).toBe('cust-ana');
+    const clientTrigger = screen.getByLabelText('Cliente');
+    expect(clientTrigger.tagName).toBe('BUTTON');
+    expect(clientTrigger.textContent).toMatch(/Ana López/);
 
     const nameInput = screen.getByLabelText('Nombre');
     await user.clear(nameInput);
     await user.type(nameInput, 'Cocina renovada');
-    await user.selectOptions(clientSelect, 'cust-bruno');
+    await user.click(clientTrigger);
+    await user.click(screen.getByRole('option', { name: /Bruno/i }));
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(onUpdate).toHaveBeenCalledWith(
@@ -357,13 +356,12 @@ describe('ProjectsScreen F022', () => {
     await user.click(screen.getByTestId('project-card-prj-1'));
     await user.click(screen.getByRole('button', { name: /Editar proyecto/i }));
 
-    const clientSelect = screen.getByLabelText('Cliente');
+    const clientTrigger = screen.getByLabelText('Cliente');
+    expect(clientTrigger.textContent).toMatch(/Ana López \(inactivo\)/);
+    await user.click(clientTrigger);
     expect(
-      within(clientSelect as HTMLElement).getByRole('option', {
-        name: /Ana López \(inactivo\)/,
-      }),
+      screen.getByRole('option', { name: /Ana López \(inactivo\)/i }),
     ).toBeTruthy();
-    expect((clientSelect as HTMLSelectElement).value).toBe('cust-ana');
   });
 
   it('opens Modal MD to add furniture with module/qty/options', async () => {

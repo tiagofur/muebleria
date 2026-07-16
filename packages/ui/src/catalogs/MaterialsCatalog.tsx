@@ -22,6 +22,7 @@ import {
   validateUniqueCode,
 } from './catalogHelpers';
 import { ActiveBadge, CatalogTable, type CatalogColumn } from './CatalogTable';
+import { CatalogPicker } from './CatalogPicker';
 import type { EdgeDraft } from './EdgesCatalog';
 import './catalogs.css';
 
@@ -568,22 +569,26 @@ export function MaterialsCatalog({
           </div>
 
           <div className="catalog-form__field">
-            <label htmlFor="mat-default-edge">Cintilla por defecto</label>
             <div className="catalog-form__inline-actions">
-              <select
+              <CatalogPicker
                 id="mat-default-edge"
+                className="catalog-picker--grow"
+                label="Cintilla por defecto"
+                placeholder="— Sin cintilla —"
+                searchPlaceholder="Buscar cintilla…"
                 value={draft.defaultEdgeBandId}
-                onChange={(e) =>
-                  setDraft({ ...draft, defaultEdgeBandId: e.target.value })
+                onChange={(defaultEdgeBandId) =>
+                  setDraft({ ...draft, defaultEdgeBandId })
                 }
-              >
-                <option value="">— Sin cintilla —</option>
-                {activeEdges.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.code} — {e.name} ({e.thicknessMm} mm)
-                  </option>
-                ))}
-              </select>
+                items={activeEdges.map((e) => ({
+                  id: e.id,
+                  code: e.code,
+                  name: e.name,
+                  active: e.active,
+                  subtitle: `${e.thicknessMm} mm`,
+                }))}
+                data-testid="material-edge-picker"
+              />
               <button
                 type="button"
                 className="btn btn--small"
