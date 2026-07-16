@@ -1193,22 +1193,18 @@ function AppContent({
   const saveWorkshopSettings = useCallback(
     (settings: WorkshopSettings) => {
       const resolved = resolveWorkshopSettings(settings);
-      setWorkspace((prev) => {
-        if (!prev) return prev;
-        const next: Workspace = { ...prev, settings: resolved };
-        workspaceRef.current = next;
-        return next;
-      });
-      const current = workspaceRef.current;
-      if (current) {
-        repository.save(current).catch((err) => {
-          console.error('Error al guardar ajustes:', err);
-          toast({
-            type: 'error',
-            message: 'No se pudieron guardar los ajustes',
-          });
+      const prev = workspaceRef.current;
+      if (!prev) return;
+      const next: Workspace = { ...prev, settings: resolved };
+      workspaceRef.current = next;
+      setWorkspace(next);
+      repository.save(next).catch((err) => {
+        console.error('Error al guardar ajustes:', err);
+        toast({
+          type: 'error',
+          message: 'No se pudieron guardar los ajustes',
         });
-      }
+      });
       toast({ type: 'success', message: '✓ Preferencias del taller guardadas' });
     },
     [repository, toast],
