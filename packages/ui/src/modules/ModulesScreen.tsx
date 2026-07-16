@@ -757,8 +757,8 @@ export function ModulesScreen({
                     Quitar
                   </button>
                 </div>
-                <div className="module-editor__grid">
-                  <div className="catalog-form__field">
+                <div className="module-editor__grid module-editor__grid--part">
+                  <div className="catalog-form__field module-editor__field--grow">
                     <label htmlFor={`part-code-${part.id}`}>Código pieza</label>
                     <input
                       id={`part-code-${part.id}`}
@@ -769,7 +769,7 @@ export function ModulesScreen({
                       placeholder={suggestPartCode(draft.code, index + 1)}
                     />
                   </div>
-                  <div className="catalog-form__field">
+                  <div className="catalog-form__field module-editor__field--grow">
                     <label htmlFor={`part-desc-${part.id}`}>Descripción</label>
                     <input
                       id={`part-desc-${part.id}`}
@@ -780,7 +780,7 @@ export function ModulesScreen({
                       required
                     />
                   </div>
-                  <div className="catalog-form__field">
+                  <div className="catalog-form__field module-editor__field--narrow">
                     <label htmlFor={`part-qty-${part.id}`}>Cantidad</label>
                     <input
                       id={`part-qty-${part.id}`}
@@ -795,7 +795,7 @@ export function ModulesScreen({
                       }
                     />
                   </div>
-                  <div className="catalog-form__field">
+                  <div className="catalog-form__field module-editor__field--narrow">
                     <label htmlFor={`part-l-${part.id}`}>Largo (mm)</label>
                     <input
                       id={`part-l-${part.id}`}
@@ -810,7 +810,7 @@ export function ModulesScreen({
                       }
                     />
                   </div>
-                  <div className="catalog-form__field">
+                  <div className="catalog-form__field module-editor__field--narrow">
                     <label htmlFor={`part-w-${part.id}`}>Ancho (mm)</label>
                     <input
                       id={`part-w-${part.id}`}
@@ -825,7 +825,9 @@ export function ModulesScreen({
                       }
                     />
                   </div>
-                  <div className="catalog-form__field">
+                </div>
+                <div className="module-part-card__role-edges">
+                  <div className="catalog-form__field module-part-card__role">
                     <label htmlFor={`part-role-${part.id}`}>
                       Rol (optionRole)
                     </label>
@@ -845,27 +847,32 @@ export function ModulesScreen({
                       ))}
                     </select>
                   </div>
-                </div>
-                <div className="module-edge-flags" role="group" aria-label="Cantos">
-                  {(
-                    [
-                      ['edgeL1', 'L1'],
-                      ['edgeL2', 'L2'],
-                      ['edgeW1', 'W1'],
-                      ['edgeW2', 'W2'],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label key={key}>
-                      <input
-                        type="checkbox"
-                        checked={part[key]}
-                        onChange={(e) =>
-                          updatePart(part.id, { [key]: e.target.checked })
-                        }
-                      />
-                      Canto {label}
-                    </label>
-                  ))}
+                  <div
+                    className="module-edge-flags"
+                    role="group"
+                    aria-label="Cantos (cintillas)"
+                  >
+                    <span className="module-edge-flags__label">Cantos</span>
+                    {(
+                      [
+                        ['edgeL1', 'L1'],
+                        ['edgeL2', 'L2'],
+                        ['edgeW1', 'W1'],
+                        ['edgeW2', 'W2'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key}>
+                        <input
+                          type="checkbox"
+                          checked={part[key]}
+                          onChange={(e) =>
+                            updatePart(part.id, { [key]: e.target.checked })
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             ))}

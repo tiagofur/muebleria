@@ -181,6 +181,14 @@ describe('catalog list CSS guards (F020)', () => {
     expect(src).toMatch(/useDebouncedValue/);
     expect(src).not.toMatch(/Mostrar inactivos/);
   });
+
+  it('#14: materials catalog does not import domain cost formula', () => {
+    const src = read('../catalogs/MaterialsCatalog.tsx');
+    expect(src).not.toMatch(/calcMaterialCostPerM2/);
+    expect(src).toMatch(/getCostPerM2/);
+    expect(src).toMatch(/catalog-form__calculated-value/);
+    expect(src).not.toMatch(/style=\{\{/);
+  });
 });
 
 describe('SearchInput debounce constant alignment', () => {

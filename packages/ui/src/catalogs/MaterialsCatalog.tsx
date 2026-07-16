@@ -4,11 +4,7 @@
  */
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import {
-  calcMaterialCostPerM2,
-  type EdgeBand,
-  type MaterialBoard,
-} from '@muebles/domain';
+import type { EdgeBand, MaterialBoard } from '@muebles/domain';
 import { Eye, EyeOff, Layers, Pencil, Plus } from 'lucide-react';
 import {
   EmptyState,
@@ -42,6 +38,14 @@ export type MaterialDraft = {
   /** Linked EdgeBand id (never by name). Empty string = none. */
   defaultEdgeBandId: string;
   notes: string;
+};
+
+/** Inputs the shell needs to compute costPerM2 (domain formula stays out of UI). */
+export type MaterialCostInputs = {
+  readonly widthMm: number;
+  readonly lengthMm: number;
+  readonly boardPrice: number;
+  readonly wastePercent: number;
 };
 
 const emptyDraft = (): MaterialDraft => ({
@@ -91,6 +95,11 @@ export interface MaterialsCatalogProps {
   readonly onReactivate: (id: string) => void;
   /** Creates an edge band and returns its new id (for linking as default). */
   readonly onCreateEdge: (draft: EdgeDraft) => string;
+  /**
+   * Domain formula injected by the shell (architecture.md: UI does not calculate).
+   * Used for live preview and to fill draft.costPerM2 on save.
+   */
+  readonly getCostPerM2: (input: MaterialCostInputs) => number;
   /** URL handoff: `/materials/:id` expands that row. */
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
@@ -104,6 +113,7 @@ export function MaterialsCatalog({
   onDeactivate,
   onReactivate,
   onCreateEdge,
+  getCostPerM2,
   openEntityId = null,
   onSelectionChange,
 }: MaterialsCatalogProps): ReactNode {
@@ -248,12 +258,12 @@ export function MaterialsCatalog({
     }
     setError(null);
 
-    const calculatedCost = calcMaterialCostPerM2(
-      draft.widthMm,
-      draft.lengthMm,
-      draft.boardPrice,
-      draft.wastePercent,
-    );
+    const calculatedCost = getCostPerM2({
+      widthMm: draft.widthMm,
+      lengthMm: draft.lengthMm,
+      boardPrice: draft.boardPrice,
+      wastePercent: draft.wastePercent,
+    });
     const finalDraft = { ...draft, costPerM2: calculatedCost };
 
     if (editingId) {
@@ -716,13 +726,14 @@ export function MaterialsCatalog({
           </div>
           <div className="catalog-form__field">
             <label>Costo / m² calculado (con merma)</label>
-            <div className="catalog-form__calculated-value" style={{ padding: '8px', background: '#f5f5f5', borderRadius: '4px', fontWeight: 'bold' }}>
-              ${calcMaterialCostPerM2(
-                draft.widthMm,
-                draft.lengthMm,
-                draft.boardPrice,
-                draft.wastePercent
-              ).toFixed(2)}
+            <div className="catalog-form__calculated-value">
+              $
+              {getCostPerM2({
+                widthMm: draft.widthMm,
+                lengthMm: draft.lengthMm,
+                boardPrice: draft.boardPrice,
+                wastePercent: draft.wastePercent,
+              }).toFixed(2)}
             </div>
           </div>
           <div className="catalog-form__field">
