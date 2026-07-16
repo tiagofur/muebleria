@@ -29,6 +29,7 @@ import type {
   Workspace,
 } from '@muebles/domain';
 import {
+  calcMaterialCostPerM2,
   calcProjectBreakdown,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
@@ -758,8 +759,31 @@ function AppContent({
     return map;
   }, [optionGroups]);
 
+  const getMaterialCostPerM2 = useCallback(
+    (input: {
+      widthMm: number;
+      lengthMm: number;
+      boardPrice: number;
+      wastePercent: number;
+    }) =>
+      calcMaterialCostPerM2(
+        input.widthMm,
+        input.lengthMm,
+        input.boardPrice,
+        input.wastePercent,
+      ),
+    [],
+  );
+
   const createMaterial = (draft: MaterialDraft) => {
     const code = draft.code.trim();
+    // Domain formula in the shell only (issue #14 — UI must not import calc).
+    const costPerM2 = calcMaterialCostPerM2(
+      draft.widthMm,
+      draft.lengthMm,
+      draft.boardPrice,
+      draft.wastePercent,
+    );
     const item: MaterialBoard = {
       id: newId(),
       code,
@@ -769,7 +793,7 @@ function AppContent({
       thicknessMm: draft.thicknessMm,
       grainDefault: draft.grainDefault,
       boardPrice: draft.boardPrice,
-      costPerM2: draft.costPerM2,
+      costPerM2,
       wastePercent: draft.wastePercent,
       defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
       notes: optionalNotes(draft.notes),
@@ -780,6 +804,12 @@ function AppContent({
   };
 
   const updateMaterial = (id: string, draft: MaterialDraft) => {
+    const costPerM2 = calcMaterialCostPerM2(
+      draft.widthMm,
+      draft.lengthMm,
+      draft.boardPrice,
+      draft.wastePercent,
+    );
     patchCatalog((c) => ({
       ...c,
       materials: c.materials.map((m) =>
@@ -793,7 +823,7 @@ function AppContent({
               thicknessMm: draft.thicknessMm,
               grainDefault: draft.grainDefault,
               boardPrice: draft.boardPrice,
-              costPerM2: draft.costPerM2,
+              costPerM2,
               wastePercent: draft.wastePercent,
               defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
               notes: optionalNotes(draft.notes),
@@ -1458,6 +1488,7 @@ function AppContent({
           onUpdate={updateMaterial}
           onDeactivate={(id) => setMaterialActive(id, false)}
           onReactivate={(id) => setMaterialActive(id, true)}
+          getCostPerM2={getMaterialCostPerM2}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
         />

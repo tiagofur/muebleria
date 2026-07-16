@@ -739,7 +739,7 @@ export function ProjectsScreen({
             ) : null}
             {modulesForAdd.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.code} — {m.name}
+                {m.name} — {m.code}
               </option>
             ))}
           </select>
@@ -791,7 +791,7 @@ export function ProjectsScreen({
                   <option value="">Seleccionar…</option>
                   {options.map((opt) => (
                     <option key={opt.id} value={opt.id}>
-                      {opt.code} — {opt.name}
+                      {opt.name} — {opt.code}
                     </option>
                   ))}
                 </select>
@@ -991,7 +991,7 @@ export function ProjectsScreen({
                       <h4 className="project-item-card__title">
                         Ítem {index + 1}:{' '}
                         {mod
-                          ? `${mod.code} — ${mod.name}`
+                          ? `${mod.name} — ${mod.code}`
                           : `Módulo desconocido (${item.moduleId})`}
                       </h4>
                       {confirmRemoveItemId === item.id ? (
@@ -1076,7 +1076,7 @@ export function ProjectsScreen({
                                 <option value="">Seleccionar…</option>
                                 {options.map((opt) => (
                                   <option key={opt.id} value={opt.id}>
-                                    {opt.code} — {opt.name}
+                                    {opt.name} — {opt.code}
                                   </option>
                                 ))}
                               </select>

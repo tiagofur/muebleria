@@ -240,13 +240,16 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 		if err != nil {
 			return nil, err
 		}
-		for mRows.Next() {
-			var eid string
-			if err := mRows.Scan(&eid); err == nil {
-				og.OptionIDs = append(og.OptionIDs, eid)
+		// Nested cursor: defer immediately so early returns cannot leak (#17).
+		func() {
+			defer mRows.Close()
+			for mRows.Next() {
+				var eid string
+				if err := mRows.Scan(&eid); err == nil {
+					og.OptionIDs = append(og.OptionIDs, eid)
+				}
 			}
-		}
-		mRows.Close()
+		}()
 		if og.OptionIDs == nil {
 			og.OptionIDs = []string{}
 		}

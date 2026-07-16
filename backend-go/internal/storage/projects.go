@@ -87,25 +87,28 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		if err != nil {
 			return cat, err
 		}
-		for pRows.Next() {
-			var p domain.BoardPart
-			var code *string
-			var l1, l2, w1, w2 bool
-			err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
-			if err == nil {
-				if code != nil {
-					p.Code = *code
+		// defer immediately so early returns / scan errors cannot leak the cursor (#17).
+		func() {
+			defer pRows.Close()
+			for pRows.Next() {
+				var p domain.BoardPart
+				var code *string
+				var l1, l2, w1, w2 bool
+				err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
+				if err == nil {
+					if code != nil {
+						p.Code = *code
+					}
+					p.Edges = []domain.EdgeAssignment{
+						{Side: "L1", Enabled: l1},
+						{Side: "L2", Enabled: l2},
+						{Side: "W1", Enabled: w1},
+						{Side: "W2", Enabled: w2},
+					}
+					m.BoardParts = append(m.BoardParts, p)
 				}
-				p.Edges = []domain.EdgeAssignment{
-					{Side: "L1", Enabled: l1},
-					{Side: "L2", Enabled: l2},
-					{Side: "W1", Enabled: w1},
-					{Side: "W2", Enabled: w2},
-				}
-				m.BoardParts = append(m.BoardParts, p)
 			}
-		}
-		pRows.Close()
+		}()
 
 		// Cargar herrajes de este módulo
 		hwQuery := `
@@ -117,22 +120,24 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		if err != nil {
 			return cat, err
 		}
-		for hRows.Next() {
-			var hl domain.HardwareLine
-			var desc *string
-			var hwID *string
-			err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID)
-			if err == nil {
-				if desc != nil {
-					hl.DescriptionOverride = *desc
+		func() {
+			defer hRows.Close()
+			for hRows.Next() {
+				var hl domain.HardwareLine
+				var desc *string
+				var hwID *string
+				err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID)
+				if err == nil {
+					if desc != nil {
+						hl.DescriptionOverride = *desc
+					}
+					if hwID != nil {
+						hl.HardwareID = *hwID
+					}
+					m.HardwareLines = append(m.HardwareLines, hl)
 				}
-				if hwID != nil {
-					hl.HardwareID = *hwID
-				}
-				m.HardwareLines = append(m.HardwareLines, hl)
 			}
-		}
-		hRows.Close()
+		}()
 
 		if m.BoardParts == nil {
 			m.BoardParts = []domain.BoardPart{}
@@ -222,14 +227,16 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		if err != nil {
 			return nil, err
 		}
-		item.OptionChoices = make(map[string]string)
-		for cRows.Next() {
-			var code, choiceID string
-			if err := cRows.Scan(&code, &choiceID); err == nil {
-				item.OptionChoices[code] = choiceID
+		func() {
+			defer cRows.Close()
+			item.OptionChoices = make(map[string]string)
+			for cRows.Next() {
+				var code, choiceID string
+				if err := cRows.Scan(&code, &choiceID); err == nil {
+					item.OptionChoices[code] = choiceID
+				}
 			}
-		}
-		cRows.Close()
+		}()
 
 		items = append(items, item)
 	}
@@ -328,24 +335,26 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		`
 		spRows, err := s.Pool.Query(ctx, pricesQuery, p.ID)
 		if err == nil {
-			snapshot.MaterialCostPerM2 = make(map[string]float64)
-			snapshot.EdgeCostPerMl = make(map[string]float64)
-			snapshot.HardwareCostPerUnit = make(map[string]float64)
-			for spRows.Next() {
-				var etype, eid string
-				var val float64
-				if err := spRows.Scan(&etype, &eid, &val); err == nil {
-					switch etype {
-					case "material":
-						snapshot.MaterialCostPerM2[eid] = val
-					case "edge":
-						snapshot.EdgeCostPerMl[eid] = val
-					case "hardware":
-						snapshot.HardwareCostPerUnit[eid] = val
+			func() {
+				defer spRows.Close()
+				snapshot.MaterialCostPerM2 = make(map[string]float64)
+				snapshot.EdgeCostPerMl = make(map[string]float64)
+				snapshot.HardwareCostPerUnit = make(map[string]float64)
+				for spRows.Next() {
+					var etype, eid string
+					var val float64
+					if err := spRows.Scan(&etype, &eid, &val); err == nil {
+						switch etype {
+						case "material":
+							snapshot.MaterialCostPerM2[eid] = val
+						case "edge":
+							snapshot.EdgeCostPerMl[eid] = val
+						case "hardware":
+							snapshot.HardwareCostPerUnit[eid] = val
+						}
 					}
 				}
-			}
-			spRows.Close()
+			}()
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) && err.Error() != "no rows in result set" {
 		// Error real, no "sin filas"

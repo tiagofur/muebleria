@@ -246,7 +246,9 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 				return domain.QuoteBreakdown{}, err
 			}
 
-			lineCost := float64(line.Quantity*item.Quantity) * hw.CostPerUnit
+			// Cast each qty to float64 before multiply — int*int can overflow
+			// on 32-bit before conversion (issue #10; TS multiplies as float).
+			lineCost := float64(line.Quantity) * float64(item.Quantity) * hw.CostPerUnit
 			hardwareTotal += lineCost
 		}
 

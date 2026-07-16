@@ -201,6 +201,72 @@ func TestCalcProjectBreakdown(t *testing.T) {
 	assertClose("SalePrice", breakdown.SalePrice, 353.6*1.35+700+200)
 }
 
+// TestHardwareLineCost_FloatQtyMultiply locks issue #10:
+// line.qty and item.qty must be cast to float64 before multiply so int
+// overflow cannot silence wrong costs (TS multiplies as float).
+func TestHardwareLineCost_FloatQtyMultiply(t *testing.T) {
+	// Use large-but-safe int values: product still fits int64, but the
+	// formula path must be float64(a)*float64(b)*cost, not float64(a*b)*cost.
+	const lineQty = 1_000_000
+	const itemQty = 2
+	const unitCost = 0.01
+	want := float64(lineQty) * float64(itemQty) * unitCost // 20000
+
+	catalog := domain.Catalog{
+		Materials: []domain.MaterialBoard{
+			{ID: "mat-1", Code: "T", Name: "T", CostPerM2: 1, Active: true},
+		},
+		Hardware: []domain.Hardware{
+			{ID: "hw-1", Code: "H", Name: "H", Unit: domain.UnitPiece, CostPerUnit: unitCost, Active: true},
+		},
+		OptionGroups: []domain.OptionGroup{
+			{ID: "g1", Code: "INTERIOR", Name: "I", Kind: "board", Required: true, OptionIDs: []string{"mat-1"}},
+			{ID: "g2", Code: "BISAGRA", Name: "B", Kind: "hardware", Required: true, OptionIDs: []string{"hw-1"}},
+		},
+		Modules: []domain.Module{
+			{
+				ID:            "mod-1",
+				Code:          "M",
+				Name:          "M",
+				BaseLaborCost: 0,
+				BoardParts: []domain.BoardPart{
+					{
+						ID: "p1", Description: "P", Quantity: 1,
+						LengthMm: 100, WidthMm: 100, OptionRole: "INTERIOR",
+						Edges: []domain.EdgeAssignment{
+							{Side: "L1", Enabled: false},
+							{Side: "L2", Enabled: false},
+							{Side: "W1", Enabled: false},
+							{Side: "W2", Enabled: false},
+						},
+					},
+				},
+				HardwareLines: []domain.HardwareLine{
+					{ID: "hl1", Quantity: lineQty, OptionRole: "BISAGRA"},
+				},
+			},
+		},
+	}
+	project := domain.Project{
+		ID: "proj-1", Name: "P", CustomerID: "c", Currency: "MXN",
+		MarginFactor: 1, LaborFixedCost: 0, Status: domain.StatusDraft,
+		Items: []domain.ProjectItem{
+			{
+				ID: "i1", ModuleID: "mod-1", Quantity: itemQty,
+				OptionChoices: map[string]string{"INTERIOR": "mat-1", "BISAGRA": "hw-1"},
+			},
+		},
+	}
+
+	bd, err := CalcProjectBreakdown(project, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(bd.HardwareTotal-want) > 1e-9 {
+		t.Errorf("HardwareTotal = %v, want %v (float qty multiply)", bd.HardwareTotal, want)
+	}
+}
+
 // TestCalcProjectBreakdown_NoIntermediateRounding locks issue #7:
 // domain engines must NOT round to 2 decimals; only presentation/export may.
 // Uses costs that produce >2 fractional digits so Round(x*100)/100 would diverge.
