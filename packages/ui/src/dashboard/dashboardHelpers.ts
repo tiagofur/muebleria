@@ -93,9 +93,17 @@ export function sumMonthlyQuotedTotal(
   return total;
 }
 
-/** Format money for dashboard stats (2 decimals). */
+/**
+ * Format money for dashboard stats (locale thousands + 2 decimals + MXN).
+ * Display-only; no domain conversion. Uses es-MX grouping for scanability.
+ */
 export function formatDashboardMoney(n: number): string {
-  return n.toFixed(2);
+  const value = Number.isFinite(n) ? n : 0;
+  const amount = value.toLocaleString('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `$${amount} MXN`;
 }
 
 /**

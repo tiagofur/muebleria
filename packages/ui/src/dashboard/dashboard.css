@@ -116,6 +116,21 @@
   line-height: var(--leading-tight);
 }
 
+/* One stat carries the money story; counts stay quieter. */
+.dashboard-stat--emphasis {
+  border-color: var(--border-brand);
+  background: var(--surface-selected);
+}
+
+.dashboard-stat--emphasis .dashboard-stat__icon {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+
+.dashboard-stat--emphasis .dashboard-stat__value {
+  color: var(--text-brand);
+}
+
 .dashboard__section {
   display: flex;
   flex-direction: column;
@@ -296,10 +311,8 @@
 .dashboard-getting-started__step-label {
   margin: 0;
   font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .dashboard-getting-started__item-title {
@@ -324,13 +337,4 @@
   color: var(--success-700);
 }
 
-.dashboard__empty {
-  margin: 0;
-  padding: var(--space-6);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-  text-align: center;
-}
+
