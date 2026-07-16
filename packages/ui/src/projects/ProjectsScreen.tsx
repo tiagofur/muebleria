@@ -40,6 +40,7 @@ import {
   Package,
   Pencil,
   Plus,
+  SearchX,
   Trash2,
 } from 'lucide-react';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
@@ -864,9 +865,14 @@ export function ProjectsScreen({
           onAction={startCreate}
         />
       ) : isFilterEmpty ? (
-        <p className="project-filter-empty">
-          No hay proyectos que coincidan con la búsqueda.
-        </p>
+        <EmptyState
+          variant="no-results"
+          icon={SearchX}
+          title="Sin resultados"
+          description="No hay proyectos que coincidan con la búsqueda."
+          actionLabel="Limpiar filtros"
+          onAction={() => setSearch('')}
+        />
       ) : (
         <ul className="project-card-grid" aria-label="Lista de proyectos">
           {filtered.map((project) => (

@@ -1,19 +1,14 @@
 # Sesión actual
 
-- **PR:** feat/ux-loading-feedback-30 — issue #30 (rebased/merged con main post-#41)
-- **Merged main:** UI Alto #27–#29 (pickers, tabs, identity)
+- **Branch:** feat/ux-empty-states-32
+- **Issue:** [#32](https://github.com/tiagofur/muebleria/issues/32) — Empty states consistentes
 
-## #30 Feedback de carga unificado
-- Primitivas: Spinner, PageLoading, InlineLoading, ListSkeleton, submitBusyLabel
-- Wire: workspace gate, Users, Dashboard/Projects/Modules loading prop, breakdown InlineLoading
-- design.md §4.7
+## Plan
+1. `EmptyState` variant `empty` | `no-results`
+2. Cablear en listas: módulos, proyectos, materiales, cantos, herrajes, grupos, clientes, usuarios
+3. design.md §4.5
+4. Tests: EmptyState + Modules + Materials
 
-## Backlog listo (menor id)
-
-| Feature | Issue | Título |
-|---------|-------|--------|
-| **F029** | [#35](https://github.com/tiagofur/muebleria/issues/35) | Opciones a nivel proyecto + override por línea |
-| F030 | [#36](https://github.com/tiagofur/muebleria/issues/36) | Export cotización comercial (Excel) |
-
-## Verificación
-- Tras resolver conflictos: re-correr tests UI + web
+## Estado
+- Implementado; tests de #32 verdes
+- Modal body-scroll flake preexistente en suite completa (pasa en aislamiento)

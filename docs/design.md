@@ -404,12 +404,25 @@ Position: **top-right**. Auto-dismiss: 4s. Máximo 3 simultáneos.
 
 ### 4.5 Estados Vacíos
 
+Componente: `EmptyState` (`variant: 'empty' | 'no-results'`).
+
+| Caso | Cuándo | UI |
+|------|--------|-----|
+| **Lista vacía** (`empty`) | No hay datos en el workspace | Icono de sección + título + descripción + CTA primario `+ Nuevo…` |
+| **Sin resultados** (`no-results`) | Hay datos pero búsqueda/chips/categoría no matchean | Icono `SearchX` + título «Sin resultados» + descripción + CTA secundario **Limpiar filtros** |
+
 ```
-         [Icono grande 48px]
-   [Título: "No hay materiales"]
- [Subtítulo explicativo de qué hacer]
-       [Botón "+ Agregar …"]
+empty:                          no-results:
+  [Icono sección 48px]            [SearchX 48px]
+  [Título: "No hay materiales"]   [Título: "Sin resultados"]
+  [Qué hacer a continuación]      [No hay ítems que coincidan…]
+  [Botón "+ Agregar …"]           [Botón "Limpiar filtros"]
 ```
+
+**Reglas:**
+- Los conteos/filtros del sidebar (p. ej. categorías) no se confunden con empty: empty = catálogo vacío.
+- «Limpiar filtros» restaura defaults de la pantalla (search vacío, chips al default, categoría «Todas»).
+- Dashboard hub de onboarding (workspace casi vacío) es issue aparte; aquí solo listas.
 
 ### 4.6 Búsqueda y Filtros
 

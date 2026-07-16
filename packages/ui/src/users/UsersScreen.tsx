@@ -3,7 +3,15 @@
  * Only visible when session.user.role === 'admin'.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CheckCircle2, MinusCircle, RefreshCw, Settings2, Trash2, Users } from 'lucide-react';
+import {
+  CheckCircle2,
+  MinusCircle,
+  RefreshCw,
+  SearchX,
+  Settings2,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { EmptyState, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
@@ -149,11 +157,28 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
 
       {loading ? (
         <PageLoading label="Cargando usuarios…" data-testid="users-loading" />
-      ) : filtered.length === 0 ? (
+      ) : users.length === 0 ? (
         <EmptyState
           icon={Users}
-          title={filter === 'pending' ? 'Sin solicitudes pendientes' : 'Sin usuarios'}
-          description={filter === 'pending' ? 'Todos los usuarios han sido procesados' : 'No hay usuarios en esta categoría'}
+          title="Sin usuarios"
+          description="Todavía no hay cuentas registradas en el sistema."
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          variant="no-results"
+          icon={SearchX}
+          title={
+            filter === 'pending'
+              ? 'Sin solicitudes pendientes'
+              : 'Sin usuarios en esta categoría'
+          }
+          description={
+            filter === 'pending'
+              ? 'Todos los usuarios han sido procesados.'
+              : 'Probá con otro filtro de estado.'
+          }
+          actionLabel="Ver todos"
+          onAction={() => setFilter('all')}
         />
       ) : (
         <div className="users-table-wrap">

@@ -15,7 +15,11 @@ export {
 } from './Toast';
 export { SearchInput, type SearchInputProps } from './SearchInput';
 export { StatusChips, type StatusChipsProps } from './StatusChips';
-export { EmptyState, type EmptyStateProps } from './EmptyState';
+export {
+  EmptyState,
+  type EmptyStateProps,
+  type EmptyStateVariant,
+} from './EmptyState';
 export {
   ErrorBoundary,
   type ErrorBoundaryProps,

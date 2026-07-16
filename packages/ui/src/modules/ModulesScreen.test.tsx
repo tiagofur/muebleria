@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -212,6 +212,27 @@ describe('ModulesScreen structure (F021)', () => {
     expect(
       screen.getAllByRole('button', { name: /Nuevo mueble/i }).length,
     ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows no-results EmptyState and clears search + category filter', async () => {
+    const user = userEvent.setup();
+    renderScreen({ onCreateCategory: vi.fn() });
+
+    await user.type(screen.getByLabelText(/Buscar muebles/i), 'zzzz-no-match');
+    await waitFor(() => {
+      expect(screen.getByTestId('empty-state-no-results')).toBeTruthy();
+    });
+    expect(screen.getByText('Sin resultados')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /Limpiar filtros/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('empty-state-no-results')).toBeNull();
+    });
+    expect(screen.getByTestId('module-card-mod-1')).toBeTruthy();
+    expect(screen.getByTestId('module-card-mod-2')).toBeTruthy();
+    expect(
+      (screen.getByLabelText(/Buscar muebles/i) as HTMLInputElement).value,
+    ).toBe('');
   });
 });
 
