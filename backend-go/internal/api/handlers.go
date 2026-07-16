@@ -22,6 +22,8 @@ type Server struct {
 	allowedOrigins []string
 	rateLimitRPS   float64
 	rateLimitBurst int
+	// MediaDir filesystem root for catalog images (F040). Empty disables upload.
+	MediaDir string
 }
 
 func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
@@ -32,6 +34,13 @@ func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimit
 		rateLimitRPS:   rateLimitRPS,
 		rateLimitBurst: rateLimitBurst,
 	}
+}
+
+// NewServerWithMedia is NewServer plus media storage directory (F040).
+func NewServerWithMedia(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int, mediaDir string) *Server {
+	s := NewServer(store, jwtSecret, allowedOrigins, rateLimitRPS, rateLimitBurst)
+	s.MediaDir = mediaDir
+	return s
 }
 
 // Helpers para JSON

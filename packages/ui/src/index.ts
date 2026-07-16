@@ -57,6 +57,7 @@ export {
 
 export {
   ModulesScreen,
+  ModuleShowcase,
   boardPartToDraft,
   defaultOptionChoicesForModule,
   edgesFromFlags,
@@ -83,6 +84,7 @@ export {
   type HardwareLineDraft,
   type ModuleDraft,
   type ModulesScreenProps,
+  type ModuleShowcaseProps,
 } from './modules';
 
 export {
@@ -134,6 +136,7 @@ export {
 
 export {
   BrandMark,
+  CatalogImage,
   EmptyState,
   ErrorBoundary,
   formatMoneyDisplay,

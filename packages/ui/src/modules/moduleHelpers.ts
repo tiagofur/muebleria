@@ -53,6 +53,8 @@ export type ModuleDraft = {
   externalHeight: string;
   externalDepth: string;
   baseLaborCost: string;
+  /** Relative media path (F040). */
+  imageUrl: string;
   boardParts: BoardPartDraft[];
   hardwareLines: HardwareLineDraft[];
 };
@@ -69,6 +71,7 @@ export function emptyModuleDraft(): ModuleDraft {
     externalHeight: '',
     externalDepth: '',
     baseLaborCost: '',
+    imageUrl: '',
     boardParts: [],
     hardwareLines: [],
   };
@@ -168,6 +171,7 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     externalDepth: mod.externalDims ? String(mod.externalDims.depth) : '',
     baseLaborCost:
       mod.baseLaborCost !== undefined ? String(mod.baseLaborCost) : '',
+    imageUrl: mod.imageUrl ?? '',
     boardParts: mod.boardParts.map(boardPartToDraft),
     hardwareLines: mod.hardwareLines.map(hardwareLineToDraft),
   };

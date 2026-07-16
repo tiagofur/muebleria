@@ -756,7 +756,7 @@
         "docs/prd.md §6.6.7 COST-01",
         "https://github.com/tiagofur/muebleria/issues/71"
       ],
-      "status": "in_progress",
+      "status": "done",
       "github_issue": 71
     },
     {
@@ -775,7 +775,7 @@
         "docs/prd.md §6.6.6",
         "https://github.com/tiagofur/muebleria/issues/72"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "github_issue": 72
     },
     {

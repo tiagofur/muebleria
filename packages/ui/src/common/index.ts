@@ -3,6 +3,7 @@
  */
 
 export { BrandMark, type BrandMarkProps } from './BrandMark';
+export { CatalogImage, type CatalogImageProps } from './CatalogImage';
 export { Modal, type ModalProps, type ModalSize } from './Modal';
 export {
   ToastProvider,

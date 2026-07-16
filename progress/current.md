@@ -1,5 +1,5 @@
 # Sesión actual
 
-- **Branch:** `feat/hide-costs-vendedor-71`
-- **Issue:** [#71](https://github.com/tiagofur/muebleria/issues/71) — Costos ocultos vendedor (F039)
+- **Branch:** `feat/catalog-images-72`
+- **Issue:** [#72](https://github.com/tiagofur/muebleria/issues/72) — Imágenes + vitrina (F040)
 - **Estado:** implementado, listo PR

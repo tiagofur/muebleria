@@ -45,6 +45,7 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
     thickness_mm: m.thicknessMm,
     grain_default: m.grainDefault,
     board_price: m.boardPrice,
+    image_url: m.imageUrl ?? '',
     waste_percent: m.wastePercent,
     cost_per_m2: m.costPerM2,
     default_edge_band_id: m.defaultEdgeBandId ?? '',
@@ -65,6 +66,7 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     thicknessMm: num(raw.thickness_mm ?? raw.thicknessMm),
     grainDefault: bool(raw.grain_default ?? raw.grainDefault),
     boardPrice: num(raw.board_price ?? raw.boardPrice),
+    imageUrl: str(raw.image_url ?? raw.imageUrl) || undefined,
     wastePercent: num(raw.waste_percent ?? raw.wastePercent),
     costPerM2: num(raw.cost_per_m2 ?? raw.costPerM2),
     defaultEdgeBandId: defaultEdge,
@@ -108,6 +110,7 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     name: h.name,
     unit: h.unit,
     cost_per_unit: h.costPerUnit,
+    image_url: h.imageUrl ?? '',
     notes: h.notes ?? '',
     active: h.active,
   };
@@ -121,6 +124,7 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     name: str(raw.name),
     unit: (unit === 'set' || unit === 'meter' ? unit : 'piece') as Hardware['unit'],
     costPerUnit: num(raw.cost_per_unit ?? raw.costPerUnit),
+    imageUrl: str(raw.image_url ?? raw.imageUrl) || undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
   };
@@ -239,6 +243,7 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     height_mm: m.externalDims?.height ?? 0,
     depth_mm: m.externalDims?.depth ?? 0,
     categoryId: m.categoryId ?? '',
+    image_url: m.imageUrl ?? '',
     notes: m.notes ?? '',
     board_parts: m.boardParts.map(boardPartToApi),
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
@@ -254,12 +259,14 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const hasDims = w > 0 || h > 0 || d > 0;
   const categoryId = str(raw.categoryId ?? raw.category_id);
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
+  const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
     categoryId: categoryId || undefined,
     baseLaborCost: labor > 0 ? labor : undefined,
+    imageUrl,
     notes: str(raw.notes) || undefined,
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
     boardParts: Array.isArray(parts)

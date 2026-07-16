@@ -60,6 +60,12 @@ func AuthMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
+			// Allow ?token= for <img src> catalog media (F040); header still preferred.
+			if authHeader == "" {
+				if q := strings.TrimSpace(r.URL.Query().Get("token")); q != "" {
+					authHeader = "Bearer " + q
+				}
+			}
 			if authHeader == "" {
 				respondWithError(w, http.StatusUnauthorized, "missing authorization header")
 				return

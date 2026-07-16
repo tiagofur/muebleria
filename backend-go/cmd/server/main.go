@@ -45,8 +45,8 @@ func main() {
 	//   go run ./cmd/admin create --email <email>
 	//   go run ./cmd/admin reset-password --email <email>
 
-	// Crear Server API
-	serverAPI := api.NewServer(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst)
+	// Crear Server API (media dir for catalog images F040)
+	serverAPI := api.NewServerWithMedia(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.MediaDir)
 	handler := api.RegisterRoutes(serverAPI)
 
 	// Timeouts mitigate slowloris and hung clients (issue #20).

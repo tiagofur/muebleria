@@ -1,51 +1,43 @@
-# Dependencies
-node_modules/
-.pnpm-store/
 
+!.env.example
+!.vscode/extensions.json
 # Build
-dist/
-build/
-out/
-*.tsbuildinfo
-
-# Test / coverage
-coverage/
-
+# Dependencies
+# Electron
 # Env / local
+# Impeccable live/critique session state (keep config tracked)
+# Local agent/harness state (plans, scratch)
+# Logs / caches
+# OS / IDE
+# Temp
+# Test / coverage
+*.log
+*.tmp
+*.tsbuildinfo
+.DS_Store
+.cache/
 .env
 .env.*
-!.env.example
-
-# Logs / caches
-*.log
-npm-debug.log*
-pnpm-debug.log*
-.vite/
-.turbo/
-.cache/
-
-# OS / IDE
-.DS_Store
 .idea/
-.vscode/*
-!.vscode/extensions.json
-
-# Local agent/harness state (plans, scratch)
-.zcode/
-
-# Impeccable live/critique session state (keep config tracked)
-.impeccable/live/sessions/
+.impeccable-live.json
+.impeccable-live/
+.impeccable/critique/
 .impeccable/live/annotations/
 .impeccable/live/server.json
-.impeccable/critique/
-.impeccable-live/
-.impeccable-live.json
-
-
-# Electron
-apps/desktop/dist-electron/
-
-# Temp
-*.tmp
-tmp/
+.impeccable/live/sessions/
+.pnpm-store/
 .temp/
+.turbo/
+.vite/
+.vscode/*
+.zcode/
+apps/desktop/dist-electron/
+build/
+coverage/
+data/media/
+dist/
+node_modules/
+npm-debug.log*
+out/
+pnpm-debug.log*
+tmp/

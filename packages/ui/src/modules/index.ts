@@ -12,6 +12,11 @@ export {
 } from './ModulesScreen';
 
 export {
+  ModuleShowcase,
+  type ModuleShowcaseProps,
+} from './ModuleShowcase';
+
+export {
   defaultOptionChoicesForModule,
   edgesFromFlags,
   emptyBoardPartDraft,
