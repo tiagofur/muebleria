@@ -11,3 +11,10 @@ export {
   type AppShellProps,
   type AppShellSessionUser,
 } from './AppShell';
+
+export {
+  CommandPalette,
+  useCommandPaletteHotkey,
+  type CommandPaletteItem,
+  type CommandPaletteProps,
+} from './CommandPalette';

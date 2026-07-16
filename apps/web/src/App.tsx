@@ -73,6 +73,7 @@ import {
   CustomersScreen,
   type CustomerDraft,
   PageLoading,
+  type CommandPaletteItem,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -757,6 +758,41 @@ function AppContent({
     setMaterialsCreateKey((k) => k + 1);
     navigate(pathForNav('materials'));
   }, [navigate]);
+
+  /** Recent entities for Cmd+K palette (issue #54). */
+  const commandItems = useMemo((): CommandPaletteItem[] => {
+    const projectItems: CommandPaletteItem[] = selectRecentProjects(
+      projects,
+      12,
+    ).map((p) => ({
+      id: `project:${p.id}`,
+      label: p.name,
+      group: 'Cotizaciones',
+      keywords: resolveCustomerName(p.customerId, customers),
+    }));
+    const moduleItems: CommandPaletteItem[] = [...modules]
+      .slice(0, 12)
+      .map((m) => ({
+        id: `module:${m.id}`,
+        label: `${m.code} — ${m.name}`,
+        group: 'Muebles',
+        keywords: m.code,
+      }));
+    return [...projectItems, ...moduleItems];
+  }, [projects, modules, customers]);
+
+  const onCommandItem = useCallback(
+    (id: string) => {
+      if (id.startsWith('project:')) {
+        navigate(projectPath(id.slice('project:'.length)));
+        return;
+      }
+      if (id.startsWith('module:')) {
+        navigate(modulePath(id.slice('module:'.length)));
+      }
+    },
+    [navigate],
+  );
 
   const groupLabels = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1467,6 +1503,8 @@ function AppContent({
         authUser ? { email: authUser.email, role: authUser.role } : null
       }
       showAdminUsers={showAdminUsers}
+      commandItems={commandItems}
+      onCommandItem={onCommandItem}
     >
       {navId === 'home' ? (
         <Dashboard

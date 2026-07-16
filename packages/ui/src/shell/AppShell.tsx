@@ -5,6 +5,7 @@
 
 import {
   useCallback,
+  useMemo,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -27,6 +28,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
+import {
+  CommandPalette,
+  useCommandPaletteHotkey,
+  type CommandPaletteItem,
+} from './CommandPalette';
 import './appShell.css';
 
 /** Stable nav destinations for AppShell (shell wires screens). */
@@ -69,6 +75,13 @@ export type AppShellProps = {
    * anchors so middle-click / copy-link work; plain click still calls onNavigate.
    */
   readonly hrefForNav?: (id: AppNavId) => string;
+  /**
+   * Extra command-palette entries (recent quotes/modules, etc.).
+   * Nav sections are always included. Cmd/Ctrl+K toggles the palette.
+   */
+  readonly commandItems?: readonly CommandPaletteItem[];
+  /** Called when a non-nav command item is chosen (`id` as provided). */
+  readonly onCommandItem?: (id: string) => void;
 };
 
 function roleLabel(role: string): string {
@@ -160,8 +173,11 @@ export function AppShell({
   sessionMode,
   showAdminUsers = false,
   hrefForNav,
+  commandItems = [],
+  onCommandItem,
 }: AppShellProps): ReactNode {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const navSections = resolveNavSections(showAdminUsers);
 
   const handleNavigate = useCallback(
@@ -170,6 +186,37 @@ export function AppShell({
       setSidebarOpen(false);
     },
     [onNavigate],
+  );
+
+  const togglePalette = useCallback(() => {
+    setPaletteOpen((open) => !open);
+  }, []);
+
+  useCommandPaletteHotkey(togglePalette, true);
+
+  const paletteItems = useMemo((): CommandPaletteItem[] => {
+    const navItems: CommandPaletteItem[] = navSections.flatMap((section) =>
+      section.items.map((item) => ({
+        id: `nav:${item.id}`,
+        label: item.label,
+        group: 'Navegación',
+        keywords: section.label,
+        icon: item.icon,
+      })),
+    );
+    return [...navItems, ...commandItems];
+  }, [navSections, commandItems]);
+
+  const onPaletteSelect = useCallback(
+    (id: string) => {
+      if (id.startsWith('nav:')) {
+        const navId = id.slice(4) as AppNavId;
+        handleNavigate(navId);
+        return;
+      }
+      onCommandItem?.(id);
+    },
+    [handleNavigate, onCommandItem],
   );
 
   const onNavClick = useCallback(
@@ -337,6 +384,13 @@ export function AppShell({
 
         <main className="app-content">{children}</main>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        items={paletteItems}
+        onSelect={onPaletteSelect}
+      />
     </div>
   );
 }
