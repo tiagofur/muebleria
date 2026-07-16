@@ -1,19 +1,14 @@
 # Sesión actual
 
-- **PR:** feat/ux-loading-feedback-30 — issue #30 (rebased/merged con main post-#41)
-- **Merged main:** UI Alto #27–#29 (pickers, tabs, identity)
+- **Branch:** feat/ux-category-counts-31
+- **Issue:** [#31](https://github.com/tiagofur/muebleria/issues/31) — Conteos por categoría en filtro de Muebles
 
-## #30 Feedback de carga unificado
-- Primitivas: Spinner, PageLoading, InlineLoading, ListSkeleton, submitBusyLabel
-- Wire: workspace gate, Users, Dashboard/Projects/Modules loading prop, breakdown InlineLoading
-- design.md §4.7
+## Plan
+1. Memo de conteos con `filterModulesByCategory` (catálogo completo, no search)
+2. Mostrar count en Todas / Sin categoría / nodos del árbol
+3. Estilo secundario con tokens
+4. Test de pantalla (2 cats, 2 mods + search no baja conteos)
 
-## Backlog listo (menor id)
-
-| Feature | Issue | Título |
-|---------|-------|--------|
-| **F029** | [#35](https://github.com/tiagofur/muebleria/issues/35) | Opciones a nivel proyecto + override por línea |
-| F030 | [#36](https://github.com/tiagofur/muebleria/issues/36) | Export cotización comercial (Excel) |
-
-## Verificación
-- Tras resolver conflictos: re-correr tests UI + web
+## Estado
+- Implementado en `ModulesScreen` + CSS + test
+- Verificando con `pnpm --filter @muebles/ui test`
