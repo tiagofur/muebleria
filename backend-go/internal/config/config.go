@@ -36,7 +36,8 @@ func LoadConfig() (Config, error) {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		// Default for local development only. Production must set DATABASE_URL.
+		// Default for local development only (sslmode=disable).
+		// Production MUST set DATABASE_URL with sslmode=require (or verify-full).
 		dbURL = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
 	}
 

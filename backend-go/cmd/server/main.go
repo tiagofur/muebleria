@@ -49,14 +49,17 @@ func main() {
 	serverAPI := api.NewServer(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst)
 	handler := api.RegisterRoutes(serverAPI)
 
+	// Timeouts mitigate slowloris and hung clients (issue #20).
+	// TLS/HSTS: this process serves plain HTTP; terminate TLS at a reverse
+	// proxy (Caddy/nginx) in production and set DATABASE_URL with sslmode=require.
 	srv := &http.Server{
-		Addr:            ":" + cfg.Port,
-		Handler:         handler,
-		ReadTimeout:     10 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:    10 * time.Second,
-		IdleTimeout:     120 * time.Second,
-		MaxHeaderBytes:  1 << 20, // 1 MiB
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
 	}
 
 	// Ejecución asíncrona del servidor

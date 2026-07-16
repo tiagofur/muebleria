@@ -296,6 +296,11 @@ describe('ModulesScreen categories (F025)', () => {
     expect(screen.getByTestId('category-filter-panel')).toBeTruthy();
     expect(screen.getByTestId('module-card-mod-1')).toBeTruthy();
     expect(screen.getByTestId('module-card-mod-2')).toBeTruthy();
+    // Filter panel is filter-only: no inline edit/delete admin list
+    expect(screen.queryByTestId('manage-categories-list')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /Editar Cocina/i }),
+    ).toBeNull();
 
     await user.click(screen.getByTestId('category-filter-uncategorized'));
     expect(screen.queryByTestId('module-card-mod-1')).toBeNull();
@@ -304,6 +309,45 @@ describe('ModulesScreen categories (F025)', () => {
     await user.click(screen.getByTestId('category-filter-cat-root'));
     expect(screen.getByTestId('module-card-mod-1')).toBeTruthy();
     expect(screen.queryByTestId('module-card-mod-2')).toBeNull();
+  });
+
+  it('opens manage-categories modal for create/edit/delete, not inline admin', async () => {
+    const user = userEvent.setup();
+    const onCreateCategory = vi.fn();
+    const onUpdateCategory = vi.fn();
+    const onDeleteCategory = vi.fn();
+    renderScreen({
+      onCreateCategory,
+      onUpdateCategory,
+      onDeleteCategory,
+    });
+
+    await user.click(screen.getByTestId('manage-categories'));
+    expect(screen.getByTestId('manage-categories-modal')).toBeTruthy();
+    expect(screen.getByTestId('manage-categories-list')).toBeTruthy();
+    expect(screen.getByTestId('manage-category-edit-cat-root')).toBeTruthy();
+    expect(screen.getByTestId('manage-category-delete-cat-root')).toBeTruthy();
+
+    await user.click(screen.getByTestId('manage-categories-new'));
+    expect(screen.getByLabelText(/Nombre/i)).toBeTruthy();
+    await user.type(screen.getByLabelText(/Nombre/i), 'Baño');
+    await user.click(screen.getByRole('button', { name: /^Guardar$/i }));
+    expect(onCreateCategory).toHaveBeenCalled();
+
+    await user.click(screen.getByTestId('manage-category-edit-cat-root'));
+    const nameInput = screen.getByLabelText(/Nombre/i) as HTMLInputElement;
+    expect(nameInput.value).toMatch(/Cocina/);
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Cocina XL');
+    await user.click(screen.getByRole('button', { name: /^Guardar$/i }));
+    expect(onUpdateCategory).toHaveBeenCalledWith(
+      'cat-root',
+      expect.objectContaining({ name: 'Cocina XL' }),
+    );
+
+    await user.click(screen.getByTestId('manage-category-delete-cat-child'));
+    await user.click(screen.getByRole('button', { name: /^Eliminar$/i }));
+    expect(onDeleteCategory).toHaveBeenCalledWith('cat-child');
   });
 
   it('shows cascade category selector in module editor', async () => {

@@ -44,14 +44,19 @@ export function CatalogTable<T extends { readonly id: string }>({
 
   return (
     <div className="catalog-table-wrap">
-      <table className="catalog-table">
+      <table
+        className="catalog-table"
+        aria-rowcount={rows.length + 1}
+      >
         <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col.key}>{col.header}</th>
+              <th key={col.key} scope="col">
+                {col.header}
+              </th>
             ))}
             {getRowActions ? (
-              <th className="catalog-table__actions-head">
+              <th className="catalog-table__actions-head" scope="col">
                 <span className="visually-hidden">Acciones</span>
               </th>
             ) : null}
@@ -73,6 +78,15 @@ export function CatalogTable<T extends { readonly id: string }>({
 
             const handleKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
               if (!onRowClick) return;
+              // Ignore keys that originated on nested controls (actions).
+              const target = event.target as HTMLElement | null;
+              if (
+                target &&
+                target !== event.currentTarget &&
+                target.closest('button, a, input, select, textarea, [role="button"]')
+              ) {
+                return;
+              }
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 onRowClick(row);

@@ -178,6 +178,7 @@ export function AppShell({
           type="button"
           className="app-layout__backdrop"
           aria-label="Cerrar menú"
+          tabIndex={-1}
           onClick={closeSidebar}
         />
       ) : null}

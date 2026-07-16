@@ -187,11 +187,16 @@ export function Modal({
 
   return createPortal(
     <div className={rootClass} data-modal-size={size}>
-      <div
+      {/*
+        Overlay is a button (not aria-hidden) so dismiss-by-click is keyboard-
+        and AT-accessible; Esc still closes via the keydown listener (issue #20).
+      */}
+      <button
+        type="button"
         className="ui-modal__overlay"
         data-testid="ui-modal-overlay"
+        aria-label="Cerrar diálogo"
         onClick={onClose}
-        aria-hidden="true"
       />
       <div
         ref={panelRef}

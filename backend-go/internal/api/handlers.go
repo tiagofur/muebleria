@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -10,6 +12,9 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
+
+// maxJSONBodyBytes caps request bodies to avoid OOM from huge payloads (issue #20).
+const maxJSONBodyBytes = 1 << 20 // 1 MiB
 
 type Server struct {
 	Store           Store
@@ -54,6 +59,28 @@ func respondWithInternalError(w http.ResponseWriter, err error, op string) {
 	respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 }
 
+// decodeJSONBody limits the request body and decodes JSON into dst.
+// On failure it writes an error response and returns false (issue #20).
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(dst); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			respondWithError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return false
+		}
+		// EOF / unexpected EOF also map to invalid body.
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			respondWithError(w, http.StatusBadRequest, "invalid request body")
+			return false
+		}
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return false
+	}
+	return true
+}
+
 // --- AUTH ---
 
 // RegisterRequest intentionally has no Role field — self-registration always
@@ -71,8 +98,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -132,8 +158,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -215,8 +240,7 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var c domain.Customer
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &c) {
 			return
 		}
 		c.Active = true
@@ -254,8 +278,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var c domain.Customer
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &c) {
 			return
 		}
 		err := s.Store.UpdateCustomer(r.Context(), id, &c)
@@ -296,8 +319,7 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var m domain.MaterialBoard
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &m) {
 			return
 		}
 		m.Active = true
@@ -335,8 +357,7 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var m domain.MaterialBoard
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &m) {
 			return
 		}
 		err := s.Store.UpdateMaterialBoard(r.Context(), id, &m)
@@ -377,8 +398,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var p domain.Project
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &p) {
 			return
 		}
 
@@ -427,8 +447,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var p domain.Project
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &p) {
 			return
 		}
 		err := s.Store.UpdateProject(r.Context(), id, &p)
@@ -507,8 +526,7 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var e domain.EdgeBand
-		if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &e) {
 			return
 		}
 		e.Active = true
@@ -546,8 +564,7 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var e domain.EdgeBand
-		if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &e) {
 			return
 		}
 		err := s.Store.UpdateEdgeBand(r.Context(), id, &e)
@@ -592,8 +609,7 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var h domain.Hardware
-		if err := json.NewDecoder(r.Body).Decode(&h); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &h) {
 			return
 		}
 		h.Active = true
@@ -631,8 +647,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var h domain.Hardware
-		if err := json.NewDecoder(r.Body).Decode(&h); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &h) {
 			return
 		}
 		err := s.Store.UpdateHardware(r.Context(), id, &h)
@@ -677,8 +692,7 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var og domain.OptionGroup
-		if err := json.NewDecoder(r.Body).Decode(&og); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &og) {
 			return
 		}
 		err := s.Store.CreateOptionGroup(r.Context(), &og)
@@ -715,8 +729,7 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var og domain.OptionGroup
-		if err := json.NewDecoder(r.Body).Decode(&og); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &og) {
 			return
 		}
 		err := s.Store.UpdateOptionGroup(r.Context(), id, &og)
@@ -761,8 +774,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var m domain.Module
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &m) {
 			return
 		}
 		err := s.Store.CreateModule(r.Context(), &m)
@@ -799,8 +811,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var m domain.Module
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &m) {
 			return
 		}
 		err := s.Store.UpdateModule(r.Context(), id, &m)
@@ -845,8 +856,7 @@ func (s *Server) HandleCategories(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		var c domain.ModuleCategory
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &c) {
 			return
 		}
 		err := s.Store.CreateCategory(r.Context(), &c)
@@ -885,8 +895,7 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var c domain.ModuleCategory
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
+		if !decodeJSONBody(w, r, &c) {
 			return
 		}
 		err := s.Store.UpdateCategory(r.Context(), id, &c)
@@ -973,7 +982,10 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Role domain.UserRole `json:"role"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Role == "" {
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	if body.Role == "" {
 		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
