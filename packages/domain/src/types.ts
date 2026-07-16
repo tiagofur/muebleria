@@ -142,6 +142,8 @@ export interface BoardPart {
    */
   readonly edges: readonly EdgeAssignment[];
   readonly optionRole: string;
+  readonly lengthFormula?: string;
+  readonly widthFormula?: string;
 }
 
 export interface HardwareLine {
@@ -173,6 +175,14 @@ export interface Module {
   readonly notes?: string;
 }
 
+export interface DimensionPreset {
+  readonly id: string;
+  readonly name?: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}
+
 /**
  * Reusable engineering **body** (cuerpo) — F049 / #99 / H04.
  * Composed later into a Module with components + measure presets (H05–H07).
@@ -182,9 +192,10 @@ export interface Structure {
   readonly id: string;
   readonly code: string;
   readonly name: string;
-  /** Documented outer size of the body (not yet parametric). */
+  /** Documented outer size of the body. */
   readonly externalDims?: ExternalDims;
   readonly boardParts: readonly BoardPart[];
+  readonly presets?: readonly DimensionPreset[];
   readonly notes?: string;
   /** Soft-delete / hide from pickers. Default true when omitted. */
   readonly active?: boolean;

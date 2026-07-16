@@ -25,6 +25,7 @@ export type {
   ExternalDims,
   Module,
   Structure,
+  DimensionPreset,
   ProjectItem,
   Project,
   QuotePriceSnapshot,
@@ -133,6 +134,8 @@ export {
   validateModule,
   validateStructure,
   validateCatalogEntityCodes,
+  evaluatePartFormula,
+  resolveStructure,
 } from './engine';
 
 export type { ExportIssue } from './exportIssues';

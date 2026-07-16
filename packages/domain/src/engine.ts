@@ -453,6 +453,21 @@ export function validateStructure(structure: Structure): void {
     );
   }
 
+  if (structure.presets) {
+    for (const preset of structure.presets) {
+      if (preset.width <= 0 || preset.height <= 0 || preset.depth <= 0) {
+        throw new ValidationError(
+          'Las dimensiones del preset deben ser mayores a 0',
+          {
+            structureCode: structure.code,
+            presetId: preset.id,
+            field: 'presets',
+          },
+        );
+      }
+    }
+  }
+
   for (const part of structure.boardParts) {
     validateBoardPart(part, structure.code);
     if (!part.description?.trim()) {
@@ -468,6 +483,32 @@ export function validateStructure(structure: Structure): void {
         partId: part.id,
         field: 'optionRole',
       });
+    }
+    if (part.lengthFormula?.trim()) {
+      const clean = part.lengthFormula.replace(/\s+/g, '');
+      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
+        throw new ValidationError(
+          `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
+          {
+            structureCode: structure.code,
+            partId: part.id,
+            field: 'lengthFormula',
+          },
+        );
+      }
+    }
+    if (part.widthFormula?.trim()) {
+      const clean = part.widthFormula.replace(/\s+/g, '');
+      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
+        throw new ValidationError(
+          `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
+          {
+            structureCode: structure.code,
+            partId: part.id,
+            field: 'widthFormula',
+          },
+        );
+      }
     }
   }
 }
@@ -1573,3 +1614,131 @@ export function generateHardwareList(
 
   return rows;
 }
+
+/**
+ * Safely evaluates simple math formulas involving W, H, D variables and numbers.
+ */
+export function evaluatePartFormula(
+  formula: string,
+  dims: { W: number; H: number; D: number },
+  contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' }
+): number {
+  const trimmed = formula.trim();
+  if (!trimmed) {
+    throw new ValidationError('La fórmula no puede estar vacía', {
+      ...contextInfo,
+      field: contextInfo?.field,
+    });
+  }
+
+  // Validate allowed characters: numbers, W, H, D, +, -, *, /, (, ), and whitespace.
+  const clean = trimmed.replace(/\s+/g, '');
+  if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números, W, H, D y operadores (+, -, *, /, paréntesis).`, {
+      ...contextInfo,
+      field: contextInfo?.field,
+    });
+  }
+
+  // Substitute variables
+  const expr = clean
+    .replace(/W/g, String(dims.W))
+    .replace(/H/g, String(dims.H))
+    .replace(/D/g, String(dims.D));
+
+  try {
+    // Safe evaluation using Function context
+    const result = new Function(`return (${expr})`)();
+    if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
+      throw new Error('No es un número válido');
+    }
+    return Math.round(result);
+  } catch (err) {
+    throw new ValidationError(`La fórmula "${formula}" no se pudo evaluar correctamente.`, {
+      ...contextInfo,
+      field: contextInfo?.field,
+    });
+  }
+}
+
+/**
+ * Resolves a cabinet body (Structure) at a specific preset dimension.
+ * Validates dimensions match one of the allowed presets (if presets are defined).
+ * Stretches parts according to their formulas.
+ */
+export function resolveStructure(
+  structure: Structure,
+  selectedDims: { width: number; height: number; depth: number },
+): BoardPart[] {
+  const presets = structure.presets ?? [];
+  if (presets.length > 0) {
+    const matched = presets.find(
+      (p) =>
+        p.width === selectedDims.width &&
+        p.height === selectedDims.height &&
+        p.depth === selectedDims.depth,
+    );
+    if (!matched) {
+      throw new ValidationError(
+        `Las medidas seleccionadas (${selectedDims.width}x${selectedDims.height}x${selectedDims.depth} mm) no están permitidas para la estructura "${structure.name}" (${structure.code}).`,
+        {
+          structureCode: structure.code,
+          selectedDims,
+          presets,
+        },
+      );
+    }
+  } else {
+    if (structure.externalDims) {
+      const ext = structure.externalDims;
+      if (
+        ext.width !== selectedDims.width ||
+        ext.height !== selectedDims.height ||
+        ext.depth !== selectedDims.depth
+      ) {
+        throw new ValidationError(
+          `Las medidas seleccionadas (${selectedDims.width}x${selectedDims.height}x${selectedDims.depth} mm) no coinciden con las medidas por defecto de la estructura "${structure.name}" (${structure.code}).`,
+          {
+            structureCode: structure.code,
+            selectedDims,
+            externalDims: ext,
+          },
+        );
+      }
+    }
+  }
+
+  const dims = {
+    W: selectedDims.width,
+    H: selectedDims.height,
+    D: selectedDims.depth,
+  };
+
+  return structure.boardParts.map((part) => {
+    let resolvedLength = part.lengthMm;
+    let resolvedWidth = part.widthMm;
+
+    if (part.lengthFormula) {
+      resolvedLength = evaluatePartFormula(part.lengthFormula, dims, {
+        structureCode: structure.code,
+        partDescription: part.description,
+        field: 'length',
+      });
+    }
+
+    if (part.widthFormula) {
+      resolvedWidth = evaluatePartFormula(part.widthFormula, dims, {
+        structureCode: structure.code,
+        partDescription: part.description,
+        field: 'width',
+      });
+    }
+
+    return {
+      ...part,
+      lengthMm: resolvedLength,
+      widthMm: resolvedWidth,
+    };
+  });
+}
+

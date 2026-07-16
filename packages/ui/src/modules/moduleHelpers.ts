@@ -31,6 +31,8 @@ export type BoardPartDraft = {
   edgeW1: boolean;
   edgeW2: boolean;
   optionRole: string;
+  lengthFormula?: string;
+  widthFormula?: string;
 };
 
 export type HardwareLineDraft = {
@@ -90,6 +92,8 @@ export function emptyBoardPartDraft(id: string): BoardPartDraft {
     edgeW1: false,
     edgeW2: false,
     optionRole: '',
+    lengthFormula: '',
+    widthFormula: '',
   };
 }
 
@@ -145,6 +149,8 @@ export function boardPartToDraft(part: BoardPart): BoardPartDraft {
     widthMm: part.widthMm,
     ...flags,
     optionRole: part.optionRole,
+    lengthFormula: part.lengthFormula ?? '',
+    widthFormula: part.widthFormula ?? '',
   };
 }
 
