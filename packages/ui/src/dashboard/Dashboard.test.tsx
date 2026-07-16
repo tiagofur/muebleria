@@ -15,6 +15,7 @@ const baseProps: DashboardProps = {
     modulesCount: 12,
     activeMaterials: 8,
   },
+  projectsCount: 2,
   recentProjects: [
     {
       id: 'prj-1',
@@ -36,6 +37,7 @@ const baseProps: DashboardProps = {
   onOpenProject: vi.fn(),
   onNewProject: vi.fn(),
   onNewModule: vi.fn(),
+  onNewMaterial: vi.fn(),
 };
 
 describe('Dashboard loading (issue #30)', () => {
@@ -58,6 +60,7 @@ function renderDashboard(overrides: Partial<DashboardProps> = {}) {
   const onOpenProject = overrides.onOpenProject ?? vi.fn();
   const onNewProject = overrides.onNewProject ?? vi.fn();
   const onNewModule = overrides.onNewModule ?? vi.fn();
+  const onNewMaterial = overrides.onNewMaterial ?? vi.fn();
   const result = render(
     <Dashboard
       {...baseProps}
@@ -65,9 +68,16 @@ function renderDashboard(overrides: Partial<DashboardProps> = {}) {
       onOpenProject={onOpenProject}
       onNewProject={onNewProject}
       onNewModule={onNewModule}
+      onNewMaterial={onNewMaterial}
     />,
   );
-  return { ...result, onOpenProject, onNewProject, onNewModule };
+  return {
+    ...result,
+    onOpenProject,
+    onNewProject,
+    onNewModule,
+    onNewMaterial,
+  };
 }
 
 afterEach(() => {
@@ -119,6 +129,71 @@ describe('Dashboard (F023)', () => {
       screen.getByText(/No hay cotizaciones todavía/i),
     ).toBeTruthy();
     expect(screen.queryByTestId('dashboard-recent-prj-1')).toBeNull();
+  });
+
+  it('hides getting-started when workspace has modules or projects', () => {
+    renderDashboard();
+    expect(screen.queryByTestId('dashboard-getting-started')).toBeNull();
+  });
+
+  it('shows getting-started on empty workspace and fires CTAs', async () => {
+    const user = userEvent.setup();
+    const { onNewMaterial, onNewModule, onNewProject } = renderDashboard({
+      stats: {
+        activeProjects: 0,
+        monthlyQuotedTotal: 0,
+        modulesCount: 0,
+        activeMaterials: 0,
+      },
+      projectsCount: 0,
+      recentProjects: [],
+    });
+
+    expect(screen.getByTestId('dashboard-getting-started')).toBeTruthy();
+    expect(screen.getByText('Primeros pasos')).toBeTruthy();
+    expect(screen.getByTestId('getting-started-material-action')).toBeTruthy();
+    expect(screen.getByTestId('getting-started-module-action')).toBeTruthy();
+    expect(screen.getByTestId('getting-started-project-action')).toBeTruthy();
+
+    // Empty-home focus: no zero stats / empty recent; header CTAs are not primary.
+    expect(screen.queryByTestId('stat-active-projects')).toBeNull();
+    expect(screen.queryByTestId('stat-materials')).toBeNull();
+    expect(screen.queryByText(/No hay cotizaciones todavía/i)).toBeNull();
+    expect(screen.getByTestId('dashboard-new-project').className).toContain(
+      'btn--ghost',
+    );
+    expect(screen.getByTestId('dashboard-new-project').className).not.toContain(
+      'btn--primary',
+    );
+    expect(
+      screen.getByTestId('getting-started-material-action').className,
+    ).toContain('btn--primary');
+
+    await user.click(screen.getByTestId('getting-started-material-action'));
+    expect(onNewMaterial).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('getting-started-module-action'));
+    expect(onNewModule).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('getting-started-project-action'));
+    expect(onNewProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks material step done when materials exist but no modules/projects', () => {
+    renderDashboard({
+      stats: {
+        activeProjects: 0,
+        monthlyQuotedTotal: 0,
+        modulesCount: 0,
+        activeMaterials: 3,
+      },
+      projectsCount: 0,
+      recentProjects: [],
+    });
+    expect(screen.getByTestId('dashboard-getting-started')).toBeTruthy();
+    expect(screen.getByTestId('getting-started-material-done').textContent).toMatch(
+      /3 materiales activos/,
+    );
+    expect(screen.queryByTestId('getting-started-material-action')).toBeNull();
+    expect(screen.getByTestId('getting-started-module-action')).toBeTruthy();
   });
 
   it('uses 2-column stat grid on mobile (CSS contract)', async () => {

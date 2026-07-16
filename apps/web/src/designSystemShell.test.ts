@@ -83,10 +83,13 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(app).toContain('onDashboardOpenProject');
     expect(app).toContain('onDashboardNewProject');
     expect(app).toContain('onDashboardNewModule');
+    expect(app).toContain('onDashboardNewMaterial');
+    expect(app).toContain('projectsCount={projects.length}');
     expect(app).toContain('openProjectId={routeProjectId}');
     expect(app).toContain('openModuleId={routeModuleId}');
     expect(app).toContain('requestCreateKey={projectsCreateKey}');
     expect(app).toContain('requestCreateKey={modulesCreateKey}');
+    expect(app).toContain('requestCreateKey={materialsCreateKey}');
     expect(app).toContain('sumMonthlyQuotedTotal');
     expect(app).toContain('selectRecentProjects');
   });

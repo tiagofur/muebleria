@@ -501,7 +501,15 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
   - 4 indicadores: proyectos activos, total cotizado del mes, módulos en catálogo, materiales activos
   - Hasta 5 cotizaciones recientes (nombre, cliente resuelto, status badge, fecha, precio venta o `—`)
   - Acciones rápidas: «Nueva cotización» (`.btn--primary`), «Nuevo mueble» (`.btn` base)
-- **Interacción:** click en card reciente → shell navega a Cotizaciones y abre detalle; acciones rápidas → shell navega y dispara create modal vía `requestCreateKey`
+- **Workspace vacío (issue #33):** si `modulesCount === 0` y `projectsCount === 0`, mostrar bloque **Primeros pasos** (checklist) como **única región de contenido** (sin stats ni cotizaciones recientes — ceros y empty duplican ruido):
+  1. Crear material (`onNewMaterial` → nav materials + `requestCreateKey`)
+  2. Crear mueble (`onNewModule`)
+  3. Crear cotización (`onNewProject`)
+  - Paso hecho: badge con conteo (p. ej. «N materiales activos»); sin CTA
+  - Paso pendiente: CTA; el primero pendiente usa **el único** `.btn--primary` de la pantalla
+  - Header «Nueva cotización» / «Nuevo mueble» en empty-home: `.btn--ghost` (atajo, no compite con el paso activo)
+  - Workspace con muebles o proyectos: **no** mostrar el bloque; stats + recientes + header con primary normal
+- **Interacción:** click en card reciente → shell navega a Cotizaciones y abre detalle; acciones rápidas / primeros pasos → shell navega y dispara create modal vía `requestCreateKey`
 
 ### 6.2 Cotizaciones
 

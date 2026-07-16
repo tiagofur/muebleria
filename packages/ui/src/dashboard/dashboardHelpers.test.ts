@@ -6,6 +6,7 @@ import {
   countModules,
   formatDashboardMoney,
   selectRecentProjects,
+  shouldShowGettingStarted,
   sumMonthlyQuotedTotal,
 } from './dashboardHelpers';
 
@@ -43,6 +44,18 @@ describe('dashboardHelpers (F023)', () => {
   it('countModules returns length', () => {
     expect(countModules([1, 2, 3])).toBe(3);
     expect(countModules([])).toBe(0);
+  });
+
+  it('shouldShowGettingStarted only when no modules and no projects', () => {
+    expect(
+      shouldShowGettingStarted({ modulesCount: 0, projectsCount: 0 }),
+    ).toBe(true);
+    expect(
+      shouldShowGettingStarted({ modulesCount: 1, projectsCount: 0 }),
+    ).toBe(false);
+    expect(
+      shouldShowGettingStarted({ modulesCount: 0, projectsCount: 2 }),
+    ).toBe(false);
   });
 
   it('selectRecentProjects sorts by updatedAt desc and limits', () => {

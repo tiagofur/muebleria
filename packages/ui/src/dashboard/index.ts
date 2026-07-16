@@ -15,6 +15,7 @@ export {
   countModules,
   formatDashboardMoney,
   selectRecentProjects,
+  shouldShowGettingStarted,
   sumMonthlyQuotedTotal,
   yearMonthKey,
   type ActiveFlag,

@@ -1,5 +1,5 @@
 /**
- * Materials catalog — empty vs no-results smoke (#32).
+ * Materials catalog — empty vs no-results (#32) + create handoff (#33).
  * @vitest-environment jsdom
  */
 
@@ -24,6 +24,40 @@ const sampleMaterial: MaterialBoard = {
   costPerM2: 25,
   active: true,
 };
+
+describe('MaterialsCatalog create handoff (#33)', () => {
+  it('opens create modal when requestCreateKey bumps', async () => {
+    const { rerender } = render(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+        requestCreateKey={0}
+      />,
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    rerender(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+        requestCreateKey={1}
+      />,
+    );
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+  });
+});
 
 describe('MaterialsCatalog empty states (#32)', () => {
   it('shows EmptyState when catalog is truly empty', () => {
