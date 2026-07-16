@@ -1187,7 +1187,7 @@ function AppContent({
       console.error('Error al crear proyecto:', err);
       toast({
         type: 'error',
-        message: 'No se pudo guardar el proyecto en el servidor',
+        message: 'No se pudo guardar la cotización en el servidor',
       });
     });
     toast({ type: 'success', message: `✓ "${meta.name}" creado` });
@@ -1252,7 +1252,7 @@ function AppContent({
     if (selectedProjectId === id) {
       navigate(pathForNav('projects'));
     }
-    toast({ type: 'info', message: 'Proyecto eliminado' });
+    toast({ type: 'info', message: 'Cotización eliminada' });
   };
 
   const duplicateProjectById = (id: string) => {

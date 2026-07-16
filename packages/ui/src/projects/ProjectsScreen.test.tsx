@@ -264,7 +264,7 @@ describe('ProjectsScreen F022', () => {
 
     await user.click(screen.getByRole('button', { name: /Nueva cotización/i }));
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Nuevo proyecto' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Nueva cotización' })).toBeTruthy();
 
     const clientTrigger = screen.getByLabelText('Cliente');
     expect(clientTrigger.tagName).toBe('BUTTON');
@@ -327,7 +327,7 @@ describe('ProjectsScreen F022', () => {
 
     await user.click(screen.getByTestId('project-card-prj-1'));
     await user.click(screen.getByRole('button', { name: /^Editar$/i }));
-    expect(screen.getByRole('heading', { name: 'Editar proyecto' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Editar cotización' })).toBeTruthy();
 
     const clientTrigger = screen.getByLabelText('Cliente');
     expect(clientTrigger.tagName).toBe('BUTTON');
@@ -473,7 +473,7 @@ describe('ProjectsScreen F022', () => {
   it('opens create modal from requestCreateKey prop', () => {
     renderScreen({ requestCreateKey: 1 });
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Nuevo proyecto' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Nueva cotización' })).toBeTruthy();
   });
 
   it('opens SM confirm modal before delete', async () => {
@@ -484,7 +484,7 @@ describe('ProjectsScreen F022', () => {
     await user.click(screen.getByRole('button', { name: /^Eliminar$/i }));
     const dialog = screen.getByRole('dialog');
     expect(
-      within(dialog).getByRole('heading', { name: 'Eliminar proyecto' }),
+      within(dialog).getByRole('heading', { name: 'Eliminar cotización' }),
     ).toBeTruthy();
     expect(within(dialog).getByText(/Cocina Ana/)).toBeTruthy();
     // Toolbar still has "Eliminar"; confirm is the danger button in the dialog.

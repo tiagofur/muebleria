@@ -346,7 +346,7 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 │  240px     │                                             │
 │            │  ┌─────────────────────────────────────┐   │
 │  TRABAJO   │  │ Título de página        [+ Nuevo]   │   │
-│  ● Home    │  ├─────────────────────────────────────┤   │
+│  ● Inicio  │  ├─────────────────────────────────────┤   │
 │  · Cotiz.  │  │ [Buscar…] [Todos][Activos][Inactivos]│   │
 │  · Client. │  ├─────────────────────────────────────┤   │
 │  · Muebles │  │                                     │   │
@@ -366,8 +366,23 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 
 | Sección | Ítems |
 |---------|--------|
-| TRABAJO | Home, Cotizaciones, Clientes, Muebles |
+| TRABAJO | Inicio, Cotizaciones, Clientes, Muebles |
 | CONFIG | Materiales, Cantos, Herrajes, Grupos |
+
+#### Vocabulario de producto (UI copy — issue #52)
+
+Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en español de taller**.
+
+| Nav / UI | Código (no renombrar) | Notas |
+|----------|------------------------|--------|
+| **Inicio** | `home` | No «Home» |
+| **Cotizaciones** | `projects` / `Project` | No «Proyectos» en UI |
+| **Muebles** | `modules` / `Module` | No «Módulos» en UI (salvo jargon técnico de export) |
+| **Clientes** | `customers` | |
+| **Materiales / Cantos / Herrajes / Grupos** | catalogs | |
+| **Usuarios** | admin | Solo admin |
+
+CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», …
 
 - **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo `--brand-400`
 - **TopBar**: `--surface-card` con `--shadow-sm`; acciones opcionales (`headerActions`, p. ej. **Salir**)

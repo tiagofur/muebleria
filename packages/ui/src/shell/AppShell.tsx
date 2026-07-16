@@ -105,7 +105,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     id: 'trabajo',
     label: 'TRABAJO',
     items: [
-      { id: 'home', label: 'Home', icon: LayoutDashboard },
+      { id: 'home', label: 'Inicio', icon: LayoutDashboard },
       { id: 'projects', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
       { id: 'modules', label: 'Muebles', icon: Package },

@@ -203,10 +203,10 @@ describe('ModulesScreen structure (F021)', () => {
 
   it('shows EmptyState when there are no modules', () => {
     renderScreen({ modules: [] });
-    expect(screen.getByText('No hay módulos')).toBeTruthy();
+    expect(screen.getByText('No hay muebles')).toBeTruthy();
     expect(
       screen.getByText(
-        /Creá el primer mueble plantilla o cargá la semilla/,
+        /Creá el primer mueble del catálogo o cargá la semilla/,
       ),
     ).toBeTruthy();
     expect(

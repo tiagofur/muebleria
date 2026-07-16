@@ -1607,8 +1607,8 @@ export function ModulesScreen({
           {isTrulyEmpty ? (
             <EmptyState
               icon={Package}
-              title="No hay módulos"
-              description="Creá el primer mueble plantilla o cargá la semilla del workspace."
+              title="No hay muebles"
+              description="Creá el primer mueble del catálogo o cargá la semilla del workspace."
               actionLabel="Nuevo mueble"
               onAction={startCreate}
             />
@@ -1666,7 +1666,7 @@ export function ModulesScreen({
 
   if (loading) {
     return (
-      <section className="catalog-page" aria-label="Muebles (módulos)">
+      <section className="catalog-page" aria-label="Muebles">
         <PageLoading label="Cargando muebles…" data-testid="modules-loading" />
       </section>
     );
