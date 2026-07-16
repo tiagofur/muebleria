@@ -109,7 +109,7 @@ type NavItemDef = {
 };
 
 type NavSectionDef = {
-  readonly id: 'trabajo' | 'config';
+  readonly id: 'trabajo' | 'ingenieria' | 'config';
   readonly label: string;
   readonly items: readonly NavItemDef[];
 };
@@ -120,7 +120,7 @@ const ADMIN_USERS_NAV: NavItemDef = {
   icon: ShieldCheck,
 };
 
-/** Canonical sidebar sections — TRABAJO / CONFIG (design.md §4.1 + §3.7). */
+/** Canonical sidebar sections — TRABAJO / INGENIERIA / CONFIG (design.md §4.1 + §3.7). */
 export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: 'trabajo',
@@ -130,17 +130,23 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'projects', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
       { id: 'modules', label: 'Muebles', icon: Package },
+    ],
+  },
+  {
+    id: 'ingenieria',
+    label: 'INGENIERÍA',
+    items: [
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
+      { id: 'materials', label: 'Materiales', icon: Layers },
+      { id: 'edges', label: 'Cantos', icon: Minus },
+      { id: 'hardware', label: 'Herrajes', icon: Settings2 },
+      { id: 'optionGroups', label: 'Grupos', icon: ToggleLeft },
     ],
   },
   {
     id: 'config',
     label: 'CONFIG',
     items: [
-      { id: 'materials', label: 'Materiales', icon: Layers },
-      { id: 'edges', label: 'Cantos', icon: Minus },
-      { id: 'hardware', label: 'Herrajes', icon: Settings2 },
-      { id: 'optionGroups', label: 'Grupos', icon: ToggleLeft },
       { id: 'settings', label: 'Ajustes', icon: Settings },
     ],
   },

@@ -30,14 +30,16 @@ function read(rel: string): string {
 }
 
 describe('AppShell nav model (F017)', () => {
-  it('exposes TRABAJO and CONFIG sections with required destinations', () => {
-    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'config']);
+  it('exposes TRABAJO, INGENIERIA and CONFIG sections with required destinations', () => {
+    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ingenieria', 'config']);
     expect(APP_NAV_SECTIONS.map((s) => s.label)).toEqual([
       'TRABAJO',
+      'INGENIERÍA',
       'CONFIG',
     ]);
 
     const trabajo = APP_NAV_SECTIONS.find((s) => s.id === 'trabajo')!;
+    const ingenieria = APP_NAV_SECTIONS.find((s) => s.id === 'ingenieria')!;
     const config = APP_NAV_SECTIONS.find((s) => s.id === 'config')!;
 
     expect(trabajo.items.map((i) => i.id)).toEqual([
@@ -45,28 +47,33 @@ describe('AppShell nav model (F017)', () => {
       'projects',
       'customers',
       'modules',
-      'structures',
     ]);
     expect(trabajo.items.map((i) => i.label)).toEqual([
       'Inicio',
       'Cotizaciones',
       'Clientes',
       'Muebles',
-      'Estructuras',
     ]);
 
-    expect(config.items.map((i) => i.id)).toEqual([
+    expect(ingenieria.items.map((i) => i.id)).toEqual([
+      'structures',
       'materials',
       'edges',
       'hardware',
       'optionGroups',
-      'settings',
     ]);
-    expect(config.items.map((i) => i.label)).toEqual([
+    expect(ingenieria.items.map((i) => i.label)).toEqual([
+      'Estructuras',
       'Materiales',
       'Cantos',
       'Herrajes',
       'Grupos',
+    ]);
+
+    expect(config.items.map((i) => i.id)).toEqual([
+      'settings',
+    ]);
+    expect(config.items.map((i) => i.label)).toEqual([
       'Ajustes',
     ]);
   });

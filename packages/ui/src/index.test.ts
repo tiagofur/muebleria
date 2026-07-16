@@ -61,9 +61,10 @@ describe('@muebles/ui package surface', () => {
 
   it('exports AppShell layout (F017)', () => {
     expect(typeof AppShell).toBe('function');
-    expect(APP_NAV_SECTIONS).toHaveLength(2);
+    expect(APP_NAV_SECTIONS).toHaveLength(3);
     expect(APP_NAV_SECTIONS[0]?.id).toBe('trabajo');
-    expect(APP_NAV_SECTIONS[1]?.id).toBe('config');
+    expect(APP_NAV_SECTIONS[1]?.id).toBe('ingenieria');
+    expect(APP_NAV_SECTIONS[2]?.id).toBe('config');
   });
 
   it('exports RegisterScreen and UsersScreen (F026)', async () => {
