@@ -155,6 +155,20 @@ describe('Dashboard (F023)', () => {
     expect(screen.getByTestId('getting-started-module-action')).toBeTruthy();
     expect(screen.getByTestId('getting-started-project-action')).toBeTruthy();
 
+    // Empty-home focus: no zero stats / empty recent; header CTAs are not primary.
+    expect(screen.queryByTestId('stat-active-projects')).toBeNull();
+    expect(screen.queryByTestId('stat-materials')).toBeNull();
+    expect(screen.queryByText(/No hay cotizaciones todavía/i)).toBeNull();
+    expect(screen.getByTestId('dashboard-new-project').className).toContain(
+      'btn--ghost',
+    );
+    expect(screen.getByTestId('dashboard-new-project').className).not.toContain(
+      'btn--primary',
+    );
+    expect(
+      screen.getByTestId('getting-started-material-action').className,
+    ).toContain('btn--primary');
+
     await user.click(screen.getByTestId('getting-started-material-action'));
     expect(onNewMaterial).toHaveBeenCalledTimes(1);
     await user.click(screen.getByTestId('getting-started-module-action'));

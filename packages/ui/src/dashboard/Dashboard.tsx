@@ -164,10 +164,13 @@ export function Dashboard({
             </p>
           </div>
         </div>
+        {/* Empty workspace: no header primary — sole primary lives on the active checklist step. */}
         <div className="dashboard__actions">
           <button
             type="button"
-            className="btn btn--primary"
+            className={
+              showGettingStarted ? 'btn btn--ghost' : 'btn btn--primary'
+            }
             onClick={onNewProject}
             data-testid="dashboard-new-project"
           >
@@ -176,7 +179,7 @@ export function Dashboard({
           </button>
           <button
             type="button"
-            className="btn"
+            className={showGettingStarted ? 'btn btn--ghost' : 'btn'}
             onClick={onNewModule}
             data-testid="dashboard-new-module"
           >
@@ -256,86 +259,100 @@ export function Dashboard({
             ))}
           </ol>
         </section>
-      ) : null}
-
-      <ul className="dashboard__stats" aria-label="Indicadores">
-        <li className="dashboard-stat" data-testid="stat-active-projects">
-          <span className="dashboard-stat__icon" aria-hidden>
-            <FileText size={18} strokeWidth={1.5} />
-          </span>
-          <p className="dashboard-stat__label">Proyectos activos</p>
-          <p className="dashboard-stat__value">{stats.activeProjects}</p>
-        </li>
-        <li className="dashboard-stat" data-testid="stat-monthly-quoted">
-          <span className="dashboard-stat__icon" aria-hidden>
-            <DollarSign size={18} strokeWidth={1.5} />
-          </span>
-          <p className="dashboard-stat__label">Total cotizado del mes</p>
-          <p className="dashboard-stat__value">
-            {formatDashboardMoney(stats.monthlyQuotedTotal)}
-          </p>
-        </li>
-        <li className="dashboard-stat" data-testid="stat-modules">
-          <span className="dashboard-stat__icon" aria-hidden>
-            <Package size={18} strokeWidth={1.5} />
-          </span>
-          <p className="dashboard-stat__label">Módulos en catálogo</p>
-          <p className="dashboard-stat__value">{stats.modulesCount}</p>
-        </li>
-        <li className="dashboard-stat" data-testid="stat-materials">
-          <span className="dashboard-stat__icon" aria-hidden>
-            <Layers size={18} strokeWidth={1.5} />
-          </span>
-          <p className="dashboard-stat__label">Materiales activos</p>
-          <p className="dashboard-stat__value">{stats.activeMaterials}</p>
-        </li>
-      </ul>
-
-      <section className="dashboard__section" aria-labelledby="dashboard-recent-title">
-        <h3 id="dashboard-recent-title" className="dashboard__section-title">
-          Cotizaciones recientes
-        </h3>
-        {recentProjects.length === 0 ? (
-          <p className="dashboard__empty" role="status">
-            No hay cotizaciones todavía. Creá la primera con «Nueva cotización».
-          </p>
-        ) : (
-          <ul className="dashboard__recent" aria-label="Cotizaciones recientes">
-            {recentProjects.map((project) => (
-              <li key={project.id}>
-                <button
-                  type="button"
-                  className="dashboard-recent-card"
-                  data-testid={`dashboard-recent-${project.id}`}
-                  onClick={() => onOpenProject(project.id)}
-                >
-                  <div className="dashboard-recent-card__top">
-                    <h4 className="dashboard-recent-card__name">{project.name}</h4>
-                    <StatusBadge status={project.status} />
-                  </div>
-                  <p className="dashboard-recent-card__client">
-                    {project.customerLabel || '—'}
-                  </p>
-                  <div className="dashboard-recent-card__meta">
-                    <span className="dashboard-recent-card__date">
-                      {formatIsoDate(project.updatedAt)}
-                    </span>
-                    {project.salePrice === null ? (
-                      <span className="dashboard-recent-card__price dashboard-recent-card__price--muted">
-                        —
-                      </span>
-                    ) : (
-                      <span className="dashboard-recent-card__price">
-                        {formatDashboardMoney(project.salePrice)}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              </li>
-            ))}
+      ) : (
+        <>
+          <ul className="dashboard__stats" aria-label="Indicadores">
+            <li className="dashboard-stat" data-testid="stat-active-projects">
+              <span className="dashboard-stat__icon" aria-hidden>
+                <FileText size={18} strokeWidth={1.5} />
+              </span>
+              <p className="dashboard-stat__label">Proyectos activos</p>
+              <p className="dashboard-stat__value">{stats.activeProjects}</p>
+            </li>
+            <li className="dashboard-stat" data-testid="stat-monthly-quoted">
+              <span className="dashboard-stat__icon" aria-hidden>
+                <DollarSign size={18} strokeWidth={1.5} />
+              </span>
+              <p className="dashboard-stat__label">Total cotizado del mes</p>
+              <p className="dashboard-stat__value">
+                {formatDashboardMoney(stats.monthlyQuotedTotal)}
+              </p>
+            </li>
+            <li className="dashboard-stat" data-testid="stat-modules">
+              <span className="dashboard-stat__icon" aria-hidden>
+                <Package size={18} strokeWidth={1.5} />
+              </span>
+              <p className="dashboard-stat__label">Módulos en catálogo</p>
+              <p className="dashboard-stat__value">{stats.modulesCount}</p>
+            </li>
+            <li className="dashboard-stat" data-testid="stat-materials">
+              <span className="dashboard-stat__icon" aria-hidden>
+                <Layers size={18} strokeWidth={1.5} />
+              </span>
+              <p className="dashboard-stat__label">Materiales activos</p>
+              <p className="dashboard-stat__value">{stats.activeMaterials}</p>
+            </li>
           </ul>
-        )}
-      </section>
+
+          <section
+            className="dashboard__section"
+            aria-labelledby="dashboard-recent-title"
+          >
+            <h3
+              id="dashboard-recent-title"
+              className="dashboard__section-title"
+            >
+              Cotizaciones recientes
+            </h3>
+            {recentProjects.length === 0 ? (
+              <p className="dashboard__empty" role="status">
+                No hay cotizaciones todavía. Creá la primera con «Nueva
+                cotización».
+              </p>
+            ) : (
+              <ul
+                className="dashboard__recent"
+                aria-label="Cotizaciones recientes"
+              >
+                {recentProjects.map((project) => (
+                  <li key={project.id}>
+                    <button
+                      type="button"
+                      className="dashboard-recent-card"
+                      data-testid={`dashboard-recent-${project.id}`}
+                      onClick={() => onOpenProject(project.id)}
+                    >
+                      <div className="dashboard-recent-card__top">
+                        <h4 className="dashboard-recent-card__name">
+                          {project.name}
+                        </h4>
+                        <StatusBadge status={project.status} />
+                      </div>
+                      <p className="dashboard-recent-card__client">
+                        {project.customerLabel || '—'}
+                      </p>
+                      <div className="dashboard-recent-card__meta">
+                        <span className="dashboard-recent-card__date">
+                          {formatIsoDate(project.updatedAt)}
+                        </span>
+                        {project.salePrice === null ? (
+                          <span className="dashboard-recent-card__price dashboard-recent-card__price--muted">
+                            —
+                          </span>
+                        ) : (
+                          <span className="dashboard-recent-card__price">
+                            {formatDashboardMoney(project.salePrice)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
     </section>
   );
 }
