@@ -112,7 +112,7 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
     expect(appSrc).toContain('Usar datos demo');
     // Load catch must set error, not auto-seed.
     const loadCatch = appSrc.match(
-      /repository[\s\S]*?\.catch\(\(err\) => \{([\s\S]*?)\}\);/,
+      /repository\s*\n?\s*\.load\(\)[\s\S]*?\.catch\(\(err\) => \{([\s\S]*?)\}\);/,
     );
     expect(loadCatch?.[1]).toBeTruthy();
     expect(loadCatch?.[1]).toContain('setWorkspaceLoadError');

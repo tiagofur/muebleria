@@ -24,14 +24,23 @@ export type CustomerDraft = {
 	phone: string;
 	address: string;
 	notes: string;
+	/** Portfolio owner (F034). Empty = shell default (me). */
+	ownerUserId: string;
 };
 
-const emptyDraft = (): CustomerDraft => ({
+export type OwnerOption = {
+	readonly id: string;
+	readonly name: string;
+	readonly role?: string;
+};
+
+const emptyDraft = (defaultOwnerId = ''): CustomerDraft => ({
 	name: '',
 	email: '',
 	phone: '',
 	address: '',
 	notes: '',
+	ownerUserId: defaultOwnerId,
 });
 
 function toDraft(item: Customer): CustomerDraft {
@@ -41,6 +50,7 @@ function toDraft(item: Customer): CustomerDraft {
 		phone: item.phone ?? '',
 		address: item.address ?? '',
 		notes: item.notes ?? '',
+		ownerUserId: item.ownerUserId ?? '',
 	};
 }
 
@@ -52,6 +62,12 @@ export interface CustomersScreenProps {
 	readonly onReactivate: (id: string) => void;
 	readonly openEntityId?: string | null;
 	readonly onSelectionChange?: (id: string | null) => void;
+	/** When true, show owner picker (admin / gerente). */
+	readonly canAssignOwner?: boolean;
+	readonly assignableOwners?: readonly OwnerOption[];
+	readonly currentUserId?: string;
+	/** Optional labels map for owner column (id → name). */
+	readonly ownerLabels?: Readonly<Record<string, string>>;
 }
 
 export function CustomersScreen({
@@ -62,6 +78,10 @@ export function CustomersScreen({
 	onReactivate,
 	openEntityId = null,
 	onSelectionChange,
+	canAssignOwner = false,
+	assignableOwners = [],
+	currentUserId = '',
+	ownerLabels = {},
 }: CustomersScreenProps): ReactNode {
 	const formId = useId();
 	const [search, setSearch] = useState('');
@@ -76,7 +96,9 @@ export function CustomersScreen({
 		});
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editingId, setEditingId] = useState<string | null>(null);
-	const [draft, setDraft] = useState<CustomerDraft>(emptyDraft());
+	const [draft, setDraft] = useState<CustomerDraft>(() =>
+		emptyDraft(currentUserId),
+	);
 	const [error, setError] = useState<string | null>(null);
 
 	const rows = useMemo(
@@ -91,13 +113,13 @@ export function CustomersScreen({
 	const closeModal = () => {
 		setModalOpen(false);
 		setEditingId(null);
-		setDraft(emptyDraft());
+		setDraft(emptyDraft(currentUserId));
 		setError(null);
 	};
 
 	const startCreate = () => {
 		setEditingId(null);
-		setDraft(emptyDraft());
+		setDraft(emptyDraft(currentUserId));
 		setError(null);
 		setModalOpen(true);
 	};
@@ -133,8 +155,8 @@ export function CustomersScreen({
 		closeModal();
 	};
 
-	const columns: CatalogColumn<Customer>[] = useMemo(
-		() => [
+	const columns: CatalogColumn<Customer>[] = useMemo(() => {
+		const cols: CatalogColumn<Customer>[] = [
 			{ key: 'name', header: 'Nombre', render: (r) => r.name },
 			{
 				key: 'email',
@@ -146,14 +168,25 @@ export function CustomersScreen({
 				header: 'Teléfono',
 				render: (r) => formatEmpty(r.phone),
 			},
-			{
-				key: 'status',
-				header: 'Estado',
-				render: (r) => <ActiveBadge active={r.active} />,
-			},
-		],
-		[],
-	);
+		];
+		if (canAssignOwner) {
+			cols.push({
+				key: 'owner',
+				header: 'Responsable',
+				render: (r) =>
+					formatEmpty(
+						(r.ownerUserId && ownerLabels[r.ownerUserId]) ||
+							r.ownerUserId,
+					),
+			});
+		}
+		cols.push({
+			key: 'status',
+			header: 'Estado',
+			render: (r) => <ActiveBadge active={r.active} />,
+		});
+		return cols;
+	}, [canAssignOwner, ownerLabels]);
 
 	const isTrulyEmpty = customers.length === 0;
 	const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
@@ -232,6 +265,14 @@ export function CustomersScreen({
 									<div className="catalog-row-detail__field">
 										<span className="catalog-row-detail__label">Notas del cliente</span>
 										<span className="catalog-row-detail__value">{row.notes}</span>
+									</div>
+								) : null}
+								{row.ownerUserId ? (
+									<div className="catalog-row-detail__field">
+										<span className="catalog-row-detail__label">Responsable</span>
+										<span className="catalog-row-detail__value">
+											{ownerLabels[row.ownerUserId] || row.ownerUserId}
+										</span>
 									</div>
 								) : null}
 								<div className="catalog-row-detail__field">
@@ -362,6 +403,26 @@ export function CustomersScreen({
 							onChange={(e) => setDraft({ ...draft, address: e.target.value })}
 						/>
 					</div>
+					{canAssignOwner && assignableOwners.length > 0 ? (
+						<div className="catalog-form__field">
+							<label htmlFor="cust-owner">Responsable</label>
+							<select
+								id="cust-owner"
+								value={draft.ownerUserId}
+								onChange={(e) =>
+									setDraft({ ...draft, ownerUserId: e.target.value })
+								}
+								data-testid="customer-owner-select"
+							>
+								{assignableOwners.map((u) => (
+									<option key={u.id} value={u.id}>
+										{u.name}
+										{u.role ? ` (${u.role})` : ''}
+									</option>
+								))}
+							</select>
+						</div>
+					) : null}
 					<div className="catalog-form__field">
 						<label htmlFor="cust-notes">Notas</label>
 						<textarea

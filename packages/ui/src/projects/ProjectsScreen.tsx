@@ -98,6 +98,14 @@ export interface ProjectsScreenProps {
   readonly hardware: readonly Hardware[];
   /** Catalog customers for name lookup on cards / detail / search. */
   readonly customers?: readonly Customer[];
+  /** F034: admin can pick portfolio owner on create/edit. */
+  readonly canAssignOwner?: boolean;
+  readonly assignableOwners?: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly role?: string;
+  }[];
+  readonly ownerLabels?: Readonly<Record<string, string>>;
   readonly onCreate: (draft: ProjectDraft) => void;
   readonly onUpdate: (id: string, draft: ProjectDraft) => void;
   readonly onDelete: (id: string) => void;
@@ -189,6 +197,9 @@ export function ProjectsScreen({
   edges,
   hardware,
   customers = [],
+  canAssignOwner = false,
+  assignableOwners = [],
+  ownerLabels = {},
   onCreate,
   onUpdate,
   onDelete,
@@ -701,6 +712,29 @@ export function ProjectsScreen({
           </select>
         </div>
       </div>
+      {canAssignOwner && assignableOwners.length > 0 ? (
+        <div
+          className="catalog-form__field"
+          style={{ marginTop: 'var(--space-3)' }}
+        >
+          <label htmlFor="prj-owner">Responsable</label>
+          <select
+            id="prj-owner"
+            value={draft.ownerUserId}
+            onChange={(e) =>
+              setDraft({ ...draft, ownerUserId: e.target.value })
+            }
+            data-testid="project-owner-select"
+          >
+            {assignableOwners.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+                {u.role ? ` (${u.role})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div className="catalog-form__field" style={{ marginTop: 'var(--space-3)' }}>
         <label htmlFor="prj-notes">Notas</label>
         <input
@@ -1107,6 +1141,12 @@ export function ProjectsScreen({
         </div>
       </header>
 
+      {project.ownerUserId ? (
+        <p className="project-detail__notes" data-testid="project-owner-label">
+          Responsable:{' '}
+          {ownerLabels[project.ownerUserId] || project.ownerUserId}
+        </p>
+      ) : null}
       {project.notes ? (
         <p className="project-detail__notes">{project.notes}</p>
       ) : null}

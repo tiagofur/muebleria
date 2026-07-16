@@ -46,6 +46,14 @@ export {
 
 export { effectiveOptionChoices } from './optionChoices';
 
+export {
+  canAccessOwnedResource,
+  resolveOwnerOnCreate,
+  resolveOwnerOnUpdate,
+  roleCanAssignOwner,
+  roleSeesAllOwners,
+} from './ownership';
+
 export type { CategoryFilterId } from './categories';
 export {
   MAX_CATEGORY_DEPTH,
