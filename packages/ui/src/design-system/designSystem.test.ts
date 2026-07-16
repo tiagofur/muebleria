@@ -51,6 +51,44 @@ describe('design system (F016)', () => {
     expect(css).toContain('--density-modal-body:');
     expect(css).toContain('--density-card-pad:');
     expect(css).toContain('--density-row-min-height:');
+
+    // Canonical breakpoints / touch (issue #34)
+    expect(css).toContain('--bp-phone-max:');
+    expect(css).toContain('--bp-tablet-min:');
+    expect(css).toContain('--bp-desktop-min:');
+    expect(css).toContain('--bp-cards-3-min:');
+    expect(css).toContain('--touch-min:');
+  });
+
+  it('responsive pass: card grids 1/2/3 and table scroll affordance (issue #34)', () => {
+    const modules = read(join(uiRoot, 'src/modules/modules.css'));
+    const projects = read(join(uiRoot, 'src/projects/projects.css'));
+    const catalogs = read(join(uiRoot, 'src/catalogs/catalogs.css'));
+    const shell = read(join(uiRoot, 'src/shell/appShell.css'));
+
+    for (const [label, css] of [
+      ['module-card-grid', modules],
+      ['project-card-grid', projects],
+    ] as const) {
+      expect(css, label).toContain('grid-template-columns: 1fr');
+      expect(css, label).toMatch(/@media \(min-width: 640px\)/);
+      expect(css, label).toMatch(/@media \(min-width: 1100px\)/);
+      expect(css, label).toContain('repeat(2, minmax(0, 1fr))');
+      expect(css, label).toContain('repeat(3, minmax(0, 1fr))');
+      // Prefer fixed ladder over unbounded auto-fill on the main list grid
+      expect(css, label).not.toMatch(
+        new RegExp(
+          `\\.${label}\\s*\\{[\\s\\S]{0,160}auto-fill`,
+        ),
+      );
+    }
+
+    expect(catalogs).toContain('overscroll-behavior-x: contain');
+    expect(catalogs).toContain('-webkit-overflow-scrolling: touch');
+    expect(catalogs).toContain('var(--touch-min)');
+    expect(catalogs).toMatch(/@media \(max-width: 639px\)/);
+    expect(catalogs).toMatch(/@media \(max-width: 767px\)/);
+    expect(shell).toContain('var(--touch-min)');
   });
 
   it('catalog tables and modals use density tokens (issue #49)', () => {

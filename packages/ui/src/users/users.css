@@ -36,8 +36,22 @@
   max-height: min(70vh, calc(100vh - 14rem));
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
-  background: var(--surface-card);
+  background-color: var(--surface-card);
   box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  background-image:
+    linear-gradient(to right, var(--surface-card), transparent),
+    linear-gradient(to left, var(--surface-card), transparent);
+  background-position:
+    left center,
+    right center;
+  background-repeat: no-repeat;
+  background-size:
+    1.25rem 100%,
+    1.25rem 100%;
+  background-attachment: local, local;
 }
 
 .users-table {
@@ -45,6 +59,17 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--text-base);
+}
+
+@media (max-width: 639px) {
+  .users-table {
+    min-width: 36rem;
+  }
+
+  .users-table__actions .btn,
+  .users-table__actions .btn--small {
+    min-height: var(--touch-min);
+  }
 }
 
 .users-table th {
