@@ -3,6 +3,7 @@ import {
   HARDWARE_LIST_HEADERS,
   OPTIMIZER_DATA_HEADERS,
   PACKAGE_NAME,
+  commercialQuoteExport,
   hardwareListExport,
   optimizerExport,
 } from './index';
@@ -12,6 +13,7 @@ describe('@muebles/excel', () => {
     expect(PACKAGE_NAME).toBe('@muebles/excel');
     expect(typeof optimizerExport).toBe('function');
     expect(typeof hardwareListExport).toBe('function');
+    expect(typeof commercialQuoteExport).toBe('function');
     expect(OPTIMIZER_DATA_HEADERS).toHaveLength(10);
     expect(HARDWARE_LIST_HEADERS).toHaveLength(6);
   });

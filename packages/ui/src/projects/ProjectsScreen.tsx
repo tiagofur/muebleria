@@ -131,6 +131,11 @@ export interface ProjectsScreenProps {
    * Shell owns validate → aggregate → xlsx → download.
    */
   readonly onExportHardware?: () => void | Promise<void>;
+  /**
+   * Commercial quote export for client (F030 / #36).
+   * Shell owns breakdown → xlsx → download.
+   */
+  readonly onExportCommercialQuote?: () => void | Promise<void>;
   readonly exportErrors?: readonly ExportIssue[];
   readonly exportBusy?: boolean;
   /** When true, export buttons stay disabled (shell already blocked). */
@@ -188,6 +193,7 @@ export function ProjectsScreen({
   groupLabels,
   onExport,
   onExportHardware,
+  onExportCommercialQuote,
   exportErrors = [],
   exportBusy = false,
   exportBlocked = false,
@@ -1004,6 +1010,27 @@ export function ProjectsScreen({
             }}
           >
             {exportBusy ? 'Exportando…' : 'Lista de herrajes'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={
+              !onExportCommercialQuote ||
+              exportBusy ||
+              exportBlocked ||
+              project.items.length === 0
+            }
+            title={
+              onExportCommercialQuote
+                ? 'Exportar cotización comercial para el cliente (.xlsx)'
+                : 'Export cotización no disponible en este shell'
+            }
+            onClick={() => {
+              void onExportCommercialQuote?.();
+            }}
+            data-testid="project-chrome-export-quote"
+          >
+            {exportBusy ? 'Exportando…' : 'Exportar cotización'}
           </button>
           <button
             type="button"

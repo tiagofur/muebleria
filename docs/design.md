@@ -559,9 +559,9 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 - **Patrón:** cards → detalle read-only → Modal **MD** (metadatos / agregar ítem)
 - **Lista:** cards con nombre, cliente, status badge, totales cuando el shell provee estimates; CTA «Nueva cotización»
 - **Detalle (workspace tool — issue #50):**
-  - **Chrome sticky** (`.workspace-chrome`): nombre, status, meta densa, precio de venta, export Optimizer (primary), herrajes, Editar/Duplicar/Eliminar
+  - **Chrome sticky** (`.workspace-chrome`): nombre, status, meta densa, precio de venta, export Optimizer (primary), lista herrajes, **Exportar cotización** (F030 / #36 — XLSX cliente), Editar/Duplicar/Eliminar
   - Cuerpo: ítems + panel de desglose; issues de export en el panel
-  - Una sola `.btn--primary` en el chrome (export); en el panel de ítems «Agregar mueble» puede ser primary de esa región
+  - Una sola `.btn--primary` en el chrome (export Optimizer); en el panel de ítems «Agregar mueble» puede ser primary de esa región
 - **Cliente:** picker de clientes activos + acción «Nuevo cliente» (alta inline o navegación a Clientes según wiring del shell)
 - **Búsqueda / filtros:** SearchInput
 - **EmptyState** cuando no hay cotizaciones
