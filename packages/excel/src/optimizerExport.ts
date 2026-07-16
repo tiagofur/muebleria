@@ -61,12 +61,29 @@ function styleHeaderCell(
 }
 
 /**
+ * Normalize exceljs writeBuffer output for Node + browser (no Node Buffer).
+ * Browser has no global Buffer — returning Uint8Array keeps web export working.
+ */
+export function workbookBytes(
+  data: ArrayBuffer | Uint8Array | ArrayBufferView,
+): Uint8Array {
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  return new Uint8Array(data);
+}
+
+/**
  * Build Optimizer workbook buffer from cut-list rows (PRD §14 / EXP-01).
  * Headers: row 1 Material/Cubrecanto merges; row 2 data headers; data from row 3.
+ * Returns Uint8Array (browser-safe; Node Buffer is not available in Vite web).
  */
 export async function optimizerExport(
   rows: readonly ProductionCutRow[],
-): Promise<Buffer> {
+): Promise<Uint8Array> {
   if (rows.length === 0) {
     throw new ValidationError('no hay piezas de tablero para exportar', {
       field: 'rows',
@@ -137,6 +154,6 @@ export async function optimizerExport(
     excelRow.height = 15;
   });
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  const raw = await workbook.xlsx.writeBuffer();
+  return workbookBytes(raw as ArrayBuffer | Uint8Array);
 }

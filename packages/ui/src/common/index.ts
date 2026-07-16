@@ -17,6 +17,16 @@ export { SearchInput, type SearchInputProps } from './SearchInput';
 export { StatusChips, type StatusChipsProps } from './StatusChips';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export {
+  ErrorBoundary,
+  type ErrorBoundaryProps,
+} from './ErrorBoundary';
+export {
   useDebouncedValue,
   SEARCH_DEBOUNCE_MS,
 } from './useDebouncedValue';
+export {
+  useRoutableEntitySelection,
+  type UseRoutableEntitySelectionOptions,
+  type UseRoutableEntitySelectionResult,
+} from './useRoutableEntitySelection';
+export { EMPTY_PLACEHOLDER, formatEmpty } from './formatEmpty';

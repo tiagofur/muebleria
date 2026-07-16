@@ -13,6 +13,7 @@ import {
   projectToApi,
   sortCategoriesForSave,
 } from './apiMappers';
+import { SCHEMA_VERSION } from './seed';
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
@@ -42,7 +43,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const catalog = await this.getCatalog();
     const projects = await this.getProjects();
     return {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       catalog,
       projects,
     };
@@ -97,6 +98,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   /**
    * Upsert entity: PUT by id; only POST when missing (404) or transport error.
    * Avoids POST-on-500 which caused duplicate-key / cascade noise.
+   *
+   * Conflict handling: a 409 (or 400 with a duplicate-key message) from either
+   * PUT or POST means the entity already exists — the upsert's goal is met, so
+   * it returns silently instead of logging an error. This keeps the console
+   * clean when React re-invokes saves (StrictMode double-fire, re-renders) or
+   * when demo/seed data overlaps existing rows.
    */
   private async upsert(
     pathById: string,
@@ -117,6 +124,9 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (res?.ok) return;
 
     const putBody = res ? await res.text().catch(() => '') : '';
+    // Already exists → upsert goal met, nothing more to do.
+    if (res && isConflict(res.status, putBody)) return;
+
     const missing =
       !res ||
       res.status === 404 ||
@@ -137,9 +147,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       });
       if (!created.ok) {
         const text = await created.text().catch(() => '');
-        console.error(
-          `API create failed ${pathCollection}: ${created.status} ${text}`,
-        );
+        // Conflict on POST = already created concurrently → treat as success.
+        if (!isConflict(created.status, text)) {
+          console.error(
+            `API create failed ${pathCollection}: ${created.status} ${text}`,
+          );
+        }
       }
     } catch (err) {
       console.error(`API create error ${pathCollection}:`, err);
@@ -221,6 +234,23 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     return list.map((p) => projectFromApi(p as Record<string, unknown>));
   }
 
+  /**
+   * Create path — POST only. Avoids the upsert PUT probe that always 404s for
+   * brand-new ids (noisy console) and is the correct verb for first insert.
+   */
+  async createProject(project: Project): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/projects`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(projectToApi(project)),
+    });
+    if (res.ok) return;
+    const text = await res.text().catch(() => '');
+    if (isConflict(res.status, text)) return;
+    console.error(`API create failed /projects: ${res.status} ${text}`);
+    throw new Error(`Failed to create project: ${res.status} ${text}`);
+  }
+
   async saveProject(project: Project): Promise<void> {
     await this.upsert(
       `/projects/${project.id}`,
@@ -236,3 +266,18 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     });
   }
 }
+
+/**
+ * Reports whether a response indicates a duplicate/conflict — i.e. the entity
+ * already exists, so an upsert has nothing to do. Matches the backend's two
+ * shapes: HTTP 409 Conflict, and the legacy 400 "ya está registrado" message
+ * some handlers emitted before the 409 unification.
+ */
+function isConflict(status: number, body: string): boolean {
+  if (status === 409) return true;
+  if (status === 400 && /ya est.a registrado|already registered|already exists/i.test(body)) {
+    return true;
+  }
+  return false;
+}
+

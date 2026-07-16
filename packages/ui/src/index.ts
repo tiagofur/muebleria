@@ -124,6 +124,7 @@ export {
 
 export {
   EmptyState,
+  ErrorBoundary,
   Modal,
   SearchInput,
   StatusChips,
@@ -135,6 +136,7 @@ export {
   TOAST_EXIT_MS,
   TOAST_MAX,
   type EmptyStateProps,
+  type ErrorBoundaryProps,
   type ModalProps,
   type ModalSize,
   type SearchInputProps,

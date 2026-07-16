@@ -10,24 +10,23 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
-	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 type Server struct {
-	Store           *storage.PostgresStore
+	Store           Store
 	JWTSecret       string
 	allowedOrigins  []string
 	rateLimitRPS    float64
 	rateLimitBurst  int
 }
 
-func NewServer(store *storage.PostgresStore, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
+func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
 	return &Server{
-		Store:          store,
-		JWTSecret:      jwtSecret,
-		allowedOrigins: allowedOrigins,
-		rateLimitRPS:   rateLimitRPS,
-		rateLimitBurst: rateLimitBurst,
+		Store:           store,
+		JWTSecret:       jwtSecret,
+		allowedOrigins:  allowedOrigins,
+		rateLimitRPS:    rateLimitRPS,
+		rateLimitBurst:  rateLimitBurst,
 	}
 }
 
@@ -98,7 +97,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 	err = s.Store.CreateUser(r.Context(), &u)
 	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+		if isDuplicateKey(err) {
 			respondWithError(w, http.StatusConflict, "email already registered")
 			return
 		}
@@ -182,6 +181,10 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 		c.Active = true
 		err := s.Store.CreateCustomer(r.Context(), &c)
 		if err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El registro ya existe")
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -259,6 +262,10 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 		m.Active = true
 		err := s.Store.CreateMaterialBoard(r.Context(), &m)
 		if err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -341,8 +348,16 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		}
 
 		p.Status = domain.StatusDraft
+		// Product default currency (Mexico).
+		if p.Currency == "" {
+			p.Currency = "MXN"
+		}
 		err := s.Store.CreateProject(r.Context(), &p)
 		if err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El registro ya existe")
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -377,6 +392,12 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.UpdateProject(r.Context(), id, &p)
 		if err != nil {
+			// 404 lets the FE upsert fall through to POST create (same pattern as
+			// materials/customers). A silent 200 on missing id left phantom projects.
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -452,8 +473,8 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 		e.Active = true
 		err := s.Store.CreateEdgeBand(r.Context(), &e)
 		if err != nil {
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -494,8 +515,8 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -537,8 +558,8 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 		h.Active = true
 		err := s.Store.CreateHardware(r.Context(), &h)
 		if err != nil {
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -579,8 +600,8 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -621,8 +642,8 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.CreateOptionGroup(r.Context(), &og)
 		if err != nil {
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -663,8 +684,8 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -705,8 +726,8 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.CreateModule(r.Context(), &m)
 		if err != nil {
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -747,8 +768,8 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-				respondWithError(w, http.StatusBadRequest, "El código ingresado ya está registrado")
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
 			}
 			respondWithInternalError(w, err, "handler")

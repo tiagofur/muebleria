@@ -8,6 +8,7 @@ import {
   sortCategoriesForSave,
   projectToApi,
   projectFromApi,
+  breakdownFromApi,
 } from './apiMappers';
 import type { MaterialBoard, Module, ModuleCategory, Project } from '@muebles/domain';
 
@@ -53,7 +54,6 @@ describe('apiMappers', () => {
           quantity: 2,
           lengthMm: 720,
           widthMm: 500,
-          grain: 1,
           edges: [{ side: 'L1', enabled: true }],
           optionRole: 'INTERIOR',
         },
@@ -130,5 +130,37 @@ describe('apiMappers', () => {
         sortOrder: 2,
       }),
     ).toEqual({ id: 'c1', name: 'Root', parentId: '', sortOrder: 2 });
+  });
+
+  it('maps breakdown snake_case (Go calculate) to camelCase', () => {
+    const api = {
+      materials_cost: 100.5,
+      edge_total: 12.25,
+      hardware_total: 8,
+      direct_cost: 120.75,
+      labor_modular: 40,
+      labor_fixed_cost: 15.5,
+      margin_factor: 1.35,
+      sale_price: 200.1,
+    };
+    const bd = breakdownFromApi(api as Record<string, unknown>);
+    expect(bd).toEqual({
+      materialsCost: 100.5,
+      edgeTotal: 12.25,
+      hardwareTotal: 8,
+      directCost: 120.75,
+      laborModular: 40,
+      laborFixedCost: 15.5,
+      marginFactor: 1.35,
+      salePrice: 200.1,
+    });
+  });
+
+  it('breakdownFromApi tolerates missing fields', () => {
+    const bd = breakdownFromApi({});
+    expect(bd.materialsCost).toBe(0);
+    expect(bd.salePrice).toBe(0);
+    // marginFactor defaults to 1 (no margin) rather than 0 (which would zero the price).
+    expect(bd.marginFactor).toBe(1);
   });
 });

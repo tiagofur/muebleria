@@ -131,9 +131,10 @@ type BoardPart struct {
 	Quantity    int              `json:"quantity"`
 	LengthMm    int              `json:"length_mm"`
 	WidthMm     int              `json:"width_mm"`
-	Grain       int              `json:"grain"` // 0 o 1
-	Edges       []EdgeAssignment `json:"edges"`
-	OptionRole  string           `json:"option_role"`
+	// Grain (veta) is inherited from the resolved material's GrainDefault —
+	// never set per piece. Mirrors how edge band is resolved from material.
+	Edges      []EdgeAssignment `json:"edges"`
+	OptionRole string           `json:"option_role"`
 }
 
 type HardwareLine struct {
@@ -213,10 +214,73 @@ type QuotePriceSnapshot struct {
 }
 
 type Catalog struct {
-	Materials    []MaterialBoard   `json:"materials"`
-	Edges        []EdgeBand        `json:"edges"`
-	Hardware     []Hardware        `json:"hardware"`
-	OptionGroups []OptionGroup     `json:"option_groups"`
-	Modules      []Module          `json:"modules"`
-	Categories   []ModuleCategory  `json:"categories,omitempty"`
+	Materials    []MaterialBoard  `json:"materials"`
+	Edges        []EdgeBand       `json:"edges"`
+	Hardware     []Hardware       `json:"hardware"`
+	OptionGroups []OptionGroup    `json:"option_groups"`
+	Modules      []Module         `json:"modules"`
+	Categories   []ModuleCategory `json:"categories,omitempty"`
+}
+
+// Grain is 0|1 for Optimizer export (inherited from material.GrainDefault).
+type Grain int
+
+const (
+	GrainNone Grain = 0
+	GrainYes  Grain = 1
+)
+
+// ResolvedBoardPart is a board part with concrete material/edge/grain (TS parity).
+type ResolvedBoardPart struct {
+	ID          string           `json:"id"`
+	Code        string           `json:"code,omitempty"`
+	Description string           `json:"description"`
+	Quantity    int              `json:"quantity"`
+	LengthMm    int              `json:"length_mm"`
+	WidthMm     int              `json:"width_mm"`
+	Grain       Grain            `json:"grain"`
+	Edges       []EdgeAssignment `json:"edges"`
+	OptionRole  string           `json:"option_role"`
+	MaterialID  string           `json:"material_id"`
+	EdgeBandID  string           `json:"edge_band_id,omitempty"`
+}
+
+// ResolvedHardwareLine is a hardware line with concrete hardware id.
+type ResolvedHardwareLine struct {
+	ID                  string `json:"id"`
+	Quantity            int    `json:"quantity"`
+	DescriptionOverride string `json:"description_override,omitempty"`
+	OptionRole          string `json:"option_role"`
+	HardwareID          string `json:"hardware_id"`
+}
+
+// ResolvedBom is the fully resolved module BOM.
+type ResolvedBom struct {
+	BoardParts     []ResolvedBoardPart     `json:"board_parts"`
+	HardwareLines  []ResolvedHardwareLine  `json:"hardware_lines"`
+}
+
+// ProductionCutRow is a flat Optimizer cut-list row (columns A–J).
+type ProductionCutRow struct {
+	Quantity     int    `json:"quantity"`
+	LengthMm     int    `json:"length_mm"`
+	WidthMm      int    `json:"width_mm"`
+	Description  string `json:"description"`
+	MaterialName string `json:"material_name"`
+	Grain        Grain  `json:"grain"`
+	L1           int    `json:"L1"` // 0|1
+	L2           int    `json:"L2"`
+	W1           int    `json:"W1"`
+	W2           int    `json:"W2"`
+}
+
+// HardwarePurchaseRow is an aggregated hardware purchase line (EXP-08).
+type HardwarePurchaseRow struct {
+	HardwareID  string       `json:"hardware_id"`
+	Code        string       `json:"code"`
+	Description string       `json:"description"`
+	Unit        HardwareUnit `json:"unit"`
+	Quantity    int          `json:"quantity"`
+	CostPerUnit float64      `json:"cost_per_unit"`
+	LineCost    float64      `json:"line_cost"`
 }

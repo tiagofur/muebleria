@@ -80,6 +80,7 @@
 
 .app-sidebar__item {
   display: flex;
+  box-sizing: border-box;
   width: 100%;
   align-items: center;
   gap: var(--space-3);
@@ -94,6 +95,8 @@
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   text-align: left;
+  text-decoration: none;
+  cursor: pointer;
   cursor: pointer;
   transition: var(--transition-colors);
 }

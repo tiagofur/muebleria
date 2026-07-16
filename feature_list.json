@@ -522,6 +522,27 @@
         "docs/prd.md §13.5"
       ],
       "status": "done"
+    },
+    {
+      "id": "F028",
+      "phase": 3,
+      "name": "grain_inherited_from_material",
+      "title": "Veta (grain) heredada del material, no por pieza",
+      "description": "La veta ('puede girar') deja de preguntarse por pieza y pasa a heredarse siempre del material (material.grainDefault) al resolver la cotización/export. Mismo patrón que edgeBandId. Arregla además el drift: material_boards.grain_default existía en Go/TS pero no en SQL.",
+      "acceptance": [
+        "BoardPart no tiene campo grain en TS ni en Go",
+        "ResolvedBoardPart.grain se materializa como material.grainDefault ? 1 : 0 en resolveBom",
+        "UI de pieza no pregunta veta; la veta se define en el material (grainDefault)",
+        "Migración SQL añade material_boards.grain_default y elimina board_parts.grain",
+        "storage Go materials.go persiste grain_default (drift corregido)",
+        "SCHEMA_VERSION bump 1→2 con migrateWorkspace que limpia grain stale",
+        "Export Optimizer mantiene columna veta con valor derivado del material"
+      ],
+      "references": [
+        "docs/prd.md §13.1",
+        "docs/prd.md §14.2"
+      ],
+      "status": "done"
     }
   ]
 }

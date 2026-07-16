@@ -115,7 +115,6 @@ describe('collectExportIssues', () => {
           quantity: 1,
           lengthMm: 0,
           widthMm: 100,
-          grain: 0,
           edges: [
             { side: 'L1', enabled: false },
             { side: 'L2', enabled: false },

@@ -33,9 +33,11 @@ import {
   type CategoryFilterId,
 } from '@muebles/domain';
 import {
+  AlertCircle,
   ChevronLeft,
   Copy,
   FileText,
+  Loader2,
   Package,
   Pencil,
   Plus,
@@ -99,6 +101,13 @@ export interface ProjectsScreenProps {
   readonly onSelectionChange?: (projectId: string | null) => void;
   /** Domain QuoteBreakdown from shell (PRJ-06, UX-03). Null when blocked/unavailable. */
   readonly breakdown?: QuoteBreakdown | null;
+  /** Live backend recalculation in flight (auth session). */
+  readonly breakdownLoading?: boolean;
+  /**
+   * Backend recalculation failed; panel may still show local/fallback totals.
+   * Parent owns toast; this prop drives the totals panel alert.
+   */
+  readonly breakdownError?: string | null;
   readonly previewBlocked?: boolean;
   readonly missingGroups?: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
@@ -162,6 +171,8 @@ export function ProjectsScreen({
   onRemoveItem,
   onSelectionChange,
   breakdown = null,
+  breakdownLoading = false,
+  breakdownError = null,
   previewBlocked = false,
   missingGroups = [],
   groupLabels,
@@ -218,9 +229,18 @@ export function ProjectsScreen({
     onSelectionChange?.(selectedId);
   }, [selectedId, onSelectionChange]);
 
-  // Open project detail from shell (Dashboard → Cotizaciones)
+  // Sync detail selection from shell URL / dashboard handoff.
+  // null = list view (e.g. `/projects`); id = detail (`/projects/:id`).
   useEffect(() => {
-    if (!openProjectId) return;
+    if (openProjectId == null || openProjectId === '') {
+      setSelectedId(null);
+      setConfirmDelete(false);
+      setConfirmRemoveItemId(null);
+      setItemError(null);
+      setAddItemModalOpen(false);
+      setMetaModalOpen(false);
+      return;
+    }
     if (!projects.some((p) => p.id === openProjectId)) return;
     setSelectedId(openProjectId);
     setConfirmDelete(false);
@@ -917,34 +937,14 @@ export function ProjectsScreen({
               Duplicar
             </button>
           ) : null}
-          {confirmDelete ? (
-            <span className="project-inline-confirm">
-              <span className="project-inline-confirm__text">¿Eliminar?</span>
-              <button
-                type="button"
-                className="btn btn--small btn--danger"
-                onClick={() => handleDelete(project.id)}
-              >
-                Confirmar
-              </button>
-              <button
-                type="button"
-                className="btn btn--small"
-                onClick={() => setConfirmDelete(false)}
-              >
-                Cancelar
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 size={16} strokeWidth={1.5} aria-hidden />
-              Eliminar
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn--danger"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={16} strokeWidth={1.5} aria-hidden />
+            Eliminar
+          </button>
         </div>
       </div>
 
@@ -1117,7 +1117,34 @@ export function ProjectsScreen({
                 </span>
               ) : null}
             </div>
+            {breakdownLoading ? (
+              <p
+                className="project-totals__loading"
+                role="status"
+                aria-busy="true"
+                data-testid="breakdown-loading"
+              >
+                <Loader2
+                  className="project-totals__spinner"
+                  size={16}
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+                Recalculando…
+              </p>
+            ) : null}
           </div>
+
+          {breakdownError ? (
+            <p
+              className="project-totals__error"
+              role="alert"
+              data-testid="breakdown-error"
+            >
+              <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
+              <span>{breakdownError}</span>
+            </p>
+          ) : null}
 
           <PricePreviewGate
             requiredGroupCodes={previewBlocked ? missingGroups : []}
@@ -1166,7 +1193,9 @@ export function ProjectsScreen({
               <p className="project-totals__empty">
                 {project.items.length === 0
                   ? 'Agregá muebles para ver totales.'
-                  : 'No se pudo calcular el desglose con las opciones actuales.'}
+                  : breakdownLoading
+                    ? 'Calculando desglose…'
+                    : 'No se pudo calcular el desglose con las opciones actuales.'}
               </p>
             )}
           </PricePreviewGate>
@@ -1267,6 +1296,39 @@ export function ProjectsScreen({
         }
       >
         {renderAddItemForm()}
+      </Modal>
+
+      <Modal
+        open={confirmDelete && selectedProject != null}
+        onClose={() => setConfirmDelete(false)}
+        title="Eliminar proyecto"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                if (selectedProject) handleDelete(selectedProject.id);
+              }}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar{' '}
+          <strong>{selectedProject?.name ?? 'este proyecto'}</strong>? Esta
+          acción no se puede deshacer.
+        </p>
       </Modal>
     </section>
   );

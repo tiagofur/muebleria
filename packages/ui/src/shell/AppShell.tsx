@@ -3,7 +3,12 @@
  * Presentation only — navigation ids are controlled by the shell.
  */
 
-import { useCallback, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import {
   FileText,
   LayoutDashboard,
@@ -47,6 +52,11 @@ export type AppShellProps = {
   readonly onLogout?: () => void;
   /** Admin-only: show «Usuarios» under CONFIG (registration approval). */
   readonly showAdminUsers?: boolean;
+  /**
+   * Optional real URL per nav id (shell SPA routes). When set, items render as
+   * anchors so middle-click / copy-link work; plain click still calls onNavigate.
+   */
+  readonly hrefForNav?: (id: AppNavId) => string;
 };
 
 type NavItemDef = {
@@ -124,6 +134,7 @@ export function AppShell({
   headerActions,
   onLogout,
   showAdminUsers = false,
+  hrefForNav,
 }: AppShellProps): ReactNode {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navSections = resolveNavSections(showAdminUsers);
@@ -134,6 +145,21 @@ export function AppShell({
       setSidebarOpen(false);
     },
     [onNavigate],
+  );
+
+  const onNavClick = useCallback(
+    (event: ReactMouseEvent<HTMLAnchorElement>, id: AppNavId) => {
+      // Allow modified clicks (new tab) to use the real href when present.
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      handleNavigate(id);
+    },
+    [handleNavigate],
   );
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -176,26 +202,41 @@ export function AppShell({
                 {section.items.map((item) => {
                   const Icon = item.icon;
                   const active = item.id === activeId;
+                  const className = active
+                    ? 'app-sidebar__item is-active'
+                    : 'app-sidebar__item';
+                  const content = (
+                    <>
+                      <Icon
+                        className="app-sidebar__icon"
+                        size={16}
+                        strokeWidth={1.5}
+                        aria-hidden
+                      />
+                      <span>{item.label}</span>
+                    </>
+                  );
                   return (
                     <li key={item.id}>
-                      <button
-                        type="button"
-                        className={
-                          active
-                            ? 'app-sidebar__item is-active'
-                            : 'app-sidebar__item'
-                        }
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => handleNavigate(item.id)}
-                      >
-                        <Icon
-                          className="app-sidebar__icon"
-                          size={16}
-                          strokeWidth={1.5}
-                          aria-hidden
-                        />
-                        <span>{item.label}</span>
-                      </button>
+                      {hrefForNav ? (
+                        <a
+                          href={hrefForNav(item.id)}
+                          className={className}
+                          aria-current={active ? 'page' : undefined}
+                          onClick={(e) => onNavClick(e, item.id)}
+                        >
+                          {content}
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          className={className}
+                          aria-current={active ? 'page' : undefined}
+                          onClick={() => handleNavigate(item.id)}
+                        >
+                          {content}
+                        </button>
+                      )}
                     </li>
                   );
                 })}

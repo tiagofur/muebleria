@@ -37,7 +37,6 @@ func TestCalcBoardLineCost(t *testing.T) {
 		Quantity:    2,
 		LengthMm:    1000,
 		WidthMm:     500,
-		Grain:       0,
 		Edges: []domain.EdgeAssignment{
 			{Side: "L1", Enabled: true},
 			{Side: "L2", Enabled: false},
@@ -105,14 +104,13 @@ func TestCalcProjectBreakdown(t *testing.T) {
 				Name:          "Gabinete",
 				BaseLaborCost: 350.0,
 				BoardParts: []domain.BoardPart{
-					{
-						ID:          "part-1",
-						Description: "Techo",
-						Quantity:    1,
-						LengthMm:    800,
-						WidthMm:     600,
-						Grain:       0,
-						Edges: []domain.EdgeAssignment{
+						{
+							ID:          "part-1",
+							Description: "Techo",
+							Quantity:    1,
+							LengthMm:    800,
+							WidthMm:     600,
+							Edges: []domain.EdgeAssignment{
 							{Side: "L1", Enabled: false},
 							{Side: "L2", Enabled: false},
 							{Side: "W1", Enabled: false},
@@ -189,19 +187,152 @@ func TestCalcProjectBreakdown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if breakdown.MaterialsCost != 153.6 {
-		t.Errorf("expected MaterialsCost = 153.6, got %f", breakdown.MaterialsCost)
+	assertClose := func(name string, got, want float64) {
+		t.Helper()
+		if math.Abs(got-want) > 1e-9 {
+			t.Errorf("%s: got %v, want %v", name, got, want)
+		}
 	}
-	if breakdown.HardwareTotal != 200.0 {
-		t.Errorf("expected HardwareTotal = 200.0, got %f", breakdown.HardwareTotal)
+	assertClose("MaterialsCost", breakdown.MaterialsCost, 153.6)
+	assertClose("HardwareTotal", breakdown.HardwareTotal, 200.0)
+	assertClose("DirectCost", breakdown.DirectCost, 353.6)
+	assertClose("LaborModular", breakdown.LaborModular, 700.0)
+	// Raw float path (no Round): sale = 353.6*1.35 + 700 + 200
+	assertClose("SalePrice", breakdown.SalePrice, 353.6*1.35+700+200)
+}
+
+// TestCalcProjectBreakdown_NoIntermediateRounding locks issue #7:
+// domain engines must NOT round to 2 decimals; only presentation/export may.
+// Uses costs that produce >2 fractional digits so Round(x*100)/100 would diverge.
+func TestCalcProjectBreakdown_NoIntermediateRounding(t *testing.T) {
+	material := domain.MaterialBoard{
+		ID:        "mat-1",
+		Code:      "TAB-1",
+		Name:      "MDF",
+		CostPerM2: 160.333, // yields non-2-decimal board cost
+		Active:    true,
 	}
-	if breakdown.DirectCost != 353.6 {
-		t.Errorf("expected DirectCost = 353.6, got %f", breakdown.DirectCost)
+	hardware := domain.Hardware{
+		ID:          "hw-1",
+		Code:        "HER-1",
+		Name:        "Bisagra",
+		Unit:        domain.UnitPiece,
+		CostPerUnit: 7.777,
+		Active:      true,
 	}
-	if breakdown.LaborModular != 700.0 {
-		t.Errorf("expected LaborModular = 700.0, got %f", breakdown.LaborModular)
+	edge := domain.EdgeBand{
+		ID:        "edge-1",
+		Code:      "CAN-1",
+		Name:      "Canto",
+		CostPerMl: 3.333,
+		Active:    true,
 	}
-	if breakdown.SalePrice != 1377.36 {
-		t.Errorf("expected SalePrice = 1377.36, got %f", breakdown.SalePrice)
+
+	catalog := domain.Catalog{
+		Materials: []domain.MaterialBoard{material},
+		Hardware:  []domain.Hardware{hardware},
+		Edges:     []domain.EdgeBand{edge},
+		Modules: []domain.Module{
+			{
+				ID:            "mod-1",
+				Code:          "MOD-TEST",
+				Name:          "Test",
+				BaseLaborCost: 100.111,
+				BoardParts: []domain.BoardPart{
+					{
+						ID:          "part-1",
+						Description: "Panel",
+						Quantity:    1,
+						LengthMm:    800,
+						WidthMm:     600, // 0.48 m2
+						Edges: []domain.EdgeAssignment{
+							{Side: "L1", Enabled: true},
+							{Side: "L2", Enabled: false},
+							{Side: "W1", Enabled: true},
+							{Side: "W2", Enabled: false},
+						},
+						OptionRole: "INTERIOR",
+					},
+				},
+				HardwareLines: []domain.HardwareLine{
+					{ID: "hwline-1", Quantity: 3, OptionRole: "BISAGRA"},
+				},
+			},
+		},
+		OptionGroups: []domain.OptionGroup{
+			{ID: "g-int", Code: "INTERIOR", Name: "Interior", Kind: "board", Required: true, OptionIDs: []string{"mat-1"}},
+			{ID: "g-hw", Code: "BISAGRA", Name: "Bisagra", Kind: "hardware", Required: true, OptionIDs: []string{"hw-1"}},
+			{ID: "g-edge", Code: "EDGE", Name: "Canto", Kind: "edge", Required: false, OptionIDs: []string{"edge-1"}},
+		},
+	}
+
+	project := domain.Project{
+		ID:             "proj-1",
+		Name:           "No-round",
+		CustomerID:     "cust-1",
+		Currency:       "MXN",
+		MarginFactor:   1.35,
+		LaborFixedCost: 50.555,
+		Status:         domain.StatusDraft,
+		Items: []domain.ProjectItem{
+			{
+				ID:       "item-1",
+				ModuleID: "mod-1",
+				Quantity: 1,
+				OptionChoices: map[string]string{
+					"INTERIOR": "mat-1",
+					"BISAGRA":  "hw-1",
+					"EDGE":     "edge-1",
+				},
+			},
+		},
+	}
+
+	// Raw expected (no Round):
+	// area = 0.48 → materials = 0.48 * 160.333 = 76.95984
+	// edge ml: L1 0.8 + W1 0.6 = 1.4 → edge = 1.4 * 3.333 = 4.6662
+	// hardware = 3 * 7.777 = 23.331
+	// direct = 76.95984 + 4.6662 + 23.331 = 104.95704
+	// laborModular = 100.111
+	// sale = 104.95704*1.35 + 100.111 + 50.555 = 292.358004
+	const (
+		wantMaterials = 76.95984
+		wantEdge      = 4.6662
+		wantHardware  = 23.331
+		wantDirect    = 104.95704
+		wantLabor     = 100.111
+		wantSale      = 292.358004
+	)
+
+	breakdown, err := CalcProjectBreakdown(project, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertClose := func(name string, got, want float64) {
+		t.Helper()
+		if math.Abs(got-want) > 1e-9 {
+			t.Errorf("%s: got %v, want %v (diff %v)", name, got, want, got-want)
+		}
+	}
+	assertClose("MaterialsCost", breakdown.MaterialsCost, wantMaterials)
+	assertClose("EdgeTotal", breakdown.EdgeTotal, wantEdge)
+	assertClose("HardwareTotal", breakdown.HardwareTotal, wantHardware)
+	assertClose("DirectCost", breakdown.DirectCost, wantDirect)
+	assertClose("LaborModular", breakdown.LaborModular, wantLabor)
+	assertClose("SalePrice", breakdown.SalePrice, wantSale)
+
+	// Algebraic identity must hold on raw floats (fails if components and total are rounded separately).
+	sumParts := breakdown.MaterialsCost + breakdown.EdgeTotal + breakdown.HardwareTotal
+	if math.Abs(sumParts-breakdown.DirectCost) > 1e-12 {
+		t.Errorf("DirectCost %v != sum of components %v", breakdown.DirectCost, sumParts)
+	}
+
+	// Guard: values must NOT equal their 2-decimal rounded form (proves we keep precision).
+	if breakdown.MaterialsCost == math.Round(wantMaterials*100)/100 {
+		t.Error("MaterialsCost appears rounded to 2 decimals — parity with TS broken")
+	}
+	if breakdown.SalePrice == math.Round(wantSale*100)/100 {
+		t.Error("SalePrice appears rounded to 2 decimals — parity with TS broken")
 	}
 }

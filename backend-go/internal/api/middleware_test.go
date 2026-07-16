@@ -73,7 +73,7 @@ func TestAuthMiddleware(t *testing.T) {
 	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
 		if !ok || claims == nil {
-			http.Error(w, "no claims found", http.StatusInternalServerError)
+			respondWithError(w, http.StatusInternalServerError, "no claims found")
 			return
 		}
 		w.WriteHeader(http.StatusOK)

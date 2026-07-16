@@ -44,9 +44,11 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(app).toContain('AppShell');
     expect(app).toContain('activeId={navId}');
     expect(app).toContain('onNavigate={onNavigate}');
+    expect(app).toContain('hrefForNav={pathForNav}');
     expect(app).not.toContain('HomePlaceholder');
     expect(app).toContain('Dashboard');
-    expect(app).toContain("useState<AppNavId>('home')");
+    expect(app).toContain('navFromPath');
+    expect(app).toContain('pathForNav');
     expect(app).not.toContain('app-nav__tab');
     expect(app).not.toContain('className="app-nav"');
     expect(app).not.toContain("useState<CatalogTab>");
@@ -81,7 +83,8 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(app).toContain('onDashboardOpenProject');
     expect(app).toContain('onDashboardNewProject');
     expect(app).toContain('onDashboardNewModule');
-    expect(app).toContain('openProjectId={projectsOpenId}');
+    expect(app).toContain('openProjectId={routeProjectId}');
+    expect(app).toContain('openModuleId={routeModuleId}');
     expect(app).toContain('requestCreateKey={projectsCreateKey}');
     expect(app).toContain('requestCreateKey={modulesCreateKey}');
     expect(app).toContain('sumMonthlyQuotedTotal');

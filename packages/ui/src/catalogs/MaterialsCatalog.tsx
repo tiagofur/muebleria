@@ -16,6 +16,7 @@ import {
   SearchInput,
   StatusChips,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../common';
 import {
   filterCatalogItems,
@@ -90,6 +91,9 @@ export interface MaterialsCatalogProps {
   readonly onReactivate: (id: string) => void;
   /** Creates an edge band and returns its new id (for linking as default). */
   readonly onCreateEdge: (draft: EdgeDraft) => string;
+  /** URL handoff: `/materials/:id` expands that row. */
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
 }
 
 export function MaterialsCatalog({
@@ -100,12 +104,20 @@ export function MaterialsCatalog({
   onDeactivate,
   onReactivate,
   onCreateEdge,
+  openEntityId = null,
+  onSelectionChange,
 }: MaterialsCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const materialIds = useMemo(() => materials.map((m) => m.id), [materials]);
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: materialIds,
+    });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<MaterialDraft>(emptyDraft);
@@ -206,7 +218,7 @@ export function MaterialsCatalog({
   };
 
   const toggleExpand = (item: MaterialBoard) => {
-    setExpandedId((prev) => (prev === item.id ? null : item.id));
+    toggleSelectedId(item.id);
   };
 
   const validate = (): string | null => {
@@ -252,46 +264,49 @@ export function MaterialsCatalog({
     closeModal();
   };
 
-  const columns: CatalogColumn<MaterialBoard>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      render: (r) => (
-        <span className="catalog-row-detail__value--mono">{r.code}</span>
-      ),
-    },
-    { key: 'name', header: 'Nombre', render: (r) => r.name },
-    {
-      key: 'thickness',
-      header: 'Espesor (mm)',
-      render: (r) => r.thicknessMm,
-    },
-    {
-      key: 'dimensions',
-      header: 'Medidas (mm)',
-      render: (r) => `${r.lengthMm} × ${r.widthMm}`,
-    },
-    {
-      key: 'boardPrice',
-      header: 'Precio Hoja',
-      render: (r) => `$${r.boardPrice.toFixed(2)}`,
-    },
-    {
-      key: 'waste',
-      header: 'Merma (%)',
-      render: (r) => `${r.wastePercent}%`,
-    },
-    {
-      key: 'cost',
-      header: 'Costo/m²',
-      render: (r) => `$${r.costPerM2.toFixed(2)}`,
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      render: (r) => <ActiveBadge active={r.active} />,
-    },
-  ];
+  const columns: CatalogColumn<MaterialBoard>[] = useMemo(
+    () => [
+      {
+        key: 'code',
+        header: 'Código',
+        render: (r) => (
+          <span className="catalog-row-detail__value--mono">{r.code}</span>
+        ),
+      },
+      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'thickness',
+        header: 'Espesor (mm)',
+        render: (r) => r.thicknessMm,
+      },
+      {
+        key: 'dimensions',
+        header: 'Medidas (mm)',
+        render: (r) => `${r.lengthMm} × ${r.widthMm}`,
+      },
+      {
+        key: 'boardPrice',
+        header: 'Precio Hoja',
+        render: (r) => `$${r.boardPrice.toFixed(2)}`,
+      },
+      {
+        key: 'waste',
+        header: 'Merma (%)',
+        render: (r) => `${r.wastePercent}%`,
+      },
+      {
+        key: 'cost',
+        header: 'Costo/m²',
+        render: (r) => `$${r.costPerM2.toFixed(2)}`,
+      },
+      {
+        key: 'status',
+        header: 'Estado',
+        render: (r) => <ActiveBadge active={r.active} />,
+      },
+    ],
+    [],
+  );
 
   const isTrulyEmpty = materials.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;

@@ -99,6 +99,13 @@ export interface ModulesScreenProps {
    * (Dashboard quick action). 0 / undefined = no request.
    */
   readonly requestCreateKey?: number;
+  /**
+   * Open detail for this module id when set (URL `/modules/:id` or shell handoff).
+   * null / '' = list view.
+   */
+  readonly openModuleId?: string | null;
+  /** Notifies parent when detail selection changes (for URL sync). */
+  readonly onSelectionChange?: (moduleId: string | null) => void;
 }
 
 function CostPreviewPanel({
@@ -196,6 +203,8 @@ export function ModulesScreen({
   groupLabels,
   moduleEstimates = {},
   requestCreateKey = 0,
+  openModuleId = null,
+  onSelectionChange,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -292,6 +301,21 @@ export function ModulesScreen({
       setSelectedId(null);
     }
   }, [modules, selectedId]);
+
+  // Notify shell of detail selection (URL sync).
+  useEffect(() => {
+    onSelectionChange?.(selectedId);
+  }, [selectedId, onSelectionChange]);
+
+  // Sync detail from shell URL (`/modules` vs `/modules/:id`).
+  useEffect(() => {
+    if (openModuleId == null || openModuleId === '') {
+      setSelectedId(null);
+      return;
+    }
+    if (!modules.some((m) => m.id === openModuleId)) return;
+    setSelectedId(openModuleId);
+  }, [openModuleId, modules]);
 
   // Open create modal from shell (Dashboard quick action)
   useEffect(() => {
@@ -487,8 +511,14 @@ export function ModulesScreen({
     closeModal();
   };
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState<
+    string | null
+  >(null);
+
   const handleDelete = (id: string) => {
     onDelete(id);
+    setConfirmDeleteId(null);
     if (selectedId === id) {
       setSelectedId(null);
     }
@@ -496,6 +526,27 @@ export function ModulesScreen({
       closeModal();
     }
   };
+
+  const handleDeleteCategory = (id: string) => {
+    onDeleteCategory?.(id);
+    setConfirmDeleteCategoryId(null);
+  };
+
+  const deleteTarget = useMemo(
+    () =>
+      confirmDeleteId
+        ? (modules.find((m) => m.id === confirmDeleteId) ?? null)
+        : null,
+    [confirmDeleteId, modules],
+  );
+
+  const deleteCategoryTarget = useMemo(
+    () =>
+      confirmDeleteCategoryId
+        ? (categories.find((c) => c.id === confirmDeleteCategoryId) ?? null)
+        : null,
+    [confirmDeleteCategoryId, categories],
+  );
 
   const isTrulyEmpty = modules.length === 0;
   const isFilterEmpty = !isTrulyEmpty && filtered.length === 0;
@@ -775,21 +826,6 @@ export function ModulesScreen({
                     />
                   </div>
                   <div className="catalog-form__field">
-                    <label htmlFor={`part-grain-${part.id}`}>Veta</label>
-                    <select
-                      id={`part-grain-${part.id}`}
-                      value={part.grain}
-                      onChange={(e) =>
-                        updatePart(part.id, {
-                          grain: Number(e.target.value) as 0 | 1,
-                        })
-                      }
-                    >
-                      <option value={0}>0 — sin veta / libre</option>
-                      <option value={1}>1 — con veta</option>
-                    </select>
-                  </div>
-                  <div className="catalog-form__field">
                     <label htmlFor={`part-role-${part.id}`}>
                       Rol (optionRole)
                     </label>
@@ -1057,7 +1093,7 @@ export function ModulesScreen({
           <button
             type="button"
             className="btn btn--danger"
-            onClick={() => handleDelete(mod.id)}
+            onClick={() => setConfirmDeleteId(mod.id)}
           >
             <Trash2 size={16} strokeWidth={1.5} aria-hidden />
             Eliminar
@@ -1093,8 +1129,7 @@ export function ModulesScreen({
                   {part.description}
                   <span className="module-detail-row__sub">
                     {part.lengthMm}×{part.widthMm} mm · rol {part.optionRole}
-                    {edgesOn ? ` · cantos ${edgesOn}` : ''}
-                    {part.grain === 1 ? ' · veta' : ''}
+                    {edgesOn ? ` · cantos ${edgesOn}` : ''} · veta según material
                   </span>
                 </div>
                 <span className="module-detail-row__qty">×{part.quantity}</span>
@@ -1312,7 +1347,7 @@ export function ModulesScreen({
                         <button
                           type="button"
                           className="btn btn--ghost btn--small"
-                          onClick={() => onDeleteCategory(cat.id)}
+                          onClick={() => setConfirmDeleteCategoryId(cat.id)}
                           aria-label={`Eliminar ${cat.name}`}
                         >
                           <Trash2 size={14} strokeWidth={1.5} />
@@ -1489,6 +1524,78 @@ export function ModulesScreen({
             />
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={deleteTarget != null}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Eliminar mueble"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDeleteId(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                if (confirmDeleteId) handleDelete(confirmDeleteId);
+              }}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar{' '}
+          <strong>
+            {deleteTarget
+              ? `${deleteTarget.code} — ${deleteTarget.name}`
+              : 'este mueble'}
+          </strong>
+          ? Esta acción no se puede deshacer.
+        </p>
+      </Modal>
+
+      <Modal
+        open={deleteCategoryTarget != null}
+        onClose={() => setConfirmDeleteCategoryId(null)}
+        title="Eliminar categoría"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDeleteCategoryId(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                if (confirmDeleteCategoryId) {
+                  handleDeleteCategory(confirmDeleteCategoryId);
+                }
+              }}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar la categoría{' '}
+          <strong>{deleteCategoryTarget?.name ?? ''}</strong>? Solo se puede
+          si no tiene hijos.
+        </p>
       </Modal>
     </section>
   );

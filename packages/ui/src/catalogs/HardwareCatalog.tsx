@@ -11,6 +11,7 @@ import {
   SearchInput,
   StatusChips,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../common';
 import {
   filterCatalogItems,
@@ -60,6 +61,8 @@ export interface HardwareCatalogProps {
   readonly onUpdate: (id: string, draft: HardwareDraft) => void;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
 }
 
 export function HardwareCatalog({
@@ -68,12 +71,20 @@ export function HardwareCatalog({
   onUpdate,
   onDeactivate,
   onReactivate,
+  openEntityId = null,
+  onSelectionChange,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const hardwareIds = useMemo(() => hardware.map((h) => h.id), [hardware]);
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: hardwareIds,
+    });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<HardwareDraft>(emptyDraft);
@@ -110,7 +121,7 @@ export function HardwareCatalog({
   };
 
   const toggleExpand = (item: Hardware) => {
-    setExpandedId((prev) => (prev === item.id ? null : item.id));
+    toggleSelectedId(item.id);
   };
 
   const validate = (): string | null => {
@@ -141,31 +152,34 @@ export function HardwareCatalog({
     closeModal();
   };
 
-  const columns: CatalogColumn<Hardware>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      render: (r) => (
-        <span className="catalog-row-detail__value--mono">{r.code}</span>
-      ),
-    },
-    { key: 'name', header: 'Nombre', render: (r) => r.name },
-    {
-      key: 'unit',
-      header: 'Unidad',
-      render: (r) => UNIT_LABELS[r.unit],
-    },
-    {
-      key: 'cost',
-      header: 'Costo unit.',
-      render: (r) => r.costPerUnit,
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      render: (r) => <ActiveBadge active={r.active} />,
-    },
-  ];
+  const columns: CatalogColumn<Hardware>[] = useMemo(
+    () => [
+      {
+        key: 'code',
+        header: 'Código',
+        render: (r) => (
+          <span className="catalog-row-detail__value--mono">{r.code}</span>
+        ),
+      },
+      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'unit',
+        header: 'Unidad',
+        render: (r) => UNIT_LABELS[r.unit],
+      },
+      {
+        key: 'cost',
+        header: 'Costo unit.',
+        render: (r) => r.costPerUnit,
+      },
+      {
+        key: 'status',
+        header: 'Estado',
+        render: (r) => <ActiveBadge active={r.active} />,
+      },
+    ],
+    [],
+  );
 
   const isTrulyEmpty = hardware.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;

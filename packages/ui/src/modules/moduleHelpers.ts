@@ -6,7 +6,6 @@ import type {
   BoardPart,
   EdgeAssignment,
   EdgeSide,
-  Grain,
   HardwareLine,
   Module,
   ModuleCategory,
@@ -26,7 +25,6 @@ export type BoardPartDraft = {
   quantity: number;
   lengthMm: number;
   widthMm: number;
-  grain: Grain;
   edgeL1: boolean;
   edgeL2: boolean;
   edgeW1: boolean;
@@ -83,7 +81,6 @@ export function emptyBoardPartDraft(id: string): BoardPartDraft {
     quantity: 1,
     lengthMm: 0,
     widthMm: 0,
-    grain: 0,
     edgeL1: false,
     edgeL2: false,
     edgeW1: false,
@@ -142,7 +139,6 @@ export function boardPartToDraft(part: BoardPart): BoardPartDraft {
     quantity: part.quantity,
     lengthMm: part.lengthMm,
     widthMm: part.widthMm,
-    grain: part.grain,
     ...flags,
     optionRole: part.optionRole,
   };

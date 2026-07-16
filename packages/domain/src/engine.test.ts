@@ -144,7 +144,6 @@ function miniModule(overrides: Partial<Module> = {}): Module {
         quantity: 1,
         lengthMm: 1000,
         widthMm: 500,
-        grain: 0,
         edges: ALL_EDGES,
         optionRole: 'INTERIOR',
       },
@@ -230,7 +229,6 @@ describe('resolveBom', () => {
           quantity: 1,
           lengthMm: 100,
           widthMm: 100,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },
@@ -386,7 +384,6 @@ describe('calcLineCost', () => {
           quantity: 1,
           lengthMm: 1000,
           widthMm: 1000,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },
@@ -425,7 +422,6 @@ describe('calcLineCost', () => {
           quantity: 1,
           lengthMm: 1000,
           widthMm: 500,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },
@@ -448,7 +444,6 @@ describe('calcLineCost', () => {
           quantity: 1,
           lengthMm: 100,
           widthMm: 100,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },
@@ -475,7 +470,6 @@ describe('calcProjectBreakdown', () => {
           quantity: 1,
           lengthMm: 1000,
           widthMm: 1000,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },
@@ -518,6 +512,116 @@ describe('calcProjectBreakdown', () => {
     expect(breakdown.salePrice).toBeCloseTo(1178, 6);
   });
 
+  /**
+   * Issue #7 — parity with Go engine: no intermediate rounding.
+   * Same fixture as backend-go TestCalcProjectBreakdown_NoIntermediateRounding.
+   * Display/export may round to 2 decimals; domain returns raw floats.
+   */
+  it('does not round breakdown fields to 2 decimals (TS/Go parity)', () => {
+    const catalog = miniCatalog({
+      materials: [
+        {
+          id: 'mat-a',
+          code: 'TAB-A',
+          name: 'Mat A',
+          widthMm: 1000,
+          lengthMm: 1000,
+          thicknessMm: 15,
+          grainDefault: false,
+          boardPrice: 100,
+          wastePercent: 0,
+          costPerM2: 160.333,
+          active: true,
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-a',
+          code: 'CAN-A',
+          name: 'Edge A',
+          thicknessMm: 0.5,
+          costPerMl: 3.333,
+          active: true,
+        },
+      ],
+      hardware: [
+        {
+          id: 'hw-a',
+          code: 'HER-A',
+          name: 'Hw A',
+          unit: 'piece',
+          costPerUnit: 7.777,
+          active: true,
+        },
+      ],
+      modules: [],
+    });
+    const module = miniModule({
+      baseLaborCost: 100.111,
+      boardParts: [
+        {
+          id: 'p1',
+          description: 'Panel',
+          quantity: 1,
+          lengthMm: 800,
+          widthMm: 600,
+          edges: [
+            { side: 'L1', enabled: true },
+            { side: 'L2', enabled: false },
+            { side: 'W1', enabled: true },
+            { side: 'W2', enabled: false },
+          ],
+          optionRole: 'INTERIOR',
+        },
+      ],
+      hardwareLines: [{ id: 'h1', quantity: 3, optionRole: 'BISAGRA' }],
+    });
+    const project: Project = {
+      id: 'proj-1',
+      name: 'No-round',
+      customerId: 'C',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 50.555,
+      status: 'draft',
+      items: [
+        {
+          id: 'i1',
+          moduleId: module.id,
+          quantity: 1,
+          optionChoices: {
+            INTERIOR: 'mat-a',
+            BISAGRA: 'hw-a',
+            EDGE: 'edge-a',
+          },
+        },
+      ],
+      createdAt: '2026-07-15T00:00:00.000Z',
+      updatedAt: '2026-07-15T00:00:00.000Z',
+    };
+
+    const breakdown = calcProjectBreakdown(
+      project,
+      { ...catalog, modules: [module] },
+    );
+
+    // Mirrors Go raw expectations (issue #7 golden cross-fixture).
+    expect(breakdown.materialsCost).toBeCloseTo(76.95984, 9);
+    expect(breakdown.edgeTotal).toBeCloseTo(4.6662, 9);
+    expect(breakdown.hardwareTotal).toBeCloseTo(23.331, 9);
+    expect(breakdown.directCost).toBeCloseTo(104.95704, 9);
+    expect(breakdown.laborModular).toBeCloseTo(100.111, 9);
+    expect(breakdown.salePrice).toBeCloseTo(292.358004, 9);
+    expect(
+      breakdown.materialsCost + breakdown.edgeTotal + breakdown.hardwareTotal,
+    ).toBeCloseTo(breakdown.directCost, 12);
+    // Must keep precision beyond 2 decimals.
+    expect(breakdown.materialsCost).not.toBe(
+      Math.round(76.95984 * 100) / 100,
+    );
+    expect(breakdown.salePrice).not.toBe(Math.round(292.358004 * 100) / 100);
+  });
+
   it('treats missing baseLaborCost as 0', () => {
     const module = miniModule({
       baseLaborCost: undefined,
@@ -528,7 +632,6 @@ describe('calcProjectBreakdown', () => {
           quantity: 1,
           lengthMm: 1000,
           widthMm: 1000,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },
@@ -724,7 +827,6 @@ describe('validations VAL-01..07 (engine-time)', () => {
           quantity: 1,
           lengthMm: 0,
           widthMm: 100,
-          grain: 0,
           edges: NO_EDGES,
           optionRole: 'INTERIOR',
         },

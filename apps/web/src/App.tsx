@@ -3,8 +3,17 @@
  * Price formulas call @muebles/domain only here (not in UI package).
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type {
+  Catalog,
   Customer,
   EdgeBand,
   ExportIssue,
@@ -66,6 +75,7 @@ import {
 import {
   APIWorkspaceRepository,
   LocalStorageWorkspaceRepository,
+  breakdownFromApi,
   createSeedWorkspace,
 } from '@muebles/storage';
 import {
@@ -76,6 +86,15 @@ import {
   buildOptimizerExport,
   downloadOptimizerXlsx,
 } from './exportOptimizer';
+import {
+  entityIdFromPath,
+  entityPath,
+  isEntitySection,
+  navFromPath,
+  pathForNav,
+  projectPath,
+  type EntitySection,
+} from './routes';
 import {
   clearSession,
   DEFAULT_API_BASE,
@@ -132,7 +151,6 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
       quantity: p.quantity,
       lengthMm: p.lengthMm,
       widthMm: p.widthMm,
-      grain: p.grain,
       edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
       optionRole: p.optionRole.trim(),
     })),
@@ -183,7 +201,7 @@ function computeModuleCostPreview(
     id: 'module-preview-project',
     name: 'Preview módulo',
     customerId: 'Preview',
-    currency: 'UYU',
+    currency: 'MXN',
     marginFactor: 1.35,
     laborFixedCost: 0,
     status: 'draft',
@@ -439,37 +457,69 @@ function AppContent({
 
   const repository = useMemo(() => {
     return session === 'auth'
-      ? new APIWorkspaceRepository()
+      ? new APIWorkspaceRepository(DEFAULT_API_BASE)
       : new LocalStorageWorkspaceRepository();
   }, [session]);
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setWorkspace(null);
-    repository.load()
+    setWorkspaceLoadError(null);
+    repository
+      .load()
       .then((ws) => {
         setWorkspace(ws);
       })
       .catch((err) => {
-        console.error("Failed to load workspace:", err);
-        setWorkspace(createSeedWorkspace());
+        // Do not silently seed — surface failure and offer explicit recover (#13).
+        console.error('Failed to load workspace:', err);
+        setWorkspaceLoadError(
+          err instanceof Error
+            ? err.message
+            : 'No se pudo cargar el espacio de trabajo',
+        );
       });
   }, [repository]);
 
-  const [navId, setNavId] = useState<AppNavId>('home');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navId: AppNavId = navFromPath(location.pathname) ?? 'home';
+  const routeEntityId =
+    isEntitySection(navId)
+      ? entityIdFromPath(location.pathname, navId)
+      : null;
+  const routeProjectId =
+    navId === 'projects' ? routeEntityId : null;
+  const routeModuleId = navId === 'modules' ? routeEntityId : null;
+
+  // Keep the address bar on a known section path (bookmarkable SPA routes).
+  useEffect(() => {
+    const resolved = navFromPath(location.pathname);
+    if (resolved === null) {
+      navigate(pathForNav('home'), { replace: true });
+      return;
+    }
+    if (resolved === 'users' && !showAdminUsers) {
+      navigate(pathForNav('home'), { replace: true });
+    }
+  }, [location.pathname, navigate, showAdminUsers]);
+
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    null,
-  );
+  // Calculate / export target follows URL detail when present.
+  const selectedProjectId = routeProjectId;
   const [exportErrors, setExportErrors] = useState<readonly ExportIssue[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
-  const [projectsOpenId, setProjectsOpenId] = useState<string | null>(null);
   const [projectsCreateKey, setProjectsCreateKey] = useState(0);
   const [modulesCreateKey, setModulesCreateKey] = useState(0);
 
-  const [backendBreakdown, setBackendBreakdown] = useState<QuoteBreakdown | null>(null);
+  const [backendBreakdown, setBackendBreakdown] =
+    useState<QuoteBreakdown | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
 
   const selectedProject = useMemo(() => {
     if (!workspace?.projects) return undefined;
@@ -479,29 +529,46 @@ function AppContent({
   useEffect(() => {
     if (session !== 'auth' || !selectedProjectId || !selectedProject) {
       setBackendBreakdown(null);
+      setBreakdownError(null);
+      setBreakdownLoading(false);
       return;
     }
 
     let active = true;
     setBreakdownLoading(true);
+    setBreakdownError(null);
 
     const fetchBreakdown = async () => {
       try {
-        const token = localStorage.getItem('muebles_token');
-        const res = await fetch(`http://localhost:8080/api/projects/${selectedProjectId}/calculate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token ? `Bearer ${token}` : '',
+        const token = readAuthToken();
+        const res = await fetch(
+          `${DEFAULT_API_BASE}/projects/${selectedProjectId}/calculate`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
           },
-        });
-        if (!res.ok) throw new Error('Error calculating breakdown in backend');
-        const data = await res.json();
+        );
+        if (!res.ok) {
+          throw new Error(`No se pudo recalcular (${res.status})`);
+        }
+        const data = breakdownFromApi((await res.json()) as Record<string, unknown>);
         if (active) {
-          setBackendBreakdown(data as QuoteBreakdown);
+          setBackendBreakdown(data);
+          setBreakdownError(null);
         }
       } catch (err) {
-        console.error("Backend calculation error:", err);
+        console.error('Backend calculation error:', err);
+        if (active) {
+          // Fall back to local domain breakdown; surface error in panel + toast.
+          setBackendBreakdown(null);
+          const message =
+            'No se pudo recalcular en el servidor; mostrando valores locales';
+          setBreakdownError(message);
+          toast({ type: 'error', message });
+        }
       } finally {
         if (active) {
           setBreakdownLoading(false);
@@ -509,13 +576,15 @@ function AppContent({
       }
     };
 
-    const timeoutId = setTimeout(fetchBreakdown, 300);
+    const timeoutId = setTimeout(() => {
+      void fetchBreakdown();
+    }, 300);
 
     return () => {
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [selectedProjectId, selectedProject, session]);
+  }, [selectedProjectId, selectedProject, session, toast]);
 
   // Derive catalog slices safely so hooks below always run (Rules of Hooks).
   // Early return for loading MUST stay after every useCallback/useMemo.
@@ -529,35 +598,56 @@ function AppContent({
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
 
+  // Latest workspace for patches — avoids stale closures (#15).
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
+
+  /**
+   * Catalog updater (reducer style). Computes next from ref, then setState +
+   * save outside any React updater (StrictMode-safe, no double POST).
+   */
   const patchCatalog = useCallback(
-    (patch: Partial<Workspace['catalog']>) => {
-      setWorkspace((prev) => {
-        if (!prev) return prev;
-        const nextCatalog = { ...prev.catalog, ...patch };
-        repository.saveCatalog(nextCatalog).catch((err) => {
-          console.error("Error al guardar catálogo:", err);
-          toast({ type: 'error', message: 'Error de conexión al sincronizar cambios' });
+    (updater: (catalog: Catalog) => Catalog) => {
+      const prev = workspaceRef.current;
+      if (!prev) return;
+      const nextCatalog = updater(prev.catalog);
+      const next: Workspace = { ...prev, catalog: nextCatalog };
+      workspaceRef.current = next;
+      setWorkspace(next);
+      repository.saveCatalog(nextCatalog).catch((err) => {
+        console.error('Error al guardar catálogo:', err);
+        toast({
+          type: 'error',
+          message: 'Error de conexión al sincronizar cambios',
         });
-        return {
-          ...prev,
-          catalog: nextCatalog,
-        };
       });
     },
     [repository, toast],
   );
 
-  const patchProjects = useCallback((next: readonly Project[]) => {
-    setWorkspace((prev) => {
-      if (!prev) return prev;
-      for (const p of next) {
-        repository.saveProject(p).catch((err) => {
-          console.error("Error al guardar proyecto:", err);
-        });
+  /**
+   * Projects updater (reducer style). Saves only projects whose reference
+   * changed vs previous list (#15).
+   */
+  const patchProjects = useCallback(
+    (updater: (projects: readonly Project[]) => readonly Project[]) => {
+      const prev = workspaceRef.current;
+      if (!prev) return;
+      const nextProjects = updater(prev.projects);
+      const next: Workspace = { ...prev, projects: nextProjects };
+      workspaceRef.current = next;
+      setWorkspace(next);
+      const prevById = new Map(prev.projects.map((p) => [p.id, p]));
+      for (const p of nextProjects) {
+        if (prevById.get(p.id) !== p) {
+          repository.saveProject(p).catch((err) => {
+            console.error('Error al guardar proyecto:', err);
+          });
+        }
       }
-      return { ...prev, projects: next };
-    });
-  }, [repository]);
+    },
+    [repository],
+  );
 
   const modulePreview = useMemo(() => {
     if (!editingModuleId || !catalog) {
@@ -643,21 +733,22 @@ function AppContent({
     }));
   }, [projects, customers, projectEstimates]);
 
-  const onDashboardOpenProject = useCallback((projectId: string) => {
-    setProjectsOpenId(projectId);
-    setNavId('projects');
-  }, []);
+  const onDashboardOpenProject = useCallback(
+    (projectId: string) => {
+      navigate(projectPath(projectId));
+    },
+    [navigate],
+  );
 
   const onDashboardNewProject = useCallback(() => {
-    setProjectsOpenId(null);
     setProjectsCreateKey((k) => k + 1);
-    setNavId('projects');
-  }, []);
+    navigate(pathForNav('projects'));
+  }, [navigate]);
 
   const onDashboardNewModule = useCallback(() => {
     setModulesCreateKey((k) => k + 1);
-    setNavId('modules');
-  }, []);
+    navigate(pathForNav('modules'));
+  }, [navigate]);
 
   const groupLabels = useMemo(() => {
     const map: Record<string, string> = {};
@@ -684,13 +775,14 @@ function AppContent({
       notes: optionalNotes(draft.notes),
       active: true,
     };
-    patchCatalog({ materials: [...materials, item] });
+    patchCatalog((c) => ({ ...c, materials: [...c.materials, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
   };
 
   const updateMaterial = (id: string, draft: MaterialDraft) => {
-    patchCatalog({
-      materials: materials.map((m) =>
+    patchCatalog((c) => ({
+      ...c,
+      materials: c.materials.map((m) =>
         m.id === id
           ? {
               ...m,
@@ -708,15 +800,16 @@ function AppContent({
             }
           : m,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setMaterialActive = (id: string, active: boolean) => {
     const target = materials.find((m) => m.id === id);
-    patchCatalog({
-      materials: materials.map((m) => (m.id === id ? { ...m, active } : m)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      materials: c.materials.map((m) => (m.id === id ? { ...m, active } : m)),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -739,14 +832,15 @@ function AppContent({
       notes: optionalNotes(draft.notes),
       active: true,
     };
-    patchCatalog({ edges: [...edges, item] });
+    patchCatalog((c) => ({ ...c, edges: [...c.edges, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
     return id;
   };
 
   const updateEdge = (id: string, draft: EdgeDraft) => {
-    patchCatalog({
-      edges: edges.map((e) =>
+    patchCatalog((c) => ({
+      ...c,
+      edges: c.edges.map((e) =>
         e.id === id
           ? {
               ...e,
@@ -758,15 +852,16 @@ function AppContent({
             }
           : e,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setEdgeActive = (id: string, active: boolean) => {
     const target = edges.find((e) => e.id === id);
-    patchCatalog({
-      edges: edges.map((e) => (e.id === id ? { ...e, active } : e)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      edges: c.edges.map((e) => (e.id === id ? { ...e, active } : e)),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -788,13 +883,14 @@ function AppContent({
       notes: optionalNotes(draft.notes),
       active: true,
     };
-    patchCatalog({ hardware: [...hardware, item] });
+    patchCatalog((c) => ({ ...c, hardware: [...c.hardware, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
   };
 
   const updateHardware = (id: string, draft: HardwareDraft) => {
-    patchCatalog({
-      hardware: hardware.map((h) =>
+    patchCatalog((c) => ({
+      ...c,
+      hardware: c.hardware.map((h) =>
         h.id === id
           ? {
               ...h,
@@ -806,15 +902,16 @@ function AppContent({
             }
           : h,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setHardwareActive = (id: string, active: boolean) => {
     const target = hardware.find((h) => h.id === id);
-    patchCatalog({
-      hardware: hardware.map((h) => (h.id === id ? { ...h, active } : h)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -835,13 +932,14 @@ function AppContent({
       required: draft.required,
       optionIds: [...draft.optionIds],
     };
-    patchCatalog({ optionGroups: [...optionGroups, item] });
+    patchCatalog((c) => ({ ...c, optionGroups: [...c.optionGroups, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
   };
 
   const updateOptionGroup = (id: string, draft: OptionGroupDraft) => {
-    patchCatalog({
-      optionGroups: optionGroups.map((g) =>
+    patchCatalog((c) => ({
+      ...c,
+      optionGroups: c.optionGroups.map((g) =>
         g.id === id
           ? {
               ...g,
@@ -853,14 +951,15 @@ function AppContent({
             }
           : g,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const deleteOptionGroup = (id: string) => {
-    patchCatalog({
-      optionGroups: optionGroups.filter((g) => g.id !== id),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      optionGroups: c.optionGroups.filter((g) => g.id !== id),
+    }));
     toast({ type: 'info', message: 'Grupo de opciones eliminado' });
   };
 
@@ -871,13 +970,17 @@ function AppContent({
       parentId: draft.parentId.trim() || undefined,
       sortOrder: Number(draft.sortOrder) || 0,
     };
-    patchCatalog({ categories: [...categories, item] });
+    patchCatalog((c) => ({
+      ...c,
+      categories: [...(c.categories ?? []), item],
+    }));
     toast({ type: 'success', message: `✓ Categoría "${item.name}" creada` });
   };
 
   const updateCategory = (id: string, draft: CategoryDraft) => {
-    patchCatalog({
-      categories: categories.map((c) =>
+    patchCatalog((cat) => ({
+      ...cat,
+      categories: (cat.categories ?? []).map((c) =>
         c.id === id
           ? {
               ...c,
@@ -887,12 +990,13 @@ function AppContent({
             }
           : c,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Categoría actualizada' });
   };
 
   const deleteCategory = (id: string) => {
-    const hasChildren = categories.some((c) => c.parentId === id);
+    const cats = workspaceRef.current?.catalog.categories ?? [];
+    const hasChildren = cats.some((c) => c.parentId === id);
     if (hasChildren) {
       toast({
         type: 'warning',
@@ -900,30 +1004,35 @@ function AppContent({
       });
       return;
     }
-    patchCatalog({
-      categories: categories.filter((c) => c.id !== id),
-      modules: modules.map((m) =>
+    patchCatalog((c) => ({
+      ...c,
+      categories: (c.categories ?? []).filter((cat) => cat.id !== id),
+      modules: c.modules.map((m) =>
         m.categoryId === id ? { ...m, categoryId: undefined } : m,
       ),
-    });
+    }));
     toast({ type: 'info', message: 'Categoría eliminada' });
   };
 
   const createModule = (draft: ModuleDraft) => {
     const item = draftToModule(newId(), draft);
-    patchCatalog({ modules: [...modules, item] });
+    patchCatalog((c) => ({ ...c, modules: [...c.modules, item] }));
     toast({ type: 'success', message: `✓ "${item.code}" creado` });
   };
 
   const updateModule = (id: string, draft: ModuleDraft) => {
-    patchCatalog({
-      modules: modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      modules: c.modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const deleteModule = (id: string) => {
-    patchCatalog({ modules: modules.filter((m) => m.id !== id) });
+    patchCatalog((c) => ({
+      ...c,
+      modules: c.modules.filter((m) => m.id !== id),
+    }));
     if (editingModuleId === id) {
       setEditingModuleId(null);
     }
@@ -942,7 +1051,7 @@ function AppContent({
       newCode,
       nextNestedId: newId,
     });
-    patchCatalog({ modules: [...modules, copy] });
+    patchCatalog((c) => ({ ...c, modules: [...c.modules, copy] }));
     toast({ type: 'success', message: `✓ Duplicado como ${newCode}` });
   };
 
@@ -956,13 +1065,17 @@ function AppContent({
       notes: draft.notes.trim() || undefined,
       active: true,
     };
-    patchCatalog({ customers: [...customers, item] });
+    patchCatalog((c) => ({
+      ...c,
+      customers: [...(c.customers ?? []), item],
+    }));
     toast({ type: 'success', message: `✓ Cliente "${item.name}" creado` });
   };
 
   const updateCustomer = (id: string, draft: CustomerDraft) => {
-    patchCatalog({
-      customers: customers.map((c) =>
+    patchCatalog((cat) => ({
+      ...cat,
+      customers: (cat.customers ?? []).map((c) =>
         c.id === id
           ? {
               ...c,
@@ -974,15 +1087,18 @@ function AppContent({
             }
           : c,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setCustomerActive = (id: string, active: boolean) => {
     const target = customers.find((c) => c.id === id);
-    patchCatalog({
-      customers: customers.map((c) => (c.id === id ? { ...c, active } : c)),
-    });
+    patchCatalog((cat) => ({
+      ...cat,
+      customers: (cat.customers ?? []).map((c) =>
+        c.id === id ? { ...c, active } : c,
+      ),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -994,97 +1110,110 @@ function AppContent({
   };
 
   const createProject = (draft: ProjectDraft) => {
+    if (!workspace) return;
     const now = new Date().toISOString();
-    let createdName = draft.name.trim();
+    // Build id + payload OUTSIDE setState — React Strict Mode re-runs updaters
+    // in dev; newId()/save inside the updater created two different projects.
+    const resolved = resolveCustomerFromDraft(
+      draft,
+      workspace.catalog.customers ?? [],
+    );
+    const catalog = { ...workspace.catalog, customers: resolved.customers };
+    const meta = draftToProjectMeta(draft, resolved.customerId);
+    const base: Project = {
+      id: newId(),
+      ...meta,
+      status: 'draft',
+      items: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    // Capture snapshot if created already as quoted/accepted (PRD §7.4).
+    const project = transitionProjectStatus(base, meta.status, catalog, now);
+
     setWorkspace((prev) => {
       if (!prev) return prev;
-      const resolved = resolveCustomerFromDraft(
-        draft,
-        prev.catalog.customers ?? [],
-      );
-      const catalog = { ...prev.catalog, customers: resolved.customers };
-      const meta = draftToProjectMeta(draft, resolved.customerId);
-      createdName = meta.name;
-      const base: Project = {
-        id: newId(),
-        ...meta,
-        status: 'draft',
-        items: [],
-        createdAt: now,
-        updatedAt: now,
-      };
-      // Capture snapshot if created already as quoted/accepted (PRD §7.4).
-      const project = transitionProjectStatus(
-        base,
-        meta.status,
-        catalog,
-        now,
-      );
-
-      // Persistir de forma asíncrona
-      repository.saveCatalog(catalog).catch(() => {});
-      repository.saveProject(project).catch(() => {});
-
-      return {
+      const next: Workspace = {
         ...prev,
-        catalog,
+        catalog: { ...prev.catalog, customers: resolved.customers },
         projects: [...prev.projects, project],
       };
+      workspaceRef.current = next;
+      return next;
     });
-    toast({ type: 'success', message: `✓ "${createdName}" creado` });
+
+    repository.saveCatalog(catalog).catch((err) => {
+      console.error('Error al guardar catálogo:', err);
+    });
+    // POST-only create — no PUT 404 probe in the console.
+    repository.createProject(project).catch((err) => {
+      console.error('Error al crear proyecto:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo guardar el proyecto en el servidor',
+      });
+    });
+    toast({ type: 'success', message: `✓ "${meta.name}" creado` });
   };
 
   const updateProject = (id: string, draft: ProjectDraft) => {
+    if (!workspace) return;
     const now = new Date().toISOString();
+    const resolved = resolveCustomerFromDraft(
+      draft,
+      workspace.catalog.customers ?? [],
+    );
+    const catalog = { ...workspace.catalog, customers: resolved.customers };
+    const meta = draftToProjectMeta(draft, resolved.customerId);
+
+    const existing = workspace.projects.find((p) => p.id === id);
+    if (!existing) return;
+
+    const withMeta: Project = {
+      ...existing,
+      name: meta.name,
+      customerId: meta.customerId,
+      currency: meta.currency,
+      marginFactor: meta.marginFactor,
+      laborFixedCost: meta.laborFixedCost,
+      notes: meta.notes,
+      updatedAt: now,
+    };
+    // Status change captures or clears priceSnapshot (PRD §7.4).
+    const updatedProject = transitionProjectStatus(
+      withMeta,
+      meta.status,
+      catalog,
+      now,
+    );
+
     setWorkspace((prev) => {
       if (!prev) return prev;
-      const resolved = resolveCustomerFromDraft(
-        draft,
-        prev.catalog.customers ?? [],
-      );
-      const catalog = { ...prev.catalog, customers: resolved.customers };
-      const meta = draftToProjectMeta(draft, resolved.customerId);
-
-      let updatedProject: Project | null = null;
-      const updatedProjects = prev.projects.map((p) => {
-        if (p.id !== id) return p;
-        const withMeta: Project = {
-          ...p,
-          name: meta.name,
-          customerId: meta.customerId,
-          currency: meta.currency,
-          marginFactor: meta.marginFactor,
-          laborFixedCost: meta.laborFixedCost,
-          notes: meta.notes,
-          updatedAt: now,
-        };
-        // Status change captures or clears priceSnapshot (PRD §7.4).
-        updatedProject = transitionProjectStatus(withMeta, meta.status, catalog, now);
-        return updatedProject;
-      });
-
-      // Persistir de forma asíncrona
-      repository.saveCatalog(catalog).catch(() => {});
-      if (updatedProject) {
-        repository.saveProject(updatedProject).catch(() => {});
-      }
-
       return {
         ...prev,
-        catalog,
-        projects: updatedProjects,
+        catalog: { ...prev.catalog, customers: resolved.customers },
+        projects: prev.projects.map((p) =>
+          p.id === id ? updatedProject : p,
+        ),
       };
+    });
+
+    repository.saveCatalog(catalog).catch((err) => {
+      console.error('Error al guardar catálogo:', err);
+    });
+    repository.saveProject(updatedProject).catch((err) => {
+      console.error('Error al guardar proyecto:', err);
     });
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const deleteProject = (id: string) => {
     repository.deleteProject(id).catch((err) => {
-      console.error("Error al eliminar proyecto:", err);
+      console.error('Error al eliminar proyecto:', err);
     });
-    patchProjects(projects.filter((p) => p.id !== id));
+    patchProjects((ps) => ps.filter((p) => p.id !== id));
     if (selectedProjectId === id) {
-      setSelectedProjectId(null);
+      navigate(pathForNav('projects'));
     }
     toast({ type: 'info', message: 'Proyecto eliminado' });
   };
@@ -1097,7 +1226,16 @@ function AppContent({
       itemIdFactory: newId,
       nowIso: new Date().toISOString(),
     });
-    patchProjects([...projects, copy]);
+    setWorkspace((prev) =>
+      prev ? { ...prev, projects: [...prev.projects, copy] } : prev,
+    );
+    repository.createProject(copy).catch((err) => {
+      console.error('Error al duplicar proyecto:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo guardar el duplicado en el servidor',
+      });
+    });
     toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
   };
 
@@ -1116,8 +1254,8 @@ function AppContent({
       quantity: input.quantity,
       optionChoices: input.optionChoices,
     };
-    patchProjects(
-      projects.map((p) =>
+    patchProjects((ps) =>
+      ps.map((p) =>
         p.id === projectId
           ? { ...p, items: [...p.items, item], updatedAt: now }
           : p,
@@ -1127,8 +1265,8 @@ function AppContent({
 
   const updateProjectItem = (projectId: string, item: ProjectItem) => {
     const now = new Date().toISOString();
-    patchProjects(
-      projects.map((p) =>
+    patchProjects((ps) =>
+      ps.map((p) =>
         p.id === projectId
           ? {
               ...p,
@@ -1142,8 +1280,8 @@ function AppContent({
 
   const removeProjectItem = (projectId: string, itemId: string) => {
     const now = new Date().toISOString();
-    patchProjects(
-      projects.map((p) =>
+    patchProjects((ps) =>
+      ps.map((p) =>
         p.id === projectId
           ? {
               ...p,
@@ -1196,23 +1334,39 @@ function AppContent({
     }
   }, [selectedProject, catalog, toast]);
 
-  const onProjectSelectionChange = useCallback((projectId: string | null) => {
-    setSelectedProjectId(projectId);
-    setExportErrors([]);
-    if (projectId === null) {
-      setProjectsOpenId(null);
-    }
-  }, []);
+  const onEntitySelectionChange = useCallback(
+    (section: EntitySection, id: string | null) => {
+      if (section === 'projects') {
+        setExportErrors([]);
+      }
+      const target = id ? entityPath(section, id) : pathForNav(section);
+      if (location.pathname !== target) {
+        navigate(target);
+      }
+    },
+    [location.pathname, navigate],
+  );
+
+  const onProjectSelectionChange = useCallback(
+    (projectId: string | null) => {
+      onEntitySelectionChange('projects', projectId);
+    },
+    [onEntitySelectionChange],
+  );
+
+  const onModuleSelectionChange = useCallback(
+    (moduleId: string | null) => {
+      onEntitySelectionChange('modules', moduleId);
+    },
+    [onEntitySelectionChange],
+  );
 
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
-      setNavId(id);
-      if (id !== 'projects') {
-        setProjectsOpenId(null);
-      }
+      navigate(pathForNav(id));
     },
-    [showAdminUsers],
+    [navigate, showAdminUsers],
   );
 
   const sessionLabel =
@@ -1222,16 +1376,57 @@ function AppContent({
         : 'Sesión'
       : 'Invitado';
 
-  // Loading gate AFTER all hooks — never return early before useCallback/useMemo.
+  // Loading / recover gate AFTER all hooks — never return early before useCallback/useMemo.
+  if (workspaceLoadError) {
+    return (
+      <div
+        className="workspace-load-error"
+        role="alert"
+        data-testid="workspace-load-error"
+      >
+        <div className="workspace-load-error__card">
+          <h1 className="workspace-load-error__title">
+            No se pudo cargar el espacio de trabajo
+          </h1>
+          <p className="workspace-load-error__message">{workspaceLoadError}</p>
+          <div className="workspace-load-error__actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                window.location.reload();
+              }}
+            >
+              Reintentar
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => {
+                setWorkspace(createSeedWorkspace());
+                setWorkspaceLoadError(null);
+              }}
+            >
+              Usar datos demo
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!workspace || !catalog) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-          <p className="text-slate-400 font-medium animate-pulse text-sm">
-            Cargando espacio de trabajo...
-          </p>
-        </div>
+      <div
+        className="workspace-loading"
+        role="status"
+        aria-busy="true"
+        data-testid="workspace-loading"
+      >
+        <div className="workspace-loading__spinner" aria-hidden />
+        <p className="workspace-loading__label">
+          Cargando espacio de trabajo…
+        </p>
       </div>
     );
   }
@@ -1240,6 +1435,7 @@ function AppContent({
     <AppShell
       activeId={navId}
       onNavigate={onNavigate}
+      hrefForNav={pathForNav}
       meta={`Semilla plantilla · schema v${workspace.schemaVersion} · ${sessionLabel}`}
       onLogout={onLogout}
       showAdminUsers={showAdminUsers}
@@ -1262,6 +1458,8 @@ function AppContent({
           onUpdate={updateMaterial}
           onDeactivate={(id) => setMaterialActive(id, false)}
           onReactivate={(id) => setMaterialActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
         />
       ) : null}
       {navId === 'edges' ? (
@@ -1271,6 +1469,8 @@ function AppContent({
           onUpdate={updateEdge}
           onDeactivate={(id) => setEdgeActive(id, false)}
           onReactivate={(id) => setEdgeActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('edges', id)}
         />
       ) : null}
       {navId === 'hardware' ? (
@@ -1280,6 +1480,8 @@ function AppContent({
           onUpdate={updateHardware}
           onDeactivate={(id) => setHardwareActive(id, false)}
           onReactivate={(id) => setHardwareActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
         />
       ) : null}
       {navId === 'optionGroups' ? (
@@ -1288,9 +1490,14 @@ function AppContent({
           materials={materials}
           edges={edges}
           hardware={hardware}
+          modules={modules}
           onCreate={createOptionGroup}
           onUpdate={updateOptionGroup}
           onDelete={deleteOptionGroup}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) =>
+            onEntitySelectionChange('optionGroups', id)
+          }
         />
       ) : null}
       {navId === 'customers' ? (
@@ -1300,6 +1507,8 @@ function AppContent({
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}
           onReactivate={(id) => setCustomerActive(id, true)}
+          openEntityId={routeEntityId}
+          onSelectionChange={(id) => onEntitySelectionChange('customers', id)}
         />
       ) : null}
       {navId === 'users' && showAdminUsers && authToken ? (
@@ -1319,6 +1528,8 @@ function AppContent({
           onDeleteCategory={deleteCategory}
           onDuplicate={duplicateModuleById}
           onEditingChange={setEditingModuleId}
+          onSelectionChange={onModuleSelectionChange}
+          openModuleId={routeModuleId}
           costPreview={modulePreview.costPreview}
           previewBlocked={modulePreview.previewBlocked}
           missingGroups={modulePreview.missingGroups}
@@ -1346,6 +1557,8 @@ function AppContent({
           onRemoveItem={removeProjectItem}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
+          breakdownLoading={breakdownLoading}
+          breakdownError={breakdownError}
           previewBlocked={projectQuote.previewBlocked}
           missingGroups={projectQuote.missingGroups}
           groupLabels={groupLabels}
@@ -1354,7 +1567,7 @@ function AppContent({
           exportErrors={exportErrors}
           exportBusy={exportBusy}
           projectEstimates={projectEstimates}
-          openProjectId={projectsOpenId}
+          openProjectId={routeProjectId}
           requestCreateKey={projectsCreateKey}
         />
       ) : null}

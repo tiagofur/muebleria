@@ -8,6 +8,7 @@ import type {
   Catalog,
   EdgeAssignment,
   EdgeBand,
+  Grain,
   Hardware,
   HardwareLine,
   HardwarePurchaseRow,
@@ -488,7 +489,8 @@ export function resolveBom(
       quantity: part.quantity,
       lengthMm: part.lengthMm,
       widthMm: part.widthMm,
-      grain: part.grain,
+      // Grain (veta) is inherited from the resolved material, never set per piece.
+      grain: (material.grainDefault ? 1 : 0) as Grain,
       edges: part.edges,
       optionRole: part.optionRole,
       materialId: material.id,

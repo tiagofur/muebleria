@@ -22,7 +22,6 @@ function sampleModule(overrides: Partial<Module> = {}): Module {
         quantity: 2,
         lengthMm: 720,
         widthMm: 500,
-        grain: 1,
         edges: [
           { side: 'L1', enabled: true },
           { side: 'L2', enabled: false },

@@ -3,7 +3,6 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -33,9 +32,14 @@ func CalcMaterialCostPerM2(widthMm, lengthMm int, boardPrice, wastePercent float
 	return baseCost * (1.0 + wastePercent/100.0)
 }
 
+// edgeFlags maps L1/L2/W1/W2 → 0|1. Unknown sides are ignored here;
+// callers must run ValidateBoardPart first so typos never reach cost math.
 func edgeFlags(edges []domain.EdgeAssignment) map[string]int {
 	flags := map[string]int{"L1": 0, "L2": 0, "W1": 0, "W2": 0}
 	for _, e := range edges {
+		if _, ok := validEdgeSide[e.Side]; !ok {
+			continue
+		}
 		if e.Enabled {
 			flags[e.Side] = 1
 		}
@@ -141,7 +145,16 @@ func ResolveHardware(line domain.HardwareLine, optionChoices map[string]string, 
 
 func CalcBoardLineCost(part domain.BoardPart, material domain.MaterialBoard, edgeBand *domain.EdgeBand, qtyMultiplier int) (BoardLineCost, error) {
 	if part.LengthMm <= 0 || part.WidthMm <= 0 {
-		return BoardLineCost{}, errors.New("board part dimensions must be > 0")
+		return BoardLineCost{}, fmt.Errorf(
+			"board part dimensions must be > 0 (lengthMm=%d, widthMm=%d)",
+			part.LengthMm, part.WidthMm,
+		)
+	}
+	if part.Quantity <= 0 {
+		return BoardLineCost{}, fmt.Errorf("board part quantity must be > 0 (got %d)", part.Quantity)
+	}
+	if !material.Active {
+		return BoardLineCost{}, fmt.Errorf("inactive material cannot be used: %s", material.Code)
 	}
 
 	areaM2, edgeMl := CalcBoardLineMetrics(part, qtyMultiplier)
@@ -152,14 +165,18 @@ func CalcBoardLineCost(part domain.BoardPart, material domain.MaterialBoard, edg
 		if edgeBand == nil {
 			return BoardLineCost{}, fmt.Errorf("missing resolved edgeBand for part: %s", part.Code)
 		}
+		// Mirrors TS calcBoardLineCost: reject inactive edge even if already resolved.
+		if !edgeBand.Active {
+			return BoardLineCost{}, fmt.Errorf("inactive edge band cannot be used: %s", edgeBand.Code)
+		}
 		edgeCost = edgeMl * edgeBand.CostPerMl
 	}
 
 	return BoardLineCost{
 		AreaM2:    areaM2,
 		EdgeMl:    edgeMl,
-		BoardCost:  boardCost,
-		EdgeCost:   edgeCost,
+		BoardCost: boardCost,
+		EdgeCost:  edgeCost,
 	}, nil
 }
 
@@ -187,12 +204,23 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 	}
 
 	for _, item := range project.Items {
+		// Mirrors TS calcLiveProjectBreakdown: reject non-positive item qty.
+		if item.Quantity <= 0 {
+			return domain.QuoteBreakdown{}, fmt.Errorf(
+				"project item quantity must be > 0 (got %d)", item.Quantity,
+			)
+		}
+
 		module, ok := modulesMap[item.ModuleID]
 		if !ok {
 			return domain.QuoteBreakdown{}, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		// Validar piezas del módulo
+		// Structural module validation before any cost math (TS: resolveBom → validateModule).
+		if err := ValidateModule(module); err != nil {
+			return domain.QuoteBreakdown{}, err
+		}
+
 		for _, part := range module.BoardParts {
 			material, err := ResolveMaterial(part, item.OptionChoices, catalog.Materials)
 			if err != nil {
@@ -212,7 +240,6 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 			edgeTotal += lineCost.EdgeCost
 		}
 
-		// Validar herrajes del módulo
 		for _, line := range module.HardwareLines {
 			hw, err := ResolveHardware(line, item.OptionChoices, catalog.Hardware)
 			if err != nil {
@@ -227,18 +254,18 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 	}
 
 	directCost := materialsCost + edgeTotal + hardwareTotal
-	
-	// Aplicar fórmula de venta: (costo_directo * factor_margen) + mano_de_obra_modular + mano_de_obra_fija
+
+	// Sale formula: (direct_cost * margin_factor) + modular_labor + fixed_labor.
+	// No intermediate rounding — same policy as packages/domain (TS). Display/export
+	// layers round to 2 decimals for presentation only (issue #7).
 	salePrice := directCost*project.MarginFactor + laborModular + project.LaborFixedCost
-	// Redondear a dos decimales
-	salePrice = math.Round(salePrice*100) / 100
 
 	return domain.QuoteBreakdown{
-		MaterialsCost:  math.Round(materialsCost*100) / 100,
-		EdgeTotal:      math.Round(edgeTotal*100) / 100,
-		HardwareTotal:  math.Round(hardwareTotal*100) / 100,
-		DirectCost:     math.Round(directCost*100) / 100,
-		LaborModular:   math.Round(laborModular*100) / 100,
+		MaterialsCost:  materialsCost,
+		EdgeTotal:      edgeTotal,
+		HardwareTotal:  hardwareTotal,
+		DirectCost:     directCost,
+		LaborModular:   laborModular,
 		LaborFixedCost: project.LaborFixedCost,
 		MarginFactor:   project.MarginFactor,
 		SalePrice:      salePrice,

@@ -95,7 +95,6 @@ const modules: Module[] = [
         quantity: 1,
         lengthMm: 720,
         widthMm: 560,
-        grain: 1,
         edges: [],
         optionRole: 'INTERIOR',
       },
@@ -105,7 +104,6 @@ const modules: Module[] = [
         quantity: 1,
         lengthMm: 700,
         widthMm: 300,
-        grain: 1,
         edges: [],
         optionRole: 'FRENTE',
       },
@@ -405,6 +403,34 @@ describe('ProjectsScreen F022', () => {
     expect(within(totals).getByRole('button', { name: /Exportar Optimizer/i })).toBeTruthy();
   });
 
+  it('shows loading status in totals when breakdownLoading', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: sampleBreakdown,
+      breakdownLoading: true,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const loading = screen.getByTestId('breakdown-loading');
+    expect(loading.getAttribute('aria-busy')).toBe('true');
+    expect(loading.textContent).toMatch(/Recalculando/i);
+  });
+
+  it('shows error alert in totals when breakdownError (still shows values)', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: sampleBreakdown,
+      breakdownError:
+        'No se pudo recalcular en el servidor; mostrando valores locales',
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const alert = screen.getByTestId('breakdown-error');
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toMatch(/valores locales/i);
+    expect(screen.getByText('202.50')).toBeTruthy();
+  });
+
   it('disables export and shows message when preview blocked', async () => {
     const user = userEvent.setup();
     renderScreen({
@@ -444,14 +470,21 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByRole('heading', { name: 'Nuevo proyecto' })).toBeTruthy();
   });
 
-  it('asks inline confirmation before delete', async () => {
+  it('opens SM confirm modal before delete', async () => {
     const user = userEvent.setup();
     const { onDelete } = renderScreen();
 
     await user.click(screen.getByTestId('project-card-prj-1'));
     await user.click(screen.getByRole('button', { name: /^Eliminar$/i }));
-    expect(screen.getByText('¿Eliminar?')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Eliminar proyecto' }),
+    ).toBeTruthy();
+    expect(within(dialog).getByText(/Cocina Ana/)).toBeTruthy();
+    // Toolbar still has "Eliminar"; confirm is the danger button in the dialog.
+    await user.click(
+      within(dialog).getByRole('button', { name: /^Eliminar$/i }),
+    );
     expect(onDelete).toHaveBeenCalledWith('prj-1');
   });
 });

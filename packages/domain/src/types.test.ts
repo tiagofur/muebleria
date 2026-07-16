@@ -90,7 +90,6 @@ describe('domain entity types', () => {
       quantity: 1,
       lengthMm: 720,
       widthMm: 590,
-      grain: 0,
       edges: ALL_EDGES,
       optionRole: 'INTERIOR',
     };

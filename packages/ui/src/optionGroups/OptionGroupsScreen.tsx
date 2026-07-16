@@ -7,6 +7,7 @@ import type {
   EdgeBand,
   Hardware,
   MaterialBoard,
+  Module,
   OptionGroup,
   OptionGroupKind,
 } from '@muebles/domain';
@@ -16,6 +17,7 @@ import {
   Modal,
   SearchInput,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../common';
 import { validateRequiredName } from '../catalogs/catalogHelpers';
 import { CatalogTable, type CatalogColumn } from '../catalogs/CatalogTable';
@@ -71,9 +73,24 @@ export interface OptionGroupsScreenProps {
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
+  /** Used to warn how many modules reference a group before delete. */
+  readonly modules?: readonly Module[];
   readonly onCreate: (draft: OptionGroupDraft) => void;
   readonly onUpdate: (id: string, draft: OptionGroupDraft) => void;
   readonly onDelete: (id: string) => void;
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
+}
+
+function countModulesUsingGroup(
+  modules: readonly Module[],
+  groupCode: string,
+): number {
+  return modules.filter(
+    (m) =>
+      m.boardParts.some((p) => p.optionRole === groupCode) ||
+      m.hardwareLines.some((h) => h.optionRole === groupCode),
+  ).length;
 }
 
 export function OptionGroupsScreen({
@@ -81,14 +98,26 @@ export function OptionGroupsScreen({
   materials,
   edges,
   hardware,
+  modules = [],
   onCreate,
   onUpdate,
   onDelete,
+  openEntityId = null,
+  onSelectionChange,
 }: OptionGroupsScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const optionGroupIds = useMemo(
+    () => optionGroups.map((g) => g.id),
+    [optionGroups],
+  );
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: optionGroupIds,
+    });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<OptionGroupDraft>(emptyDraft);
@@ -135,7 +164,7 @@ export function OptionGroupsScreen({
   };
 
   const toggleExpand = (item: OptionGroup) => {
-    setExpandedId((prev) => (prev === item.id ? null : item.id));
+    toggleSelectedId(item.id);
   };
 
   const setKind = (kind: OptionGroupKind) => {
@@ -191,31 +220,56 @@ export function OptionGroupsScreen({
     closeModal();
   };
 
-  const columns: CatalogColumn<OptionGroup>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      render: (r) => (
-        <span className="catalog-row-detail__value--mono">{r.code}</span>
-      ),
-    },
-    { key: 'name', header: 'Nombre', render: (r) => r.name },
-    {
-      key: 'kind',
-      header: 'Tipo',
-      render: (r) => optionGroupKindLabel(r.kind),
-    },
-    {
-      key: 'required',
-      header: 'Requerido',
-      render: (r) => (r.required ? 'Sí' : 'No'),
-    },
-    {
-      key: 'members',
-      header: 'Miembros',
-      render: (r) => r.optionIds.length,
-    },
-  ];
+  const columns: CatalogColumn<OptionGroup>[] = useMemo(
+    () => [
+      {
+        key: 'code',
+        header: 'Código',
+        render: (r) => (
+          <span className="catalog-row-detail__value--mono">{r.code}</span>
+        ),
+      },
+      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'kind',
+        header: 'Tipo',
+        render: (r) => optionGroupKindLabel(r.kind),
+      },
+      {
+        key: 'required',
+        header: 'Requerido',
+        render: (r) => (r.required ? 'Sí' : 'No'),
+      },
+      {
+        key: 'members',
+        header: 'Miembros',
+        render: (r) => r.optionIds.length,
+      },
+    ],
+    [],
+  );
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const deleteTarget = useMemo(
+    () =>
+      confirmDeleteId
+        ? (optionGroups.find((g) => g.id === confirmDeleteId) ?? null)
+        : null,
+    [confirmDeleteId, optionGroups],
+  );
+  const deleteTargetModuleCount = deleteTarget
+    ? countModulesUsingGroup(modules, deleteTarget.code)
+    : 0;
+
+  const requestDelete = (id: string) => {
+    setConfirmDeleteId(id);
+  };
+
+  const confirmDelete = () => {
+    if (!confirmDeleteId) return;
+    onDelete(confirmDeleteId);
+    setConfirmDeleteId(null);
+  };
 
   const isTrulyEmpty = optionGroups.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
@@ -308,7 +362,7 @@ export function OptionGroupsScreen({
                   <button
                     type="button"
                     className="btn btn--small btn--danger"
-                    onClick={() => onDelete(row.id)}
+                    onClick={() => requestDelete(row.id)}
                   >
                     <Trash2 size={14} strokeWidth={1.5} aria-hidden />
                     Eliminar
@@ -331,7 +385,7 @@ export function OptionGroupsScreen({
                   type="button"
                   className="btn btn--small btn--ghost btn--danger"
                   aria-label={`Eliminar ${row.code}`}
-                  onClick={() => onDelete(row.id)}
+                  onClick={() => requestDelete(row.id)}
                 >
                   <Trash2 size={14} strokeWidth={1.5} aria-hidden />
                   Eliminar
@@ -341,6 +395,50 @@ export function OptionGroupsScreen({
           />
         )}
       </div>
+
+      <Modal
+        open={deleteTarget != null}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Eliminar grupo de opciones"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDeleteId(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={confirmDelete}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar{' '}
+          <strong>
+            {deleteTarget
+              ? `${deleteTarget.code} — ${deleteTarget.name}`
+              : 'este grupo'}
+          </strong>
+          ?
+          {deleteTargetModuleCount > 0 ? (
+            <>
+              {' '}
+              Afecta a <strong>{deleteTargetModuleCount}</strong> mueble
+              {deleteTargetModuleCount === 1 ? '' : 's'} del catálogo (cost
+              preview / opciones).
+            </>
+          ) : null}{' '}
+          Esta acción no se puede deshacer.
+        </p>
+      </Modal>
 
       <Modal
         open={modalOpen}

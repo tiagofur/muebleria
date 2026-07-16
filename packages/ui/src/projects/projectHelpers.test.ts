@@ -71,7 +71,6 @@ const moduleGab: Module = {
       quantity: 1,
       lengthMm: 720,
       widthMm: 590,
-      grain: 0,
       edges: [],
       optionRole: 'INTERIOR',
     },
@@ -81,7 +80,6 @@ const moduleGab: Module = {
       quantity: 1,
       lengthMm: 700,
       widthMm: 300,
-      grain: 1,
       edges: [],
       optionRole: 'FRENTE',
     },
@@ -178,7 +176,7 @@ describe('project drafts and validation', () => {
   it('empty draft has sensible defaults', () => {
     const d = emptyProjectDraft();
     expect(d.status).toBe('draft');
-    expect(d.currency).toBe('UYU');
+    expect(d.currency).toBe('MXN');
     expect(d.marginFactor).toBe('1.35');
   });
 
@@ -398,6 +396,12 @@ describe('filterProjectsByQuery / formatProjectMoney (F022)', () => {
   it('formats money with 2 decimals', () => {
     expect(formatProjectMoney(202.5)).toBe('202.50');
     expect(formatProjectMoney(0)).toBe('0.00');
+  });
+
+  it('renders missing/non-finite money as 0.00 instead of crashing', () => {
+    expect(formatProjectMoney(undefined)).toBe('0.00');
+    expect(formatProjectMoney(null)).toBe('0.00');
+    expect(formatProjectMoney(NaN)).toBe('0.00');
   });
 });
 
