@@ -979,6 +979,7 @@ function AppContent({
       costPerM2,
       wastePercent: draft.wastePercent,
       defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
+      imageUrl: draft.imageUrl?.trim() || undefined,
       notes: optionalNotes(draft.notes),
       active: true,
     };
@@ -1009,6 +1010,7 @@ function AppContent({
               costPerM2,
               wastePercent: draft.wastePercent,
               defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
+              imageUrl: draft.imageUrl?.trim() || undefined,
               notes: optionalNotes(draft.notes),
             }
           : m,
@@ -1093,6 +1095,7 @@ function AppContent({
       name: draft.name.trim(),
       unit: draft.unit,
       costPerUnit: draft.costPerUnit,
+      imageUrl: draft.imageUrl?.trim() || undefined,
       notes: optionalNotes(draft.notes),
       active: true,
     };
@@ -1111,6 +1114,7 @@ function AppContent({
               name: draft.name.trim(),
               unit: draft.unit,
               costPerUnit: draft.costPerUnit,
+              imageUrl: draft.imageUrl?.trim() || undefined,
               notes: optionalNotes(draft.notes),
             }
           : h,
@@ -1594,6 +1598,44 @@ function AppContent({
     );
   };
 
+
+  const resolveMediaUrl = useCallback(
+    (url: string | undefined): string | undefined => {
+      if (!url) return undefined;
+      if (url.startsWith('http') || url.startsWith('blob:')) return url;
+      const token = authToken ?? '';
+      const abs = url.startsWith('/api/')
+        ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
+        : url;
+      return token
+        ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+        : abs;
+    },
+    [authToken],
+  );
+
+  const uploadCatalogImage = useCallback(
+    async (file: File): Promise<string> => {
+      if (!authToken) throw new Error('no auth');
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${DEFAULT_API_BASE}/media`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+        body: form,
+      });
+      if (!res.ok) {
+        toast({ type: 'error', message: 'No se pudo subir la imagen' });
+        throw new Error(`upload ${res.status}`);
+      }
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error('no url');
+      toast({ type: 'success', message: '✓ Imagen subida' });
+      return data.url;
+    },
+    [authToken, toast],
+  );
+
   const handleExportOptimizer = useCallback(
     async (projectId?: string) => {
       const project =
@@ -1874,6 +1916,12 @@ function AppContent({
           requestCreateKey={materialsCreateKey}
           canMutate={canMutateCatalog}
           showCosts={showCosts}
+          resolveImageUrl={resolveMediaUrl}
+          onUploadImage={
+            canMutateCatalog && session === 'auth' && authToken
+              ? uploadCatalogImage
+              : undefined
+          }
         />
       ) : null}
       {navId === 'edges' ? (
@@ -1900,6 +1948,12 @@ function AppContent({
           onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
           canMutate={canMutateCatalog}
           showCosts={showCosts}
+          resolveImageUrl={resolveMediaUrl}
+          onUploadImage={
+            canMutateCatalog && session === 'auth' && authToken
+              ? uploadCatalogImage
+              : undefined
+          }
         />
       ) : null}
       {navId === 'optionGroups' ? (
@@ -1947,20 +2001,7 @@ function AppContent({
         !canMutateModules && session === 'auth' ? (
           <ModuleShowcase
             modules={modules}
-            resolveImageUrl={(url) => {
-              if (!url) return undefined;
-              if (url.startsWith('http') || url.startsWith('blob:')) return url;
-              const token = authToken ?? '';
-              const base = url.startsWith('/')
-                ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
-                : url;
-              // DEFAULT_API_BASE is .../api — media path is /api/media/...
-              const abs =
-                url.startsWith('/api/')
-                  ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
-                  : base;
-              return token ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : abs;
-            }}
+            resolveImageUrl={resolveMediaUrl}
             onSelect={(id) => onModuleSelectionChange(id)}
           />
         ) : (
@@ -1986,39 +2027,10 @@ function AppContent({
           moduleEstimates={moduleEstimates}
           requestCreateKey={modulesCreateKey}
           canMutate={canMutateModules}
-          resolveImageUrl={(url) => {
-            if (!url) return undefined;
-            if (url.startsWith('http') || url.startsWith('blob:')) return url;
-            const token = authToken ?? '';
-            const abs = url.startsWith('/api/')
-              ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
-              : url;
-            return token
-              ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
-              : abs;
-          }}
+          resolveImageUrl={resolveMediaUrl}
           onUploadImage={
             canMutateModules && session === 'auth' && authToken
-              ? async (file) => {
-                  const form = new FormData();
-                  form.append('file', file);
-                  const res = await fetch(`${DEFAULT_API_BASE}/media`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${authToken}` },
-                    body: form,
-                  });
-                  if (!res.ok) {
-                    toast({
-                      type: 'error',
-                      message: 'No se pudo subir la imagen',
-                    });
-                    throw new Error(`upload ${res.status}`);
-                  }
-                  const data = (await res.json()) as { url?: string };
-                  if (!data.url) throw new Error('no url');
-                  toast({ type: 'success', message: '✓ Imagen subida' });
-                  return data.url;
-                }
+              ? uploadCatalogImage
               : undefined
           }
         />
