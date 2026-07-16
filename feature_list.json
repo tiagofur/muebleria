@@ -793,8 +793,84 @@
         "docs/prd.md §4.2.3",
         "https://github.com/tiagofur/muebleria/issues/73"
       ],
-      "status": "in_progress",
+      "status": "done",
       "github_issue": 73
+    },
+    {
+      "id": "F042",
+      "phase": 8,
+      "name": "catalog_image_upload_materials_hardware",
+      "title": "Subida de imagen en materiales y herrajes",
+      "description": "UI upload reutilizando POST /api/media e imageUrl ya en schema (F040). Solo ingeniero/admin. Thumbnail en lista.",
+      "acceptance": [
+        "Upload/reemplazo de foto en material y herraje",
+        "Sin upload para roles sin mutar catálogo",
+        "Thumbnail o placeholder en lista",
+        "Sin base64 en Postgres"
+      ],
+      "references": [
+        "docs/prd.md §6.6",
+        "https://github.com/tiagofur/muebleria/issues/87"
+      ],
+      "status": "pending",
+      "github_issue": 87
+    },
+    {
+      "id": "F043",
+      "phase": 8,
+      "name": "polish_showcase_home_by_role",
+      "title": "Pulir vitrina de muebles y home por rol",
+      "description": "Mejorar ModuleShowcase (filtros, CTA cotizar) y home de vendedor/ingeniero alineado a §6.6.5 sin romper F037/F038.",
+      "acceptance": [
+        "Vendedor prioriza cotizar y vitrina",
+        "Vitrina con búsqueda/filtro usable",
+        "Sin regresión RBAC nav",
+        "Tests o checklist por rol"
+      ],
+      "references": [
+        "docs/prd.md §6.6.5",
+        "https://github.com/tiagofur/muebleria/issues/88"
+      ],
+      "status": "pending",
+      "github_issue": 88
+    },
+    {
+      "id": "F044",
+      "phase": 8,
+      "name": "vendedor_view_costs_flag",
+      "title": "Flag taller: vendedor puede ver costos (COST-02)",
+      "description": "WorkshopSettings.vendedorCanViewCosts (default false). roleCanViewCosts + redaction API condicional.",
+      "acceptance": [
+        "Default vendedor no ve costos",
+        "Flag ON habilita costos en UI y API",
+        "Persistido en Ajustes",
+        "Tests matriz flag"
+      ],
+      "references": [
+        "docs/prd.md §6.6.6",
+        "https://github.com/tiagofur/muebleria/issues/89"
+      ],
+      "status": "pending",
+      "github_issue": 89
+    },
+    {
+      "id": "F045",
+      "phase": 8,
+      "name": "commercial_quote_pdf",
+      "title": "Export cotización comercial en PDF",
+      "description": "PDF cliente con mismas líneas/totales de venta que F030 Excel; sin costos internos al cliente.",
+      "acceptance": [
+        "Descarga PDF desde detalle de proyecto",
+        "Totales de venta alineados a app",
+        "Snapshot en proyectos cerrados",
+        "Sin costos internos en el PDF"
+      ],
+      "references": [
+        "docs/prd.md §6.2",
+        "https://github.com/tiagofur/muebleria/issues/90"
+      ],
+      "status": "pending",
+      "github_issue": 90
     }
   ]
 }
