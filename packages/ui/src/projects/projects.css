@@ -113,8 +113,8 @@
 
 .project-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--density-card-grid-gap);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -123,16 +123,16 @@
 .project-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--density-card-gap);
   width: 100%;
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--density-card-pad);
   text-align: left;
   font: inherit;
   color: inherit;
   cursor: pointer;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--surface-card);
   box-shadow: var(--shadow-sm);
   transition:

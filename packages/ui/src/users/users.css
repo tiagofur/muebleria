@@ -46,7 +46,7 @@
 }
 
 .users-table th {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--density-table-pad-y) var(--density-table-pad-x);
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-app);
@@ -58,7 +58,8 @@
 }
 
 .users-table td {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--density-table-pad-y) var(--density-table-pad-x);
+  min-height: var(--density-row-min-height);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-primary);
   vertical-align: middle;
