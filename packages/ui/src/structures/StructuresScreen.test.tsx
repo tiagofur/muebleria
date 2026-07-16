@@ -127,6 +127,9 @@ describe('StructuresScreen', () => {
       target: { value: '560' },
     });
 
+    // Switch to parts tab
+    fireEvent.click(screen.getByTestId('structure-editor-tab-parts'));
+
     // Add piece
     fireEvent.click(screen.getByRole('button', { name: /Agregar pieza/i }));
 
@@ -209,7 +212,7 @@ describe('StructuresScreen', () => {
     render(
       <StructuresScreen
         structures={[]}
-        optionGroups={[{ id: 'g-lateral', code: 'LATERAL', name: 'Grupo Lateral', kind: 'board', options: [] }]}
+        optionGroups={[{ id: 'g-lateral', code: 'LATERAL', name: 'Grupo Lateral', kind: 'board', optionIds: [], required: false }]}
         onCreate={onCreate}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
@@ -225,6 +228,9 @@ describe('StructuresScreen', () => {
     fireEvent.change(screen.getByTestId('input-code'), { target: { value: 'EST-PRESETS' } });
     fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'Estructura con Presets' } });
 
+    // Switch to presets tab
+    fireEvent.click(screen.getByTestId('structure-editor-tab-presets'));
+
     // Add preset
     fireEvent.click(screen.getByTestId('add-preset-btn'));
     expect(screen.getByTestId('preset-item-0')).toBeTruthy();
@@ -233,6 +239,9 @@ describe('StructuresScreen', () => {
     fireEvent.change(screen.getByTestId('preset-width-0'), { target: { value: '300' } });
     fireEvent.change(screen.getByTestId('preset-height-0'), { target: { value: '720' } });
     fireEvent.change(screen.getByTestId('preset-depth-0'), { target: { value: '560' } });
+
+    // Switch to parts tab
+    fireEvent.click(screen.getByTestId('structure-editor-tab-parts'));
 
     // Add board part with formulas
     fireEvent.click(screen.getByTestId('add-part-btn'));
