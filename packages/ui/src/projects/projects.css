@@ -260,9 +260,18 @@
 
 .project-detail__body {
   display: grid;
+  /* Exactly two children: .project-detail__main | .project-totals */
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
   gap: var(--density-page-gap, var(--space-3));
   align-items: start;
+}
+
+/* Stack project options + furniture list in the left column (F029 layout fix). */
+.project-detail__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap, var(--space-3));
+  min-width: 0;
 }
 
 .project-detail__section {
@@ -356,8 +365,9 @@
   margin-top: var(--space-2);
 }
 
+/* Spacing between options and items comes from .project-detail__main gap. */
 .project-level-options {
-  margin-bottom: var(--space-4);
+  margin-bottom: 0;
 }
 
 .project-choice-override-badge {

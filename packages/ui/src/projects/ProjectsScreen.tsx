@@ -1229,6 +1229,11 @@ export function ProjectsScreen({
       ) : null}
 
       <div className="project-detail__body">
+        {/*
+          Single main column (options + items) so the 2-col grid stays:
+          main | totals — never three siblings (that pushed totals down).
+        */}
+        <div className="project-detail__main">
         {optionGroups.length > 0 && onUpdateProjectLevelChoices ? (
           <section
             className="project-detail__section project-level-options"
@@ -1436,6 +1441,7 @@ export function ProjectsScreen({
             </div>
           )}
         </section>
+        </div>
 
         <aside
           className={

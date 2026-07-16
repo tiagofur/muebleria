@@ -3,6 +3,9 @@
  * @vitest-environment jsdom
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -18,6 +21,8 @@ import type {
   QuoteBreakdown,
 } from '@muebles/domain';
 import { ProjectsScreen } from './ProjectsScreen';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const optionGroups: OptionGroup[] = [
   {
@@ -516,6 +521,24 @@ describe('ProjectsScreen F022', () => {
         id: 'item-1',
         optionChoices: { FRENTE: 'mat-c' },
       }),
+    );
+  });
+
+  it('keeps project options inside main column so totals stay sidebar (layout)', () => {
+    const src = readFileSync(join(here, 'ProjectsScreen.tsx'), 'utf8');
+    const main = src.indexOf('project-detail__main');
+    const opts = src.indexOf('project-level-options');
+    const items = src.indexOf('project-detail__items');
+    const totals = src.indexOf('aria-label="Totales de cotización"');
+    expect(main).toBeGreaterThan(-1);
+    expect(main).toBeLessThan(opts);
+    expect(opts).toBeLessThan(items);
+    expect(items).toBeLessThan(totals);
+    // main column closes before totals aside
+    const between = src.slice(items, totals);
+    expect(between).toContain('</div>');
+    expect(between.lastIndexOf('</section>')).toBeLessThan(
+      between.lastIndexOf('</div>'),
     );
   });
 
