@@ -1,26 +1,20 @@
 # Sesión actual
 
-- **Branch:** `feat/project-level-options-35`
-- **Feature:** F029 — project_level_option_choices (#35)
+- **Branch:** `feat/ux-responsive-34`
+- **Issue:** [#34](https://github.com/tiagofur/muebleria/issues/34) — UX responsive tablet/taller
 - **Estado:** in_progress
 
-## Plan
-
-1. Domain: `effectiveOptionChoices` + engine/export/snapshot merge
-2. Go: `EffectiveOptionChoices` + Postgres `project_level_choices` + API mapper
-3. UI: bloque opciones del proyecto + pickers de línea con heredar/override
-4. Tests domain/UI/Go + verificación monorepo
-5. PR Closes #35
-
 ## Hecho
+- Breakpoints canónicos en `tokens.css` + `docs/design.md` §3.8
+- Cards Muebles/Cotizaciones: 1 → 2 → 3 columnas (640 / 1100)
+- Tablas catálogo/usuarios: scroll-x + fade + min-width phone
+- Touch targets ≥40px en ≤767px (btn/small/acciones)
+- Shell phone padding + topbar touch
+- Tests de contrato design-system
 
-- TS domain `optionChoices.ts` + engine paths + exportIssues + duplicate
-- Go engine/storage/migration 000008 + apiMappers
-- ProjectsScreen project-level block + line inherit + Override badge
-- App `onUpdateProjectLevelChoices`
-- Tests: optionChoices, exportIssues F029, helpers, ProjectsScreen F029, Go option_choices
+## Siguiente
+- PR Closes #34
+- Luego #38 Electron
 
-## Próximo
-
-- `pnpm test` / typecheck / `go test`
-- Reviewer + PR
+## Nota
+- Etapa 3 multi-usuario (F034+) en pausa a pedido del usuario; PR #76 queda abierto aparte

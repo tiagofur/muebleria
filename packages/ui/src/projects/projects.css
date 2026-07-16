@@ -109,15 +109,27 @@
   border: 1px solid var(--brand-300);
 }
 
-/* —— Card grid (list) —— */
+/* —— Card grid (list) —— 1 / 2 / 3 cols (issue #34) —— */
 
 .project-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--density-card-grid-gap);
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+@media (min-width: 640px) {
+  .project-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .project-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .project-card {
@@ -558,13 +570,25 @@
   max-width: none;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
   .project-detail__body {
     grid-template-columns: 1fr;
   }
 
   .project-totals--sticky {
     position: static;
+  }
+}
+
+/* Phone: touch-sized item actions without changing desktop density */
+@media (max-width: 767px) {
+  .project-item-card .btn--small {
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+  }
+
+  .project-editor__grid {
+    grid-template-columns: 1fr;
   }
 }
 

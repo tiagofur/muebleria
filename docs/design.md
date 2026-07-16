@@ -331,6 +331,26 @@ pnpm add lucide-react --filter @muebles/ui
 
 ## 4. Patrones de Interacción
 
+### 3.8 Breakpoints canónicos (issue #34)
+
+Los media queries **no pueden** leer custom properties; los px de abajo son literales fijos y se documentan también en `tokens.css` (`--bp-*`, `--touch-min`).
+
+| Nombre | Rango | Uso típico |
+|--------|--------|------------|
+| **phone** | `max-width: 639px` | Portrait ~390: 1 col de cards, scroll-x en tablas, touch targets ≥40px |
+| **tablet** | `640px`–`899px` | Portrait ~768: 2 cols de cards, shell con drawer |
+| **desktop** | `min-width: 900px` | Sidebar fija (F017), layout denso |
+| **cards-3** | `min-width: 1100px` | 3 columnas en grillas de Muebles / Cotizaciones |
+| **wide** | ~1280px | Smoke de no-overflow en monitores de taller |
+
+**Grillas de cards (Muebles, Cotizaciones):** 1 → 2 → 3 columnas en esos cortes (no `auto-fill` suelto).
+
+**Tablas de catálogo / usuarios:** `overflow-x: auto` + fade de bordes + `min-width` en phone para no aplastar celdas.
+
+**Touch:** en `max-width: 767px`, `.btn` / `.btn--small` / acciones de fila usan `min-height: var(--touch-min)` (2.5rem ≈ 40px). Desktop compacto (#49) no cambia.
+
+**Shell:** collapse drawer en `max-width: 899px` (sin cambio de contrato F017).
+
 ### 4.1 Layout General
 
 **Gate de sesión:** antes del shell, la app muestra `LoginScreen` (pantalla completa). Solo tras `guest` o `auth` se monta el layout sidebar + content.

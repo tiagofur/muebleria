@@ -130,6 +130,21 @@
   --density-control-pad-y: 0.35rem;
   --density-control-pad-x: var(--space-2);
 
+  /*
+   * Breakpoints (issue #34 / design.md §3.8) — documented here for agents.
+   * @media cannot use custom properties; use the same px literals in CSS:
+   *   phone  ≤639px   (390 portrait)
+   *   tablet 640–899  (768 portrait)
+   *   desktop ≥900    (shell sidebar expands; 1280 wide)
+   *   cards-3 ≥1100   (3-column card grids)
+   */
+  --bp-phone-max: 639px;
+  --bp-tablet-min: 640px;
+  --bp-desktop-min: 900px;
+  --bp-cards-3-min: 1100px;
+  /* Min interactive size on coarse pointers / phone (≈40px). */
+  --touch-min: 2.5rem;
+
   /* —— Border radius (§3.5) —— */
   --radius-sm: 4px;
   --radius-md: 8px;
