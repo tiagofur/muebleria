@@ -521,7 +521,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 - **Contenido:**
   - 4 indicadores (vocabulario de nav): cotizaciones activas, total cotizado del mes, muebles en catálogo, materiales activos
   - «Total cotizado del mes» con énfasis visual (`.dashboard-stat--emphasis`); los conteos quedan secundarios
-  - Montos: `formatDashboardMoney` → `$1,250.50 MXN` (es-MX + default de producto)
+  - Montos: helper único `formatMoneyDisplay` (y wrappers `formatDashboardMoney` / `formatProjectMoney` / `formatModuleMoney`) → `$1,250.50 MXN` (locale `es-MX`, currency default MXN; issue #51)
   - Hasta 5 cotizaciones recientes (nombre, cliente resuelto, status badge, fecha, precio venta o `—`)
   - Lista reciente vacía (workspace no vacío): `EmptyState` **sin** CTA (el único primary es el header «Nueva cotización»)
   - Acciones rápidas: «Nueva cotización» (`.btn--primary`), «Nuevo mueble» (`.btn` base)
