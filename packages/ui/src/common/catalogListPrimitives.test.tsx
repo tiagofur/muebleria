@@ -188,6 +188,17 @@ describe('catalog list CSS guards (F020)', () => {
     expect(css).toMatch(/opacity:\s*0/);
   });
 
+  it('sticky column headers on catalog table scrollport (issue #56)', () => {
+    const css = read('../catalogs/catalogs.css');
+    expect(css).toMatch(/\.catalog-table-wrap\s*\{[^}]*overflow:\s*auto/s);
+    expect(css).toMatch(/\.catalog-table-wrap\s*\{[^}]*max-height:/s);
+    expect(css).toMatch(
+      /\.catalog-table th\s*\{[^}]*position:\s*sticky/s,
+    );
+    expect(css).toMatch(/\.catalog-table th\s*\{[^}]*top:\s*0/s);
+    expect(css).toMatch(/border-collapse:\s*separate/);
+  });
+
   it('catalog layout is single-column (no permanent side form grid)', () => {
     const css = read('../catalogs/catalogs.css');
     expect(css).not.toMatch(
