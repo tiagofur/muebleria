@@ -899,6 +899,48 @@ function AppContent({
     navigate(pathForNav('materials'));
   }, [navigate]);
 
+  const onDashboardOpenShowcase = useCallback(() => {
+    navigate(pathForNav('modules'));
+  }, [navigate]);
+
+  const onDashboardOpenMaterials = useCallback(() => {
+    navigate(pathForNav('materials'));
+  }, [navigate]);
+
+  const onDashboardOpenModules = useCallback(() => {
+    navigate(pathForNav('modules'));
+  }, [navigate]);
+
+  const onShowcaseUseInQuote = useCallback(
+    (moduleId: string) => {
+      const mod = modules.find((m) => m.id === moduleId);
+      setProjectsCreateKey((k) => k + 1);
+      navigate(pathForNav('projects'));
+      toast({
+        type: 'info',
+        message: mod
+          ? `Nueva cotización: agregá «${mod.name}» (${mod.code}) con Agregar mueble.`
+          : 'Nueva cotización: agregá el mueble desde Agregar mueble.',
+      });
+    },
+    [modules, navigate, toast],
+  );
+
+  const dashboardHomeMode = useMemo(():
+    | 'default'
+    | 'sales'
+    | 'engineering' => {
+    if (session !== 'auth' || !actorRole) return 'default';
+    if (actorRole === 'vendedor') return 'sales';
+    if (actorRole === 'ingeniero') return 'engineering';
+    return 'default';
+  }, [session, actorRole]);
+
+  const modulesWithoutPhotoCount = useMemo(
+    () => modules.filter((m) => !m.imageUrl).length,
+    [modules],
+  );
+
   /** Recent entities for Cmd+K palette (issue #54). */
   const commandItems = useMemo((): CommandPaletteItem[] => {
     const projectItems: CommandPaletteItem[] = selectRecentProjects(
@@ -1898,6 +1940,27 @@ function AppContent({
             onNewModule={canMutateModules ? onDashboardNewModule : undefined}
             onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
             ownerBreakdown={dashboardOwnerBreakdown}
+            homeMode={dashboardHomeMode}
+            onOpenShowcase={
+              dashboardHomeMode === 'sales'
+                ? onDashboardOpenShowcase
+                : undefined
+            }
+            onOpenMaterials={
+              dashboardHomeMode === 'engineering'
+                ? onDashboardOpenMaterials
+                : undefined
+            }
+            onOpenModules={
+              dashboardHomeMode === 'engineering'
+                ? onDashboardOpenModules
+                : undefined
+            }
+            modulesWithoutPhotoCount={
+              dashboardHomeMode === 'engineering'
+                ? modulesWithoutPhotoCount
+                : undefined
+            }
           />
         )
       ) : null}
@@ -2001,8 +2064,12 @@ function AppContent({
         !canMutateModules && session === 'auth' ? (
           <ModuleShowcase
             modules={modules}
+            categories={categories}
             resolveImageUrl={resolveMediaUrl}
             onSelect={(id) => onModuleSelectionChange(id)}
+            onUseInQuote={
+              canMutateProjects ? onShowcaseUseInQuote : undefined
+            }
           />
         ) : (
         <ModulesScreen

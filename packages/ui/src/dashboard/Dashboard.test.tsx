@@ -241,3 +241,74 @@ describe('Dashboard (F023)', () => {
     expect(text).toContain('prefers-reduced-motion');
   });
 });
+
+describe('Dashboard home by role (F043 / #88)', () => {
+  it('sales home: vitrina CTA, own monthly total, no catalog stats', async () => {
+    const user = userEvent.setup();
+    const onOpenShowcase = vi.fn();
+    renderDashboard({
+      homeMode: 'sales',
+      onOpenShowcase,
+      onNewModule: undefined,
+      onNewMaterial: undefined,
+      ownerBreakdown: undefined,
+    });
+
+    expect(screen.getByTestId('dashboard-stats-sales')).toBeTruthy();
+    expect(screen.getByText('Tu total del mes')).toBeTruthy();
+    expect(screen.queryByTestId('stat-modules')).toBeNull();
+    expect(screen.queryByTestId('stat-materials')).toBeNull();
+    expect(screen.getByTestId('stat-active-projects')).toBeTruthy();
+    expect(screen.getByTestId('dashboard-open-showcase')).toBeTruthy();
+    expect(screen.queryByTestId('dashboard-owner-breakdown')).toBeNull();
+    expect(screen.queryByTestId('dashboard-engineering-shortcuts')).toBeNull();
+
+    await user.click(screen.getByTestId('dashboard-open-showcase'));
+    expect(onOpenShowcase).toHaveBeenCalledTimes(1);
+  });
+
+  it('engineering home: catalog shortcuts and modules without photo', async () => {
+    const user = userEvent.setup();
+    const onOpenMaterials = vi.fn();
+    const onOpenModules = vi.fn();
+    renderDashboard({
+      homeMode: 'engineering',
+      onOpenMaterials,
+      onOpenModules,
+      modulesWithoutPhotoCount: 3,
+      ownerBreakdown: undefined,
+    });
+
+    expect(screen.getByTestId('dashboard-engineering-shortcuts')).toBeTruthy();
+    expect(screen.getByTestId('dashboard-modules-without-photo').textContent).toMatch(
+      /3 plantillas sin foto/,
+    );
+    expect(screen.getByTestId('stat-modules')).toBeTruthy();
+
+    await user.click(screen.getByTestId('dashboard-open-materials'));
+    expect(onOpenMaterials).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('dashboard-open-modules'));
+    expect(onOpenModules).toHaveBeenCalledTimes(1);
+  });
+
+  it('default/gerente keeps owner breakdown without sales-only chrome', () => {
+    renderDashboard({
+      homeMode: 'default',
+      ownerBreakdown: [
+        {
+          ownerUserId: 'v1',
+          ownerName: 'Ana Vendedora',
+          ownerRoleLabel: 'Vendedor',
+          activeProjects: 2,
+          monthlyQuotedTotal: 500,
+          projectsTotal: 4,
+        },
+      ],
+    });
+    expect(screen.getByTestId('dashboard-owner-breakdown')).toBeTruthy();
+    expect(screen.queryByTestId('dashboard-open-showcase')).toBeNull();
+    expect(screen.queryByTestId('dashboard-engineering-shortcuts')).toBeNull();
+    expect(screen.getByTestId('stat-modules')).toBeTruthy();
+  });
+});
+

@@ -4,6 +4,7 @@
 
 export {
   Dashboard,
+  type DashboardHomeMode,
   type DashboardProps,
   type DashboardRecentProject,
   type DashboardStats,

@@ -801,18 +801,6 @@
       "phase": 8,
       "name": "catalog_image_upload_materials_hardware",
       "title": "Subida de imagen en materiales y herrajes",
-      "description": "UI upload materials/hardware via POST /api/media",
-      "acceptance": [
-        "Upload material/herraje",
-        "RBAC",
-        "Thumbnail",
-        "No base64"
-      ],
-      "status": "in_progress",
-      "github_issue": 87,
-      "references": [
-        "https://github.com/tiagofur/muebleria/issues/87"
-      ]
       "description": "UI upload reutilizando POST /api/media e imageUrl ya en schema (F040). Solo ingeniero/admin. Thumbnail en lista.",
       "acceptance": [
         "Upload/reemplazo de foto en material y herraje",
@@ -824,7 +812,7 @@
         "docs/prd.md §6.6",
         "https://github.com/tiagofur/muebleria/issues/87"
       ],
-      "status": "pending",
+      "status": "done",
       "github_issue": 87
     },
     {
@@ -843,7 +831,7 @@
         "docs/prd.md §6.6.5",
         "https://github.com/tiagofur/muebleria/issues/88"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "github_issue": 88
     },
     {
