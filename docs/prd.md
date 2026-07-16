@@ -1,7 +1,7 @@
 # PRD — Sistema de Cotización y Producción de Muebles
 
 **Producto:** Muebles (nombre de trabajo; renombrable)  
-**Estado:** MVP **implementado** · v1.1 **parcial** · backlog en GitHub (#35–#39) y `feature_list.json` (F029–F033)  
+**Estado:** MVP **implementado** · Etapa 3 multi-usuario **implementada** (F034–F041) · backlog post-E3 en GitHub (#87–#90) / F042–F045  
 **Última revisión de alcance:** 2026-07-15  
 **Autor:** Producto + dominio de taller  
 **Fuentes de dominio:** `Plantilla_Muebles.xlsx`, `Plantilla_Optimizer.xlsx`  
@@ -193,7 +193,7 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 | Canto: grupo EDGE o mapeo material→canto default | Hecho | F027 |
 | Duplicar módulo / proyecto | Hecho | F015 |
 | Merma % por material en costo | Hecho | F014 |
-| Opciones a nivel **proyecto** + override por línea | **Pendiente** | [#35](https://github.com/tiagofur/muebleria/issues/35) · F029 |
+| Opciones a nivel **proyecto** + override por línea | **Hecho** | [#35](https://github.com/tiagofur/muebleria/issues/35) · F029 |
 | PDF o Excel de cotización comercial (simple) | **Hecho (Excel)** | [#36](https://github.com/tiagofur/muebleria/issues/36) · F030 — XLSX cliente; PDF opcional futuro |
 
 ### 6.2b Mejoras de producto abiertas (no bloquean MVP)
@@ -313,6 +313,16 @@ El rol `vendedor` (y `user` sin puesto) **no** recibe ni ve en UI: `costPerM2`, 
 #### 6.6.7 Exports de producción (F041)
 
 Roles `ingeniero`, `produccion`, `gerente_ventas` y `admin` pueden exportar Optimizer y lista de herrajes en proyectos **accepted** o **produced**. `vendedor` no. Cotización comercial (cliente) es independiente.
+
+#### 6.6.8 Backlog post–Etapa 3 (issues)
+
+| Ítem | Issue · feature |
+|------|-----------------|
+| Subida de imagen materiales/herrajes | [#87](https://github.com/tiagofur/muebleria/issues/87) · F042 |
+| Pulir vitrina / home por rol | [#88](https://github.com/tiagofur/muebleria/issues/88) · F043 |
+| Flag taller vendedor ve costos | [#89](https://github.com/tiagofur/muebleria/issues/89) · F044 |
+| PDF cotización comercial | [#90](https://github.com/tiagofur/muebleria/issues/90) · F045 |
+
 
 ---
 
