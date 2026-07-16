@@ -15,8 +15,11 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/auth/register", authRL(http.HandlerFunc(server.HandleRegister)))
 	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
 
-	// Endpoints protegidos por JWT
-	authMW := AuthMiddleware(server.JWTSecret)
+	// Endpoints protegidos por JWT (role/active re-checked against DB — #16)
+	authMW := AuthMiddleware(server.JWTSecret, server.Store)
+
+	// Refresh: requires a still-valid token; re-issues JWT with current DB role.
+	mux.Handle("POST /api/auth/refresh", authMW(http.HandlerFunc(server.HandleRefresh)))
 
 	// Clientes
 	mux.Handle("GET /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))
@@ -77,8 +80,8 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Cálculo financiero
 	mux.Handle("POST /api/projects/{id}/calculate", authMW(http.HandlerFunc(server.HandleProjectCalculate)))
 
-	// Admin — Gestión de usuarios (solo admin)
-	adminMW := AdminMiddleware(server.JWTSecret)
+	// Admin — Gestión de usuarios (solo admin; live role from DB)
+	adminMW := AdminMiddleware(server.JWTSecret, server.Store)
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
 	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))

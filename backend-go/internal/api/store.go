@@ -17,6 +17,8 @@ import (
 type Store interface {
 	// Auth / users
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
+	// GetUserByID loads the user for JWT re-validation of role/active (issue #16).
+	GetUserByID(ctx context.Context, id string) (*domain.User, error)
 	CreateUser(ctx context.Context, u *domain.User) error
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	ApproveUser(ctx context.Context, id string) error

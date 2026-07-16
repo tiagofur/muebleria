@@ -166,6 +166,41 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleRefresh re-issues an access token for the authenticated user after
+// AuthMiddleware has already re-validated role/active against the DB (issue #16).
+// Clients should call this before AccessTokenTTL elapses to avoid re-login.
+func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
+	if !ok || claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	// AuthMiddleware already loaded live role/active into claims; re-fetch for
+	// a complete User payload in the response.
+	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || u == nil || !u.Active {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	token, err := auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	if err != nil {
+		respondWithInternalError(w, err, "refresh: generate token")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, LoginResponse{
+		Token: token,
+		User:  *u,
+	})
+}
+
 // --- CUSTOMERS ---
 
 func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {

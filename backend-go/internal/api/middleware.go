@@ -7,12 +7,18 @@ import (
 	"sync"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
+	"github.com/tiagofur/muebles-backend/internal/domain"
 	"golang.org/x/time/rate"
 )
 
 type contextKey string
 
 const UserContextKey contextKey = "user"
+
+// UserLookup is the subset of Store needed to re-validate JWT subjects (issue #16).
+type UserLookup interface {
+	GetUserByID(ctx context.Context, id string) (*domain.User, error)
+}
 
 // CORSMiddleware only allows origins present in the allowlist. The matched
 // origin is reflected per request; non-matching origins get no Allow-Origin
@@ -47,10 +53,10 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	}
 }
 
-// AuthMiddleware validates the Bearer JWT and puts the claims in the request
-// context. Failure responses are JSON (consistent with the handlers) and never
-// leak the underlying parse error to the client (#5).
-func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+// AuthMiddleware validates the Bearer JWT, re-loads the user from the DB to
+// refresh role/active (issue #16), and puts claims in the request context.
+// Failure responses are JSON and never leak parser/DB errors to the client.
+func AuthMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -72,19 +78,31 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Re-read role and active flag from DB so demotion / deactivation take
+			// effect immediately instead of waiting for token expiry (issue #16).
+			if users != nil {
+				u, err := users.GetUserByID(r.Context(), claims.UserID)
+				if err != nil || u == nil || !u.Active {
+					respondWithError(w, http.StatusUnauthorized, "invalid token")
+					return
+				}
+				claims.Role = string(u.Role)
+				claims.Email = u.Email
+			}
+
 			ctx := context.WithValue(r.Context(), UserContextKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-// AdminMiddleware wraps AuthMiddleware and additionally requires role == "admin".
-func AdminMiddleware(jwtSecret string) func(http.Handler) http.Handler {
-	authMW := AuthMiddleware(jwtSecret)
+// AdminMiddleware wraps AuthMiddleware and requires the live DB role to be admin.
+func AdminMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.Handler {
+	authMW := AuthMiddleware(jwtSecret, users)
 	return func(next http.Handler) http.Handler {
 		return authMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
-			if !ok || claims.Role != "admin" {
+			if !ok || claims == nil || claims.Role != string(domain.RoleAdmin) {
 				respondWithError(w, http.StatusForbidden, "admin access required")
 				return
 			}
