@@ -310,6 +310,10 @@ Precios congelados en `quoted` / `accepted` / `produced` (`priceSnapshot`). Expo
 
 El rol `vendedor` (y `user` sin puesto) **no** recibe ni ve en UI: `costPerM2`, `costPerUnit`, `costPerMl`, `board_price`, costo directo, factor de margen, desglose de costos. **Sí** ve precio de venta. Admin / gerente / ingeniero / producción ven la estructura de costos del taller.
 
+#### 6.6.7 Exports de producción (F041)
+
+Roles `ingeniero`, `produccion`, `gerente_ventas` y `admin` pueden exportar Optimizer y lista de herrajes en proyectos **accepted** o **produced**. `vendedor` no. Cotización comercial (cliente) es independiente.
+
 ---
 
 ## 7. Modelo de dominio (producto)

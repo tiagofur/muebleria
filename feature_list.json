@@ -775,7 +775,7 @@
         "docs/prd.md §6.6.6",
         "https://github.com/tiagofur/muebleria/issues/72"
       ],
-      "status": "in_progress",
+      "status": "done",
       "github_issue": 72
     },
     {
@@ -793,7 +793,7 @@
         "docs/prd.md §4.2.3",
         "https://github.com/tiagofur/muebleria/issues/73"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "github_issue": 73
     }
   ]

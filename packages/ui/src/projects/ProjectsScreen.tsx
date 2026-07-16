@@ -586,6 +586,12 @@ export function ProjectsScreen({
   /** Block export when shell says so or options incomplete; still allow retry after listed issues. */
   const exportDisabled =
     exportBusy || exportBlocked || previewBlocked || !selectedProject;
+  /** F041: Optimizer/herrajes only for accepted/produced (plant-ready). */
+  const productionExportOk =
+    selectedProject != null &&
+    (selectedProject.status === 'accepted' ||
+      selectedProject.status === 'produced');
+  const productionExportDisabled = exportDisabled || !productionExportOk;
 
   const exportBlockMessage = previewBlocked
     ? 'Exportación bloqueada: completá las opciones obligatorias de los muebles.'
@@ -1096,14 +1102,15 @@ export function ProjectsScreen({
           </span>
         </div>
         <div className="workspace-chrome__actions">
+          {onExport ? (
           <button
             type="button"
             className="btn btn--primary"
-            disabled={!onExport || exportDisabled}
+            disabled={productionExportDisabled}
             title={
-              onExport
-                ? 'Exportar cut-list Optimizer (.xlsx)'
-                : 'Export Optimizer no disponible en este shell'
+              !productionExportOk
+                ? 'Export de producción solo en Aceptado o En producción'
+                : 'Exportar cut-list Optimizer (.xlsx)'
             }
             onClick={() => {
               void onExport?.();
@@ -1112,21 +1119,25 @@ export function ProjectsScreen({
           >
             {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
           </button>
+          ) : null}
+          {onExportHardware ? (
           <button
             type="button"
             className="btn"
-            disabled={!onExportHardware || exportDisabled}
+            disabled={productionExportDisabled}
             title={
-              onExportHardware
-                ? 'Exportar lista de herrajes para compras (.xlsx)'
-                : 'Export lista de herrajes no disponible en este shell'
+              !productionExportOk
+                ? 'Export de producción solo en Aceptado o En producción'
+                : 'Exportar lista de herrajes para compras (.xlsx)'
             }
             onClick={() => {
               void onExportHardware?.();
             }}
+            data-testid="project-chrome-export-hw"
           >
             {exportBusy ? 'Exportando…' : 'Lista de herrajes'}
           </button>
+          ) : null}
           <button
             type="button"
             className="btn"

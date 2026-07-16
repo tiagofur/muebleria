@@ -4,6 +4,8 @@ import {
   navIdsForRole,
   roleCanAccessCustomers,
   roleCanDeleteProject,
+  canExportProductionForProject,
+  projectAllowsProductionExport,
   roleCanExportProduction,
   roleCanMarkProduced,
   roleCanMutateCatalog,
@@ -43,6 +45,17 @@ describe('rbac (F035)', () => {
     expect(roleCanExportProduction('vendedor')).toBe(false);
     expect(roleCanExportProduction('produccion')).toBe(true);
     expect(roleCanExportProduction('ingeniero')).toBe(true);
+  });
+
+  it('ingeniero exports production only on accepted/produced (F041)', () => {
+    expect(projectAllowsProductionExport('accepted')).toBe(true);
+    expect(projectAllowsProductionExport('produced')).toBe(true);
+    expect(projectAllowsProductionExport('draft')).toBe(false);
+    expect(projectAllowsProductionExport('quoted')).toBe(false);
+    expect(canExportProductionForProject('ingeniero', 'accepted')).toBe(true);
+    expect(canExportProductionForProject('ingeniero', 'produced')).toBe(true);
+    expect(canExportProductionForProject('ingeniero', 'draft')).toBe(false);
+    expect(canExportProductionForProject('vendedor', 'accepted')).toBe(false);
   });
 
   it('hides CRM from produccion', () => {

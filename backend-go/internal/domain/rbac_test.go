@@ -46,6 +46,15 @@ func TestRBAC_ExportProduction(t *testing.T) {
 	if !RoleCanExportProduction(RoleIngeniero) || !RoleCanExportProduction(RoleProduccion) {
 		t.Fatal("ingeniero/produccion export production")
 	}
+	if !CanExportProductionForProject(RoleIngeniero, StatusAccepted) {
+		t.Fatal("ingeniero accepted export")
+	}
+	if CanExportProductionForProject(RoleIngeniero, StatusDraft) {
+		t.Fatal("ingeniero draft must not production-export")
+	}
+	if CanExportProductionForProject(RoleVendedor, StatusAccepted) {
+		t.Fatal("vendedor accepted must not production-export")
+	}
 }
 
 func TestRBAC_CustomersAccess(t *testing.T) {

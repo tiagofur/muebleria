@@ -93,6 +93,16 @@ func RoleCanExportProduction(role UserRole) bool {
 	}
 }
 
+// ProjectAllowsProductionExport is true for accepted/produced only (F041).
+func ProjectAllowsProductionExport(status ProjectStatus) bool {
+	return status == StatusAccepted || status == StatusProduced
+}
+
+// CanExportProductionForProject combines role + status gates (F041).
+func CanExportProductionForProject(role UserRole, status ProjectStatus) bool {
+	return RoleCanExportProduction(role) && ProjectAllowsProductionExport(status)
+}
+
 // RoleCanAccessSettings — workshop global defaults.
 func RoleCanAccessSettings(role UserRole) bool {
 	return role == RoleAdmin || role == RoleGerenteVentas || role == RoleIngeniero

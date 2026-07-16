@@ -67,6 +67,8 @@ export {
   roleCanAccessProjects,
   roleCanAccessSettings,
   roleCanDeleteProject,
+  canExportProductionForProject,
+  projectAllowsProductionExport,
   roleCanExportProduction,
   roleCanManageUsers,
   roleCanMarkProduced,
