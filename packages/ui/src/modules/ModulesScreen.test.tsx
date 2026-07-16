@@ -265,6 +265,26 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(within(dialog).getByLabelText('Nombre')).toHaveProperty('value', '');
   });
 
+
+  it('shows editor tabs General/Piezas/Herrajes/Costo in Modal LG', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
+    expect(screen.getByTestId('module-editor-panel-parts').hidden).toBe(true);
+
+    await user.click(screen.getByTestId('module-editor-tab-parts'));
+    expect(screen.getByTestId('module-editor-panel-parts').hidden).toBe(false);
+    expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(true);
+
+    await user.click(screen.getByTestId('module-editor-tab-hardware'));
+    expect(screen.getByTestId('module-editor-panel-hardware').hidden).toBe(false);
+
+    await user.click(screen.getByTestId('module-editor-tab-cost'));
+    expect(screen.getByTestId('module-editor-panel-cost').hidden).toBe(false);
+  });
+
   it('opens create modal from requestCreateKey prop (Dashboard handoff)', () => {
     renderScreen({ requestCreateKey: 1 });
     const dialog = screen.getByRole('dialog');

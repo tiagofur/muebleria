@@ -20,6 +20,8 @@ import {
   Settings2,
   ShieldCheck,
   ToggleLeft,
+  User,
+  WifiOff,
   X,
   Users,
   type LucideIcon,
@@ -38,6 +40,11 @@ export type AppNavId =
   | 'optionGroups'
   | 'users';
 
+export type AppShellSessionUser = {
+  readonly email: string;
+  readonly role: string;
+};
+
 export type AppShellProps = {
   readonly activeId: AppNavId;
   readonly onNavigate: (id: AppNavId) => void;
@@ -50,6 +57,10 @@ export type AppShellProps = {
   readonly headerActions?: ReactNode;
   /** When set, renders the standard top-bar «Salir» control (design.md §6.6). */
   readonly onLogout?: () => void;
+  /** Auth user for topbar identity (email + role). Guest leaves this unset. */
+  readonly user?: AppShellSessionUser | null;
+  /** Session mode for badge: auth vs guest (invitado). */
+  readonly sessionMode?: 'auth' | 'guest';
   /** Admin-only: show «Usuarios» under CONFIG (registration approval). */
   readonly showAdminUsers?: boolean;
   /**
@@ -58,6 +69,17 @@ export type AppShellProps = {
    */
   readonly hrefForNav?: (id: AppNavId) => string;
 };
+
+function roleLabel(role: string): string {
+  const map: Record<string, string> = {
+    admin: 'Admin',
+    user: 'Usuario',
+    vendedor: 'Vendedor',
+    disenador: 'Diseñador',
+    carpintero: 'Carpintero',
+  };
+  return map[role] ?? role;
+}
 
 type NavItemDef = {
   readonly id: AppNavId;
@@ -133,6 +155,8 @@ export function AppShell({
   title,
   headerActions,
   onLogout,
+  user = null,
+  sessionMode,
   showAdminUsers = false,
   hrefForNav,
 }: AppShellProps): ReactNode {
@@ -169,7 +193,8 @@ export function AppShell({
   );
 
   const heading = title ?? labelForNavId(activeId);
-  const hasActions = Boolean(headerActions) || Boolean(onLogout);
+  const hasIdentity = Boolean(user) || sessionMode === 'guest' || sessionMode === 'auth';
+  const hasActions = Boolean(headerActions) || Boolean(onLogout) || hasIdentity;
 
   return (
     <div className="app-layout">
@@ -268,6 +293,34 @@ export function AppShell({
           {hasActions ? (
             <div className="app-topbar__actions">
               {headerActions}
+              {sessionMode === 'guest' ? (
+                <div
+                  className="app-topbar__identity"
+                  data-testid="app-session-identity"
+                  title="Modo invitado: datos locales, sin API"
+                >
+                  <WifiOff size={16} strokeWidth={1.5} aria-hidden />
+                  <span className="app-topbar__identity-text">
+                    <span className="app-topbar__identity-name">Invitado</span>
+                    <span className="app-topbar__identity-role">Sin conexión</span>
+                  </span>
+                </div>
+              ) : null}
+              {sessionMode === 'auth' && user ? (
+                <div
+                  className="app-topbar__identity"
+                  data-testid="app-session-identity"
+                  title={user.email}
+                >
+                  <User size={16} strokeWidth={1.5} aria-hidden />
+                  <span className="app-topbar__identity-text">
+                    <span className="app-topbar__identity-name">{user.email}</span>
+                    <span className="app-topbar__identity-role">
+                      {roleLabel(user.role)}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
               {onLogout ? (
                 <button
                   type="button"

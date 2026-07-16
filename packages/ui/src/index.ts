@@ -120,6 +120,7 @@ export {
   resolveNavSections,
   type AppNavId,
   type AppShellProps,
+  type AppShellSessionUser,
 } from './shell';
 
 export {
