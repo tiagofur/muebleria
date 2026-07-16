@@ -17,6 +17,10 @@ const BcryptCost = 12
 // MinPasswordLen is the minimum accepted password length on register (issue #19).
 const MinPasswordLen = 8
 
+// AccessTokenTTL is how long a JWT remains valid before re-login or refresh
+// (issue #16). Role/active are also re-checked against the DB on every request.
+const AccessTokenTTL = 15 * time.Minute
+
 // DummyHash is a valid bcrypt hash used only to equalize login timing when the
 // user does not exist (issue #19 account enumeration).
 // Generated once for the fixed string "dummy-password-for-timing".
@@ -74,14 +78,15 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 func GenerateToken(userID string, email string, role string, secret string) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
+	now := time.Now()
 	claims := &Claims{
 		UserID: userID,
 		Email:  email,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
 		},
 	}
 

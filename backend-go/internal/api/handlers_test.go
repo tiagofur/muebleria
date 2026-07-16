@@ -57,6 +57,12 @@ func (s *stubStore) stubNotUsed(name string) {
 func (s *stubStore) GetUserByEmail(context.Context, string) (*domain.User, error) {
 	return s.getUserByEmail, s.getUserByEmailErr
 }
+func (s *stubStore) GetUserByID(context.Context, string) (*domain.User, error) {
+	if s.getUserByEmail != nil {
+		return s.getUserByEmail, s.getUserByEmailErr
+	}
+	return nil, s.getUserByEmailErr
+}
 func (s *stubStore) CreateUser(context.Context, *domain.User) error {
 	return s.createUserErr
 }

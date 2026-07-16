@@ -3,6 +3,7 @@ package auth
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -104,6 +105,14 @@ func TestJWTTokenLifecycle(t *testing.T) {
 	}
 	if claims.Role != role {
 		t.Errorf("expected Role = %s, got %s", role, claims.Role)
+	}
+	if claims.ExpiresAt == nil {
+		t.Fatal("expected ExpiresAt set")
+	}
+	// Access token should expire about AccessTokenTTL from now (issue #16).
+	ttl := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+	if ttl < AccessTokenTTL-time.Second || ttl > AccessTokenTTL+time.Second {
+		t.Errorf("token TTL = %v, want ~%v", ttl, AccessTokenTTL)
 	}
 
 	// Probar con una firma incorrecta
