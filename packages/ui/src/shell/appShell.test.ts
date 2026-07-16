@@ -104,6 +104,16 @@ describe('AppShell nav model (F017)', () => {
     expect(configAdmin.items.map((i) => i.id)).toContain('users');
     expect(configAdmin.items.at(-1)?.label).toBe('Usuarios');
   });
+
+  it('resolveNavSections filters by allowedNavIds (F035)', () => {
+    const prod = resolveNavSections({
+      allowedNavIds: new Set(['home', 'projects']),
+    });
+    expect(prod.flatMap((s) => s.items.map((i) => i.id))).toEqual([
+      'home',
+      'projects',
+    ]);
+  });
 });
 
 describe('AppShell source structure (F017)', () => {

@@ -64,6 +64,8 @@ export interface HardwareCatalogProps {
   readonly onReactivate: (id: string) => void;
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
+  /** F035: hide ABM when false. */
+  readonly canMutate?: boolean;
 }
 
 export function HardwareCatalog({
@@ -74,6 +76,7 @@ export function HardwareCatalog({
   onReactivate,
   openEntityId = null,
   onSelectionChange,
+  canMutate = true,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -190,10 +193,12 @@ export function HardwareCatalog({
       <div className="catalog-page__header">
         <h2 className="catalog-page__title">Herrajes</h2>
         <div className="catalog-page__toolbar">
+          {canMutate ? (
           <button type="button" className="btn btn--primary" onClick={startCreate}>
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nuevo herraje
           </button>
+          ) : null}
         </div>
       </div>
 

@@ -34,10 +34,17 @@ import {
   calcProjectBreakdown,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
+  navIdsForRole,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   resolveWorkshopSettings,
+  roleCanAccessNav,
   roleCanAssignOwner,
+  roleCanDeleteProject,
+  roleCanExportProduction,
+  roleCanMutateCatalog,
+  roleCanMutateModules,
+  roleCanMutateProjects,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -463,6 +470,22 @@ function AppContent({
   );
   const showAdminUsers = session === 'auth' && isAdminRole(authUser?.role);
   const canAssignOwner = roleCanAssignOwner(authUser?.role);
+  /** Guest (local) has full tool; auth uses product RBAC (F035). */
+  const actorRole = session === 'auth' ? authUser?.role : null;
+  const allowedNavIds = useMemo(
+    () => navIdsForRole(session === 'auth' ? authUser?.role : null),
+    [session, authUser?.role],
+  );
+  const canMutateCatalog =
+    session === 'guest' || roleCanMutateCatalog(actorRole);
+  const canMutateModules =
+    session === 'guest' || roleCanMutateModules(actorRole);
+  const canMutateProjects =
+    session === 'guest' || roleCanMutateProjects(actorRole);
+  const canDeleteProjects =
+    session === 'guest' || roleCanDeleteProject(actorRole);
+  const canExportProduction =
+    session === 'guest' || roleCanExportProduction(actorRole);
 
   const repository = useMemo(() => {
     return session === 'auth'
@@ -484,14 +507,14 @@ function AppContent({
       return;
     }
     let cancelled = false;
-    fetch(`${DEFAULT_API_BASE}/admin/users`, {
+    fetch(`${DEFAULT_API_BASE}/assignable-owners`, {
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
     })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`users ${res.status}`);
+        if (!res.ok) throw new Error(`owners ${res.status}`);
         return res.json() as Promise<
           { id: string; name: string; role?: string; active?: boolean }[]
         >;
@@ -572,10 +595,15 @@ function AppContent({
       navigate(pathForNav('home'), { replace: true });
       return;
     }
-    if (resolved === 'users' && !showAdminUsers) {
+    if (session === 'auth' && !roleCanAccessNav(actorRole, resolved)) {
+      toast({
+        type: 'error',
+        message:
+          'No tenés permiso para esta sección. Pedile a un admin que te asigne el puesto correcto.',
+      });
       navigate(pathForNav('home'), { replace: true });
     }
-  }, [location.pathname, navigate, showAdminUsers]);
+  }, [location.pathname, navigate, session, actorRole, toast]);
 
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   // Calculate / export target follows URL detail when present.
@@ -855,7 +883,7 @@ function AppContent({
         return;
       }
       if (id.startsWith('module:')) {
-        navigate(modulePath(id.slice('module:'.length)));
+        navigate(entityPath('modules', id.slice('module:'.length)));
       }
     },
     [navigate],
@@ -1679,6 +1707,7 @@ function AppContent({
         authUser ? { email: authUser.email, role: authUser.role } : null
       }
       showAdminUsers={showAdminUsers}
+      allowedNavIds={allowedNavIds}
       commandItems={commandItems}
       onCommandItem={onCommandItem}
     >
@@ -1688,9 +1717,9 @@ function AppContent({
           recentProjects={dashboardRecent}
           projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
-          onNewProject={onDashboardNewProject}
-          onNewModule={onDashboardNewModule}
-          onNewMaterial={onDashboardNewMaterial}
+          onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
+          onNewModule={canMutateModules ? onDashboardNewModule : undefined}
+          onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
         />
       ) : null}
       {navId === 'materials' ? (
@@ -1706,6 +1735,7 @@ function AppContent({
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
           requestCreateKey={materialsCreateKey}
+          canMutate={canMutateCatalog}
         />
       ) : null}
       {navId === 'edges' ? (
@@ -1717,6 +1747,7 @@ function AppContent({
           onReactivate={(id) => setEdgeActive(id, true)}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('edges', id)}
+          canMutate={canMutateCatalog}
         />
       ) : null}
       {navId === 'hardware' ? (
@@ -1728,6 +1759,7 @@ function AppContent({
           onReactivate={(id) => setHardwareActive(id, true)}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
+          canMutate={canMutateCatalog}
         />
       ) : null}
       {navId === 'optionGroups' ? (
@@ -1744,6 +1776,7 @@ function AppContent({
           onSelectionChange={(id) =>
             onEntitySelectionChange('optionGroups', id)
           }
+          canMutate={canMutateCatalog}
         />
       ) : null}
       {navId === 'customers' ? (
@@ -1792,6 +1825,7 @@ function AppContent({
           groupLabels={groupLabels}
           moduleEstimates={moduleEstimates}
           requestCreateKey={modulesCreateKey}
+          canMutate={canMutateModules}
         />
       ) : null}
       {navId === 'projects' ? (
@@ -1822,8 +1856,10 @@ function AppContent({
           previewBlocked={projectQuote.previewBlocked}
           missingGroups={projectQuote.missingGroups}
           groupLabels={groupLabels}
-          onExport={handleExportOptimizer}
-          onExportHardware={handleExportHardwareList}
+          onExport={canExportProduction ? handleExportOptimizer : undefined}
+          onExportHardware={
+            canExportProduction ? handleExportHardwareList : undefined
+          }
           onExportCommercialQuote={handleExportCommercialQuote}
           exportErrors={exportErrors}
           exportBusy={exportBusy}
@@ -1831,6 +1867,8 @@ function AppContent({
           openProjectId={routeProjectId}
           requestCreateKey={projectsCreateKey}
           workshopSettings={workshopSettings}
+          canMutate={canMutateProjects}
+          canDelete={canDeleteProjects}
         />
       ) : null}
     </AppShell>

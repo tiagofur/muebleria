@@ -58,13 +58,17 @@ export interface Hardware {
   readonly active: boolean;
 }
 
-/** Backend roles: admin | user (default on self-register) | specialty roles. */
+/**
+ * Product account roles (F035).
+ * `user` = approved account without job title until admin assigns a puesto.
+ */
 export type UserRole =
   | 'admin'
   | 'user'
   | 'vendedor'
-  | 'disenador'
-  | 'carpintero';
+  | 'gerente_ventas'
+  | 'ingeniero'
+  | 'produccion';
 
 export interface User {
   readonly id: string;

@@ -76,9 +76,12 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
-	
+
 	// Cálculo financiero
 	mux.Handle("POST /api/projects/{id}/calculate", authMW(http.HandlerFunc(server.HandleProjectCalculate)))
+
+	// Assignable portfolio owners (admin + gerente_ventas) — F035
+	mux.Handle("GET /api/assignable-owners", authMW(http.HandlerFunc(server.HandleAssignableOwners)))
 
 	// Admin — Gestión de usuarios (solo admin; live role from DB)
 	adminMW := AdminMiddleware(server.JWTSecret, server.Store)

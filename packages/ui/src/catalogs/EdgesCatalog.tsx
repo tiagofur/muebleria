@@ -58,6 +58,8 @@ export interface EdgesCatalogProps {
   readonly onReactivate: (id: string) => void;
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
+  /** F035: hide ABM when false. */
+  readonly canMutate?: boolean;
 }
 
 export function EdgesCatalog({
@@ -68,6 +70,7 @@ export function EdgesCatalog({
   onReactivate,
   openEntityId = null,
   onSelectionChange,
+  canMutate = true,
 }: EdgesCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -183,10 +186,12 @@ export function EdgesCatalog({
       <div className="catalog-page__header">
         <h2 className="catalog-page__title">Cantos</h2>
         <div className="catalog-page__toolbar">
+          {canMutate ? (
           <button type="button" className="btn btn--primary" onClick={startCreate}>
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nuevo canto
           </button>
+          ) : null}
         </div>
       </div>
 

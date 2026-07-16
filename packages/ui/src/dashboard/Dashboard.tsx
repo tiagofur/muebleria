@@ -51,8 +51,10 @@ export type DashboardProps = {
   /** Total projects in workspace (any status) — for getting-started gate. */
   readonly projectsCount?: number;
   readonly onOpenProject: (projectId: string) => void;
-  readonly onNewProject: () => void;
-  readonly onNewModule: () => void;
+  /** Omit when role cannot create quotes (F035). */
+  readonly onNewProject?: () => void;
+  /** Omit when role cannot create modules (F035). */
+  readonly onNewModule?: () => void;
   /** Navigate to materials + open create (shell requestCreateKey). */
   readonly onNewMaterial?: () => void;
   /** When true, show loading instead of stats (workspace gate). */
@@ -166,6 +168,7 @@ export function Dashboard({
         </div>
         {/* Empty workspace: no header primary — sole primary lives on the active checklist step. */}
         <div className="dashboard__actions">
+          {onNewProject ? (
           <button
             type="button"
             className={
@@ -177,6 +180,8 @@ export function Dashboard({
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nueva cotización
           </button>
+          ) : null}
+          {onNewModule ? (
           <button
             type="button"
             className={showGettingStarted ? 'btn btn--ghost' : 'btn'}
@@ -186,6 +191,7 @@ export function Dashboard({
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nuevo mueble
           </button>
+          ) : null}
         </div>
       </header>
 

@@ -80,6 +80,8 @@ export interface OptionGroupsScreenProps {
   readonly onDelete: (id: string) => void;
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
+  /** F035: hide ABM when false. */
+  readonly canMutate?: boolean;
 }
 
 function countModulesUsingGroup(
@@ -104,6 +106,7 @@ export function OptionGroupsScreen({
   onDelete,
   openEntityId = null,
   onSelectionChange,
+  canMutate = true,
 }: OptionGroupsScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -279,10 +282,12 @@ export function OptionGroupsScreen({
       <div className="catalog-page__header">
         <h2 className="catalog-page__title">Grupos de opciones</h2>
         <div className="catalog-page__toolbar">
+          {canMutate ? (
           <button type="button" className="btn btn--primary" onClick={startCreate}>
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nuevo grupo
           </button>
+          ) : null}
         </div>
       </div>
 

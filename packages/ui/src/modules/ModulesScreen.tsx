@@ -143,6 +143,8 @@ export interface ModulesScreenProps {
   readonly openModuleId?: string | null;
   /** Notifies parent when detail selection changes (for URL sync). */
   readonly onSelectionChange?: (moduleId: string | null) => void;
+  /** F035: hide ABM when false (read-only templates). */
+  readonly canMutate?: boolean;
 }
 
 function CostPreviewPanel({
@@ -243,6 +245,7 @@ export function ModulesScreen({
   openModuleId = null,
   onSelectionChange,
   loading = false,
+  canMutate = true,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -1652,7 +1655,7 @@ export function ModulesScreen({
       <div className="catalog-page__header">
         <h2 className="catalog-page__title">Muebles</h2>
         <div className="catalog-page__toolbar">
-          {onCreateCategory ? (
+          {canMutate && onCreateCategory ? (
             <button
               type="button"
               className="btn"
@@ -1663,6 +1666,7 @@ export function ModulesScreen({
               Editar categorías
             </button>
           ) : null}
+          {canMutate ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -1671,6 +1675,7 @@ export function ModulesScreen({
             <Plus size={16} strokeWidth={1.5} aria-hidden />
             Nuevo mueble
           </button>
+          ) : null}
         </div>
       </div>
 

@@ -16,6 +16,11 @@ describe('UsersScreen (F026 admin approval)', () => {
     expect(src).toContain("method: 'DELETE'");
     expect(src).toContain("'user'");
     expect(src).toContain("'admin'");
+    expect(src).toContain("'gerente_ventas'");
+    expect(src).toContain("'ingeniero'");
+    expect(src).toContain("'produccion'");
+    expect(src).not.toContain("'disenador'");
+    expect(src).not.toContain("'carpintero'");
   });
 
   it('uses design tokens in users.css (no hardcoded hex)', () => {

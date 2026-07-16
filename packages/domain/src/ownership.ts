@@ -1,16 +1,20 @@
 /**
- * Portfolio ownership helpers (F034 / #66).
- * Until F035 (gerente_ventas), only vendedor is scoped; admin assigns owners.
+ * Portfolio ownership helpers (F034 / #66 + F035 gerente).
  */
 
-/** Vendedor is portfolio-scoped; other roles see all owners. */
+/** Vendedor (and sin puesto) are portfolio-scoped; sales managers and ops see all. */
 export function roleSeesAllOwners(role: string | null | undefined): boolean {
-  return role !== 'vendedor';
+  return (
+    role === 'admin' ||
+    role === 'gerente_ventas' ||
+    role === 'ingeniero' ||
+    role === 'produccion'
+  );
 }
 
-/** Admin can assign/reassign ownerUserId (gerente arrives with F035). */
+/** Admin and gerente can assign/reassign ownerUserId. */
 export function roleCanAssignOwner(role: string | null | undefined): boolean {
-  return role === 'admin';
+  return role === 'admin' || role === 'gerente_ventas';
 }
 
 export function resolveOwnerOnCreate(

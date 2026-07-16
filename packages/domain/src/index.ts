@@ -54,6 +54,28 @@ export {
   roleSeesAllOwners,
 } from './ownership';
 
+export type { ProductRole } from './rbac';
+export {
+  ASSIGNABLE_ROLES,
+  PRODUCT_ROLES,
+  isValidUserRole,
+  navIdsForRole,
+  roleCanAccessCatalogNav,
+  roleCanAccessCustomers,
+  roleCanAccessModulesNav,
+  roleCanAccessNav,
+  roleCanAccessProjects,
+  roleCanAccessSettings,
+  roleCanDeleteProject,
+  roleCanExportProduction,
+  roleCanManageUsers,
+  roleCanMutateCatalog,
+  roleCanMutateCustomers,
+  roleCanMutateModules,
+  roleCanMutateProjects,
+  roleLabelEs,
+} from './rbac';
+
 export type { CategoryFilterId } from './categories';
 export {
   MAX_CATEGORY_DEPTH,

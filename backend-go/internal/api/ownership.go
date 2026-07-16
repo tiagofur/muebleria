@@ -22,6 +22,25 @@ func actorRole(claims *auth.Claims) domain.UserRole {
 	return domain.UserRole(claims.Role)
 }
 
+func actorID(claims *auth.Claims) string {
+	if claims == nil {
+		return ""
+	}
+	return claims.UserID
+}
+
+// requirePermission responds 403 and returns false when ok is false.
+func requirePermission(w http.ResponseWriter, ok bool, message string) bool {
+	if ok {
+		return true
+	}
+	if message == "" {
+		message = "no tenés permiso para esta acción"
+	}
+	respondWithError(w, http.StatusForbidden, message)
+	return false
+}
+
 func filterCustomersByOwner(list []domain.Customer, actorID string, role domain.UserRole) []domain.Customer {
 	if domain.RoleSeesAllOwners(role) {
 		return list

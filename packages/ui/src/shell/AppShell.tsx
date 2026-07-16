@@ -72,6 +72,8 @@ export type AppShellProps = {
   readonly sessionMode?: 'auth' | 'guest';
   /** Admin-only: show «Usuarios» under CONFIG (registration approval). */
   readonly showAdminUsers?: boolean;
+  /** Role-filtered nav ids (F035). When set, filters APP_NAV_SECTIONS. */
+  readonly allowedNavIds?: ReadonlySet<string> | readonly string[];
   /**
    * Optional real URL per nav id (shell SPA routes). When set, items render as
    * anchors so middle-click / copy-link work; plain click still calls onNavigate.
@@ -89,10 +91,11 @@ export type AppShellProps = {
 function roleLabel(role: string): string {
   const map: Record<string, string> = {
     admin: 'Admin',
-    user: 'Usuario',
+    user: 'Sin puesto',
     vendedor: 'Vendedor',
-    disenador: 'Diseñador',
-    carpintero: 'Carpintero',
+    gerente_ventas: 'Gerente de ventas',
+    ingeniero: 'Ingeniero',
+    produccion: 'Producción',
   };
   return map[role] ?? role;
 }
@@ -149,12 +152,47 @@ export function labelForNavId(id: AppNavId): string {
   return 'Muebles';
 }
 
-/** Sidebar sections; optionally append admin Usuarios under CONFIG. */
+export type ResolveNavOptions = {
+  /** @deprecated use allowedNavIds — still appends Usuarios when true and no allowlist */
+  readonly showAdminUsers?: boolean;
+  /** When set, only these nav ids appear (F035 role matrix). Guest = omit. */
+  readonly allowedNavIds?: ReadonlySet<string> | readonly string[];
+};
+
+/** Sidebar sections filtered by product role (F035). */
 export function resolveNavSections(
-  showAdminUsers = false,
+  showAdminUsersOrOptions: boolean | ResolveNavOptions = false,
 ): readonly NavSectionDef[] {
-  if (!showAdminUsers) return APP_NAV_SECTIONS;
-  return APP_NAV_SECTIONS.map((section) => {
+  const options: ResolveNavOptions =
+    typeof showAdminUsersOrOptions === 'boolean'
+      ? { showAdminUsers: showAdminUsersOrOptions }
+      : showAdminUsersOrOptions;
+
+  const allowed = options.allowedNavIds
+    ? new Set(
+        options.allowedNavIds instanceof Set
+          ? options.allowedNavIds
+          : options.allowedNavIds,
+      )
+    : null;
+
+  const includeUsers =
+    allowed != null
+      ? allowed.has('users')
+      : Boolean(options.showAdminUsers);
+
+  let sections: readonly NavSectionDef[] = APP_NAV_SECTIONS;
+
+  if (allowed != null) {
+    sections = APP_NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => allowed.has(item.id)),
+    })).filter((section) => section.items.length > 0);
+  }
+
+  if (!includeUsers) return sections;
+
+  return sections.map((section) => {
     if (section.id !== 'config') return section;
     if (section.items.some((i) => i.id === 'users')) return section;
     return {
@@ -175,13 +213,17 @@ export function AppShell({
   user = null,
   sessionMode,
   showAdminUsers = false,
+  allowedNavIds,
   hrefForNav,
   commandItems = [],
   onCommandItem,
 }: AppShellProps): ReactNode {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const navSections = resolveNavSections(showAdminUsers);
+  const navSections = resolveNavSections({
+    showAdminUsers,
+    allowedNavIds,
+  });
 
   const handleNavigate = useCallback(
     (id: AppNavId) => {
