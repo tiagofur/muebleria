@@ -13,6 +13,7 @@ import {
   projectToApi,
   sortCategoriesForSave,
 } from './apiMappers';
+import { SCHEMA_VERSION } from './seed';
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
@@ -42,7 +43,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const catalog = await this.getCatalog();
     const projects = await this.getProjects();
     return {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       catalog,
       projects,
     };

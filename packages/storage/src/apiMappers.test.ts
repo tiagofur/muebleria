@@ -53,7 +53,6 @@ describe('apiMappers', () => {
           quantity: 2,
           lengthMm: 720,
           widthMm: 500,
-          grain: 1,
           edges: [{ side: 'L1', enabled: true }],
           optionRole: 'INTERIOR',
         },

@@ -57,7 +57,6 @@ function cloneBoardPart(part: BoardPart, newId: string): BoardPart {
     quantity: part.quantity,
     lengthMm: part.lengthMm,
     widthMm: part.widthMm,
-    grain: part.grain,
     edges: part.edges.map((e) => ({ side: e.side, enabled: e.enabled })),
     optionRole: part.optionRole,
   };

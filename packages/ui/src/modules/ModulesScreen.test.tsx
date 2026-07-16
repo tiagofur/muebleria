@@ -74,7 +74,6 @@ const modules: Module[] = [
         quantity: 1,
         lengthMm: 720,
         widthMm: 560,
-        grain: 1,
         edges: [
           { side: 'L1', enabled: true },
           { side: 'L2', enabled: false },
@@ -90,7 +89,6 @@ const modules: Module[] = [
         quantity: 1,
         lengthMm: 568,
         widthMm: 560,
-        grain: 0,
         edges: [
           { side: 'L1', enabled: false },
           { side: 'L2', enabled: false },
@@ -120,7 +118,6 @@ const modules: Module[] = [
         quantity: 1,
         lengthMm: 400,
         widthMm: 150,
-        grain: 1,
         edges: [
           { side: 'L1', enabled: true },
           { side: 'L2', enabled: true },

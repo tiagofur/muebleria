@@ -79,7 +79,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 		// Cargar board parts de este módulo
 		partsQuery := `
-			SELECT id, code, description, quantity, length_mm, width_mm, grain, option_role, edge_l1, edge_l2, edge_w1, edge_w2
+			SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2
 			FROM board_parts
 			WHERE module_id = $1;
 		`
@@ -91,7 +91,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 			var p domain.BoardPart
 			var code *string
 			var l1, l2, w1, w2 bool
-			err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.Grain, &p.OptionRole, &l1, &l2, &w1, &w2)
+			err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
 			if err == nil {
 				if code != nil {
 					p.Code = *code
@@ -486,7 +486,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 
 	// BoardParts
-	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, grain, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1`
+	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1`
 	pRows, err := s.Pool.Query(ctx, partsQuery, m.ID)
 	if err != nil {
 		return nil, err
@@ -497,7 +497,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 		var p domain.BoardPart
 		var code *string
 		var l1, l2, w1, w2 bool
-		err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.Grain, &p.OptionRole, &l1, &l2, &w1, &w2)
+		err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
 		if err == nil {
 			if code != nil {
 				p.Code = *code
@@ -596,17 +596,17 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		partID := p.ID
 		if partID == "" {
 			partQuery := `
-				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, grain, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.Grain, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
 		} else {
 			partQuery := `
-				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, grain, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.Grain, p.OptionRole, l1, l2, w1, w2)
+			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)
@@ -692,17 +692,17 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 		partID := p.ID
 		if partID == "" {
 			partQuery := `
-				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, grain, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.Grain, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
 		} else {
 			partQuery := `
-				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, grain, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.Grain, p.OptionRole, l1, l2, w1, w2)
+			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)

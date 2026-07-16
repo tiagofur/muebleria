@@ -10,7 +10,7 @@ import {
 } from '@muebles/domain/fixtures';
 
 /** Persistence format version (NFR-10). Bump when migrations are required. */
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 
 /**
  * Plantilla catalogs, MOD-GAB-01 + MOD-CAJ-01, and a draft demo quotation

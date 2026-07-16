@@ -30,6 +30,16 @@ func main() {
 	}
 	defer store.Close()
 
+	// Aplicar migraciones embebidas antes de servir tráfico. Si la base de
+	// datos está desactualizada respecto al código, los endpoints reventarían
+	// con 500 (drift schema). Fail-closed: si una migración falla, no arranca.
+	migCtx, migCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := store.RunMigrations(migCtx); err != nil {
+		migCancel()
+		log.Fatalf("Critical error: failed to run database migrations: %v", err)
+	}
+	migCancel()
+
 	// NOTE: the admin account is no longer provisioned at boot (seed removed).
 	// Create or rotate it with the dedicated CLI:
 	//   go run ./cmd/admin create --email <email>

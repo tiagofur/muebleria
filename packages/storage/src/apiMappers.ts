@@ -9,7 +9,6 @@ import type {
   Customer,
   EdgeBand,
   EdgeAssignment,
-  Grain,
   Hardware,
   HardwareLine,
   MaterialBoard,
@@ -31,10 +30,6 @@ function str(v: unknown, fallback = ''): string {
 
 function bool(v: unknown, fallback = false): boolean {
   return typeof v === 'boolean' ? v : fallback;
-}
-
-function grainFromApi(v: unknown): Grain {
-  return v === 1 || v === true ? 1 : 0;
 }
 
 // --- Materials ---
@@ -186,7 +181,6 @@ function boardPartToApi(p: BoardPart): Record<string, unknown> {
     quantity: p.quantity,
     length_mm: p.lengthMm,
     width_mm: p.widthMm,
-    grain: p.grain,
     edges: p.edges.map((e: EdgeAssignment) => ({
       side: e.side,
       enabled: e.enabled,
@@ -204,7 +198,6 @@ function boardPartFromApi(raw: Record<string, unknown>): BoardPart {
     quantity: num(raw.quantity, 1),
     lengthMm: num(raw.length_mm ?? raw.lengthMm),
     widthMm: num(raw.width_mm ?? raw.widthMm),
-    grain: grainFromApi(raw.grain),
     edges: edgesRaw.map((e: Record<string, unknown>) => ({
       side: str(e.side, 'L1') as EdgeAssignment['side'],
       enabled: bool(e.enabled),

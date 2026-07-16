@@ -775,21 +775,6 @@ export function ModulesScreen({
                     />
                   </div>
                   <div className="catalog-form__field">
-                    <label htmlFor={`part-grain-${part.id}`}>Veta</label>
-                    <select
-                      id={`part-grain-${part.id}`}
-                      value={part.grain}
-                      onChange={(e) =>
-                        updatePart(part.id, {
-                          grain: Number(e.target.value) as 0 | 1,
-                        })
-                      }
-                    >
-                      <option value={0}>0 — sin veta / libre</option>
-                      <option value={1}>1 — con veta</option>
-                    </select>
-                  </div>
-                  <div className="catalog-form__field">
                     <label htmlFor={`part-role-${part.id}`}>
                       Rol (optionRole)
                     </label>
@@ -1093,8 +1078,7 @@ export function ModulesScreen({
                   {part.description}
                   <span className="module-detail-row__sub">
                     {part.lengthMm}×{part.widthMm} mm · rol {part.optionRole}
-                    {edgesOn ? ` · cantos ${edgesOn}` : ''}
-                    {part.grain === 1 ? ' · veta' : ''}
+                    {edgesOn ? ` · cantos ${edgesOn}` : ''} · veta según material
                   </span>
                 </div>
                 <span className="module-detail-row__qty">×{part.quantity}</span>

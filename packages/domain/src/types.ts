@@ -121,7 +121,11 @@ export interface BoardPart {
   readonly quantity: number;
   readonly lengthMm: number;
   readonly widthMm: number;
-  readonly grain: Grain;
+  /**
+   * Grain (veta) is NOT set per piece — it is inherited from the resolved
+   * material's grainDefault at quotation time (see resolveBom). This mirrors
+   * how edgeBandId is also resolved from material.defaultEdgeBandId.
+   */
   readonly edges: readonly EdgeAssignment[];
   readonly optionRole: string;
 }
@@ -208,6 +212,10 @@ export interface ResolvedBoardPart {
   readonly quantity: number;
   readonly lengthMm: number;
   readonly widthMm: number;
+  /**
+   * Grain (veta) inherited from the resolved material's grainDefault
+   * (material.grainDefault ? 1 : 0) — materialized here for cost/export paths.
+   */
   readonly grain: Grain;
   readonly edges: readonly EdgeAssignment[];
   readonly optionRole: string;
