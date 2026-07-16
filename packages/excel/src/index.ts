@@ -27,3 +27,8 @@ export {
   type CommercialQuotePdfInput,
   type CommercialQuotePdfVariant,
 } from './commercialQuotePdf';
+
+export {
+  pieceLabelsPdfExport,
+  type PieceLabelsPdfInput,
+} from './pieceLabelsExport';

@@ -328,6 +328,31 @@ export interface HardwarePurchaseRow {
   readonly lineCost: number;
 }
 
+/**
+ * Piece label for workshop print/export (F046 / #96).
+ * Board parts only — never hardware.
+ */
+export interface PieceLabel {
+  readonly moduleCode: string;
+  readonly moduleName: string;
+  readonly partCode?: string;
+  readonly description: string;
+  /** part.quantity × project item quantity */
+  readonly quantity: number;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly materialCode: string;
+  readonly materialName: string;
+  readonly edgeBandCode?: string;
+  readonly edgeBandName?: string;
+  readonly L1: boolean;
+  readonly L2: boolean;
+  readonly W1: boolean;
+  readonly W2: boolean;
+  /** Spanish workshop instruction (sides + edge band when known). */
+  readonly edgeBandingInstruction: string;
+}
+
 /** Aggregated board material usage for a project (F047 / #97). */
 export interface MaterialUsageRow {
   readonly materialId: string;

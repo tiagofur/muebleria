@@ -156,6 +156,11 @@ export interface ProjectsScreenProps {
    */
   readonly onExportHardware?: () => void | Promise<void>;
   /**
+   * Piece labels PDF with edge-banding instruction (F046 / #96).
+   * Shell owns validate → labels → PDF → download.
+   */
+  readonly onExportPieceLabels?: () => void | Promise<void>;
+  /**
    * Commercial quote export for client (F030 / #36).
    * Shell owns breakdown → xlsx → download.
    */
@@ -245,6 +250,7 @@ export function ProjectsScreen({
   groupLabels,
   onExport,
   onExportHardware,
+  onExportPieceLabels,
   onExportCommercialQuote,
   onExportCommercialQuotePdf,
   exportErrors = [],
@@ -1152,6 +1158,24 @@ export function ProjectsScreen({
             data-testid="project-chrome-export-hw"
           >
             {exportBusy ? 'Exportando…' : 'Lista de herrajes'}
+          </button>
+          ) : null}
+          {onExportPieceLabels ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={productionExportDisabled}
+            title={
+              !productionExportOk
+                ? 'Export de producción solo en Aceptado o En producción'
+                : 'Etiquetas de pieza con instrucción de encintado (PDF)'
+            }
+            onClick={() => {
+              void onExportPieceLabels?.();
+            }}
+            data-testid="project-chrome-export-labels"
+          >
+            {exportBusy ? 'Exportando…' : 'Etiquetas'}
           </button>
           ) : null}
           <button

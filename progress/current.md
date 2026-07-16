@@ -2,8 +2,9 @@
 
 - **Branch:** `feat/project-material-summary-97`
 - **Issue:** [#97](https://github.com/tiagofur/muebleria/issues/97) — F047 resumen m² / herrajes
-- **Estado:** implementado — listo PR
-- **PR anterior:** https://github.com/tiagofur/muebleria/pull/113 (F046 / #96)
+- **Estado:** implementado — conflictos con main resueltos (unión F046+F047)
+- **PR:** https://github.com/tiagofur/muebleria/pull/114
+- **PR anterior mergeado:** https://github.com/tiagofur/muebleria/pull/113 (F046 / #96)
 
 ## Entregado F047
 
@@ -12,6 +13,12 @@
 - Shell: calcula con domain cuando el preview no está bloqueado
 - Tests domain + UI
 
-## PR F046
+## Ya en main (F046)
 
-https://github.com/tiagofur/muebleria/pull/113
+1. Domain: `PieceLabel`, `formatEdgeBandingInstruction`, `generatePieceLabels`
+2. PDF: `pieceLabelsPdfExport` + botón **Etiquetas**
+3. Merge conflict resolution kept both F046 and F047 surfaces
+
+## Siguiente
+
+- H03 / #98 cut-list enrich (PR #115) — rebasar después de mergear #114
