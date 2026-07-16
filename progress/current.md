@@ -1,11 +1,11 @@
 # Sesión actual
 
-- **Branch:** `feat/gerente-dashboard-69`
-- **Issue:** [#69](https://github.com/tiagofur/muebleria/issues/69) — Dashboard gerente (F037)
+- **Branch:** `feat/production-queue-70`
+- **Issue:** [#70](https://github.com/tiagofur/muebleria/issues/70) — Cola producción (F038)
 - **Estado:** implementado, listo PR
 
 ## Hecho
-- `aggregatePortfolioByOwner` + tabla «Por responsable»
-- Solo admin/gerente ven el desglose multi-owner
-- Vendedor: stats del portafolio filtrado (API F034), sin tabla global
-- Tests helpers + Dashboard + rbac
+- Home `produccion`: ProductionQueue (tabs Para fabricar / Ya en planta)
+- Export corte + herrajes + marcar produced
+- Cotizaciones filtradas a accepted/produced
+- Sin cotización comercial / mutar maestros (RBAC F035)

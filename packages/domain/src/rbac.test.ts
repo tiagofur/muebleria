@@ -12,6 +12,7 @@ import {
   roleCanReopenProject,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
+  roleUsesProductionQueue,
 } from './rbac';
 
 describe('rbac (F035)', () => {
@@ -67,5 +68,11 @@ describe('rbac (F035)', () => {
     expect(roleCanViewPortfolioDashboard('admin')).toBe(true);
     expect(roleCanViewPortfolioDashboard('vendedor')).toBe(false);
     expect(roleCanViewPortfolioDashboard('produccion')).toBe(false);
+  });
+
+  it('production queue home is produccion only (F038)', () => {
+    expect(roleUsesProductionQueue('produccion')).toBe(true);
+    expect(roleUsesProductionQueue('vendedor')).toBe(false);
+    expect(roleUsesProductionQueue('ingeniero')).toBe(false);
   });
 });

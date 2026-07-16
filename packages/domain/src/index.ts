@@ -77,6 +77,7 @@ export {
   roleCanReopenProject,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
+  roleUsesProductionQueue,
 } from './rbac';
 
 export type { CategoryFilterId } from './categories';

@@ -49,6 +49,7 @@ import {
   roleCanReopenProject,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
+  roleUsesProductionQueue,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -60,6 +61,8 @@ import {
   ModulesScreen,
   OptionGroupsScreen,
   ProjectsScreen,
+  ProductionQueue,
+  filterProductionVisible,
   Dashboard,
   LoginScreen,
   RegisterScreen,
@@ -497,6 +500,8 @@ function AppContent({
     session === 'guest' || roleCanExportProduction(actorRole);
   const canViewPortfolioDashboard =
     session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
+  const useProductionQueue =
+    session === 'auth' && roleUsesProductionQueue(actorRole);
 
   const repository = useMemo(() => {
     return session === 'auth'
@@ -706,6 +711,12 @@ function AppContent({
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
+  /** F038: producción only works accepted/produced quotes. */
+  const projectsForRole = useMemo(
+    () =>
+      useProductionQueue ? filterProductionVisible(projects) : projects,
+    [useProductionQueue, projects],
+  );
   const workshopSettings = resolveWorkshopSettings(workspace?.settings);
 
   // Latest workspace for patches — avoids stale closures (#15).
@@ -1576,60 +1587,86 @@ function AppContent({
     );
   };
 
-  const handleExportOptimizer = useCallback(async () => {
-    if (!selectedProject || !catalog) return;
-    setExportBusy(true);
-    setExportErrors([]);
-    try {
-      const result = await buildOptimizerExport(selectedProject, catalog);
-      if (!result.ok) {
-        // Validation issues stay inline (ExportIssueList) — not as toasts.
-        setExportErrors(result.issues);
-        return;
+  const handleExportOptimizer = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildOptimizerExport(project, catalog);
+        if (!result.ok) {
+          // Validation issues stay inline (ExportIssueList) — not as toasts.
+          setExportErrors(result.issues);
+          if (projectId != null) {
+            toast({
+              type: 'error',
+              message: 'No se pudo exportar el corte: revisá las opciones del pedido',
+            });
+          }
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
       }
-      const delivery = await deliverExcelFile(result.bytes, result.fileName);
-      if (delivery === 'cancelled') {
-        toast({ type: 'info', message: 'Export cancelado' });
-        return;
-      }
-      toast({
-        type: 'success',
-        message:
-          delivery === 'saved'
-            ? `✓ ${result.fileName} guardado`
-            : `✓ ${result.fileName} descargado`,
-      });
-    } finally {
-      setExportBusy(false);
-    }
-  }, [selectedProject, catalog, toast]);
+    },
+    [selectedProject, projects, catalog, toast],
+  );
 
-  const handleExportHardwareList = useCallback(async () => {
-    if (!selectedProject || !catalog) return;
-    setExportBusy(true);
-    setExportErrors([]);
-    try {
-      const result = await buildHardwareListExport(selectedProject, catalog);
-      if (!result.ok) {
-        setExportErrors(result.issues);
-        return;
+  const handleExportHardwareList = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildHardwareListExport(project, catalog);
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          if (projectId != null) {
+            toast({
+              type: 'error',
+              message: 'No se pudo exportar herrajes: revisá el pedido',
+            });
+          }
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
       }
-      const delivery = await deliverExcelFile(result.bytes, result.fileName);
-      if (delivery === 'cancelled') {
-        toast({ type: 'info', message: 'Export cancelado' });
-        return;
-      }
-      toast({
-        type: 'success',
-        message:
-          delivery === 'saved'
-            ? `✓ ${result.fileName} guardado`
-            : `✓ ${result.fileName} descargado`,
-      });
-    } finally {
-      setExportBusy(false);
-    }
-  }, [selectedProject, catalog, toast]);
+    },
+    [selectedProject, projects, catalog, toast],
+  );
 
   const handleExportCommercialQuote = useCallback(async () => {
     if (!selectedProject || !catalog) return;
@@ -1763,16 +1800,34 @@ function AppContent({
       onCommandItem={onCommandItem}
     >
       {navId === 'home' ? (
-        <Dashboard
-          stats={dashboardStats}
-          recentProjects={dashboardRecent}
-          projectsCount={projects.length}
-          onOpenProject={onDashboardOpenProject}
-          onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
-          onNewModule={canMutateModules ? onDashboardNewModule : undefined}
-          onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
-          ownerBreakdown={dashboardOwnerBreakdown}
-        />
+        useProductionQueue ? (
+          <ProductionQueue
+            projects={projects}
+            customerLabelFor={(customerId) =>
+              resolveCustomerName(customerId, customers)
+            }
+            salePriceFor={(id) => projectEstimates[id] ?? null}
+            onExportOptimizer={(id) => {
+              void handleExportOptimizer(id);
+            }}
+            onExportHardware={(id) => {
+              void handleExportHardwareList(id);
+            }}
+            onMarkProduced={markProjectProduced}
+            exportBusy={exportBusy}
+          />
+        ) : (
+          <Dashboard
+            stats={dashboardStats}
+            recentProjects={dashboardRecent}
+            projectsCount={projects.length}
+            onOpenProject={onDashboardOpenProject}
+            onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
+            onNewModule={canMutateModules ? onDashboardNewModule : undefined}
+            onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
+            ownerBreakdown={dashboardOwnerBreakdown}
+          />
+        )
       ) : null}
       {navId === 'materials' ? (
         <MaterialsCatalog
@@ -1882,7 +1937,7 @@ function AppContent({
       ) : null}
       {navId === 'projects' ? (
         <ProjectsScreen
-          projects={projects}
+          projects={projectsForRole}
           modules={modules}
           categories={categories}
           optionGroups={optionGroups}
@@ -1908,11 +1963,23 @@ function AppContent({
           previewBlocked={projectQuote.previewBlocked}
           missingGroups={projectQuote.missingGroups}
           groupLabels={groupLabels}
-          onExport={canExportProduction ? handleExportOptimizer : undefined}
-          onExportHardware={
-            canExportProduction ? handleExportHardwareList : undefined
+          onExport={
+            canExportProduction
+              ? () => {
+                  void handleExportOptimizer();
+                }
+              : undefined
           }
-          onExportCommercialQuote={handleExportCommercialQuote}
+          onExportHardware={
+            canExportProduction
+              ? () => {
+                  void handleExportHardwareList();
+                }
+              : undefined
+          }
+          onExportCommercialQuote={
+            useProductionQueue ? undefined : handleExportCommercialQuote
+          }
           exportErrors={exportErrors}
           exportBusy={exportBusy}
           projectEstimates={projectEstimates}

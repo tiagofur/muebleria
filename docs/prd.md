@@ -303,7 +303,7 @@ Precios congelados en `quoted` / `accepted` / `produced` (`priceSnapshot`). Expo
 |-----|------|
 | `gerente_ventas` / `admin` | Totales del período + tabla **Por responsable** (`ownerUserId`, nombre, puesto) |
 | `vendedor` | Resumen de su portafolio (sin desglose de otros) |
-| `produccion` | Cola de fabricación (F038) |
+| `produccion` | **Listos para fabricar** (F038): accepted → export corte/herrajes → marcar produced |
 
 
 ---

@@ -113,6 +113,13 @@ export function roleCanViewPortfolioDashboard(
   return role === 'admin' || role === 'gerente_ventas';
 }
 
+/** Home is the plant floor queue (F038). */
+export function roleUsesProductionQueue(
+  role: string | null | undefined,
+): boolean {
+  return role === 'produccion';
+}
+
 export function roleCanAccessCatalogNav(role: string | null | undefined): boolean {
   return (
     role === 'admin' ||
