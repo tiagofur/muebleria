@@ -122,6 +122,7 @@ export {
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,
+  formatOptimizerPartDescription,
   generatePieceLabels,
   formatEdgeBandingInstruction,
   generateHardwareList,

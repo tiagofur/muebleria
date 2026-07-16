@@ -121,7 +121,7 @@ export async function optimizerExport(
   });
   row2.height = 15;
 
-  // Data rows from row 3
+  // Data rows from row 3 — columns A–J only (Optimizer contract)
   rows.forEach((cut, index) => {
     const excelRow = sheet.getRow(index + 3);
     const values: (string | number)[] = [
@@ -154,6 +154,70 @@ export async function optimizerExport(
     excelRow.height = 15;
   });
 
+  // F048: workshop reference sheet (does not affect Optimizer columns A–J)
+  addReferencesSheet(workbook, rows);
+
   const raw = await workbook.xlsx.writeBuffer();
   return workbookBytes(raw as ArrayBuffer | Uint8Array);
+}
+
+const REF_HEADERS = [
+  'Ref etiqueta',
+  'Código pieza',
+  'Módulo',
+  'Pieza',
+  'Cantidad',
+  'Largo',
+  'Ancho',
+  'Materia Prima',
+  'Encintado',
+] as const;
+
+function edgeBandingShort(cut: ProductionCutRow): string {
+  const sides: string[] = [];
+  if (cut.L1) sides.push('L1');
+  if (cut.L2) sides.push('L2');
+  if (cut.W1) sides.push('W1');
+  if (cut.W2) sides.push('W2');
+  return sides.length > 0 ? sides.join('+') : '—';
+}
+
+function addReferencesSheet(
+  workbook: ExcelJS.Workbook,
+  rows: readonly ProductionCutRow[],
+): void {
+  const sheet = workbook.addWorksheet('Referencias', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
+  const widths = [16, 16, 12, 22, 8, 8, 8, 18, 12];
+  widths.forEach((w, i) => {
+    sheet.getColumn(i + 1).width = w;
+  });
+
+  const header = sheet.getRow(1);
+  REF_HEADERS.forEach((title, i) => {
+    styleHeaderCell(header.getCell(i + 1), HEADER_DATA_FILL, title);
+  });
+  header.height = 15;
+
+  rows.forEach((cut, index) => {
+    const excelRow = sheet.getRow(index + 2);
+    const values: (string | number)[] = [
+      cut.labelRef ?? cut.partCode ?? cut.description,
+      cut.partCode ?? '',
+      cut.moduleCode ?? '',
+      cut.partName ?? cut.description,
+      cut.quantity,
+      cut.lengthMm,
+      cut.widthMm,
+      cut.materialName,
+      edgeBandingShort(cut),
+    ];
+    values.forEach((value, colIndex) => {
+      const cell = excelRow.getCell(colIndex + 1);
+      cell.value = value;
+      cell.font = DATA_FONT;
+    });
+    excelRow.height = 15;
+  });
 }

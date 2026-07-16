@@ -165,10 +165,24 @@ describe('optimizerExport', () => {
     const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
     const buffer = await optimizerExport(rows);
     const workbook = await loadWorkbook(buffer);
-    expect(workbook.worksheets).toHaveLength(1);
-    expect(workbook.worksheets[0]?.name).toBe('Plantilla');
-    expect(workbook.worksheets[0]?.rowCount).toBeGreaterThanOrEqual(
+    // F048: Plantilla (Optimizer A–J) + Referencias (workshop)
+    expect(workbook.worksheets).toHaveLength(2);
+    expect(workbook.getWorksheet('Plantilla')?.name).toBe('Plantilla');
+    expect(workbook.getWorksheet('Referencias')?.name).toBe('Referencias');
+    expect(workbook.getWorksheet('Plantilla')?.rowCount).toBeGreaterThanOrEqual(
       2 + rows.length,
     );
+  });
+
+  it('F048: Referencias sheet lists label refs without changing A–J count', async () => {
+    const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
+    const buffer = await optimizerExport(rows);
+    const workbook = await loadWorkbook(buffer);
+    const plantilla = workbook.getWorksheet('Plantilla')!;
+    const refs = workbook.getWorksheet('Referencias')!;
+    expect(readDataRows(plantilla)).toHaveLength(8);
+    expect(refs.getRow(1).getCell(1).value).toBe('Ref etiqueta');
+    expect(refs.getRow(2).getCell(1).value).toBe(rows[0]?.labelRef);
+    expect(String(refs.getRow(2).getCell(4).value)).toContain('Costado');
   });
 });

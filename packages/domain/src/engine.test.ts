@@ -20,6 +20,7 @@ import {
   calcProjectBreakdown,
   captureQuoteSnapshot,
   formatEdgeBandingInstruction,
+  formatOptimizerPartDescription,
   generateCutRows,
   generateHardwareList,
   generatePieceLabels,
@@ -1102,6 +1103,15 @@ describe('generateCutRows', () => {
     updatedAt: '2026-07-15T00:00:00.000Z',
   };
 
+  it('F048: description includes part and module codes', () => {
+    expect(
+      formatOptimizerPartDescription('MOD-GAB-01', 'Costado Derecho', 'MOD-GAB-01-P01'),
+    ).toBe('MOD-GAB-01-P01 · Costado Derecho · MOD-GAB-01');
+    expect(formatOptimizerPartDescription('MOD-X', 'Pieza')).toBe(
+      'Pieza · MOD-X',
+    );
+  });
+
   it('EXP-02: multiplies part quantity by project item quantity', () => {
     const project: Project = {
       ...gabOnlyProject,
@@ -1116,9 +1126,12 @@ describe('generateCutRows', () => {
     };
 
     const rows = generateCutRows(project, plantillaCatalogWithModules);
-    const costado = rows.find((r) => r.description === 'Costado Derecho');
+    const costado = rows.find((r) => r.partName === 'Costado Derecho');
     // part.quantity = 1 × item.quantity = 3
     expect(costado?.quantity).toBe(3);
+    expect(costado?.description).toContain('Costado Derecho');
+    expect(costado?.description).toContain('MOD-GAB-01');
+    expect(costado?.labelRef).toBeTruthy();
   });
 
   it('EXP-05: never includes hardware lines', () => {
@@ -1139,10 +1152,10 @@ describe('generateCutRows', () => {
     );
     // MOD-CAJ-01 < MOD-GAB-01 → all CAJ board parts before GAB
     const cajPuertaIdx = full.findIndex(
-      (r) => r.description === 'Frente de Cajón',
+      (r) => r.partName === 'Frente de Cajón' || r.description.includes('Frente de Cajón'),
     );
     const gabPuertaIdx = full.findIndex(
-      (r) => r.description === 'Puerta Gabinete',
+      (r) => r.partName === 'Puerta Gabinete' || r.description.includes('Puerta Gabinete'),
     );
     expect(cajPuertaIdx).toBeGreaterThanOrEqual(0);
     expect(gabPuertaIdx).toBeGreaterThan(cajPuertaIdx);
@@ -1152,7 +1165,7 @@ describe('generateCutRows', () => {
       gabOnlyProject,
       plantillaCatalogWithModules,
     );
-    expect(gabOnly.map((r) => r.description)).toEqual([
+    expect(gabOnly.map((r) => r.partName)).toEqual([
       'Costado Derecho',
       'Costado Izquierdo',
       'Respaldo Gabinete',
@@ -1166,9 +1179,9 @@ describe('generateCutRows', () => {
 
   it('maps material name, grain and edge flags from resolved BOM', () => {
     const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
-    const costado = rows.find((r) => r.description === 'Costado Derecho');
-    const puerta = rows.find((r) => r.description === 'Puerta Gabinete');
-    const respaldo = rows.find((r) => r.description === 'Respaldo Gabinete');
+    const costado = rows.find((r) => r.partName === 'Costado Derecho');
+    const puerta = rows.find((r) => r.partName === 'Puerta Gabinete');
+    const respaldo = rows.find((r) => r.partName === 'Respaldo Gabinete');
 
     expect(costado).toMatchObject({
       quantity: 1,

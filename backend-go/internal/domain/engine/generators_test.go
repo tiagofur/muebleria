@@ -156,9 +156,12 @@ func TestGenerateCutRows_MultipliesAndSorts(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 board rows, got %d", len(rows))
 	}
-	// Sorted by part code: P01 before P08
-	if rows[0].Description != "Costado" || rows[1].Description != "Puerta" {
-		t.Errorf("sort order: %q then %q", rows[0].Description, rows[1].Description)
+	// Sorted by part code: P01 before P08; F048 descriptions include codes
+	if rows[0].PartName != "Costado" || rows[1].PartName != "Puerta" {
+		t.Errorf("sort order part names: %q then %q", rows[0].PartName, rows[1].PartName)
+	}
+	if !strings.Contains(rows[0].Description, "Costado") || !strings.Contains(rows[0].Description, "MOD-GAB") {
+		t.Errorf("enriched description: %q", rows[0].Description)
 	}
 	// part qty 2 × item qty 3 = 6
 	if rows[0].Quantity != 6 {
@@ -185,8 +188,20 @@ func TestGenerateCutRows_SortsByModuleCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	// MOD-CAJ-01 before MOD-GAB-01
-	if rows[0].Description != "Frente Cajon" {
-		t.Errorf("first row should be CAJ frente, got %q", rows[0].Description)
+	if rows[0].PartName != "Frente Cajon" && !strings.Contains(rows[0].Description, "Frente Cajon") {
+		t.Errorf("first row should be CAJ frente, got part=%q desc=%q", rows[0].PartName, rows[0].Description)
+	}
+}
+
+func TestFormatOptimizerPartDescription(t *testing.T) {
+	got := FormatOptimizerPartDescription("MOD-GAB-01", "Costado", "P01")
+	want := "P01 · Costado · MOD-GAB-01"
+	if got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+	got2 := FormatOptimizerPartDescription("MOD-X", "Pieza", "")
+	if got2 != "Pieza · MOD-X" {
+		t.Errorf("no code: %q", got2)
 	}
 }
 

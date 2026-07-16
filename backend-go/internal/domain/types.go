@@ -295,6 +295,7 @@ type ResolvedBom struct {
 }
 
 // ProductionCutRow is a flat Optimizer cut-list row (columns A–J).
+// Description includes part/module codes (F048) for workshop identification.
 type ProductionCutRow struct {
 	Quantity     int    `json:"quantity"`
 	LengthMm     int    `json:"length_mm"`
@@ -306,6 +307,10 @@ type ProductionCutRow struct {
 	L2           int    `json:"L2"`
 	W1           int    `json:"W1"`
 	W2           int    `json:"W2"`
+	PartName     string `json:"part_name,omitempty"`
+	PartCode     string `json:"part_code,omitempty"`
+	ModuleCode   string `json:"module_code,omitempty"`
+	LabelRef     string `json:"label_ref,omitempty"`
 }
 
 // HardwarePurchaseRow is an aggregated hardware purchase line (EXP-08).

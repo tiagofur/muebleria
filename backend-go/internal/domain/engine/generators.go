@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -21,8 +22,21 @@ type sortableCutRow struct {
 	row         domain.ProductionCutRow
 }
 
+// FormatOptimizerPartDescription builds Optimizer column D with stable codes (F048).
+// "{partCode} · {partName} · {moduleCode}" or "{partName} · {moduleCode}".
+func FormatOptimizerPartDescription(moduleCode, partName, partCode string) string {
+	name := strings.TrimSpace(partName)
+	mod := strings.TrimSpace(moduleCode)
+	code := strings.TrimSpace(partCode)
+	if code != "" {
+		return fmt.Sprintf("%s · %s · %s", code, name, mod)
+	}
+	return fmt.Sprintf("%s · %s", name, mod)
+}
+
 // GenerateCutRows expands project board parts into Optimizer cut-list rows
 // (PRD §14 / EXP-02, EXP-04, EXP-05, VAL-05). Never includes hardware.
+// Description includes part/module codes (F048) without adding Optimizer columns.
 func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.ProductionCutRow, error) {
 	var sortable []sortableCutRow
 
@@ -46,6 +60,11 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 				return nil, fmt.Errorf("material not found: %s", part.MaterialID)
 			}
 			flags := edgeFlags(part.Edges)
+			labelRef := strings.TrimSpace(part.Code)
+			if labelRef == "" {
+				labelRef = module.Code + "/" + part.ID
+			}
+			desc := FormatOptimizerPartDescription(module.Code, part.Description, part.Code)
 			sortable = append(sortable, sortableCutRow{
 				moduleCode:  module.Code,
 				partCode:    part.Code,
@@ -55,13 +74,17 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 					Quantity:     part.Quantity * item.Quantity,
 					LengthMm:     part.LengthMm,
 					WidthMm:      part.WidthMm,
-					Description:  part.Description,
+					Description:  desc,
 					MaterialName: material.Name,
 					Grain:        part.Grain,
 					L1:           flags["L1"],
 					L2:           flags["L2"],
 					W1:           flags["W1"],
 					W2:           flags["W2"],
+					PartName:     part.Description,
+					PartCode:     part.Code,
+					ModuleCode:   module.Code,
+					LabelRef:     labelRef,
 				},
 			})
 		}
