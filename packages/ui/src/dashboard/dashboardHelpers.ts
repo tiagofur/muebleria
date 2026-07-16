@@ -82,7 +82,11 @@ export function sumMonthlyQuotedTotal(
   if (!currentKey) return 0;
   let total = 0;
   for (const project of projects) {
-    if (project.status !== 'quoted' && project.status !== 'accepted') {
+    if (
+      project.status !== 'quoted' &&
+      project.status !== 'accepted' &&
+      project.status !== 'produced'
+    ) {
       continue;
     }
     if (yearMonthKey(project.updatedAt) !== currentKey) continue;

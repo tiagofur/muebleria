@@ -57,3 +57,19 @@ func TestRBAC_CustomersAccess(t *testing.T) {
 		t.Fatal("vendedor CRM")
 	}
 }
+
+func TestRBAC_ReopenAndMarkProduced(t *testing.T) {
+	t.Parallel()
+	if !RoleCanReopenProject(RoleAdmin) || !RoleCanReopenProject(RoleGerenteVentas) {
+		t.Fatal("admin/gerente reopen")
+	}
+	if RoleCanReopenProject(RoleVendedor) {
+		t.Fatal("vendedor cannot reopen")
+	}
+	if !RoleCanMarkProduced(RoleProduccion) || !RoleCanMarkProduced(RoleIngeniero) {
+		t.Fatal("prod/eng mark produced")
+	}
+	if RoleCanMarkProduced(RoleVendedor) {
+		t.Fatal("vendedor cannot mark produced")
+	}
+}

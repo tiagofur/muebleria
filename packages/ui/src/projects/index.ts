@@ -13,6 +13,7 @@ export {
 
 export {
   PROJECT_STATUSES,
+  statusOptionsForRole,
   canShowProjectPricePreview,
   countItemsWithModule,
   customersForProjectPicker,

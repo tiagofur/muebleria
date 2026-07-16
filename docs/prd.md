@@ -284,6 +284,19 @@ Features dependientes: F036 produced/reopen, F037 dashboard gerente, F038 cola p
 
 Sidebar filtrada por `navIdsForRole` (domain). Deep-link denegado redirige a Inicio con mensaje en español de taller. Guest local sigue con acceso completo (sin RBAC de API).
 
+#### 6.6.4 Workflow de estado (F036)
+
+`draft → quoted → accepted → produced`
+
+| Acción | Quién |
+|--------|--------|
+| Avanzar draft → quoted/accepted | Vendedor (propio), gerente, admin |
+| Marcar **produced** (click, sin export previo) | Admin, gerente, ingeniero, producción |
+| Reabrir → draft (limpia snapshot) | Solo gerente / admin |
+| Eliminar cotización | Solo gerente / admin |
+
+Precios congelados en `quoted` / `accepted` / `produced` (`priceSnapshot`). Export Optimizer y herrajes en **accepted** y **produced** (reimpresión).
+
 ---
 
 ## 7. Modelo de dominio (producto)
@@ -405,7 +418,7 @@ ResolvedBom
 ### 7.4 Políticas de costo (v1)
 
 1. **Borrador (`draft`):** siempre recalcula con catálogo actual.
-2. **Cerrada (`quoted` / `accepted`) — v1.1:** congela precios unitarios usados (snapshot). En MVP puro puede bastar solo `draft` + export, documentando la limitación.
+2. **Cerrada (`quoted` / `accepted` / `produced`) — v1.1+:** congela precios unitarios usados (snapshot). Reabrir a `draft` (gerente/admin) limpia el snapshot. `produced` no exige export previo (F036).
 3. **Merma:** MVP = 0% o campo opcional simple en material; no nesting.
 4. **IVA:** fuera de precio final MVP salvo flag simple “mostrar IVA X%” en v1.1.
 

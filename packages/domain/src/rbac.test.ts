@@ -5,9 +5,11 @@ import {
   roleCanAccessCustomers,
   roleCanDeleteProject,
   roleCanExportProduction,
+  roleCanMarkProduced,
   roleCanMutateCatalog,
   roleCanMutateModules,
   roleCanMutateProjects,
+  roleCanReopenProject,
   roleLabelEs,
 } from './rbac';
 
@@ -49,5 +51,13 @@ describe('rbac (F035)', () => {
   it('labels roles in Spanish de taller', () => {
     expect(roleLabelEs('gerente_ventas')).toBe('Gerente de ventas');
     expect(roleLabelEs('user')).toBe('Sin puesto');
+  });
+
+  it('reopen and mark produced permissions (F036)', () => {
+    expect(roleCanReopenProject('gerente_ventas')).toBe(true);
+    expect(roleCanReopenProject('vendedor')).toBe(false);
+    expect(roleCanMarkProduced('produccion')).toBe(true);
+    expect(roleCanMarkProduced('ingeniero')).toBe(true);
+    expect(roleCanMarkProduced('vendedor')).toBe(false);
   });
 });

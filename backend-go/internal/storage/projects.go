@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // Cargar catálogo completo para el motor de cálculo
@@ -569,8 +570,8 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		return err
 	}
 
-	// Si pasa a cerrado (quoted/accepted), crear o actualizar snapshot
-	if p.Status == domain.StatusQuoted || p.Status == domain.StatusAccepted {
+	// Closed statuses freeze prices (quoted/accepted/produced — F036).
+	if engine.IsProjectClosed(p.Status) {
 		// Eliminar snapshot previo
 		_, _ = tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id)
 
@@ -715,7 +716,7 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 	if m.ID != "" {
 		idToInsert = m.ID
 	}
-	
+
 	var categoryArg interface{}
 	if m.CategoryID != "" {
 		categoryArg = m.CategoryID
@@ -751,13 +752,17 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		var l1, l2, w1, w2 bool
 		for _, e := range p.Edges {
 			switch e.Side {
-			case "L1": l1 = e.Enabled
-			case "L2": l2 = e.Enabled
-			case "W1": w1 = e.Enabled
-			case "W2": w2 = e.Enabled
+			case "L1":
+				l1 = e.Enabled
+			case "L2":
+				l2 = e.Enabled
+			case "W1":
+				w1 = e.Enabled
+			case "W2":
+				w2 = e.Enabled
 			}
 		}
-		
+
 		partID := p.ID
 		if partID == "" {
 			partQuery := `
@@ -784,7 +789,7 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		if hl.HardwareID != "" {
 			hwID = hl.HardwareID
 		}
-		
+
 		hlID := hl.ID
 		if hlID == "" {
 			hwLineQuery := `
@@ -848,10 +853,14 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 		var l1, l2, w1, w2 bool
 		for _, e := range p.Edges {
 			switch e.Side {
-			case "L1": l1 = e.Enabled
-			case "L2": l2 = e.Enabled
-			case "W1": w1 = e.Enabled
-			case "W2": w2 = e.Enabled
+			case "L1":
+				l1 = e.Enabled
+			case "L2":
+				l2 = e.Enabled
+			case "W1":
+				w1 = e.Enabled
+			case "W2":
+				w2 = e.Enabled
 			}
 		}
 		partID := p.ID

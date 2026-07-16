@@ -672,7 +672,7 @@ export function calcLineCost(
 
 /** PRD §7.4 — quoted/accepted freeze catalog unit prices. */
 export function isProjectClosed(status: ProjectStatus): boolean {
-  return status === 'quoted' || status === 'accepted';
+  return status === 'quoted' || status === 'accepted' || status === 'produced';
 }
 
 /**
@@ -837,9 +837,9 @@ export function captureQuoteSnapshot(
 
 /**
  * Status transition helper (PRD §7.4):
- * - draft → quoted/accepted: attach fresh priceSnapshot
- * - quoted/accepted → draft: remove priceSnapshot (reopen)
- * - quoted ↔ accepted: keep existing snapshot (re-freeze only if missing)
+ * - draft → quoted/accepted/produced: attach fresh priceSnapshot
+ * - closed → draft: remove priceSnapshot (reopen)
+ * - closed → closed (quoted ↔ accepted → produced): keep existing snapshot
  */
 export function transitionProjectStatus(
   project: Project,

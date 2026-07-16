@@ -42,9 +42,11 @@ import {
   roleCanAssignOwner,
   roleCanDeleteProject,
   roleCanExportProduction,
+  roleCanMarkProduced,
   roleCanMutateCatalog,
   roleCanMutateModules,
   roleCanMutateProjects,
+  roleCanReopenProject,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -484,6 +486,10 @@ function AppContent({
     session === 'guest' || roleCanMutateProjects(actorRole);
   const canDeleteProjects =
     session === 'guest' || roleCanDeleteProject(actorRole);
+  const canReopenProjects =
+    session === 'guest' || roleCanReopenProject(actorRole);
+  const canMarkProduced =
+    session === 'guest' || roleCanMarkProduced(actorRole);
   const canExportProduction =
     session === 'guest' || roleCanExportProduction(actorRole);
 
@@ -1431,6 +1437,30 @@ function AppContent({
     toast({ type: 'info', message: 'Cotización eliminada' });
   };
 
+  /** F036: accepted → produced (click-only; no export gate). */
+  const markProjectProduced = (id: string) => {
+    const project = projects.find((p) => p.id === id);
+    if (!project || project.status !== 'accepted') return;
+    const now = new Date().toISOString();
+    const updated = transitionProjectStatus(project, 'produced', catalog, now);
+    // patchProjects persists changed projects (no save inside setState).
+    patchProjects((ps) => ps.map((p) => (p.id === id ? updated : p)));
+    toast({ type: 'success', message: '✓ Marcada en producción' });
+  };
+
+  /** F036: closed → draft; clears price snapshot. */
+  const reopenProject = (id: string) => {
+    const project = projects.find((p) => p.id === id);
+    if (!project || project.status === 'draft') return;
+    const now = new Date().toISOString();
+    const updated = transitionProjectStatus(project, 'draft', catalog, now);
+    patchProjects((ps) => ps.map((p) => (p.id === id ? updated : p)));
+    toast({
+      type: 'info',
+      message: 'Cotización reabierta a borrador (precios descongelados)',
+    });
+  };
+
   const duplicateProjectById = (id: string) => {
     const source = projects.find((p) => p.id === id);
     if (!source) return;
@@ -1869,6 +1899,10 @@ function AppContent({
           workshopSettings={workshopSettings}
           canMutate={canMutateProjects}
           canDelete={canDeleteProjects}
+          canReopen={canReopenProjects}
+          canMarkProduced={canMarkProduced}
+          onMarkProduced={markProjectProduced}
+          onReopen={reopenProject}
         />
       ) : null}
     </AppShell>

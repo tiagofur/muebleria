@@ -68,9 +68,9 @@ import {
   groupsForModuleItem,
   optionLabelForId,
   optionsForGroup,
-  PROJECT_STATUSES,
   projectStatusBadgeClass,
   projectStatusLabel,
+  statusOptionsForRole,
   projectToDraft,
   resolveCustomerName,
   setItemOptionChoice,
@@ -179,6 +179,13 @@ export interface ProjectsScreenProps {
   readonly canMutate?: boolean;
   /** F035: hide delete (gerente/admin only). */
   readonly canDelete?: boolean;
+  /** F036: reopen closed quote → draft (clears snapshot). */
+  readonly canReopen?: boolean;
+  /** F036: mark accepted → produced (click-only). */
+  readonly canMarkProduced?: boolean;
+  /** Shell applies status transition (snapshot rules). */
+  readonly onMarkProduced?: (projectId: string) => void;
+  readonly onReopen?: (projectId: string) => void;
 }
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -232,6 +239,10 @@ export function ProjectsScreen({
   workshopSettings = null,
   canMutate = true,
   canDelete = true,
+  canReopen = false,
+  canMarkProduced = false,
+  onMarkProduced,
+  onReopen,
 }: ProjectsScreenProps): ReactNode {
   const metaFormId = useId();
   const addItemFormId = useId();
@@ -255,6 +266,7 @@ export function ProjectsScreen({
   );
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReopen, setConfirmReopen] = useState(false);
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(
     null,
   );
@@ -710,7 +722,12 @@ export function ProjectsScreen({
               })
             }
           >
-            {PROJECT_STATUSES.map((s) => (
+            {statusOptionsForRole({
+              current: draft.status,
+              canMutate,
+              canReopen,
+              canMarkProduced,
+            }).map((s) => (
               <option key={s} value={s}>
                 {projectStatusLabel(s)}
               </option>
@@ -1138,6 +1155,32 @@ export function ProjectsScreen({
             >
               <Copy size={16} strokeWidth={1.5} aria-hidden />
               Duplicar
+            </button>
+          ) : null}
+          {canMarkProduced &&
+          project.status === 'accepted' &&
+          onMarkProduced ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onMarkProduced(project.id)}
+              data-testid="project-mark-produced"
+            >
+              Marcar en producción
+            </button>
+          ) : null}
+          {canReopen &&
+          (project.status === 'quoted' ||
+            project.status === 'accepted' ||
+            project.status === 'produced') &&
+          onReopen ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmReopen(true)}
+              data-testid="project-reopen"
+            >
+              Reabrir a borrador
             </button>
           ) : null}
           {canDelete ? (
@@ -1598,6 +1641,44 @@ export function ProjectsScreen({
           ¿Seguro que querés eliminar{' '}
           <strong>{selectedProject?.name ?? 'esta cotización'}</strong>? Esta
           acción no se puede deshacer.
+        </p>
+      </Modal>
+
+      <Modal
+        open={confirmReopen && selectedProject != null}
+        onClose={() => setConfirmReopen(false)}
+        title="Reabrir cotización"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmReopen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                if (selectedProject && onReopen) {
+                  onReopen(selectedProject.id);
+                  setConfirmReopen(false);
+                }
+              }}
+              data-testid="project-reopen-confirm"
+            >
+              Reabrir
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Reabrir{' '}
+          <strong>{selectedProject?.name ?? 'esta cotización'}</strong> a
+          borrador? Se borra el snapshot de precios congelados y vuelve a
+          recalcular con el catálogo actual.
         </p>
       </Modal>
     </section>

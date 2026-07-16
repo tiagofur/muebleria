@@ -12,7 +12,8 @@ export type Grain = 0 | 1;
 
 export type EdgeSide = 'L1' | 'L2' | 'W1' | 'W2';
 
-export type ProjectStatus = 'draft' | 'quoted' | 'accepted';
+/** Workflow: draft → quoted → accepted → produced; reopen → draft (F036). */
+export type ProjectStatus = 'draft' | 'quoted' | 'accepted' | 'produced';
 
 export type OptionChoices = { readonly [optionGroupCode: string]: string };
 
@@ -198,7 +199,7 @@ export interface Project {
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  /** Present when closed (quoted/accepted); ignored while draft. */
+  /** Present when closed (quoted/accepted/produced); ignored while draft. */
   readonly priceSnapshot?: QuotePriceSnapshot;
 }
 

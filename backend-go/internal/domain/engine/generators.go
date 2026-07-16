@@ -8,9 +8,9 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// IsProjectClosed reports whether status freezes catalog prices (PRD §7.4).
+// IsProjectClosed reports whether status freezes catalog prices (PRD §7.4 / F036).
 func IsProjectClosed(status domain.ProjectStatus) bool {
-	return status == domain.StatusQuoted || status == domain.StatusAccepted
+	return status == domain.StatusQuoted || status == domain.StatusAccepted || status == domain.StatusProduced
 }
 
 type sortableCutRow struct {

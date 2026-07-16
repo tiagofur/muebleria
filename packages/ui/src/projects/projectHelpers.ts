@@ -65,6 +65,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   draft: 'Borrador',
   quoted: 'Cotizado',
   accepted: 'Aceptado',
+  produced: 'En producción',
 };
 
 /** design.md §5.2 status badge class names (without leading `.`). */
@@ -72,13 +73,45 @@ const STATUS_BADGE_CLASS: Record<ProjectStatus, string> = {
   draft: 'badge-draft',
   quoted: 'badge-quoted',
   accepted: 'badge-accepted',
+  produced: 'badge-produced',
 };
 
 export const PROJECT_STATUSES: readonly ProjectStatus[] = [
   'draft',
   'quoted',
   'accepted',
+  'produced',
 ] as const;
+
+/** Status options for the meta form, filtered by role capabilities (F036). */
+export function statusOptionsForRole(opts: {
+  readonly current: ProjectStatus;
+  readonly canMutate: boolean;
+  readonly canReopen: boolean;
+  readonly canMarkProduced: boolean;
+}): readonly ProjectStatus[] {
+  const { current, canMutate, canReopen, canMarkProduced } = opts;
+  const out = new Set<ProjectStatus>([current]);
+  if (canMutate) {
+    if (current === 'draft') {
+      out.add('quoted');
+      out.add('accepted');
+    }
+    if (current === 'quoted') {
+      out.add('accepted');
+    }
+  }
+  if (canMarkProduced && (current === 'accepted' || current === 'produced')) {
+    out.add('produced');
+  }
+  if (
+    canReopen &&
+    (current === 'quoted' || current === 'accepted' || current === 'produced')
+  ) {
+    out.add('draft');
+  }
+  return PROJECT_STATUSES.filter((s) => out.has(s));
+}
 
 export function projectStatusLabel(status: ProjectStatus): string {
   return STATUS_LABELS[status];
