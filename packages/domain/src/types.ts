@@ -327,3 +327,37 @@ export interface HardwarePurchaseRow {
   readonly costPerUnit: number;
   readonly lineCost: number;
 }
+
+/** Aggregated board material usage for a project (F047 / #97). */
+export interface MaterialUsageRow {
+  readonly materialId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly areaM2: number;
+  readonly edgeMl: number;
+  readonly boardCost: number;
+}
+
+/** Aggregated edge-band ML for a project (F047 / #97). */
+export interface EdgeUsageRow {
+  readonly edgeBandId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly edgeMl: number;
+  readonly edgeCost: number;
+}
+
+/**
+ * Consolidated purchase/planning summary for a project (F047 / #97).
+ * Costs are included for roles that may view them; UI redacts when needed.
+ */
+export interface ProjectMaterialSummary {
+  readonly materials: readonly MaterialUsageRow[];
+  readonly edges: readonly EdgeUsageRow[];
+  readonly hardware: readonly HardwarePurchaseRow[];
+  readonly totalAreaM2: number;
+  readonly totalEdgeMl: number;
+  readonly totalBoardCost: number;
+  readonly totalEdgeCost: number;
+  readonly totalHardwareCost: number;
+}

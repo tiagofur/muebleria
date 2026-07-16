@@ -1,12 +1,17 @@
 # Sesión actual
 
-- **Branch:** `feat/commercial-quote-pdf-90`
-- **Issue:** [#90](https://github.com/tiagofur/muebleria/issues/90) — F045 PDF cotización comercial
+- **Branch:** `feat/project-material-summary-97`
+- **Issue:** [#97](https://github.com/tiagofur/muebleria/issues/97) — F047 resumen m² / herrajes
 - **Estado:** implementado — listo PR
+- **PR anterior:** https://github.com/tiagofur/muebleria/pull/113 (F046 / #96)
 
-## Variantes PDF (pedido producto)
+## Entregado F047
 
-1. **PDF listado** — datos de proyecto + tabla de muebles + total de venta
-2. **PDF resumen** — solo datos de proyecto + conteo + total de venta
+- Domain: `generateProjectMaterialSummary` (m² por material, ML cantos, herrajes)
+- UI: panel “Resumen de materiales” en detalle (costos solo si `showCosts`)
+- Shell: calcula con domain cuando el preview no está bloqueado
+- Tests domain + UI
 
-Cliente: solo precio de venta. Snapshot en cerrados. `pdf-lib` en `@muebles/excel`.
+## PR F046
+
+https://github.com/tiagofur/muebleria/pull/113

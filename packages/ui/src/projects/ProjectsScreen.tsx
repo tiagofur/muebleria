@@ -23,6 +23,7 @@ import type {
   OptionGroup,
   Project,
   ProjectItem,
+  ProjectMaterialSummary,
   QuoteBreakdown,
   WorkshopSettings,
 } from '@muebles/domain';
@@ -129,6 +130,11 @@ export interface ProjectsScreenProps {
   readonly onSelectionChange?: (projectId: string | null) => void;
   /** Domain QuoteBreakdown from shell (PRJ-06, UX-03). Null when blocked/unavailable. */
   readonly breakdown?: QuoteBreakdown | null;
+  /**
+   * Consolidated m² / cantos / herrajes for planning (F047 / #97).
+   * Shell computes via domain; null when blocked/unavailable.
+   */
+  readonly materialSummary?: ProjectMaterialSummary | null;
   /** Live backend recalculation in flight (auth session). */
   readonly breakdownLoading?: boolean;
   /**
@@ -231,6 +237,7 @@ export function ProjectsScreen({
   onUpdateProjectLevelChoices,
   onSelectionChange,
   breakdown = null,
+  materialSummary = null,
   breakdownLoading = false,
   breakdownError = null,
   previewBlocked = false,
@@ -1625,6 +1632,86 @@ export function ProjectsScreen({
               </p>
             )}
           </PricePreviewGate>
+
+          {materialSummary &&
+          (materialSummary.materials.length > 0 ||
+            materialSummary.hardware.length > 0) ? (
+            <section
+              className="project-material-summary"
+              aria-label="Resumen de materiales"
+              data-testid="project-material-summary"
+            >
+              <h4 className="project-material-summary__title">
+                Resumen de materiales
+              </h4>
+              {materialSummary.materials.length > 0 ? (
+                <div className="project-material-summary__block">
+                  <p className="project-material-summary__label">
+                    Tableros · {materialSummary.totalAreaM2.toFixed(3)} m²
+                  </p>
+                  <ul className="project-material-summary__list">
+                    {materialSummary.materials.map((row) => (
+                      <li key={row.materialId}>
+                        <span className="project-material-summary__name">
+                          {row.name}
+                        </span>
+                        <span className="project-material-summary__meta">
+                          {row.areaM2.toFixed(3)} m²
+                          {showCosts
+                            ? ` · ${formatProjectMoney(row.boardCost, project.currency)}`
+                            : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {materialSummary.edges.length > 0 ? (
+                <div className="project-material-summary__block">
+                  <p className="project-material-summary__label">
+                    Cantos · {materialSummary.totalEdgeMl.toFixed(2)} ML
+                  </p>
+                  <ul className="project-material-summary__list">
+                    {materialSummary.edges.map((row) => (
+                      <li key={row.edgeBandId}>
+                        <span className="project-material-summary__name">
+                          {row.name}
+                        </span>
+                        <span className="project-material-summary__meta">
+                          {row.edgeMl.toFixed(2)} ML
+                          {showCosts
+                            ? ` · ${formatProjectMoney(row.edgeCost, project.currency)}`
+                            : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {materialSummary.hardware.length > 0 ? (
+                <div className="project-material-summary__block">
+                  <p className="project-material-summary__label">
+                    Herrajes · {materialSummary.hardware.reduce((s, h) => s + h.quantity, 0)} uds
+                  </p>
+                  <ul className="project-material-summary__list">
+                    {materialSummary.hardware.map((row) => (
+                      <li key={row.hardwareId}>
+                        <span className="project-material-summary__name">
+                          {row.description}
+                        </span>
+                        <span className="project-material-summary__meta">
+                          ×{row.quantity}
+                          {showCosts
+                            ? ` · ${formatProjectMoney(row.lineCost, project.currency)}`
+                            : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           {exportBlockMessage ? (
             <p className="project-totals__export-msg" role="status">

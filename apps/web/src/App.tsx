@@ -25,6 +25,7 @@ import type {
   OptionGroup,
   Project,
   ProjectItem,
+  ProjectMaterialSummary,
   QuoteBreakdown,
   WorkshopSettings,
   Workspace,
@@ -32,6 +33,7 @@ import type {
 import {
   calcMaterialCostPerM2,
   calcProjectBreakdown,
+  generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
   navIdsForRole,
@@ -821,6 +823,17 @@ function AppContent({
           },
     [selectedProject, catalog],
   );
+
+  /** F047: m² / herrajes summary — same gate as price preview. */
+  const materialSummary = useMemo((): ProjectMaterialSummary | null => {
+    if (!catalog || !selectedProject) return null;
+    if (projectQuote.previewBlocked || !projectQuote.breakdown) return null;
+    try {
+      return generateProjectMaterialSummary(selectedProject, catalog);
+    } catch {
+      return null;
+    }
+  }, [catalog, selectedProject, projectQuote.previewBlocked, projectQuote.breakdown]);
 
   /** Sale-price estimates for project cards — domain only in the shell (F022). */
   const projectEstimates = useMemo(() => {
@@ -2164,6 +2177,7 @@ function AppContent({
           onUpdateProjectLevelChoices={updateProjectLevelChoices}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
+          materialSummary={materialSummary}
           breakdownLoading={breakdownLoading}
           breakdownError={breakdownError}
           previewBlocked={projectQuote.previewBlocked}

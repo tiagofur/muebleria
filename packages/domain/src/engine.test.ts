@@ -21,6 +21,7 @@ import {
   captureQuoteSnapshot,
   generateCutRows,
   generateHardwareList,
+  generateProjectMaterialSummary,
   isProjectClosed,
   resolveBom,
   transitionProjectStatus,
@@ -1138,6 +1139,74 @@ describe('generateCutRows', () => {
     expect(() => generateCutRows(project, catalog)).toThrow(
       /no hay piezas de tablero para exportar/i,
     );
+  });
+});
+
+describe('generateProjectMaterialSummary (F047 / #97)', () => {
+  const gabOnlyProject: Project = {
+    id: 'proj-summary-gab',
+    name: 'Summary gab',
+    customerId: 'Test',
+    currency: 'MXN',
+    marginFactor: 1.35,
+    laborFixedCost: 0,
+    status: 'draft',
+    items: [
+      {
+        id: 'item-gab',
+        moduleId: IDS.modGab,
+        quantity: 1,
+        optionChoices: plantillaChoices,
+      },
+    ],
+    createdAt: '2026-07-15T00:00:00.000Z',
+    updatedAt: '2026-07-15T00:00:00.000Z',
+  };
+
+  it('aggregates area m² by material matching board line costs', () => {
+    const summary = generateProjectMaterialSummary(
+      gabOnlyProject,
+      plantillaCatalogWithModules,
+    );
+    expect(summary.materials.length).toBeGreaterThan(0);
+    expect(summary.totalAreaM2).toBeGreaterThan(0);
+    const sumAreas = summary.materials.reduce((s, m) => s + m.areaM2, 0);
+    expect(sumAreas).toBeCloseTo(summary.totalAreaM2, 8);
+    // total board cost matches sum of rows
+    const sumBoard = summary.materials.reduce((s, m) => s + m.boardCost, 0);
+    expect(sumBoard).toBeCloseTo(summary.totalBoardCost, 8);
+  });
+
+  it('scales area with project item quantity', () => {
+    const one = generateProjectMaterialSummary(
+      gabOnlyProject,
+      plantillaCatalogWithModules,
+    );
+    const two = generateProjectMaterialSummary(
+      {
+        ...gabOnlyProject,
+        items: [
+          {
+            id: 'item-gab',
+            moduleId: IDS.modGab,
+            quantity: 2,
+            optionChoices: plantillaChoices,
+          },
+        ],
+      },
+      plantillaCatalogWithModules,
+    );
+    expect(two.totalAreaM2).toBeCloseTo(one.totalAreaM2 * 2, 8);
+  });
+
+  it('includes hardware totals and edge ML when present', () => {
+    const summary = generateProjectMaterialSummary(
+      gabOnlyProject,
+      plantillaCatalogWithModules,
+    );
+    expect(summary.hardware.length).toBeGreaterThan(0);
+    expect(summary.totalHardwareCost).toBeGreaterThan(0);
+    expect(summary.totalEdgeMl).toBeGreaterThanOrEqual(0);
   });
 });
 

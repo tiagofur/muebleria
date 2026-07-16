@@ -36,6 +36,9 @@ export type {
   QuoteBreakdown,
   ProductionCutRow,
   HardwarePurchaseRow,
+  MaterialUsageRow,
+  EdgeUsageRow,
+  ProjectMaterialSummary,
 } from './types';
 
 export {
@@ -119,6 +122,7 @@ export {
   transitionProjectStatus,
   generateCutRows,
   generateHardwareList,
+  generateProjectMaterialSummary,
   validateBoardPart,
   validateHardwareLine,
   validateModule,
