@@ -4,6 +4,7 @@
  */
 
 import type { Workspace } from '@muebles/domain';
+import { DEFAULT_WORKSHOP_SETTINGS } from '@muebles/domain';
 import {
   createPlantillaDemoProject,
   plantillaCatalogWithModules,
@@ -21,5 +22,6 @@ export function createSeedWorkspace(): Workspace {
     schemaVersion: SCHEMA_VERSION,
     catalog: plantillaCatalogWithModules,
     projects: [createPlantillaDemoProject()],
+    settings: { ...DEFAULT_WORKSHOP_SETTINGS },
   };
 }

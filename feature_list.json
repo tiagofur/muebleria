@@ -602,7 +602,7 @@
         "docs/prd.md §12",
         "https://github.com/tiagofur/muebleria/issues/37"
       ],
-      "status": "pending",
+      "status": "done",
       "github_issue": 37
     },
     {
@@ -643,6 +643,158 @@
       ],
       "status": "done",
       "github_issue": 39
+    },
+    {
+      "id": "F034",
+      "phase": 7,
+      "name": "owner_isolation",
+      "title": "Ownership de clientes/proyectos + aislamiento vendedor",
+      "description": "Etapa 3: ownerUserId en Customer y Project. Vendedor solo ve/edita lo suyo. Gerente/admin ven todo; al crear eligen owner (yo u otro vendedor) y pueden reasignar. Enforcement API Go + tests OWN-*.",
+      "acceptance": [
+        "Customer y Project persisten ownerUserId",
+        "API vendedor no devuelve filas de otros owners",
+        "Gerente puede asignar y reasignar owner",
+        "Tests de autorización de aislamiento",
+        "Migración/backfill de datos existentes documentado"
+      ],
+      "references": [
+        "docs/prd.md §6.6.2",
+        "https://github.com/tiagofur/muebleria/issues/66"
+      ],
+      "status": "pending",
+      "github_issue": 66
+    },
+    {
+      "id": "F035",
+      "phase": 7,
+      "name": "product_roles_rbac",
+      "title": "Roles de producto + matriz RBAC en API y UI",
+      "description": "Roles: admin, gerente_ventas, vendedor, ingeniero, produccion. Migrar disenador→ingeniero, carpintero→produccion; user=sin puesto. Matriz §6.6.3 en Go + nav/acciones UI.",
+      "acceptance": [
+        "Se pueden asignar los 5 roles desde admin",
+        "Mutaciones denegadas devuelven 403 en API",
+        "UI no muestra acciones prohibidas",
+        "Tests de matriz mínima"
+      ],
+      "references": [
+        "docs/prd.md §4.2",
+        "docs/prd.md §6.6.3",
+        "https://github.com/tiagofur/muebleria/issues/67"
+      ],
+      "status": "pending",
+      "github_issue": 67
+    },
+    {
+      "id": "F036",
+      "phase": 7,
+      "name": "project_status_produced_reopen",
+      "title": "Status produced + reopen/delete (gerente)",
+      "description": "ProjectStatus + produced. Workflow draft→quoted→accepted→produced. Reopen solo gerente/admin limpia snapshot. Delete solo gerente/admin. produced click-only.",
+      "acceptance": [
+        "Enum + badge produced",
+        "Reopen solo gerente/admin e invalida snapshot",
+        "produced no exige export previo",
+        "Export permitido en accepted y produced",
+        "Tests de transiciones y permisos"
+      ],
+      "references": [
+        "docs/prd.md §6.6.4",
+        "https://github.com/tiagofur/muebleria/issues/68"
+      ],
+      "status": "pending",
+      "github_issue": 68
+    },
+    {
+      "id": "F037",
+      "phase": 7,
+      "name": "sales_manager_dashboard",
+      "title": "Dashboard gerente: total + por owner",
+      "description": "Home gerente_ventas: métricas del período y desglose por ownerUserId (nombre + rol).",
+      "acceptance": [
+        "Gerente ve total y tabla por responsable",
+        "Vendedor no ve dashboard global de otros",
+        "UI en español de taller"
+      ],
+      "references": [
+        "docs/prd.md §6.6.5",
+        "https://github.com/tiagofur/muebleria/issues/69"
+      ],
+      "status": "pending",
+      "github_issue": 69
+    },
+    {
+      "id": "F038",
+      "phase": 7,
+      "name": "production_queue",
+      "title": "Cola producción: accepted → export → produced",
+      "description": "Home produccion: Listos para fabricar, export Optimizer/herrajes, marcar produced. Sin CRM ni catálogo.",
+      "acceptance": [
+        "Producción solo ve accepted/produced",
+        "Puede exportar corte y herrajes",
+        "Puede marcar produced",
+        "No edita maestros ni borra proyectos"
+      ],
+      "references": [
+        "docs/prd.md §4.2.4",
+        "https://github.com/tiagofur/muebleria/issues/70"
+      ],
+      "status": "pending",
+      "github_issue": 70
+    },
+    {
+      "id": "F039",
+      "phase": 7,
+      "name": "vendor_cost_hiding",
+      "title": "Costos ocultos al vendedor (COST-01)",
+      "description": "API/UI vendedor no exponen costPerM2, costPerUnit, costo directo, margen. Sí precio de venta.",
+      "acceptance": [
+        "Payloads vendedor sin costos sensibles",
+        "UI vendedor sin margen ni unitarios",
+        "Tests DTO por rol"
+      ],
+      "references": [
+        "docs/prd.md §6.6.7 COST-01",
+        "https://github.com/tiagofur/muebleria/issues/71"
+      ],
+      "status": "pending",
+      "github_issue": 71
+    },
+    {
+      "id": "F040",
+      "phase": 7,
+      "name": "catalog_images_vitrine",
+      "title": "Imágenes de catálogo + vitrina de muebles",
+      "description": "imageUrl en module/material/hardware; upload auth; vitrina ventas sin despiece/costos.",
+      "acceptance": [
+        "Ingeniero/admin sube imagen",
+        "Vendedor ve vitrina con foto o placeholder",
+        "Sin base64 masivo en Postgres",
+        "Tests contrato media"
+      ],
+      "references": [
+        "docs/prd.md §6.6.6",
+        "https://github.com/tiagofur/muebleria/issues/72"
+      ],
+      "status": "pending",
+      "github_issue": 72
+    },
+    {
+      "id": "F041",
+      "phase": 7,
+      "name": "engineer_production_exports",
+      "title": "Ingeniero: acceso a exports de producción",
+      "description": "Rol ingeniero exporta Optimizer y herrajes en accepted/produced. Puede ir con F035/F038.",
+      "acceptance": [
+        "Ingeniero exporta Optimizer y herrajes",
+        "Vendedor no exporta producción",
+        "Tests RBAC"
+      ],
+      "references": [
+        "docs/prd.md §4.2.3",
+        "https://github.com/tiagofur/muebleria/issues/73"
+      ],
+      "status": "pending",
+      "github_issue": 73
     }
   ]
 }

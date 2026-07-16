@@ -28,6 +28,7 @@ export type {
   Project,
   QuotePriceSnapshot,
   Catalog,
+  WorkshopSettings,
   Workspace,
   ResolvedBoardPart,
   ResolvedHardwareLine,
@@ -36,6 +37,12 @@ export type {
   ProductionCutRow,
   HardwarePurchaseRow,
 } from './types';
+
+export {
+  DEFAULT_WORKSHOP_SETTINGS,
+  resolveWorkshopSettings,
+  withWorkshopSettings,
+} from './workshopSettings';
 
 export type { CategoryFilterId } from './categories';
 export {

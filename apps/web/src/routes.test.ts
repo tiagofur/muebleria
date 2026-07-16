@@ -25,6 +25,7 @@ describe('app routes', () => {
     expect(navFromPath('/projects')).toBe('projects');
     expect(navFromPath('/option-groups')).toBe('optionGroups');
     expect(navFromPath('/users')).toBe('users');
+    expect(navFromPath('/settings')).toBe('settings');
   });
 
   it('resolves entity deep links for all id-bearing sections', () => {
