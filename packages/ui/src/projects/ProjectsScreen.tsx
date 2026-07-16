@@ -29,6 +29,7 @@ import type {
 import {
   cascadeOptions,
   cascadeSelectedCategoryId,
+  effectiveOptionChoices,
   filterModulesByCategory,
   isProjectClosed,
   type CategoryFilterId,
@@ -65,12 +66,15 @@ import {
   formatIsoDate,
   formatProjectMoney,
   groupsForModuleItem,
+  optionLabelForId,
   optionsForGroup,
   PROJECT_STATUSES,
   projectStatusBadgeClass,
   projectStatusLabel,
   projectToDraft,
   resolveCustomerName,
+  setItemOptionChoice,
+  setProjectLevelChoice,
   validateItemQuantity,
   validateProjectDraft,
   type AddItemDraft,
@@ -105,6 +109,11 @@ export interface ProjectsScreenProps {
   ) => void;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
+  /** F029: project-wide option defaults (empty keys inherit on each line). */
+  readonly onUpdateProjectLevelChoices?: (
+    projectId: string,
+    choices: OptionChoices,
+  ) => void;
   /**
    * Notifies parent when the selected project id changes (null = list / none).
    * Parent computes domain breakdown and passes breakdown props.
@@ -187,6 +196,7 @@ export function ProjectsScreen({
   onAddItem,
   onUpdateItem,
   onRemoveItem,
+  onUpdateProjectLevelChoices,
   onSelectionChange,
   breakdown = null,
   breakdownLoading = false,
@@ -414,12 +424,19 @@ export function ProjectsScreen({
 
   const selectModuleForAdd = (moduleId: string) => {
     const mod = modules.find((m) => m.id === moduleId);
+    // Prefill only groups without a project-level default (F029 inherit).
+    const seeded = mod ? defaultChoicesForNewItem(mod, optionGroups) : {};
+    const projectLevel = selectedProject?.projectLevelChoices ?? {};
+    const optionChoices: Record<string, string> = {};
+    for (const [code, id] of Object.entries(seeded)) {
+      if (!projectLevel[code]?.trim()) {
+        optionChoices[code] = id;
+      }
+    }
     setAddItem({
       moduleId,
       quantity: addItem.quantity || 1,
-      optionChoices: mod
-        ? defaultChoicesForNewItem(mod, optionGroups)
-        : {},
+      optionChoices,
     });
   };
 
@@ -443,8 +460,12 @@ export function ProjectsScreen({
     }
 
     const groups = groupsForModuleItem(mod, optionGroups);
+    const effective = effectiveOptionChoices(
+      addItem.optionChoices,
+      selectedProject.projectLevelChoices,
+    );
     for (const group of groups) {
-      if (!addItem.optionChoices[group.code]) {
+      if (!effective[group.code]) {
         setItemError(`Falta elegir: ${group.name} (${group.code}).`);
         return;
       }
@@ -477,11 +498,23 @@ export function ProjectsScreen({
   ) => {
     if (!selectedId) return;
     // PRJ-09: only ProjectItem.optionChoices changes — never Module.
-    const optionChoices: OptionChoices = {
-      ...item.optionChoices,
-      [groupCode]: optionId,
-    };
+    // Empty value = inherit project default (F029).
+    const optionChoices = setItemOptionChoice(
+      item.optionChoices,
+      groupCode,
+      optionId,
+    );
     onUpdateItem(selectedId, { ...item, optionChoices });
+  };
+
+  const updateProjectLevelChoice = (groupCode: string, optionId: string) => {
+    if (!selectedId || !selectedProject || !onUpdateProjectLevelChoices) return;
+    const choices = setProjectLevelChoice(
+      selectedProject.projectLevelChoices,
+      groupCode,
+      optionId,
+    );
+    onUpdateProjectLevelChoices(selectedId, choices);
   };
 
   const handleDelete = (id: string) => {
@@ -805,6 +838,11 @@ export function ProjectsScreen({
         <div className="project-item-choices" style={{ marginTop: 'var(--space-3)' }}>
           {addGroups.map((group) => {
             const options = optionsForGroup(group, catalogs);
+            const projectDefault =
+              selectedProject?.projectLevelChoices?.[group.code]?.trim() ?? '';
+            const inheritLabel = projectDefault
+              ? `Usar default del proyecto (${optionLabelForId(projectDefault, group, catalogs)})`
+              : 'Usar default del proyecto';
             return (
               <div key={group.id} className="catalog-form__field">
                 <label htmlFor={`add-choice-${group.code}`}>
@@ -816,14 +854,15 @@ export function ProjectsScreen({
                   onChange={(e) =>
                     setAddItem({
                       ...addItem,
-                      optionChoices: {
-                        ...addItem.optionChoices,
-                        [group.code]: e.target.value,
-                      },
+                      optionChoices: setItemOptionChoice(
+                        addItem.optionChoices,
+                        group.code,
+                        e.target.value,
+                      ),
                     })
                   }
                 >
-                  <option value="">Seleccionar…</option>
+                  <option value="">{inheritLabel}</option>
                   {options.map((opt) => (
                     <option key={opt.id} value={opt.id}>
                       {opt.name} — {opt.code}
@@ -836,7 +875,8 @@ export function ProjectsScreen({
         </div>
       )}
       <p className="project-editor__hint">
-        Podés agregar el mismo mueble más de una vez con distintas opciones.
+        Vacío = hereda el default del proyecto. Podés agregar el mismo mueble
+        más de una vez con distintas opciones.
       </p>
     </form>
   );
@@ -1072,6 +1112,53 @@ export function ProjectsScreen({
       ) : null}
 
       <div className="project-detail__body">
+        {optionGroups.length > 0 && onUpdateProjectLevelChoices ? (
+          <section
+            className="project-detail__section project-level-options"
+            aria-label="Opciones del proyecto"
+            data-testid="project-level-options"
+          >
+            <div className="project-detail__section-header">
+              <h3 className="project-detail__section-title">
+                Opciones del proyecto
+              </h3>
+            </div>
+            <p className="project-editor__hint">
+              Defaults de cotización. Cada mueble las hereda salvo que
+              overridees en la línea.
+            </p>
+            <div className="project-item-choices">
+              {optionGroups.map((group) => {
+                const options = optionsForGroup(group, catalogs);
+                return (
+                  <div key={group.id} className="catalog-form__field">
+                    <label htmlFor={`project-level-${group.code}`}>
+                      {group.name} ({group.code})
+                    </label>
+                    <select
+                      id={`project-level-${group.code}`}
+                      value={
+                        project.projectLevelChoices?.[group.code] ?? ''
+                      }
+                      onChange={(e) =>
+                        updateProjectLevelChoice(group.code, e.target.value)
+                      }
+                      data-testid={`project-level-choice-${group.code}`}
+                    >
+                      <option value="">Sin default</option>
+                      {options.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.name} — {opt.code}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
         <section
           className="project-detail__section project-detail__items"
           aria-label="Ítems de cotización"
@@ -1175,6 +1262,15 @@ export function ProjectsScreen({
                       <div className="project-item-choices">
                         {groups.map((group) => {
                           const options = optionsForGroup(group, catalogs);
+                          const lineValue =
+                            item.optionChoices[group.code]?.trim() ?? '';
+                          const projectDefault =
+                            project.projectLevelChoices?.[group.code]?.trim() ??
+                            '';
+                          const isOverride = Boolean(lineValue);
+                          const inheritLabel = projectDefault
+                            ? `Usar default del proyecto (${optionLabelForId(projectDefault, group, catalogs)})`
+                            : 'Usar default del proyecto';
                           return (
                             <div
                               key={group.id}
@@ -1184,10 +1280,18 @@ export function ProjectsScreen({
                                 htmlFor={`choice-${item.id}-${group.code}`}
                               >
                                 {group.name} ({group.code})
+                                {isOverride ? (
+                                  <span
+                                    className="project-choice-override-badge"
+                                    title="Esta línea overridea el default del proyecto"
+                                  >
+                                    Override
+                                  </span>
+                                ) : null}
                               </label>
                               <select
                                 id={`choice-${item.id}-${group.code}`}
-                                value={item.optionChoices[group.code] ?? ''}
+                                value={lineValue}
                                 onChange={(e) =>
                                   updateItemChoice(
                                     item,
@@ -1195,8 +1299,9 @@ export function ProjectsScreen({
                                     e.target.value,
                                   )
                                 }
+                                data-testid={`item-choice-${item.id}-${group.code}`}
                               >
-                                <option value="">Seleccionar…</option>
+                                <option value="">{inheritLabel}</option>
                                 {options.map((opt) => (
                                   <option key={opt.id} value={opt.id}>
                                     {opt.name} — {opt.code}

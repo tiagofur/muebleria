@@ -15,7 +15,10 @@ import type {
   ProjectStatus,
   WorkshopSettings,
 } from '@muebles/domain';
-import { DEFAULT_WORKSHOP_SETTINGS } from '@muebles/domain';
+import {
+  DEFAULT_WORKSHOP_SETTINGS,
+  effectiveOptionChoices,
+} from '@muebles/domain';
 import {
   canShowPricePreview,
   membersForKind,
@@ -278,6 +281,7 @@ export function groupsForModuleItem(
 
 /**
  * Gate for whole-project price preview: every item must satisfy required choices.
+ * Uses effective resolution (project defaults + line overrides) — F029 / #35.
  */
 export function canShowProjectPricePreview(
   project: Project,
@@ -294,7 +298,11 @@ export function canShowProjectPricePreview(
       continue;
     }
     const required = requiredGroupCodesForModule(mod, optionGroups);
-    const gate = canShowPricePreview(required, item.optionChoices);
+    const effective = effectiveOptionChoices(
+      item.optionChoices,
+      project.projectLevelChoices,
+    );
+    const gate = canShowPricePreview(required, effective);
     if (!gate.ok) {
       for (const code of gate.missingGroups) {
         missing.add(code);
@@ -306,6 +314,57 @@ export function canShowProjectPricePreview(
     return { ok: true, missingGroups: [] };
   }
   return { ok: false, missingGroups: [...missing] };
+}
+
+/**
+ * Label for a catalog option id within a group (UI display).
+ */
+export function optionLabelForId(
+  optionId: string,
+  group: OptionGroup,
+  catalogs: {
+    readonly materials: readonly MaterialBoard[];
+    readonly edges: readonly EdgeBand[];
+    readonly hardware: readonly Hardware[];
+  },
+): string {
+  const opt = optionsForGroup(group, catalogs).find((o) => o.id === optionId);
+  return opt ? `${opt.name} — ${opt.code}` : optionId;
+}
+
+/**
+ * Empty string key means inherit project default (F029).
+ * Returns a new OptionChoices without empty keys.
+ */
+export function setItemOptionChoice(
+  current: OptionChoices,
+  groupCode: string,
+  optionId: string,
+): OptionChoices {
+  const next: Record<string, string> = { ...current };
+  if (!optionId.trim()) {
+    delete next[groupCode];
+  } else {
+    next[groupCode] = optionId;
+  }
+  return next;
+}
+
+/**
+ * Patch project-level defaults; empty optionId removes the key.
+ */
+export function setProjectLevelChoice(
+  current: OptionChoices | undefined,
+  groupCode: string,
+  optionId: string,
+): OptionChoices {
+  const next: Record<string, string> = { ...(current ?? {}) };
+  if (!optionId.trim()) {
+    delete next[groupCode];
+  } else {
+    next[groupCode] = optionId;
+  }
+  return next;
 }
 
 /** Find module by id (UI label helper). */

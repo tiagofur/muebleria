@@ -310,6 +310,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
     labor_fixed_cost: p.laborFixedCost,
     status: p.status,
     notes: p.notes ?? '',
+    project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     items: p.items.map((item) => ({
       id: item.id,
       module_id: item.moduleId,
@@ -322,6 +323,12 @@ export function projectToApi(p: Project): Record<string, unknown> {
 export function projectFromApi(raw: Record<string, unknown>): Project {
   const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
   const status = str(raw.status, 'draft') as ProjectStatus;
+  const levelRaw =
+    raw.project_level_choices ?? raw.projectLevelChoices;
+  const projectLevelChoices =
+    levelRaw && typeof levelRaw === 'object' && !Array.isArray(levelRaw)
+      ? (levelRaw as Project['projectLevelChoices'])
+      : undefined;
   return {
     id: str(raw.id),
     name: str(raw.name),
@@ -334,6 +341,10 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
       ? status
       : 'draft') as ProjectStatus,
     notes: str(raw.notes) || undefined,
+    projectLevelChoices:
+      projectLevelChoices && Object.keys(projectLevelChoices).length > 0
+        ? projectLevelChoices
+        : undefined,
     createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
     items: itemsRaw.map((it): ProjectItem => {

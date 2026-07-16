@@ -221,12 +221,14 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 			return domain.QuoteBreakdown{}, err
 		}
 
+		choices := choicesForItem(project, item)
+
 		for _, part := range module.BoardParts {
-			material, err := ResolveMaterial(part, item.OptionChoices, catalog.Materials)
+			material, err := ResolveMaterial(part, choices, catalog.Materials)
 			if err != nil {
 				return domain.QuoteBreakdown{}, err
 			}
-			edgeBand, err := ResolveEdgeBand(part, *material, item.OptionChoices, catalog.Edges)
+			edgeBand, err := ResolveEdgeBand(part, *material, choices, catalog.Edges)
 			if err != nil {
 				return domain.QuoteBreakdown{}, err
 			}
@@ -241,7 +243,7 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 		}
 
 		for _, line := range module.HardwareLines {
-			hw, err := ResolveHardware(line, item.OptionChoices, catalog.Hardware)
+			hw, err := ResolveHardware(line, choices, catalog.Hardware)
 			if err != nil {
 				return domain.QuoteBreakdown{}, err
 			}

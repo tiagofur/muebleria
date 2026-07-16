@@ -1379,6 +1379,25 @@ function AppContent({
     );
   };
 
+  const updateProjectLevelChoices = (
+    projectId: string,
+    choices: OptionChoices,
+  ) => {
+    const now = new Date().toISOString();
+    patchProjects((ps) =>
+      ps.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              projectLevelChoices:
+                Object.keys(choices).length > 0 ? choices : undefined,
+              updatedAt: now,
+            }
+          : p,
+      ),
+    );
+  };
+
   const removeProjectItem = (projectId: string, itemId: string) => {
     const now = new Date().toISOString();
     patchProjects((ps) =>
@@ -1683,6 +1702,7 @@ function AppContent({
           onAddItem={addProjectItem}
           onUpdateItem={updateProjectItem}
           onRemoveItem={removeProjectItem}
+          onUpdateProjectLevelChoices={updateProjectLevelChoices}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
           breakdownLoading={breakdownLoading}

@@ -133,6 +133,9 @@ export function duplicateProject(
     laborFixedCost: project.laborFixedCost,
     status: 'draft',
     items,
+    projectLevelChoices: project.projectLevelChoices
+      ? { ...project.projectLevelChoices }
+      : undefined,
     notes: project.notes,
     createdAt: options.nowIso,
     updatedAt: options.nowIso,

@@ -3,6 +3,7 @@
  */
 
 import { ResolutionError, ValidationError } from './errors';
+import { effectiveOptionChoices } from './optionChoices';
 import type {
   BoardPart,
   Catalog,
@@ -726,7 +727,11 @@ function calcLiveProjectBreakdown(
       );
     }
 
-    const bom = resolveBom(module, item.optionChoices, catalog);
+    const bom = resolveBom(
+      module,
+      effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
+      catalog,
+    );
 
     for (const part of bom.boardParts) {
       const line = calcBoardLineCost(part, catalog, item.quantity);
@@ -778,7 +783,11 @@ function collectUsedUnitPrices(
     const module = findModule(catalog, item.moduleId);
     if (!module) continue;
 
-    const bom = resolveBom(module, item.optionChoices, catalog);
+    const bom = resolveBom(
+      module,
+      effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
+      catalog,
+    );
 
     for (const part of bom.boardParts) {
       const material = findMaterial(catalog, part.materialId);
@@ -948,7 +957,11 @@ export function generateCutRows(
       );
     }
 
-    const bom = resolveBom(module, item.optionChoices, catalog);
+    const bom = resolveBom(
+      module,
+      effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
+      catalog,
+    );
 
     for (const part of bom.boardParts) {
       const material = findMaterial(catalog, part.materialId);
@@ -1043,7 +1056,11 @@ export function generateHardwareList(
       );
     }
 
-    const bom = resolveBom(module, item.optionChoices, catalog);
+    const bom = resolveBom(
+      module,
+      effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
+      catalog,
+    );
 
     for (const line of bom.hardwareLines) {
       const hardware = findHardware(catalog, line.hardwareId);

@@ -104,6 +104,7 @@ describe('apiMappers', () => {
       marginFactor: 1.4,
       laborFixedCost: 100,
       status: 'draft',
+      projectLevelChoices: { INTERIOR: 'mat1', FRENTE: 'mat2' },
       items: [
         {
           id: 'i1',
@@ -117,6 +118,14 @@ describe('apiMappers', () => {
     };
     const api = projectToApi(p);
     expect(api.customer_id).toBe('c1');
+    expect(api.project_level_choices).toEqual({
+      INTERIOR: 'mat1',
+      FRENTE: 'mat2',
+    });
+    expect(projectFromApi(api as Record<string, unknown>).projectLevelChoices).toEqual({
+      INTERIOR: 'mat1',
+      FRENTE: 'mat2',
+    });
     const items = api.items as Record<string, unknown>[];
     expect(items[0]?.module_id).toBe('m1');
     expect(projectFromApi(api as Record<string, unknown>).customerId).toBe('c1');
