@@ -543,6 +543,106 @@
         "docs/prd.md §14.2"
       ],
       "status": "done"
+    },
+    {
+      "id": "F029",
+      "phase": 3,
+      "name": "project_level_option_choices",
+      "title": "Opciones a nivel proyecto + override por línea",
+      "description": "Project.projectLevelChoices como defaults de cotización; cada ProjectItem puede overridear por grupo. Resolución efectiva: item.optionChoices[role] ?? project.projectLevelChoices[role]. UI: bloque opciones del proyecto + pickers por línea con estado 'usar default'. Paridad Go/Postgres.",
+      "acceptance": [
+        "Se setean opciones a nivel proyecto y los ítems sin override las heredan",
+        "Un ítem puede overridear un grupo sin afectar a los demás",
+        "Export Optimizer y snapshot usan la resolución efectiva",
+        "Tests domain (solo proyecto / solo línea / override / required missing)",
+        "Persistencia API/Go con paridad TS"
+      ],
+      "references": [
+        "docs/prd.md §6.2",
+        "docs/prd.md §7.1",
+        "https://github.com/tiagofur/muebleria/issues/35"
+      ],
+      "status": "pending",
+      "github_issue": 35
+    },
+    {
+      "id": "F030",
+      "phase": 3,
+      "name": "commercial_quote_export",
+      "title": "Export cotización comercial (Excel simple)",
+      "description": "Generar XLSX de cotización para el cliente: datos de proyecto, líneas de mueble con opciones resumidas, totales (materiales/cantos/herrajes/directo/venta). Usar snapshot si quoted/accepted. Botón en detalle de proyecto junto a Optimizer/herrajes.",
+      "acceptance": [
+        "Desde un proyecto se descarga un .xlsx legible para el cliente",
+        "Totales coinciden con el desglose de la app",
+        "Proyectos cerrados usan priceSnapshot; draft recalcula",
+        "Test de fixture o smoke del writer",
+        "Web: descarga en browser"
+      ],
+      "references": [
+        "docs/prd.md §6.2",
+        "docs/prd.md §8.1",
+        "https://github.com/tiagofur/muebleria/issues/36"
+      ],
+      "status": "pending",
+      "github_issue": 36
+    },
+    {
+      "id": "F031",
+      "phase": 3,
+      "name": "workshop_settings_screen",
+      "title": "Pantalla Ajustes: defaults globales del taller",
+      "description": "WorkshopSettings (defaultMarginFactor, defaultLaborFixedCost, currency). Pantalla Ajustes en shell Config. emptyProjectDraft / create project toma defaults. No muta proyectos ya creados.",
+      "acceptance": [
+        "Navegación a Ajustes en el shell",
+        "Cambiar defaults no muta proyectos existentes",
+        "Defaults se persisten entre recargas",
+        "UI en español de taller"
+      ],
+      "references": [
+        "docs/prd.md §12",
+        "https://github.com/tiagofur/muebleria/issues/37"
+      ],
+      "status": "pending",
+      "github_issue": 37
+    },
+    {
+      "id": "F032",
+      "phase": 6,
+      "name": "desktop_electron_packaged",
+      "title": "Desktop Electron: host empaquetado usable",
+      "description": "Bootstrap BrowserWindow real cargando UI compartida; wire save dialogs (EXP-06); script de empaquetado dev; documentar en verification. Hoy solo hay adapters IPC en apps/desktop.",
+      "acceptance": [
+        "Script/dev abre la app desktop con la misma UI que web",
+        "Export Optimizer usa diálogo nativo de guardar",
+        "Shell no implementa fórmulas de costo",
+        "docs/verification.md documenta cómo correr desktop en dev"
+      ],
+      "references": [
+        "docs/prd.md §6.1",
+        "docs/prd.md §11",
+        "https://github.com/tiagofur/muebleria/issues/38"
+      ],
+      "status": "pending",
+      "github_issue": 38
+    },
+    {
+      "id": "F033",
+      "phase": 3,
+      "name": "grid_keyboard_shortcuts",
+      "title": "UX grillas: atajos de teclado básicos",
+      "description": "En editor de módulo (piezas/herrajes): Tab/Shift+Tab entre celdas, Enter confirma y avanza fila, Esc cancela. Focus visible (NFR-08). Sin copiar/pegar masivo en esta feature.",
+      "acceptance": [
+        "Se puede completar qty/L/A de piezas con teclado sin click en cada celda",
+        "Focus visible en celdas editables",
+        "No rompe accesibilidad de modales existentes",
+        "Checklist o test en verification"
+      ],
+      "references": [
+        "docs/prd.md §9.7",
+        "https://github.com/tiagofur/muebleria/issues/39"
+      ],
+      "status": "pending",
+      "github_issue": 39
     }
   ]
 }

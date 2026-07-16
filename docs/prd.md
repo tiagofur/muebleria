@@ -1,11 +1,13 @@
 # PRD — Sistema de Cotización y Producción de Muebles
 
 **Producto:** Muebles (nombre de trabajo; renombrable)  
-**Estado:** Borrador v1.1 — incorpora catálogo reutilizable + grupos de opciones  
-**Fecha:** 2026-07-15  
+**Estado:** MVP **implementado** · v1.1 **parcial** · backlog en GitHub (#35–#39) y `feature_list.json` (F029–F033)  
+**Última revisión de alcance:** 2026-07-15  
 **Autor:** Producto + dominio de taller  
 **Fuentes de dominio:** `Plantilla_Muebles.xlsx`, `Plantilla_Optimizer.xlsx`  
 **Audiencia:** dueño/operador del taller (usuario principal) y agentes de implementación  
+
+> **Cómo seguir desde cualquier máquina:** leé `feature_list.json` (tareas `pending` de menor id) y los issues abiertos en GitHub. El harness (`AGENTS.md`, `./init.sh`) está orientado al producto Muebles.
 
 ---
 
@@ -167,28 +169,40 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 
 ## 6. Alcance
 
-### 6.1 En alcance — MVP (v1)
+### 6.1 En alcance — MVP (v1) — **HECHO**
 
-1. Catálogos: materiales (tableros), cantos, herrajes/accesorios (alta única, reutilizable).
-2. **Grupos de opciones** configurables por el taller (ej. Interiores, Frentes, Bisagras, Correderas), cada uno con un conjunto de ítems de catálogo permitidos.
-3. **Muebles/módulos reutilizables** (plantillas): piezas y herrajes con **rol / slot de opción** (no material fijo “de cotización”; el default del catálogo es solo fallback/semilla).
-4. **Cotizaciones:** se eligen muebles ya creados × cantidad + se eligen opciones de los grupos aplicables; **no se redespiega el mueble por presupuesto**.
-5. Motor que **resuelve** material/herraje concreto por rol → calcula costos y precio de venta.
-6. Explosión consolidada del proyecto (ya resuelta con colores/herrajes elegidos).
-7. Export Excel Optimizer 1:1 con el formato de plantilla (materia prima ya resuelta).
-8. Persistencia local + app web (React) + desktop (Electron) con paquetes compartidos.
-9. Validaciones: no cotizar/exportar si falta elegir una opción requerida.
-10. Datos semilla alineados a la plantilla demo.
+| # | Ítem | Estado |
+|---|------|--------|
+| 1 | Catálogos: materiales, cantos, herrajes/accesorios | Hecho (F006, F020) |
+| 2 | Grupos de opciones configurables | Hecho (F007) |
+| 3 | Muebles plantilla con roles / slots de opción | Hecho (F008, F021) |
+| 4 | Cotizaciones: módulo × qty + opciones (sin redespiece) | Hecho (F009, F022) |
+| 5 | Motor resolución BOM + costos + precio | Hecho (F003) |
+| 6 | Explosión consolidada resuelta | Hecho |
+| 7 | Export Optimizer 1:1 | Hecho (F004, F010) |
+| 8 | Persistencia + web + packages compartidos | Hecho (F001, F005). **Desktop Electron:** adapters listos; host empaquetado pendiente → #38 / F032 |
+| 9 | Validaciones que bloquean cotizar/export | Hecho |
+| 10 | Datos semilla (MOD-GAB-01, MOD-CAJ-01, catálogos) | Hecho (F011) |
 
 ### 6.2 En alcance — v1.1 (corto plazo post-MVP)
 
-- Snapshot de costos al “cerrar” cotización.
-- Export/lista de compra de herrajes.
-- Canto como grupo de opciones o mapeo material→canto default.
-- Opciones a nivel **proyecto** (mismo interior/frente para todos los muebles) + override por línea.
-- Duplicar módulo / proyecto.
-- Merma % por material en costo (sin nesting real).
-- PDF o Excel de cotización comercial (simple).
+| Ítem | Estado | Tracking |
+|------|--------|----------|
+| Snapshot de costos al “cerrar” cotización | Hecho | F012 |
+| Export / lista de compra de herrajes | Hecho | F013 |
+| Canto: grupo EDGE o mapeo material→canto default | Hecho | F027 |
+| Duplicar módulo / proyecto | Hecho | F015 |
+| Merma % por material en costo | Hecho | F014 |
+| Opciones a nivel **proyecto** + override por línea | **Pendiente** | [#35](https://github.com/tiagofur/muebleria/issues/35) · F029 |
+| PDF o Excel de cotización comercial (simple) | **Pendiente** | [#36](https://github.com/tiagofur/muebleria/issues/36) · F030 |
+
+### 6.2b Mejoras de producto abiertas (no bloquean MVP)
+
+| Ítem | Tracking |
+|------|----------|
+| Pantalla Ajustes (defaults globales margen/MO) | [#37](https://github.com/tiagofur/muebleria/issues/37) · F031 |
+| Desktop Electron host empaquetado | [#38](https://github.com/tiagofur/muebleria/issues/38) · F032 |
+| UX grillas: atajos teclado (tab/enter) | [#39](https://github.com/tiagofur/muebleria/issues/39) · F033 |
 
 ### 6.3 Fuera de alcance (explícito)
 
@@ -196,8 +210,8 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 |------|--------------------|
 | Nesting 2D / optimización de pliegos | Ya existe flujo Optimizer externo |
 | CAD / dibujo 3D / renders | No resuelve el dolor principal |
-| Módulos paramétricos completos | Alto valor, alta complejidad; fase 2 |
-| Multi-usuario / permisos / cloud sync | Después de validar flujo local (Etapa 2) |
+| Módulos paramétricos completos | Alto valor, alta complejidad; Fase 4 del roadmap |
+| Cloud sync multi-dispositivo completo | Etapa 2 en curso parcial (hay auth multi-usuario; falta sync real) |
 | Inventario y stock | ERP; no MVP |
 | CNC directo / post-procesadores | Más adelante si hay demanda |
 | Multi-moneda compleja | Plantilla es MXN; un default basta |
@@ -220,12 +234,15 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 
 ### 6.5 Etapa 2 — Centralización y Multiplataforma (Go + Postgres)
 
-Una vez validado el flujo local (Etapa 1), se avanzará a una arquitectura cliente-servidor para habilitar sincronización de múltiples usuarios en el taller y soporte para nuevos clientes (móviles):
+| Ítem | Estado |
+|------|--------|
+| 1. Backend Go (REST, auth, CRUD) | **Hecho** (F024, F026) — `backend-go/` |
+| 2. Postgres normalizado | **Hecho** (F024) |
+| 3. Cálculos en el servidor (paridad TS↔Go) | **Hecho en gran parte** (engine, cut rows, hardware list, snapshot, validaciones; ver issues cerrados #7–#10) |
+| 4. Sync multi-dispositivo / “guardar en servidor del taller” como única fuente | **Parcial** — la web ya trabaja contra API; falta hardening de offline/local-first dual y clientes adicionales |
+| 5. App móvil nativa | **No iniciado** |
 
-1. **Backend en Go:** Servicio REST/GraphQL para la persistencia, validaciones de seguridad y orquestación de negocio.
-2. **Base de Datos Postgres:** Almacenamiento relacional normalizado para catálogos, proyectos, histórico y configuraciones de taller.
-3. **Cálculos en el Servidor:** La lógica de cálculo del motor de dominio se migra a Go. Los clientes (web, desktop, mobile) consultan al backend para cotizar, asegurando paridad del 100% de precios y fórmulas entre todas las plataformas y evitando la duplicación de código en los clientes.
-4. **Sincronización:** Los proyectos se guardan automáticamente en la nube/servidor del taller, permitiendo que un usuario cotice en su laptop y otro mande a producción desde la máquina del taller.
+Auth multi-usuario (registro + aprobación admin + roles) está en F026.
 
 ---
 
@@ -741,71 +758,85 @@ Métricas subjetivas se validan con uso real del dueño del taller (aceptación 
 
 ## 17. Roadmap por fases
 
-### Fase 0 — Alineación (esta etapa)
+### Fase 0 — Alineación — **HECHA**
 
 - [x] Análisis de plantillas
 - [x] PRD + modelo catálogo/grupos/cotización
-- [ ] Aprobar este PRD
-- [ ] Re-orientar harness del repo al producto
-- [ ] Design técnico (paquetes, schema, stack cerrado)
+- [x] Aprobar / operar bajo este PRD (en uso como contrato de producto)
+- [x] Re-orientar harness del repo al producto (`AGENTS.md`, `feature_list.json`, docs)
+- [x] Design técnico (paquetes, schema, stack — ver `docs/architecture.md`, `docs/technical_design.md`)
 
-### Fase 1 — Fundación
+### Fase 1 — Fundación — **HECHA** (F001–F005)
 
-- Scaffold monorepo TS
-- `domain`: tipos + **option groups** + resolución BOM + costos + golden test
-- `excel`: writer Optimizer + tests
-- Storage local mínimo
+- [x] Scaffold monorepo TS
+- [x] `domain`: tipos + option groups + resolución BOM + costos + golden test
+- [x] `excel`: writer Optimizer + tests
+- [x] Storage local versionado
 
-### Fase 2 — MVP usable
+### Fase 2 — MVP usable — **HECHA** (F006–F011)
 
-- UI catálogos + grupos de opciones
-- UI muebles (roles en piezas/herrajes)
-- UI cotización (elegir mueble + opciones) + resumen
-- Export desde UI (web + desktop shell)
-- Datos semilla
+- [x] UI catálogos + grupos de opciones
+- [x] UI muebles (roles en piezas/herrajes)
+- [x] UI cotización + resumen
+- [x] Export desde UI (web; desktop adapters)
+- [x] Datos semilla
 
-### Fase 3 — Endurecer para el día a día
+### Fase 3 — Endurecer para el día a día — **PARCIAL**
 
-- Snapshot de cotización
-- Lista de herrajes
-- Merma %
-- Duplicar / plantillas de proyecto
-- Mejoras UX grilla (atajos, copiar filas)
+- [x] Snapshot de cotización (F012)
+- [x] Lista de herrajes (F013)
+- [x] Merma % (F014)
+- [x] Duplicar módulo / proyecto (F015)
+- [x] Cintilla default por material (F027)
+- [x] Veta heredada del material (F028)
+- [ ] Opciones a nivel proyecto + override (#35 / F029)
+- [ ] Export cotización comercial (#36 / F030)
+- [ ] Mejoras UX grilla / atajos (#39 / F033)
+- [ ] Pantalla Ajustes (#37 / F031)
 
-### Fase 4 — Inteligencia de taller
+### Fase 4 — Inteligencia de taller — **NO INICIADA**
 
 - Módulos paramétricos (gabinete N, cajonera N)
 - Reglas de taller (bisagras por alto, corredera por fondo)
 - Etiquetas / códigos de pieza avanzados
 
-### Fase 5 — Ecosistema (opcional)
+### Fase 5 — Ecosistema (opcional) — **NO INICIADA**
 
 - Import resultado nesting (consumo real de pliegos)
-- Cloud backup / multi-dispositivo
+- Cloud backup / multi-dispositivo completo
 - Integraciones CNC
 
-### Segunda Etapa (Fase 6+) — Backend Go + Postgres
+### Fase UI design system — **HECHA** (F016–F023)
 
-- **Fundación Backend:** Inicializar servidor HTTP en Go con arquitectura limpia (REST/GraphQL).
-- **Base de Datos Postgres:** Migración del esquema relacional (catálogos, proyectos, histórico).
-- **Centralización del Motor:** Migración del motor de cálculo (`packages/domain`) de TS a Go para proveer una API única que sirva a la app desktop, web y futuras apps móviles.
-- **Sincronización:** Guardado automático en el servidor local/nube del taller y soporte multi-usuario.
+- Tokens, layout sidebar, modales, toasts, catálogos/cards, dashboard.
+
+### Segunda Etapa (Fase 6+) — Backend Go + Postgres — **AVANZADA**
+
+- [x] Fundación backend Go + Postgres (F024)
+- [x] Auth, roles, aprobación admin (F026)
+- [x] Categorías jerárquicas de muebles (F025)
+- [x] Motor de cálculo / generadores en Go (paridad con TS)
+- [ ] Desktop Electron empaquetado (#38 / F032)
+- [ ] Sync multi-dispositivo / offline dual robusto
+- [ ] Clientes móviles
 
 ---
 
 ## 18. Criterios de aceptación del MVP (Definition of Done de producto)
 
-El MVP se considera exitoso cuando **todas** se cumplen:
+El MVP se considera exitoso cuando **todas** se cumplen. **Estado a 2026-07-15: cumplido** (validado vía features F001–F011 + tests golden/export).
 
-1. Existen catálogos de materiales, cantos y herrajes editables.
-2. Existen grupos de opciones (al menos Interiores, Frentes, Bisagras, Correderas) con miembros configurables.
-3. Se crean muebles plantilla `MOD-GAB-01` y `MOD-CAJ-01` con piezas/herrajes **rolados** (no hace falta un mueble por color).
-4. En una cotización se **reutilizan** esos muebles, se eligen opciones solo del grupo, y el precio sale del BOM resuelto.
-5. El mismo mueble en dos líneas con distinto frente produce dos precios y dos materiales en export, sin clonar el módulo maestro.
-6. Se exporta un `.xlsx` Optimizer con materia prima ya resuelta y sin herrajes.
-7. Falta de opción requerida o medida inválida bloquea export con mensaje claro.
-8. Tests automatizados cubren resolución + costos + export.
-9. Ciclo real sin Excel manual: catálogo → grupos → mueble → cotización → export.
+1. [x] Existen catálogos de materiales, cantos y herrajes editables.
+2. [x] Existen grupos de opciones (al menos Interiores, Frentes, Bisagras, Correderas) con miembros configurables.
+3. [x] Se crean muebles plantilla `MOD-GAB-01` y `MOD-CAJ-01` con piezas/herrajes **rolados** (no hace falta un mueble por color).
+4. [x] En una cotización se **reutilizan** esos muebles, se eligen opciones solo del grupo, y el precio sale del BOM resuelto.
+5. [x] El mismo mueble en dos líneas con distinto frente produce dos precios y dos materiales en export, sin clonar el módulo maestro.
+6. [x] Se exporta un `.xlsx` Optimizer con materia prima ya resuelta y sin herrajes.
+7. [x] Falta de opción requerida o medida inválida bloquea export con mensaje claro.
+8. [x] Tests automatizados cubren resolución + costos + export.
+9. [x] Ciclo real sin Excel manual: catálogo → grupos → mueble → cotización → export.
+
+**Pendiente post-MVP (no bloquea DoD):** opciones de proyecto (#35), cotización comercial (#36), Ajustes (#37), Electron empaquetado (#38), atajos de grilla (#39).
 
 ---
 
