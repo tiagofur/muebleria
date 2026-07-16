@@ -306,6 +306,10 @@ Precios congelados en `quoted` / `accepted` / `produced` (`priceSnapshot`). Expo
 | `produccion` | **Listos para fabricar** (F038): accepted → export corte/herrajes → marcar produced |
 
 
+#### 6.6.6 Costos al vendedor (COST-01 / F039)
+
+El rol `vendedor` (y `user` sin puesto) **no** recibe ni ve en UI: `costPerM2`, `costPerUnit`, `costPerMl`, `board_price`, costo directo, factor de margen, desglose de costos. **Sí** ve precio de venta. Admin / gerente / ingeniero / producción ven la estructura de costos del taller.
+
 ---
 
 ## 7. Modelo de dominio (producto)

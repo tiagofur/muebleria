@@ -10,6 +10,7 @@ import {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
+  roleCanViewCosts,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,
@@ -74,5 +75,14 @@ describe('rbac (F035)', () => {
     expect(roleUsesProductionQueue('produccion')).toBe(true);
     expect(roleUsesProductionQueue('vendedor')).toBe(false);
     expect(roleUsesProductionQueue('ingeniero')).toBe(false);
+  });
+
+  it('vendedor cannot view costs; admin/ingeniero can (F039)', () => {
+    expect(roleCanViewCosts('vendedor')).toBe(false);
+    expect(roleCanViewCosts('user')).toBe(false);
+    expect(roleCanViewCosts('admin')).toBe(true);
+    expect(roleCanViewCosts('ingeniero')).toBe(true);
+    expect(roleCanViewCosts('gerente_ventas')).toBe(true);
+    expect(roleCanViewCosts(null)).toBe(true);
   });
 });

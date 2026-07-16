@@ -362,6 +362,9 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+			domain.RedactMaterialsList(list)
+		}
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
@@ -402,6 +405,9 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondWithError(w, http.StatusNotFound, "material board not found")
 			return
+		}
+		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+			domain.RedactMaterialCosts(m)
 		}
 		respondWithJSON(w, http.StatusOK, m)
 
@@ -457,7 +463,11 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		respondWithJSON(w, http.StatusOK, filterProjectsByOwner(list, uid, role))
+		filtered := filterProjectsByOwner(list, uid, role)
+		if !domain.RoleCanViewCosts(role) {
+			domain.RedactProjectsList(filtered)
+		}
+		respondWithJSON(w, http.StatusOK, filtered)
 
 	case http.MethodPost:
 		if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para crear cotizaciones") {
@@ -486,6 +496,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			}
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if !domain.RoleCanViewCosts(role) {
+			domain.RedactProjectCosts(&p)
 		}
 		respondWithJSON(w, http.StatusCreated, p)
 
@@ -518,6 +531,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !domain.CanAccessOwnedResource(uid, role, p.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
+		}
+		if !domain.RoleCanViewCosts(role) {
+			domain.RedactProjectCosts(p)
 		}
 		respondWithJSON(w, http.StatusOK, p)
 
@@ -588,6 +604,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			}
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if !domain.RoleCanViewCosts(role) {
+			domain.RedactProjectCosts(&p)
 		}
 		respondWithJSON(w, http.StatusOK, p)
 
@@ -660,6 +679,9 @@ func (s *Server) HandleProjectCalculate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+		domain.RedactQuoteBreakdown(&breakdown)
+	}
 	respondWithJSON(w, http.StatusOK, breakdown)
 }
 
@@ -672,6 +694,9 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+			domain.RedactEdgesList(list)
 		}
 		respondWithJSON(w, http.StatusOK, list)
 
@@ -713,6 +738,9 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondWithError(w, http.StatusNotFound, "edge band not found")
 			return
+		}
+		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+			domain.RedactEdgeCosts(e)
 		}
 		respondWithJSON(w, http.StatusOK, e)
 
@@ -765,6 +793,9 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+			domain.RedactHardwareList(list)
+		}
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
@@ -805,6 +836,9 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondWithError(w, http.StatusNotFound, "hardware not found")
 			return
+		}
+		if !domain.RoleCanViewCosts(actorRole(claimsFromRequest(r))) {
+			domain.RedactHardwareCosts(h)
 		}
 		respondWithJSON(w, http.StatusOK, h)
 

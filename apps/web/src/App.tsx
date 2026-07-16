@@ -47,6 +47,7 @@ import {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
+  roleCanViewCosts,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,
@@ -502,6 +503,9 @@ function AppContent({
     session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
   const useProductionQueue =
     session === 'auth' && roleUsesProductionQueue(actorRole);
+  /** Guest/local: full costs; auth uses COST-01 matrix (F039). */
+  const showCosts =
+    session === 'guest' || roleCanViewCosts(actorRole);
 
   const repository = useMemo(() => {
     return session === 'auth'
@@ -1843,6 +1847,7 @@ function AppContent({
           onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
           requestCreateKey={materialsCreateKey}
           canMutate={canMutateCatalog}
+          showCosts={showCosts}
         />
       ) : null}
       {navId === 'edges' ? (
@@ -1855,6 +1860,7 @@ function AppContent({
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('edges', id)}
           canMutate={canMutateCatalog}
+          showCosts={showCosts}
         />
       ) : null}
       {navId === 'hardware' ? (
@@ -1867,6 +1873,7 @@ function AppContent({
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
           canMutate={canMutateCatalog}
+          showCosts={showCosts}
         />
       ) : null}
       {navId === 'optionGroups' ? (
@@ -1926,7 +1933,7 @@ function AppContent({
           onEditingChange={setEditingModuleId}
           onSelectionChange={onModuleSelectionChange}
           openModuleId={routeModuleId}
-          costPreview={modulePreview.costPreview}
+          costPreview={showCosts ? modulePreview.costPreview : null}
           previewBlocked={modulePreview.previewBlocked}
           missingGroups={modulePreview.missingGroups}
           groupLabels={groupLabels}
@@ -1992,6 +1999,7 @@ function AppContent({
           canMarkProduced={canMarkProduced}
           onMarkProduced={markProjectProduced}
           onReopen={reopenProject}
+          showCosts={showCosts}
         />
       ) : null}
     </AppShell>
