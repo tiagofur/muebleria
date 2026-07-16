@@ -97,3 +97,15 @@ export function sumMonthlyQuotedTotal(
 export function formatDashboardMoney(n: number): string {
   return n.toFixed(2);
 }
+
+/**
+ * Fresh workspace: no modules and no projects yet.
+ * Materials alone (seed/catalog) still show getting-started; power users with
+ * templates or quotes do not.
+ */
+export function shouldShowGettingStarted(input: {
+  readonly modulesCount: number;
+  readonly projectsCount: number;
+}): boolean {
+  return input.modulesCount === 0 && input.projectsCount === 0;
+}

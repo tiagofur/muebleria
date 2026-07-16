@@ -517,6 +517,7 @@ function AppContent({
   const [exportBusy, setExportBusy] = useState(false);
   const [projectsCreateKey, setProjectsCreateKey] = useState(0);
   const [modulesCreateKey, setModulesCreateKey] = useState(0);
+  const [materialsCreateKey, setMaterialsCreateKey] = useState(0);
 
   const [backendBreakdown, setBackendBreakdown] =
     useState<QuoteBreakdown | null>(null);
@@ -750,6 +751,11 @@ function AppContent({
   const onDashboardNewModule = useCallback(() => {
     setModulesCreateKey((k) => k + 1);
     navigate(pathForNav('modules'));
+  }, [navigate]);
+
+  const onDashboardNewMaterial = useCallback(() => {
+    setMaterialsCreateKey((k) => k + 1);
+    navigate(pathForNav('materials'));
   }, [navigate]);
 
   const groupLabels = useMemo(() => {
@@ -1466,9 +1472,11 @@ function AppContent({
         <Dashboard
           stats={dashboardStats}
           recentProjects={dashboardRecent}
+          projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
           onNewProject={onDashboardNewProject}
           onNewModule={onDashboardNewModule}
+          onNewMaterial={onDashboardNewMaterial}
         />
       ) : null}
       {navId === 'materials' ? (
@@ -1483,6 +1491,7 @@ function AppContent({
           getCostPerM2={getMaterialCostPerM2}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
+          requestCreateKey={materialsCreateKey}
         />
       ) : null}
       {navId === 'edges' ? (

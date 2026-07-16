@@ -3,7 +3,14 @@
  * F027: material links default edge band by id; create-edge shortcut from form.
  */
 
-import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import type { EdgeBand, MaterialBoard } from '@muebles/domain';
 import { Eye, EyeOff, Layers, Pencil, Plus } from 'lucide-react';
 import {
@@ -104,6 +111,11 @@ export interface MaterialsCatalogProps {
   /** URL handoff: `/materials/:id` expands that row. */
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
+  /**
+   * Increment from shell to open create modal (Dashboard getting-started).
+   * 0 / undefined = no request.
+   */
+  readonly requestCreateKey?: number;
 }
 
 export function MaterialsCatalog({
@@ -117,6 +129,7 @@ export function MaterialsCatalog({
   getCostPerM2,
   openEntityId = null,
   onSelectionChange,
+  requestCreateKey = 0,
 }: MaterialsCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -178,6 +191,13 @@ export function MaterialsCatalog({
     setEdgeError(null);
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!requestCreateKey) return;
+    startCreate();
+    // Intentionally only when shell bumps the key (Dashboard handoff).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startCreate is stable enough per bump
+  }, [requestCreateKey]);
 
   const startEdit = (item: MaterialBoard) => {
     setEditingId(item.id);
