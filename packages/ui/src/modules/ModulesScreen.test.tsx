@@ -313,14 +313,16 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(within(dialog).getByText('Nuevo mueble')).toBeTruthy();
   });
 
-  it('returns to list from detail back control', async () => {
+  it('returns to list from sticky chrome and shows total', async () => {
     const user = userEvent.setup();
     const { onEditingChange } = renderScreen();
 
     await user.click(screen.getByTestId('module-card-mod-1'));
     expect(screen.getByTestId('module-detail')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-chrome')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-total')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /Volver a la lista/i }));
+    await user.click(screen.getByRole('button', { name: /^Lista$/i }));
     expect(screen.queryByTestId('module-detail')).toBeNull();
     expect(screen.getByTestId('module-card-mod-1')).toBeTruthy();
     expect(onEditingChange).toHaveBeenLastCalledWith(null);

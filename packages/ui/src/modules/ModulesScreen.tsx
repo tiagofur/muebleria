@@ -1159,52 +1159,78 @@ export function ModulesScreen({
     </form>
   );
 
-  const renderDetail = (mod: Module): ReactNode => (
+  const renderDetail = (mod: Module): ReactNode => {
+    const estimate = moduleEstimates[mod.id];
+    const chromeSale =
+      costPreview?.salePrice ??
+      (typeof estimate === 'number' ? estimate : null);
+    const categoryLabel = mod.categoryId
+      ? categoryPath(mod.categoryId, categories)
+          .map((c) => c.name)
+          .join(' › ') || 'Categoría'
+      : 'Sin categoría';
+
+    return (
     <div className="module-detail" data-testid="module-detail">
-      <div className="module-detail__top">
-        <div className="module-detail__identity">
+      <header className="workspace-chrome" data-testid="module-detail-chrome">
+        <div className="workspace-chrome__lead">
           <button
             type="button"
-            className="btn btn--ghost btn--small module-detail__back"
+            className="btn btn--ghost btn--small"
             onClick={backToList}
           >
             <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
-            Volver a la lista
+            Lista
           </button>
-          <span className="module-detail__code">{mod.code}</span>
-          <h2 className="module-detail__title">{mod.name}</h2>
-          {mod.categoryId ? (
-            <p className="module-detail__category" data-testid="module-category-path">
-              {categoryPath(mod.categoryId, categories)
-                .map((c) => c.name)
-                .join(' › ') || 'Categoría'}
-            </p>
-          ) : (
-            <p className="module-detail__category module-detail__category--muted">
-              Sin categoría
-            </p>
-          )}
-          <div className="module-detail__meta">
-            <span>
+          <div className="workspace-chrome__identity">
+            <span className="workspace-chrome__code">{mod.code}</span>
+            <div className="workspace-chrome__title-row">
+              <h2 className="workspace-chrome__title">{mod.name}</h2>
+            </div>
+            <p
+              className={
+                mod.categoryId
+                  ? 'workspace-chrome__subtitle'
+                  : 'workspace-chrome__subtitle workspace-chrome__subtitle--muted'
+              }
+              data-testid="module-category-path"
+            >
+              {categoryLabel}
+              <span className="workspace-chrome__dot" aria-hidden>
+                ·
+              </span>
               {mod.boardParts.length} pieza
               {mod.boardParts.length === 1 ? '' : 's'}
-            </span>
-            <span>
+              <span className="workspace-chrome__dot" aria-hidden>
+                ·
+              </span>
               {mod.hardwareLines.length} herraje
               {mod.hardwareLines.length === 1 ? '' : 's'}
-            </span>
-            {mod.externalDims ? (
-              <span>
-                {mod.externalDims.width}×{mod.externalDims.height}×
-                {mod.externalDims.depth} mm
-              </span>
-            ) : null}
+              {mod.externalDims ? (
+                <>
+                  <span className="workspace-chrome__dot" aria-hidden>
+                    ·
+                  </span>
+                  {mod.externalDims.width}×{mod.externalDims.height}×
+                  {mod.externalDims.depth} mm
+                </>
+              ) : null}
+            </p>
           </div>
-          {mod.notes ? (
-            <p className="module-detail__notes">{mod.notes}</p>
-          ) : null}
         </div>
-        <div className="module-detail__actions">
+        <div className="workspace-chrome__total" data-testid="module-detail-total">
+          <span className="workspace-chrome__total-label">Precio est.</span>
+          <span
+            className={
+              chromeSale == null
+                ? 'workspace-chrome__total-value workspace-chrome__total-value--muted'
+                : 'workspace-chrome__total-value'
+            }
+          >
+            {chromeSale == null ? '—' : formatModuleMoney(chromeSale)}
+          </span>
+        </div>
+        <div className="workspace-chrome__actions">
           <button
             type="button"
             className="btn btn--primary"
@@ -1232,7 +1258,11 @@ export function ModulesScreen({
             Eliminar
           </button>
         </div>
-      </div>
+      </header>
+
+      {mod.notes ? (
+        <p className="module-detail__notes">{mod.notes}</p>
+      ) : null}
 
       <CostPreviewPanel
         costPreview={costPreview}
@@ -1304,7 +1334,8 @@ export function ModulesScreen({
         )}
       </section>
     </div>
-  );
+    );
+  };
 
   const renderCategoryTree = (
     parentId: string | undefined,
@@ -1472,7 +1503,7 @@ export function ModulesScreen({
   const renderList = (): ReactNode => (
     <>
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Muebles (módulos plantilla)</h2>
+        <h2 className="catalog-page__title">Muebles</h2>
         <div className="catalog-page__toolbar">
           {onCreateCategory ? (
             <button
