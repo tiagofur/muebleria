@@ -40,6 +40,40 @@ import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+describe('@muebles/web #15 setState side effects / stale patches', () => {
+  it('patchCatalog/patchProjects use reducer updaters (no array-literal-only API)', () => {
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc).toContain(
+      'updater: (catalog: Catalog) => Catalog',
+    );
+    expect(appSrc).toContain(
+      'updater: (projects: readonly Project[]) => readonly Project[]',
+    );
+    // Must not save inside setWorkspace callback (StrictMode double-fire).
+    expect(appSrc).not.toMatch(
+      /setWorkspace\(\(prev\)[\s\S]{0,200}repository\.save/,
+    );
+    // Project item mutations must use functional patchProjects.
+    expect(appSrc).toContain('patchProjects((ps) =>');
+    expect(appSrc).toContain('patchCatalog((c) =>');
+  });
+
+  it('createProject builds id outside setWorkspace (StrictMode single write)', () => {
+    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    expect(appSrc).toContain('repository.createProject(project)');
+    // newId for project must not appear only inside setWorkspace updater.
+    const createBlock = appSrc.slice(
+      appSrc.indexOf('const createProject'),
+      appSrc.indexOf('const updateProject'),
+    );
+    expect(createBlock).toContain('id: newId()');
+    expect(createBlock).toMatch(/setWorkspace\(\(prev\)[\s\S]*projects:/);
+    expect(createBlock).not.toMatch(
+      /setWorkspace\(\(prev\)[\s\S]*newId\(\)/,
+    );
+  });
+});
+
 describe('@muebles/web reliability (issues #11–#13)', () => {
   it('#11: App calculate path uses DEFAULT_API_BASE + readAuthToken (no hardcode)', () => {
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');

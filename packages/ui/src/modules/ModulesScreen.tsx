@@ -511,8 +511,14 @@ export function ModulesScreen({
     closeModal();
   };
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState<
+    string | null
+  >(null);
+
   const handleDelete = (id: string) => {
     onDelete(id);
+    setConfirmDeleteId(null);
     if (selectedId === id) {
       setSelectedId(null);
     }
@@ -520,6 +526,27 @@ export function ModulesScreen({
       closeModal();
     }
   };
+
+  const handleDeleteCategory = (id: string) => {
+    onDeleteCategory?.(id);
+    setConfirmDeleteCategoryId(null);
+  };
+
+  const deleteTarget = useMemo(
+    () =>
+      confirmDeleteId
+        ? (modules.find((m) => m.id === confirmDeleteId) ?? null)
+        : null,
+    [confirmDeleteId, modules],
+  );
+
+  const deleteCategoryTarget = useMemo(
+    () =>
+      confirmDeleteCategoryId
+        ? (categories.find((c) => c.id === confirmDeleteCategoryId) ?? null)
+        : null,
+    [confirmDeleteCategoryId, categories],
+  );
 
   const isTrulyEmpty = modules.length === 0;
   const isFilterEmpty = !isTrulyEmpty && filtered.length === 0;
@@ -1066,7 +1093,7 @@ export function ModulesScreen({
           <button
             type="button"
             className="btn btn--danger"
-            onClick={() => handleDelete(mod.id)}
+            onClick={() => setConfirmDeleteId(mod.id)}
           >
             <Trash2 size={16} strokeWidth={1.5} aria-hidden />
             Eliminar
@@ -1320,7 +1347,7 @@ export function ModulesScreen({
                         <button
                           type="button"
                           className="btn btn--ghost btn--small"
-                          onClick={() => onDeleteCategory(cat.id)}
+                          onClick={() => setConfirmDeleteCategoryId(cat.id)}
                           aria-label={`Eliminar ${cat.name}`}
                         >
                           <Trash2 size={14} strokeWidth={1.5} />
@@ -1497,6 +1524,78 @@ export function ModulesScreen({
             />
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={deleteTarget != null}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Eliminar mueble"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDeleteId(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                if (confirmDeleteId) handleDelete(confirmDeleteId);
+              }}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar{' '}
+          <strong>
+            {deleteTarget
+              ? `${deleteTarget.code} — ${deleteTarget.name}`
+              : 'este mueble'}
+          </strong>
+          ? Esta acción no se puede deshacer.
+        </p>
+      </Modal>
+
+      <Modal
+        open={deleteCategoryTarget != null}
+        onClose={() => setConfirmDeleteCategoryId(null)}
+        title="Eliminar categoría"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDeleteCategoryId(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                if (confirmDeleteCategoryId) {
+                  handleDeleteCategory(confirmDeleteCategoryId);
+                }
+              }}
+            >
+              Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="project-confirm-modal__text">
+          ¿Seguro que querés eliminar la categoría{' '}
+          <strong>{deleteCategoryTarget?.name ?? ''}</strong>? Solo se puede
+          si no tiene hijos.
+        </p>
       </Modal>
     </section>
   );

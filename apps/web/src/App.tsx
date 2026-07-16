@@ -3,9 +3,17 @@
  * Price formulas call @muebles/domain only here (not in UI package).
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
+  Catalog,
   Customer,
   EdgeBand,
   ExportIssue,
@@ -590,16 +598,22 @@ function AppContent({
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
 
+  // Latest workspace for patches — avoids stale closures (#15).
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
+
+  /**
+   * Catalog updater (reducer style). Computes next from ref, then setState +
+   * save outside any React updater (StrictMode-safe, no double POST).
+   */
   const patchCatalog = useCallback(
-    (patch: Partial<Workspace['catalog']>) => {
-      // Never put fetch/save inside the setState updater — Strict Mode re-runs
-      // updaters in dev and would double-fire network calls.
-      setWorkspace((prev) => {
-        if (!prev) return prev;
-        return { ...prev, catalog: { ...prev.catalog, ...patch } };
-      });
-      if (!workspace) return;
-      const nextCatalog = { ...workspace.catalog, ...patch };
+    (updater: (catalog: Catalog) => Catalog) => {
+      const prev = workspaceRef.current;
+      if (!prev) return;
+      const nextCatalog = updater(prev.catalog);
+      const next: Workspace = { ...prev, catalog: nextCatalog };
+      workspaceRef.current = next;
+      setWorkspace(next);
       repository.saveCatalog(nextCatalog).catch((err) => {
         console.error('Error al guardar catálogo:', err);
         toast({
@@ -608,17 +622,28 @@ function AppContent({
         });
       });
     },
-    [repository, toast, workspace],
+    [repository, toast],
   );
 
+  /**
+   * Projects updater (reducer style). Saves only projects whose reference
+   * changed vs previous list (#15).
+   */
   const patchProjects = useCallback(
-    (next: readonly Project[]) => {
-      setWorkspace((prev) => (prev ? { ...prev, projects: next } : prev));
-      // Side effects outside setState updater (Strict Mode safe).
-      for (const p of next) {
-        repository.saveProject(p).catch((err) => {
-          console.error('Error al guardar proyecto:', err);
-        });
+    (updater: (projects: readonly Project[]) => readonly Project[]) => {
+      const prev = workspaceRef.current;
+      if (!prev) return;
+      const nextProjects = updater(prev.projects);
+      const next: Workspace = { ...prev, projects: nextProjects };
+      workspaceRef.current = next;
+      setWorkspace(next);
+      const prevById = new Map(prev.projects.map((p) => [p.id, p]));
+      for (const p of nextProjects) {
+        if (prevById.get(p.id) !== p) {
+          repository.saveProject(p).catch((err) => {
+            console.error('Error al guardar proyecto:', err);
+          });
+        }
       }
     },
     [repository],
@@ -750,13 +775,14 @@ function AppContent({
       notes: optionalNotes(draft.notes),
       active: true,
     };
-    patchCatalog({ materials: [...materials, item] });
+    patchCatalog((c) => ({ ...c, materials: [...c.materials, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
   };
 
   const updateMaterial = (id: string, draft: MaterialDraft) => {
-    patchCatalog({
-      materials: materials.map((m) =>
+    patchCatalog((c) => ({
+      ...c,
+      materials: c.materials.map((m) =>
         m.id === id
           ? {
               ...m,
@@ -774,15 +800,16 @@ function AppContent({
             }
           : m,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setMaterialActive = (id: string, active: boolean) => {
     const target = materials.find((m) => m.id === id);
-    patchCatalog({
-      materials: materials.map((m) => (m.id === id ? { ...m, active } : m)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      materials: c.materials.map((m) => (m.id === id ? { ...m, active } : m)),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -805,14 +832,15 @@ function AppContent({
       notes: optionalNotes(draft.notes),
       active: true,
     };
-    patchCatalog({ edges: [...edges, item] });
+    patchCatalog((c) => ({ ...c, edges: [...c.edges, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
     return id;
   };
 
   const updateEdge = (id: string, draft: EdgeDraft) => {
-    patchCatalog({
-      edges: edges.map((e) =>
+    patchCatalog((c) => ({
+      ...c,
+      edges: c.edges.map((e) =>
         e.id === id
           ? {
               ...e,
@@ -824,15 +852,16 @@ function AppContent({
             }
           : e,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setEdgeActive = (id: string, active: boolean) => {
     const target = edges.find((e) => e.id === id);
-    patchCatalog({
-      edges: edges.map((e) => (e.id === id ? { ...e, active } : e)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      edges: c.edges.map((e) => (e.id === id ? { ...e, active } : e)),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -854,13 +883,14 @@ function AppContent({
       notes: optionalNotes(draft.notes),
       active: true,
     };
-    patchCatalog({ hardware: [...hardware, item] });
+    patchCatalog((c) => ({ ...c, hardware: [...c.hardware, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
   };
 
   const updateHardware = (id: string, draft: HardwareDraft) => {
-    patchCatalog({
-      hardware: hardware.map((h) =>
+    patchCatalog((c) => ({
+      ...c,
+      hardware: c.hardware.map((h) =>
         h.id === id
           ? {
               ...h,
@@ -872,15 +902,16 @@ function AppContent({
             }
           : h,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setHardwareActive = (id: string, active: boolean) => {
     const target = hardware.find((h) => h.id === id);
-    patchCatalog({
-      hardware: hardware.map((h) => (h.id === id ? { ...h, active } : h)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -901,13 +932,14 @@ function AppContent({
       required: draft.required,
       optionIds: [...draft.optionIds],
     };
-    patchCatalog({ optionGroups: [...optionGroups, item] });
+    patchCatalog((c) => ({ ...c, optionGroups: [...c.optionGroups, item] }));
     toast({ type: 'success', message: `✓ "${code}" creado` });
   };
 
   const updateOptionGroup = (id: string, draft: OptionGroupDraft) => {
-    patchCatalog({
-      optionGroups: optionGroups.map((g) =>
+    patchCatalog((c) => ({
+      ...c,
+      optionGroups: c.optionGroups.map((g) =>
         g.id === id
           ? {
               ...g,
@@ -919,14 +951,15 @@ function AppContent({
             }
           : g,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const deleteOptionGroup = (id: string) => {
-    patchCatalog({
-      optionGroups: optionGroups.filter((g) => g.id !== id),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      optionGroups: c.optionGroups.filter((g) => g.id !== id),
+    }));
     toast({ type: 'info', message: 'Grupo de opciones eliminado' });
   };
 
@@ -937,13 +970,17 @@ function AppContent({
       parentId: draft.parentId.trim() || undefined,
       sortOrder: Number(draft.sortOrder) || 0,
     };
-    patchCatalog({ categories: [...categories, item] });
+    patchCatalog((c) => ({
+      ...c,
+      categories: [...(c.categories ?? []), item],
+    }));
     toast({ type: 'success', message: `✓ Categoría "${item.name}" creada` });
   };
 
   const updateCategory = (id: string, draft: CategoryDraft) => {
-    patchCatalog({
-      categories: categories.map((c) =>
+    patchCatalog((cat) => ({
+      ...cat,
+      categories: (cat.categories ?? []).map((c) =>
         c.id === id
           ? {
               ...c,
@@ -953,12 +990,13 @@ function AppContent({
             }
           : c,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Categoría actualizada' });
   };
 
   const deleteCategory = (id: string) => {
-    const hasChildren = categories.some((c) => c.parentId === id);
+    const cats = workspaceRef.current?.catalog.categories ?? [];
+    const hasChildren = cats.some((c) => c.parentId === id);
     if (hasChildren) {
       toast({
         type: 'warning',
@@ -966,30 +1004,35 @@ function AppContent({
       });
       return;
     }
-    patchCatalog({
-      categories: categories.filter((c) => c.id !== id),
-      modules: modules.map((m) =>
+    patchCatalog((c) => ({
+      ...c,
+      categories: (c.categories ?? []).filter((cat) => cat.id !== id),
+      modules: c.modules.map((m) =>
         m.categoryId === id ? { ...m, categoryId: undefined } : m,
       ),
-    });
+    }));
     toast({ type: 'info', message: 'Categoría eliminada' });
   };
 
   const createModule = (draft: ModuleDraft) => {
     const item = draftToModule(newId(), draft);
-    patchCatalog({ modules: [...modules, item] });
+    patchCatalog((c) => ({ ...c, modules: [...c.modules, item] }));
     toast({ type: 'success', message: `✓ "${item.code}" creado` });
   };
 
   const updateModule = (id: string, draft: ModuleDraft) => {
-    patchCatalog({
-      modules: modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
-    });
+    patchCatalog((c) => ({
+      ...c,
+      modules: c.modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const deleteModule = (id: string) => {
-    patchCatalog({ modules: modules.filter((m) => m.id !== id) });
+    patchCatalog((c) => ({
+      ...c,
+      modules: c.modules.filter((m) => m.id !== id),
+    }));
     if (editingModuleId === id) {
       setEditingModuleId(null);
     }
@@ -1008,7 +1051,7 @@ function AppContent({
       newCode,
       nextNestedId: newId,
     });
-    patchCatalog({ modules: [...modules, copy] });
+    patchCatalog((c) => ({ ...c, modules: [...c.modules, copy] }));
     toast({ type: 'success', message: `✓ Duplicado como ${newCode}` });
   };
 
@@ -1022,13 +1065,17 @@ function AppContent({
       notes: draft.notes.trim() || undefined,
       active: true,
     };
-    patchCatalog({ customers: [...customers, item] });
+    patchCatalog((c) => ({
+      ...c,
+      customers: [...(c.customers ?? []), item],
+    }));
     toast({ type: 'success', message: `✓ Cliente "${item.name}" creado` });
   };
 
   const updateCustomer = (id: string, draft: CustomerDraft) => {
-    patchCatalog({
-      customers: customers.map((c) =>
+    patchCatalog((cat) => ({
+      ...cat,
+      customers: (cat.customers ?? []).map((c) =>
         c.id === id
           ? {
               ...c,
@@ -1040,15 +1087,18 @@ function AppContent({
             }
           : c,
       ),
-    });
+    }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };
 
   const setCustomerActive = (id: string, active: boolean) => {
     const target = customers.find((c) => c.id === id);
-    patchCatalog({
-      customers: customers.map((c) => (c.id === id ? { ...c, active } : c)),
-    });
+    patchCatalog((cat) => ({
+      ...cat,
+      customers: (cat.customers ?? []).map((c) =>
+        c.id === id ? { ...c, active } : c,
+      ),
+    }));
     if (target) {
       toast({
         type: 'info',
@@ -1083,11 +1133,13 @@ function AppContent({
 
     setWorkspace((prev) => {
       if (!prev) return prev;
-      return {
+      const next: Workspace = {
         ...prev,
         catalog: { ...prev.catalog, customers: resolved.customers },
         projects: [...prev.projects, project],
       };
+      workspaceRef.current = next;
+      return next;
     });
 
     repository.saveCatalog(catalog).catch((err) => {
@@ -1159,7 +1211,7 @@ function AppContent({
     repository.deleteProject(id).catch((err) => {
       console.error('Error al eliminar proyecto:', err);
     });
-    patchProjects(projects.filter((p) => p.id !== id));
+    patchProjects((ps) => ps.filter((p) => p.id !== id));
     if (selectedProjectId === id) {
       navigate(pathForNav('projects'));
     }
@@ -1202,8 +1254,8 @@ function AppContent({
       quantity: input.quantity,
       optionChoices: input.optionChoices,
     };
-    patchProjects(
-      projects.map((p) =>
+    patchProjects((ps) =>
+      ps.map((p) =>
         p.id === projectId
           ? { ...p, items: [...p.items, item], updatedAt: now }
           : p,
@@ -1213,8 +1265,8 @@ function AppContent({
 
   const updateProjectItem = (projectId: string, item: ProjectItem) => {
     const now = new Date().toISOString();
-    patchProjects(
-      projects.map((p) =>
+    patchProjects((ps) =>
+      ps.map((p) =>
         p.id === projectId
           ? {
               ...p,
@@ -1228,8 +1280,8 @@ function AppContent({
 
   const removeProjectItem = (projectId: string, itemId: string) => {
     const now = new Date().toISOString();
-    patchProjects(
-      projects.map((p) =>
+    patchProjects((ps) =>
+      ps.map((p) =>
         p.id === projectId
           ? {
               ...p,
@@ -1438,6 +1490,7 @@ function AppContent({
           materials={materials}
           edges={edges}
           hardware={hardware}
+          modules={modules}
           onCreate={createOptionGroup}
           onUpdate={updateOptionGroup}
           onDelete={deleteOptionGroup}

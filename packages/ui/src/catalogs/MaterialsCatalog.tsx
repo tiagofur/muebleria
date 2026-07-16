@@ -264,46 +264,49 @@ export function MaterialsCatalog({
     closeModal();
   };
 
-  const columns: CatalogColumn<MaterialBoard>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      render: (r) => (
-        <span className="catalog-row-detail__value--mono">{r.code}</span>
-      ),
-    },
-    { key: 'name', header: 'Nombre', render: (r) => r.name },
-    {
-      key: 'thickness',
-      header: 'Espesor (mm)',
-      render: (r) => r.thicknessMm,
-    },
-    {
-      key: 'dimensions',
-      header: 'Medidas (mm)',
-      render: (r) => `${r.lengthMm} × ${r.widthMm}`,
-    },
-    {
-      key: 'boardPrice',
-      header: 'Precio Hoja',
-      render: (r) => `$${r.boardPrice.toFixed(2)}`,
-    },
-    {
-      key: 'waste',
-      header: 'Merma (%)',
-      render: (r) => `${r.wastePercent}%`,
-    },
-    {
-      key: 'cost',
-      header: 'Costo/m²',
-      render: (r) => `$${r.costPerM2.toFixed(2)}`,
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      render: (r) => <ActiveBadge active={r.active} />,
-    },
-  ];
+  const columns: CatalogColumn<MaterialBoard>[] = useMemo(
+    () => [
+      {
+        key: 'code',
+        header: 'Código',
+        render: (r) => (
+          <span className="catalog-row-detail__value--mono">{r.code}</span>
+        ),
+      },
+      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'thickness',
+        header: 'Espesor (mm)',
+        render: (r) => r.thicknessMm,
+      },
+      {
+        key: 'dimensions',
+        header: 'Medidas (mm)',
+        render: (r) => `${r.lengthMm} × ${r.widthMm}`,
+      },
+      {
+        key: 'boardPrice',
+        header: 'Precio Hoja',
+        render: (r) => `$${r.boardPrice.toFixed(2)}`,
+      },
+      {
+        key: 'waste',
+        header: 'Merma (%)',
+        render: (r) => `${r.wastePercent}%`,
+      },
+      {
+        key: 'cost',
+        header: 'Costo/m²',
+        render: (r) => `$${r.costPerM2.toFixed(2)}`,
+      },
+      {
+        key: 'status',
+        header: 'Estado',
+        render: (r) => <ActiveBadge active={r.active} />,
+      },
+    ],
+    [],
+  );
 
   const isTrulyEmpty = materials.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;

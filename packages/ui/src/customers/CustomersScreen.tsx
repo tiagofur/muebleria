@@ -3,6 +3,7 @@ import type { Customer } from '@muebles/domain';
 import { Eye, EyeOff, Pencil, Plus, Users } from 'lucide-react';
 import {
 	EmptyState,
+	formatEmpty,
 	Modal,
 	SearchInput,
 	StatusChips,
@@ -132,16 +133,27 @@ export function CustomersScreen({
 		closeModal();
 	};
 
-	const columns: CatalogColumn<Customer>[] = [
-		{ key: 'name', header: 'Nombre', render: (r) => r.name },
-		{ key: 'email', header: 'Email', render: (r) => r.email || '-' },
-		{ key: 'phone', header: 'Teléfono', render: (r) => r.phone || '-' },
-		{
-			key: 'status',
-			header: 'Estado',
-			render: (r) => <ActiveBadge active={r.active} />,
-		},
-	];
+	const columns: CatalogColumn<Customer>[] = useMemo(
+		() => [
+			{ key: 'name', header: 'Nombre', render: (r) => r.name },
+			{
+				key: 'email',
+				header: 'Email',
+				render: (r) => formatEmpty(r.email),
+			},
+			{
+				key: 'phone',
+				header: 'Teléfono',
+				render: (r) => formatEmpty(r.phone),
+			},
+			{
+				key: 'status',
+				header: 'Estado',
+				render: (r) => <ActiveBadge active={r.active} />,
+			},
+		],
+		[],
+	);
 
 	const isTrulyEmpty = customers.length === 0;
 	const isFilterEmpty = !isTrulyEmpty && rows.length === 0;

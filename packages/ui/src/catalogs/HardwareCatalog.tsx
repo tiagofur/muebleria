@@ -152,31 +152,34 @@ export function HardwareCatalog({
     closeModal();
   };
 
-  const columns: CatalogColumn<Hardware>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      render: (r) => (
-        <span className="catalog-row-detail__value--mono">{r.code}</span>
-      ),
-    },
-    { key: 'name', header: 'Nombre', render: (r) => r.name },
-    {
-      key: 'unit',
-      header: 'Unidad',
-      render: (r) => UNIT_LABELS[r.unit],
-    },
-    {
-      key: 'cost',
-      header: 'Costo unit.',
-      render: (r) => r.costPerUnit,
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      render: (r) => <ActiveBadge active={r.active} />,
-    },
-  ];
+  const columns: CatalogColumn<Hardware>[] = useMemo(
+    () => [
+      {
+        key: 'code',
+        header: 'Código',
+        render: (r) => (
+          <span className="catalog-row-detail__value--mono">{r.code}</span>
+        ),
+      },
+      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'unit',
+        header: 'Unidad',
+        render: (r) => UNIT_LABELS[r.unit],
+      },
+      {
+        key: 'cost',
+        header: 'Costo unit.',
+        render: (r) => r.costPerUnit,
+      },
+      {
+        key: 'status',
+        header: 'Estado',
+        render: (r) => <ActiveBadge active={r.active} />,
+      },
+    ],
+    [],
+  );
 
   const isTrulyEmpty = hardware.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;

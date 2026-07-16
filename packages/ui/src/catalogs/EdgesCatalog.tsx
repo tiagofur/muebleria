@@ -145,31 +145,34 @@ export function EdgesCatalog({
     closeModal();
   };
 
-  const columns: CatalogColumn<EdgeBand>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      render: (r) => (
-        <span className="catalog-row-detail__value--mono">{r.code}</span>
-      ),
-    },
-    { key: 'name', header: 'Nombre', render: (r) => r.name },
-    {
-      key: 'thickness',
-      header: 'Espesor (mm)',
-      render: (r) => r.thicknessMm,
-    },
-    {
-      key: 'cost',
-      header: 'Costo/ML',
-      render: (r) => r.costPerMl,
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      render: (r) => <ActiveBadge active={r.active} />,
-    },
-  ];
+  const columns: CatalogColumn<EdgeBand>[] = useMemo(
+    () => [
+      {
+        key: 'code',
+        header: 'Código',
+        render: (r) => (
+          <span className="catalog-row-detail__value--mono">{r.code}</span>
+        ),
+      },
+      { key: 'name', header: 'Nombre', render: (r) => r.name },
+      {
+        key: 'thickness',
+        header: 'Espesor (mm)',
+        render: (r) => r.thicknessMm,
+      },
+      {
+        key: 'cost',
+        header: 'Costo/ML',
+        render: (r) => r.costPerMl,
+      },
+      {
+        key: 'status',
+        header: 'Estado',
+        render: (r) => <ActiveBadge active={r.active} />,
+      },
+    ],
+    [],
+  );
 
   const isTrulyEmpty = edges.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
