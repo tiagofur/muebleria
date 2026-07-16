@@ -539,20 +539,27 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 
 - **Ruta nav:** `projects`
 - **Path:** `packages/ui/src/projects/`
+- **Título de pantalla:** **Cotizaciones** (no “Proyectos / Cotización”)
 - **Patrón:** cards → detalle read-only → Modal **MD** (metadatos / agregar ítem)
-- **Lista:** cards con nombre, cliente, status badge, totales cuando el shell provee estimates
-- **Detalle:** ítems del proyecto, breakdown de cotización (props del shell), exports Optimizer / lista de herrajes; issues de export inline (no toast de validación)
+- **Lista:** cards con nombre, cliente, status badge, totales cuando el shell provee estimates; CTA «Nueva cotización»
+- **Detalle (workspace tool — issue #50):**
+  - **Chrome sticky** (`.workspace-chrome`): nombre, status, meta densa, precio de venta, export Optimizer (primary), herrajes, Editar/Duplicar/Eliminar
+  - Cuerpo: ítems + panel de desglose; issues de export en el panel
+  - Una sola `.btn--primary` en el chrome (export); en el panel de ítems «Agregar mueble» puede ser primary de esa región
 - **Cliente:** picker de clientes activos + acción «Nuevo cliente» (alta inline o navegación a Clientes según wiring del shell)
-- **Búsqueda / filtros:** SearchInput + chips de status de proyecto según implementación
+- **Búsqueda / filtros:** SearchInput
 - **EmptyState** cuando no hay cotizaciones
 
 ### 6.3 Muebles
 
 - **Ruta nav:** `modules`
 - **Path:** `packages/ui/src/modules/`
+- **Título de pantalla:** **Muebles**
 - **Patrón:** cards → detalle read-only → Modal **LG** (editor completo de partes / herrajes / opciones)
 - **Lista:** cards con código, nombre, conteos de partes/herrajes, estimate de precio de venta (shell)
-- **Detalle:** partes de tablero + líneas de herraje; acciones Editar / Duplicar / Eliminar
+- **Detalle (workspace tool — issue #50):**
+  - **Chrome sticky:** código, nombre, categoría/meta, precio estimado, Editar (primary), Duplicar/Eliminar
+  - Cuerpo: preview de costo + piezas + herrajes densos (sin header de página web)
 - **Preview de costo:** props del shell (`costPreview`, `previewBlocked`, `missingGroups`); sin fórmulas en UI
 - **EmptyState** + SearchInput con debounce
 

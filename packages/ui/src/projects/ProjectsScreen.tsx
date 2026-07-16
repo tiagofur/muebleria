@@ -832,7 +832,7 @@ export function ProjectsScreen({
   const renderList = (): ReactNode => (
     <>
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Proyectos / Cotización</h2>
+        <h2 className="catalog-page__title">Cotizaciones</h2>
         <div className="catalog-page__toolbar">
           <button
             type="button"
@@ -840,7 +840,7 @@ export function ProjectsScreen({
             onClick={startCreate}
           >
             <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo proyecto
+            Nueva cotización
           </button>
         </div>
       </div>
@@ -850,8 +850,8 @@ export function ProjectsScreen({
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Buscar proyectos o clientes…"
-            aria-label="Buscar proyectos"
+            placeholder="Buscar cotizaciones o clientes…"
+            aria-label="Buscar cotizaciones"
           />
         </div>
       ) : null}
@@ -859,9 +859,9 @@ export function ProjectsScreen({
       {isTrulyEmpty ? (
         <EmptyState
           icon={FileText}
-          title="No hay proyectos"
+          title="No hay cotizaciones"
           description="Creá la primera cotización para un cliente y agregá muebles del catálogo."
-          actionLabel="Nuevo proyecto"
+          actionLabel="Nueva cotización"
           onAction={startCreate}
         />
       ) : isFilterEmpty ? (
@@ -869,12 +869,12 @@ export function ProjectsScreen({
           variant="no-results"
           icon={SearchX}
           title="Sin resultados"
-          description="No hay proyectos que coincidan con la búsqueda."
+          description="No hay cotizaciones que coincidan con la búsqueda."
           actionLabel="Limpiar filtros"
           onAction={() => setSearch('')}
         />
       ) : (
-        <ul className="project-card-grid" aria-label="Lista de proyectos">
+        <ul className="project-card-grid" aria-label="Lista de cotizaciones">
           {filtered.map((project) => (
             <li key={project.id}>
               <button
@@ -914,46 +914,102 @@ export function ProjectsScreen({
     </>
   );
 
-  const renderDetail = (project: Project): ReactNode => (
+  const renderDetail = (project: Project): ReactNode => {
+    const saleEstimate = projectEstimates[project.id];
+    const chromeSale =
+      breakdown?.salePrice ??
+      (typeof saleEstimate === 'number' ? saleEstimate : null);
+
+    return (
     <div className="project-detail" data-testid="project-detail">
-      <div className="project-detail__top">
-        <div className="project-detail__identity">
+      {/* Sticky tool chrome: status + total + primary export stay visible while scrolling */}
+      <header
+        className="workspace-chrome"
+        data-testid="project-detail-chrome"
+      >
+        <div className="workspace-chrome__lead">
           <button
             type="button"
-            className="btn btn--ghost btn--small project-detail__back"
+            className="btn btn--ghost btn--small"
             onClick={backToList}
           >
             <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
-            Volver a la lista
+            Lista
           </button>
-          <div className="project-detail__title-row">
-            <h2 className="project-detail__title">{project.name}</h2>
-            <StatusBadge status={project.status} />
-          </div>
-          <p className="project-detail__client">
-            {resolveCustomerName(project.customerId, customers)}
-          </p>
-          <div className="project-detail__meta">
-            <span>
+          <div className="workspace-chrome__identity">
+            <div className="workspace-chrome__title-row">
+              <h2 className="workspace-chrome__title">{project.name}</h2>
+              <StatusBadge status={project.status} />
+            </div>
+            <p className="workspace-chrome__subtitle">
+              {resolveCustomerName(project.customerId, customers)}
+              <span className="workspace-chrome__dot" aria-hidden>
+                ·
+              </span>
               {project.items.length} mueble
               {project.items.length === 1 ? '' : 's'}
-            </span>
-            <span>{project.currency}</span>
-            <span>Margen ×{project.marginFactor.toFixed(2)}</span>
-            <span>Actualizado {formatIsoDate(project.updatedAt)}</span>
+              <span className="workspace-chrome__dot" aria-hidden>
+                ·
+              </span>
+              {project.currency}
+              <span className="workspace-chrome__dot" aria-hidden>
+                ·
+              </span>
+              Margen ×{project.marginFactor.toFixed(2)}
+            </p>
           </div>
-          {project.notes ? (
-            <p className="project-detail__notes">{project.notes}</p>
-          ) : null}
         </div>
-        <div className="project-detail__actions">
+        <div className="workspace-chrome__total" data-testid="project-detail-total">
+          <span className="workspace-chrome__total-label">Precio de venta</span>
+          <span
+            className={
+              chromeSale == null
+                ? 'workspace-chrome__total-value workspace-chrome__total-value--muted'
+                : 'workspace-chrome__total-value'
+            }
+          >
+            {chromeSale == null ? '—' : formatProjectMoney(chromeSale)}
+          </span>
+        </div>
+        <div className="workspace-chrome__actions">
           <button
             type="button"
             className="btn btn--primary"
+            disabled={!onExport || exportDisabled}
+            title={
+              onExport
+                ? 'Exportar cut-list Optimizer (.xlsx)'
+                : 'Export Optimizer no disponible en este shell'
+            }
+            onClick={() => {
+              void onExport?.();
+            }}
+            data-testid="project-chrome-export"
+          >
+            {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!onExportHardware || exportDisabled}
+            title={
+              onExportHardware
+                ? 'Exportar lista de herrajes para compras (.xlsx)'
+                : 'Export lista de herrajes no disponible en este shell'
+            }
+            onClick={() => {
+              void onExportHardware?.();
+            }}
+          >
+            {exportBusy ? 'Exportando…' : 'Lista de herrajes'}
+          </button>
+          <button
+            type="button"
+            className="btn"
             onClick={() => startEditMeta(project)}
           >
             <Pencil size={16} strokeWidth={1.5} aria-hidden />
-            Editar proyecto
+            Editar
           </button>
           {onDuplicate ? (
             <button
@@ -974,7 +1030,11 @@ export function ProjectsScreen({
             Eliminar
           </button>
         </div>
-      </div>
+      </header>
+
+      {project.notes ? (
+        <p className="project-detail__notes">{project.notes}</p>
+      ) : null}
 
       <div className="project-detail__body">
         <section
@@ -1218,39 +1278,6 @@ export function ProjectsScreen({
             )}
           </PricePreviewGate>
 
-          <div className="project-totals__exports">
-            <button
-              type="button"
-              className="btn btn--primary"
-              disabled={!onExport || exportDisabled}
-              title={
-                onExport
-                  ? 'Exportar cut-list Optimizer (.xlsx)'
-                  : 'Export Optimizer no disponible en este shell'
-              }
-              onClick={() => {
-                void onExport?.();
-              }}
-            >
-              {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={!onExportHardware || exportDisabled}
-              title={
-                onExportHardware
-                  ? 'Exportar lista de herrajes para compras (.xlsx)'
-                  : 'Export lista de herrajes no disponible en este shell'
-              }
-              onClick={() => {
-                void onExportHardware?.();
-              }}
-            >
-              {exportBusy ? 'Exportando…' : 'Lista de herrajes'}
-            </button>
-          </div>
-
           {exportBlockMessage ? (
             <p className="project-totals__export-msg" role="status">
               {exportBlockMessage}
@@ -1263,7 +1290,8 @@ export function ProjectsScreen({
         </aside>
       </div>
     </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -1274,7 +1302,7 @@ export function ProjectsScreen({
   }
 
   return (
-    <section className="catalog-page" aria-label="Proyectos y cotización">
+    <section className="catalog-page" aria-label="Cotizaciones">
       {selectedProject ? renderDetail(selectedProject) : renderList()}
 
       <Modal

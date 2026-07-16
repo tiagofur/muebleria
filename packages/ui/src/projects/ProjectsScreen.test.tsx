@@ -229,7 +229,8 @@ afterEach(() => {
 describe('ProjectsScreen F022', () => {
   it('renders project list as rich cards (not a table)', () => {
     renderScreen();
-    expect(screen.getByLabelText('Lista de proyectos')).toBeTruthy();
+    expect(screen.getByLabelText('Lista de cotizaciones')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Cotizaciones' })).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
     const card = screen.getByTestId('project-card-prj-1');
     expect(within(card).getByText('Cocina Ana')).toBeTruthy();
@@ -239,18 +240,21 @@ describe('ProjectsScreen F022', () => {
     expect(within(card).getByText('202.50')).toBeTruthy();
   });
 
-  it('opens detail on card click with back navigation', async () => {
+  it('opens detail on card click with sticky chrome and back navigation', async () => {
     const user = userEvent.setup();
     const { onSelectionChange } = renderScreen();
 
     await user.click(screen.getByTestId('project-card-prj-1'));
     expect(screen.getByTestId('project-detail')).toBeTruthy();
+    expect(screen.getByTestId('project-detail-chrome')).toBeTruthy();
+    expect(screen.getByTestId('project-detail-total')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
+    expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
 
-    await user.click(screen.getByRole('button', { name: /Volver a la lista/i }));
+    await user.click(screen.getByRole('button', { name: /^Lista$/i }));
     expect(screen.queryByTestId('project-detail')).toBeNull();
-    expect(screen.getByLabelText('Lista de proyectos')).toBeTruthy();
+    expect(screen.getByLabelText('Lista de cotizaciones')).toBeTruthy();
     expect(onSelectionChange).toHaveBeenCalledWith(null);
   });
 
@@ -258,7 +262,7 @@ describe('ProjectsScreen F022', () => {
     const user = userEvent.setup();
     const { onCreate } = renderScreen();
 
-    await user.click(screen.getByRole('button', { name: /Nuevo proyecto/i }));
+    await user.click(screen.getByRole('button', { name: /Nueva cotización/i }));
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Nuevo proyecto' })).toBeTruthy();
 
@@ -290,7 +294,7 @@ describe('ProjectsScreen F022', () => {
     const user = userEvent.setup();
     const { onCreate } = renderScreen();
 
-    await user.click(screen.getByRole('button', { name: /Nuevo proyecto/i }));
+    await user.click(screen.getByRole('button', { name: /Nueva cotización/i }));
     await user.type(screen.getByLabelText('Nombre'), 'Sin cliente');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
@@ -302,7 +306,7 @@ describe('ProjectsScreen F022', () => {
     const user = userEvent.setup();
     const { onCreate } = renderScreen();
 
-    await user.click(screen.getByRole('button', { name: /Nuevo proyecto/i }));
+    await user.click(screen.getByRole('button', { name: /Nueva cotización/i }));
     await user.type(screen.getByLabelText('Nombre'), 'Oficina');
     await user.click(screen.getByLabelText('Nuevo cliente'));
     await user.type(screen.getByLabelText('Cliente'), 'Carla Nueva');
@@ -322,7 +326,7 @@ describe('ProjectsScreen F022', () => {
     const { onUpdate } = renderScreen();
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    await user.click(screen.getByRole('button', { name: /Editar proyecto/i }));
+    await user.click(screen.getByRole('button', { name: /^Editar$/i }));
     expect(screen.getByRole('heading', { name: 'Editar proyecto' })).toBeTruthy();
 
     const clientTrigger = screen.getByLabelText('Cliente');
@@ -354,7 +358,7 @@ describe('ProjectsScreen F022', () => {
     renderScreen({ customers: inactiveCustomers });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    await user.click(screen.getByRole('button', { name: /Editar proyecto/i }));
+    await user.click(screen.getByRole('button', { name: /^Editar$/i }));
 
     const clientTrigger = screen.getByLabelText('Cliente');
     expect(clientTrigger.textContent).toMatch(/Ana López \(inactivo\)/);
@@ -398,7 +402,11 @@ describe('ProjectsScreen F022', () => {
     const totals = screen.getByLabelText('Totales de cotización');
     expect(within(totals).getByText('Precio de venta')).toBeTruthy();
     expect(within(totals).getByText('202.50')).toBeTruthy();
-    expect(within(totals).getByRole('button', { name: /Exportar Optimizer/i })).toBeTruthy();
+    // Export lives in sticky workspace chrome (issue #50)
+    expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
+    expect(screen.getByTestId('project-detail-total').textContent).toMatch(
+      /202\.50/,
+    );
   });
 
   it('shows loading status in totals when breakdownLoading', async () => {
@@ -426,7 +434,7 @@ describe('ProjectsScreen F022', () => {
     const alert = screen.getByTestId('breakdown-error');
     expect(alert.getAttribute('role')).toBe('alert');
     expect(alert.textContent).toMatch(/valores locales/i);
-    expect(screen.getByText('202.50')).toBeTruthy();
+    expect(screen.getAllByText('202.50').length).toBeGreaterThanOrEqual(1);
   });
 
   it('disables export and shows message when preview blocked', async () => {
@@ -449,9 +457,9 @@ describe('ProjectsScreen F022', () => {
 
   it('shows EmptyState when there are no projects', () => {
     renderScreen({ projects: [] });
-    expect(screen.getByText('No hay proyectos')).toBeTruthy();
+    expect(screen.getByText('No hay cotizaciones')).toBeTruthy();
     expect(
-      screen.getAllByRole('button', { name: /Nuevo proyecto/i }).length,
+      screen.getAllByRole('button', { name: /Nueva cotización/i }).length,
     ).toBeGreaterThanOrEqual(1);
   });
 
