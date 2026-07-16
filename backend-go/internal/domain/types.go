@@ -56,15 +56,17 @@ type User struct {
 }
 
 type Customer struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email,omitempty"`
-	Phone     string    `json:"phone,omitempty"`
-	Address   string    `json:"address,omitempty"`
-	Notes     string    `json:"notes,omitempty"`
-	Active    bool      `json:"active"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Email       string    `json:"email,omitempty"`
+	Phone       string    `json:"phone,omitempty"`
+	Address     string    `json:"address,omitempty"`
+	Notes       string    `json:"notes,omitempty"`
+	Active      bool      `json:"active"`
+	// OwnerUserID is the portfolio owner (F034 / OWN-*). Vendedor-scoped lists use this.
+	OwnerUserID string    `json:"owner_user_id,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type MaterialBoard struct {
@@ -183,6 +185,8 @@ type Project struct {
 	Name           string             `json:"name"`
 	CustomerID     string             `json:"customer_id"`
 	CreatedBy      string             `json:"created_by,omitempty"`
+	// OwnerUserID is the portfolio owner (F034). May differ from CreatedBy after reassignment.
+	OwnerUserID    string             `json:"owner_user_id,omitempty"`
 	Currency       string             `json:"currency"`
 	MarginFactor   float64            `json:"margin_factor"`
 	LaborFixedCost float64            `json:"labor_fixed_cost"`
