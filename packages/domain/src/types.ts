@@ -308,6 +308,10 @@ export interface ProductionCutRow {
   readonly quantity: number;
   readonly lengthMm: number;
   readonly widthMm: number;
+  /**
+   * Optimizer column D — includes part/module codes for workshop ID (F048).
+   * Format: `{partCode} · {partName} · {moduleCode}` when codes exist.
+   */
   readonly description: string;
   readonly materialName: string;
   readonly grain: Grain;
@@ -315,6 +319,12 @@ export interface ProductionCutRow {
   readonly L2: 0 | 1;
   readonly W1: 0 | 1;
   readonly W2: 0 | 1;
+  /** Original part name without codes (F048). */
+  readonly partName?: string;
+  readonly partCode?: string;
+  readonly moduleCode?: string;
+  /** Stable label key for matching piece labels (F046/F048). */
+  readonly labelRef?: string;
 }
 
 /** Aggregated hardware line for purchase-list export (EXP-08). */

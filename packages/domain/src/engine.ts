@@ -926,9 +926,28 @@ interface SortableCutRow {
 }
 
 /**
+ * Optimizer column D text with stable codes (F048 / #98).
+ * `{partCode} · {partName} · {moduleCode}` or `{partName} · {moduleCode}`.
+ */
+export function formatOptimizerPartDescription(
+  moduleCode: string,
+  partName: string,
+  partCode?: string,
+): string {
+  const name = partName.trim();
+  const mod = moduleCode.trim();
+  const code = partCode?.trim();
+  if (code) {
+    return `${code} · ${name} · ${mod}`;
+  }
+  return `${name} · ${mod}`;
+}
+
+/**
  * Expand project board parts into Optimizer cut-list rows (PRD §14).
  * Board parts only (EXP-05). Quantity = part.quantity × item.quantity (EXP-02).
  * Sorted by module code, then part code (EXP-04). Never includes hardware.
+ * Description includes part/module codes for workshop ID (F048) without new columns.
  */
 export function generateCutRows(
   project: Project,
@@ -982,19 +1001,30 @@ export function generateCutRows(
       }
 
       const edgeBits = edgeBinaryFlags(part.edges);
+      const partCode = part.code;
+      const labelRef = partCode?.trim() || `${module.code}/${part.id}`;
+      const description = formatOptimizerPartDescription(
+        module.code,
+        part.description,
+        partCode,
+      );
       sortable.push({
         moduleCode: module.code,
-        partCode: part.code ?? '',
+        partCode: partCode ?? '',
         partId: part.id,
         description: part.description,
         row: {
           quantity: part.quantity * item.quantity,
           lengthMm: part.lengthMm,
           widthMm: part.widthMm,
-          description: part.description,
+          description,
           materialName: material.name,
           grain: part.grain,
           ...edgeBits,
+          partName: part.description,
+          partCode,
+          moduleCode: module.code,
+          labelRef,
         },
       });
     }

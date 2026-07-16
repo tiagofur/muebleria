@@ -910,6 +910,24 @@
       ],
       "status": "done",
       "github_issue": 97
+    },
+    {
+      "id": "F048",
+      "phase": 9,
+      "name": "optimizer_cutlist_enrich",
+      "title": "Lista de corte Optimizer enriquecida (códigos/etiquetas)",
+      "description": "Enriquecer description del cut-list con código de pieza y módulo sin romper columnas A–J. Hoja Referencias opcional. Issue #98 / H03.",
+      "acceptance": [
+        "Columnas A–J del Optimizer intactas en layout",
+        "Descripción incluye código de pieza y módulo cuando existen",
+        "Sin herrajes en sheet de corte",
+        "Tests domain + excel actualizados"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/98"
+      ],
+      "status": "done",
+      "github_issue": 98
     }
   ]
 }
