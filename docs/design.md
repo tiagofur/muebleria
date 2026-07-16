@@ -499,9 +499,10 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 - **Contrato:** props-driven — el shell precomputa stats y lista reciente; la UI no llama al engine de dominio
 - **Contenido:**
   - 4 indicadores (vocabulario de nav): cotizaciones activas, total cotizado del mes, muebles en catálogo, materiales activos
-  - Montos: `formatDashboardMoney` → `$N.NN MXN` (default de producto)
+  - «Total cotizado del mes» con énfasis visual (`.dashboard-stat--emphasis`); los conteos quedan secundarios
+  - Montos: `formatDashboardMoney` → `$1,250.50 MXN` (es-MX + default de producto)
   - Hasta 5 cotizaciones recientes (nombre, cliente resuelto, status badge, fecha, precio venta o `—`)
-  - Lista reciente vacía (workspace no vacío): `EmptyState` con CTA «Nueva cotización»
+  - Lista reciente vacía (workspace no vacío): `EmptyState` **sin** CTA (el único primary es el header «Nueva cotización»)
   - Acciones rápidas: «Nueva cotización» (`.btn--primary`), «Nuevo mueble» (`.btn` base)
 - **Workspace vacío (issue #33):** si `modulesCount === 0` y `projectsCount === 0`, mostrar bloque **Primeros pasos** (checklist) como **única región de contenido** (sin stats ni cotizaciones recientes — ceros y empty duplican ruido):
   1. Crear material (`onNewMaterial` → nav materials + `requestCreateKey`)

@@ -269,7 +269,10 @@ export function Dashboard({
               <p className="dashboard-stat__label">Cotizaciones activas</p>
               <p className="dashboard-stat__value">{stats.activeProjects}</p>
             </li>
-            <li className="dashboard-stat" data-testid="stat-monthly-quoted">
+            <li
+              className="dashboard-stat dashboard-stat--emphasis"
+              data-testid="stat-monthly-quoted"
+            >
               <span className="dashboard-stat__icon" aria-hidden>
                 <DollarSign size={18} strokeWidth={1.5} />
               </span>
@@ -309,9 +312,7 @@ export function Dashboard({
                 variant="empty"
                 icon={FileText}
                 title="No hay cotizaciones todavía"
-                description="Creá la primera cotización para verla acá y seguir el flujo del taller."
-                actionLabel="Nueva cotización"
-                onAction={onNewProject}
+                description="Usá «Nueva cotización» arriba para crear la primera y verla acá."
               />
             ) : (
               <ul

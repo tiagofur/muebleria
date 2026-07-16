@@ -89,8 +89,11 @@ describe('Dashboard (F023)', () => {
     renderDashboard();
     expect(screen.getByTestId('stat-active-projects').textContent).toContain('3');
     expect(screen.getByTestId('stat-monthly-quoted').textContent).toContain(
-      '$1250.50 MXN',
+      '$1,250.50 MXN',
     );
+    expect(
+      screen.getByTestId('stat-monthly-quoted').className,
+    ).toContain('dashboard-stat--emphasis');
     expect(screen.getByTestId('stat-modules').textContent).toContain('12');
     expect(screen.getByTestId('stat-materials').textContent).toContain('8');
     expect(screen.getByText('Cotizaciones activas')).toBeTruthy();
@@ -123,19 +126,19 @@ describe('Dashboard (F023)', () => {
     expect(onNewModule).toHaveBeenCalledTimes(1);
   });
 
-  it('shows EmptyState when there are no recent projects', async () => {
-    const user = userEvent.setup();
-    const { onNewProject } = renderDashboard({ recentProjects: [] });
+  it('shows EmptyState without second primary when there are no recent projects', () => {
+    renderDashboard({ recentProjects: [] });
     const empty = screen.getByTestId('empty-state');
     expect(empty).toBeTruthy();
     expect(
       screen.getByText(/No hay cotizaciones todavía/i),
     ).toBeTruthy();
     expect(screen.queryByTestId('dashboard-recent-prj-1')).toBeNull();
-    const cta = empty.querySelector('button');
-    expect(cta).toBeTruthy();
-    await user.click(cta!);
-    expect(onNewProject).toHaveBeenCalledTimes(1);
+    // Header keeps the only primary; EmptyState has no CTA (no dual primary).
+    expect(empty.querySelector('button')).toBeNull();
+    expect(screen.getByTestId('dashboard-new-project').className).toContain(
+      'btn--primary',
+    );
   });
 
   it('hides getting-started when workspace has modules or projects', () => {
