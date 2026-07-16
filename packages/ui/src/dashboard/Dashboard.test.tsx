@@ -89,13 +89,13 @@ describe('Dashboard (F023)', () => {
     renderDashboard();
     expect(screen.getByTestId('stat-active-projects').textContent).toContain('3');
     expect(screen.getByTestId('stat-monthly-quoted').textContent).toContain(
-      '1250.50',
+      '$1250.50 MXN',
     );
     expect(screen.getByTestId('stat-modules').textContent).toContain('12');
     expect(screen.getByTestId('stat-materials').textContent).toContain('8');
-    expect(screen.getByText('Proyectos activos')).toBeTruthy();
+    expect(screen.getByText('Cotizaciones activas')).toBeTruthy();
     expect(screen.getByText('Total cotizado del mes')).toBeTruthy();
-    expect(screen.getByText('Módulos en catálogo')).toBeTruthy();
+    expect(screen.getByText('Muebles en catálogo')).toBeTruthy();
     expect(screen.getByText('Materiales activos')).toBeTruthy();
   });
 
@@ -106,7 +106,7 @@ describe('Dashboard (F023)', () => {
     expect(screen.getByText('Cotizaciones recientes')).toBeTruthy();
     expect(screen.getByText('Cocina Ana')).toBeTruthy();
     expect(screen.getByText('Ana López')).toBeTruthy();
-    expect(screen.getByText('202.50')).toBeTruthy();
+    expect(screen.getByText('$202.50 MXN')).toBeTruthy();
 
     await user.click(screen.getByTestId('dashboard-recent-prj-1'));
     expect(onOpenProject).toHaveBeenCalledWith('prj-1');
@@ -123,12 +123,19 @@ describe('Dashboard (F023)', () => {
     expect(onNewModule).toHaveBeenCalledTimes(1);
   });
 
-  it('shows empty message when there are no recent projects', () => {
-    renderDashboard({ recentProjects: [] });
+  it('shows EmptyState when there are no recent projects', async () => {
+    const user = userEvent.setup();
+    const { onNewProject } = renderDashboard({ recentProjects: [] });
+    const empty = screen.getByTestId('empty-state');
+    expect(empty).toBeTruthy();
     expect(
       screen.getByText(/No hay cotizaciones todavía/i),
     ).toBeTruthy();
     expect(screen.queryByTestId('dashboard-recent-prj-1')).toBeNull();
+    const cta = empty.querySelector('button');
+    expect(cta).toBeTruthy();
+    await user.click(cta!);
+    expect(onNewProject).toHaveBeenCalledTimes(1);
   });
 
   it('hides getting-started when workspace has modules or projects', () => {

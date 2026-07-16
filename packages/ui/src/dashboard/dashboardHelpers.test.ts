@@ -108,8 +108,8 @@ describe('dashboardHelpers (F023)', () => {
     expect(sumMonthlyQuotedTotal(projects, estimates, now)).toBe(350.5);
   });
 
-  it('formatDashboardMoney uses 2 decimals', () => {
-    expect(formatDashboardMoney(202.5)).toBe('202.50');
-    expect(formatDashboardMoney(0)).toBe('0.00');
+  it('formatDashboardMoney uses 2 decimals and MXN product default', () => {
+    expect(formatDashboardMoney(202.5)).toBe('$202.50 MXN');
+    expect(formatDashboardMoney(0)).toBe('$0.00 MXN');
   });
 });

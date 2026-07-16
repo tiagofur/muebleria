@@ -296,10 +296,8 @@
 .dashboard-getting-started__step-label {
   margin: 0;
   font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .dashboard-getting-started__item-title {

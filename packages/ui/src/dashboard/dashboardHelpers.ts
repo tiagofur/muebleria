@@ -93,9 +93,13 @@ export function sumMonthlyQuotedTotal(
   return total;
 }
 
-/** Format money for dashboard stats (2 decimals). */
+/**
+ * Format money for dashboard stats (2 decimals + MXN product default).
+ * Display-only; no domain conversion.
+ */
 export function formatDashboardMoney(n: number): string {
-  return n.toFixed(2);
+  const amount = Number.isFinite(n) ? n.toFixed(2) : '0.00';
+  return `$${amount} MXN`;
 }
 
 /**

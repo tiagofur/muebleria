@@ -15,7 +15,7 @@ import {
   Package,
   Plus,
 } from 'lucide-react';
-import { PageLoading } from '../common';
+import { EmptyState, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import '../projects/projects.css';
 import {
@@ -135,7 +135,7 @@ export function Dashboard({
     {
       id: 'project',
       title: 'Crear una cotización',
-      description: 'Proyecto para un cliente con opciones y precio de venta.',
+      description: 'Cotización para un cliente con opciones y precio de venta.',
       done: projectsCount > 0,
       doneLabel:
         projectsCount === 1 ? '1 cotización' : `${projectsCount} cotizaciones`,
@@ -266,7 +266,7 @@ export function Dashboard({
               <span className="dashboard-stat__icon" aria-hidden>
                 <FileText size={18} strokeWidth={1.5} />
               </span>
-              <p className="dashboard-stat__label">Proyectos activos</p>
+              <p className="dashboard-stat__label">Cotizaciones activas</p>
               <p className="dashboard-stat__value">{stats.activeProjects}</p>
             </li>
             <li className="dashboard-stat" data-testid="stat-monthly-quoted">
@@ -282,7 +282,7 @@ export function Dashboard({
               <span className="dashboard-stat__icon" aria-hidden>
                 <Package size={18} strokeWidth={1.5} />
               </span>
-              <p className="dashboard-stat__label">Módulos en catálogo</p>
+              <p className="dashboard-stat__label">Muebles en catálogo</p>
               <p className="dashboard-stat__value">{stats.modulesCount}</p>
             </li>
             <li className="dashboard-stat" data-testid="stat-materials">
@@ -305,10 +305,14 @@ export function Dashboard({
               Cotizaciones recientes
             </h3>
             {recentProjects.length === 0 ? (
-              <p className="dashboard__empty" role="status">
-                No hay cotizaciones todavía. Creá la primera con «Nueva
-                cotización».
-              </p>
+              <EmptyState
+                variant="empty"
+                icon={FileText}
+                title="No hay cotizaciones todavía"
+                description="Creá la primera cotización para verla acá y seguir el flujo del taller."
+                actionLabel="Nueva cotización"
+                onAction={onNewProject}
+              />
             ) : (
               <ul
                 className="dashboard__recent"
