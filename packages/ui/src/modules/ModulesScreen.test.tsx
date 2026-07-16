@@ -289,6 +289,23 @@ describe('ModulesScreen navigation + modals (F021)', () => {
   });
 
 
+  it('Enter on part qty moves focus to same field on next row (#39)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('module-editor-tab-parts'));
+
+    const parts = within(dialog).getByTestId('module-parts-grid');
+    const qtyInputs = within(parts).getAllByLabelText('Cantidad');
+    expect(qtyInputs.length).toBeGreaterThanOrEqual(2);
+
+    qtyInputs[0]!.focus();
+    await user.keyboard('{Enter}');
+    expect(document.activeElement).toBe(qtyInputs[1]);
+  });
+
   it('shows editor tabs General/Piezas/Herrajes/Costo in Modal LG', async () => {
     const user = userEvent.setup();
     renderScreen();

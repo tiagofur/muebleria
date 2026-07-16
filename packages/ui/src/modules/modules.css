@@ -207,6 +207,14 @@
   background: var(--surface-hover);
 }
 
+/* Grid keyboard capture (#39): stronger focus ring on numeric fields */
+.module-editor__section .catalog-form__field input:focus-visible,
+.module-editor__section .catalog-form__field select:focus-visible {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
 .module-editor__tab:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);

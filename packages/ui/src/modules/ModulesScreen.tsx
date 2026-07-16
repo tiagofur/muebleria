@@ -4,11 +4,14 @@
  */
 
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
 import type {
@@ -58,7 +61,10 @@ import {
   filterModulesByQuery,
   flattenCategoriesForSelect,
   formatModuleMoney,
+  moduleHardwareGridInputId,
+  modulePartGridInputId,
   moduleToDraft,
+  nextGridEnterTarget,
   optionGroupsForBoardParts,
   optionGroupsForHardware,
   suggestPartCode,
@@ -67,6 +73,7 @@ import {
   type CategoryDraft,
   type HardwareLineDraft,
   type ModuleDraft,
+  type ModulePartGridField,
 } from './moduleHelpers';
 import './modules.css';
 
@@ -441,21 +448,121 @@ export function ModulesScreen({
     }));
   };
 
-  const addBoardPart = () => {
-    const id =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `part-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const index = draft.boardParts.length + 1;
-    const part = emptyBoardPartDraft(id);
-    part.code = suggestPartCode(draft.code, index);
-    if (boardRoles[0]) {
-      part.optionRole = boardRoles[0].code;
+  /** After Enter adds a row, focus this field on the new part (issue #39). */
+  const pendingPartFocusRef = useRef<{
+    field: ModulePartGridField;
+  } | null>(null);
+  const pendingHwFocusRef = useRef<{ field: 'qty' } | null>(null);
+
+  const addBoardPart = useCallback(
+    (focusField?: ModulePartGridField) => {
+      const id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `part-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      if (focusField) {
+        pendingPartFocusRef.current = { field: focusField };
+      }
+      setDraft((prev) => {
+        const index = prev.boardParts.length + 1;
+        const part = emptyBoardPartDraft(id);
+        part.code = suggestPartCode(prev.code, index);
+        if (boardRoles[0]) {
+          part.optionRole = boardRoles[0].code;
+        }
+        return {
+          ...prev,
+          boardParts: [...prev.boardParts, part],
+        };
+      });
+    },
+    [boardRoles],
+  );
+
+  useEffect(() => {
+    const pending = pendingPartFocusRef.current;
+    if (!pending || draft.boardParts.length === 0) return;
+    const last = draft.boardParts[draft.boardParts.length - 1];
+    if (!last) return;
+    pendingPartFocusRef.current = null;
+    const el = document.getElementById(
+      modulePartGridInputId(last.id, pending.field),
+    ) as HTMLInputElement | null;
+    el?.focus();
+    el?.select?.();
+  }, [draft.boardParts]);
+
+  useEffect(() => {
+    const pending = pendingHwFocusRef.current;
+    if (!pending || draft.hardwareLines.length === 0) return;
+    const last = draft.hardwareLines[draft.hardwareLines.length - 1];
+    if (!last) return;
+    pendingHwFocusRef.current = null;
+    const el = document.getElementById(
+      moduleHardwareGridInputId(last.id, pending.field),
+    ) as HTMLInputElement | null;
+    el?.focus();
+    el?.select?.();
+  }, [draft.hardwareLines]);
+
+  const onPartsGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
     }
-    setDraft((prev) => ({
-      ...prev,
-      boardParts: [...prev.boardParts, part],
-    }));
+    const target = event.target as HTMLElement;
+    if (target.tagName !== 'INPUT') return;
+    const field = target.getAttribute('data-grid-field');
+    const rowId = target.getAttribute('data-grid-row');
+    if (!field || !rowId) return;
+    if (field !== 'qty' && field !== 'length' && field !== 'width') return;
+
+    event.preventDefault();
+    const rowIds = draft.boardParts.map((p) => p.id);
+    const next = nextGridEnterTarget({
+      rowIds,
+      currentRowId: rowId,
+      field,
+    });
+    if (!next) return;
+    if (next.kind === 'focus') {
+      const el = document.getElementById(
+        modulePartGridInputId(next.rowId, next.field as ModulePartGridField),
+      ) as HTMLInputElement | null;
+      el?.focus();
+      el?.select?.();
+      return;
+    }
+    addBoardPart(next.field as ModulePartGridField);
+  };
+
+  const onHardwareGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+    const target = event.target as HTMLElement;
+    if (target.tagName !== 'INPUT') return;
+    const field = target.getAttribute('data-grid-field');
+    const rowId = target.getAttribute('data-grid-row');
+    if (field !== 'qty' || !rowId) return;
+
+    event.preventDefault();
+    const rowIds = draft.hardwareLines.map((l) => l.id);
+    const next = nextGridEnterTarget({
+      rowIds,
+      currentRowId: rowId,
+      field: 'qty',
+    });
+    if (!next) return;
+    if (next.kind === 'focus') {
+      const el = document.getElementById(
+        moduleHardwareGridInputId(next.rowId, 'qty'),
+      ) as HTMLInputElement | null;
+      el?.focus();
+      el?.select?.();
+      return;
+    }
+    pendingHwFocusRef.current = { field: 'qty' };
+    addHardwareLine();
   };
 
   const removeBoardPart = (id: string) => {
@@ -846,7 +953,11 @@ export function ModulesScreen({
           <h4 className="module-editor__section-title">
             Piezas de tablero ({draft.boardParts.length})
           </h4>
-          <button type="button" className="btn btn--small" onClick={addBoardPart}>
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => addBoardPart()}
+          >
             Agregar pieza
           </button>
         </div>
@@ -855,7 +966,11 @@ export function ModulesScreen({
             Sin piezas. Agregá al menos una para cotizar.
           </p>
         ) : (
-          <div className="module-part-list">
+          <div
+            className="module-part-list"
+            data-testid="module-parts-grid"
+            onKeyDown={onPartsGridKeyDown}
+          >
             {draft.boardParts.map((part, index) => (
               <div key={part.id} className="module-part-card">
                 <div className="module-part-card__header">
@@ -870,9 +985,13 @@ export function ModulesScreen({
                 </div>
                 <div className="module-editor__grid module-editor__grid--part">
                   <div className="catalog-form__field module-editor__field--grow">
-                    <label htmlFor={`part-code-${part.id}`}>Código pieza</label>
+                    <label htmlFor={modulePartGridInputId(part.id, 'code')}>
+                      Código pieza
+                    </label>
                     <input
-                      id={`part-code-${part.id}`}
+                      id={modulePartGridInputId(part.id, 'code')}
+                      data-grid-row={part.id}
+                      data-grid-field="code"
                       value={part.code}
                       onChange={(e) =>
                         updatePart(part.id, { code: e.target.value })
@@ -881,9 +1000,13 @@ export function ModulesScreen({
                     />
                   </div>
                   <div className="catalog-form__field module-editor__field--grow">
-                    <label htmlFor={`part-desc-${part.id}`}>Descripción</label>
+                    <label htmlFor={modulePartGridInputId(part.id, 'desc')}>
+                      Descripción
+                    </label>
                     <input
-                      id={`part-desc-${part.id}`}
+                      id={modulePartGridInputId(part.id, 'desc')}
+                      data-grid-row={part.id}
+                      data-grid-field="desc"
                       value={part.description}
                       onChange={(e) =>
                         updatePart(part.id, { description: e.target.value })
@@ -892,9 +1015,13 @@ export function ModulesScreen({
                     />
                   </div>
                   <div className="catalog-form__field module-editor__field--narrow">
-                    <label htmlFor={`part-qty-${part.id}`}>Cantidad</label>
+                    <label htmlFor={modulePartGridInputId(part.id, 'qty')}>
+                      Cantidad
+                    </label>
                     <input
-                      id={`part-qty-${part.id}`}
+                      id={modulePartGridInputId(part.id, 'qty')}
+                      data-grid-row={part.id}
+                      data-grid-field="qty"
                       type="number"
                       min={1}
                       step={1}
@@ -907,9 +1034,13 @@ export function ModulesScreen({
                     />
                   </div>
                   <div className="catalog-form__field module-editor__field--narrow">
-                    <label htmlFor={`part-l-${part.id}`}>Largo (mm)</label>
+                    <label htmlFor={modulePartGridInputId(part.id, 'length')}>
+                      Largo (mm)
+                    </label>
                     <input
-                      id={`part-l-${part.id}`}
+                      id={modulePartGridInputId(part.id, 'length')}
+                      data-grid-row={part.id}
+                      data-grid-field="length"
                       type="number"
                       min={0}
                       step="any"
@@ -922,9 +1053,13 @@ export function ModulesScreen({
                     />
                   </div>
                   <div className="catalog-form__field module-editor__field--narrow">
-                    <label htmlFor={`part-w-${part.id}`}>Ancho (mm)</label>
+                    <label htmlFor={modulePartGridInputId(part.id, 'width')}>
+                      Ancho (mm)
+                    </label>
                     <input
-                      id={`part-w-${part.id}`}
+                      id={modulePartGridInputId(part.id, 'width')}
+                      data-grid-row={part.id}
+                      data-grid-field="width"
                       type="number"
                       min={0}
                       step="any"
@@ -1014,7 +1149,11 @@ export function ModulesScreen({
         {draft.hardwareLines.length === 0 ? (
           <p className="catalog-empty">Sin líneas de herraje.</p>
         ) : (
-          <div className="module-part-list">
+          <div
+            className="module-part-list"
+            data-testid="module-hardware-grid"
+            onKeyDown={onHardwareGridKeyDown}
+          >
             {draft.hardwareLines.map((line, index) => (
               <div key={line.id} className="module-part-card">
                 <div className="module-part-card__header">
@@ -1031,9 +1170,13 @@ export function ModulesScreen({
                 </div>
                 <div className="module-editor__grid">
                   <div className="catalog-form__field">
-                    <label htmlFor={`hw-mode-${line.id}`}>Modo</label>
+                    <label htmlFor={moduleHardwareGridInputId(line.id, 'mode')}>
+                      Modo
+                    </label>
                     <select
-                      id={`hw-mode-${line.id}`}
+                      id={moduleHardwareGridInputId(line.id, 'mode')}
+                      data-grid-row={line.id}
+                      data-grid-field="mode"
                       value={line.mode}
                       onChange={(e) => {
                         const mode = e.target.value as 'role' | 'fixed';
@@ -1054,9 +1197,13 @@ export function ModulesScreen({
                     </select>
                   </div>
                   <div className="catalog-form__field">
-                    <label htmlFor={`hw-qty-${line.id}`}>Cantidad</label>
+                    <label htmlFor={moduleHardwareGridInputId(line.id, 'qty')}>
+                      Cantidad
+                    </label>
                     <input
-                      id={`hw-qty-${line.id}`}
+                      id={moduleHardwareGridInputId(line.id, 'qty')}
+                      data-grid-row={line.id}
+                      data-grid-field="qty"
                       type="number"
                       min={1}
                       step={1}
