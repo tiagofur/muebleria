@@ -14,6 +14,7 @@ import {
   type ModuleCategory,
   type OptionGroup,
   type HardwarePurchaseRow,
+  type PieceLabel,
   type ProductionCutRow,
   type Project,
   type ProjectItem,
@@ -284,8 +285,28 @@ describe('domain entity types', () => {
       lineCost: 70,
     };
 
+    const pieceLabel: PieceLabel = {
+      moduleCode: 'MOD-GAB-01',
+      moduleName: 'Gabinete',
+      partCode: 'P01',
+      description: 'Costado Derecho',
+      quantity: 1,
+      lengthMm: 720,
+      widthMm: 590,
+      materialCode: 'TAB-ARA',
+      materialName: 'Arauco Blanco 15mm',
+      edgeBandCode: 'CAN-05',
+      edgeBandName: 'Canto Blanco',
+      L1: true,
+      L2: true,
+      W1: false,
+      W2: false,
+      edgeBandingInstruction: 'Encintar L1 y L2 con Canto Blanco 0.5 mm (CAN-05)',
+    };
+
     expect(bom.boardParts[0]?.materialId).toBeDefined();
     expect(bom.hardwareLines[0]?.hardwareId).toBeDefined();
+    expect(pieceLabel.edgeBandingInstruction).toContain('Encintar');
     expect(breakdown.directCost).toBe(166);
     expect(cutRow.L1).toBe(1);
     expect(purchaseRow.lineCost).toBe(70);

@@ -36,6 +36,7 @@ export type {
   QuoteBreakdown,
   ProductionCutRow,
   HardwarePurchaseRow,
+  PieceLabel,
 } from './types';
 
 export {
@@ -118,6 +119,8 @@ export {
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,
+  generatePieceLabels,
+  formatEdgeBandingInstruction,
   generateHardwareList,
   validateBoardPart,
   validateHardwareLine,
