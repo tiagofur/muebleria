@@ -12,6 +12,7 @@ import {
   Package,
   Plus,
 } from 'lucide-react';
+import { PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import '../projects/projects.css';
 import {
@@ -44,6 +45,8 @@ export type DashboardProps = {
   readonly onOpenProject: (projectId: string) => void;
   readonly onNewProject: () => void;
   readonly onNewModule: () => void;
+  /** When true, show loading instead of stats (workspace gate). */
+  readonly loading?: boolean;
 };
 
 function StatusBadge({ status }: { readonly status: ProjectStatus }): ReactNode {
@@ -63,7 +66,16 @@ export function Dashboard({
   onOpenProject,
   onNewProject,
   onNewModule,
+  loading = false,
 }: DashboardProps): ReactNode {
+  if (loading) {
+    return (
+      <section className="dashboard" aria-label="Inicio">
+        <PageLoading label="Cargando inicio…" data-testid="dashboard-loading" />
+      </section>
+    );
+  }
+
   return (
     <section className="dashboard" aria-label="Inicio">
       <header className="dashboard__header">

@@ -38,6 +38,22 @@ const baseProps: DashboardProps = {
   onNewModule: vi.fn(),
 };
 
+describe('Dashboard loading (issue #30)', () => {
+  it('shows PageLoading when loading is true', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        loading
+        onOpenProject={vi.fn()}
+        onNewProject={vi.fn()}
+        onNewModule={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('dashboard-loading')).toBeTruthy();
+    expect(screen.queryByText('Cocina Ana')).toBeNull();
+  });
+});
+
 function renderDashboard(overrides: Partial<DashboardProps> = {}) {
   const onOpenProject = overrides.onOpenProject ?? vi.fn();
   const onNewProject = overrides.onNewProject ?? vi.fn();

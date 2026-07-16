@@ -72,6 +72,7 @@ import {
   type ProjectDraft,
   CustomersScreen,
   type CustomerDraft,
+  PageLoading,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -1440,17 +1441,11 @@ function AppContent({
 
   if (!workspace || !catalog) {
     return (
-      <div
-        className="workspace-loading"
-        role="status"
-        aria-busy="true"
+      <PageLoading
+        fullPage
+        label="Cargando espacio de trabajo…"
         data-testid="workspace-loading"
-      >
-        <div className="workspace-loading__spinner" aria-hidden />
-        <p className="workspace-loading__label">
-          Cargando espacio de trabajo…
-        </p>
-      </div>
+      />
     );
   }
 

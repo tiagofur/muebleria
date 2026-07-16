@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, MinusCircle, RefreshCw, Settings2, Trash2, Users } from 'lucide-react';
-import { EmptyState } from '../common';
+import { EmptyState, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 
@@ -148,9 +148,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
       </div>
 
       {loading ? (
-        <div className="catalog-empty">
-          <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Cargando...</p>
-        </div>
+        <PageLoading label="Cargando usuarios…" data-testid="users-loading" />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Users}

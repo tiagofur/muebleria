@@ -37,14 +37,20 @@ import {
   ChevronLeft,
   Copy,
   FileText,
-  Loader2,
   Package,
   Pencil,
   Plus,
   Trash2,
 } from 'lucide-react';
-import { EmptyState, Modal, SearchInput, useDebouncedValue } from '../common';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
+import {
+  EmptyState,
+  InlineLoading,
+  Modal,
+  PageLoading,
+  SearchInput,
+  useDebouncedValue,
+} from '../common';
 import '../catalogs/catalogs.css';
 import { PricePreviewGate } from '../optionGroups/PricePreviewGate';
 import { ExportIssueList } from './ExportIssueList';
@@ -74,6 +80,8 @@ export type { ProjectDraft, AddItemDraft };
 export { ExportIssueList, type ExportIssueListProps } from './ExportIssueList';
 
 export interface ProjectsScreenProps {
+  /** When true, show section loading (workspace/async gate). */
+  readonly loading?: boolean;
   readonly projects: readonly Project[];
   readonly modules: readonly Module[];
   /** Module categories for PRJ-11 cascade filter in add-item modal. */
@@ -185,6 +193,7 @@ export function ProjectsScreen({
   projectEstimates = {},
   openProjectId = null,
   requestCreateKey = 0,
+  loading = false,
 }: ProjectsScreenProps): ReactNode {
   const metaFormId = useId();
   const addItemFormId = useId();
@@ -1131,20 +1140,10 @@ export function ProjectsScreen({
               ) : null}
             </div>
             {breakdownLoading ? (
-              <p
-                className="project-totals__loading"
-                role="status"
-                aria-busy="true"
+              <InlineLoading
+                label="Recalculando…"
                 data-testid="breakdown-loading"
-              >
-                <Loader2
-                  className="project-totals__spinner"
-                  size={16}
-                  strokeWidth={1.5}
-                  aria-hidden
-                />
-                Recalculando…
-              </p>
+              />
             ) : null}
           </div>
 
@@ -1259,6 +1258,14 @@ export function ProjectsScreen({
       </div>
     </div>
   );
+
+  if (loading) {
+    return (
+      <section className="catalog-page" aria-label="Cotizaciones">
+        <PageLoading label="Cargando cotizaciones…" data-testid="projects-loading" />
+      </section>
+    );
+  }
 
   return (
     <section className="catalog-page" aria-label="Proyectos y cotización">
