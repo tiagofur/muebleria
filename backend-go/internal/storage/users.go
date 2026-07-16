@@ -24,10 +24,9 @@ func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*doma
 		}
 		return nil, err
 	}
-	// User found but pending admin approval
-	if !u.Active {
-		return nil, domain.ErrPendingApproval
-	}
+	// Return inactive (pending) users too — login maps all failures to the same
+	// 401 so clients cannot enumerate registered/pending emails (issue #19).
+	// Callers that require an approved account must check u.Active themselves.
 	return &u, nil
 }
 

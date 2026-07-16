@@ -24,17 +24,17 @@ describe('RegisterScreen', () => {
       target: { value: 'nueva@example.com' },
     });
     fireEvent.change(screen.getByLabelText('Contraseña'), {
-      target: { value: 'secret1' },
+      target: { value: 'secret12' },
     });
     fireEvent.change(screen.getByLabelText('Confirmar contraseña'), {
-      target: { value: 'secret1' },
+      target: { value: 'secret12' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar acceso' }));
 
     expect(onRegister).toHaveBeenCalledWith(
       'Nueva Persona',
       'nueva@example.com',
-      'secret1',
+      'secret12',
     );
   });
 
@@ -51,7 +51,7 @@ describe('RegisterScreen', () => {
       target: { value: 'x@example.com' },
     });
     fireEvent.change(screen.getByLabelText('Contraseña'), {
-      target: { value: 'secret1' },
+      target: { value: 'secret12' },
     });
     fireEvent.change(screen.getByLabelText('Confirmar contraseña'), {
       target: { value: 'other' },
@@ -60,6 +60,30 @@ describe('RegisterScreen', () => {
 
     expect(onRegister).not.toHaveBeenCalled();
     expect(screen.getByRole('alert').textContent).toMatch(/no coinciden/i);
+  });
+
+  it('blocks weak passwords (policy: 8+ letter and digit)', () => {
+    const onRegister = vi.fn();
+    render(
+      <RegisterScreen onRegister={onRegister} onBack={vi.fn()} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Nombre completo'), {
+      target: { value: 'X' },
+    });
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'x@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Contraseña'), {
+      target: { value: '12345678' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirmar contraseña'), {
+      target: { value: '12345678' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar acceso' }));
+
+    expect(onRegister).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toMatch(/letra y un número/i);
   });
 
   it('uses co-located login.css tokens', () => {

@@ -32,8 +32,12 @@ export function RegisterScreen({
       setLocalError('Las contraseñas no coinciden');
       return;
     }
-    if (password.length < 6) {
-      setLocalError('La contraseña debe tener al menos 6 caracteres');
+    if (password.length < 8) {
+      setLocalError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(password) || !/\d/.test(password)) {
+      setLocalError('La contraseña debe incluir al menos una letra y un número');
       return;
     }
     try {
@@ -156,7 +160,7 @@ export function RegisterScreen({
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mín. 8 caracteres, letra y número"
                 disabled={loading}
               />
             </div>

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
@@ -25,6 +26,10 @@ type stubStore struct {
 	customerGetByIDErr    error
 	materialReturnedByID  *domain.MaterialBoard
 	materialGetByIDErr    error
+	// Auth test hooks
+	getUserByEmail        *domain.User
+	getUserByEmailErr     error
+	createUserErr         error
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -50,10 +55,10 @@ func (s *stubStore) stubNotUsed(name string) {
 
 // The remaining Store methods are not exercised by the duplicate-key tests.
 func (s *stubStore) GetUserByEmail(context.Context, string) (*domain.User, error) {
-	s.stubNotUsed("GetUserByEmail"); return nil, nil
+	return s.getUserByEmail, s.getUserByEmailErr
 }
 func (s *stubStore) CreateUser(context.Context, *domain.User) error {
-	s.stubNotUsed("CreateUser"); return nil
+	return s.createUserErr
 }
 func (s *stubStore) ListUsers(context.Context) ([]domain.User, error) {
 	s.stubNotUsed("ListUsers"); return nil, nil
@@ -302,4 +307,141 @@ func TestHandleProjectByIDUpdateNotFoundReturns404(t *testing.T) {
 	if msg := errorBody(t, rr); !strings.Contains(msg, "not found") {
 		t.Errorf("error message = %q, want it to mention 'not found'", msg)
 	}
+}
+
+// --- Issue #19 auth hardening ---
+
+func TestHandleLogin_Uniform401ForMissingUser(t *testing.T) {
+	srv := &Server{
+		Store:     &stubStore{getUserByEmailErr: errors.New("user not found")},
+		JWTSecret: "test-secret-key-for-jwt-signing-32b",
+	}
+	body := strings.NewReader(`{"email":"nope@test.com","password":"whatever1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleLogin(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (body=%s)", rr.Code, rr.Body.String())
+	}
+	msg := errorBody(t, rr)
+	if msg != "invalid email or password" {
+		t.Errorf("error = %q, want generic invalid credentials", msg)
+	}
+}
+
+func TestHandleLogin_Uniform401ForPendingUser(t *testing.T) {
+	hash, err := mustHash("goodpass1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{
+		Store: &stubStore{getUserByEmail: &domain.User{
+			ID: "u1", Email: "pending@test.com", PasswordHash: hash,
+			Name: "P", Role: domain.RoleUser, Active: false,
+		}},
+		JWTSecret: "test-secret-key-for-jwt-signing-32b",
+	}
+	body := strings.NewReader(`{"email":"pending@test.com","password":"goodpass1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleLogin(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (body=%s)", rr.Code, rr.Body.String())
+	}
+	msg := errorBody(t, rr)
+	if strings.Contains(strings.ToLower(msg), "pendiente") || strings.Contains(strings.ToLower(msg), "pending") {
+		t.Errorf("must not reveal pending status, got %q", msg)
+	}
+	if msg != "invalid email or password" {
+		t.Errorf("error = %q, want generic invalid credentials", msg)
+	}
+}
+
+func TestHandleLogin_Uniform401ForWrongPassword(t *testing.T) {
+	hash, err := mustHash("goodpass1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{
+		Store: &stubStore{getUserByEmail: &domain.User{
+			ID: "u1", Email: "ok@test.com", PasswordHash: hash,
+			Name: "O", Role: domain.RoleUser, Active: true,
+		}},
+		JWTSecret: "test-secret-key-for-jwt-signing-32b",
+	}
+	body := strings.NewReader(`{"email":"ok@test.com","password":"wrongpass9"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleLogin(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rr.Code)
+	}
+	if errorBody(t, rr) != "invalid email or password" {
+		t.Errorf("unexpected body %s", rr.Body.String())
+	}
+}
+
+func TestHandleRegister_RejectsWeakPassword(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"email":"a@b.com","password":"short","name":"A"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleRegister(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleRegister_IgnoresRoleInBody(t *testing.T) {
+	// Role field removed from RegisterRequest — extra JSON fields are ignored by decoder.
+	// Ensure self-registration cannot self-elevate via body.role.
+	var created *domain.User
+	srv := &Server{Store: &createUserCapture{created: &created}}
+	body := strings.NewReader(`{"email":"a@b.com","password":"goodpass1","name":"A","role":"admin"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleRegister(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if created == nil {
+		t.Fatal("expected CreateUser to be called")
+	}
+	if created.Role != domain.RoleUser {
+		t.Errorf("role = %q, want %q (self-reg always user)", created.Role, domain.RoleUser)
+	}
+	if created.Active {
+		t.Error("self-reg must start inactive (pending approval)")
+	}
+}
+
+// createUserCapture embeds stubStore and records the user passed to CreateUser.
+type createUserCapture struct {
+	stubStore
+	created **domain.User
+}
+
+func (c *createUserCapture) CreateUser(_ context.Context, u *domain.User) error {
+	cp := *u
+	*c.created = &cp
+	return nil
+}
+
+func mustHash(pw string) (string, error) {
+	return auth.HashPassword(pw)
 }

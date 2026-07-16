@@ -1,11 +1,14 @@
 package auth
 
 import (
+	"strings"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestHashAndCheckPassword(t *testing.T) {
-	password := "mi-contraseña-secreta"
+	password := "mi-contraseña-secreta1"
 	hash, err := HashPassword(password)
 	if err != nil {
 		t.Fatal(err)
@@ -17,6 +20,63 @@ func TestHashAndCheckPassword(t *testing.T) {
 
 	if CheckPasswordHash("incorrecta", hash) {
 		t.Error("expected password hash check to fail for incorrect password")
+	}
+}
+
+func TestHashPassword_UsesCost12(t *testing.T) {
+	hash, err := HashPassword("goodpass1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cost, err := bcrypt.Cost([]byte(hash))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cost != BcryptCost {
+		t.Errorf("bcrypt cost = %d, want %d (issue #19)", cost, BcryptCost)
+	}
+}
+
+func TestValidatePassword(t *testing.T) {
+	cases := []struct {
+		pw      string
+		wantErr bool
+	}{
+		{"short1a", true},    // 7
+		{"12345678", true},   // digits only
+		{"abcdefgh", true},   // letters only
+		{"pass1234", false},
+		{"Passw0rd!", false},
+		{"", true},
+	}
+	for _, c := range cases {
+		err := ValidatePassword(c.pw)
+		if c.wantErr && err == nil {
+			t.Errorf("ValidatePassword(%q): expected error", c.pw)
+		}
+		if !c.wantErr && err != nil {
+			t.Errorf("ValidatePassword(%q): unexpected %v", c.pw, err)
+		}
+	}
+}
+
+func TestValidatePassword_Message(t *testing.T) {
+	err := ValidatePassword("ab")
+	if err == nil || !strings.Contains(err.Error(), "8") {
+		t.Errorf("expected min-length message, got %v", err)
+	}
+	err = ValidatePassword("abcdefgh")
+	if err == nil || !strings.Contains(err.Error(), "letter") && !strings.Contains(err.Error(), "digit") {
+		t.Errorf("expected letter/digit message, got %v", err)
+	}
+}
+
+func TestDummyHash_IsValidBcrypt(t *testing.T) {
+	if DummyHash == "" {
+		t.Fatal("DummyHash not initialized")
+	}
+	if !CheckPasswordHash("dummy-password-for-timing", DummyHash) {
+		t.Error("DummyHash should verify the known dummy password")
 	}
 }
 

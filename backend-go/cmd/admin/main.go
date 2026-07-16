@@ -26,7 +26,7 @@ import (
 	"golang.org/x/term"
 )
 
-const minPasswordLen = 8
+
 
 func main() {
 	log.SetFlags(0)
@@ -77,7 +77,7 @@ func runCreate(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	if err := validatePassword(password); err != nil {
+	if err := auth.ValidatePassword(password); err != nil {
 		fatal(err)
 	}
 
@@ -129,7 +129,7 @@ func runResetPassword(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	if err := validatePassword(password); err != nil {
+	if err := auth.ValidatePassword(password); err != nil {
 		fatal(err)
 	}
 
@@ -198,13 +198,6 @@ func validateEmail(email string) error {
 	}
 	if !strings.Contains(email, "@") {
 		return fmt.Errorf("invalid email %q", email)
-	}
-	return nil
-}
-
-func validatePassword(password string) error {
-	if len(password) < minPasswordLen {
-		return fmt.Errorf("password must be at least %d characters", minPasswordLen)
 	}
 	return nil
 }
