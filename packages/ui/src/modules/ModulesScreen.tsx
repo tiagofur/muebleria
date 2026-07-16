@@ -40,6 +40,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { validateNonNegativeNumber, validateRequiredName } from '../catalogs/catalogHelpers';
+import { CatalogPicker } from '../catalogs/CatalogPicker';
 import { EmptyState, Modal, SearchInput, useDebouncedValue } from '../common';
 import '../catalogs/catalogs.css';
 import {
@@ -63,6 +64,27 @@ import {
 import './modules.css';
 
 export type { ModuleDraft, BoardPartDraft, HardwareLineDraft, CategoryDraft };
+
+type ModuleEditorTab = 'general' | 'parts' | 'hardware' | 'cost';
+
+const MODULE_EDITOR_TABS: readonly {
+  readonly id: ModuleEditorTab;
+  readonly label: string;
+}[] = [
+  { id: 'general', label: 'General' },
+  { id: 'parts', label: 'Piezas' },
+  { id: 'hardware', label: 'Herrajes' },
+  { id: 'cost', label: 'Costo' },
+];
+
+function tabForModuleValidationError(message: string): ModuleEditorTab {
+  const m = message.toLocaleLowerCase('es-UY');
+  if (m.includes('pieza') || m.includes('tablero') || m.includes('largo') || m.includes('ancho de pieza')) {
+    return 'parts';
+  }
+  if (m.includes('herraje')) return 'hardware';
+  return 'general';
+}
 
 export interface ModulesScreenProps {
   readonly modules: readonly Module[];
@@ -226,6 +248,8 @@ export function ModulesScreen({
   const [categoryDraft, setCategoryDraft] =
     useState<CategoryDraft>(emptyCategoryDraft);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [editorTab, setEditorTab] =
+    useState<ModuleEditorTab>('general');
 
   const boardRoles = useMemo(
     () => optionGroupsForBoardParts(optionGroups),
@@ -342,12 +366,14 @@ export function ModulesScreen({
     setEditingId(null);
     setDraft(emptyModuleDraft());
     setError(null);
+    setEditorTab('general');
   };
 
   const startCreate = () => {
     setEditingId(null);
     setDraft(emptyModuleDraft());
     setError(null);
+    setEditorTab('general');
     setModalOpen(true);
   };
 
@@ -355,6 +381,7 @@ export function ModulesScreen({
     setEditingId(item.id);
     setDraft(moduleToDraft(item));
     setError(null);
+    setEditorTab('general');
     setModalOpen(true);
   };
 
@@ -502,6 +529,7 @@ export function ModulesScreen({
     const err = validate();
     if (err) {
       setError(err);
+      setEditorTab(tabForModuleValidationError(err));
       return;
     }
     setError(null);
@@ -581,10 +609,55 @@ export function ModulesScreen({
       id={formId}
       className="catalog-form catalog-form--wide module-editor"
       onSubmit={handleSubmit}
+      noValidate
     >
       {error ? <p className="catalog-form__error">{error}</p> : null}
 
-      <div className="module-editor__section">
+      <div
+        className="module-editor__tabs"
+        role="tablist"
+        aria-label="Secciones del editor de mueble"
+        data-testid="module-editor-tabs"
+      >
+        {MODULE_EDITOR_TABS.map((tab) => {
+          const selected = editorTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              id={`module-editor-tab-${tab.id}`}
+              aria-selected={selected}
+              aria-controls={`module-editor-panel-${tab.id}`}
+              tabIndex={selected ? 0 : -1}
+              className={
+                selected
+                  ? 'module-editor__tab module-editor__tab--active'
+                  : 'module-editor__tab'
+              }
+              data-testid={`module-editor-tab-${tab.id}`}
+              onClick={() => setEditorTab(tab.id)}
+            >
+              {tab.label}
+              {tab.id === 'parts' && draft.boardParts.length > 0
+                ? ` (${draft.boardParts.length})`
+                : ''}
+              {tab.id === 'hardware' && draft.hardwareLines.length > 0
+                ? ` (${draft.hardwareLines.length})`
+                : ''}
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="module-editor__section"
+        role="tabpanel"
+        id="module-editor-panel-general"
+        aria-labelledby="module-editor-tab-general"
+        hidden={editorTab !== 'general'}
+        data-testid="module-editor-panel-general"
+      >
         <h4 className="module-editor__section-title">Datos generales</h4>
         <div className="module-editor__grid">
           <div className="catalog-form__field">
@@ -731,7 +804,14 @@ export function ModulesScreen({
         </fieldset>
       </div>
 
-      <div className="module-editor__section">
+      <div
+        className="module-editor__section"
+        role="tabpanel"
+        id="module-editor-panel-parts"
+        aria-labelledby="module-editor-tab-parts"
+        hidden={editorTab !== 'parts'}
+        data-testid="module-editor-panel-parts"
+      >
         <div className="module-editor__section-header">
           <h4 className="module-editor__section-title">
             Piezas de tablero ({draft.boardParts.length})
@@ -881,7 +961,14 @@ export function ModulesScreen({
         )}
       </div>
 
-      <div className="module-editor__section">
+      <div
+        className="module-editor__section"
+        role="tabpanel"
+        id="module-editor-panel-hardware"
+        aria-labelledby="module-editor-tab-hardware"
+        hidden={editorTab !== 'hardware'}
+        data-testid="module-editor-panel-hardware"
+      >
         <div className="module-editor__section-header">
           <h4 className="module-editor__section-title">
             Herrajes ({draft.hardwareLines.length})
@@ -974,26 +1061,26 @@ export function ModulesScreen({
                       </select>
                     </div>
                   ) : (
-                    <div className="catalog-form__field">
-                      <label htmlFor={`hw-id-${line.id}`}>Herraje fijo</label>
-                      <select
-                        id={`hw-id-${line.id}`}
-                        value={line.hardwareId}
-                        onChange={(e) =>
-                          updateLine(line.id, {
-                            hardwareId: e.target.value,
-                            optionRole: line.optionRole || 'FIXED',
-                          })
-                        }
-                      >
-                        <option value="">Seleccionar herraje…</option>
-                        {activeHardware.map((h) => (
-                          <option key={h.id} value={h.id}>
-                            {h.code} — {h.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <CatalogPicker
+                      id={`hw-id-${line.id}`}
+                      label="Herraje fijo"
+                      placeholder="Seleccionar herraje…"
+                      searchPlaceholder="Buscar herraje…"
+                      value={line.hardwareId}
+                      onChange={(hardwareId) =>
+                        updateLine(line.id, {
+                          hardwareId,
+                          optionRole: line.optionRole || 'FIXED',
+                        })
+                      }
+                      items={activeHardware.map((h) => ({
+                        id: h.id,
+                        code: h.code,
+                        name: h.name,
+                        active: h.active,
+                      }))}
+                      data-testid={`module-hardware-picker-${line.id}`}
+                    />
                   )}
                   <div className="catalog-form__field">
                     <label htmlFor={`hw-desc-${line.id}`}>
@@ -1016,21 +1103,29 @@ export function ModulesScreen({
         )}
       </div>
 
-      {editingId ? (
-        <CostPreviewPanel
-          costPreview={costPreview}
-          previewBlocked={previewBlocked}
-          missingGroups={missingGroups}
-          groupLabels={groupLabels}
-        />
-      ) : (
-        <CostPreviewPanel
-          costPreview={null}
-          previewBlocked={false}
-          missingGroups={[]}
-          allowEmptyHint
-        />
-      )}
+      <div
+        role="tabpanel"
+        id="module-editor-panel-cost"
+        aria-labelledby="module-editor-tab-cost"
+        hidden={editorTab !== 'cost'}
+        data-testid="module-editor-panel-cost"
+      >
+        {editingId ? (
+          <CostPreviewPanel
+            costPreview={costPreview}
+            previewBlocked={previewBlocked}
+            missingGroups={missingGroups}
+            groupLabels={groupLabels}
+          />
+        ) : (
+          <CostPreviewPanel
+            costPreview={null}
+            previewBlocked={false}
+            missingGroups={[]}
+            allowEmptyHint
+          />
+        )}
+      </div>
     </form>
   );
 

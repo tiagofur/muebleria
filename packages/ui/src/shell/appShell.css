@@ -282,3 +282,49 @@
     display: none;
   }
 }
+
+/* Session identity (issue #29) */
+.app-topbar__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 14rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+}
+
+.app-topbar__identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--leading-tight);
+}
+
+.app-topbar__identity-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-topbar__identity-role {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+@media (max-width: 640px) {
+  .app-topbar__identity-text {
+    display: none;
+  }
+
+  .app-topbar__identity {
+    max-width: none;
+    padding: var(--space-2);
+  }
+}

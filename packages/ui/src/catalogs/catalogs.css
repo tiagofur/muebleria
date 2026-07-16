@@ -436,10 +436,16 @@
 }
 
 .catalog-picker {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   font-family: var(--font-sans);
+  min-width: 0;
+}
+
+.catalog-picker--grow {
+  flex: 1 1 auto;
 }
 
 .catalog-picker label {
@@ -448,12 +454,188 @@
   color: var(--text-secondary);
 }
 
-.catalog-picker select {
+.catalog-picker__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
   font: inherit;
+  text-align: left;
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-input);
   color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-colors);
   min-width: 12rem;
 }
+
+.catalog-picker__trigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.catalog-picker__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-color: var(--border-brand);
+}
+
+.catalog-picker__trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.catalog-picker__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-picker__value--placeholder {
+  color: var(--text-secondary);
+}
+
+.catalog-picker__chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.catalog-picker__popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  min-width: min(100%, 18rem);
+  max-width: 28rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.catalog-picker__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-2);
+  gap: var(--space-2);
+}
+
+.catalog-picker__search-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.catalog-picker__search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  padding: var(--space-1) 0;
+}
+
+.catalog-picker__search-input:focus {
+  outline: none;
+}
+
+.catalog-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.catalog-picker__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.catalog-picker__option--active {
+  background: var(--surface-hover);
+}
+
+.catalog-picker__option--selected {
+  color: var(--text-brand);
+  font-weight: var(--weight-medium);
+}
+
+.catalog-picker__option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.catalog-picker__option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-picker__option-sub {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-picker__check {
+  flex-shrink: 0;
+  color: var(--text-brand);
+}
+
+.catalog-picker__empty {
+  padding: var(--space-3);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.catalog-picker__clear {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition-colors);
+}
+
+.catalog-picker__clear:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.catalog-form__inline-actions .catalog-picker {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.catalog-form__inline-actions .catalog-picker__trigger {
+  min-width: 0;
+}
+

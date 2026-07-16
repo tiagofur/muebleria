@@ -151,6 +151,51 @@
   font-style: italic;
 }
 
+
+/* Module editor tabs (issue #28) */
+.module-editor__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+}
+
+.module-editor__tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  white-space: nowrap;
+}
+
+.module-editor__tab:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.module-editor__tab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.module-editor__tab--active {
+  background: var(--surface-card);
+  color: var(--text-brand);
+  box-shadow: var(--shadow-sm);
+  font-weight: var(--weight-semibold);
+}
+
 .module-editor {
   display: flex;
   flex-direction: column;

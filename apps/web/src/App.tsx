@@ -1399,13 +1399,6 @@ function AppContent({
     [navigate, showAdminUsers],
   );
 
-  const sessionLabel =
-    session === 'auth'
-      ? authUser?.role === 'admin'
-        ? 'Admin'
-        : 'Sesión'
-      : 'Invitado';
-
   // Loading / recover gate AFTER all hooks — never return early before useCallback/useMemo.
   if (workspaceLoadError) {
     return (
@@ -1466,8 +1459,12 @@ function AppContent({
       activeId={navId}
       onNavigate={onNavigate}
       hrefForNav={pathForNav}
-      meta={`Semilla plantilla · schema v${workspace.schemaVersion} · ${sessionLabel}`}
+      meta={`schema v${workspace.schemaVersion}`}
       onLogout={onLogout}
+      sessionMode={session}
+      user={
+        authUser ? { email: authUser.email, role: authUser.role } : null
+      }
       showAdminUsers={showAdminUsers}
     >
       {navId === 'home' ? (
