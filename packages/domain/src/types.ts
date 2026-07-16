@@ -173,6 +173,23 @@ export interface Module {
   readonly notes?: string;
 }
 
+/**
+ * Reusable engineering **body** (cuerpo) — F049 / #99 / H04.
+ * Composed later into a Module with components + measure presets (H05–H07).
+ * Not used in quotation resolution until a module references it.
+ */
+export interface Structure {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  /** Documented outer size of the body (not yet parametric). */
+  readonly externalDims?: ExternalDims;
+  readonly boardParts: readonly BoardPart[];
+  readonly notes?: string;
+  /** Soft-delete / hide from pickers. Default true when omitted. */
+  readonly active?: boolean;
+}
+
 // --- Project / quotation ---
 
 export interface ProjectItem {
@@ -217,6 +234,11 @@ export interface Catalog {
   readonly hardware: readonly Hardware[];
   readonly optionGroups: readonly OptionGroup[];
   readonly modules: readonly Module[];
+  /**
+   * Engineering bodies (F049). Omitted/undefined treated as [] for older workspaces.
+   * Does not affect module resolution until modules compose structures (H07).
+   */
+  readonly structures?: readonly Structure[];
   /** Hierarchical module categories (MOD-09). Empty/omitted = no taxonomy. */
   readonly categories?: readonly ModuleCategory[];
   readonly customers?: readonly Customer[];

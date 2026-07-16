@@ -928,6 +928,26 @@
       ],
       "status": "done",
       "github_issue": 98
+    },
+    {
+      "id": "F049",
+      "phase": 10,
+      "name": "structures_reusable_bodies",
+      "title": "Estructuras: cuerpos reutilizables en Ingeniería",
+      "description": "Entidad Estructura (cuerpo) con piezas de tablero y roles. CRUD ingeniería. Dual path con módulos fijos. Issue #99 / H04.",
+      "acceptance": [
+        "Crear/editar/listar Estructura en Ingeniería",
+        "Datos en domain + backend",
+        "Validaciones de piezas (medidas, roles, cantos)",
+        "Tests de dominio",
+        "Módulos fijos siguen funcionando"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/99",
+        "docs/prd.md §6.7"
+      ],
+      "status": "done",
+      "github_issue": 99
     }
   ]
 }

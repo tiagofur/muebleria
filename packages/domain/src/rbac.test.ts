@@ -64,6 +64,14 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('produccion').has('projects')).toBe(true);
   });
 
+  it('F049: structures nav only for ingeniero/admin (not vendedor)', () => {
+    expect(navIdsForRole('ingeniero').has('structures')).toBe(true);
+    expect(navIdsForRole('admin').has('structures')).toBe(true);
+    expect(navIdsForRole('vendedor').has('structures')).toBe(false);
+    expect(navIdsForRole('produccion').has('structures')).toBe(false);
+    expect(navIdsForRole(null).has('structures')).toBe(true);
+  });
+
   it('labels roles in Spanish de taller', () => {
     expect(roleLabelEs('gerente_ventas')).toBe('Gerente de ventas');
     expect(roleLabelEs('user')).toBe('Sin puesto');

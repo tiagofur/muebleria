@@ -74,6 +74,13 @@ type Store interface {
 	UpdateModule(ctx context.Context, id string, m *domain.Module) error
 	DeleteModule(ctx context.Context, id string) error
 
+	// Catalog: structures (F049 cuerpos)
+	ListStructures(ctx context.Context) ([]domain.Structure, error)
+	GetStructureByID(ctx context.Context, id string) (*domain.Structure, error)
+	CreateStructure(ctx context.Context, st *domain.Structure) error
+	UpdateStructure(ctx context.Context, id string, st *domain.Structure) error
+	DeleteStructure(ctx context.Context, id string) error
+
 	// Projects
 	ListProjects(ctx context.Context) ([]domain.Project, error)
 	GetProjectByID(ctx context.Context, id string) (*domain.Project, error)

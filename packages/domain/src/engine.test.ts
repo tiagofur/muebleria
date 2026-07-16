@@ -30,6 +30,7 @@ import {
   transitionProjectStatus,
   validateCatalogEntityCodes,
   validateModule,
+  validateStructure,
 } from './engine';
 import { ResolutionError, ValidationError } from './errors';
 import type {
@@ -883,6 +884,57 @@ describe('validations VAL-01..07 (engine-time)', () => {
     ).toThrow(ValidationError);
     expect(() =>
       validateModule(miniModule({ code: 'OK', name: '' })),
+    ).toThrow(ValidationError);
+  });
+
+  it('F049: validateStructure accepts cuerpo with board parts', () => {
+    expect(() =>
+      validateStructure({
+        id: 'str-1',
+        code: 'EST-GAB-CUERPO',
+        name: 'Cuerpo gabinete',
+        boardParts: [
+          {
+            id: 'sp1',
+            code: 'P01',
+            description: 'Lateral izquierdo',
+            quantity: 1,
+            lengthMm: 720,
+            widthMm: 560,
+            edges: ALL_EDGES,
+            optionRole: 'INTERIOR',
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('F049: validateStructure rejects empty parts and bad dims', () => {
+    expect(() =>
+      validateStructure({
+        id: 'str-1',
+        code: 'EST-X',
+        name: 'X',
+        boardParts: [],
+      }),
+    ).toThrow(ValidationError);
+    expect(() =>
+      validateStructure({
+        id: 'str-1',
+        code: 'EST-X',
+        name: 'X',
+        boardParts: [
+          {
+            id: 'sp1',
+            description: 'Lateral',
+            quantity: 1,
+            lengthMm: 0,
+            widthMm: 100,
+            edges: ALL_EDGES,
+            optionRole: 'INTERIOR',
+          },
+        ],
+      }),
     ).toThrow(ValidationError);
   });
 

@@ -14,6 +14,7 @@ import {
   FileText,
   LayoutDashboard,
   Layers,
+  LayoutGrid,
   LogOut,
   Menu,
   Minus,
@@ -42,6 +43,7 @@ export type AppNavId =
   | 'projects'
   | 'customers'
   | 'modules'
+  | 'structures'
   | 'materials'
   | 'edges'
   | 'hardware'
@@ -128,6 +130,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'projects', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
       { id: 'modules', label: 'Muebles', icon: Package },
+      { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
     ],
   },
   {

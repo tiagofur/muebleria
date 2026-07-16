@@ -173,7 +173,7 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
     const rows = generateCutRows(demo, seed.catalog);
 
     expect(rows).toHaveLength(8);
-    expect(rows.map((r) => r.description)).toEqual([
+    expect(rows.map((r) => r.partName)).toEqual([
       'Costado Derecho',
       'Costado Izquierdo',
       'Respaldo Gabinete',

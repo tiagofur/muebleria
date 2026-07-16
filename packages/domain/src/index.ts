@@ -24,6 +24,7 @@ export type {
   HardwareLine,
   ExternalDims,
   Module,
+  Structure,
   ProjectItem,
   Project,
   QuotePriceSnapshot,
@@ -130,6 +131,7 @@ export {
   validateBoardPart,
   validateHardwareLine,
   validateModule,
+  validateStructure,
   validateCatalogEntityCodes,
 } from './engine';
 

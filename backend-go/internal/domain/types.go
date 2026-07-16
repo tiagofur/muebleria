@@ -181,6 +181,22 @@ type Module struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+// Structure is a reusable engineering body (cuerpo) — F049 / #99.
+// Not composed into modules until H07; dual path keeps fixed modules working.
+type Structure struct {
+	ID         string      `json:"id"`
+	Code       string      `json:"code"`
+	Name       string      `json:"name"`
+	WidthMm    int         `json:"width_mm,omitempty"`
+	HeightMm   int         `json:"height_mm,omitempty"`
+	DepthMm    int         `json:"depth_mm,omitempty"`
+	BoardParts []BoardPart `json:"board_parts"`
+	Notes      string      `json:"notes,omitempty"`
+	Active     bool        `json:"active"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+}
+
 type ProjectItem struct {
 	ID            string            `json:"id"`
 	ModuleID      string            `json:"module_id"`
@@ -234,6 +250,7 @@ type Catalog struct {
 	Hardware     []Hardware       `json:"hardware"`
 	OptionGroups []OptionGroup    `json:"option_groups"`
 	Modules      []Module         `json:"modules"`
+	Structures   []Structure      `json:"structures,omitempty"`
 	Categories   []ModuleCategory `json:"categories,omitempty"`
 }
 

@@ -1,0 +1,754 @@
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
+import type { Structure, OptionGroup } from '@muebles/domain';
+import { Eye, EyeOff, Layers, Pencil, Plus, SearchX, Trash2, LayoutGrid, Check } from 'lucide-react';
+import {
+  EmptyState,
+  Modal,
+  SearchInput,
+  StatusChips,
+  useDebouncedValue,
+  useRoutableEntitySelection,
+} from '../common';
+import {
+  filterCatalogItems,
+  type CatalogStatusFilter,
+  validateUniqueCode,
+} from '../catalogs';
+import {
+  boardPartToDraft,
+  emptyBoardPartDraft,
+  edgesFromFlags,
+  optionGroupsForBoardParts,
+  suggestPartCode,
+  type BoardPartDraft,
+} from '../modules';
+import './structures.css';
+
+export interface StructureDraft {
+  code: string;
+  name: string;
+  widthMm: number;
+  heightMm: number;
+  depthMm: number;
+  boardParts: BoardPartDraft[];
+  notes: string;
+  active: boolean;
+}
+
+const emptyDraft = (): StructureDraft => ({
+  code: '',
+  name: '',
+  widthMm: 0,
+  heightMm: 0,
+  depthMm: 0,
+  boardParts: [],
+  notes: '',
+  active: true,
+});
+
+function toDraft(item: Structure): StructureDraft {
+  return {
+    code: item.code,
+    name: item.name,
+    widthMm: item.externalDims?.width ?? 0,
+    heightMm: item.externalDims?.height ?? 0,
+    depthMm: item.externalDims?.depth ?? 0,
+    notes: item.notes ?? '',
+    active: item.active !== false,
+    boardParts: item.boardParts.map((p) => boardPartToDraft(p)),
+  };
+}
+
+export interface StructuresScreenProps {
+  readonly structures: readonly Structure[];
+  readonly optionGroups: readonly OptionGroup[];
+  readonly onCreate: (draft: StructureDraft) => void;
+  readonly onUpdate: (id: string, draft: StructureDraft) => void;
+  readonly onDelete: (id: string) => void;
+  readonly onDeactivate: (id: string) => void;
+  readonly onReactivate: (id: string) => void;
+  /** URL handoff: `/structures/:id` expands that row. */
+  readonly openStructureId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
+  /** Role matrix: can current user mutate structures? */
+  readonly canMutate?: boolean;
+}
+
+export function StructuresScreen({
+  structures,
+  optionGroups,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onDeactivate,
+  onReactivate,
+  openStructureId = null,
+  onSelectionChange,
+  canMutate = true,
+}: StructuresScreenProps): ReactNode {
+  const formId = useId();
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search);
+  const [status, setStatus] = useState<CatalogStatusFilter>('active');
+
+  const structureIds = useMemo(() => structures.map((s) => s.id), [structures]);
+  const { selectedId: expandedId, setSelectedId, toggleSelectedId } = useRoutableEntitySelection({
+    openEntityId: openStructureId,
+    onSelectionChange,
+    knownIds: structureIds,
+  });
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<StructureDraft>(emptyDraft);
+  const [error, setError] = useState<string | null>(null);
+
+  // Deletion confirm state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const boardRoles = useMemo(
+    () => optionGroupsForBoardParts(optionGroups),
+    [optionGroups],
+  );
+
+  const normalizedStructures = useMemo(() => {
+    return structures.map((s) => ({
+      ...s,
+      active: s.active !== false,
+    }));
+  }, [structures]);
+
+  const rows = useMemo(
+    () =>
+      filterCatalogItems(normalizedStructures, {
+        status,
+        query: debouncedSearch,
+      }),
+    [normalizedStructures, status, debouncedSearch],
+  );
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+    setDraft(emptyDraft());
+    setError(null);
+  };
+
+  const handleCreateNew = () => {
+    setDraft(emptyDraft());
+    setEditingId(null);
+    setError(null);
+    setModalOpen(true);
+  };
+
+  const handleEdit = (item: Structure) => {
+    setDraft(toDraft(item));
+    setEditingId(item.id);
+    setError(null);
+    setModalOpen(true);
+  };
+
+  const addBoardPart = () => {
+    const id = `part-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setDraft((prev) => {
+      const index = prev.boardParts.length + 1;
+      const part = emptyBoardPartDraft(id);
+      part.code = suggestPartCode(prev.code || 'EST', index);
+      if (boardRoles[0]) {
+        part.optionRole = boardRoles[0].code;
+      }
+      return {
+        ...prev,
+        boardParts: [...prev.boardParts, part],
+      };
+    });
+  };
+
+  const removeBoardPart = (id: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      boardParts: prev.boardParts.filter((p) => p.id !== id),
+    }));
+  };
+
+  const updatePart = (id: string, patch: Partial<BoardPartDraft>) => {
+    setDraft((prev) => ({
+      ...prev,
+      boardParts: prev.boardParts.map((p) =>
+        p.id === id ? { ...p, ...patch } : p,
+      ),
+    }));
+  };
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const codeError = validateUniqueCode(
+      draft.code,
+      normalizedStructures,
+      editingId ?? undefined,
+    );
+    if (codeError) {
+      setError(codeError);
+      return;
+    }
+
+    if (draft.boardParts.length === 0) {
+      setError('Una estructura debe tener al menos una pieza.');
+      return;
+    }
+
+    for (const p of draft.boardParts) {
+      if (!p.code.trim()) {
+        setError('Todas las piezas deben tener un código.');
+        return;
+      }
+      if (!p.description.trim()) {
+        setError('Todas las piezas deben tener una descripción.');
+        return;
+      }
+      if (p.quantity <= 0) {
+        setError('La cantidad de cada pieza debe ser mayor a 0.');
+        return;
+      }
+      if (p.lengthMm <= 0 || p.widthMm <= 0) {
+        setError('El largo y ancho de cada pieza debe ser mayor a 0.');
+        return;
+      }
+      if (!p.optionRole) {
+        setError('Todas las piezas deben tener asignado un Rol (grupo de opciones).');
+        return;
+      }
+    }
+
+    if (editingId) {
+      onUpdate(editingId, draft);
+    } else {
+      onCreate(draft);
+    }
+    closeModal();
+  };
+
+  const confirmDelete = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const handleDelete = () => {
+    if (deleteConfirmId) {
+      onDelete(deleteConfirmId);
+      if (expandedId === deleteConfirmId) {
+        setSelectedId(null);
+      }
+      setDeleteConfirmId(null);
+    }
+  };
+
+  return (
+    <div className="catalog-screen" data-testid="structures-screen">
+      <header className="catalog-screen__header">
+        <div>
+          <h1 className="catalog-screen__title">Estructuras</h1>
+          <p className="catalog-screen__subtitle">
+            Cuerpos de ingeniería reutilizables para el taller
+          </p>
+        </div>
+        {canMutate && (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={handleCreateNew}
+            data-testid="create-structure-btn"
+          >
+            <Plus size={16} /> Nueva Estructura
+          </button>
+        )}
+      </header>
+
+      <div className="catalog-screen__filters">
+        <div className="catalog-screen__search-wrapper">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por código o nombre…"
+            data-testid="structure-search"
+          />
+        </div>
+        <StatusChips
+          value={status}
+          onChange={setStatus}
+          data-testid="structure-status-chips"
+        />
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState
+          icon={LayoutGrid}
+          title={search ? 'No se encontraron estructuras' : 'Sin estructuras'}
+          description={
+            search
+              ? 'Probá cambiando el texto de búsqueda o el filtro de estado.'
+              : 'Comenzá agregando una estructura de ingeniería reutilizable.'
+          }
+          actionLabel={canMutate && !search ? 'Crear estructura' : undefined}
+          onAction={canMutate && !search ? handleCreateNew : undefined}
+          variant={search ? 'no-results' : 'empty'}
+        />
+      ) : (
+        <div className="structure-cards-grid" data-testid="structure-list">
+          {rows.map((item) => {
+            const isExpanded = expandedId === item.id;
+            const dims =
+              item.externalDims &&
+              (item.externalDims.width > 0 ||
+                item.externalDims.height > 0 ||
+                item.externalDims.depth > 0)
+                ? `${item.externalDims.width} × ${item.externalDims.height} × ${item.externalDims.depth} mm`
+                : '—';
+
+            return (
+              <div
+                key={item.id}
+                className={`structure-card ${!item.active ? 'structure-card--inactive' : ''} ${isExpanded ? 'structure-card--expanded' : ''}`}
+                data-testid={`structure-card-${item.code}`}
+              >
+                <div
+                  className="structure-card__summary"
+                  onClick={() => toggleSelectedId(item.id)}
+                >
+                  <div className="structure-card__meta">
+                    <span className="structure-card__code font-mono">{item.code}</span>
+                    {!item.active && (
+                      <span className="badge badge--inactive ml-2">Inactivo</span>
+                    )}
+                  </div>
+                  <h3 className="structure-card__name">{item.name}</h3>
+                  <div className="structure-card__details-row">
+                    <span>
+                      Dimensiones: <strong>{dims}</strong>
+                    </span>
+                    <span>
+                      Piezas: <strong>{item.boardParts.length}</strong>
+                    </span>
+                  </div>
+                  {item.notes && (
+                    <p className="structure-card__notes-preview">{item.notes}</p>
+                  )}
+                </div>
+
+                {isExpanded && (
+                  <div className="structure-card__expanded-content">
+                    <h4 className="structure-expanded-title">Piezas del cuerpo</h4>
+                    <div className="table-responsive">
+                      <table className="catalog-table">
+                        <thead>
+                          <tr>
+                            <th>Código</th>
+                            <th>Descripción</th>
+                            <th className="text-right">Cant</th>
+                            <th className="text-right">Largo (mm)</th>
+                            <th className="text-right">Ancho (mm)</th>
+                            <th>Rol / Grupo</th>
+                            <th>Cantos</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {item.boardParts.map((p) => {
+                            const edges = p.edges
+                              .filter((e) => e.enabled)
+                              .map((e) => e.side)
+                              .join(', ');
+                            return (
+                              <tr key={p.id}>
+                                <td className="font-mono text-small">{p.code || '—'}</td>
+                                <td>{p.description}</td>
+                                <td className="text-right">{p.quantity}</td>
+                                <td className="text-right font-mono">{p.lengthMm}</td>
+                                <td className="text-right font-mono">{p.widthMm}</td>
+                                <td className="text-small">{p.optionRole}</td>
+                                <td className="text-small text-muted">{edges || 'Ninguno'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {canMutate && (
+                      <div className="structure-card__actions">
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--small"
+                          onClick={() => handleEdit(item)}
+                          data-testid={`edit-btn-${item.code}`}
+                        >
+                          <Pencil size={14} className="mr-1" /> Editar
+                        </button>
+                        {item.active ? (
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--small"
+                            onClick={() => onDeactivate(item.id)}
+                            data-testid={`deactivate-btn-${item.code}`}
+                          >
+                            <EyeOff size={14} className="mr-1" /> Desactivar
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--small"
+                            onClick={() => onReactivate(item.id)}
+                            data-testid={`reactivate-btn-${item.code}`}
+                          >
+                            <Eye size={14} className="mr-1" /> Activar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn--danger btn--small"
+                          onClick={() => confirmDelete(item.id)}
+                          data-testid={`delete-btn-${item.code}`}
+                        >
+                          <Trash2 size={14} className="mr-1" /> Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Main Creation/Edit Modal */}
+      <Modal
+        open={modalOpen}
+        title={editingId ? 'Editar Estructura' : 'Nueva Estructura'}
+        onClose={closeModal}
+        size="lg"
+        data-testid="structure-modal"
+      >
+          <form id={formId} onSubmit={onSubmit} className="catalog-form">
+            {error && (
+              <div className="alert alert--danger mb-4" data-testid="form-error">
+                {error}
+              </div>
+            )}
+
+            <div className="module-editor__grid">
+              <div className="catalog-form__field">
+                <label htmlFor={`${formId}-code`}>Código de Estructura</label>
+                <input
+                  id={`${formId}-code`}
+                  value={draft.code}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, code: e.target.value }))
+                  }
+                  placeholder="Ej: EST-GAB-720"
+                  required
+                  disabled={!!editingId}
+                  data-testid="input-code"
+                />
+              </div>
+
+              <div className="catalog-form__field">
+                <label htmlFor={`${formId}-name`}>Nombre</label>
+                <input
+                  id={`${formId}-name`}
+                  value={draft.name}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="Ej: Cuerpo Gabinete Bajo"
+                  required
+                  data-testid="input-name"
+                />
+              </div>
+            </div>
+
+            <div className="module-editor__grid">
+              <div className="catalog-form__field">
+                <label htmlFor={`${formId}-width`}>Ancho Externo (mm)</label>
+                <input
+                  id={`${formId}-width`}
+                  type="number"
+                  min={0}
+                  value={draft.widthMm || ''}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      widthMm: Math.max(0, Number(e.target.value)),
+                    }))
+                  }
+                  placeholder="Opcional"
+                  data-testid="input-width"
+                />
+              </div>
+
+              <div className="catalog-form__field">
+                <label htmlFor={`${formId}-height`}>Alto Externo (mm)</label>
+                <input
+                  id={`${formId}-height`}
+                  type="number"
+                  min={0}
+                  value={draft.heightMm || ''}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      heightMm: Math.max(0, Number(e.target.value)),
+                    }))
+                  }
+                  placeholder="Opcional"
+                  data-testid="input-height"
+                />
+              </div>
+
+              <div className="catalog-form__field">
+                <label htmlFor={`${formId}-depth`}>Profundidad (mm)</label>
+                <input
+                  id={`${formId}-depth`}
+                  type="number"
+                  min={0}
+                  value={draft.depthMm || ''}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      depthMm: Math.max(0, Number(e.target.value)),
+                    }))
+                  }
+                  placeholder="Opcional"
+                  data-testid="input-depth"
+                />
+              </div>
+            </div>
+
+            <div className="catalog-form__field">
+              <label htmlFor={`${formId}-notes`}>Notas / Descripción técnica</label>
+              <textarea
+                id={`${formId}-notes`}
+                rows={2}
+                value={draft.notes}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, notes: e.target.value }))
+                }
+                placeholder="Detalles sobre el armado, cantos especiales..."
+                data-testid="input-notes"
+              />
+            </div>
+
+            <div className="module-editor__parts-header mt-6">
+              <h4 className="module-editor__section-title">Piezas de Tablero ({draft.boardParts.length})</h4>
+              <button
+                type="button"
+                className="btn btn--secondary btn--small"
+                onClick={addBoardPart}
+                data-testid="add-part-btn"
+              >
+                <Plus size={14} className="mr-1" /> Agregar Pieza
+              </button>
+            </div>
+
+            {draft.boardParts.length === 0 ? (
+              <div className="module-parts-empty" data-testid="parts-empty">
+                Sin piezas. Agregá al menos una pieza de tablero para esta estructura.
+              </div>
+            ) : (
+              <div className="module-part-list" data-testid="parts-list">
+                {draft.boardParts.map((part, index) => (
+                  <div key={part.id} className="module-part-card" data-testid={`part-item-${index}`}>
+                    <div className="module-part-card__header">
+                      <h5 className="module-part-card__title">Pieza {index + 1}</h5>
+                      <button
+                        type="button"
+                        className="btn btn--small btn--danger"
+                        onClick={() => removeBoardPart(part.id)}
+                        data-testid={`remove-part-${index}`}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+
+                    <div className="module-editor__grid module-editor__grid--part">
+                      <div className="catalog-form__field module-editor__field--grow">
+                        <label>Código pieza</label>
+                        <input
+                          value={part.code}
+                          onChange={(e) =>
+                            updatePart(part.id, { code: e.target.value })
+                          }
+                          placeholder={suggestPartCode(draft.code || 'EST', index + 1)}
+                          required
+                          data-testid={`part-code-${index}`}
+                        />
+                      </div>
+                      <div className="catalog-form__field module-editor__field--grow">
+                        <label>Descripción</label>
+                        <input
+                          value={part.description}
+                          onChange={(e) =>
+                            updatePart(part.id, { description: e.target.value })
+                          }
+                          required
+                          data-testid={`part-desc-${index}`}
+                        />
+                      </div>
+                      <div className="catalog-form__field module-editor__field--narrow">
+                        <label>Cant</label>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={part.quantity}
+                          onChange={(e) =>
+                            updatePart(part.id, {
+                              quantity: Math.max(1, Number(e.target.value)),
+                            })
+                          }
+                          required
+                          data-testid={`part-qty-${index}`}
+                        />
+                      </div>
+                      <div className="catalog-form__field module-editor__field--narrow">
+                        <label>Largo (mm)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={part.lengthMm || ''}
+                          onChange={(e) =>
+                            updatePart(part.id, {
+                              lengthMm: Math.max(0, Number(e.target.value)),
+                            })
+                          }
+                          required
+                          data-testid={`part-length-${index}`}
+                        />
+                      </div>
+                      <div className="catalog-form__field module-editor__field--narrow">
+                        <label>Ancho (mm)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={part.widthMm || ''}
+                          onChange={(e) =>
+                            updatePart(part.id, {
+                              widthMm: Math.max(0, Number(e.target.value)),
+                            })
+                          }
+                          required
+                          data-testid={`part-width-${index}`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="module-part-card__role-edges">
+                      <div className="catalog-form__field module-part-card__role">
+                        <label>Rol (optionRole)</label>
+                        <select
+                          value={part.optionRole}
+                          onChange={(e) =>
+                            updatePart(part.id, { optionRole: e.target.value })
+                          }
+                          required
+                          data-testid={`part-role-${index}`}
+                        >
+                          <option value="">Seleccionar grupo…</option>
+                          {boardRoles.map((g) => (
+                            <option key={g.id} value={g.code}>
+                              {g.name} ({g.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="module-edge-flags" role="group" aria-label="Cantos (cintillas)">
+                        <span className="module-edge-flags__label">Cantos</span>
+                        {(
+                          [
+                            ['edgeL1', 'L1'],
+                            ['edgeL2', 'L2'],
+                            ['edgeW1', 'W1'],
+                            ['edgeW2', 'W2'],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <label key={key}>
+                            <input
+                              type="checkbox"
+                              checked={part[key]}
+                              onChange={(e) =>
+                                updatePart(part.id, { [key]: e.target.checked })
+                              }
+                              data-testid={`part-edge-${label}-${index}`}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="modal__footer mt-6">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={closeModal}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="btn btn--primary"
+                data-testid="save-btn"
+              >
+                Guardar
+              </button>
+            </div>
+          </form>
+        </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        open={!!deleteConfirmId}
+        title="¿Eliminar estructura?"
+        onClose={() => setDeleteConfirmId(null)}
+        size="sm"
+        data-testid="delete-confirm-modal"
+      >
+        <div className="p-4">
+          <p className="mb-4">
+            ¿Estás seguro de que deseas eliminar esta estructura? Esta acción no se puede deshacer.
+          </p>
+          <div className="modal__footer">
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => setDeleteConfirmId(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={handleDelete}
+              data-testid="confirm-delete-btn"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}

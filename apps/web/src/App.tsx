@@ -27,6 +27,7 @@ import type {
   ProjectItem,
   ProjectMaterialSummary,
   QuoteBreakdown,
+  Structure,
   WorkshopSettings,
   Workspace,
 } from '@muebles/domain';
@@ -98,6 +99,8 @@ import {
   type ProjectDraft,
   CustomersScreen,
   type CustomerDraft,
+  StructuresScreen,
+  type StructureDraft,
   PageLoading,
   type CommandPaletteItem,
 } from '@muebles/ui';
@@ -196,6 +199,31 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
         l.mode === 'fixed' && l.hardwareId.trim()
           ? l.hardwareId.trim()
           : undefined,
+    })),
+  };
+}
+
+function draftToStructure(id: string, draft: StructureDraft): Structure {
+  const w = draft.widthMm;
+  const h = draft.heightMm;
+  const d = draft.depthMm;
+  const hasDims = w > 0 || h > 0 || d > 0;
+  return {
+    id,
+    code: draft.code.trim(),
+    name: draft.name.trim(),
+    notes: optionalNotes(draft.notes),
+    active: draft.active !== false,
+    externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
+    boardParts: draft.boardParts.map((p) => ({
+      id: p.id,
+      code: p.code.trim() || undefined,
+      description: p.description.trim(),
+      quantity: p.quantity,
+      lengthMm: p.lengthMm,
+      widthMm: p.widthMm,
+      edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
+      optionRole: p.optionRole.trim(),
     })),
   };
 }
@@ -610,6 +638,7 @@ function AppContent({
   const routeProjectId =
     navId === 'projects' ? routeEntityId : null;
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
+  const routeStructureId = navId === 'structures' ? routeEntityId : null;
 
   // Keep the address bar on a known section path (bookmarkable SPA routes).
   useEffect(() => {
@@ -715,6 +744,7 @@ function AppContent({
   const hardware = catalog?.hardware ?? [];
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
+  const structures = catalog?.structures ?? [];
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
@@ -1331,6 +1361,59 @@ function AppContent({
     toast({ type: 'success', message: `✓ Duplicado como ${newCode}` });
   };
 
+  const createStructure = (draft: StructureDraft) => {
+    const item = draftToStructure(newId(), draft);
+    patchCatalog((c) => ({
+      ...c,
+      structures: [...(c.structures ?? []), item],
+    }));
+    toast({ type: 'success', message: `✓ "${item.code}" creado` });
+  };
+
+  const updateStructure = (id: string, draft: StructureDraft) => {
+    patchCatalog((c) => ({
+      ...c,
+      structures: (c.structures ?? []).map((s) =>
+        s.id === id ? draftToStructure(id, draft) : s,
+      ),
+    }));
+    toast({ type: 'success', message: '✓ Cambios guardados' });
+  };
+
+  const deleteStructure = async (id: string) => {
+    patchCatalog((c) => ({
+      ...c,
+      structures: (c.structures ?? []).filter((s) => s.id !== id),
+    }));
+    if (session === 'auth' && authToken) {
+      try {
+        await fetch(`${DEFAULT_API_BASE}/catalog/structures/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+      } catch (err) {
+        console.error('Error deleting structure from backend:', err);
+      }
+    }
+    toast({ type: 'info', message: 'Estructura eliminada' });
+  };
+
+  const setStructureActive = (id: string, active: boolean) => {
+    patchCatalog((c) => ({
+      ...c,
+      structures: (c.structures ?? []).map((s) =>
+        s.id === id ? { ...s, active } : s,
+      ),
+    }));
+    toast({
+      type: 'info',
+      message: active ? 'Estructura activada' : 'Estructura desactivada',
+    });
+  };
+
   const createCustomer = (draft: CustomerDraft) => {
     const ownerUserId = resolveOwnerOnCreate(
       authUser?.id,
@@ -1541,6 +1624,7 @@ function AppContent({
 
   /** F036: accepted → produced (click-only; no export gate). */
   const markProjectProduced = (id: string) => {
+    if (!catalog) return;
     const project = projects.find((p) => p.id === id);
     if (!project || project.status !== 'accepted') return;
     const now = new Date().toISOString();
@@ -1552,6 +1636,7 @@ function AppContent({
 
   /** F036: closed → draft; clears price snapshot. */
   const reopenProject = (id: string) => {
+    if (!catalog) return;
     const project = projects.find((p) => p.id === id);
     if (!project || project.status === 'draft') return;
     const now = new Date().toISOString();
@@ -1947,6 +2032,13 @@ function AppContent({
     [onEntitySelectionChange],
   );
 
+  const onStructureSelectionChange = useCallback(
+    (structureId: string | null) => {
+      onEntitySelectionChange('structures', structureId);
+    },
+    [onEntitySelectionChange],
+  );
+
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
@@ -2212,6 +2304,20 @@ function AppContent({
           }
         />
         )
+      ) : null}
+      {navId === 'structures' ? (
+        <StructuresScreen
+          structures={structures}
+          optionGroups={optionGroups}
+          onCreate={createStructure}
+          onUpdate={updateStructure}
+          onDelete={deleteStructure}
+          onDeactivate={(id) => setStructureActive(id, false)}
+          onReactivate={(id) => setStructureActive(id, true)}
+          openStructureId={routeStructureId}
+          onSelectionChange={onStructureSelectionChange}
+          canMutate={canMutateModules}
+        />
       ) : null}
       {navId === 'projects' ? (
         <ProjectsScreen

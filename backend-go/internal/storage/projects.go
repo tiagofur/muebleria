@@ -157,6 +157,13 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		cat.Modules = []domain.Module{}
 	}
 
+	// F049 engineering structures (bodies)
+	structures, err := s.ListStructures(ctx)
+	if err != nil {
+		return cat, fmt.Errorf("error loading structures: %w", err)
+	}
+	cat.Structures = structures
+
 	return cat, nil
 }
 

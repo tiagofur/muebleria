@@ -236,6 +236,25 @@ func (s *stubStore) DeleteModule(context.Context, string) error {
 	s.stubNotUsed("DeleteModule")
 	return nil
 }
+func (s *stubStore) ListStructures(context.Context) ([]domain.Structure, error) {
+	return []domain.Structure{}, nil
+}
+func (s *stubStore) GetStructureByID(context.Context, string) (*domain.Structure, error) {
+	s.stubNotUsed("GetStructureByID")
+	return nil, nil
+}
+func (s *stubStore) CreateStructure(context.Context, *domain.Structure) error {
+	s.stubNotUsed("CreateStructure")
+	return nil
+}
+func (s *stubStore) UpdateStructure(context.Context, string, *domain.Structure) error {
+	s.stubNotUsed("UpdateStructure")
+	return nil
+}
+func (s *stubStore) DeleteStructure(context.Context, string) error {
+	s.stubNotUsed("DeleteStructure")
+	return nil
+}
 func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 	if s.listProjects != nil {
 		return s.listProjects, nil
