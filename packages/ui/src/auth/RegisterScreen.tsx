@@ -3,6 +3,7 @@
  */
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Mail, User, LogIn, ChevronLeft } from 'lucide-react';
+import { BrandMark } from '../common/BrandMark';
 import './login.css';
 
 export interface RegisterScreenProps {
@@ -75,9 +76,7 @@ export function RegisterScreen({
     <div className="login-screen">
       <div className="login-card">
         <header className="login-card__header">
-          <span className="login-card__mark" aria-hidden>
-            🪑
-          </span>
+          <BrandMark size={40} className="login-card__mark" />
           <h2 className="login-card__title">Solicitar acceso</h2>
           <p className="login-card__subtitle">
             Tu cuenta quedará pendiente hasta que el administrador la apruebe

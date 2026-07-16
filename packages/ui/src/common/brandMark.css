@@ -1,0 +1,35 @@
+/* Brand mark — tokens only (issue #53) */
+
+.app-brand-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  color: inherit;
+}
+
+.app-brand-mark__svg {
+  display: block;
+}
+
+.app-brand-mark__tile {
+  fill: color-mix(in srgb, currentColor 14%, transparent);
+  stroke: color-mix(in srgb, currentColor 28%, transparent);
+  stroke-width: 1;
+}
+
+.app-brand-mark__panel {
+  stroke: currentColor;
+}
+
+/* Login / register: brand tint on dark surface */
+.login-card__mark.app-brand-mark {
+  margin: 0 auto var(--space-4);
+  color: var(--brand-300);
+}
+
+/* Sidebar: light mark on dark chrome */
+.app-sidebar__brand-mark.app-brand-mark {
+  color: var(--text-inverse);
+}

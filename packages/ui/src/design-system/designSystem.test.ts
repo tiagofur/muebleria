@@ -38,6 +38,12 @@ describe('design system (F016)', () => {
     expect(css).toContain('--font-sans:');
     expect(css).toContain('--duration-fast:');
     expect(css).toContain('--ease-out:');
+    // Product motion: no bounce spring (issue #55)
+    expect(css).not.toContain('--ease-spring');
+    expect(css).not.toMatch(/cubic-bezier\(\s*0\.34\s*,\s*1\.56/);
+    expect(css).toContain(
+      '--transition-transform: transform var(--duration-normal) var(--ease-out)',
+    );
 
     // Compact density (issue #49)
     expect(css).toContain('--density-table-pad-y:');
