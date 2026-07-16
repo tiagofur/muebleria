@@ -50,6 +50,8 @@ export type ProjectDraft = {
   laborFixedCost: string;
   status: ProjectStatus;
   notes: string;
+  /** Portfolio owner user id (F034). Empty = shell default (me). */
+  ownerUserId: string;
 };
 
 export type AddItemDraft = {
@@ -117,6 +119,7 @@ export function emptyProjectDraft(
     laborFixedCost: String(s.defaultLaborFixedCost),
     status: 'draft',
     notes: '',
+    ownerUserId: '',
   };
 }
 
@@ -134,6 +137,7 @@ export function projectToDraft(
     laborFixedCost: String(project.laborFixedCost),
     status: project.status,
     notes: project.notes ?? '',
+    ownerUserId: project.ownerUserId ?? '',
   };
 }
 

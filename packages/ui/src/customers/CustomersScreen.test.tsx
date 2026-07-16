@@ -92,6 +92,42 @@ describe('CustomersScreen', () => {
 			phone: '',
 			address: '',
 			notes: '',
+			ownerUserId: '',
 		});
+	});
+
+	it('F034: admin can pick owner on create', () => {
+		const onCreate = vi.fn();
+		render(
+			<CustomersScreen
+				customers={[]}
+				onCreate={onCreate}
+				onUpdate={vi.fn()}
+				onDeactivate={vi.fn()}
+				onReactivate={vi.fn()}
+				canAssignOwner
+				currentUserId="admin-1"
+				assignableOwners={[
+					{ id: 'admin-1', name: 'Admin', role: 'admin' },
+					{ id: 'v1', name: 'Vendedor Uno', role: 'vendedor' },
+				]}
+			/>,
+		);
+		fireEvent.click(
+			screen.getAllByRole('button', { name: 'Agregar cliente' })[0] as HTMLElement,
+		);
+		fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+			target: { value: 'Cliente Asignado' },
+		});
+		fireEvent.change(screen.getByTestId('customer-owner-select'), {
+			target: { value: 'v1' },
+		});
+		fireEvent.click(screen.getByRole('button', { name: /guardar/i }));
+		expect(onCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: 'Cliente Asignado',
+				ownerUserId: 'v1',
+			}),
+		);
 	});
 });

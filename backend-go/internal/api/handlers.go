@@ -229,6 +229,13 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 // --- CUSTOMERS ---
 
 func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	role := actorRole(claims)
+	actorID := ""
+	if claims != nil {
+		actorID = claims.UserID
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		list, err := s.Store.ListCustomers(r.Context())
@@ -236,7 +243,7 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		respondWithJSON(w, http.StatusOK, list)
+		respondWithJSON(w, http.StatusOK, filterCustomersByOwner(list, actorID, role))
 
 	case http.MethodPost:
 		var c domain.Customer
@@ -244,6 +251,7 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.Active = true
+		c.OwnerUserID = domain.ResolveOwnerOnCreate(actorID, role, c.OwnerUserID)
 		err := s.Store.CreateCustomer(r.Context(), &c)
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -266,6 +274,12 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "missing customer id")
 		return
 	}
+	claims := claimsFromRequest(r)
+	role := actorRole(claims)
+	actorID := ""
+	if claims != nil {
+		actorID = claims.UserID
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -274,14 +288,28 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
+		if !domain.CanAccessOwnedResource(actorID, role, c.OwnerUserID) {
+			respondWithError(w, http.StatusNotFound, "customer not found")
+			return
+		}
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
+		existing, err := s.Store.GetCustomerByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "customer not found")
+			return
+		}
+		if !domain.CanAccessOwnedResource(actorID, role, existing.OwnerUserID) {
+			respondWithError(w, http.StatusNotFound, "customer not found")
+			return
+		}
 		var c domain.Customer
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
-		err := s.Store.UpdateCustomer(r.Context(), id, &c)
+		c.OwnerUserID = domain.ResolveOwnerOnUpdate(role, existing.OwnerUserID, c.OwnerUserID)
+		err = s.Store.UpdateCustomer(r.Context(), id, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
@@ -293,7 +321,16 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
-		err := s.Store.DeactivateCustomer(r.Context(), id)
+		existing, err := s.Store.GetCustomerByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "customer not found")
+			return
+		}
+		if !domain.CanAccessOwnedResource(actorID, role, existing.OwnerUserID) {
+			respondWithError(w, http.StatusNotFound, "customer not found")
+			return
+		}
+		err = s.Store.DeactivateCustomer(r.Context(), id)
 		if err != nil {
 			respondWithInternalError(w, err, "handler")
 			return
@@ -387,6 +424,13 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 // --- PROJECTS ---
 
 func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	role := actorRole(claims)
+	actorID := ""
+	if claims != nil {
+		actorID = claims.UserID
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		list, err := s.Store.ListProjects(r.Context())
@@ -394,7 +438,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		respondWithJSON(w, http.StatusOK, list)
+		respondWithJSON(w, http.StatusOK, filterProjectsByOwner(list, actorID, role))
 
 	case http.MethodPost:
 		var p domain.Project
@@ -402,11 +446,10 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Si viene el usuario autenticado en contexto, registrar como creador
-		claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
-		if ok && claims != nil {
+		if claims != nil {
 			p.CreatedBy = claims.UserID
 		}
+		p.OwnerUserID = domain.ResolveOwnerOnCreate(actorID, role, p.OwnerUserID)
 
 		p.Status = domain.StatusDraft
 		// Product default currency (Mexico).
@@ -435,6 +478,12 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "missing project id")
 		return
 	}
+	claims := claimsFromRequest(r)
+	role := actorRole(claims)
+	actorID := ""
+	if claims != nil {
+		actorID = claims.UserID
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -443,17 +492,34 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
+		if !domain.CanAccessOwnedResource(actorID, role, p.OwnerUserID) {
+			respondWithError(w, http.StatusNotFound, "project not found")
+			return
+		}
 		respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodPut:
+		existing, err := s.Store.GetProjectByID(r.Context(), id)
+		if err != nil {
+			// 404 lets the FE upsert fall through to POST create.
+			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "no rows") {
+				respondWithError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		if !domain.CanAccessOwnedResource(actorID, role, existing.OwnerUserID) {
+			respondWithError(w, http.StatusNotFound, "project not found")
+			return
+		}
 		var p domain.Project
 		if !decodeJSONBody(w, r, &p) {
 			return
 		}
-		err := s.Store.UpdateProject(r.Context(), id, &p)
+		p.OwnerUserID = domain.ResolveOwnerOnUpdate(role, existing.OwnerUserID, p.OwnerUserID)
+		err = s.Store.UpdateProject(r.Context(), id, &p)
 		if err != nil {
-			// 404 lets the FE upsert fall through to POST create (same pattern as
-			// materials/customers). A silent 200 on missing id left phantom projects.
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
@@ -464,7 +530,16 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodDelete:
-		err := s.Store.DeleteProject(r.Context(), id)
+		existing, err := s.Store.GetProjectByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		if !domain.CanAccessOwnedResource(actorID, role, existing.OwnerUserID) {
+			respondWithError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		err = s.Store.DeleteProject(r.Context(), id)
 		if err != nil {
 			respondWithInternalError(w, err, "handler")
 			return

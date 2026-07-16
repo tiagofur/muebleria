@@ -282,10 +282,12 @@ export function customerToApi(c: Customer): Record<string, unknown> {
     address: c.address ?? '',
     notes: c.notes ?? '',
     active: c.active,
+    owner_user_id: c.ownerUserId ?? '',
   };
 }
 
 export function customerFromApi(raw: Record<string, unknown>): Customer {
+  const owner = str(raw.owner_user_id ?? raw.ownerUserId);
   return {
     id: str(raw.id),
     name: str(raw.name),
@@ -294,6 +296,7 @@ export function customerFromApi(raw: Record<string, unknown>): Customer {
     address: str(raw.address) || undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
+    ownerUserId: owner || undefined,
   };
 }
 
@@ -305,6 +308,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
     name: p.name,
     customer_id: p.customerId,
     created_by: p.createdBy ?? '',
+    owner_user_id: p.ownerUserId ?? '',
     currency: p.currency,
     margin_factor: p.marginFactor,
     labor_fixed_cost: p.laborFixedCost,
@@ -329,11 +333,14 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     levelRaw && typeof levelRaw === 'object' && !Array.isArray(levelRaw)
       ? (levelRaw as Project['projectLevelChoices'])
       : undefined;
+  const ownerUserId =
+    str(raw.owner_user_id ?? raw.ownerUserId) || undefined;
   return {
     id: str(raw.id),
     name: str(raw.name),
     customerId: str(raw.customer_id ?? raw.customerId),
     createdBy: str(raw.created_by ?? raw.createdBy) || undefined,
+    ownerUserId,
     currency: str(raw.currency, 'MXN'),
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
