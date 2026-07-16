@@ -58,6 +58,16 @@ func TestRBAC_CustomersAccess(t *testing.T) {
 	}
 }
 
+func TestRBAC_ViewCosts(t *testing.T) {
+	t.Parallel()
+	if RoleCanViewCosts(RoleVendedor) {
+		t.Fatal("vendedor no costs")
+	}
+	if !RoleCanViewCosts(RoleGerenteVentas) {
+		t.Fatal("gerente sees costs")
+	}
+}
+
 func TestRBAC_ReopenAndMarkProduced(t *testing.T) {
 	t.Parallel()
 	if !RoleCanReopenProject(RoleAdmin) || !RoleCanReopenProject(RoleGerenteVentas) {

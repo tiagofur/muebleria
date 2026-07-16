@@ -186,6 +186,8 @@ export interface ProjectsScreenProps {
   /** Shell applies status transition (snapshot rules). */
   readonly onMarkProduced?: (projectId: string) => void;
   readonly onReopen?: (projectId: string) => void;
+  /** F039: hide margin and cost breakdown. */
+  readonly showCosts?: boolean;
 }
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -243,6 +245,7 @@ export function ProjectsScreen({
   canMarkProduced = false,
   onMarkProduced,
   onReopen,
+  showCosts = true,
 }: ProjectsScreenProps): ReactNode {
   const metaFormId = useId();
   const addItemFormId = useId();
@@ -682,34 +685,38 @@ export function ProjectsScreen({
             required
           />
         </div>
-        <div className="catalog-form__field">
-          <label htmlFor="prj-margin">Factor de margen</label>
-          <input
-            id="prj-margin"
-            type="number"
-            min={0.01}
-            step="any"
-            value={draft.marginFactor}
-            onChange={(e) =>
-              setDraft({ ...draft, marginFactor: e.target.value })
-            }
-            required
-          />
-        </div>
-        <div className="catalog-form__field">
-          <label htmlFor="prj-labor">Mano de obra fija</label>
-          <input
-            id="prj-labor"
-            type="number"
-            min={0}
-            step="any"
-            value={draft.laborFixedCost}
-            onChange={(e) =>
-              setDraft({ ...draft, laborFixedCost: e.target.value })
-            }
-            required
-          />
-        </div>
+        {showCosts ? (
+          <>
+            <div className="catalog-form__field">
+              <label htmlFor="prj-margin">Factor de margen</label>
+              <input
+                id="prj-margin"
+                type="number"
+                min={0.01}
+                step="any"
+                value={draft.marginFactor}
+                onChange={(e) =>
+                  setDraft({ ...draft, marginFactor: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="prj-labor">Mano de obra fija</label>
+              <input
+                id="prj-labor"
+                type="number"
+                min={0}
+                step="any"
+                value={draft.laborFixedCost}
+                onChange={(e) =>
+                  setDraft({ ...draft, laborFixedCost: e.target.value })
+                }
+                required
+              />
+            </div>
+          </>
+        ) : null}
         <div className="catalog-form__field">
           <label htmlFor="prj-status">Estado</label>
           <select
@@ -1063,10 +1070,14 @@ export function ProjectsScreen({
                 ·
               </span>
               {project.currency}
-              <span className="workspace-chrome__dot" aria-hidden>
-                ·
-              </span>
-              Margen ×{project.marginFactor.toFixed(2)}
+              {showCosts ? (
+                <>
+                  <span className="workspace-chrome__dot" aria-hidden>
+                    ·
+                  </span>
+                  Margen ×{project.marginFactor.toFixed(2)}
+                </>
+              ) : null}
             </p>
           </div>
         </div>
@@ -1467,58 +1478,68 @@ export function ProjectsScreen({
           >
             {breakdown ? (
               <dl className="project-totals__grid">
-                <div>
-                  <dt>Materiales</dt>
-                  <dd>
-                    {formatProjectMoney(
-                      breakdown.materialsCost,
-                      project.currency,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Cantos</dt>
-                  <dd>
-                    {formatProjectMoney(breakdown.edgeTotal, project.currency)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Herrajes</dt>
-                  <dd>
-                    {formatProjectMoney(
-                      breakdown.hardwareTotal,
-                      project.currency,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Costo directo</dt>
-                  <dd>
-                    {formatProjectMoney(breakdown.directCost, project.currency)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>MO modular</dt>
-                  <dd>
-                    {formatProjectMoney(
-                      breakdown.laborModular,
-                      project.currency,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>MO fija</dt>
-                  <dd>
-                    {formatProjectMoney(
-                      breakdown.laborFixedCost,
-                      project.currency,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Factor margen</dt>
-                  <dd>{breakdown.marginFactor.toFixed(2)}</dd>
-                </div>
+                {showCosts ? (
+                  <>
+                    <div>
+                      <dt>Materiales</dt>
+                      <dd>
+                        {formatProjectMoney(
+                          breakdown.materialsCost,
+                          project.currency,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Cantos</dt>
+                      <dd>
+                        {formatProjectMoney(
+                          breakdown.edgeTotal,
+                          project.currency,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Herrajes</dt>
+                      <dd>
+                        {formatProjectMoney(
+                          breakdown.hardwareTotal,
+                          project.currency,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Costo directo</dt>
+                      <dd>
+                        {formatProjectMoney(
+                          breakdown.directCost,
+                          project.currency,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>MO modular</dt>
+                      <dd>
+                        {formatProjectMoney(
+                          breakdown.laborModular,
+                          project.currency,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>MO fija</dt>
+                      <dd>
+                        {formatProjectMoney(
+                          breakdown.laborFixedCost,
+                          project.currency,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Factor margen</dt>
+                      <dd>{breakdown.marginFactor.toFixed(2)}</dd>
+                    </div>
+                  </>
+                ) : null}
                 <div className="project-totals__sale-row">
                   <dt>Precio de venta</dt>
                   <dd className="project-totals__sale">

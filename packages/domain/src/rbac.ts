@@ -120,6 +120,22 @@ export function roleUsesProductionQueue(
   return role === 'produccion';
 }
 
+/**
+ * Workshop cost structure (unit costs, margin, direct cost) — COST-01 / F039.
+ * Vendedor (and sin puesto) only see sale price, not cost stack.
+ */
+export function roleCanViewCosts(role: string | null | undefined): boolean {
+  if (role === 'vendedor' || role === 'user') return false;
+  // Guest / local shell passes null — full workshop tool.
+  if (role == null) return true;
+  return (
+    role === 'admin' ||
+    role === 'gerente_ventas' ||
+    role === 'ingeniero' ||
+    role === 'produccion'
+  );
+}
+
 export function roleCanAccessCatalogNav(role: string | null | undefined): boolean {
   return (
     role === 'admin' ||

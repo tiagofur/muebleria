@@ -75,6 +75,7 @@ export {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
+  roleCanViewCosts,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,

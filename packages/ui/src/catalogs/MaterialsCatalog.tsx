@@ -119,6 +119,8 @@ export interface MaterialsCatalogProps {
   readonly requestCreateKey?: number;
   /** F035: hide ABM when false (read-only list). */
   readonly canMutate?: boolean;
+  /** F039: hide unit costs for vendedor. */
+  readonly showCosts?: boolean;
 }
 
 export function MaterialsCatalog({
@@ -134,6 +136,7 @@ export function MaterialsCatalog({
   onSelectionChange,
   requestCreateKey = 0,
   canMutate = true,
+  showCosts = true,
 }: MaterialsCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -342,6 +345,15 @@ export function MaterialsCatalog({
     ],
     [],
   );
+  const visibleColumns = useMemo(
+    () =>
+      showCosts
+        ? columns
+        : columns.filter(
+            (c) => c.key !== 'boardPrice' && c.key !== 'waste' && c.key !== 'cost',
+          ),
+    [columns, showCosts],
+  );
 
   const isTrulyEmpty = materials.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
@@ -395,7 +407,7 @@ export function MaterialsCatalog({
           />
         ) : (
           <CatalogTable
-            columns={columns}
+            columns={visibleColumns}
             rows={rows}
             expandedId={expandedId}
             isInactive={(r) => !r.active}

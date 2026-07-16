@@ -28,6 +28,7 @@ type stubStore struct {
 	projectGetByIDErr    error
 	listCustomers        []domain.Customer
 	listProjects         []domain.Project
+	listMaterials        []domain.MaterialBoard
 	lastCreatedCustomer  *domain.Customer
 	lastCreatedProject   *domain.Project
 	materialReturnedByID *domain.MaterialBoard
@@ -120,8 +121,10 @@ func (s *stubStore) DeactivateCustomer(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListMaterialBoards(context.Context) ([]domain.MaterialBoard, error) {
-	s.stubNotUsed("ListMaterialBoards")
-	return nil, nil
+	if s.listMaterials != nil {
+		return s.listMaterials, nil
+	}
+	return []domain.MaterialBoard{}, nil
 }
 func (s *stubStore) UpdateMaterialBoard(context.Context, string, *domain.MaterialBoard) error {
 	s.stubNotUsed("UpdateMaterialBoard")
@@ -684,6 +687,78 @@ func TestF036_ProduccionCanMarkProduced(t *testing.T) {
 	if got.Status != domain.StatusProduced {
 		t.Fatalf("status = %q want produced", got.Status)
 	}
+}
+
+func TestF039_VendedorMaterialsListRedactsCosts(t *testing.T) {
+	store := &stubStore{
+		listMaterials: []domain.MaterialBoard{
+			{ID: "m1", Code: "M1", Name: "Board", BoardPrice: 100, CostPerM2: 25, Active: true},
+		},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/materials", nil), "v1", string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+	srv.HandleMaterials(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d", rr.Code)
+	}
+	var list []domain.MaterialBoard
+	if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].BoardPrice != 0 || list[0].CostPerM2 != 0 {
+		t.Fatalf("expected redacted costs: %#v", list)
+	}
+	// Admin still sees costs
+	store2 := &stubStore{
+		listMaterials: []domain.MaterialBoard{
+			{ID: "m1", Code: "M1", Name: "Board", BoardPrice: 100, CostPerM2: 25, Active: true},
+		},
+	}
+	srv2 := &Server{Store: store2}
+	req2 := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/materials", nil), "a1", string(domain.RoleAdmin))
+	rr2 := httptest.NewRecorder()
+	srv2.HandleMaterials(rr2, req2)
+	var list2 []domain.MaterialBoard
+	_ = json.Unmarshal(rr2.Body.Bytes(), &list2)
+	if len(list2) != 1 || list2[0].BoardPrice != 100 {
+		t.Fatalf("admin should see board_price: %#v", list2)
+	}
+}
+
+func TestF039_VendedorMaterialsHideCosts(t *testing.T) {
+	store := &stubStore{}
+	// Override ListMaterialBoards via embedding is hard — use direct domain redact unit + handler path with stub.
+	// Handler path: stub ListMaterialBoards not implemented returns panic — use domain package test for redact,
+	// and exercise calculate redaction here.
+	_ = store
+	srv := &Server{Store: &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
+		},
+	}}
+	// Calculate needs catalog — skip if GetFullCatalog panics. Use domain redaction assertion instead.
+	bd := domain.QuoteBreakdown{MaterialsCost: 50, DirectCost: 80, MarginFactor: 1.35, SalePrice: 108}
+	domain.RedactQuoteBreakdown(&bd)
+	if bd.SalePrice != 108 || bd.DirectCost != 0 {
+		t.Fatalf("redact: %#v", bd)
+	}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1", nil), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+	var got domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.MarginFactor != 0 {
+		t.Fatalf("vendedor project margin must be redacted, got %v", got.MarginFactor)
+	}
+	_ = srv
 }
 
 func TestF036_VendedorCannotMarkProduced(t *testing.T) {

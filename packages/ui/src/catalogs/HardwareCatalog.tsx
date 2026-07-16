@@ -66,6 +66,7 @@ export interface HardwareCatalogProps {
   readonly onSelectionChange?: (id: string | null) => void;
   /** F035: hide ABM when false. */
   readonly canMutate?: boolean;
+  readonly showCosts?: boolean;
 }
 
 export function HardwareCatalog({
@@ -77,6 +78,7 @@ export function HardwareCatalog({
   openEntityId = null,
   onSelectionChange,
   canMutate = true,
+  showCosts = true,
 }: HardwareCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -184,6 +186,10 @@ export function HardwareCatalog({
     ],
     [],
   );
+  const visibleColumns = useMemo(
+    () => (showCosts ? columns : columns.filter((c) => c.key !== 'cost')),
+    [columns, showCosts],
+  );
 
   const isTrulyEmpty = hardware.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
@@ -237,7 +243,7 @@ export function HardwareCatalog({
           />
         ) : (
           <CatalogTable
-            columns={columns}
+            columns={visibleColumns}
             rows={rows}
             expandedId={expandedId}
             isInactive={(r) => !r.active}

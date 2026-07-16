@@ -72,6 +72,17 @@ func RoleCanMarkProduced(role UserRole) bool {
 	}
 }
 
+// RoleCanViewCosts — unit costs, margin, direct cost (COST-01 / F039).
+// Vendedor and sin puesto only see sale price.
+func RoleCanViewCosts(role UserRole) bool {
+	switch role {
+	case RoleVendedor, RoleUser:
+		return false
+	default:
+		return true
+	}
+}
+
 // RoleCanExportProduction — Optimizer / hardware list (not vendedor).
 func RoleCanExportProduction(role UserRole) bool {
 	switch role {
