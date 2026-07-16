@@ -581,7 +581,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 - **Lista:** cards con nombre, cliente, status badge, totales cuando el shell provee estimates; CTA «Nueva cotización»
 - **Detalle (workspace tool — issue #50):**
   - **Chrome sticky** (`.workspace-chrome`): nombre, status, meta densa, precio de venta, export Optimizer (primary), lista herrajes, **Exportar cotización** (F030 / #36 — XLSX cliente), Editar/Duplicar/Eliminar
-  - Cuerpo: ítems + panel de desglose; issues de export en el panel
+  - Cuerpo en **2 columnas** (`.project-detail__body`): columna principal (`.project-detail__main` = opciones de proyecto opcionales + ítems/muebles) | panel sticky de desglose (`.project-totals`). Nunca más de dos hijos directos del grid o el layout se rompe.
   - Una sola `.btn--primary` en el chrome (export Optimizer); en el panel de ítems «Agregar mueble» puede ser primary de esa región
 - **Cliente:** picker de clientes activos + acción «Nuevo cliente» (alta inline o navegación a Clientes según wiring del shell)
 - **Búsqueda / filtros:** SearchInput
