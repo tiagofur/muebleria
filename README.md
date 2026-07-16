@@ -85,8 +85,22 @@ Cuando el monorepo esté scaffolded:
 pnpm install
 pnpm --filter @muebles/domain test   # tests del motor
 pnpm test                             # todos los paquetes
-pnpm --filter apps/web dev            # UI en localhost
+pnpm --filter @muebles/web dev        # UI en localhost:5173
 ```
+
+### Desktop Electron (dev)
+
+Misma UI que web; el host solo aporta ventana + diálogo nativo de guardar (EXP-06).
+
+```bash
+# Terminal 1
+pnpm --filter @muebles/web dev
+
+# Terminal 2 (espera a Vite y abre Electron)
+pnpm --filter @muebles/desktop dev:app
+```
+
+Detalle y smoke: `docs/verification.md` § Nivel 6.
 
 ---
 

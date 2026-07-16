@@ -1,6 +1,6 @@
 /**
  * Electron main-process shell — identity + Excel IPC factory (F010 EXP-06).
- * Full BrowserWindow bootstrap can land when the desktop host is packaged.
+ * Runtime BrowserWindow host lives in `electron/main.mjs` (F032 / #38).
  */
 
 import { PACKAGE_NAME as domainName } from '@muebles/domain';

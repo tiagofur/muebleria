@@ -99,6 +99,61 @@ function defaultDownloadDeps(): DownloadDeps {
 }
 
 /**
+ * Optional Electron preload surface (EXP-06). Present only in the desktop host.
+ * Kept local to the web shell so `@muebles/ui` never imports Electron.
+ */
+export type ElectronSaveApi = {
+  readonly showSaveDialog: (options: {
+    defaultPath: string;
+  }) => Promise<string | undefined>;
+  readonly writeExcelFile: (
+    filePath: string,
+    buffer: ArrayBuffer,
+  ) => Promise<void>;
+};
+
+function readElectronApi(
+  host: { electronAPI?: ElectronSaveApi } | undefined = typeof globalThis !==
+  'undefined'
+    ? (globalThis as { electronAPI?: ElectronSaveApi })
+    : undefined,
+): ElectronSaveApi | undefined {
+  return host?.electronAPI;
+}
+
+function toArrayBuffer(data: ArrayBuffer | Uint8Array): ArrayBuffer {
+  if (data instanceof ArrayBuffer) return data;
+  return data.buffer.slice(
+    data.byteOffset,
+    data.byteOffset + data.byteLength,
+  ) as ArrayBuffer;
+}
+
+export type DeliverExcelResult = 'saved' | 'cancelled' | 'downloaded';
+
+/**
+ * Desktop: native save dialog + write (EXP-06).
+ * Browser: anchor download (EXP-07).
+ */
+export async function deliverExcelFile(
+  data: ArrayBuffer | Uint8Array,
+  fileName: string,
+  deps: DownloadDeps = defaultDownloadDeps(),
+  electronApi: ElectronSaveApi | undefined = readElectronApi(),
+): Promise<DeliverExcelResult> {
+  if (electronApi?.showSaveDialog && electronApi?.writeExcelFile) {
+    const filePath = await electronApi.showSaveDialog({
+      defaultPath: fileName,
+    });
+    if (!filePath) return 'cancelled';
+    await electronApi.writeExcelFile(filePath, toArrayBuffer(toUint8Array(data)));
+    return 'saved';
+  }
+  downloadOptimizerXlsx(data, fileName, deps);
+  return 'downloaded';
+}
+
+/**
  * Trigger browser download of an .xlsx buffer (EXP-07).
  * Injectable deps for unit tests without jsdom file dance.
  */

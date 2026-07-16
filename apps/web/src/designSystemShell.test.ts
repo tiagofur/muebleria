@@ -168,10 +168,10 @@ describe('web shell Toast wiring (F019)', () => {
     // design.md §4.4: create material → success with code; similar to "Creado correctamente"
     expect(app).toMatch(/toast\(\{\s*type:\s*'success',\s*message:\s*`✓ "\$\{code\}" creado`/);
     expect(app).toContain("message: '✓ Cambios guardados'");
-    // Export success toast; validation stays on exportErrors (inline)
-    expect(app).toMatch(
-      /toast\(\{\s*type:\s*'success',\s*message:\s*`✓ \$\{result\.fileName\} descargado`/,
-    );
+    // Export success toast (browser download or Electron save); validation stays inline
+    expect(app).toContain('deliverExcelFile');
+    expect(app).toMatch(/\$\{result\.fileName\} descargado/);
+    expect(app).toMatch(/\$\{result\.fileName\} guardado/);
     expect(app).toContain('setExportErrors(result.issues)');
     expect(app).toContain('// Validation issues stay inline');
   });

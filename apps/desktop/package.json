@@ -3,11 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./src/main.ts",
+  "main": "./electron/main.mjs",
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "ELECTRON_DEV=1 electron .",
+    "start": "electron .",
+    "dev:app": "node ./scripts/dev-app.mjs"
   },
   "dependencies": {
     "@muebles/domain": "workspace:*",
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.32",
+    "electron": "^35.2.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }
