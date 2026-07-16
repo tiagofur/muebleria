@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -57,11 +56,12 @@ func respondWithInternalError(w http.ResponseWriter, err error, op string) {
 
 // --- AUTH ---
 
+// RegisterRequest intentionally has no Role field — self-registration always
+// creates role "user" pending approval (issue #19).
 type RegisterRequest struct {
-	Email    string          `json:"email"`
-	Password string          `json:"password"`
-	Name     string          `json:"name"`
-	Role     domain.UserRole `json:"role"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
 }
 
 func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +78,11 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
 		respondWithError(w, http.StatusBadRequest, "missing fields")
+		return
+	}
+
+	if err := auth.ValidatePassword(req.Password); err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -132,19 +137,20 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Uniform 401 for not found / wrong password / pending approval so clients
+	// cannot enumerate accounts (issue #19). Dummy bcrypt when user missing
+	// keeps response timing closer to the password-check path.
+	const invalidCreds = "invalid email or password"
+
 	u, err := s.Store.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
-		if errors.Is(err, domain.ErrPendingApproval) {
-			respondWithError(w, http.StatusForbidden,
-				"Tu cuenta está pendiente de aprobación por el administrador")
-			return
-		}
-		respondWithError(w, http.StatusUnauthorized, "invalid email or password")
+		_ = auth.CheckPasswordHash(req.Password, auth.DummyHash)
+		respondWithError(w, http.StatusUnauthorized, invalidCreds)
 		return
 	}
 
-	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) {
-		respondWithError(w, http.StatusUnauthorized, "invalid email or password")
+	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) || !u.Active {
+		respondWithError(w, http.StatusUnauthorized, invalidCreds)
 		return
 	}
 
