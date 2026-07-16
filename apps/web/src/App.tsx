@@ -60,6 +60,7 @@ import {
   HardwareCatalog,
   MaterialsCatalog,
   ModulesScreen,
+  ModuleShowcase,
   OptionGroupsScreen,
   ProjectsScreen,
   ProductionQueue,
@@ -160,6 +161,7 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
     notes: optionalNotes(draft.notes),
     categoryId: draft.categoryId.trim() || undefined,
     baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
+    imageUrl: draft.imageUrl.trim() || undefined,
     externalDims: hasDims
       ? {
           width: width ?? 0,
@@ -1918,6 +1920,26 @@ function AppContent({
         />
       ) : null}
       {navId === 'modules' ? (
+        !canMutateModules && session === 'auth' ? (
+          <ModuleShowcase
+            modules={modules}
+            resolveImageUrl={(url) => {
+              if (!url) return undefined;
+              if (url.startsWith('http') || url.startsWith('blob:')) return url;
+              const token = authToken ?? '';
+              const base = url.startsWith('/')
+                ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
+                : url;
+              // DEFAULT_API_BASE is .../api — media path is /api/media/...
+              const abs =
+                url.startsWith('/api/')
+                  ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
+                  : base;
+              return token ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : abs;
+            }}
+            onSelect={(id) => onModuleSelectionChange(id)}
+          />
+        ) : (
         <ModulesScreen
           modules={modules}
           optionGroups={optionGroups}
@@ -1940,7 +1962,43 @@ function AppContent({
           moduleEstimates={moduleEstimates}
           requestCreateKey={modulesCreateKey}
           canMutate={canMutateModules}
+          resolveImageUrl={(url) => {
+            if (!url) return undefined;
+            if (url.startsWith('http') || url.startsWith('blob:')) return url;
+            const token = authToken ?? '';
+            const abs = url.startsWith('/api/')
+              ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
+              : url;
+            return token
+              ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+              : abs;
+          }}
+          onUploadImage={
+            canMutateModules && session === 'auth' && authToken
+              ? async (file) => {
+                  const form = new FormData();
+                  form.append('file', file);
+                  const res = await fetch(`${DEFAULT_API_BASE}/media`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${authToken}` },
+                    body: form,
+                  });
+                  if (!res.ok) {
+                    toast({
+                      type: 'error',
+                      message: 'No se pudo subir la imagen',
+                    });
+                    throw new Error(`upload ${res.status}`);
+                  }
+                  const data = (await res.json()) as { url?: string };
+                  if (!data.url) throw new Error('no url');
+                  toast({ type: 'success', message: '✓ Imagen subida' });
+                  return data.url;
+                }
+              : undefined
+          }
         />
+        )
       ) : null}
       {navId === 'projects' ? (
         <ProjectsScreen

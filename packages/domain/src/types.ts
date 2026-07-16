@@ -35,6 +35,8 @@ export interface MaterialBoard {
    * project does not override with an EDGE option choice. Linked by id — never by name.
    */
   readonly defaultEdgeBandId?: string;
+  /** Relative media URL (e.g. /api/media/xxx.webp) — never base64 (F040). */
+  readonly imageUrl?: string;
   readonly notes?: string;
   readonly active: boolean;
 }
@@ -55,6 +57,8 @@ export interface Hardware {
   readonly name: string;
   readonly unit: HardwareUnit;
   readonly costPerUnit: number;
+  /** Relative media URL (F040). */
+  readonly imageUrl?: string;
   readonly notes?: string;
   readonly active: boolean;
 }
@@ -162,6 +166,8 @@ export interface Module {
   readonly categoryId?: string;
   readonly externalDims?: ExternalDims;
   readonly baseLaborCost?: number;
+  /** Relative media URL for sales showcase (F040). */
+  readonly imageUrl?: string;
   readonly boardParts: readonly BoardPart[];
   readonly hardwareLines: readonly HardwareLine[];
   readonly notes?: string;

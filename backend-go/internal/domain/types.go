@@ -83,11 +83,13 @@ type MaterialBoard struct {
 	WastePercent float64 `json:"waste_percent"`
 	CostPerM2    float64 `json:"cost_per_m2"`
 	// DefaultEdgeBandID links the default edge band by id (never by name).
-	DefaultEdgeBandID string    `json:"default_edge_band_id,omitempty"`
-	Notes             string    `json:"notes,omitempty"`
-	Active            bool      `json:"active"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	DefaultEdgeBandID string `json:"default_edge_band_id,omitempty"`
+	// ImageURL is a relative media path (e.g. /api/media/xxx.webp), never base64.
+	ImageURL  string    `json:"image_url,omitempty"`
+	Notes     string    `json:"notes,omitempty"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type EdgeBand struct {
@@ -108,10 +110,12 @@ type Hardware struct {
 	Name        string       `json:"name"`
 	Unit        HardwareUnit `json:"unit"`
 	CostPerUnit float64      `json:"cost_per_unit"`
-	Notes       string       `json:"notes,omitempty"`
-	Active      bool         `json:"active"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	// ImageURL relative media path (F040).
+	ImageURL  string    `json:"image_url,omitempty"`
+	Notes     string    `json:"notes,omitempty"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type OptionGroup struct {
@@ -160,14 +164,16 @@ type ModuleCategory struct {
 }
 
 type Module struct {
-	ID            string         `json:"id"`
-	Code          string         `json:"code"`
-	Name          string         `json:"name"`
-	BaseLaborCost float64        `json:"base_labor_cost"`
-	WidthMm       int            `json:"width_mm,omitempty"`
-	HeightMm      int            `json:"height_mm,omitempty"`
-	DepthMm       int            `json:"depth_mm,omitempty"`
-	CategoryID    string         `json:"categoryId,omitempty"`
+	ID            string  `json:"id"`
+	Code          string  `json:"code"`
+	Name          string  `json:"name"`
+	BaseLaborCost float64 `json:"base_labor_cost"`
+	WidthMm       int     `json:"width_mm,omitempty"`
+	HeightMm      int     `json:"height_mm,omitempty"`
+	DepthMm       int     `json:"depth_mm,omitempty"`
+	CategoryID    string  `json:"categoryId,omitempty"`
+	// ImageURL relative media path for sales showcase (F040).
+	ImageURL      string         `json:"image_url,omitempty"`
 	BoardParts    []BoardPart    `json:"board_parts"`
 	HardwareLines []HardwareLine `json:"hardware_lines"`
 	Notes         string         `json:"notes,omitempty"`

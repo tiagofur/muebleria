@@ -19,6 +19,8 @@ type Config struct {
 	AllowedOrigins []string // CORS allowlist (reflected per-request); never "*"
 	RateLimitRPS   float64  // sustained requests/second for auth endpoints
 	RateLimitBurst int      // maximum burst for auth endpoints
+	// MediaDir is the filesystem root for catalog image uploads (F040).
+	MediaDir string
 }
 
 const minJWTSecretBytes = 32
@@ -60,6 +62,11 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	mediaDir := os.Getenv("MEDIA_DIR")
+	if mediaDir == "" {
+		mediaDir = "data/media"
+	}
+
 	return Config{
 		Port:           port,
 		DatabaseURL:    dbURL,
@@ -67,6 +74,7 @@ func LoadConfig() (Config, error) {
 		AllowedOrigins: allowed,
 		RateLimitRPS:   rps,
 		RateLimitBurst: burst,
+		MediaDir:       mediaDir,
 	}, nil
 }
 

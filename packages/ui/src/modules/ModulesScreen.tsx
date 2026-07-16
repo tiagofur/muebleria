@@ -46,6 +46,7 @@ import {
 import { validateNonNegativeNumber, validateRequiredName } from '../catalogs/catalogHelpers';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
 import {
+  CatalogImage,
   EmptyState,
   Modal,
   PageLoading,
@@ -145,6 +146,13 @@ export interface ModulesScreenProps {
   readonly onSelectionChange?: (moduleId: string | null) => void;
   /** F035: hide ABM when false (read-only templates). */
   readonly canMutate?: boolean;
+  /**
+   * Upload catalog image (F040). Returns relative media URL for draft.imageUrl.
+   * Only used when canMutate is true.
+   */
+  readonly onUploadImage?: (file: File) => Promise<string>;
+  /** Resolve media path for preview. */
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
 function CostPreviewPanel({
@@ -246,6 +254,8 @@ export function ModulesScreen({
   onSelectionChange,
   loading = false,
   canMutate = true,
+  onUploadImage,
+  resolveImageUrl = (u) => u,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -832,6 +842,37 @@ export function ModulesScreen({
               }
               placeholder="Opcional"
             />
+          </div>
+          <div className="catalog-form__field" data-testid="module-image-field">
+            <label htmlFor="mod-image">Foto (vitrina)</label>
+            <div className="module-editor__image-row">
+              <CatalogImage
+                src={resolveImageUrl(draft.imageUrl || undefined)}
+                alt={draft.name || 'Mueble'}
+                size="md"
+              />
+              {onUploadImage ? (
+                <input
+                  id="mod-image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void onUploadImage(file)
+                      .then((url) => setDraft({ ...draft, imageUrl: url }))
+                      .catch(() => {
+                        /* shell toasts */
+                      });
+                    e.target.value = '';
+                  }}
+                />
+              ) : (
+                <p className="module-editor__hint">
+                  {draft.imageUrl ? draft.imageUrl : 'Sin imagen'}
+                </p>
+              )}
+            </div>
           </div>
         </div>
         <div

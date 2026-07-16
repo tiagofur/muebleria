@@ -83,6 +83,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Assignable portfolio owners (admin + gerente_ventas) — F035
 	mux.Handle("GET /api/assignable-owners", authMW(http.HandlerFunc(server.HandleAssignableOwners)))
 
+	// Catalog media (F040) — upload mutate-catalog roles; GET any auth
+	mux.Handle("POST /api/media", authMW(http.HandlerFunc(server.HandleMediaUpload)))
+	mux.Handle("GET /api/media/{name}", authMW(http.HandlerFunc(server.HandleMediaGet)))
+
 	// Admin — Gestión de usuarios (solo admin; live role from DB)
 	adminMW := AdminMiddleware(server.JWTSecret, server.Store)
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
