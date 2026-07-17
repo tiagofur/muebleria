@@ -63,6 +63,8 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `progress/current.md` | Estado de la sesión activa | Al empezar |
 | `progress/history.md` | Bitácora de sesiones anteriores | Si necesitas contexto histórico |
 | `docs/prd.md` | Producto, usuarios del taller, dominio, fórmulas, anti-scope | Antes de dominio o producto |
+| `docs/app-excellence.md` | Plan post-horizonte: ventas/ingeniería/producción, layout cocina, CNC policy, issues | Roadmap de excelencia / issues #125+ |
+| `docs/judgment-day-wip-3d-2026-07-17.md` | Findings JD Round 1 (WIP 3D/espacial) | Antes de tocar preview 3D o mappers espaciales |
 | `docs/PRODUCT.md` | Contexto Impeccable (register, personality, anti-refs) | Setup del skill UI; no reemplaza el PRD |
 | `docs/architecture.md` | Paquetes, boundaries, flujo de datos | Antes de crear archivos |
 | `docs/conventions.md` | Estilo, nombres, tests, errores, tipos | Antes de escribir código |
@@ -105,6 +107,7 @@ muebles/
 - **Si no sabes algo**, busca en `docs/` antes de inventarlo.
 - **Deja el repo limpio** al cerrar (ver `docs/verification.md §Verificación final`).
 - **Antes de tocar UI/UX** (componentes `.tsx`, archivos `.css`, layouts, estilos inline), lee `docs/design.md` completo. No inventes colores, espaciados, sombras ni patrones de interacción — todos están definidos ahí.
+- **Archivos grandes:** soft budget en `docs/conventions.md` (screens ~400–600 líneas). Preferí extraer paneles/tabs a `components/` o `editor/` antes de seguir hinchando un `*Screen.tsx`.
 - **UI no calcula dominio.** Fórmulas y validaciones de negocio viven en `packages/domain` (o backend Go cuando aplique), no en React.
 - **pnpm only** en el monorepo JS. No npm/yarn.
 - **Nunca commits de `.env` / `.env.local`.** Solo `.env.example`.

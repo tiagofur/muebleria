@@ -209,11 +209,11 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 | Ítem | Por qué se difiere |
 |------|--------------------|
 | Nesting 2D / optimización de pliegos | Ya existe flujo Optimizer externo |
-| CAD / dibujo 3D / renders | No resuelve el dolor principal |
+| CAD / dibujo 3D / renders fotorealistas | No resuelve el dolor principal; layout **simple** de cocina está en alcance de excelencia (ver §6.7) |
 | Módulos paramétricos completos | Alto valor, alta complejidad; Fase 4 del roadmap |
 | Cloud sync multi-dispositivo completo | Etapa 2 en curso parcial (hay auth multi-usuario; falta sync real) |
 | Inventario y stock | ERP; no MVP |
-| CNC directo / post-procesadores | Más adelante si hay demanda |
+| CNC directo / post-procesadores de marca | Futuro documentado; ver §6.7.2 y issue CNC |
 | Multi-moneda compleja | Plantilla es MXN; un default basta |
 | App móvil nativa | Web responsive en MVP; nativa en Etapa 2 |
 
@@ -325,8 +325,37 @@ Roles `ingeniero`, `produccion`, `gerente_ventas` y `admin` pueden exportar Opti
 | Flag taller vendedor ve costos | [#89](https://github.com/tiagofur/muebleria/issues/89) · F044 |
 | PDF cotización comercial | [#90](https://github.com/tiagofur/muebleria/issues/90) · F045 |
 
+### 6.7 App Excellence (post-horizonte H01–H12)
+
+Plan vivo: **`docs/app-excellence.md`**.  
+Judgment Day WIP 3D (2026-07-17): **`docs/judgment-day-wip-3d-2026-07-17.md`**.
+
+#### 6.7.1 Plan de corte (política)
+
+| Ahora | Futuro (solo documentado hasta demanda real) |
+|-------|-----------------------------------------------|
+| `ProductionCutRow[]` → `Plantilla_Optimizer.xlsx` → nesting/corte **externo** | Metadatos por pieza → DXF/JSON → post-procesadores CNC de marca → nesting interno opcional |
+
+El Optimizer Excel sigue siendo la **única** salida de plan de corte implementada. No hay nesting 2D embebido ni G-code en producto.
+
+#### 6.7.2 CNC / máquinas
+
+- Tracking base: issue de metadatos CNC/DXF (horizonte icebox).  
+- Etapas F1–F4 en `docs/app-excellence.md` §4.  
+- Implementar solo con demanda real del taller y prueba de campo.
+
+#### 6.7.3 Layout simple de cocina (en alcance de excelencia)
+
+- **Sí:** muros rectos, colocar/reordenar ítems de cotización, elevación base/alto, 3D desde placements.  
+- **No (v1):** CAD libre, import de plano automático, renders fotorrealistas, islas complejas.  
+- Fallback si no hay plano: corrida lineal actual (`layoutProjectRun`).
+
+#### 6.7.4 Deuda técnica inmediata (Judgment Day)
+
+Bugs de paridad API/Go y 3D de cotización se trackean como issues `bug` etiquetados desde el JD del 2026-07-17. Cerrarlos antes de construir el layout de cocina encima del preview.
 
 ---
+
 
 ## 7. Modelo de dominio (producto)
 

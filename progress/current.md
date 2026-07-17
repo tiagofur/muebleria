@@ -1,26 +1,32 @@
 # Sesión actual
 
-- **Branch:** `feat/presets-measure-100`
-- **Carpeta principal:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Issue:** [#104](https://github.com/tiagofur/muebleria/issues/104) — Cotización: preset de medida (H09 / F051)
-- **Estado:** usable en UI; dominio + Go + seed multi-medida
+- **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
+- **Branch:** `feat/presets-measure-100` (modelo componentes-only)
+- **No usar:** `muebles-orig` para features nuevas
 
-## Modelo UX
+## Hecho en esta pasada (2026-07-17)
 
-| Campo | Dónde | Regla |
-|-------|--------|------|
-| Medida base | General | Obligatoria si hay estructura |
-| Más medidas | General (abajo) | Opcional; si hay lista, vendedor elige en cotización |
+- Judgment Day Round 1 → ESCALATED; issues #125–#142
+- Plan App Excellence documentado
+- **Fixes JD Round 1 (confirmed):**
+  - #127 App.tsx → ProjectsScreen structures/components
+  - #125 apiMappers spatial round-trip component + instance
+  - #126 Go formulas PH/PW/PD/T/i
+  - #128 per-axis pose fallback + lateral_derecho + laterals rotX/Y
+  - #129 multi-módulo WebGL msg, ghosts, DEFAULT_MODULE_FOOTPRINT_MM
+  - #130 preview color validate/normalize; no pisar color al upload
+- Tests: domain, storage, ui preview/materials, go engine — verdes
 
-## Cómo probar
+## Docs
 
-1. Hard refresh en app `muebles` (`:5173`)
-2. Muebles → editar → **General** → medida base + más medidas
-3. Seed `MOD-COMP-001` trae presets 300/400/600
-4. Cotización → agregar ese mueble → selector **Medida**
+| Doc | Rol |
+|-----|-----|
+| `docs/app-excellence.md` | Plan + issues |
+| `docs/judgment-day-wip-3d-2026-07-17.md` | JD findings |
+| `docs/prd.md` §6.7 | Política corte / CNC / layout |
 
-## Pendiente posible
+## Siguiente
 
-- Commit / PR
-- Migración `000021` en Postgres local (`migrate` / `./dev.sh`)
-- POST `/api/seed` para repoblar con module_presets
+1. Commit/PR de fixes JD + docs (cuando pedís)
+2. Residual opcional: migration `structure_components.overrides` + rotate NULL en components
+3. Ola B: #133 layout cocina

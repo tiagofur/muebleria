@@ -23,6 +23,38 @@
 | Privadas/internas | prefijo `_` | `_atomicWrite` |
 | IDs de entidad | UUID v4 (string) como ID primario; 'code' legible para negocio | id: `"123e4567-e89b-12d3-a456-426614174000"`, code: `"MOD-GAB-01"` |
 
+## Tamaño de archivos y partición (harness / tokens)
+
+Pantallas y módulos grandes **se parten** para no quemar contexto del agente ni
+hacer reviews imposibles:
+
+| Tipo | Soft budget | Acción si se pasa |
+|------|-------------|-------------------|
+| Screen React (`*Screen.tsx`) | **~400–600 líneas** | Extraer paneles a `./components/` o `./editor/` |
+| Helpers de UI | **~300 líneas** | Partir por dominio (draft, grid, labels) |
+| `engine.ts` / dominio denso | **~500 líneas por área** | Archivos por capacidad (`assembly.ts`, `measurePresets.ts`, …) |
+
+Reglas:
+
+- **Screen = orquestador:** lista, detalle, modal shell, estado; **no** cientos
+  de líneas de un solo tab embebidas.
+- **Un tab de editor = un archivo** cuando el panel es denso (estructura,
+  componentes, medidas, herrajes).
+- **Co-localizar CSS** al lado del panel si el tab tiene estilos propios.
+- No copiar pantallas monstruo entre clones: se **extrae** y se reusa.
+
+Ejemplo de layout preferido:
+
+```
+modules/
+  ModulesScreen.tsx          # orquestador
+  components/
+    ModuleMeasureSection.tsx
+    ModuleEditorStructurePanel.tsx
+    ModuleEditorComponentsPanel.tsx
+  moduleHelpers.ts
+```
+
 ## Estructura de archivo
 
 Cada módulo en `packages/*/src/` empieza con:
