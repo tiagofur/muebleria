@@ -20,6 +20,8 @@ export type {
   OptionGroup,
   ModuleCategory,
   EdgeAssignment,
+  BoardFace,
+  PlacementSlot,
   BoardPart,
   HardwareLine,
   ExternalDims,
@@ -38,6 +40,9 @@ export type {
   ResolvedBoardPart,
   ResolvedHardwareLine,
   ResolvedBom,
+  AssemblyCompleteness,
+  PlacedBoardPart,
+  ResolvedAssembly,
   QuoteBreakdown,
   ProductionCutRow,
   HardwarePurchaseRow,
@@ -126,7 +131,20 @@ export {
   isFurnitureComponentKind,
 } from './furnitureComponents';
 
-export type { BoardLineCost, HardwareLineCost, LineCost } from './engine';
+export {
+  BOARD_FACES,
+  PLACEMENT_SLOTS,
+  DEFAULT_DESIGN_THICKNESS_MM,
+  isBoardFace,
+  isPlacementSlot,
+  boardFaceLabelEs,
+  placementSlotLabelEs,
+  defaultPoseForSlot,
+} from './spatial';
+
+export { resolveAssembly } from './assembly';
+
+export type { BoardLineCost, HardwareLineCost, LineCost, PartFormulaDims } from './engine';
 
 export {
   resolveBom,
@@ -151,10 +169,13 @@ export {
   validateStructure,
   validateFurnitureComponent,
   validateModuleComponentRefs,
+  validatePartSpatialFormulas,
   expandModuleComponents,
   resolveFurnitureComponentParts,
   validateCatalogEntityCodes,
   evaluatePartFormula,
+  isValidPartFormula,
+  PART_FORMULA_PATTERN,
   resolveStructure,
 } from './engine';
 

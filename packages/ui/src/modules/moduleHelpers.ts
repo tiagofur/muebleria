@@ -3,6 +3,7 @@
  */
 
 import type {
+  BoardFace,
   BoardPart,
   DimensionPreset,
   EdgeAssignment,
@@ -12,8 +13,9 @@ import type {
   ModuleCategory,
   OptionGroup,
   OptionGroupKind,
+  PlacementSlot,
 } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import { childrenOf, isBoardFace, isPlacementSlot } from '@muebles/domain';
 import {
   matchesCodeOrName,
   normalizeCode,
@@ -34,6 +36,22 @@ export type BoardPartDraft = {
   optionRole: string;
   lengthFormula?: string;
   widthFormula?: string;
+  /** S1 spatial — empty string = unset */
+  face: string;
+  placement: string;
+  originXFormula: string;
+  originYFormula: string;
+  originZFormula: string;
+  designThicknessMm: string;
+};
+
+export type ModuleComponentRefDraft = {
+  componentId: string;
+  quantity: number;
+  placement: string;
+  originXFormula: string;
+  originYFormula: string;
+  originZFormula: string;
 };
 
 export type HardwareLineDraft = {
@@ -70,8 +88,8 @@ export type ModuleDraft = {
   structureId: string;
   /** Commercial measure options for sales (H09 / #104). */
   presets: MeasurePresetDraft[];
-  /** Attached reusable components (H07 / #102). */
-  components: { componentId: string; quantity: number }[];
+  /** Attached reusable components (H07 / #102 + S1 spatial overrides). */
+  components: ModuleComponentRefDraft[];
   boardParts: BoardPartDraft[];
   hardwareLines: HardwareLineDraft[];
 };
@@ -146,6 +164,48 @@ export function emptyBoardPartDraft(id: string): BoardPartDraft {
     optionRole: '',
     lengthFormula: '',
     widthFormula: '',
+    face: '',
+    placement: '',
+    originXFormula: '',
+    originYFormula: '',
+    originZFormula: '',
+    designThicknessMm: '',
+  };
+}
+
+export function emptyModuleComponentRefDraft(
+  componentId = '',
+): ModuleComponentRefDraft {
+  return {
+    componentId,
+    quantity: 1,
+    placement: '',
+    originXFormula: '',
+    originYFormula: '',
+    originZFormula: '',
+  };
+}
+
+/** Map draft spatial fields onto a domain BoardPart (omits empties). */
+export function spatialFieldsFromDraft(p: BoardPartDraft): {
+  face?: BoardFace;
+  placement?: PlacementSlot;
+  originXFormula?: string;
+  originYFormula?: string;
+  originZFormula?: string;
+  designThicknessMm?: number;
+} {
+  const face = p.face.trim();
+  const placement = p.placement.trim();
+  const designT = Number(p.designThicknessMm);
+  return {
+    face: isBoardFace(face) ? face : undefined,
+    placement: isPlacementSlot(placement) ? placement : undefined,
+    originXFormula: p.originXFormula.trim() || undefined,
+    originYFormula: p.originYFormula.trim() || undefined,
+    originZFormula: p.originZFormula.trim() || undefined,
+    designThicknessMm:
+      Number.isFinite(designT) && designT > 0 ? designT : undefined,
   };
 }
 
@@ -203,6 +263,15 @@ export function boardPartToDraft(part: BoardPart): BoardPartDraft {
     optionRole: part.optionRole,
     lengthFormula: part.lengthFormula ?? '',
     widthFormula: part.widthFormula ?? '',
+    face: part.face ?? '',
+    placement: part.placement ?? '',
+    originXFormula: part.originXFormula ?? '',
+    originYFormula: part.originYFormula ?? '',
+    originZFormula: part.originZFormula ?? '',
+    designThicknessMm:
+      part.designThicknessMm && part.designThicknessMm > 0
+        ? String(part.designThicknessMm)
+        : '',
   };
 }
 
@@ -241,6 +310,10 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     components: (mod.components ?? []).map((c) => ({
       componentId: c.componentId,
       quantity: c.quantity,
+      placement: c.placement ?? '',
+      originXFormula: c.originXFormula ?? '',
+      originYFormula: c.originYFormula ?? '',
+      originZFormula: c.originZFormula ?? '',
     })),
     boardParts: mod.boardParts.map(boardPartToDraft),
     hardwareLines: mod.hardwareLines.map(hardwareLineToDraft),

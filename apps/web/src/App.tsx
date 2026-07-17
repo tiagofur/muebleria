@@ -38,6 +38,7 @@ import {
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
   navIdsForRole,
+  resolveAssembly,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   resolveWorkshopSettings,
@@ -57,6 +58,7 @@ import {
   roleUsesProductionQueue,
   suggestDuplicateCode,
   transitionProjectStatus,
+  type ResolvedAssembly,
 } from '@muebles/domain';
 import {
   AppShell,
@@ -83,6 +85,7 @@ import {
   countModules,
   defaultOptionChoicesForModule,
   edgesFromFlags,
+  spatialFieldsFromDraft,
   parseOptionalNumber,
   requiredGroupCodesForModule,
   resolveCustomerName,
@@ -191,6 +194,12 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
             .map((c) => ({
               componentId: c.componentId.trim(),
               quantity: Math.max(1, Math.floor(c.quantity) || 1),
+              placement: (c.placement?.trim() || undefined) as
+                | import('@muebles/domain').PlacementSlot
+                | undefined,
+              originXFormula: c.originXFormula?.trim() || undefined,
+              originYFormula: c.originYFormula?.trim() || undefined,
+              originZFormula: c.originZFormula?.trim() || undefined,
             }))
         : undefined,
     externalDims: hasDims
@@ -211,6 +220,7 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
       optionRole: p.optionRole.trim(),
       lengthFormula: p.lengthFormula?.trim() || undefined,
       widthFormula: p.widthFormula?.trim() || undefined,
+      ...spatialFieldsFromDraft(p),
     })),
     hardwareLines: draft.hardwareLines.map((l) => ({
       id: l.id,
@@ -251,6 +261,7 @@ function draftToStructure(id: string, draft: StructureDraft): Structure {
       optionRole: p.optionRole.trim(),
       lengthFormula: p.lengthFormula?.trim() || undefined,
       widthFormula: p.widthFormula?.trim() || undefined,
+      ...spatialFieldsFromDraft(p),
     })),
     presets: draft.presets && draft.presets.length > 0 ? draft.presets.map((pr) => ({
       id: pr.id,
@@ -866,6 +877,24 @@ function AppContent({
       };
     }
     return computeModuleCostPreview(mod, catalog);
+  }, [editingModuleId, modules, catalog]);
+
+  /** Spatial assembly for 3D viewer — domain only in the shell (H12 / #107). */
+  const assemblyPreview = useMemo((): ResolvedAssembly | null => {
+    if (!editingModuleId || !catalog) return null;
+    const mod = modules.find((m) => m.id === editingModuleId);
+    if (!mod) return null;
+    try {
+      const choices = defaultOptionChoicesForModule(mod, catalog.optionGroups);
+      const presetId =
+        mod.presets && mod.presets.length > 0
+          ? mod.presets[0]!.id
+          : undefined;
+      return resolveAssembly(mod, choices, catalog, presetId);
+    } catch (err) {
+      console.warn('resolveAssembly failed', err);
+      return null;
+    }
   }, [editingModuleId, modules, catalog]);
 
   /** Sale-price estimates for module cards — domain only in the shell (F021). */
@@ -2393,6 +2422,7 @@ function AppContent({
           previewBlocked={modulePreview.previewBlocked}
           missingGroups={modulePreview.missingGroups}
           groupLabels={groupLabels}
+          assemblyPreview={assemblyPreview}
           moduleEstimates={moduleEstimates}
           requestCreateKey={modulesCreateKey}
           canMutate={canMutateModules}

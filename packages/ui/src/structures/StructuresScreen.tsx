@@ -15,6 +15,7 @@ import {
   EmptyState,
   Modal,
   SearchInput,
+  SpatialPartFields,
   StatusChips,
   useDebouncedValue,
   useRoutableEntitySelection,
@@ -976,6 +977,19 @@ export function StructuresScreen({
                           />
                         </div>
                       </div>
+
+                      <SpatialPartFields
+                        testIdPrefix={`struct-part-${index}`}
+                        value={{
+                          face: part.face,
+                          placement: part.placement,
+                          originXFormula: part.originXFormula,
+                          originYFormula: part.originYFormula,
+                          originZFormula: part.originZFormula,
+                          designThicknessMm: part.designThicknessMm,
+                        }}
+                        onChange={(patch) => updatePart(part.id, patch)}
+                      />
 
                       {((part.lengthFormula || part.widthFormula) && (draft.presets.length > 0 || (draft.widthMm > 0 || draft.heightMm > 0 || draft.depthMm > 0))) && (
                         <div className="text-small text-muted" style={{ fontStyle: 'italic', display: 'flex', gap: '1rem', marginBottom: '0.5rem', fontSize: '0.75rem' }} data-testid={`part-resolved-preview-${index}`}>

@@ -89,7 +89,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 		// Cargar board parts de este módulo
 		partsQuery := `
-			SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2
+			SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2,
+				face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm
 			FROM board_parts
 			WHERE module_id = $1;
 		`
@@ -103,12 +104,16 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 			for pRows.Next() {
 				var p domain.BoardPart
 				var code *string
+				var face, placement, ox, oy, oz *string
+				var designT *int
 				var l1, l2, w1, w2 bool
-				err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
+				err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2,
+					&face, &placement, &ox, &oy, &oz, &designT)
 				if err == nil {
 					if code != nil {
 						p.Code = *code
 					}
+					applySpatialPtrs(&p, face, placement, ox, oy, oz, designT)
 					p.Edges = []domain.EdgeAssignment{
 						{Side: "L1", Enabled: l1},
 						{Side: "L2", Enabled: l2},
@@ -866,20 +871,25 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 			}
 		}
 
+		face, placement, ox, oy, oz, designT := spatialWriteArgs(p)
 		partID := p.ID
 		if partID == "" {
 			partQuery := `
-				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2,
+					face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2,
+				face, placement, ox, oy, oz, designT).Scan(&p.ID)
 		} else {
 			partQuery := `
-				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2,
+					face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2,
+				face, placement, ox, oy, oz, designT)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)
@@ -978,20 +988,25 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 				w2 = e.Enabled
 			}
 		}
+		face, placement, ox, oy, oz, designT := spatialWriteArgs(p)
 		partID := p.ID
 		if partID == "" {
 			partQuery := `
-				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2,
+					face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2,
+				face, placement, ox, oy, oz, designT).Scan(&p.ID)
 		} else {
 			partQuery := `
-				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2,
+					face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2,
+				face, placement, ox, oy, oz, designT)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)

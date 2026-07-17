@@ -193,11 +193,32 @@ function boardPartToApi(p: BoardPart): Record<string, unknown> {
       enabled: e.enabled,
     })),
     option_role: p.optionRole,
+    length_formula: p.lengthFormula ?? '',
+    width_formula: p.widthFormula ?? '',
+    face: p.face ?? '',
+    placement: p.placement ?? '',
+    origin_x_formula: p.originXFormula ?? '',
+    origin_y_formula: p.originYFormula ?? '',
+    origin_z_formula: p.originZFormula ?? '',
+    design_thickness_mm: p.designThicknessMm ?? 0,
   };
 }
 
 function boardPartFromApi(raw: Record<string, unknown>): BoardPart {
   const edgesRaw = Array.isArray(raw.edges) ? raw.edges : [];
+  const faceRaw = str(raw.face);
+  const placementRaw = str(raw.placement);
+  const lengthFormula = str(raw.length_formula ?? raw.lengthFormula);
+  const widthFormula = str(raw.width_formula ?? raw.widthFormula);
+  const originX = str(raw.origin_x_formula ?? raw.originXFormula);
+  const originY = str(raw.origin_y_formula ?? raw.originYFormula);
+  const originZ = str(raw.origin_z_formula ?? raw.originZFormula);
+  const designT = num(raw.design_thickness_mm ?? raw.designThicknessMm);
+  const face =
+    faceRaw === 'xy' || faceRaw === 'xz' || faceRaw === 'yz'
+      ? faceRaw
+      : undefined;
+  const placement = placementRaw || undefined;
   return {
     id: str(raw.id),
     code: str(raw.code) || undefined,
@@ -210,6 +231,14 @@ function boardPartFromApi(raw: Record<string, unknown>): BoardPart {
       enabled: bool(e.enabled),
     })),
     optionRole: str(raw.option_role ?? raw.optionRole),
+    lengthFormula: lengthFormula || undefined,
+    widthFormula: widthFormula || undefined,
+    face,
+    placement: placement as BoardPart['placement'],
+    originXFormula: originX || undefined,
+    originYFormula: originY || undefined,
+    originZFormula: originZ || undefined,
+    designThicknessMm: designT > 0 ? designT : undefined,
   };
 }
 
@@ -285,6 +314,10 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     components: (m.components ?? []).map((c) => ({
       component_id: c.componentId,
       quantity: c.quantity,
+      placement: c.placement ?? '',
+      origin_x_formula: c.originXFormula ?? '',
+      origin_y_formula: c.originYFormula ?? '',
+      origin_z_formula: c.originZFormula ?? '',
     })),
     board_parts: m.boardParts.map(boardPartToApi),
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
@@ -311,9 +344,17 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     ? compsRaw
         .map((c) => {
           const row = c as Record<string, unknown>;
+          const placement = str(row.placement) || undefined;
+          const ox = str(row.origin_x_formula ?? row.originXFormula);
+          const oy = str(row.origin_y_formula ?? row.originYFormula);
+          const oz = str(row.origin_z_formula ?? row.originZFormula);
           return {
             componentId: str(row.component_id ?? row.componentId),
             quantity: Math.max(1, Math.floor(num(row.quantity, 1))),
+            placement: placement as BoardPart['placement'],
+            originXFormula: ox || undefined,
+            originYFormula: oy || undefined,
+            originZFormula: oz || undefined,
           };
         })
         .filter((c) => c.componentId.length > 0)

@@ -128,6 +128,31 @@ export interface EdgeAssignment {
   readonly enabled: boolean;
 }
 
+/**
+ * Which world plane the board face lies on (workshop frame, S1 spatial).
+ * - xy: front/back plane
+ * - xz: horizontal (base / top / shelf)
+ * - yz: lateral (left / right side)
+ */
+export type BoardFace = 'xy' | 'xz' | 'yz';
+
+/**
+ * Semantic assembly slot — used for defaults and engineering UI (S1).
+ * Distinct from BoardFace (physical orientation).
+ */
+export type PlacementSlot =
+  | 'base'
+  | 'top'
+  | 'left'
+  | 'right'
+  | 'back'
+  | 'front'
+  | 'shelf'
+  | 'door'
+  | 'drawer_front'
+  | 'divider'
+  | 'custom';
+
 export interface BoardPart {
   readonly id: string;
   readonly code?: string;
@@ -144,6 +169,21 @@ export interface BoardPart {
   readonly optionRole: string;
   readonly lengthFormula?: string;
   readonly widthFormula?: string;
+  /**
+   * Spatial assembly metadata (S1). Optional — modules without these still
+   * resolve BOM; assembly degrades to outer_only / partial.
+   */
+  readonly face?: BoardFace;
+  readonly placement?: PlacementSlot;
+  /** Origin formulas in furniture mm; tokens W,H,D,T,i,n. */
+  readonly originXFormula?: string;
+  readonly originYFormula?: string;
+  readonly originZFormula?: string;
+  /**
+   * Design thickness when material is not yet resolved (mm).
+   * Assembly prefers resolved material thickness when available.
+   */
+  readonly designThicknessMm?: number;
 }
 
 export interface HardwareLine {
@@ -208,6 +248,14 @@ export interface ModuleComponentRef {
   readonly componentId: string;
   /** How many times to include this component (e.g. 2 doors). */
   readonly quantity: number;
+  /**
+   * Instance placement overrides (S1). Applied as the component frame origin
+   * for each index i in 0..quantity-1; formulas may use W,H,D,T,i,n.
+   */
+  readonly placement?: PlacementSlot;
+  readonly originXFormula?: string;
+  readonly originYFormula?: string;
+  readonly originZFormula?: string;
 }
 
 /**
@@ -370,6 +418,43 @@ export interface ResolvedHardwareLine {
 export interface ResolvedBom {
   readonly boardParts: readonly ResolvedBoardPart[];
   readonly hardwareLines: readonly ResolvedHardwareLine[];
+}
+
+/** Completeness of spatial assembly (S1) — viewer may degrade gracefully. */
+export type AssemblyCompleteness = 'full' | 'partial' | 'outer_only';
+
+/**
+ * One board placed in furniture space (S1). Sibling of ResolvedBoardPart for
+ * cost/export — does not replace BOM.
+ */
+export interface PlacedBoardPart {
+  readonly partId: string;
+  readonly code?: string;
+  readonly description: string;
+  readonly optionRole: string;
+  readonly materialId?: string;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly thicknessMm: number;
+  readonly face: BoardFace;
+  readonly originMm: { readonly x: number; readonly y: number; readonly z: number };
+  readonly placement?: PlacementSlot;
+  readonly source: {
+    readonly kind: 'structure' | 'component' | 'module';
+    readonly structureId?: string;
+    readonly componentId?: string;
+    readonly instanceIndex?: number;
+  };
+}
+
+export interface ResolvedAssembly {
+  readonly outerMm: {
+    readonly width: number;
+    readonly height: number;
+    readonly depth: number;
+  };
+  readonly boards: readonly PlacedBoardPart[];
+  readonly completeness: AssemblyCompleteness;
 }
 
 export interface QuoteBreakdown {

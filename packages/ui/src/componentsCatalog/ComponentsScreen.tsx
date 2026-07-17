@@ -23,6 +23,7 @@ import {
   EmptyState,
   Modal,
   SearchInput,
+  SpatialPartFields,
   StatusChips,
   useDebouncedValue,
   useRoutableEntitySelection,
@@ -38,6 +39,7 @@ import {
   emptyHardwareLineDraft,
   edgesFromFlags,
   hardwareLineToDraft,
+  spatialFieldsFromDraft,
   optionGroupsForBoardParts,
   type BoardPartDraft,
   type HardwareLineDraft,
@@ -558,6 +560,25 @@ export function ComponentsScreen({
                       }))
                     }
                   />
+                  <SpatialPartFields
+                    testIdPrefix={`comp-part-${idx}`}
+                    value={{
+                      face: p.face,
+                      placement: p.placement,
+                      originXFormula: p.originXFormula,
+                      originYFormula: p.originYFormula,
+                      originZFormula: p.originZFormula,
+                      designThicknessMm: p.designThicknessMm,
+                    }}
+                    onChange={(patch) =>
+                      setDraft((d) => ({
+                        ...d,
+                        boardParts: d.boardParts.map((x, i) =>
+                          i === idx ? { ...x, ...patch } : x,
+                        ),
+                      }))
+                    }
+                  />
                   <select
                     className="input"
                     value={p.optionRole}
@@ -703,6 +724,7 @@ export function componentDraftToEntity(
       optionRole: p.optionRole.trim(),
       lengthFormula: p.lengthFormula?.trim() || undefined,
       widthFormula: p.widthFormula?.trim() || undefined,
+      ...spatialFieldsFromDraft(p),
     })),
     hardwareLines: draft.hardwareLines.map((l) => ({
       id: l.id,

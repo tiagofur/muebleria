@@ -145,6 +145,13 @@ type BoardPart struct {
 	OptionRole    string           `json:"option_role"`
 	LengthFormula string           `json:"length_formula,omitempty"`
 	WidthFormula  string           `json:"width_formula,omitempty"`
+	// Spatial assembly (S1) — optional; BOM works without these.
+	Face              string `json:"face,omitempty"`
+	Placement         string `json:"placement,omitempty"`
+	OriginXFormula    string `json:"origin_x_formula,omitempty"`
+	OriginYFormula    string `json:"origin_y_formula,omitempty"`
+	OriginZFormula    string `json:"origin_z_formula,omitempty"`
+	DesignThicknessMm int    `json:"design_thickness_mm,omitempty"`
 }
 
 type HardwareLine struct {
@@ -191,8 +198,12 @@ type Module struct {
 
 // ModuleComponentRef links a module template to a furniture component (H07).
 type ModuleComponentRef struct {
-	ComponentID string `json:"component_id"`
-	Quantity    int    `json:"quantity"`
+	ComponentID    string `json:"component_id"`
+	Quantity       int    `json:"quantity"`
+	Placement      string `json:"placement,omitempty"`
+	OriginXFormula string `json:"origin_x_formula,omitempty"`
+	OriginYFormula string `json:"origin_y_formula,omitempty"`
+	OriginZFormula string `json:"origin_z_formula,omitempty"`
 }
 
 // FurnitureComponent is a reusable add-on (puerta, entrepaño, …) — H06 / #101.

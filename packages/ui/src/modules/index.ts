@@ -17,11 +17,24 @@ export {
 } from './ModuleShowcase';
 
 export {
+  Module3DPreview,
+  type Module3DPreviewProps,
+} from './preview3d/Module3DPreview';
+
+export {
+  assemblyToBoxes,
+  placedBoardToBox,
+  mmToScene,
+  type BoardBoxMm,
+} from './preview3d/placedBoardGeometry';
+
+export {
   defaultOptionChoicesForModule,
   edgesFromFlags,
   emptyBoardPartDraft,
   emptyCategoryDraft,
   emptyHardwareLineDraft,
+  emptyModuleComponentRefDraft,
   emptyModuleDraft,
   filterModulesByQuery,
   flattenCategoriesForSelect,
@@ -31,6 +44,7 @@ export {
   moduleToDraft,
   boardPartToDraft,
   hardwareLineToDraft,
+  spatialFieldsFromDraft,
   optionGroupsByKind,
   optionGroupsForBoardParts,
   optionGroupsForHardware,

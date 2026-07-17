@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { validateNonNegativeNumber, validateRequiredName } from '../catalogs/catalogHelpers';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
+import { Module3DPreview } from './preview3d/Module3DPreview';
 import {
   CatalogImage,
   EmptyState,
@@ -134,6 +135,11 @@ export interface ModulesScreenProps {
   readonly previewBlocked?: boolean;
   readonly missingGroups?: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
+  /**
+   * Spatial assembly from domain `resolveAssembly` (H12 / #107).
+   * Shell computes; UI only renders the viewer.
+   */
+  readonly assemblyPreview?: import('@muebles/domain').ResolvedAssembly | null;
   /**
    * Sale-price estimate per module id (domain-computed in shell).
    * `null` value = blocked / unavailable.
@@ -257,6 +263,7 @@ export function ModulesScreen({
   previewBlocked = false,
   missingGroups = [],
   groupLabels,
+  assemblyPreview = null,
   moduleEstimates = {},
   requestCreateKey = 0,
   openModuleId = null,
@@ -1508,6 +1515,12 @@ export function ModulesScreen({
         missingGroups={missingGroups}
         groupLabels={groupLabels}
       />
+
+      {assemblyPreview &&
+      (assemblyPreview.outerMm.width > 0 ||
+        assemblyPreview.boards.length > 0) ? (
+        <Module3DPreview assembly={assemblyPreview} />
+      ) : null}
 
       <section className="module-detail__section" aria-label="Piezas de tablero">
         <h3 className="module-detail__section-title">

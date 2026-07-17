@@ -20,10 +20,12 @@ import type {
   Catalog,
   Customer,
   EdgeAssignment,
+  FurnitureComponent,
   Module,
   OptionChoices,
   Project,
   QuoteBreakdown,
+  Structure,
 } from '../types';
 
 const edgesAll = (
@@ -61,6 +63,10 @@ export const IDS = {
   ogCorredera: 'og-corredera',
   modGab: 'mod-gab-01',
   modCaj: 'mod-caj-01',
+  /** Composed spatial demo (S1 / #107). */
+  structureGab600: 'st-gab-600',
+  componentPuerta: 'comp-puerta-simple',
+  modComp600: 'mod-comp-600',
   /** Seed customers referenced by plantilla / demo projects. */
   custPlantilla1: 'cust-plantilla-1',
   custPlantilla2: 'cust-plantilla-2',
@@ -493,9 +499,161 @@ export const modCaj01: Module = {
   ],
 };
 
+/**
+ * Engineering body for 600×720×560 gabinete with S1 spatial poses.
+ * Used by MOD-COMP-600 seed for 3D assembly preview.
+ */
+export const estGab600: Structure = {
+  id: IDS.structureGab600,
+  code: 'EST-GAB-600',
+  name: 'Cuerpo gabinete 600',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  boardParts: [
+    {
+      id: 'est-gab-left',
+      code: 'EST-GAB-L',
+      description: 'Lateral izquierdo',
+      quantity: 1,
+      lengthMm: 720,
+      widthMm: 560,
+      lengthFormula: 'H',
+      widthFormula: 'D',
+      edges: edgesAll(true, true, true, true),
+      optionRole: 'INTERIOR',
+      placement: 'left',
+      designThicknessMm: 18,
+    },
+    {
+      id: 'est-gab-right',
+      code: 'EST-GAB-R',
+      description: 'Lateral derecho',
+      quantity: 1,
+      lengthMm: 720,
+      widthMm: 560,
+      lengthFormula: 'H',
+      widthFormula: 'D',
+      edges: edgesAll(true, true, true, true),
+      optionRole: 'INTERIOR',
+      placement: 'right',
+      designThicknessMm: 18,
+    },
+    {
+      id: 'est-gab-base',
+      code: 'EST-GAB-B',
+      description: 'Base',
+      quantity: 1,
+      lengthMm: 564,
+      widthMm: 560,
+      lengthFormula: 'W-2*T',
+      widthFormula: 'D',
+      edges: edgesAll(false, false, true, true),
+      optionRole: 'INTERIOR',
+      placement: 'base',
+      designThicknessMm: 18,
+    },
+    {
+      id: 'est-gab-top',
+      code: 'EST-GAB-T',
+      description: 'Tapa',
+      quantity: 1,
+      lengthMm: 564,
+      widthMm: 560,
+      lengthFormula: 'W-2*T',
+      widthFormula: 'D',
+      edges: edgesAll(false, false, true, true),
+      optionRole: 'INTERIOR',
+      placement: 'top',
+      designThicknessMm: 18,
+    },
+    {
+      id: 'est-gab-back',
+      code: 'EST-GAB-BK',
+      description: 'Trasera',
+      quantity: 1,
+      lengthMm: 564,
+      widthMm: 684,
+      lengthFormula: 'W-2*T',
+      widthFormula: 'H-2*T',
+      edges: edgesAll(false, false, false, false),
+      optionRole: 'INTERIOR',
+      placement: 'back',
+      designThicknessMm: 18,
+    },
+  ],
+};
+
+/** Single door panel for composed furniture (kind puerta → default door pose). */
+export const compPuertaSimple: FurnitureComponent = {
+  id: IDS.componentPuerta,
+  code: 'COMP-PUERTA-01',
+  name: 'Puerta simple',
+  kind: 'puerta',
+  active: true,
+  boardParts: [
+    {
+      id: 'comp-pta-panel',
+      code: 'PTA-01',
+      description: 'Puerta',
+      quantity: 1,
+      lengthMm: 716,
+      widthMm: 596,
+      lengthFormula: 'H-4',
+      widthFormula: 'W-4',
+      edges: edgesAll(true, true, true, true),
+      optionRole: 'FRENTE',
+      designThicknessMm: 18,
+    },
+  ],
+  hardwareLines: [
+    {
+      id: 'comp-pta-hinge',
+      quantity: 2,
+      optionRole: 'BISAGRA',
+    },
+  ],
+};
+
+/**
+ * Composed commercial module: structure + door + measure presets.
+ * Opens full 3D assembly in seed workspaces (H07 + S1 + #107).
+ */
+export const modComp600: Module = {
+  id: IDS.modComp600,
+  code: 'MOD-COMP-600',
+  name: 'Gabinete compuesto 600 (demo 3D)',
+  structureId: IDS.structureGab600,
+  presets: [
+    {
+      id: 'preset-comp-600',
+      name: '600',
+      width: 600,
+      height: 720,
+      depth: 560,
+    },
+    {
+      id: 'preset-comp-500',
+      name: '500',
+      width: 500,
+      height: 720,
+      depth: 560,
+    },
+  ],
+  components: [
+    {
+      componentId: IDS.componentPuerta,
+      quantity: 1,
+      placement: 'door',
+    },
+  ],
+  boardParts: [],
+  hardwareLines: [],
+};
+
 export const plantillaCatalogWithModules: Catalog = {
   ...plantillaCatalog,
-  modules: [modGab01, modCaj01],
+  modules: [modGab01, modCaj01, modComp600],
+  structures: [estGab600],
+  components: [compPuertaSimple],
 };
 
 export const plantillaProject: Project = {

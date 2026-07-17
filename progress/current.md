@@ -1,27 +1,17 @@
 # Sesión actual
 
 - **Branch:** `feat/furniture-components-101-103`
-- **Issues:** #101 #102 #103 (sobre base #104)
-- **Estado:** listo para PR
+- **Features:** F055 spatial S1 + F056 / #107 Module3DPreview
+- **Estado:** in_progress
 
-## Entregado
+## Hecho
 
-### #101 / F052 — Componentes reutilizables
-- Domain: `FurnitureComponent`, kinds, `validateFurnitureComponent`
-- Go: migration `000017`, storage CRUD, API `/catalog/components`
-- UI: `ComponentsScreen` en Ingeniería
-
-### #102 / F053 — Mueble compuesto
-- `Module.components` + `expandModuleComponents` en `resolveBom`
-- Dual path: módulos fijos sin cambios
-- Persistencia `module_component_refs`
-
-### #103 / F054 — UI Ingeniería
-- Nav **Componentes** (RBAC ingeniero/admin)
-- Editor de mueble: sección adjuntar componentes + cantidad
-- Estructuras ya existían (#99)
+- S1: resolveAssembly, fórmulas T/i/n, UI espacial, migración 000018
+- F056: Module3DPreview (three + R3F) en detalle de mueble
+- Shell: `resolveAssembly` → `assemblyPreview` prop
 
 ## Verificación
 
-- domain/ui/storage/web tests + typecheck verdes
-- go test ./... ok
+- domain + geometry unit tests
+- ui tests (viewer may skip WebGL in jsdom; pure geometry covered)
+- typecheck ui/web

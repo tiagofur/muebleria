@@ -34,7 +34,8 @@ func edgeFlagsFromPart(p domain.BoardPart) (l1, l2, w1, w2 bool) {
 
 func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID string) ([]domain.BoardPart, error) {
 	partsQuery := `
-		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula
+		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+			face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm
 		FROM structure_board_parts
 		WHERE structure_id = $1
 		ORDER BY code NULLS LAST, description;
@@ -50,8 +51,11 @@ func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID stri
 		var p domain.BoardPart
 		var code *string
 		var lengthFormula, widthFormula *string
+		var face, placement, ox, oy, oz *string
+		var designT *int
 		var l1, l2, w1, w2 bool
-		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2, &lengthFormula, &widthFormula); err != nil {
+		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2, &lengthFormula, &widthFormula,
+			&face, &placement, &ox, &oy, &oz, &designT); err != nil {
 			return nil, err
 		}
 		if code != nil {
@@ -63,6 +67,7 @@ func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID stri
 		if widthFormula != nil {
 			p.WidthFormula = *widthFormula
 		}
+		applySpatialPtrs(&p, face, placement, ox, oy, oz, designT)
 		p.Edges = edgesFromFlags(l1, l2, w1, w2)
 		parts = append(parts, p)
 	}
@@ -252,18 +257,23 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 		if !isValidUUID(partID) {
 			partID = ""
 		}
+		face, placement, ox, oy, oz, designT := spatialWriteArgs(p)
 		if partID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, partID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+				 face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20);
+			`, partID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula),
+				face, placement, ox, oy, oz, designT)
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
-			`, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+				 face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19);
+			`, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula),
+				face, placement, ox, oy, oz, designT)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting structure part: %w", err)
@@ -338,18 +348,24 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 		if !isValidUUID(partID) {
 			partID = ""
 		}
+		face, placement, ox, oy, oz, designT := spatialWriteArgs(p)
+		var err error
 		if partID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, partID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+				 face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20);
+			`, partID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula),
+				face, placement, ox, oy, oz, designT)
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO structure_board_parts
-				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
-			`, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+				 face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19);
+			`, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula),
+				face, placement, ox, oy, oz, designT)
 		}
 		if err != nil {
 			return fmt.Errorf("error replacing structure parts: %w", err)
