@@ -983,7 +983,7 @@ function AppContent({
   }, [navigate]);
 
   const onDashboardOpenShowcase = useCallback(() => {
-    navigate(pathForNav('modules'));
+    navigate(pathForNav('showcase'));
   }, [navigate]);
 
   const onDashboardOpenMaterials = useCallback(() => {
@@ -991,8 +991,8 @@ function AppContent({
   }, [navigate]);
 
   const onDashboardOpenModules = useCallback(() => {
-    navigate(pathForNav('modules'));
-  }, [navigate]);
+    navigate(pathForNav(canMutateModules ? 'modules' : 'showcase'));
+  }, [navigate, canMutateModules]);
 
   const onShowcaseUseInQuote = useCallback(
     (moduleId: string) => {
@@ -2360,18 +2360,25 @@ function AppContent({
           onSave={saveWorkshopSettings}
         />
       ) : null}
+      {navId === 'showcase' ? (
+        <ModuleShowcase
+          modules={modules}
+          categories={categories}
+          optionGroups={optionGroups}
+          furnitureComponents={furnitureComponents}
+          saleEstimates={moduleEstimates}
+          resolveImageUrl={resolveMediaUrl}
+          onUseInQuote={
+            canMutateProjects ? onShowcaseUseInQuote : undefined
+          }
+          onOpenPlantillas={
+            canMutateModules
+              ? () => navigate(pathForNav('modules'))
+              : undefined
+          }
+        />
+      ) : null}
       {navId === 'modules' ? (
-        !canMutateModules && session === 'auth' ? (
-          <ModuleShowcase
-            modules={modules}
-            categories={categories}
-            resolveImageUrl={resolveMediaUrl}
-            onSelect={(id) => onModuleSelectionChange(id)}
-            onUseInQuote={
-              canMutateProjects ? onShowcaseUseInQuote : undefined
-            }
-          />
-        ) : (
         <ModulesScreen
           modules={modules}
           optionGroups={optionGroups}
@@ -2402,8 +2409,8 @@ function AppContent({
               ? uploadCatalogImage
               : undefined
           }
+          onOpenShowcase={() => navigate(pathForNav('showcase'))}
         />
-        )
       ) : null}
       {navId === 'structures' ? (
         <StructuresScreen

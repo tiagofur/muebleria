@@ -43,6 +43,7 @@ export type AppNavId =
   | 'home'
   | 'projects'
   | 'customers'
+  | 'showcase'
   | 'modules'
   | 'structures'
   | 'components'
@@ -131,13 +132,15 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'home', label: 'Inicio', icon: LayoutDashboard },
       { id: 'projects', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
-      { id: 'modules', label: 'Muebles', icon: Package },
+      /** Commercial showroom (#118) — not the engineering ABM. */
+      { id: 'showcase', label: 'Vitrina', icon: Package },
     ],
   },
   {
     id: 'ingenieria',
     label: 'INGENIERÍA',
     items: [
+      { id: 'modules', label: 'Plantillas', icon: Package },
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
       { id: 'components', label: 'Componentes', icon: Box },
       { id: 'materials', label: 'Materiales', icon: Layers },

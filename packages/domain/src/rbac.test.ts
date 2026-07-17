@@ -68,6 +68,10 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('ingeniero').has('structures')).toBe(true);
     expect(navIdsForRole('admin').has('structures')).toBe(true);
     expect(navIdsForRole('vendedor').has('structures')).toBe(false);
+    expect(navIdsForRole('vendedor').has('showcase')).toBe(true);
+    expect(navIdsForRole('vendedor').has('modules')).toBe(false);
+    expect(navIdsForRole('ingeniero').has('showcase')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('modules')).toBe(true);
     expect(navIdsForRole('produccion').has('structures')).toBe(false);
     expect(navIdsForRole(null).has('structures')).toBe(true);
     expect(navIdsForRole('ingeniero').has('components')).toBe(true);

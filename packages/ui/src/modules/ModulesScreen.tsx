@@ -160,6 +160,8 @@ export interface ModulesScreenProps {
   readonly onUploadImage?: (file: File) => Promise<string>;
   /** Resolve media path for preview. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** Dual access (#118): open commercial vitrina from plantillas. */
+  readonly onOpenShowcase?: () => void;
 }
 
 function CostPreviewPanel({
@@ -265,6 +267,7 @@ export function ModulesScreen({
   canMutate = true,
   onUploadImage,
   resolveImageUrl = (u) => u,
+  onOpenShowcase,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -1832,8 +1835,18 @@ export function ModulesScreen({
   const renderList = (): ReactNode => (
     <>
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Muebles</h2>
+        <h2 className="catalog-page__title">Plantillas de muebles</h2>
         <div className="catalog-page__toolbar">
+          {onOpenShowcase ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={onOpenShowcase}
+              data-testid="modules-open-showcase"
+            >
+              Ver vitrina
+            </button>
+          ) : null}
           {canMutate && onCreateCategory ? (
             <button
               type="button"

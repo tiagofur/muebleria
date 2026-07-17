@@ -10,6 +10,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   home: '/',
   projects: '/projects',
   customers: '/customers',
+  showcase: '/showcase',
   modules: '/modules',
   structures: '/structures',
   components: '/components',
