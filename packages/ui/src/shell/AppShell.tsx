@@ -133,6 +133,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'home', label: 'Inicio', icon: LayoutDashboard },
       { id: 'projects', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
+      /** Commercial showroom (#118) — not the engineering ABM. */
       { id: 'showcase', label: 'Vitrina', icon: Store },
     ],
   },

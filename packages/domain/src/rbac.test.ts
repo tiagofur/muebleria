@@ -64,29 +64,24 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('produccion').has('projects')).toBe(true);
   });
 
-  it('F049/H06: structures + components + modules (Ingeniería) only for ingeniero/admin', () => {
+  it('F049/H06 + #118: Ingeniería plantillas vs Trabajo vitrina', () => {
     expect(navIdsForRole('ingeniero').has('structures')).toBe(true);
     expect(navIdsForRole('admin').has('structures')).toBe(true);
     expect(navIdsForRole('vendedor').has('structures')).toBe(false);
+    expect(navIdsForRole('vendedor').has('showcase')).toBe(true);
+    expect(navIdsForRole('vendedor').has('modules')).toBe(false);
+    expect(navIdsForRole('ingeniero').has('showcase')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('modules')).toBe(true);
+    expect(navIdsForRole('admin').has('modules')).toBe(true);
+    expect(navIdsForRole(null).has('modules')).toBe(true);
     expect(navIdsForRole('produccion').has('structures')).toBe(false);
     expect(navIdsForRole(null).has('structures')).toBe(true);
     expect(navIdsForRole('ingeniero').has('components')).toBe(true);
     expect(navIdsForRole('admin').has('components')).toBe(true);
     expect(navIdsForRole('vendedor').has('components')).toBe(false);
     expect(navIdsForRole(null).has('components')).toBe(true);
-    expect(navIdsForRole('ingeniero').has('modules')).toBe(true);
-    expect(navIdsForRole('admin').has('modules')).toBe(true);
-    expect(navIdsForRole('vendedor').has('modules')).toBe(false);
-    expect(navIdsForRole(null).has('modules')).toBe(true);
-  });
-
-  it('Trabajo Vitrina (showcase) for sales + engineering; not produccion', () => {
-    expect(navIdsForRole('vendedor').has('showcase')).toBe(true);
     expect(navIdsForRole('gerente_ventas').has('showcase')).toBe(true);
-    expect(navIdsForRole('ingeniero').has('showcase')).toBe(true);
-    expect(navIdsForRole('admin').has('showcase')).toBe(true);
     expect(navIdsForRole('produccion').has('showcase')).toBe(false);
-    expect(navIdsForRole(null).has('showcase')).toBe(true);
   });
 
   it('labels roles in Spanish de taller', () => {

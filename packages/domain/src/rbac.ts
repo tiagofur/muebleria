@@ -238,10 +238,11 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   const ids = new Set<string>(['home']);
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
+  // Trabajo → Vitrina (sales + engineering browse)
   if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
-  // Ingeniería: Muebles + Estructuras + Componentes (admin / ingeniero)
-  if (roleCanAccessModulesNav(role)) ids.add('modules');
+  // Ingeniería → Muebles / Estructuras / Componentes (admin / ingeniero)
   if (roleCanMutateModules(role)) {
+    ids.add('modules');
     ids.add('structures');
     ids.add('components');
   }

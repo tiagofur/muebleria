@@ -21,8 +21,26 @@ const sample: Module = {
   categoryId: 'cat-cocina',
   imageUrl: '/api/media/abc.webp',
   externalDims: { width: 600, height: 720, depth: 550 },
-  boardParts: [],
+  boardParts: [
+    {
+      id: 'p1',
+      description: 'Lateral',
+      quantity: 1,
+      lengthMm: 720,
+      widthMm: 560,
+      edges: [
+        { side: 'L1', enabled: false },
+        { side: 'L2', enabled: false },
+        { side: 'W1', enabled: false },
+        { side: 'W2', enabled: false },
+      ],
+      optionRole: 'INTERIOR',
+    },
+  ],
   hardwareLines: [],
+  presets: [
+    { id: 'pr-600', name: 'Ancho 600', width: 600, height: 720, depth: 550 },
+  ],
 };
 
 const living: Module = {
@@ -87,5 +105,51 @@ describe('ModuleShowcase (F040 / F043)', () => {
 
     await user.click(screen.getByTestId('showcase-detail-use'));
     expect(onUseInQuote).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows sale estimate, presets and option groups in commercial detail (#118)', async () => {
+    const user = userEvent.setup();
+    render(
+      <ModuleShowcase
+        modules={[sample]}
+        categories={categories}
+        saleEstimates={{ m1: 12500 }}
+        optionGroups={[
+          {
+            id: 'og-int',
+            code: 'INTERIOR',
+            name: 'Interior',
+            kind: 'board',
+            required: true,
+            optionIds: ['mat-a'],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('showcase-card-price-m1').textContent).toMatch(
+      /12.?500|\$12500/,
+    );
+    await user.click(screen.getByTestId('showcase-card-open-m1'));
+    expect(screen.getByTestId('showcase-detail-price').textContent).toMatch(
+      /12.?500|\$12500/,
+    );
+    expect(screen.getByTestId('showcase-detail-presets').textContent).toMatch(
+      /Ancho 600/,
+    );
+    expect(screen.getByTestId('showcase-detail-options').textContent).toMatch(
+      /Interior/,
+    );
+  });
+
+  it('offers dual access to plantillas when onOpenPlantillas is set (#118)', () => {
+    const onOpenPlantillas = vi.fn();
+    render(
+      <ModuleShowcase
+        modules={[sample]}
+        onOpenPlantillas={onOpenPlantillas}
+      />,
+    );
+    expect(screen.getByTestId('showcase-open-plantillas')).toBeTruthy();
   });
 });

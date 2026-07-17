@@ -30,6 +30,8 @@ export {
 
 export {
   defaultOptionChoicesForModule,
+  optionGroupCodesForModule,
+  formatMeasurePresetLine,
   edgesFromFlags,
   emptyBoardPartDraft,
   emptyCategoryDraft,

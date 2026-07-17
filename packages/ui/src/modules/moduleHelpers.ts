@@ -385,6 +385,61 @@ export function parseOptionalNumber(raw: string): number | undefined {
 }
 
 /**
+ * Option group codes used by a module template (own parts + attached components).
+ * Pure selection helper for vitrina / preview gates (#118).
+ */
+export function optionGroupCodesForModule(
+  module: {
+    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly hardwareLines: readonly {
+      readonly optionRole: string;
+      readonly hardwareId?: string;
+    }[];
+    readonly components?: readonly { readonly componentId: string }[];
+  },
+  furnitureComponents: readonly {
+    readonly id: string;
+    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly hardwareLines: readonly {
+      readonly optionRole: string;
+      readonly hardwareId?: string;
+    }[];
+  }[] = [],
+): string[] {
+  const roles = new Set<string>();
+  for (const part of module.boardParts) {
+    if (part.optionRole?.trim()) roles.add(part.optionRole.trim());
+  }
+  for (const line of module.hardwareLines) {
+    if (line.hardwareId) continue;
+    if (line.optionRole?.trim()) roles.add(line.optionRole.trim());
+  }
+  const byId = new Map(furnitureComponents.map((c) => [c.id, c]));
+  for (const ref of module.components ?? []) {
+    const comp = byId.get(ref.componentId);
+    if (!comp) continue;
+    for (const part of comp.boardParts) {
+      if (part.optionRole?.trim()) roles.add(part.optionRole.trim());
+    }
+    for (const line of comp.hardwareLines) {
+      if (line.hardwareId) continue;
+      if (line.optionRole?.trim()) roles.add(line.optionRole.trim());
+    }
+  }
+  return [...roles];
+}
+
+/** Alias used by ModuleShowcase commercial detail (#118). */
+export function formatMeasurePresetLine(preset: {
+  readonly name?: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}): string {
+  return formatMeasurePresetLabel(preset);
+}
+
+/**
  * Default option choices for cost preview: first member of each required group used by the module.
  * Pure selection helper — does not compute prices.
  */
@@ -395,17 +450,21 @@ export function defaultOptionChoicesForModule(
       readonly optionRole: string;
       readonly hardwareId?: string;
     }[];
+    readonly components?: readonly { readonly componentId: string }[];
   },
   optionGroups: readonly OptionGroup[],
+  furnitureComponents: readonly {
+    readonly id: string;
+    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly hardwareLines: readonly {
+      readonly optionRole: string;
+      readonly hardwareId?: string;
+    }[];
+  }[] = [],
 ): Record<string, string> {
-  const usedRoles = new Set<string>();
-  for (const part of module.boardParts) {
-    if (part.optionRole?.trim()) usedRoles.add(part.optionRole.trim());
-  }
-  for (const line of module.hardwareLines) {
-    if (line.hardwareId) continue;
-    if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
-  }
+  const usedRoles = new Set(
+    optionGroupCodesForModule(module, furnitureComponents),
+  );
 
   const choices: Record<string, string> = {};
   for (const group of optionGroups) {
