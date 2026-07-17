@@ -1,25 +1,28 @@
 # Sesión actual
 
-- **Branch:** `feat/furniture-components-101-103`
-- **PR:** https://github.com/tiagofur/muebleria/pull/124
-- **Issue:** Closes #107 (F055 spatial + F056 3D viewer)
-- **Estado:** resolviendo conflictos con main (#120 + #123 ya en main)
+- **Branch:** `feat/presets-measure-100` (rebased onto `main` 88a00c3)
+- **PR:** https://github.com/tiagofur/muebleria/pull/143
 
-## En main ya está
+## Qué pasó con los conflictos
 
-- #101–#103 componentes / mueble compuesto / UI (#120)
-- #122 polish medidas base vs comerciales
-- #123 Vitrina + dual plantillas
+`main` ya tenía (vía #117–#124):
 
-## Este PR aporta
+- Presets de estructura y de cotización  
+- Componentes / mueble compuesto  
+- Vitrina dual  
+- Spatial assembly + Module3DPreview  
 
-- resolveAssembly + fórmulas T/i/n + UI espacial + migración 000018
-- Module3DPreview (three/R3F)
-- Seed MOD-COMP-600
-- Nav: Trabajo → Vitrina; Ingeniería → Muebles
+El branch traía un stack **paralelo** (spatialPlacement + preview3d propio + paneles extraídos). Merge = cientos de conflictos sin valor.
 
-## Cómo ver el 3D
+## Resolución
 
-1. Ingeniería → **Muebles** → **MOD-COMP-600** (seed nuevo) o mueble con poses
-2. Detalle → Vista 3D
-3. API: migración espacial / bridge en Postgres
+1. Reset duro a `origin/main`  
+2. Conservar solo docs de producto: App Excellence + JD report + PRD §6.7  
+3. Force-push del PR como **docs-only**  
+4. Issues #125–#130: re-auditar en main o cerrar superseded  
+
+## Siguiente
+
+- Auditar #125–#130 contra `spatial.ts` / mappers actuales  
+- Producto: #133 layout cocina  
+- No reintroducir preview3d del branch sin SDD  

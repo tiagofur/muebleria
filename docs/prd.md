@@ -209,11 +209,11 @@ Sirven como **casos de aceptación** del motor de dominio y del export.
 | Ítem | Por qué se difiere |
 |------|--------------------|
 | Nesting 2D / optimización de pliegos | Ya existe flujo Optimizer externo |
-| CAD / dibujo 3D / renders | No resuelve el dolor principal |
+| CAD / dibujo 3D / renders fotorealistas | Preview 3D de ingeniería existe; layout de cocina simple es App Excellence (ver §6.7) |
 | Módulos paramétricos completos | Alto valor, alta complejidad; Fase 4 del roadmap |
 | Cloud sync multi-dispositivo completo | Etapa 2 en curso parcial (hay auth multi-usuario; falta sync real) |
 | Inventario y stock | ERP; no MVP |
-| CNC directo / post-procesadores | Más adelante si hay demanda |
+| CNC directo / post-procesadores de marca | Futuro documentado; ver §6.7.2 |
 | Multi-moneda compleja | Plantilla es MXN; un default basta |
 | App móvil nativa | Web responsive en MVP; nativa en Etapa 2 |
 
@@ -325,6 +325,36 @@ Roles `ingeniero`, `produccion`, `gerente_ventas` y `admin` pueden exportar Opti
 | Flag taller vendedor ve costos | [#89](https://github.com/tiagofur/muebleria/issues/89) · F044 |
 | PDF cotización comercial | [#90](https://github.com/tiagofur/muebleria/issues/90) · F045 |
 
+### 6.7 App Excellence (post-horizonte H01–H12)
+
+Plan vivo: **`docs/app-excellence.md`**.  
+META índice: [#132](https://github.com/tiagofur/muebleria/issues/132).
+
+#### 6.7.1 Plan de corte (política)
+
+| Ahora | Futuro (solo documentado hasta demanda real) |
+|-------|-----------------------------------------------|
+| `ProductionCutRow[]` → `Plantilla_Optimizer.xlsx` → nesting/corte **externo** | Metadatos por pieza → DXF/JSON → post-procesadores CNC → nesting interno opcional |
+
+El Optimizer Excel es la **única** salida de plan de corte implementada.
+
+#### 6.7.2 CNC / máquinas
+
+- Tracking: [#111](https://github.com/tiagofur/muebleria/issues/111) (icebox).  
+- Etapas F1–F4 en `docs/app-excellence.md` §4.  
+- No implementar G-code de marca sin prueba de campo.
+
+#### 6.7.3 Layout simple de cocina
+
+- **Sí (siguiente producto grande):** muros rectos, colocar/reordenar ítems de cotización, elevación base/alto, 3D desde placements.  
+  Tracking: [#133](https://github.com/tiagofur/muebleria/issues/133).  
+- **No (v1):** CAD libre, import de plano, renders fotorrealistas.  
+- Hoy existe **Vista 3D del mueble** (ingeniería, #107 / #124); la corrida de cotización con muros es #133.
+
+#### 6.7.4 Estado del horizonte
+
+H01–H12 (producción enriquecida, estructuras, componentes, previews 2D/3D de módulo) cerrados en main vía PRs #113–#124.  
+Icebox: #108–#111. Features App Excellence: #132–#142.
 
 ---
 

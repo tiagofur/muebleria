@@ -63,6 +63,8 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `progress/current.md` | Estado de la sesión activa | Al empezar |
 | `progress/history.md` | Bitácora de sesiones anteriores | Si necesitas contexto histórico |
 | `docs/prd.md` | Producto, usuarios del taller, dominio, fórmulas, anti-scope | Antes de dominio o producto |
+| `docs/app-excellence.md` | Plan post-horizonte: ventas/ingeniería/producción, layout cocina, CNC policy, issues #125+ | Roadmap de excelencia |
+| `docs/judgment-day-wip-3d-2026-07-17.md` | Bitácora JD 3D (histórico; arquitectura canónica = spatial + Module3DPreview en main) | Antes de reintroducir stacks 3D paralelos |
 | `docs/PRODUCT.md` | Contexto Impeccable (register, personality, anti-refs) | Setup del skill UI; no reemplaza el PRD |
 | `docs/architecture.md` | Paquetes, boundaries, flujo de datos | Antes de crear archivos |
 | `docs/conventions.md` | Estilo, nombres, tests, errores, tipos | Antes de escribir código |
