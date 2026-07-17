@@ -12,6 +12,7 @@ import type {
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
+  layoutKitchenPlacements,
   resolveBom,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
@@ -202,19 +203,63 @@ export function resolveProject3DPreview(
     };
   });
 
-  const footprints = rows.map((row) => ({
-    id: row.item.id,
-    width: row.width,
-    height: row.height,
-    depth: row.depth,
-    quantity: row.item.quantity,
-  }));
-
-  const layout = layoutProjectRun(footprints);
   const byItemId = new Map(rows.map((r) => [r.item.id, r]));
+  const kitchen = project.kitchenLayout;
+  const useKitchen =
+    !options.itemId &&
+    kitchen &&
+    kitchen.walls.length > 0 &&
+    kitchen.placements.length > 0;
 
-  const modules: ProjectModule3DInstance[] = layout.placements.map(
-    (place: PlacedModuleFootprint) => {
+  let modules: ProjectModule3DInstance[];
+  let totalWidth: number;
+  let totalHeight: number;
+  let totalDepth: number;
+  const layoutWarnings: string[] = [];
+
+  if (useKitchen && kitchen) {
+    const fps = kitchen.placements.map((p) => {
+      const row = byItemId.get(p.itemId);
+      return {
+        itemId: p.itemId,
+        instanceIndex: p.instanceIndex,
+        width: row?.width ?? DEFAULT_MODULE_FOOTPRINT_MM.width,
+        height: row?.height ?? DEFAULT_MODULE_FOOTPRINT_MM.height,
+        depth: row?.depth ?? DEFAULT_MODULE_FOOTPRINT_MM.depth,
+      };
+    });
+    const layout = layoutKitchenPlacements(kitchen, fps);
+    layoutWarnings.push(...layout.warnings);
+    modules = layout.placements.map((place) => {
+      const row = byItemId.get(place.itemId);
+      return {
+        instanceKey: place.instanceKey,
+        itemId: place.itemId,
+        moduleId: row?.module?.id ?? row?.item.moduleId ?? place.itemId,
+        label: row?.label ?? place.itemId,
+        parts: row?.parts ?? [],
+        width: place.width,
+        height: place.height,
+        depth: place.depth,
+        originX: place.originX,
+        originY: place.originY,
+        originZ: place.originZ,
+        error: row?.error ?? null,
+      };
+    });
+    totalWidth = layout.totalWidth;
+    totalHeight = layout.totalHeight;
+    totalDepth = layout.totalDepth;
+  } else {
+    const footprints = rows.map((row) => ({
+      id: row.item.id,
+      width: row.width,
+      height: row.height,
+      depth: row.depth,
+      quantity: row.item.quantity,
+    }));
+    const layout = layoutProjectRun(footprints);
+    modules = layout.placements.map((place: PlacedModuleFootprint) => {
       const row = byItemId.get(place.id)!;
       return {
         instanceKey: place.instanceKey,
@@ -230,14 +275,18 @@ export function resolveProject3DPreview(
         originZ: place.originZ,
         error: row.error,
       };
-    },
-  );
+    });
+    totalWidth = layout.totalWidth;
+    totalHeight = layout.totalHeight;
+    totalDepth = layout.totalDepth;
+  }
 
   const errors = [
     ...new Set(
-      rows
-        .map((r) => r.error)
-        .filter((e): e is string => Boolean(e)),
+      [
+        ...rows.map((r) => r.error).filter((e): e is string => Boolean(e)),
+        ...layoutWarnings,
+      ],
     ),
   ];
 
@@ -245,9 +294,9 @@ export function resolveProject3DPreview(
 
   return {
     modules,
-    totalWidth: layout.totalWidth,
-    totalHeight: layout.totalHeight,
-    totalDepth: layout.totalDepth,
+    totalWidth,
+    totalHeight,
+    totalDepth,
     empty: !hasAnyParts,
     errors,
   };

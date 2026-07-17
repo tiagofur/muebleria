@@ -607,6 +607,70 @@ export function customerFromApi(raw: Record<string, unknown>): Customer {
 
 // --- Projects ---
 
+function kitchenLayoutToApi(
+  layout: Project['kitchenLayout'],
+): Record<string, unknown> | null {
+  if (!layout) return null;
+  return {
+    walls: layout.walls.map((w) => ({
+      id: w.id,
+      name: w.name ?? '',
+      length_mm: w.lengthMm,
+      angle_deg: w.angleDeg,
+      origin_x_mm: w.originXMm ?? null,
+      origin_y_mm: w.originYMm ?? null,
+    })),
+    placements: layout.placements.map((p) => ({
+      item_id: p.itemId,
+      instance_index: p.instanceIndex,
+      wall_id: p.wallId,
+      offset_mm: p.offsetMm,
+      elevation: p.elevation,
+    })),
+  };
+}
+
+function kitchenLayoutFromApi(
+  raw: unknown,
+): Project['kitchenLayout'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const row = raw as Record<string, unknown>;
+  const wallsRaw = Array.isArray(row.walls) ? row.walls : [];
+  const placementsRaw = Array.isArray(row.placements) ? row.placements : [];
+  const walls = wallsRaw.map((w) => {
+    const wr = w as Record<string, unknown>;
+    const ox = wr.origin_x_mm ?? wr.originXMm;
+    const oy = wr.origin_y_mm ?? wr.originYMm;
+    return {
+      id: str(wr.id),
+      name: str(wr.name) || undefined,
+      lengthMm: num(wr.length_mm ?? wr.lengthMm, 1),
+      angleDeg: num(wr.angle_deg ?? wr.angleDeg),
+      originXMm:
+        ox === null || ox === undefined || ox === ''
+          ? undefined
+          : num(ox),
+      originYMm:
+        oy === null || oy === undefined || oy === ''
+          ? undefined
+          : num(oy),
+    };
+  });
+  const placements = placementsRaw.map((p) => {
+    const pr = p as Record<string, unknown>;
+    const elev = str(pr.elevation, 'floor');
+    return {
+      itemId: str(pr.item_id ?? pr.itemId),
+      instanceIndex: Math.max(0, Math.floor(num(pr.instance_index ?? pr.instanceIndex))),
+      wallId: str(pr.wall_id ?? pr.wallId),
+      offsetMm: num(pr.offset_mm ?? pr.offsetMm),
+      elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
+    };
+  });
+  if (walls.length === 0 && placements.length === 0) return undefined;
+  return { walls, placements };
+}
+
 export function projectToApi(p: Project): Record<string, unknown> {
   return {
     id: p.id,
@@ -620,6 +684,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
     status: p.status,
     notes: p.notes ?? '',
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
+    kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
     items: p.items.map((item) => ({
       id: item.id,
       module_id: item.moduleId,
@@ -658,6 +723,9 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
       projectLevelChoices && Object.keys(projectLevelChoices).length > 0
         ? projectLevelChoices
         : undefined,
+    kitchenLayout: kitchenLayoutFromApi(
+      raw.kitchen_layout ?? raw.kitchenLayout,
+    ),
     createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
     items: itemsRaw.map((it): ProjectItem => {

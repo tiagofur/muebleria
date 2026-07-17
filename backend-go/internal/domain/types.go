@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -308,11 +309,13 @@ type Project struct {
 	Items          []ProjectItem `json:"items"`
 	// ProjectLevelChoices are defaults for all line items (F029 / #35).
 	// Effective: item.OptionChoices[role] if set, else ProjectLevelChoices[role].
-	ProjectLevelChoices map[string]string   `json:"project_level_choices,omitempty"`
-	Notes               string              `json:"notes,omitempty"`
-	PriceSnapshot       *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt           time.Time           `json:"created_at"`
-	UpdatedAt           time.Time           `json:"updated_at"`
+	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
+	// KitchenLayout is optional walls+placements plan (#133). JSON object or null.
+	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
+	Notes         string          `json:"notes,omitempty"`
+	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
+	CreatedAt     time.Time           `json:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"`
 }
 
 type QuoteBreakdown struct {

@@ -140,6 +140,22 @@ export function duplicateProject(
     measurePresetId: item.measurePresetId,
   }));
 
+  // Remap kitchen placements to new item ids (same order).
+  const oldIds = project.items.map((it) => it.id);
+  const idMap = new Map(oldIds.map((id, i) => [id, items[i]!.id]));
+  const kitchenLayout = project.kitchenLayout
+    ? {
+        walls: project.kitchenLayout.walls.map((w) => ({ ...w })),
+        placements: project.kitchenLayout.placements
+          .map((p) => {
+            const newItemId = idMap.get(p.itemId);
+            if (!newItemId) return null;
+            return { ...p, itemId: newItemId };
+          })
+          .filter((p): p is NonNullable<typeof p> => p != null),
+      }
+    : undefined;
+
   return {
     id: options.newId,
     name: options.newName ?? `${project.name} (copia)`,
@@ -153,6 +169,7 @@ export function duplicateProject(
     projectLevelChoices: project.projectLevelChoices
       ? { ...project.projectLevelChoices }
       : undefined,
+    kitchenLayout,
     notes: project.notes,
     createdAt: options.nowIso,
     updatedAt: options.nowIso,

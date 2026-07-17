@@ -62,6 +62,7 @@ import '../catalogs/catalogs.css';
 import { PricePreviewGate } from '../optionGroups/PricePreviewGate';
 import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
+import { KitchenPlanPanel } from './components/KitchenPlanPanel';
 import {
   customersForProjectPicker,
   defaultChoicesForNewItem,
@@ -130,6 +131,11 @@ export interface ProjectsScreenProps {
   ) => void;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
+  /** Kitchen plan walls + placements (#133). */
+  readonly onUpdateKitchenLayout?: (
+    projectId: string,
+    layout: import('@muebles/domain').ProjectKitchenLayout,
+  ) => void;
   /** F029: project-wide option defaults (empty keys inherit on each line). */
   readonly onUpdateProjectLevelChoices?: (
     projectId: string,
@@ -253,6 +259,7 @@ export function ProjectsScreen({
   onAddItem,
   onUpdateItem,
   onRemoveItem,
+  onUpdateKitchenLayout,
   onUpdateProjectLevelChoices,
   onSelectionChange,
   breakdown = null,
@@ -1448,6 +1455,19 @@ export function ProjectsScreen({
             </div>
           </section>
         ) : null}
+
+        <KitchenPlanPanel
+          project={project}
+          modules={modules}
+          canEdit={Boolean(
+            canMutate &&
+              project.status === 'draft' &&
+              onUpdateKitchenLayout,
+          )}
+          onChange={(layout) => {
+            onUpdateKitchenLayout?.(project.id, layout);
+          }}
+        />
 
         <section
           className="project-detail__section project-detail__items"

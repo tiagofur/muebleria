@@ -33,6 +33,10 @@ export type {
   ModuleComponentInstance,
   ProjectItem,
   Project,
+  PlacementElevation,
+  KitchenWall,
+  ProjectItemPlacement,
+  ProjectKitchenLayout,
   QuotePriceSnapshot,
   Catalog,
   WorkshopSettings,
@@ -180,3 +184,20 @@ export {
   duplicateModule,
   duplicateProject,
 } from './duplicate';
+
+export {
+  DEFAULT_WALL_CABINET_Z_MM,
+  emptyKitchenLayout,
+  resolveWallFrames,
+  kitchenLayoutWarnings,
+  pruneKitchenLayout,
+  layoutKitchenPlacements,
+  nextOffsetOnWall,
+  createDefaultLWalls,
+} from './kitchenLayout';
+export type {
+  KitchenFootprint,
+  ResolvedWallFrame,
+  KitchenPlacedModule,
+  KitchenLayoutResult,
+} from './kitchenLayout';

@@ -1811,7 +1811,29 @@ function AppContent({
     );
   };
 
-  const removeProjectItem = (projectId: string, itemId: string) => {
+  const updateKitchenLayout = (
+    projectId: string,
+    kitchenLayout: import('@muebles/domain').ProjectKitchenLayout,
+  ) => {
+    const now = new Date().toISOString();
+    patchProjects((ps) =>
+      ps.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              kitchenLayout:
+                kitchenLayout.walls.length === 0 &&
+                kitchenLayout.placements.length === 0
+                  ? undefined
+                  : kitchenLayout,
+              updatedAt: now,
+            }
+          : p,
+      ),
+    );
+  };
+
+    const removeProjectItem = (projectId: string, itemId: string) => {
     const now = new Date().toISOString();
     patchProjects((ps) =>
       ps.map((p) =>
@@ -2448,6 +2470,7 @@ function AppContent({
           onUpdateItem={updateProjectItem}
           onRemoveItem={removeProjectItem}
           onUpdateProjectLevelChoices={updateProjectLevelChoices}
+          onUpdateKitchenLayout={updateKitchenLayout}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
           materialSummary={materialSummary}

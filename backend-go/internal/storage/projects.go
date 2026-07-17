@@ -282,7 +282,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, created_at, updated_at
 		FROM projects
 		ORDER BY updated_at DESC;
 	`
@@ -298,7 +298,8 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var createdBy *string
 		var ownerID *string
 		var notes *string
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &p.CreatedAt, &p.UpdatedAt)
+		var kitchenLayout []byte
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -310,6 +311,9 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		}
 		if notes != nil {
 			p.Notes = *notes
+		}
+		if len(kitchenLayout) > 0 && string(kitchenLayout) != "null" {
+			p.KitchenLayout = kitchenLayout
 		}
 
 		// Load items so FE reload keeps line items (calculate + UI depend on them).
@@ -510,7 +514,7 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, created_at, updated_at
 		FROM projects
 		WHERE id = $1;
 	`
@@ -519,7 +523,8 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var createdBy *string
 	var ownerID *string
 	var notes *string
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &p.CreatedAt, &p.UpdatedAt)
+	var kitchenLayout []byte
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -531,6 +536,9 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	}
 	if notes != nil {
 		p.Notes = *notes
+	}
+	if len(kitchenLayout) > 0 && string(kitchenLayout) != "null" {
+		p.KitchenLayout = kitchenLayout
 	}
 
 	items, err := s.loadProjectItems(ctx, p.ID)
@@ -624,19 +632,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout)).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout)).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -725,10 +733,10 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	query := `
 		UPDATE projects
 		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7,
-		    owner_user_id = $8, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $9;
+		    owner_user_id = $8, kitchen_layout = $9, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $10;
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, nullKitchenLayout(p.KitchenLayout), id)
 	if err != nil {
 		return err
 	}
@@ -1164,4 +1172,12 @@ func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
 	query := `DELETE FROM modules WHERE id = $1;`
 	_, err := s.Pool.Exec(ctx, query, id)
 	return err
+}
+
+
+func nullKitchenLayout(b []byte) interface{} {
+	if len(b) == 0 || string(b) == "null" {
+		return nil
+	}
+	return b
 }

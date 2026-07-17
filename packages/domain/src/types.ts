@@ -309,6 +309,44 @@ export interface ProjectItem {
   readonly measurePresetId?: string;
 }
 
+/** Floor base vs wall-hung elevation for kitchen plan (#133). */
+export type PlacementElevation = 'floor' | 'wall';
+
+/**
+ * Straight wall segment in plan (mm).
+ * angleDeg: 0 = along +X, 90 = along +Y (L kitchen).
+ */
+export interface KitchenWall {
+  readonly id: string;
+  readonly lengthMm: number;
+  readonly name?: string;
+  /** Direction of the wall in plan degrees (0 = +X). */
+  readonly angleDeg: number;
+  /** Optional start; if omitted, chained from previous wall end. */
+  readonly originXMm?: number;
+  readonly originYMm?: number;
+}
+
+/**
+ * Placement of one copy of a quote line on a wall.
+ * Does not affect BOM — presentation/obra only (#133).
+ */
+export interface ProjectItemPlacement {
+  readonly itemId: string;
+  /** 0-based index when ProjectItem.quantity > 1. */
+  readonly instanceIndex: number;
+  readonly wallId: string;
+  /** Distance along the wall from the wall start (mm). */
+  readonly offsetMm: number;
+  readonly elevation: PlacementElevation;
+}
+
+/** Optional kitchen plan attached to a project. */
+export interface ProjectKitchenLayout {
+  readonly walls: readonly KitchenWall[];
+  readonly placements: readonly ProjectItemPlacement[];
+}
+
 export interface Project {
   readonly id: string;
   readonly name: string;
@@ -329,6 +367,10 @@ export interface Project {
    * Empty/missing line values inherit the project default.
    */
   readonly projectLevelChoices?: OptionChoices;
+  /**
+   * Optional kitchen plan (walls + placements). Omitted = linear 3D run only.
+   */
+  readonly kitchenLayout?: ProjectKitchenLayout;
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
