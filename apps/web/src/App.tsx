@@ -267,9 +267,10 @@ function draftToComponent(id: string, draft: ComponentDraft): Component {
     xFormula: draft.xFormula.trim() || undefined,
     yFormula: draft.yFormula.trim() || undefined,
     zFormula: draft.zFormula.trim() || undefined,
-    rotateX: draft.rotateX || undefined,
-    rotateY: draft.rotateY || undefined,
-    rotateZ: draft.rotateZ || undefined,
+    // null = placement default; 0 is a valid explicit rotation
+    rotateX: draft.rotateX ?? undefined,
+    rotateY: draft.rotateY ?? undefined,
+    rotateZ: draft.rotateZ ?? undefined,
   };
 }
 
@@ -996,7 +997,7 @@ function AppContent({
   }, [navigate]);
 
   const onDashboardOpenShowcase = useCallback(() => {
-    navigate(pathForNav('modules'));
+    navigate(pathForNav('showcase'));
   }, [navigate]);
 
   const onDashboardOpenMaterials = useCallback(() => {
@@ -1118,6 +1119,8 @@ function AppContent({
       wastePercent: draft.wastePercent,
       defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
       imageUrl: draft.imageUrl?.trim() || undefined,
+      previewColor: draft.previewColor?.trim() || undefined,
+      previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
       notes: optionalNotes(draft.notes),
       active: true,
     };
@@ -1149,6 +1152,8 @@ function AppContent({
               wastePercent: draft.wastePercent,
               defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
               imageUrl: draft.imageUrl?.trim() || undefined,
+              previewColor: draft.previewColor?.trim() || undefined,
+              previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
               notes: optionalNotes(draft.notes),
             }
           : m,
@@ -2348,18 +2353,17 @@ function AppContent({
           onSave={saveWorkshopSettings}
         />
       ) : null}
+      {navId === 'showcase' ? (
+        <ModuleShowcase
+          modules={modules}
+          categories={categories}
+          resolveImageUrl={resolveMediaUrl}
+          onUseInQuote={
+            canMutateProjects ? onShowcaseUseInQuote : undefined
+          }
+        />
+      ) : null}
       {navId === 'modules' ? (
-        !canMutateModules && session === 'auth' ? (
-          <ModuleShowcase
-            modules={modules}
-            categories={categories}
-            resolveImageUrl={resolveMediaUrl}
-            onSelect={(id) => onModuleSelectionChange(id)}
-            onUseInQuote={
-              canMutateProjects ? onShowcaseUseInQuote : undefined
-            }
-          />
-        ) : (
         <ModulesScreen
           modules={modules}
           optionGroups={optionGroups}
@@ -2393,7 +2397,6 @@ function AppContent({
               : undefined
           }
         />
-        )
       ) : null}
       {navId === 'structures' ? (
         <StructuresScreen
@@ -2431,6 +2434,8 @@ function AppContent({
           materials={materials}
           edges={edges}
           hardware={hardware}
+          catalogStructures={structures}
+          catalogComponents={components}
           customers={customers}
           canAssignOwner={canAssignOwner}
           assignableOwners={assignableOwners}

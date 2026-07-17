@@ -1,7 +1,10 @@
 export {
   ComponentsScreen,
+  type ComponentsScreenProps,
+} from './ComponentsScreen';
+
+export {
   COMPONENT_PLACEMENTS,
   PLACEMENT_LABEL,
   type ComponentDraft,
-  type ComponentsScreenProps,
-} from './ComponentsScreen';
+} from './componentDraft';

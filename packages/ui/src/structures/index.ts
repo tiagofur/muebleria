@@ -1,5 +1,6 @@
 export {
   StructuresScreen,
-  type StructureDraft,
   type StructuresScreenProps,
 } from './StructuresScreen';
+
+export type { StructureDraft } from './structureDraft';

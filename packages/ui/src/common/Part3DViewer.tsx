@@ -74,8 +74,21 @@ export const Part3DViewer: React.FC<Part3DViewerProps> = ({ parts, width, height
     return 'role-interior';
   };
 
+  if (parts.length === 0) {
+    return (
+      <div className="three-d-viewer-container" data-testid="part-3d-viewer-empty">
+        <p className="catalog-empty">Sin piezas para la vista 3D.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="three-d-viewer-container" ref={containerRef} onWheel={handleWheel}>
+    <div
+      className="three-d-viewer-container"
+      ref={containerRef}
+      onWheel={handleWheel}
+      data-testid="part-3d-viewer"
+    >
       <div className="three-d-instructions">
         Arrastrá para girar • Usá la ruedita para zoom
       </div>

@@ -12,6 +12,10 @@ import {
   type ReactNode,
 } from 'react';
 import type { EdgeBand, MaterialBoard } from '@muebles/domain';
+import {
+  isValidPreviewColor,
+  normalizePreviewColor,
+} from '@muebles/domain';
 import { Eye, EyeOff, Layers, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   CatalogImage,
@@ -33,6 +37,8 @@ import {
 import { ActiveBadge, CatalogTable, type CatalogColumn } from './CatalogTable';
 import { CatalogPicker } from './CatalogPicker';
 import type { EdgeDraft } from './EdgesCatalog';
+import { extractDominantColorFromImageFile } from './extractDominantColor';
+
 import './catalogs.css';
 
 export type MaterialDraft = {
@@ -49,6 +55,10 @@ export type MaterialDraft = {
   defaultEdgeBandId: string;
   /** Relative media path (F040/F042). */
   imageUrl: string;
+  /** #RRGGBB solid color for 3D / swatches. Empty = none. */
+  previewColor: string;
+  /** Optional texture media URL for 3D. Empty = none. */
+  previewTextureUrl: string;
   notes: string;
 };
 
@@ -72,6 +82,8 @@ const emptyDraft = (): MaterialDraft => ({
   costPerM2: 0,
   defaultEdgeBandId: '',
   imageUrl: '',
+  previewColor: '',
+  previewTextureUrl: '',
   notes: '',
 });
 
@@ -88,6 +100,8 @@ function toDraft(item: MaterialBoard): MaterialDraft {
     costPerM2: item.costPerM2,
     defaultEdgeBandId: item.defaultEdgeBandId ?? '',
     imageUrl: item.imageUrl ?? '',
+    previewColor: item.previewColor ?? '',
+    previewTextureUrl: item.previewTextureUrl ?? '',
     notes: item.notes ?? '',
   };
 }
@@ -278,6 +292,10 @@ export function MaterialsCatalog({
     if (codeErr) return codeErr;
     const nameErr = validateRequiredName(draft.name);
     if (nameErr) return nameErr;
+    const colorTrim = draft.previewColor.trim();
+    if (colorTrim && !isValidPreviewColor(colorTrim)) {
+      return 'Color de vista previa inválido. Usá #RGB o #RRGGBB, o dejalo vacío.';
+    }
     return (
       validateNonNegativeNumber(draft.widthMm, 'Ancho (mm)') ??
       validateNonNegativeNumber(draft.lengthMm, 'Largo (mm)') ??
@@ -302,7 +320,12 @@ export function MaterialsCatalog({
       boardPrice: draft.boardPrice,
       wastePercent: draft.wastePercent,
     });
-    const finalDraft = { ...draft, costPerM2: calculatedCost };
+    const normalizedColor = normalizePreviewColor(draft.previewColor);
+    const finalDraft = {
+      ...draft,
+      costPerM2: calculatedCost,
+      previewColor: normalizedColor ?? '',
+    };
 
     if (editingId) {
       onUpdate(editingId, finalDraft);
@@ -324,6 +347,32 @@ export function MaterialsCatalog({
             size="sm"
           />
         ),
+      },
+      {
+        key: 'previewColor',
+        header: 'Color',
+        render: (r) =>
+          r.previewColor ? (
+            <svg
+              className="material-color-swatch"
+              width={20}
+              height={20}
+              viewBox="0 0 20 20"
+              aria-label={r.previewColor}
+              data-testid={`material-swatch-${r.id}`}
+            >
+              <rect
+                x={0}
+                y={0}
+                width={20}
+                height={20}
+                rx={4}
+                fill={r.previewColor}
+              />
+            </svg>
+          ) : (
+            <span className="catalog-form__hint">—</span>
+          ),
       },
       {
         key: 'code',
@@ -633,11 +682,28 @@ export function MaterialsCatalog({
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    void onUploadImage(file)
-                      .then((url) => setDraft({ ...draft, imageUrl: url }))
-                      .catch(() => {
+                    void (async () => {
+                      try {
+                        const url = await onUploadImage(file);
+                        let previewColor: string | undefined;
+                        try {
+                          previewColor =
+                            await extractDominantColorFromImageFile(file);
+                        } catch {
+                          /* color is optional */
+                        }
+                        setDraft((prev) => ({
+                          ...prev,
+                          imageUrl: url,
+                          // Only auto-fill color when the user left it empty.
+                          ...(previewColor && !prev.previewColor.trim()
+                            ? { previewColor }
+                            : {}),
+                        }));
+                      } catch {
                         /* shell toasts */
-                      });
+                      }
+                    })();
                     e.target.value = '';
                   }}
                 />
@@ -647,6 +713,49 @@ export function MaterialsCatalog({
                 </p>
               )}
             </div>
+            <p className="catalog-form__hint">
+              Al cargar una foto se sugiere el color sólido dominante para el
+              3D (podés ajustarlo abajo).
+            </p>
+          </div>
+
+          <div
+            className="catalog-form__field"
+            data-testid="material-preview-color-field"
+          >
+            <label htmlFor="mat-preview-color">Color de vista previa</label>
+            <div className="material-preview-color-row">
+              <input
+                id="mat-preview-color-picker"
+                type="color"
+                className="material-preview-color-picker"
+                value={
+                  /^#([0-9a-fA-F]{6})$/.test(draft.previewColor)
+                    ? draft.previewColor
+                    : '#D4C4A8'
+                }
+                onChange={(e) =>
+                  setDraft({ ...draft, previewColor: e.target.value })
+                }
+                aria-label="Selector de color"
+                data-testid="material-preview-color-picker"
+              />
+              <input
+                id="mat-preview-color"
+                className="material-preview-color-hex"
+                value={draft.previewColor}
+                onChange={(e) =>
+                  setDraft({ ...draft, previewColor: e.target.value })
+                }
+                placeholder="#F5F5F0"
+                autoComplete="off"
+                data-testid="material-preview-color-input"
+              />
+            </div>
+            <p className="catalog-form__hint">
+              Color sólido para el 3D y la vista rápida (melaminas lisas, lacas).
+              Formato #RRGGBB. Vacío = color genérico en 3D.
+            </p>
           </div>
           <div className="catalog-form__field">
             <label htmlFor="mat-thickness">Espesor (mm)</label>

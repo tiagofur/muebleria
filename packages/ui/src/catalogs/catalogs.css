@@ -845,6 +845,36 @@
   gap: var(--space-3);
 }
 
+/* Material preview color (3D / swatches) */
+.material-color-swatch {
+  display: inline-block;
+  vertical-align: middle;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.material-preview-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.material-preview-color-picker {
+  width: 44px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
+  background: transparent;
+  cursor: pointer;
+}
+
+.material-preview-color-hex {
+  flex: 1 1 8rem;
+  min-width: 7rem;
+}
+
 .catalog-form__hint {
   margin: 0;
   font-size: var(--text-sm);

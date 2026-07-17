@@ -38,6 +38,12 @@ export {
 } from './MaterialsCatalog';
 
 export {
+  extractDominantColorFromImageFile,
+  extractDominantColorFromRgba,
+  type DominantColorOptions,
+} from './extractDominantColor';
+
+export {
   EdgesCatalog,
   type EdgeDraft,
   type EdgesCatalogProps,

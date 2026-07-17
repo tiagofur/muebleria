@@ -1,0 +1,33 @@
+.module-scene-3d {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 360px;
+}
+
+.module-scene-3d--empty {
+  min-height: 120px;
+  justify-content: center;
+}
+
+.module-scene-3d__hint {
+  margin: 0;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-muted, #9ca3af);
+  text-align: center;
+}
+
+.module-scene-3d__canvas-wrap {
+  position: relative;
+  height: 380px;
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  border: 1px solid var(--border, #333);
+  background: #1a1c1e;
+}
+
+.module-scene-3d__canvas-wrap canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}

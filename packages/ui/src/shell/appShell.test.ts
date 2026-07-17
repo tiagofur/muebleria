@@ -14,6 +14,7 @@ import {
   Package,
   Settings,
   Settings2,
+  Store,
   ToggleLeft,
   Users,
 } from 'lucide-react';
@@ -46,16 +47,17 @@ describe('AppShell nav model (F017)', () => {
       'home',
       'projects',
       'customers',
-      'modules',
+      'showcase',
     ]);
     expect(trabajo.items.map((i) => i.label)).toEqual([
       'Inicio',
       'Cotizaciones',
       'Clientes',
-      'Muebles',
+      'Vitrina',
     ]);
 
     expect(ingenieria.items.map((i) => i.id)).toEqual([
+      'modules',
       'structures',
       'components',
       'materials',
@@ -64,6 +66,7 @@ describe('AppShell nav model (F017)', () => {
       'optionGroups',
     ]);
     expect(ingenieria.items.map((i) => i.label)).toEqual([
+      'Muebles',
       'Estructuras',
       'Componentes',
       'Materiales',
@@ -88,6 +91,7 @@ describe('AppShell nav model (F017)', () => {
     expect(byId.home).toBe(LayoutDashboard);
     expect(byId.projects).toBe(FileText);
     expect(byId.customers).toBe(Users);
+    expect(byId.showcase).toBe(Store);
     expect(byId.modules).toBe(Package);
     expect(byId.materials).toBe(Layers);
     expect(byId.edges).toBe(Minus);
@@ -100,6 +104,8 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('home')).toBe('Inicio');
     expect(labelForNavId('projects')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
+    expect(labelForNavId('showcase')).toBe('Vitrina');
+    expect(labelForNavId('modules')).toBe('Muebles');
     expect(labelForNavId('optionGroups')).toBe('Grupos');
     expect(labelForNavId('settings')).toBe('Ajustes');
     expect(labelForNavId('users')).toBe('Usuarios');

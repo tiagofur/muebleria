@@ -228,3 +228,23 @@ export {
 } from './components';
 
 export { Part3DViewer } from './common';
+export {
+  ModuleScene3D,
+  FurnitureScene3D,
+  canUseWebGL,
+  boardPartToVisual,
+  boardPartsToVisuals,
+  colorForOptionRole,
+  colorForMaterialId,
+  materialColorMap,
+  resolvePartColor,
+  sceneFraming,
+  layoutProjectRun,
+  resolveProject3DPreview,
+  type ModuleScene3DProps,
+  type FurnitureScene3DProps,
+  type FurnitureSceneModule,
+  type BoardPartVisual,
+  type BoardColorMode,
+  type Project3DPreviewResult,
+} from './preview3d';

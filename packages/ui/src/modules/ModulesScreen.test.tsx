@@ -172,11 +172,13 @@ afterEach(() => {
 
 describe('ModulesScreen structure (F021)', () => {
   it('uses cards, not CatalogTable', () => {
-    const src = read('ModulesScreen.tsx');
-    expect(src).not.toMatch(/CatalogTable/);
-    expect(src).toMatch(/module-card-grid/);
-    expect(src).toMatch(/size="lg"/);
-    expect(src).toMatch(/EmptyState/);
+    const screenSrc = read('ModulesScreen.tsx');
+    const listSrc = read('components/ModuleListView.tsx');
+    expect(screenSrc).not.toMatch(/CatalogTable/);
+    expect(listSrc).not.toMatch(/CatalogTable/);
+    expect(listSrc).toMatch(/module-card-grid/);
+    expect(listSrc).toMatch(/EmptyState/);
+    expect(screenSrc).toMatch(/size="lg"/);
   });
 
   it('renders a card per module with code, name, counts, and estimate', () => {
@@ -280,28 +282,41 @@ describe('ModulesScreen navigation + modals (F021)', () => {
   });
 
 
-  it('shows editor tabs General/Composición/Herrajes/Costo (no Piezas tab)', async () => {
+  it('shows editor tabs General/Estructura/Componentes/Medidas/Herrajes/Costo', async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
     expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
 
-    await user.click(screen.getByTestId('module-editor-tab-composition'));
-    expect(
-      screen.getByTestId('module-editor-panel-composition').hidden,
-    ).toBe(false);
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
+    expect(screen.getByTestId('module-editor-panel-structure').hidden).toBe(
+      false,
+    );
     expect(screen.getByTestId('structure-picker')).toBeTruthy();
 
+    await user.click(screen.getByTestId('module-editor-tab-components'));
+    expect(screen.getByTestId('module-editor-panel-components').hidden).toBe(
+      false,
+    );
+
+    await user.click(screen.getByTestId('module-editor-tab-measures'));
+    expect(screen.getByTestId('module-editor-panel-measures').hidden).toBe(
+      false,
+    );
+
     await user.click(screen.getByTestId('module-editor-tab-hardware'));
-    expect(screen.getByTestId('module-editor-panel-hardware').hidden).toBe(false);
+    expect(screen.getByTestId('module-editor-panel-hardware').hidden).toBe(
+      false,
+    );
 
     await user.click(screen.getByTestId('module-editor-tab-cost'));
     expect(screen.getByTestId('module-editor-panel-cost').hidden).toBe(false);
 
-    // The board-parts editor tab is gone — modules compose structure + components.
+    // No board-parts editor — modules compose structure + components only.
     expect(screen.queryByTestId('module-editor-tab-parts')).toBeNull();
     expect(screen.queryByTestId('module-editor-panel-parts')).toBeNull();
+    expect(screen.queryByTestId('module-editor-tab-composition')).toBeNull();
   });
 
   it('opens create modal from requestCreateKey prop (Dashboard handoff)', () => {

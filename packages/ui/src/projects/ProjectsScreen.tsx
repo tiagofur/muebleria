@@ -28,7 +28,6 @@ import type {
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
-  Catalog,
 } from '@muebles/domain';
 import {
   cascadeOptions,
@@ -36,7 +35,6 @@ import {
   effectiveOptionChoices,
   filterModulesByCategory,
   isProjectClosed,
-  resolveBom,
   type CategoryFilterId,
 } from '@muebles/domain';
 import {
@@ -59,11 +57,11 @@ import {
   PageLoading,
   SearchInput,
   useDebouncedValue,
-  Part3DViewer,
 } from '../common';
 import '../catalogs/catalogs.css';
 import { PricePreviewGate } from '../optionGroups/PricePreviewGate';
 import { ExportIssueList } from './ExportIssueList';
+import { Project3DModal } from './components/Project3DModal';
 import {
   customersForProjectPicker,
   defaultChoicesForNewItem,
@@ -87,7 +85,6 @@ import {
   type AddItemDraft,
   type ProjectDraft,
 } from './projectHelpers';
-import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import './projects.css';
 
 export type { ProjectDraft, AddItemDraft };
@@ -310,7 +307,12 @@ export function ProjectsScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [show3DModal, setShow3DModal] = useState(false);
-  const [viewerItem, setViewerItem] = useState<{ item: ProjectItem; mod: Module } | null>(null);
+  const [viewerItem, setViewerItem] = useState<{
+    item: ProjectItem;
+    mod: Module;
+  } | null>(null);
+  /** When true, 3D modal shows full quote run (not a single line). */
+  const [viewerQuoteRun, setViewerQuoteRun] = useState(false);
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(
     null,
   );
@@ -318,6 +320,27 @@ export function ProjectsScreen({
   const catalogs = useMemo(
     () => ({ materials, edges, hardware }),
     [materials, edges, hardware],
+  );
+
+  const project3dCatalog = useMemo(
+    () => ({
+      modules,
+      structures: catalogStructures,
+      components: catalogComponents,
+      materials,
+      edges,
+      hardware,
+      optionGroups,
+    }),
+    [
+      modules,
+      catalogStructures,
+      catalogComponents,
+      materials,
+      edges,
+      hardware,
+      optionGroups,
+    ],
   );
 
   const filtered = useMemo(
@@ -329,45 +352,6 @@ export function ProjectsScreen({
     selectedId !== null
       ? (projects.find((p) => p.id === selectedId) ?? null)
       : null;
-
-  const resolved3DParts = useMemo(() => {
-    if (!viewerItem || !selectedProject) return [];
-    try {
-      const { item, mod } = viewerItem;
-      const catalogObj: Catalog = {
-        materials,
-        edges,
-        hardware,
-        optionGroups,
-        modules,
-        structures: catalogStructures,
-        components: catalogComponents,
-      };
-
-      const defaultChoices = defaultOptionChoicesForModule(mod, optionGroups, catalogComponents, catalogStructures);
-      const mergedChoices = {
-        ...defaultChoices,
-        ...(selectedProject.projectLevelChoices ?? {}),
-        ...item.optionChoices,
-      };
-
-      const bom = resolveBom(mod, mergedChoices, catalogObj, item.measurePresetId || undefined);
-      return bom.boardParts;
-    } catch (e) {
-      console.error('Error resolving project item 3D parts:', e);
-      return [];
-    }
-  }, [
-    viewerItem,
-    selectedProject,
-    materials,
-    edges,
-    hardware,
-    optionGroups,
-    modules,
-    catalogStructures,
-    catalogComponents,
-  ]);
 
   // Domain breakdown target: selected detail project
   useEffect(() => {
@@ -1473,15 +1457,32 @@ export function ProjectsScreen({
             <h3 className="project-detail__section-title">
               Muebles ({project.items.length})
             </h3>
-            <button
-              type="button"
-              className="btn btn--primary btn--small"
-              onClick={openAddItemModal}
-              disabled={modules.length === 0}
-            >
-              <Plus size={14} strokeWidth={1.5} aria-hidden />
-              Agregar mueble
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {project.items.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn--small btn--outline"
+                  onClick={() => {
+                    setViewerItem(null);
+                    setViewerQuoteRun(true);
+                    setShow3DModal(true);
+                  }}
+                  data-testid="project-view-3d-run"
+                >
+                  <Box size={14} strokeWidth={1.5} aria-hidden />
+                  Vista 3D cotización
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={openAddItemModal}
+                disabled={modules.length === 0}
+              >
+                <Plus size={14} strokeWidth={1.5} aria-hidden />
+                Agregar mueble
+              </button>
+            </div>
           </div>
 
           {itemError && !addItemModalOpen ? (
@@ -1516,6 +1517,7 @@ export function ProjectsScreen({
                             type="button"
                             className="btn btn--small btn--outline"
                             onClick={() => {
+                              setViewerQuoteRun(false);
                               setViewerItem({ item, mod });
                               setShow3DModal(true);
                             }}
@@ -2024,24 +2026,21 @@ export function ProjectsScreen({
         </p>
       </Modal>
 
-      <Modal
+      <Project3DModal
         open={show3DModal}
+        project={selectedProject}
+        catalog={project3dCatalog}
+        focus={
+          viewerQuoteRun || !viewerItem
+            ? null
+            : { item: viewerItem.item, module: viewerItem.mod }
+        }
         onClose={() => {
           setShow3DModal(false);
           setViewerItem(null);
+          setViewerQuoteRun(false);
         }}
-        title={viewerItem ? `Vista 3D — ${viewerItem.mod.code} - ${viewerItem.mod.name}` : 'Vista 3D'}
-        size="lg"
-      >
-        {viewerItem ? (
-          <Part3DViewer
-            parts={resolved3DParts}
-            width={viewerItem.mod.externalDims?.width ?? 800}
-            height={viewerItem.mod.externalDims?.height ?? 700}
-            depth={viewerItem.mod.externalDims?.depth ?? 500}
-          />
-        ) : null}
-      </Modal>
+      />
     </section>
   );
 }
