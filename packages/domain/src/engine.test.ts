@@ -39,6 +39,7 @@ import {
   resolveStructure,
 } from './engine';
 import { ResolutionError, ValidationError } from './errors';
+import { bumpStructureRevision } from './structures/versioning';
 import type {
   Catalog,
   Component,
@@ -862,6 +863,95 @@ describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
     );
     expect(live.salePrice).toBeCloseTo(plantillaExpected.salePrice, 5);
     expect(live.salePrice).not.toBe(3);
+  });
+
+  it('#108 — closed quote keeps rev-1 BOM after structure edit to rev 2', () => {
+    // miniCatalog + miniModule reference `struct-test` which carries a single
+    // component instance (comp-side × 1). A draft project resolves to 1 board part.
+    const catalog = miniCatalog();
+    const module = miniModule();
+    const baseStructure = catalog.structures?.find(
+      (s) => s.id === 'struct-test',
+    )!;
+    expect(baseStructure).toBeDefined();
+    // Pin the base structure to revision 1 explicitly so the test is robust.
+    const rev1Structure = { ...baseStructure, revision: 1 };
+    const catalogRev1: Catalog = {
+      ...catalog,
+      modules: [module],
+      structures: [rev1Structure],
+    };
+
+    const draft: Project = {
+      id: 'p-108',
+      name: 'p',
+      customerId: 'c',
+      currency: 'USD',
+      marginFactor: 1.3,
+      laborFixedCost: 0,
+      status: 'draft',
+      items: [
+        {
+          id: 'i-1',
+          moduleId: module.id,
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a', BISAGRA: 'hw-a' },
+        },
+      ],
+      createdAt: '2026-07-15T00:00:00.000Z',
+      updatedAt: '2026-07-15T00:00:00.000Z',
+    };
+
+    const draftBom = resolveBom(
+      module,
+      { INTERIOR: 'mat-a', BISAGRA: 'hw-a' },
+      catalogRev1,
+      undefined,
+      undefined,
+    );
+    expect(draftBom.boardParts).toHaveLength(1);
+
+    // Close the quote → pins structureRevisionPin: 1 onto the item.
+    const closed = transitionProjectStatus(
+      draft,
+      'quoted',
+      catalogRev1,
+      frozenAt,
+    );
+    expect(closed.status).toBe('quoted');
+    expect(closed.items[0]?.structureRevisionPin).toBe(1);
+
+    // Edit the structure to revision 2, tripling the component quantity.
+    const { structure: rev2Structure } = bumpStructureRevision(rev1Structure, {
+      ...rev1Structure,
+      components: [{ componentId: 'comp-side', quantity: 3 }],
+    });
+    expect(rev2Structure.revision).toBe(2);
+    const catalogRev2: Catalog = {
+      ...catalogRev1,
+      structures: [rev2Structure],
+    };
+
+    // Sanity: a DRAFT project (no pin) now sees 3 parts from the live rev-2 structure.
+    const liveBomRev2 = resolveBom(module, { INTERIOR: 'mat-a', BISAGRA: 'hw-a' }, catalogRev2, undefined, undefined);
+    expect(liveBomRev2.boardParts).toHaveLength(3);
+
+    // NON-REGRESSION: closed project's BOM still resolves to rev-1 (1 part),
+    // because the item carries structureRevisionPin = 1 and rev 1 is in history.
+    const closedBomRev2 = resolveBom(
+      module,
+      { INTERIOR: 'mat-a', BISAGRA: 'hw-a' },
+      catalogRev2,
+      undefined,
+      closed.items[0]?.structureRevisionPin,
+    );
+    expect(closedBomRev2.boardParts).toHaveLength(1);
+
+    // And the frozen breakdown (calcProjectBreakdown on a closed project) is
+    // unchanged despite the catalog structure being rev 2.
+    const frozenBefore = calcProjectBreakdown(closed, catalogRev1).salePrice;
+    const frozenAfter = calcProjectBreakdown(closed, catalogRev2).salePrice;
+    expect(frozenAfter).toBeCloseTo(frozenBefore, 6);
   });
 });
 

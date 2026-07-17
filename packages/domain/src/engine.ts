@@ -9,6 +9,10 @@ import {
 } from './measurePresets';
 import { effectiveOptionChoices } from './optionChoices';
 import { defaultPoseForPlacement } from './spatialPlacement';
+import {
+  captureProjectItemStructurePins,
+  resolveStructureForPin,
+} from './structures/versioning';
 import type {
   BoardPart,
   Catalog,
@@ -901,6 +905,12 @@ export function resolveBom(
   optionChoices: OptionChoices,
   catalog: Catalog,
   measurePresetId?: string,
+  /**
+   * Pinned structure revision (#108). When the caller has a closed project,
+   * pass `item.structureRevisionPin` so the BOM resolves against the frozen
+   * revision rather than the live catalog structure. Omit for draft/live use.
+   */
+  structureRevisionPin?: number,
 ): ResolvedBom {
   validateModule(module);
 
@@ -908,10 +918,10 @@ export function resolveBom(
   let allParts: BoardPart[] = [];
   let composedHardware: HardwareLine[] = [];
   if (module.structureId) {
-    const structure = catalog.structures?.find(
+    const found = catalog.structures?.find(
       (s) => s.id === module.structureId,
     );
-    if (!structure) {
+    if (!found) {
       throw new ResolutionError(
         `Structure not found: ${module.structureId}`,
         {
@@ -921,6 +931,11 @@ export function resolveBom(
         },
       );
     }
+
+    // #108 — honor a pinned revision when present. Falls back to live
+    // structure when the pin is undefined. Throws ResolutionError for an
+    // unknown pin (deleted structure without snapshot, etc.).
+    const structure = resolveStructureForPin(found, structureRevisionPin);
 
     const preset = resolveModuleMeasurePreset(module, measurePresetId);
     const dims = preset
@@ -1194,6 +1209,7 @@ function calcLiveProjectBreakdown(
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
       item.measurePresetId,
+      item.structureRevisionPin,
     );
 
     for (const part of bom.boardParts) {
@@ -1251,6 +1267,7 @@ function collectUsedUnitPrices(
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
       item.measurePresetId,
+      item.structureRevisionPin,
     );
 
     for (const part of bom.boardParts) {
@@ -1301,9 +1318,13 @@ export function captureQuoteSnapshot(
 
 /**
  * Status transition helper (PRD §7.4):
- * - draft → quoted/accepted/produced: attach fresh priceSnapshot
- * - closed → draft: remove priceSnapshot (reopen)
- * - closed → closed (quoted ↔ accepted → produced): keep existing snapshot
+ * - draft → quoted/accepted/produced: attach fresh priceSnapshot + pin current
+ *   structure revisions on every item (#108).
+ * - closed → draft: remove priceSnapshot (reopen). Structure revision pins are
+ *   INTENTIONALLY kept so the reopened quote can still be audited against the
+ *   exact revisions it was closed with; they get rewritten on the next close.
+ * - closed → closed (quoted ↔ accepted → produced): keep existing snapshot and
+ *   existing pins (do not rewrite the audited revisions).
  */
 export function transitionProjectStatus(
   project: Project,
@@ -1319,10 +1340,13 @@ export function transitionProjectStatus(
       ...project,
       status: newStatus,
       priceSnapshot: captureQuoteSnapshot(project, catalog, capturedAt),
+      // #108 — freeze each item to its module's current structure revision.
+      items: captureProjectItemStructurePins(project.items, catalog),
     };
   }
 
   if (wasClosed && !willClose) {
+    // #108 — pins kept on reopen for audit continuity (see JSDoc above).
     const { priceSnapshot: _removed, ...rest } = project;
     return {
       ...rest,
@@ -1338,6 +1362,7 @@ export function transitionProjectStatus(
       ...project,
       status: newStatus,
       priceSnapshot: captureQuoteSnapshot(project, catalog, capturedAt),
+      items: captureProjectItemStructurePins(project.items, catalog),
     };
   }
 
@@ -1445,6 +1470,7 @@ export function generateCutRows(
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
       item.measurePresetId,
+      item.structureRevisionPin,
     );
 
     for (const part of bom.boardParts) {
@@ -1600,6 +1626,7 @@ export function generatePieceLabels(
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
       item.measurePresetId,
+      item.structureRevisionPin,
     );
 
     for (const part of bom.boardParts) {
@@ -1762,6 +1789,7 @@ export function generateProjectMaterialSummary(
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
       item.measurePresetId,
+      item.structureRevisionPin,
     );
 
     for (const part of bom.boardParts) {
@@ -1921,6 +1949,7 @@ export function generateHardwareList(
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
       item.measurePresetId,
+      item.structureRevisionPin,
     );
 
     for (const line of bom.hardwareLines) {
