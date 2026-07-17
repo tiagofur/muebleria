@@ -282,7 +282,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, created_at, updated_at
 		FROM projects
 		ORDER BY updated_at DESC;
 	`
@@ -300,7 +300,8 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var notes *string
 		var kitchenLayout []byte
 		var installationChecklist []byte
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &p.CreatedAt, &p.UpdatedAt)
+		var nestingImport []byte
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &nestingImport, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -318,6 +319,9 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		}
 		if len(installationChecklist) > 0 && string(installationChecklist) != "null" {
 			p.InstallationChecklist = installationChecklist
+		}
+		if len(nestingImport) > 0 && string(nestingImport) != "null" {
+			p.NestingImport = nestingImport
 		}
 
 		// Load items so FE reload keeps line items (calculate + UI depend on them).
@@ -518,7 +522,7 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, created_at, updated_at
 		FROM projects
 		WHERE id = $1;
 	`
@@ -529,7 +533,8 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var notes *string
 	var kitchenLayout []byte
 	var installationChecklist []byte
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &p.CreatedAt, &p.UpdatedAt)
+	var nestingImport []byte
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &nestingImport, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -547,6 +552,9 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	}
 	if len(installationChecklist) > 0 && string(installationChecklist) != "null" {
 		p.InstallationChecklist = installationChecklist
+	}
+	if len(nestingImport) > 0 && string(nestingImport) != "null" {
+		p.NestingImport = nestingImport
 	}
 
 	items, err := s.loadProjectItems(ctx, p.ID)
@@ -640,19 +648,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist)).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport)).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist)).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport)).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -741,10 +749,10 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	query := `
 		UPDATE projects
 		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7,
-		    owner_user_id = $8, kitchen_layout = $9, installation_checklist = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11;
+		    owner_user_id = $8, kitchen_layout = $9, installation_checklist = $10, nesting_import = $11, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $12;
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), id)
 	if err != nil {
 		return err
 	}

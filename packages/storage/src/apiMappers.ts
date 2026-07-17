@@ -685,6 +685,17 @@ export function projectToApi(p: Project): Record<string, unknown> {
     notes: p.notes ?? '',
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
+    nesting_import: p.nestingImport
+      ? {
+          imported_at: p.nestingImport.importedAt,
+          source_name: p.nestingImport.sourceName ?? '',
+          rows: p.nestingImport.rows.map((r) => ({
+            material_code: r.materialCode,
+            sheets_used: r.sheetsUsed,
+            area_m2: r.areaM2 ?? null,
+          })),
+        }
+      : null,
     installation_checklist: p.installationChecklist
       ? p.installationChecklist.map((c) => ({
           id: c.id,
@@ -733,6 +744,30 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     kitchenLayout: kitchenLayoutFromApi(
       raw.kitchen_layout ?? raw.kitchenLayout,
     ),
+    nestingImport: (() => {
+      const rawNest = raw.nesting_import ?? raw.nestingImport;
+      if (!rawNest || typeof rawNest !== 'object' || Array.isArray(rawNest)) return undefined;
+      const n = rawNest as Record<string, unknown>;
+      const rowsRaw = Array.isArray(n.rows) ? n.rows : [];
+      const rows = rowsRaw.map((row) => {
+        const r = row as Record<string, unknown>;
+        const area = r.area_m2 ?? r.areaM2;
+        return {
+          materialCode: str(r.material_code ?? r.materialCode),
+          sheetsUsed: Math.max(0, Math.floor(num(r.sheets_used ?? r.sheetsUsed))),
+          areaM2:
+            area === null || area === undefined || area === ''
+              ? undefined
+              : num(area),
+        };
+      });
+      if (rows.length === 0) return undefined;
+      return {
+        importedAt: str(n.imported_at ?? n.importedAt, new Date().toISOString()),
+        sourceName: str(n.source_name ?? n.sourceName) || undefined,
+        rows,
+      };
+    })(),
     installationChecklist: (() => {
       const rawList =
         raw.installation_checklist ?? raw.installationChecklist;

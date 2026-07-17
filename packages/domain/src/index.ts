@@ -220,3 +220,12 @@ export { DEFAULT_INSTALLATION_CHECKLIST } from './types';
 
 export { pieceLabelQrPayload } from './pieceLabelQr';
 export type { PieceLabelQrFields } from './pieceLabelQr';
+
+export {
+  parseNestingImportCsv,
+  nestingImportFromRows,
+} from './nestingImport';
+export type {
+  NestingImportRow,
+  NestingImportResult,
+} from './nestingImport';

@@ -34,6 +34,8 @@ import {
   cascadeSelectedCategoryId,
   effectiveOptionChoices,
   estimateBoardSheets,
+  parseNestingImportCsv,
+  nestingImportFromRows,
   filterModulesByCategory,
   isProjectClosed,
   type CategoryFilterId,
@@ -154,6 +156,10 @@ export interface ProjectsScreenProps {
   readonly onUpdateInstallationChecklist?: (
     projectId: string,
     items: readonly import('@muebles/domain').InstallationChecklistItem[],
+  ) => void;
+  readonly onImportNesting?: (
+    projectId: string,
+    nestingImport: NonNullable<import('@muebles/domain').Project['nestingImport']>,
   ) => void;
   /** F029: project-wide option defaults (empty keys inherit on each line). */
   readonly onUpdateProjectLevelChoices?: (
@@ -284,6 +290,7 @@ export function ProjectsScreen({
   onApplyScenarioB,
   onDuplicateWithScenarioB,
   onUpdateInstallationChecklist,
+  onImportNesting,
   onUpdateProjectLevelChoices,
   onSelectionChange,
   breakdown = null,
@@ -1973,6 +1980,69 @@ export function ProjectsScreen({
                       </div>
                     );
                   })()}
+
+                  {project.nestingImport && project.nestingImport.rows.length > 0 ? (
+                    <div
+                      className="project-material-summary__block"
+                      data-testid="project-nesting-import"
+                      style={{ marginTop: '0.75rem' }}
+                    >
+                      <p className="project-material-summary__label">
+                        Nesting importado
+                      </p>
+                      <p className="catalog-form__hint" style={{ marginTop: 0 }}>
+                        Consumo real ({project.nestingImport.sourceName ?? 'CSV'})
+                        · {new Date(project.nestingImport.importedAt).toLocaleString()}
+                      </p>
+                      <ul className="project-material-summary__list">
+                        {project.nestingImport.rows.map((r) => (
+                          <li key={r.materialCode}>
+                            <span className="project-material-summary__name">
+                              {r.materialCode}
+                            </span>
+                            <span className="project-material-summary__meta">
+                              {r.sheetsUsed} pliego{r.sheetsUsed === 1 ? '' : 's'}
+                              {r.areaM2 != null ? ` · ${r.areaM2} m²` : ''}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {canMutate && onImportNesting ? (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <label className="btn btn--secondary btn--sm" style={{ cursor: 'pointer' }}>
+                        Importar nesting (CSV)
+                        <input
+                          type="file"
+                          accept=".csv,text/csv,text/plain"
+                          style={{ display: 'none' }}
+                          data-testid="project-nesting-file"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            void file.text().then((text) => {
+                              const rows = parseNestingImportCsv(text);
+                              if (rows.length === 0) return;
+                              onImportNesting(
+                                project.id,
+                                nestingImportFromRows(
+                                  rows,
+                                  new Date().toISOString(),
+                                  file.name,
+                                ),
+                              );
+                            });
+                          }}
+                        />
+                      </label>
+                      <p className="catalog-form__hint">
+                        Columnas: material_code, sheets_used [, area_m2]
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {materialSummary.edges.length > 0 ? (

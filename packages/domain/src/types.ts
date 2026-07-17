@@ -394,6 +394,18 @@ export interface Project {
    * Optional installation checklist for obra (#139).
    */
   readonly installationChecklist?: readonly InstallationChecklistItem[];
+  /**
+   * Optional nesting import (real sheets used) from external optimizer (#142).
+   */
+  readonly nestingImport?: {
+    readonly importedAt: string;
+    readonly sourceName?: string;
+    readonly rows: readonly {
+      readonly materialCode: string;
+      readonly sheetsUsed: number;
+      readonly areaM2?: number;
+    }[];
+  };
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

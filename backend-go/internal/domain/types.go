@@ -313,6 +313,7 @@ type Project struct {
 	// KitchenLayout is optional walls+placements plan (#133). JSON object or null.
 	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
+	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	Notes         string          `json:"notes,omitempty"`
 	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
 	CreatedAt     time.Time           `json:"created_at"`

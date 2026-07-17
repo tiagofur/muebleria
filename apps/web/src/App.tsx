@@ -1878,6 +1878,22 @@ function AppContent({
     navigate(entityPath('projects', withB.id));
   };
 
+
+  const importNestingResult = (
+    projectId: string,
+    nestingImport: NonNullable<import('@muebles/domain').Project['nestingImport']>,
+  ) => {
+    const now = new Date().toISOString();
+    patchProjects((ps) =>
+      ps.map((p) =>
+        p.id === projectId
+          ? { ...p, nestingImport, updatedAt: now }
+          : p,
+      ),
+    );
+    toast({ type: 'success', message: '✓ Nesting importado' });
+  };
+
   const applyScenarioB = (
     projectId: string,
     role: string,
@@ -2617,6 +2633,7 @@ function AppContent({
           onApplyScenarioB={applyScenarioB}
           onDuplicateWithScenarioB={duplicateWithScenarioB}
           onUpdateInstallationChecklist={updateInstallationChecklist}
+          onImportNesting={importNestingResult}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
           materialSummary={materialSummary}
