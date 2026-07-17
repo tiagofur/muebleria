@@ -40,6 +40,8 @@ export type ProductionQueueProps = {
   readonly onExportHardware: (projectId: string) => void | Promise<void>;
   /** Piece labels PDF with edge banding (F046 / #96). */
   readonly onExportPieceLabels?: (projectId: string) => void | Promise<void>;
+  /** ZIP pack: Optimizer + herrajes + etiquetas (#134). */
+  readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
   readonly onMarkProduced: (projectId: string) => void;
   readonly exportBusy?: boolean;
   readonly loading?: boolean;
@@ -63,6 +65,7 @@ export function ProductionQueue({
   onExportOptimizer,
   onExportHardware,
   onExportPieceLabels,
+  onExportProductionPack,
   onMarkProduced,
   exportBusy = false,
   loading = false,
@@ -225,6 +228,21 @@ export function ProductionQueue({
                     >
                       <Tags size={16} strokeWidth={1.5} aria-hidden />
                       Etiquetas
+                    </button>
+                  ) : null}
+                  {onExportProductionPack ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={exportBusy}
+                      title="ZIP con Optimizer, herrajes y etiquetas"
+                      onClick={() => {
+                        void onExportProductionPack(project.id);
+                      }}
+                      data-testid={`prod-export-pack-${project.id}`}
+                    >
+                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+                      Pack producción
                     </button>
                   ) : null}
                   {project.status === 'accepted' ? (

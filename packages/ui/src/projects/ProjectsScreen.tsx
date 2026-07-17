@@ -178,6 +178,8 @@ export interface ProjectsScreenProps {
    * Shell owns validate → labels → PDF → download.
    */
   readonly onExportPieceLabels?: () => void | Promise<void>;
+  /** Pack ZIP: Optimizer + herrajes + etiquetas (#134). */
+  readonly onExportProductionPack?: () => void | Promise<void>;
   /**
    * Commercial quote export for client (F030 / #36).
    * Shell owns breakdown → xlsx → download.
@@ -272,6 +274,7 @@ export function ProjectsScreen({
   onExport,
   onExportHardware,
   onExportPieceLabels,
+  onExportProductionPack,
   onExportCommercialQuote,
   onExportCommercialQuotePdf,
   exportErrors = [],
@@ -1269,6 +1272,24 @@ export function ProjectsScreen({
             data-testid="project-chrome-export-labels"
           >
             {exportBusy ? 'Exportando…' : 'Etiquetas'}
+          </button>
+          ) : null}
+          {onExportProductionPack ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={productionExportDisabled}
+            title={
+              !productionExportOk
+                ? 'Export de producción solo en Aceptado o En producción'
+                : 'Descargar ZIP con Optimizer, herrajes y etiquetas'
+            }
+            onClick={() => {
+              void onExportProductionPack?.();
+            }}
+            data-testid="project-chrome-export-pack"
+          >
+            {exportBusy ? 'Exportando…' : 'Pack producción'}
           </button>
           ) : null}
           <button

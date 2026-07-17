@@ -166,9 +166,12 @@ export function downloadOptimizerXlsx(
   // Copy into a fresh ArrayBuffer so BlobPart typing accepts it under strict DOM libs.
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
-  const mime = fileName.toLowerCase().endsWith('.pdf')
+  const lower = fileName.toLowerCase();
+  const mime = lower.endsWith('.pdf')
     ? 'application/pdf'
-    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    : lower.endsWith('.zip')
+      ? 'application/zip'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const blob = new Blob([copy.buffer], {
     type: mime,
   });

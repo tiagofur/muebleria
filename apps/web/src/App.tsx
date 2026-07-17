@@ -118,6 +118,7 @@ import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import { buildPieceLabelsExport } from './exportPieceLabels';
+import { buildProductionPackExport } from './exportProductionPack';
 import {
   buildOptimizerExport,
   deliverExcelFile,
@@ -2045,6 +2046,60 @@ function AppContent({
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
   );
 
+  const handleExportProductionPack = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildProductionPackExport(
+          project,
+          catalog,
+          customers,
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          toast({
+            type: 'error',
+            message:
+              'No se pudo armar el pack: revisá el pedido (falta el corte Optimizer)',
+          });
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+  );
+
   const handleExportCommercialQuote = useCallback(async () => {
     if (!selectedProject || !catalog) return;
     setExportBusy(true);
@@ -2241,6 +2296,9 @@ function AppContent({
             }}
             onExportPieceLabels={(id) => {
               void handleExportPieceLabels(id);
+            }}
+            onExportProductionPack={(id) => {
+              void handleExportProductionPack(id);
             }}
             onMarkProduced={markProjectProduced}
             exportBusy={exportBusy}
@@ -2497,6 +2555,13 @@ function AppContent({
             canExportProduction
               ? () => {
                   void handleExportPieceLabels();
+                }
+              : undefined
+          }
+          onExportProductionPack={
+            canExportProduction
+              ? () => {
+                  void handleExportProductionPack();
                 }
               : undefined
           }
