@@ -1,17 +1,19 @@
 # Sesión actual
 
 - **Branch:** `feat/furniture-components-101-103`
-- **Features:** F055 spatial S1 + F056 / #107 Module3DPreview
-- **Estado:** in_progress
+- **PR:** https://github.com/tiagofur/muebleria/pull/124
+- **Issue:** Closes #107 (F055 spatial + F056 3D viewer)
+- **Estado:** PR abierto
 
-## Hecho
+## Entregado
 
-- S1: resolveAssembly, fórmulas T/i/n, UI espacial, migración 000018
-- F056: Module3DPreview (three + R3F) en detalle de mueble
-- Shell: `resolveAssembly` → `assemblyPreview` prop
+- resolveAssembly + fórmulas T/i/n + UI espacial + migración 000018
+- Module3DPreview (three/R3F) en detalle de mueble
+- Seed MOD-COMP-600 + EST-GAB-600 + COMP-PUERTA-01 con poses
+- Tests domain/ui/storage + typecheck verdes
 
-## Verificación
+## Cómo ver el 3D
 
-- domain + geometry unit tests
-- ui tests (viewer may skip WebGL in jsdom; pure geometry covered)
-- typecheck ui/web
+1. Workspace **nuevo** (seed) o crear/importar el mueble compuesto
+2. Muebles → **MOD-COMP-600** → Vista 3D
+3. API mode: aplicar migración `000018`
