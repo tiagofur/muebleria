@@ -644,14 +644,19 @@ export function ModulesScreen({
       }
     }
 
-    for (const preset of draft.presets) {
-      if (preset.width <= 0 || preset.height <= 0 || preset.depth <= 0) {
-        return 'Las dimensiones de los presets de medida deben ser mayores a 0.';
+    if (draft.structureId.trim()) {
+      const w = Number(draft.externalWidth);
+      const h = Number(draft.externalHeight);
+      const d = Number(draft.externalDepth);
+      if (!(w > 0 && h > 0 && d > 0)) {
+        return 'Con estructura, la medida base (ancho, alto y profundidad) es obligatoria.';
       }
     }
 
-    if (draft.structureId.trim() && draft.presets.length === 0) {
-      return 'Un mueble con estructura necesita al menos un preset de medida comercial.';
+    for (const preset of draft.presets) {
+      if (preset.width <= 0 || preset.height <= 0 || preset.depth <= 0) {
+        return 'Las opciones de medida adicionales deben tener ancho, alto y profundidad mayores a 0.';
+      }
     }
 
     for (const part of draft.boardParts) {
@@ -956,10 +961,50 @@ export function ModulesScreen({
             onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
           />
         </div>
+        <div className="catalog-form__field catalog-form__field--spaced">
+          <label htmlFor="mod-structure-id">Estructura (cuerpo)</label>
+          <select
+            id="mod-structure-id"
+            value={draft.structureId}
+            disabled={!canMutate}
+            onChange={(e) => {
+              const structureId = e.target.value;
+              const struct = structures.find((s) => s.id === structureId);
+              setDraft((prev) => ({
+                ...prev,
+                structureId,
+                ...(struct?.externalDims
+                  ? {
+                      externalWidth: String(struct.externalDims.width),
+                      externalHeight: String(struct.externalDims.height),
+                      externalDepth: String(struct.externalDims.depth),
+                    }
+                  : {}),
+              }));
+            }}
+            data-testid="module-structure-select"
+          >
+            <option value="">Sin estructura (módulo fijo)</option>
+            {structures
+              .filter((s) => s.active !== false)
+              .map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.name} — {st.code}
+                </option>
+              ))}
+          </select>
+        </div>
+
         <fieldset className="module-editor__dims-legend">
           <legend className="module-editor__section-title">
-            Dimensiones externas (opcionales, mm)
+            Medida base (mm)
+            {draft.structureId.trim() ? ' *' : ' (opcional)'}
           </legend>
+          <p className="catalog-empty" style={{ marginTop: 0 }}>
+            {draft.structureId.trim()
+              ? 'Obligatoria si el mueble usa estructura: tamaño de referencia (preview y cotización cuando no hay más opciones).'
+              : 'Opcional en módulos fijos. Si abajo agregás opciones de medida, el vendedor elige en cotización.'}
+          </p>
           <div className="module-editor__grid module-editor__grid--dims">
             <div className="catalog-form__field">
               <label htmlFor="mod-w">Ancho</label>
@@ -1004,13 +1049,8 @@ export function ModulesScreen({
         </fieldset>
 
         <ModuleMeasureSection
-          structureId={draft.structureId}
           presets={draft.presets}
-          structures={structures}
           disabled={!canMutate}
-          onStructureIdChange={(structureId) =>
-            setDraft((prev) => ({ ...prev, structureId }))
-          }
           onPresetsChange={(presets) =>
             setDraft((prev) => ({ ...prev, presets }))
           }
@@ -1020,6 +1060,57 @@ export function ModulesScreen({
               ? crypto.randomUUID()
               : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
           }
+          canImportFromStructure={
+            ((structures.find((s) => s.id === draft.structureId)?.presets
+              ?.length ?? 0) > 0)
+          }
+          onImportFromStructure={() => {
+            const selected = structures.find((s) => s.id === draft.structureId);
+            const fromStructure = (selected?.presets ?? []).map((pr) => ({
+              id:
+                typeof crypto !== 'undefined' &&
+                typeof crypto.randomUUID === 'function'
+                  ? crypto.randomUUID()
+                  : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              name: pr.name ?? '',
+              width: pr.width,
+              height: pr.height,
+              depth: pr.depth,
+            }));
+            setDraft((prev) => ({
+              ...prev,
+              presets: [...prev.presets, ...fromStructure],
+            }));
+          }}
+          canSeedFromBase={
+            Number(draft.externalWidth) > 0 &&
+            Number(draft.externalHeight) > 0 &&
+            Number(draft.externalDepth) > 0
+          }
+          onSeedFromBase={() => {
+            const w = Number(draft.externalWidth);
+            const h = Number(draft.externalHeight);
+            const d = Number(draft.externalDepth);
+            if (!(w > 0 && h > 0 && d > 0)) return;
+            const id =
+              typeof crypto !== 'undefined' &&
+              typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            setDraft((prev) => ({
+              ...prev,
+              presets: [
+                ...prev.presets,
+                {
+                  id,
+                  name: 'Medida base',
+                  width: w,
+                  height: h,
+                  depth: d,
+                },
+              ],
+            }));
+          }}
         />
 
         <ModuleComponentsSection
