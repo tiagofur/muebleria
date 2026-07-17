@@ -33,6 +33,7 @@ import {
   cascadeOptions,
   cascadeSelectedCategoryId,
   effectiveOptionChoices,
+  estimateBoardSheets,
   filterModulesByCategory,
   isProjectClosed,
   type CategoryFilterId,
@@ -63,6 +64,7 @@ import { PricePreviewGate } from '../optionGroups/PricePreviewGate';
 import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
 import { KitchenPlanPanel } from './components/KitchenPlanPanel';
+import { ProjectPresentationMode } from './components/ProjectPresentationMode';
 import {
   customersForProjectPicker,
   defaultChoicesForNewItem,
@@ -316,6 +318,7 @@ export function ProjectsScreen({
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
+  const [showPresentation, setShowPresentation] = useState(false);
   const [show3DModal, setShow3DModal] = useState(false);
   const [viewerItem, setViewerItem] = useState<{
     item: ProjectItem;
@@ -1355,6 +1358,15 @@ export function ProjectsScreen({
           >
             {exportBusy ? 'Exportando…' : 'PDF resumen'}
           </button>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => setShowPresentation(true)}
+            data-testid="project-chrome-present"
+            title="Modo presentación para el cliente (sin costos ni exports de planta)"
+          >
+            Presentar
+          </button>
           {canMutate ? (
           <button
             type="button"
@@ -1873,6 +1885,43 @@ export function ProjectsScreen({
                       </li>
                     ))}
                   </ul>
+                  {(() => {
+                    const sheets = estimateBoardSheets(
+                      materialSummary.materials,
+                      materials,
+                    ).filter((s) => s.estimatedSheets > 0);
+                    if (sheets.length === 0) return null;
+                    return (
+                      <div
+                        className="project-material-summary__block"
+                        data-testid="project-sheet-estimate"
+                        style={{ marginTop: '0.75rem' }}
+                      >
+                        <p className="project-material-summary__label">
+                          Pliegos estimados
+                        </p>
+                        <p className="catalog-form__hint" style={{ marginTop: 0 }}>
+                          Estimado — nesting real en software de corte
+                        </p>
+                        <ul className="project-material-summary__list">
+                          {sheets.map((s) => (
+                            <li key={s.materialId}>
+                              <span className="project-material-summary__name">
+                                {s.name}
+                              </span>
+                              <span className="project-material-summary__meta">
+                                ~{s.estimatedSheets} pliego
+                                {s.estimatedSheets === 1 ? '' : 's'}
+                                {s.sheetWidthMm > 0
+                                  ? ` (${s.sheetWidthMm}×${s.sheetLengthMm} mm)`
+                                  : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : null}
               {materialSummary.edges.length > 0 ? (
@@ -2066,6 +2115,31 @@ export function ProjectsScreen({
           recalcular con el catálogo actual.
         </p>
       </Modal>
+
+      {selectedProject ? (
+        <ProjectPresentationMode
+          open={showPresentation}
+          project={selectedProject}
+          modules={modules}
+          customers={customers}
+          catalog={{
+            modules,
+            structures: catalogStructures,
+            components: catalogComponents,
+            materials,
+            edges,
+            hardware,
+            optionGroups,
+          }}
+          salePrice={
+            breakdown?.salePrice ??
+            (typeof projectEstimates[selectedProject.id] === 'number'
+              ? (projectEstimates[selectedProject.id] as number)
+              : null)
+          }
+          onClose={() => setShowPresentation(false)}
+        />
+      ) : null}
 
       <Project3DModal
         open={show3DModal}

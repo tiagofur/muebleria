@@ -201,3 +201,6 @@ export type {
   KitchenPlacedModule,
   KitchenLayoutResult,
 } from './kitchenLayout';
+
+export { estimateBoardSheets } from './boardSheetEstimate';
+export type { BoardSheetEstimate } from './boardSheetEstimate';
