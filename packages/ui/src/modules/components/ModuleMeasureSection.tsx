@@ -1,8 +1,9 @@
 /**
- * Module commercial measure presets + structure link (H09 / #104).
+ * Additional commercial measure options for a Module (H09 / #104).
+ * Base measure lives in General → Medida base (externalDims).
+ * Structure picker is rendered by ModulesScreen (composition link).
  */
 
-import type { Structure } from '@muebles/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import {
   emptyMeasurePresetDraft,
@@ -10,26 +11,26 @@ import {
 } from '../moduleHelpers';
 
 export interface ModuleMeasureSectionProps {
-  readonly structureId: string;
   readonly presets: readonly MeasurePresetDraft[];
-  readonly structures: readonly Structure[];
   readonly disabled?: boolean;
-  readonly onStructureIdChange: (structureId: string) => void;
   readonly onPresetsChange: (presets: MeasurePresetDraft[]) => void;
   readonly nextId: () => string;
+  readonly onImportFromStructure?: () => void;
+  readonly canImportFromStructure?: boolean;
+  readonly onSeedFromBase?: () => void;
+  readonly canSeedFromBase?: boolean;
 }
 
 export function ModuleMeasureSection({
-  structureId,
   presets,
-  structures,
   disabled = false,
-  onStructureIdChange,
   onPresetsChange,
   nextId,
+  onImportFromStructure,
+  canImportFromStructure = false,
+  onSeedFromBase,
+  canSeedFromBase = false,
 }: ModuleMeasureSectionProps) {
-  const activeStructures = structures.filter((s) => s.active !== false);
-
   const addPreset = () => {
     onPresetsChange([...presets, emptyMeasurePresetDraft(nextId())]);
   };
@@ -46,58 +47,63 @@ export function ModuleMeasureSection({
 
   return (
     <div className="module-measure-section" data-testid="module-measure-section">
-      <h4 className="module-editor__section-title">Medidas comerciales</h4>
-      <p className="catalog-empty" style={{ marginTop: 0 }}>
-        El vendedor elige de esta lista en cotización. La estructura aporta las
-        fórmulas; el mueble define qué tamaños se venden.
-      </p>
-
-      <div className="catalog-form__field">
-        <label htmlFor="module-structure-id">Estructura (cuerpo)</label>
-        <select
-          id="module-structure-id"
-          value={structureId}
-          disabled={disabled}
-          onChange={(e) => onStructureIdChange(e.target.value)}
-          data-testid="module-structure-select"
-        >
-          <option value="">Sin estructura (módulo fijo)</option>
-          {activeStructures.map((st) => (
-            <option key={st.id} value={st.id}>
-              {st.name} — {st.code}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '0.75rem',
-          marginBottom: '0.75rem',
+          marginBottom: '0.5rem',
+          marginTop: '1rem',
         }}
       >
         <h5 className="module-editor__section-title" style={{ margin: 0 }}>
-          Presets de medida ({presets.length})
+          Más medidas para cotización ({presets.length})
         </h5>
-        <button
-          type="button"
-          className="btn btn--small"
-          disabled={disabled}
-          onClick={addPreset}
-          data-testid="module-add-preset-btn"
-        >
-          <Plus size={16} aria-hidden />
-          Agregar
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {canSeedFromBase && onSeedFromBase ? (
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={disabled}
+              onClick={onSeedFromBase}
+              data-testid="module-seed-base-preset-btn"
+            >
+              Incluir medida base
+            </button>
+          ) : null}
+          {canImportFromStructure && onImportFromStructure ? (
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={disabled}
+              onClick={onImportFromStructure}
+              data-testid="module-import-structure-presets-btn"
+            >
+              Importar de estructura
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn--small"
+            disabled={disabled}
+            onClick={addPreset}
+            data-testid="module-add-preset-btn"
+          >
+            <Plus size={16} aria-hidden />
+            Agregar
+          </button>
+        </div>
       </div>
+      <p className="catalog-empty" style={{ marginTop: 0 }}>
+        Opcional. Si no agregás nada, se cotiza solo con la medida base. Si
+        agregás opciones, el vendedor elige entre ellas en la cotización (incluí
+        la base acá si también querés venderla como opción de la lista).
+      </p>
 
       {presets.length === 0 ? (
         <p className="catalog-empty" data-testid="module-presets-empty">
-          Sin presets. Si el mueble usa estructura, agregá al menos un tamaño
-          vendible (ej. 300 / 400 / 600 mm de ancho).
+          Sin medidas extra. Un solo tamaño: la medida base de arriba.
         </p>
       ) : (
         <div
@@ -118,7 +124,7 @@ export function ModuleMeasureSection({
                 disabled={disabled}
                 onChange={(e) => updatePreset(preset.id, { name: e.target.value })}
                 data-testid={`module-preset-name-${idx}`}
-                aria-label={`Nombre preset ${idx + 1}`}
+                aria-label={`Nombre medida ${idx + 1}`}
               />
               <input
                 type="number"
@@ -132,7 +138,7 @@ export function ModuleMeasureSection({
                   })
                 }
                 data-testid={`module-preset-width-${idx}`}
-                aria-label={`Ancho preset ${idx + 1}`}
+                aria-label={`Ancho medida ${idx + 1}`}
               />
               <input
                 type="number"
@@ -146,7 +152,7 @@ export function ModuleMeasureSection({
                   })
                 }
                 data-testid={`module-preset-height-${idx}`}
-                aria-label={`Alto preset ${idx + 1}`}
+                aria-label={`Alto medida ${idx + 1}`}
               />
               <input
                 type="number"
@@ -160,7 +166,7 @@ export function ModuleMeasureSection({
                   })
                 }
                 data-testid={`module-preset-depth-${idx}`}
-                aria-label={`Fondo preset ${idx + 1}`}
+                aria-label={`Fondo medida ${idx + 1}`}
               />
               <button
                 type="button"
@@ -168,7 +174,7 @@ export function ModuleMeasureSection({
                 disabled={disabled}
                 onClick={() => removePreset(preset.id)}
                 data-testid={`module-remove-preset-${idx}`}
-                aria-label={`Quitar preset ${idx + 1}`}
+                aria-label={`Quitar medida ${idx + 1}`}
               >
                 <Trash2 size={16} aria-hidden />
               </button>
