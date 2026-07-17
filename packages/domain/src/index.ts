@@ -37,6 +37,7 @@ export type {
   KitchenWall,
   ProjectItemPlacement,
   ProjectKitchenLayout,
+  InstallationChecklistItem,
   QuotePriceSnapshot,
   Catalog,
   WorkshopSettings,
@@ -204,3 +205,15 @@ export type {
 
 export { estimateBoardSheets } from './boardSheetEstimate';
 export type { BoardSheetEstimate } from './boardSheetEstimate';
+
+export {
+  projectWithRoleChoice,
+  compareRoleScenario,
+  applyRoleChoiceToProject,
+} from './scenarioCompare';
+export type {
+  ScenarioCompareResult,
+  ScenarioCompareError,
+} from './scenarioCompare';
+
+export { DEFAULT_INSTALLATION_CHECKLIST } from './types';

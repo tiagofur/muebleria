@@ -347,6 +347,25 @@ export interface ProjectKitchenLayout {
   readonly placements: readonly ProjectItemPlacement[];
 }
 
+/** Simple installation checklist item (#139). */
+export interface InstallationChecklistItem {
+  readonly id: string;
+  readonly label: string;
+  readonly done: boolean;
+}
+
+/** Default checklist template for new projects / first open. */
+export const DEFAULT_INSTALLATION_CHECKLIST: readonly Omit<
+  InstallationChecklistItem,
+  'id'
+>[] = [
+  { label: 'Verificar medidas en obra', done: false },
+  { label: 'Nivelar y fijar módulos', done: false },
+  { label: 'Instalar herrajes y ajustes', done: false },
+  { label: 'Sellar juntas y limpiar', done: false },
+  { label: 'Entrega y conformidad cliente', done: false },
+] as const;
+
 export interface Project {
   readonly id: string;
   readonly name: string;
@@ -371,6 +390,10 @@ export interface Project {
    * Optional kitchen plan (walls + placements). Omitted = linear 3D run only.
    */
   readonly kitchenLayout?: ProjectKitchenLayout;
+  /**
+   * Optional installation checklist for obra (#139).
+   */
+  readonly installationChecklist?: readonly InstallationChecklistItem[];
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

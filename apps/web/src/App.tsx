@@ -34,6 +34,7 @@ import type {
   Workspace,
 } from '@muebles/domain';
 import {
+  applyRoleChoiceToProject,
   calcMaterialCostPerM2,
   calcProjectBreakdown,
   generateProjectMaterialSummary,
@@ -1130,12 +1131,19 @@ function AppContent({
   };
 
   const updateMaterial = (id: string, draft: MaterialDraft) => {
+    const prev = materials.find((m) => m.id === id);
     const costPerM2 = calcMaterialCostPerM2(
       draft.widthMm,
       draft.lengthMm,
       draft.boardPrice,
       draft.wastePercent,
     );
+    const priceChanged =
+      prev != null &&
+      (prev.boardPrice !== draft.boardPrice ||
+        prev.wastePercent !== draft.wastePercent ||
+        Math.abs(prev.costPerM2 - costPerM2) > 1e-9);
+
     patchCatalog((c) => ({
       ...c,
       materials: c.materials.map((m) =>
@@ -1161,6 +1169,17 @@ function AppContent({
       ),
     }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
+
+    // #138: warn about draft quotes that may still use previous catalog prices
+    if (priceChanged) {
+      const draftCount = projects.filter((p) => p.status === 'draft').length;
+      if (draftCount > 0) {
+        toast({
+          type: 'info',
+          message: `Precio de material actualizado. ${draftCount} cotización${draftCount === 1 ? '' : 'es'} en borrador usarán el nuevo catálogo al recalcular.`,
+        });
+      }
+    }
   };
 
   const setMaterialActive = (id: string, active: boolean) => {
@@ -1810,6 +1829,72 @@ function AppContent({
           : p,
       ),
     );
+  };
+
+
+
+  const updateInstallationChecklist = (
+    projectId: string,
+    installationChecklist: readonly import('@muebles/domain').InstallationChecklistItem[],
+  ) => {
+    const now = new Date().toISOString();
+    patchProjects((ps) =>
+      ps.map((p) =>
+        p.id === projectId
+          ? { ...p, installationChecklist: [...installationChecklist], updatedAt: now }
+          : p,
+      ),
+    );
+  };
+
+  const duplicateWithScenarioB = (
+    projectId: string,
+    role: string,
+    choiceId: string,
+  ) => {
+    const source = projects.find((p) => p.id === projectId);
+    if (!source) return;
+    const now = new Date().toISOString();
+    const copy = deepCopyProject(source, {
+      newId: newId(),
+      itemIdFactory: newId,
+      nowIso: now,
+    });
+    const withB = applyRoleChoiceToProject(copy, role, choiceId, now);
+    setWorkspace((prev) =>
+      prev ? { ...prev, projects: [...prev.projects, withB] } : prev,
+    );
+    repository.createProject(withB).catch((err) => {
+      console.error('Error al duplicar con escenario B:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo guardar el duplicado en el servidor',
+      });
+    });
+    toast({
+      type: 'success',
+      message: '✓ Cotización duplicada con escenario B',
+    });
+    navigate(entityPath('projects', withB.id));
+  };
+
+  const applyScenarioB = (
+    projectId: string,
+    role: string,
+    choiceId: string,
+  ) => {
+    const now = new Date().toISOString();
+    const project = projects.find((p) => p.id === projectId);
+    if (!project || project.status !== 'draft') {
+      toast({
+        type: 'error',
+        message: 'Solo se puede aplicar el escenario B en borrador',
+      });
+      return;
+    }
+    const updated = applyRoleChoiceToProject(project, role, choiceId, now);
+    patchProjects((ps) => ps.map((p) => (p.id === projectId ? updated : p)));
+    toast({ type: 'success', message: '✓ Escenario B aplicado a la cotización' });
   };
 
   const updateKitchenLayout = (
@@ -2529,6 +2614,9 @@ function AppContent({
           onRemoveItem={removeProjectItem}
           onUpdateProjectLevelChoices={updateProjectLevelChoices}
           onUpdateKitchenLayout={updateKitchenLayout}
+          onApplyScenarioB={applyScenarioB}
+          onDuplicateWithScenarioB={duplicateWithScenarioB}
+          onUpdateInstallationChecklist={updateInstallationChecklist}
           onSelectionChange={onProjectSelectionChange}
           breakdown={backendBreakdown ?? projectQuote.breakdown}
           materialSummary={materialSummary}

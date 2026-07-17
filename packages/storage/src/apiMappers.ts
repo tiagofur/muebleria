@@ -685,6 +685,13 @@ export function projectToApi(p: Project): Record<string, unknown> {
     notes: p.notes ?? '',
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
+    installation_checklist: p.installationChecklist
+      ? p.installationChecklist.map((c) => ({
+          id: c.id,
+          label: c.label,
+          done: c.done,
+        }))
+      : null,
     items: p.items.map((item) => ({
       id: item.id,
       module_id: item.moduleId,
@@ -726,6 +733,20 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     kitchenLayout: kitchenLayoutFromApi(
       raw.kitchen_layout ?? raw.kitchenLayout,
     ),
+    installationChecklist: (() => {
+      const rawList =
+        raw.installation_checklist ?? raw.installationChecklist;
+      if (!Array.isArray(rawList)) return undefined;
+      const items = rawList.map((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          id: str(r.id),
+          label: str(r.label),
+          done: bool(r.done),
+        };
+      });
+      return items.length > 0 ? items : undefined;
+    })(),
     createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
     items: itemsRaw.map((it): ProjectItem => {

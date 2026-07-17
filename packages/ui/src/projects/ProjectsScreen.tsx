@@ -65,6 +65,8 @@ import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
 import { KitchenPlanPanel } from './components/KitchenPlanPanel';
 import { ProjectPresentationMode } from './components/ProjectPresentationMode';
+import { QuoteScenarioCompare } from './components/QuoteScenarioCompare';
+import { InstallationChecklistPanel } from './components/InstallationChecklistPanel';
 import {
   customersForProjectPicker,
   defaultChoicesForNewItem,
@@ -137,6 +139,21 @@ export interface ProjectsScreenProps {
   readonly onUpdateKitchenLayout?: (
     projectId: string,
     layout: import('@muebles/domain').ProjectKitchenLayout,
+  ) => void;
+  /** Apply A/B scenario B role choice to all lines (#137). Draft only. */
+  readonly onApplyScenarioB?: (
+    projectId: string,
+    role: string,
+    choiceId: string,
+  ) => void;
+  readonly onDuplicateWithScenarioB?: (
+    projectId: string,
+    role: string,
+    choiceId: string,
+  ) => void;
+  readonly onUpdateInstallationChecklist?: (
+    projectId: string,
+    items: readonly import('@muebles/domain').InstallationChecklistItem[],
   ) => void;
   /** F029: project-wide option defaults (empty keys inherit on each line). */
   readonly onUpdateProjectLevelChoices?: (
@@ -264,6 +281,9 @@ export function ProjectsScreen({
   onUpdateItem,
   onRemoveItem,
   onUpdateKitchenLayout,
+  onApplyScenarioB,
+  onDuplicateWithScenarioB,
+  onUpdateInstallationChecklist,
   onUpdateProjectLevelChoices,
   onSelectionChange,
   breakdown = null,
@@ -1499,6 +1519,37 @@ export function ProjectsScreen({
           )}
           onChange={(layout) => {
             onUpdateKitchenLayout?.(project.id, layout);
+          }}
+        />
+
+        <QuoteScenarioCompare
+          project={project}
+          catalog={{
+            materials,
+            edges,
+            hardware,
+            optionGroups,
+            modules,
+          }}
+          optionGroups={optionGroups}
+          canApply={Boolean(
+            canMutate && project.status === 'draft' && onApplyScenarioB,
+          )}
+          canDuplicate={Boolean(canMutate && onDuplicateWithScenarioB)}
+          currency={project.currency}
+          onApplyB={(role, choiceId) => {
+            onApplyScenarioB?.(project.id, role, choiceId);
+          }}
+          onDuplicateWithB={(role, choiceId) => {
+            onDuplicateWithScenarioB?.(project.id, role, choiceId);
+          }}
+        />
+
+        <InstallationChecklistPanel
+          project={project}
+          canEdit={Boolean(canMutate && onUpdateInstallationChecklist)}
+          onChange={(items) => {
+            onUpdateInstallationChecklist?.(project.id, items);
           }}
         />
 
