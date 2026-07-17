@@ -128,7 +128,7 @@ describe('@muebles/web F006 shell wiring', () => {
 
   it('loads plantilla seed catalogs on first open (CAT-06)', () => {
     const ws = createSeedWorkspace();
-    expect(ws.schemaVersion).toBe(2);
+    expect(ws.schemaVersion).toBe(3);
     expect(ws.catalog.materials.length).toBeGreaterThan(0);
     expect(ws.catalog.edges.length).toBeGreaterThan(0);
     expect(ws.catalog.hardware.length).toBeGreaterThan(0);

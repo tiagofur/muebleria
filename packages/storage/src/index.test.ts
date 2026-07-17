@@ -9,7 +9,7 @@ import {
 describe('@muebles/storage exports', () => {
   it('exports package identity and storage surface', () => {
     expect(PACKAGE_NAME).toBe('@muebles/storage');
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
     expect(typeof createSeedWorkspace).toBe('function');
   });
 });

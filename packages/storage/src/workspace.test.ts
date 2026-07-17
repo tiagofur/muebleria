@@ -231,4 +231,92 @@ describe('JSONFileStorage', () => {
     expect(loaded.catalog.modules).toHaveLength(0);
     expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
   });
+
+  it('migrates v2 workspace → v3 (#108): backfills structure revision/history', async () => {
+    // Hand-write a v2 workspace whose structures predate the `revision`/`history`
+    // fields added in Slice 1. The migration must default them additively
+    // (revision: 1, history: []) without dropping any other data, and bump
+    // schemaVersion to 3. Legacy items without `structureRevisionPin` stay
+    // unpinned (live revision) — that's the documented behavior.
+    const path = await tempWorkspacePath('v2-migrate.json');
+    // Cast through unknown: the on-disk shape intentionally omits the v3 fields.
+    const v2Workspace = {
+      schemaVersion: 2,
+      catalog: {
+        materials: [],
+        edges: [],
+        hardware: [],
+        optionGroups: [],
+        modules: [],
+        structures: [
+          {
+            id: 'struct-legacy',
+            code: 'EST-OLD',
+            name: 'Legacy body',
+            externalDims: { width: 300, height: 720, depth: 590 },
+            components: [],
+            presets: [],
+            active: true,
+            // no revision, no history
+          },
+          {
+            id: 'struct-explicit',
+            code: 'EST-NEW',
+            name: 'Explicit body',
+            externalDims: { width: 500, height: 720, depth: 590 },
+            revision: 4,
+            history: [{ revision: 3, code: 'EST-NEW', name: 'Old name' }],
+            active: true,
+          },
+        ],
+        categories: [],
+        customers: [],
+      },
+      projects: [
+        {
+          id: 'proj-legacy',
+          name: 'Legacy',
+          customerId: 'c',
+          currency: 'MXN',
+          marginFactor: 1.35,
+          laborFixedCost: 0,
+          status: 'draft',
+          items: [
+            {
+              id: 'i1',
+              moduleId: 'm1',
+              quantity: 1,
+              optionChoices: {},
+              // no structureRevisionPin — should stay undefined
+            },
+          ],
+          createdAt: '2026-07-15T00:00:00.000Z',
+          updatedAt: '2026-07-15T00:00:00.000Z',
+        },
+      ],
+    } as unknown as Workspace;
+    await writeFile(path, JSON.stringify(v2Workspace), 'utf8');
+
+    const storage = new JSONFileStorage(path);
+    const loaded = await storage.load();
+
+    expect(loaded.schemaVersion).toBe(3);
+
+    const structs = loaded.catalog.structures ?? [];
+    expect(structs).toHaveLength(2);
+
+    const legacy = structs.find((s) => s.id === 'struct-legacy');
+    expect(legacy?.revision).toBe(1);
+    expect(legacy?.history).toEqual([]);
+
+    // Explicit revision/history must be preserved verbatim (additive migration).
+    const explicit = structs.find((s) => s.id === 'struct-explicit');
+    expect(explicit?.revision).toBe(4);
+    expect(explicit?.history).toEqual([
+      { revision: 3, code: 'EST-NEW', name: 'Old name' },
+    ]);
+
+    // Unpinned items stay unpinned — no forced freeze on legacy data.
+    expect(loaded.projects[0]?.items[0]?.structureRevisionPin).toBeUndefined();
+  });
 });

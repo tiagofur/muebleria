@@ -48,6 +48,24 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
     expect(codes).toContain('MOD-CAJ-01');
   });
 
+  it('seed structures are revision-compatible (#108): normalize to revision 1', () => {
+    // Seed structures come from domain fixtures without an explicit `revision`
+    // field. The domain normalizes missing → 1 via `structureRevision` (Slice 1),
+    // so a freshly-seeded workspace is already valid for the v3 schema. This
+    // guards against a future fixture change that silently drops compatibility.
+    const seed = createSeedWorkspace();
+    const structures = seed.catalog.structures ?? [];
+    expect(structures.length).toBeGreaterThan(0);
+    for (const s of structures) {
+      // revision ?? 1 must equal 1 — either explicitly set or normalized.
+      expect(s.revision ?? 1).toBe(1);
+      // history, when present, must be an array (snapshot list).
+      if (s.history !== undefined) {
+        expect(Array.isArray(s.history)).toBe(true);
+      }
+    }
+  });
+
   it('includes Arauco, Maderado, MDF materials with costs and matching edges (CAT-06)', () => {
     const seed = createSeedWorkspace();
     const matCodes = new Set(seed.catalog.materials.map((m) => m.code));
