@@ -10,7 +10,8 @@ import (
 
 func (s *PostgresStore) loadComponentParts(ctx context.Context, componentID string) ([]domain.BoardPart, error) {
 	partsQuery := `
-		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula
+		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+			face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm
 		FROM component_board_parts
 		WHERE component_id = $1
 		ORDER BY code NULLS LAST, description;
@@ -26,8 +27,11 @@ func (s *PostgresStore) loadComponentParts(ctx context.Context, componentID stri
 		var p domain.BoardPart
 		var code *string
 		var lengthFormula, widthFormula *string
+		var face, placement, ox, oy, oz *string
+		var designT *int
 		var l1, l2, w1, w2 bool
-		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2, &lengthFormula, &widthFormula); err != nil {
+		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2, &lengthFormula, &widthFormula,
+			&face, &placement, &ox, &oy, &oz, &designT); err != nil {
 			return nil, err
 		}
 		if code != nil {
@@ -39,6 +43,7 @@ func (s *PostgresStore) loadComponentParts(ctx context.Context, componentID stri
 		if widthFormula != nil {
 			p.WidthFormula = *widthFormula
 		}
+		applySpatialPtrs(&p, face, placement, ox, oy, oz, designT)
 		p.Edges = edgesFromFlags(l1, l2, w1, w2)
 		parts = append(parts, p)
 	}
@@ -84,7 +89,7 @@ func (s *PostgresStore) loadComponentHardware(ctx context.Context, componentID s
 
 func (s *PostgresStore) loadModuleComponentRefs(ctx context.Context, moduleID string) ([]domain.ModuleComponentRef, error) {
 	q := `
-		SELECT component_id, quantity
+		SELECT component_id, quantity, placement, origin_x_formula, origin_y_formula, origin_z_formula
 		FROM module_component_refs
 		WHERE module_id = $1
 		ORDER BY sort_order ASC, component_id ASC;
@@ -98,9 +103,11 @@ func (s *PostgresStore) loadModuleComponentRefs(ctx context.Context, moduleID st
 	var out []domain.ModuleComponentRef
 	for rows.Next() {
 		var ref domain.ModuleComponentRef
-		if err := rows.Scan(&ref.ComponentID, &ref.Quantity); err != nil {
+		var placement, ox, oy, oz *string
+		if err := rows.Scan(&ref.ComponentID, &ref.Quantity, &placement, &ox, &oy, &oz); err != nil {
 			return nil, err
 		}
+		applyRefSpatialPtrs(&ref, placement, ox, oy, oz)
 		out = append(out, ref)
 	}
 	if out == nil {
@@ -118,9 +125,10 @@ func replaceModuleComponentRefsTx(ctx context.Context, tx pgx.Tx, moduleID strin
 			continue
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO module_component_refs (module_id, component_id, quantity, sort_order)
-			VALUES ($1, $2, $3, $4);
-		`, moduleID, ref.ComponentID, ref.Quantity, i); err != nil {
+			INSERT INTO module_component_refs (module_id, component_id, quantity, sort_order, placement, origin_x_formula, origin_y_formula, origin_z_formula)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+		`, moduleID, ref.ComponentID, ref.Quantity, i,
+			nullIfEmpty(ref.Placement), nullIfEmpty(ref.OriginXFormula), nullIfEmpty(ref.OriginYFormula), nullIfEmpty(ref.OriginZFormula)); err != nil {
 			return fmt.Errorf("error inserting module component ref: %w", err)
 		}
 	}
@@ -134,19 +142,24 @@ func writeComponentChildren(ctx context.Context, tx pgx.Tx, componentID string, 
 		if !isValidUUID(partID) {
 			partID = ""
 		}
+		face, placement, ox, oy, oz, designT := spatialWriteArgs(p)
 		var err error
 		if partID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO component_board_parts
-				(id, component_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, partID, componentID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+				(id, component_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+				 face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20);
+			`, partID, componentID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula),
+				face, placement, ox, oy, oz, designT)
 		} else {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO component_board_parts
-				(component_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
-			`, componentID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
+				(component_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula,
+				 face, placement, origin_x_formula, origin_y_formula, origin_z_formula, design_thickness_mm)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19);
+			`, componentID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula),
+				face, placement, ox, oy, oz, designT)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting component part: %w", err)

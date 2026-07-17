@@ -3,6 +3,7 @@
  */
 
 import type {
+  BoardFace,
   BoardPart,
   DimensionPreset,
   EdgeAssignment,
@@ -12,8 +13,9 @@ import type {
   ModuleCategory,
   OptionGroup,
   OptionGroupKind,
+  PlacementSlot,
 } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import { childrenOf, isBoardFace, isPlacementSlot } from '@muebles/domain';
 import {
   matchesCodeOrName,
   normalizeCode,
@@ -34,6 +36,22 @@ export type BoardPartDraft = {
   optionRole: string;
   lengthFormula?: string;
   widthFormula?: string;
+  /** S1 spatial — empty string = unset */
+  face: string;
+  placement: string;
+  originXFormula: string;
+  originYFormula: string;
+  originZFormula: string;
+  designThicknessMm: string;
+};
+
+export type ModuleComponentRefDraft = {
+  componentId: string;
+  quantity: number;
+  placement: string;
+  originXFormula: string;
+  originYFormula: string;
+  originZFormula: string;
 };
 
 export type HardwareLineDraft = {
@@ -70,8 +88,8 @@ export type ModuleDraft = {
   structureId: string;
   /** Commercial measure options for sales (H09 / #104). */
   presets: MeasurePresetDraft[];
-  /** Attached reusable components (H07 / #102). */
-  components: { componentId: string; quantity: number }[];
+  /** Attached reusable components (H07 / #102 + S1 spatial overrides). */
+  components: ModuleComponentRefDraft[];
   boardParts: BoardPartDraft[];
   hardwareLines: HardwareLineDraft[];
 };
@@ -146,6 +164,48 @@ export function emptyBoardPartDraft(id: string): BoardPartDraft {
     optionRole: '',
     lengthFormula: '',
     widthFormula: '',
+    face: '',
+    placement: '',
+    originXFormula: '',
+    originYFormula: '',
+    originZFormula: '',
+    designThicknessMm: '',
+  };
+}
+
+export function emptyModuleComponentRefDraft(
+  componentId = '',
+): ModuleComponentRefDraft {
+  return {
+    componentId,
+    quantity: 1,
+    placement: '',
+    originXFormula: '',
+    originYFormula: '',
+    originZFormula: '',
+  };
+}
+
+/** Map draft spatial fields onto a domain BoardPart (omits empties). */
+export function spatialFieldsFromDraft(p: BoardPartDraft): {
+  face?: BoardFace;
+  placement?: PlacementSlot;
+  originXFormula?: string;
+  originYFormula?: string;
+  originZFormula?: string;
+  designThicknessMm?: number;
+} {
+  const face = p.face.trim();
+  const placement = p.placement.trim();
+  const designT = Number(p.designThicknessMm);
+  return {
+    face: isBoardFace(face) ? face : undefined,
+    placement: isPlacementSlot(placement) ? placement : undefined,
+    originXFormula: p.originXFormula.trim() || undefined,
+    originYFormula: p.originYFormula.trim() || undefined,
+    originZFormula: p.originZFormula.trim() || undefined,
+    designThicknessMm:
+      Number.isFinite(designT) && designT > 0 ? designT : undefined,
   };
 }
 
@@ -203,6 +263,15 @@ export function boardPartToDraft(part: BoardPart): BoardPartDraft {
     optionRole: part.optionRole,
     lengthFormula: part.lengthFormula ?? '',
     widthFormula: part.widthFormula ?? '',
+    face: part.face ?? '',
+    placement: part.placement ?? '',
+    originXFormula: part.originXFormula ?? '',
+    originYFormula: part.originYFormula ?? '',
+    originZFormula: part.originZFormula ?? '',
+    designThicknessMm:
+      part.designThicknessMm && part.designThicknessMm > 0
+        ? String(part.designThicknessMm)
+        : '',
   };
 }
 
@@ -241,6 +310,10 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     components: (mod.components ?? []).map((c) => ({
       componentId: c.componentId,
       quantity: c.quantity,
+      placement: c.placement ?? '',
+      originXFormula: c.originXFormula ?? '',
+      originYFormula: c.originYFormula ?? '',
+      originZFormula: c.originZFormula ?? '',
     })),
     boardParts: mod.boardParts.map(boardPartToDraft),
     hardwareLines: mod.hardwareLines.map(hardwareLineToDraft),
@@ -312,6 +385,61 @@ export function parseOptionalNumber(raw: string): number | undefined {
 }
 
 /**
+ * Option group codes used by a module template (own parts + attached components).
+ * Pure selection helper for vitrina / preview gates (#118).
+ */
+export function optionGroupCodesForModule(
+  module: {
+    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly hardwareLines: readonly {
+      readonly optionRole: string;
+      readonly hardwareId?: string;
+    }[];
+    readonly components?: readonly { readonly componentId: string }[];
+  },
+  furnitureComponents: readonly {
+    readonly id: string;
+    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly hardwareLines: readonly {
+      readonly optionRole: string;
+      readonly hardwareId?: string;
+    }[];
+  }[] = [],
+): string[] {
+  const roles = new Set<string>();
+  for (const part of module.boardParts) {
+    if (part.optionRole?.trim()) roles.add(part.optionRole.trim());
+  }
+  for (const line of module.hardwareLines) {
+    if (line.hardwareId) continue;
+    if (line.optionRole?.trim()) roles.add(line.optionRole.trim());
+  }
+  const byId = new Map(furnitureComponents.map((c) => [c.id, c]));
+  for (const ref of module.components ?? []) {
+    const comp = byId.get(ref.componentId);
+    if (!comp) continue;
+    for (const part of comp.boardParts) {
+      if (part.optionRole?.trim()) roles.add(part.optionRole.trim());
+    }
+    for (const line of comp.hardwareLines) {
+      if (line.hardwareId) continue;
+      if (line.optionRole?.trim()) roles.add(line.optionRole.trim());
+    }
+  }
+  return [...roles];
+}
+
+/** Alias used by ModuleShowcase commercial detail (#118). */
+export function formatMeasurePresetLine(preset: {
+  readonly name?: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}): string {
+  return formatMeasurePresetLabel(preset);
+}
+
+/**
  * Default option choices for cost preview: first member of each required group used by the module.
  * Pure selection helper — does not compute prices.
  */
@@ -322,17 +450,21 @@ export function defaultOptionChoicesForModule(
       readonly optionRole: string;
       readonly hardwareId?: string;
     }[];
+    readonly components?: readonly { readonly componentId: string }[];
   },
   optionGroups: readonly OptionGroup[],
+  furnitureComponents: readonly {
+    readonly id: string;
+    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly hardwareLines: readonly {
+      readonly optionRole: string;
+      readonly hardwareId?: string;
+    }[];
+  }[] = [],
 ): Record<string, string> {
-  const usedRoles = new Set<string>();
-  for (const part of module.boardParts) {
-    if (part.optionRole?.trim()) usedRoles.add(part.optionRole.trim());
-  }
-  for (const line of module.hardwareLines) {
-    if (line.hardwareId) continue;
-    if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
-  }
+  const usedRoles = new Set(
+    optionGroupCodesForModule(module, furnitureComponents),
+  );
 
   const choices: Record<string, string> = {};
   for (const group of optionGroups) {
@@ -389,62 +521,6 @@ export function flattenCategoriesForSelect(
 }
 
 /** Format module money for display — shared formatMoneyDisplay (#51). */
-/**
- * Option group codes used by a module (own parts + attached components).
- * For commercial showcase labels — pure, no pricing.
- */
-export function optionGroupCodesForModule(
-  module: {
-    readonly boardParts: readonly { readonly optionRole: string }[];
-    readonly hardwareLines: readonly {
-      readonly optionRole: string;
-      readonly hardwareId?: string;
-    }[];
-    readonly components?: readonly { readonly componentId: string }[];
-  },
-  furnitureComponents: readonly {
-    readonly id: string;
-    readonly boardParts: readonly { readonly optionRole: string }[];
-    readonly hardwareLines: readonly {
-      readonly optionRole: string;
-      readonly hardwareId?: string;
-    }[];
-  }[] = [],
-): string[] {
-  const roles = new Set<string>();
-  for (const part of module.boardParts) {
-    if (part.optionRole?.trim()) roles.add(part.optionRole.trim());
-  }
-  for (const line of module.hardwareLines) {
-    if (line.hardwareId) continue;
-    if (line.optionRole?.trim()) roles.add(line.optionRole.trim());
-  }
-  const byId = new Map(furnitureComponents.map((c) => [c.id, c]));
-  for (const ref of module.components ?? []) {
-    const comp = byId.get(ref.componentId);
-    if (!comp) continue;
-    for (const part of comp.boardParts) {
-      if (part.optionRole?.trim()) roles.add(part.optionRole.trim());
-    }
-    for (const line of comp.hardwareLines) {
-      if (line.hardwareId) continue;
-      if (line.optionRole?.trim()) roles.add(line.optionRole.trim());
-    }
-  }
-  return [...roles].sort((a, b) => a.localeCompare(b, 'es'));
-}
-
-export function formatMeasurePresetLine(preset: {
-  readonly name?: string;
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-}): string {
-  const dims = `${preset.width}×${preset.height}×${preset.depth} mm`;
-  const name = preset.name?.trim();
-  return name ? `${name} (${dims})` : dims;
-}
-
 export function formatModuleMoney(n: number | null | undefined): string {
   return formatMoneyDisplay(n);
 }

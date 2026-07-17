@@ -177,13 +177,28 @@ export function roleCanAccessCatalogNav(role: string | null | undefined): boolea
   );
 }
 
-export function roleCanAccessModulesNav(role: string | null | undefined): boolean {
+/**
+ * Commercial showcase (Trabajo → Vitrina).
+ * Sales + engineering may browse catalog photos without BOM edit.
+ */
+export function roleCanAccessShowcaseNav(
+  role: string | null | undefined,
+): boolean {
   return (
     role === 'admin' ||
     role === 'ingeniero' ||
     role === 'gerente_ventas' ||
     role === 'vendedor'
   );
+}
+
+/**
+ * Engineering module templates (Ingeniería → Muebles).
+ * Same roles that historically opened the modules catalog.
+ * Mutate is gated separately by `roleCanMutateModules`.
+ */
+export function roleCanAccessModulesNav(role: string | null | undefined): boolean {
+  return roleCanMutateModules(role);
 }
 
 /** Spanish labels for taller UI. */
@@ -223,12 +238,11 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   const ids = new Set<string>(['home']);
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
-  // #118: commercial vitrina for all who can browse modules (vendedor, etc.)
-  if (roleCanAccessModulesNav(role)) ids.add('showcase');
-  // Plantilla ABM only when role may mutate catalog modules (ingeniero/admin)
+  // Trabajo → Vitrina (sales + engineering browse)
+  if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
+  // Ingeniería → Muebles / Estructuras / Componentes (admin / ingeniero)
   if (roleCanMutateModules(role)) {
     ids.add('modules');
-    // F049/H06: Estructuras + Componentes only for ingeniero/admin
     ids.add('structures');
     ids.add('components');
   }

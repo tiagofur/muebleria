@@ -9,6 +9,7 @@ import {
 } from './measurePresets';
 import { isFurnitureComponentKind } from './furnitureComponents';
 import { effectiveOptionChoices } from './optionChoices';
+import { DEFAULT_DESIGN_THICKNESS_MM } from './spatial';
 import type {
   BoardPart,
   Catalog,
@@ -414,6 +415,7 @@ export function validateModule(module: Module): void {
         field: 'optionRole',
       });
     }
+    validatePartSpatialFormulas(part, { moduleCode: module.code });
   }
 
   for (const line of module.hardwareLines) {
@@ -445,6 +447,18 @@ export function validateModuleComponentRefs(
         'La referencia de componente necesita componentId',
         { moduleCode, field: 'components' },
       );
+    }
+    for (const [field, value] of [
+      ['originXFormula', ref.originXFormula],
+      ['originYFormula', ref.originYFormula],
+      ['originZFormula', ref.originZFormula],
+    ] as const) {
+      if (value?.trim() && !isValidPartFormula(value)) {
+        throw new ValidationError(
+          `La fórmula de origen del componente "${value}" no es válida`,
+          { moduleCode, componentId: ref.componentId, field },
+        );
+      }
     }
     if (!Number.isFinite(ref.quantity) || ref.quantity < 1) {
       throw new ValidationError(
@@ -522,32 +536,27 @@ export function validateFurnitureComponent(
         },
       );
     }
-    if (part.lengthFormula?.trim()) {
-      const clean = part.lengthFormula.replace(/\s+/g, '');
-      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-        throw new ValidationError(
-          `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
-          {
-            componentCode: component.code,
-            partId: part.id,
-            field: 'lengthFormula',
-          },
-        );
-      }
+    if (part.lengthFormula?.trim() && !isValidPartFormula(part.lengthFormula)) {
+      throw new ValidationError(
+        `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
+        {
+          componentCode: component.code,
+          partId: part.id,
+          field: 'lengthFormula',
+        },
+      );
     }
-    if (part.widthFormula?.trim()) {
-      const clean = part.widthFormula.replace(/\s+/g, '');
-      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-        throw new ValidationError(
-          `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
-          {
-            componentCode: component.code,
-            partId: part.id,
-            field: 'widthFormula',
-          },
-        );
-      }
+    if (part.widthFormula?.trim() && !isValidPartFormula(part.widthFormula)) {
+      throw new ValidationError(
+        `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
+        {
+          componentCode: component.code,
+          partId: part.id,
+          field: 'widthFormula',
+        },
+      );
     }
+    validatePartSpatialFormulas(part, { componentCode: component.code });
   }
 
   for (const line of component.hardwareLines) {
@@ -571,10 +580,12 @@ function moduleCodeForHw(component: FurnitureComponent): string {
 
 /**
  * Stretch component parts at furniture outer dims (H06).
+ * Optional instance vars T/i/n support multi-instance size formulas (S1).
  */
 export function resolveFurnitureComponentParts(
   component: FurnitureComponent,
   selectedDims?: { width: number; height: number; depth: number },
+  instance?: { T?: number; i?: number; n?: number },
 ): BoardPart[] {
   validateFurnitureComponent(component);
   if (!selectedDims) {
@@ -594,9 +605,12 @@ export function resolveFurnitureComponentParts(
       },
     );
   }
-  return applyDimsToParts(component.boardParts, selectedDims, {
-    componentCode: component.code,
-  });
+  return applyDimsToParts(
+    component.boardParts,
+    selectedDims,
+    { componentCode: component.code },
+    instance,
+  );
 }
 
 /**
@@ -638,8 +652,11 @@ export function expandModuleComponents(
       );
     }
 
-    const parts = resolveFurnitureComponentParts(component, selectedDims);
     for (let i = 0; i < ref.quantity; i += 1) {
+      const parts = resolveFurnitureComponentParts(component, selectedDims, {
+        i,
+        n: ref.quantity,
+      });
       for (const part of parts) {
         boardParts.push({
           ...part,
@@ -718,32 +735,27 @@ export function validateStructure(structure: Structure): void {
         field: 'optionRole',
       });
     }
-    if (part.lengthFormula?.trim()) {
-      const clean = part.lengthFormula.replace(/\s+/g, '');
-      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-        throw new ValidationError(
-          `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
-          {
-            structureCode: structure.code,
-            partId: part.id,
-            field: 'lengthFormula',
-          },
-        );
-      }
+    if (part.lengthFormula?.trim() && !isValidPartFormula(part.lengthFormula)) {
+      throw new ValidationError(
+        `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
+        {
+          structureCode: structure.code,
+          partId: part.id,
+          field: 'lengthFormula',
+        },
+      );
     }
-    if (part.widthFormula?.trim()) {
-      const clean = part.widthFormula.replace(/\s+/g, '');
-      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-        throw new ValidationError(
-          `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
-          {
-            structureCode: structure.code,
-            partId: part.id,
-            field: 'widthFormula',
-          },
-        );
-      }
+    if (part.widthFormula?.trim() && !isValidPartFormula(part.widthFormula)) {
+      throw new ValidationError(
+        `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
+        {
+          structureCode: structure.code,
+          partId: part.id,
+          field: 'widthFormula',
+        },
+      );
     }
+    validatePartSpatialFormulas(part, { structureCode: structure.code });
   }
 }
 
@@ -957,14 +969,23 @@ function applyDimsToParts(
     structureCode?: string;
     componentCode?: string;
   },
+  instance?: { T?: number; i?: number; n?: number },
 ): BoardPart[] {
-  const dims = {
-    W: selectedDims.width,
-    H: selectedDims.height,
-    D: selectedDims.depth,
-  };
-
   return parts.map((part) => {
+    const T =
+      instance?.T ??
+      (part.designThicknessMm && part.designThicknessMm > 0
+        ? part.designThicknessMm
+        : DEFAULT_DESIGN_THICKNESS_MM);
+    const dims: PartFormulaDims = {
+      W: selectedDims.width,
+      H: selectedDims.height,
+      D: selectedDims.depth,
+      T,
+      i: instance?.i ?? 0,
+      n: instance?.n ?? 1,
+    };
+
     let resolvedLength = part.lengthMm;
     let resolvedWidth = part.widthMm;
 
@@ -990,6 +1011,50 @@ function applyDimsToParts(
       widthMm: resolvedWidth,
     };
   });
+}
+
+/** Validate optional origin formulas on a board part (S1). */
+export function validatePartSpatialFormulas(
+  part: BoardPart,
+  context: {
+    moduleCode?: string;
+    structureCode?: string;
+    componentCode?: string;
+  },
+): void {
+  const fields: Array<{
+    key: 'originXFormula' | 'originYFormula' | 'originZFormula';
+    value?: string;
+  }> = [
+    { key: 'originXFormula', value: part.originXFormula },
+    { key: 'originYFormula', value: part.originYFormula },
+    { key: 'originZFormula', value: part.originZFormula },
+  ];
+  for (const { key, value } of fields) {
+    if (value?.trim() && !isValidPartFormula(value)) {
+      throw new ValidationError(
+        `La fórmula de origen "${value}" contiene caracteres no válidos.`,
+        {
+          ...context,
+          partId: part.id,
+          field: key,
+        },
+      );
+    }
+  }
+  if (
+    part.designThicknessMm !== undefined &&
+    (!(part.designThicknessMm > 0) || !Number.isFinite(part.designThicknessMm))
+  ) {
+    throw new ValidationError(
+      'designThicknessMm debe ser mayor a 0 cuando se define',
+      {
+        ...context,
+        partId: part.id,
+        field: 'designThicknessMm',
+      },
+    );
+  }
 }
 
 export function calcMaterialCostPerM2(
@@ -1996,17 +2061,38 @@ export function generateHardwareList(
   return rows;
 }
 
+/** Allowed tokens in part formulas: W,H,D,T,i,n and arithmetic. */
+export const PART_FORMULA_PATTERN = /^[0-9WHDTin+\-*/()]+$/;
+
+export function isValidPartFormula(formula: string): boolean {
+  const clean = formula.replace(/\s+/g, '');
+  return clean.length > 0 && PART_FORMULA_PATTERN.test(clean);
+}
+
+export type PartFormulaDims = {
+  readonly W: number;
+  readonly H: number;
+  readonly D: number;
+  /** Material / design thickness mm (S1). Defaults to 0 if omitted. */
+  readonly T?: number;
+  /** Instance index 0..n-1 (S1). Defaults to 0. */
+  readonly i?: number;
+  /** Instance count (S1). Defaults to 1. */
+  readonly n?: number;
+};
+
 /**
- * Safely evaluates simple math formulas involving W, H, D variables and numbers.
+ * Safely evaluates simple math formulas involving W, H, D, T, i, n and numbers.
  */
 export function evaluatePartFormula(
   formula: string,
-  dims: { W: number; H: number; D: number },
+  dims: PartFormulaDims,
   contextInfo?: {
     structureCode?: string;
     moduleCode?: string;
-    partDescription: string;
-    field: 'length' | 'width';
+    componentCode?: string;
+    partDescription?: string;
+    field?: string;
   },
 ): number {
   const trimmed = formula.trim();
@@ -2017,33 +2103,44 @@ export function evaluatePartFormula(
     });
   }
 
-  // Validate allowed characters: numbers, W, H, D, +, -, *, /, (, ), and whitespace.
   const clean = trimmed.replace(/\s+/g, '');
-  if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números, W, H, D y operadores (+, -, *, /, paréntesis).`, {
-      ...contextInfo,
-      field: contextInfo?.field,
-    });
+  if (!PART_FORMULA_PATTERN.test(clean)) {
+    throw new ValidationError(
+      `La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números, W, H, D, T, i, n y operadores (+, -, *, /, paréntesis).`,
+      {
+        ...contextInfo,
+        field: contextInfo?.field,
+      },
+    );
   }
 
-  // Substitute variables
+  const T = dims.T ?? 0;
+  const i = dims.i ?? 0;
+  const n = dims.n ?? 1;
+
+  // Substitute multi-letter-safe single tokens (order does not matter for single chars).
   const expr = clean
     .replace(/W/g, String(dims.W))
     .replace(/H/g, String(dims.H))
-    .replace(/D/g, String(dims.D));
+    .replace(/D/g, String(dims.D))
+    .replace(/T/g, String(T))
+    .replace(/i/g, String(i))
+    .replace(/n/g, String(n));
 
   try {
-    // Safe evaluation using Function context
     const result = new Function(`return (${expr})`)();
     if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
       throw new Error('No es un número válido');
     }
     return Math.round(result);
-  } catch (err) {
-    throw new ValidationError(`La fórmula "${formula}" no se pudo evaluar correctamente.`, {
-      ...contextInfo,
-      field: contextInfo?.field,
-    });
+  } catch {
+    throw new ValidationError(
+      `La fórmula "${formula}" no se pudo evaluar correctamente.`,
+      {
+        ...contextInfo,
+        field: contextInfo?.field,
+      },
+    );
   }
 }
 

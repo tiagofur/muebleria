@@ -45,3 +45,7 @@ export { PageLoading, type PageLoadingProps } from './PageLoading';
 export { InlineLoading, type InlineLoadingProps } from './InlineLoading';
 export { ListSkeleton, type ListSkeletonProps } from './ListSkeleton';
 export { submitBusyLabel } from './submitBusy';
+export {
+  SpatialPartFields,
+  type SpatialPartFieldValues,
+} from './SpatialPartFields';

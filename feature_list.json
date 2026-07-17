@@ -1036,6 +1036,43 @@
       ],
       "status": "done",
       "github_issue": 103
+    },
+    {
+      "id": "F055",
+      "phase": 11,
+      "name": "spatial_assembly_s1",
+      "title": "Modelo espacial S1: resolveAssembly + captura face/placement",
+      "description": "Domain spatial layer for 3D: BoardFace, PlacementSlot, origin formulas (W,H,D,T,i,n), resolveAssembly sibling of resolveBom. UI capture in structures/components/module refs. No Three.js. Prep for #107.",
+      "acceptance": [
+        "resolveAssembly places structure + component boards with tests",
+        "Modules without spatial metadata return outer_only; BOM unchanged",
+        "Optional fields persist via API/Go migration 000018",
+        "Engineering UI can set face, placement, origin formulas",
+        "No three.js dependency"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/107",
+        "docs/structures.md"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F056",
+      "phase": 11,
+      "name": "module_3d_preview_viewer",
+      "title": "Preview 3D básico (viewer, no CAD)",
+      "description": "Module3DPreview with three + R3F consuming domain ResolvedAssembly. Orbit, click part specs, no domain three dep. Issue #107 / H12.",
+      "acceptance": [
+        "Viewer loads resolved assembly and allows orbit",
+        "Click on part shows correct specs",
+        "packages/domain without three dependency",
+        "Not a geometry editor"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/107"
+      ],
+      "status": "done",
+      "github_issue": 107
     }
   ]
 }

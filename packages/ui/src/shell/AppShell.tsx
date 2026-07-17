@@ -23,6 +23,7 @@ import {
   Settings,
   Settings2,
   ShieldCheck,
+  Store,
   ToggleLeft,
   User,
   WifiOff,
@@ -133,14 +134,14 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'projects', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
       /** Commercial showroom (#118) — not the engineering ABM. */
-      { id: 'showcase', label: 'Vitrina', icon: Package },
+      { id: 'showcase', label: 'Vitrina', icon: Store },
     ],
   },
   {
     id: 'ingenieria',
     label: 'INGENIERÍA',
     items: [
-      { id: 'modules', label: 'Plantillas', icon: Package },
+      { id: 'modules', label: 'Muebles', icon: Package },
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
       { id: 'components', label: 'Componentes', icon: Box },
       { id: 'materials', label: 'Materiales', icon: Layers },

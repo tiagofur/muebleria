@@ -71,9 +71,11 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(app).toContain("navId === 'edges'");
     expect(app).toContain("navId === 'hardware'");
     expect(app).toContain("navId === 'optionGroups'");
+    expect(app).toContain("navId === 'showcase'");
     expect(app).toContain("navId === 'modules'");
     expect(app).toContain("navId === 'projects'");
     expect(app).toContain("navId === 'home'");
+    expect(app).toContain('ModuleShowcase');
   });
 
   it('App.tsx wires Dashboard home with open-from-outside props (F023)', () => {

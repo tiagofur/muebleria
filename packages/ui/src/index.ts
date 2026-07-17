@@ -58,12 +58,16 @@ export {
 export {
   ModulesScreen,
   ModuleShowcase,
+  Module3DPreview,
+  assemblyToBoxes,
+  placedBoardToBox,
   boardPartToDraft,
   defaultOptionChoicesForModule,
   edgesFromFlags,
   emptyBoardPartDraft,
   emptyCategoryDraft,
   emptyHardwareLineDraft,
+  emptyModuleComponentRefDraft,
   emptyModuleDraft,
   filterModulesByQuery,
   flattenCategoriesForSelect,
@@ -72,6 +76,7 @@ export {
   formatModuleMoney,
   hardwareLineToDraft,
   moduleToDraft,
+  spatialFieldsFromDraft,
   optionGroupsByKind,
   optionGroupsForBoardParts,
   optionGroupsForHardware,
@@ -85,6 +90,8 @@ export {
   type ModuleDraft,
   type ModulesScreenProps,
   type ModuleShowcaseProps,
+  type Module3DPreviewProps,
+  type BoardBoxMm,
 } from './modules';
 
 export {
@@ -148,6 +155,7 @@ export {
   Spinner,
   StatusChips,
   ToastProvider,
+  SpatialPartFields,
   submitBusyLabel,
   useDebouncedValue,
   useToast,

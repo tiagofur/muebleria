@@ -1,0 +1,81 @@
+/* 3D module viewer chrome — tokens from design system */
+
+.module-3d-preview {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
+
+.module-3d-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.module-3d-preview__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.module-3d-preview__badge {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.module-3d-preview__canvas-wrap {
+  height: min(360px, 42vh);
+  min-height: 240px;
+  background: hsl(220 20% 96%);
+  touch-action: none;
+}
+
+.module-3d-preview__canvas-wrap canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.module-3d-preview__footer {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-card);
+}
+
+.module-3d-preview__hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.module-3d-preview__specs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.module-3d-preview__specs dt {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: var(--weight-medium);
+}
+
+.module-3d-preview__specs dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}

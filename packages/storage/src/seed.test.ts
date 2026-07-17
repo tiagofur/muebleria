@@ -46,6 +46,21 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
     const codes = seed.catalog.modules.map((m) => m.code);
     expect(codes).toContain('MOD-GAB-01');
     expect(codes).toContain('MOD-CAJ-01');
+    expect(codes).toContain('MOD-COMP-600');
+  });
+
+  it('includes composed gabinete 600 with spatial structure for 3D (S1/#107)', () => {
+    const seed = createSeedWorkspace();
+    const st = seed.catalog.structures?.find((s) => s.code === 'EST-GAB-600');
+    const comp = seed.catalog.components?.find((c) => c.code === 'COMP-PUERTA-01');
+    const mod = seed.catalog.modules.find((m) => m.code === 'MOD-COMP-600');
+
+    expect(st).toBeDefined();
+    expect(st!.boardParts.every((p) => p.placement)).toBe(true);
+    expect(comp).toBeDefined();
+    expect(mod?.structureId).toBe(st!.id);
+    expect(mod?.components?.[0]?.componentId).toBe(comp!.id);
+    expect(mod?.presets?.some((p) => p.width === 600)).toBe(true);
   });
 
   it('includes Arauco, Maderado, MDF materials with costs and matching edges (CAT-06)', () => {

@@ -1,18 +1,21 @@
 /**
- * Attach reusable catalog components to a furniture template (H07 / #102).
+ * Attach reusable catalog components to a furniture template (H07 / #102 + S1).
  */
 import type { ReactNode } from 'react';
 import type { FurnitureComponent } from '@muebles/domain';
 import {
   furnitureComponentKindLabelEs,
   isFurnitureComponentKind,
+  PLACEMENT_SLOTS,
+  placementSlotLabelEs,
 } from '@muebles/domain';
 import { Plus, Trash2 } from 'lucide-react';
+import {
+  emptyModuleComponentRefDraft,
+  type ModuleComponentRefDraft,
+} from '../moduleHelpers';
 
-export type ModuleComponentRefDraft = {
-  componentId: string;
-  quantity: number;
-};
+export type { ModuleComponentRefDraft };
 
 export type ModuleComponentsSectionProps = {
   readonly componentsCatalog: readonly FurnitureComponent[];
@@ -33,7 +36,7 @@ export function ModuleComponentsSection({
     const first = activeCatalog[0];
     onChange([
       ...refs,
-      { componentId: first?.id ?? '', quantity: 1 },
+      emptyModuleComponentRefDraft(first?.id ?? ''),
     ]);
   };
 
@@ -68,7 +71,8 @@ export function ModuleComponentsSection({
       </header>
       <p className="form-hint">
         Piezas reutilizables del catálogo de Ingeniería (puerta, entrepaño…). Se
-        expanden al cotizar según la medida del mueble.
+        expanden al cotizar según la medida del mueble. Posición/orígenes son
+        opcionales para ensamble 3D.
       </p>
       {activeCatalog.length === 0 ? (
         <p className="catalog-empty" data-testid="module-components-empty-catalog">
@@ -123,6 +127,60 @@ export function ModuleComponentsSection({
                       })
                     }
                     data-testid={`module-component-qty-${idx}`}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Posición</span>
+                  <select
+                    className="input"
+                    value={ref.placement}
+                    disabled={!canMutate}
+                    onChange={(e) => patch(idx, { placement: e.target.value })}
+                    data-testid={`module-component-placement-${idx}`}
+                  >
+                    <option value="">Default</option>
+                    {PLACEMENT_SLOTS.map((s) => (
+                      <option key={s} value={s}>
+                        {placementSlotLabelEs(s)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field__label">Origen X</span>
+                  <input
+                    className="input"
+                    value={ref.originXFormula}
+                    disabled={!canMutate}
+                    placeholder="i*(W/n)"
+                    onChange={(e) =>
+                      patch(idx, { originXFormula: e.target.value })
+                    }
+                    data-testid={`module-component-ox-${idx}`}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Origen Y</span>
+                  <input
+                    className="input"
+                    value={ref.originYFormula}
+                    disabled={!canMutate}
+                    onChange={(e) =>
+                      patch(idx, { originYFormula: e.target.value })
+                    }
+                    data-testid={`module-component-oy-${idx}`}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Origen Z</span>
+                  <input
+                    className="input"
+                    value={ref.originZFormula}
+                    disabled={!canMutate}
+                    onChange={(e) =>
+                      patch(idx, { originZFormula: e.target.value })
+                    }
+                    data-testid={`module-component-oz-${idx}`}
                   />
                 </label>
                 {kindLabel ? (
