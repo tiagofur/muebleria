@@ -412,7 +412,8 @@ const compGabCostado: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  rotateX: 0,
+  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X).
+  rotateX: 90,
   rotateY: 90,
   rotateZ: 0,
 };
@@ -511,7 +512,8 @@ const compCajCostado: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  rotateX: 0,
+  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X).
+  rotateX: 90,
   rotateY: 90,
   rotateZ: 0,
 };
@@ -576,7 +578,8 @@ const compCajLateral: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  rotateX: 0,
+  // Vertical board along run (same mesh convention as cabinet costados).
+  rotateX: 90,
   rotateY: 90,
   rotateZ: 0,
 };
