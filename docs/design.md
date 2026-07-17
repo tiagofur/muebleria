@@ -302,7 +302,8 @@ pnpm add lucide-react --filter @muebles/ui
 | Dashboard | `LayoutDashboard` |
 | Cotizaciones | `FileText` |
 | Clientes | `Users` |
-| Muebles / Módulos | `Package` |
+| Muebles (plantillas) | `Package` |
+| Vitrina | `Store` |
 | Materiales | `Layers` |
 | Cantos | `Minus` |
 | Herrajes | `Settings2` |
@@ -386,8 +387,9 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 
 | Sección | Ítems |
 |---------|--------|
-| TRABAJO | Inicio, Cotizaciones, Clientes, Muebles |
-| CONFIG | Materiales, Cantos, Herrajes, Grupos |
+| TRABAJO | Inicio, Cotizaciones, Clientes, **Vitrina** |
+| INGENIERÍA | **Muebles**, Estructuras, Componentes, Materiales, Cantos, Herrajes, Grupos |
+| CONFIG | Ajustes (+ Usuarios solo admin) |
 
 #### Vocabulario de producto (UI copy — issue #52)
 
@@ -397,7 +399,8 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 |----------|------------------------|--------|
 | **Inicio** | `home` | No «Home» |
 | **Cotizaciones** | `projects` / `Project` | No «Proyectos» en UI |
-| **Muebles** | `modules` / `Module` | No «Módulos» en UI (salvo jargon técnico de export) |
+| **Vitrina** | `showcase` | Catálogo comercial (fotos); no editor de BOM |
+| **Muebles** | `modules` / `Module` | Plantillas de ingeniería (ABM); en sección INGENIERÍA |
 | **Clientes** | `customers` | |
 | **Materiales / Cantos / Herrajes / Grupos** | catalogs | |
 | **Usuarios** | admin | Solo admin |
@@ -587,18 +590,27 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024. Cada 
 - **Búsqueda / filtros:** SearchInput
 - **EmptyState** cuando no hay cotizaciones
 
-### 6.3 Muebles
+### 6.3 Muebles (Ingeniería) y Vitrina (Trabajo)
 
-- **Ruta nav:** `modules`
-- **Path:** `packages/ui/src/modules/`
-- **Título de pantalla:** **Muebles**
-- **Patrón:** cards → detalle read-only → Modal **LG** (editor completo de partes / herrajes / opciones)
-- **Lista:** cards con código, nombre, conteos de partes/herrajes, estimate de precio de venta (shell)
-- **Detalle (workspace tool — issue #50):**
-  - **Chrome sticky:** código, nombre, categoría/meta, precio estimado, Editar (primary), Duplicar/Eliminar
-  - Cuerpo: preview de costo + piezas + herrajes densos (sin header de página web)
-- **Preview de costo:** props del shell (`costPreview`, `previewBlocked`, `missingGroups`); sin fórmulas en UI
-- **EmptyState** + SearchInput con debounce
+#### Muebles (plantillas — ingeniería)
+
+- **Ruta nav:** `modules` · sección **INGENIERÍA**
+- **Path:** `packages/ui/src/modules/` (`ModulesScreen`)
+- **Título:** **Muebles**
+- **Roles:** admin / ingeniero (y guest local)
+- **Patrón:** cards → detalle read-only → Modal **LG** (editor: estructura, componentes, piezas, herrajes)
+- **Lista:** cards con código, nombre, conteos, estimate de precio (shell)
+- **Detalle:** chrome sticky + costo + piezas/herrajes + **Vista 3D** cuando hay `assemblyPreview`
+- **Preview de costo:** props del shell; sin fórmulas en UI
+
+#### Vitrina (catálogo comercial)
+
+- **Ruta nav:** `showcase` · sección **TRABAJO** · path `/showcase`
+- **Path:** `packages/ui/src/modules/ModuleShowcase.tsx`
+- **Título:** **Vitrina**
+- **Roles:** vendedor, gerente, ingeniero, admin
+- **Patrón:** cards con imagen → detalle modal / CTA cotizar
+- **No** editor de BOM ni ABM de plantillas
 
 ### 6.4 Catálogos (Materiales / Cantos / Herrajes / Grupos)
 

@@ -2389,18 +2389,17 @@ function AppContent({
           onSave={saveWorkshopSettings}
         />
       ) : null}
+      {navId === 'showcase' ? (
+        <ModuleShowcase
+          modules={modules}
+          categories={categories}
+          resolveImageUrl={resolveMediaUrl}
+          onUseInQuote={
+            canMutateProjects ? onShowcaseUseInQuote : undefined
+          }
+        />
+      ) : null}
       {navId === 'modules' ? (
-        !canMutateModules && session === 'auth' ? (
-          <ModuleShowcase
-            modules={modules}
-            categories={categories}
-            resolveImageUrl={resolveMediaUrl}
-            onSelect={(id) => onModuleSelectionChange(id)}
-            onUseInQuote={
-              canMutateProjects ? onShowcaseUseInQuote : undefined
-            }
-          />
-        ) : (
         <ModulesScreen
           modules={modules}
           optionGroups={optionGroups}
@@ -2433,7 +2432,6 @@ function AppContent({
               : undefined
           }
         />
-        )
       ) : null}
       {navId === 'structures' ? (
         <StructuresScreen

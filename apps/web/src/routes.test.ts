@@ -23,9 +23,15 @@ describe('app routes', () => {
     expect(navFromPath('/home')).toBe('home');
     expect(navFromPath('/materials')).toBe('materials');
     expect(navFromPath('/projects')).toBe('projects');
+    expect(navFromPath('/showcase')).toBe('showcase');
+    expect(navFromPath('/modules')).toBe('modules');
     expect(navFromPath('/option-groups')).toBe('optionGroups');
     expect(navFromPath('/users')).toBe('users');
     expect(navFromPath('/settings')).toBe('settings');
+  });
+
+  it('showcase is not an entity-detail section', () => {
+    expect(isEntitySection('showcase')).toBe(false);
   });
 
   it('resolves entity deep links for all id-bearing sections', () => {

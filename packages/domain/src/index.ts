@@ -77,6 +77,7 @@ export {
   roleCanAccessCatalogNav,
   roleCanAccessCustomers,
   roleCanAccessModulesNav,
+  roleCanAccessShowcaseNav,
   roleCanAccessNav,
   roleCanAccessProjects,
   roleCanAccessSettings,
