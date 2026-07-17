@@ -255,6 +255,25 @@ func (s *stubStore) DeleteStructure(context.Context, string) error {
 	s.stubNotUsed("DeleteStructure")
 	return nil
 }
+func (s *stubStore) ListFurnitureComponents(context.Context) ([]domain.FurnitureComponent, error) {
+	return []domain.FurnitureComponent{}, nil
+}
+func (s *stubStore) GetFurnitureComponentByID(context.Context, string) (*domain.FurnitureComponent, error) {
+	s.stubNotUsed("GetFurnitureComponentByID")
+	return nil, nil
+}
+func (s *stubStore) CreateFurnitureComponent(context.Context, *domain.FurnitureComponent) error {
+	s.stubNotUsed("CreateFurnitureComponent")
+	return nil
+}
+func (s *stubStore) UpdateFurnitureComponent(context.Context, string, *domain.FurnitureComponent) error {
+	s.stubNotUsed("UpdateFurnitureComponent")
+	return nil
+}
+func (s *stubStore) DeleteFurnitureComponent(context.Context, string) error {
+	s.stubNotUsed("DeleteFurnitureComponent")
+	return nil
+}
 func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 	if s.listProjects != nil {
 		return s.listProjects, nil

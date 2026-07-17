@@ -1,17 +1,27 @@
 # Sesión actual
 
-- **Branch:** `feat/quote-measure-presets-104`
-- **Issue:** [#104](https://github.com/tiagofur/muebleria/issues/104) — Cotización: elegir preset de medida del mueble (H09)
+- **Branch:** `feat/furniture-components-101-103`
+- **Issues:** #101 #102 #103 (sobre base #104)
 - **Estado:** listo para PR
 
-## Entregado (F051 / #104)
+## Entregado
 
-- Domain: `Module.presets`, `Module.structureId`, `ProjectItem.measurePresetId`, `measurePresets.ts`, `resolveBom` con preset
-- Storage/Go: migration `000016`, mappers, persistencia en proyectos/módulos
-- UI: presets comerciales en editor de mueble; selector de medida en cotización
-- Tests: domain + ui + storage + web typecheck verdes
+### #101 / F052 — Componentes reutilizables
+- Domain: `FurnitureComponent`, kinds, `validateFurnitureComponent`
+- Go: migration `000017`, storage CRUD, API `/catalog/components`
+- UI: `ComponentsScreen` en Ingeniería
 
-## Nota de alcance
+### #102 / F053 — Mueble compuesto
+- `Module.components` + `expandModuleComponents` en `resolveBom`
+- Dual path: módulos fijos sin cambios
+- Persistencia `module_component_refs`
 
-- **No cierra #101 / #103** (componentes reutilizables y UI completa de ingeniería de componentes no están en este PR).
-- **#102** solo slice: `structureId` + merge de estructura en resolución; sin catálogo de componentes.
+### #103 / F054 — UI Ingeniería
+- Nav **Componentes** (RBAC ingeniero/admin)
+- Editor de mueble: sección adjuntar componentes + cantidad
+- Estructuras ya existían (#99)
+
+## Verificación
+
+- domain/ui/storage/web tests + typecheck verdes
+- go test ./... ok

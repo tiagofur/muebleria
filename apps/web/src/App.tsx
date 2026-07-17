@@ -101,6 +101,9 @@ import {
   type CustomerDraft,
   StructuresScreen,
   type StructureDraft,
+  ComponentsScreen,
+  componentDraftToEntity,
+  type ComponentDraft,
   PageLoading,
   type CommandPaletteItem,
 } from '@muebles/ui';
@@ -180,6 +183,15 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
             height: p.height,
             depth: p.depth,
           }))
+        : undefined,
+    components:
+      draft.components.length > 0
+        ? draft.components
+            .filter((c) => c.componentId.trim())
+            .map((c) => ({
+              componentId: c.componentId.trim(),
+              quantity: Math.max(1, Math.floor(c.quantity) || 1),
+            }))
         : undefined,
     externalDims: hasDims
       ? {
@@ -661,6 +673,7 @@ function AppContent({
     navId === 'projects' ? routeEntityId : null;
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
   const routeStructureId = navId === 'structures' ? routeEntityId : null;
+  const routeComponentId = navId === 'components' ? routeEntityId : null;
 
   // Keep the address bar on a known section path (bookmarkable SPA routes).
   useEffect(() => {
@@ -767,6 +780,7 @@ function AppContent({
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
+  const furnitureComponents = catalog?.components ?? [];
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
@@ -1436,6 +1450,59 @@ function AppContent({
     });
   };
 
+  const createFurnitureComponent = (draft: ComponentDraft) => {
+    const item = componentDraftToEntity(newId(), draft);
+    patchCatalog((c) => ({
+      ...c,
+      components: [...(c.components ?? []), item],
+    }));
+    toast({ type: 'success', message: `✓ "${item.code}" creado` });
+  };
+
+  const updateFurnitureComponent = (id: string, draft: ComponentDraft) => {
+    patchCatalog((c) => ({
+      ...c,
+      components: (c.components ?? []).map((comp) =>
+        comp.id === id ? componentDraftToEntity(id, draft) : comp,
+      ),
+    }));
+    toast({ type: 'success', message: '✓ Cambios guardados' });
+  };
+
+  const deleteFurnitureComponent = async (id: string) => {
+    patchCatalog((c) => ({
+      ...c,
+      components: (c.components ?? []).filter((comp) => comp.id !== id),
+    }));
+    if (session === 'auth' && authToken) {
+      try {
+        await fetch(`${DEFAULT_API_BASE}/catalog/components/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+      } catch (err) {
+        console.error('Error deleting component from backend:', err);
+      }
+    }
+    toast({ type: 'info', message: 'Componente eliminado' });
+  };
+
+  const setFurnitureComponentActive = (id: string, active: boolean) => {
+    patchCatalog((c) => ({
+      ...c,
+      components: (c.components ?? []).map((comp) =>
+        comp.id === id ? { ...comp, active } : comp,
+      ),
+    }));
+    toast({
+      type: 'info',
+      message: active ? 'Componente activado' : 'Componente desactivado',
+    });
+  };
+
   const createCustomer = (draft: CustomerDraft) => {
     const ownerUserId = resolveOwnerOnCreate(
       authUser?.id,
@@ -2063,6 +2130,13 @@ function AppContent({
     [onEntitySelectionChange],
   );
 
+  const onComponentSelectionChange = useCallback(
+    (componentId: string | null) => {
+      onEntitySelectionChange('components', componentId);
+    },
+    [onEntitySelectionChange],
+  );
+
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
@@ -2304,6 +2378,7 @@ function AppContent({
           hardware={hardware}
           categories={categories}
           structures={structures}
+          furnitureComponents={furnitureComponents}
           onCreate={createModule}
           onUpdate={updateModule}
           onDelete={deleteModule}
@@ -2341,6 +2416,20 @@ function AppContent({
           onReactivate={(id) => setStructureActive(id, true)}
           openStructureId={routeStructureId}
           onSelectionChange={onStructureSelectionChange}
+          canMutate={canMutateModules}
+        />
+      ) : null}
+      {navId === 'components' ? (
+        <ComponentsScreen
+          components={furnitureComponents}
+          optionGroups={optionGroups}
+          onCreate={createFurnitureComponent}
+          onUpdate={updateFurnitureComponent}
+          onDelete={deleteFurnitureComponent}
+          onDeactivate={(id) => setFurnitureComponentActive(id, false)}
+          onReactivate={(id) => setFurnitureComponentActive(id, true)}
+          openComponentId={routeComponentId}
+          onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
         />
       ) : null}

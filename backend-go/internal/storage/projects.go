@@ -160,6 +160,11 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 			return cat, err
 		}
 		m.Presets = presets
+		compRefs, err := s.loadModuleComponentRefs(ctx, m.ID)
+		if err != nil {
+			return cat, err
+		}
+		m.Components = compRefs
 		cat.Modules = append(cat.Modules, m)
 	}
 	if cat.Modules == nil {
@@ -172,6 +177,13 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		return cat, fmt.Errorf("error loading structures: %w", err)
 	}
 	cat.Structures = structures
+
+	// H06 reusable components
+	components, err := s.ListFurnitureComponents(ctx)
+	if err != nil {
+		return cat, fmt.Errorf("error loading components: %w", err)
+	}
+	cat.Components = components
 
 	return cat, nil
 }
@@ -786,6 +798,11 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 		return nil, err
 	}
 	m.Presets = presets
+	compRefs, err := s.loadModuleComponentRefs(ctx, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	m.Components = compRefs
 
 	return &m, nil
 }
@@ -899,6 +916,9 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 	if err := insertModulePresetsTx(ctx, tx, m.ID, m.Presets); err != nil {
 		return err
 	}
+	if err := replaceModuleComponentRefsTx(ctx, tx, m.ID, m.Components); err != nil {
+		return err
+	}
 
 	return tx.Commit(ctx)
 }
@@ -1005,6 +1025,9 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	}
 
 	if err := insertModulePresetsTx(ctx, tx, id, m.Presets); err != nil {
+		return err
+	}
+	if err := replaceModuleComponentRefsTx(ctx, tx, id, m.Components); err != nil {
 		return err
 	}
 

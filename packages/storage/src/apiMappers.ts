@@ -282,6 +282,10 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     notes: m.notes ?? '',
     structure_id: m.structureId ?? '',
     presets: (m.presets ?? []).map(dimensionPresetToApi),
+    components: (m.components ?? []).map((c) => ({
+      component_id: c.componentId,
+      quantity: c.quantity,
+    })),
     board_parts: m.boardParts.map(boardPartToApi),
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
   };
@@ -302,6 +306,18 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const presets = Array.isArray(presetsRaw)
     ? presetsRaw.map((p) => dimensionPresetFromApi(p as Record<string, unknown>))
     : undefined;
+  const compsRaw = raw.components;
+  const components = Array.isArray(compsRaw)
+    ? compsRaw
+        .map((c) => {
+          const row = c as Record<string, unknown>;
+          return {
+            componentId: str(row.component_id ?? row.componentId),
+            quantity: Math.max(1, Math.floor(num(row.quantity, 1))),
+          };
+        })
+        .filter((c) => c.componentId.length > 0)
+    : undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -313,6 +329,7 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
     structureId,
     presets: presets && presets.length > 0 ? presets : undefined,
+    components: components && components.length > 0 ? components : undefined,
     boardParts: Array.isArray(parts)
       ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
       : [],
@@ -361,6 +378,51 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
       ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
       : [],
     presets: presets && presets.length > 0 ? presets : undefined,
+  };
+}
+
+// --- Furniture components (H06 / #101) ---
+
+export function furnitureComponentToApi(
+  c: import('@muebles/domain').FurnitureComponent,
+): Record<string, unknown> {
+  return {
+    id: c.id,
+    code: c.code,
+    name: c.name,
+    kind: c.kind,
+    notes: c.notes ?? '',
+    active: c.active !== false,
+    board_parts: c.boardParts.map(boardPartToApi),
+    hardware_lines: c.hardwareLines.map(hardwareLineToApi),
+  };
+}
+
+export function furnitureComponentFromApi(
+  raw: Record<string, unknown>,
+): import('@muebles/domain').FurnitureComponent {
+  const parts = raw.board_parts ?? raw.boardParts;
+  const lines = raw.hardware_lines ?? raw.hardwareLines;
+  const kindRaw = str(raw.kind) || 'otro';
+  const kind = (
+    ['puerta', 'entrepaño', 'frente_cajon', 'lateral', 'otro'] as const
+  ).includes(kindRaw as 'puerta')
+    ? (kindRaw as import('@muebles/domain').FurnitureComponentKind)
+    : 'otro';
+  const activeRaw = raw.active;
+  return {
+    id: str(raw.id),
+    code: str(raw.code),
+    name: str(raw.name),
+    kind,
+    notes: str(raw.notes) || undefined,
+    active: activeRaw === false ? false : true,
+    boardParts: Array.isArray(parts)
+      ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
+      : [],
+    hardwareLines: Array.isArray(lines)
+      ? lines.map((l) => hardwareLineFromApi(l as Record<string, unknown>))
+      : [],
   };
 }
 
@@ -530,6 +592,7 @@ export function catalogFromApi(parts: {
   optionGroups: unknown;
   modules: unknown;
   structures?: unknown;
+  components?: unknown;
   categories: unknown;
   customers: unknown;
 }): Catalog {
@@ -543,6 +606,7 @@ export function catalogFromApi(parts: {
     optionGroups: asRows(parts.optionGroups).map(optionGroupFromApi),
     modules: asRows(parts.modules).map(moduleFromApi),
     structures: asRows(parts.structures).map(structureFromApi),
+    components: asRows(parts.components).map(furnitureComponentFromApi),
     categories: asRows(parts.categories).map(categoryFromApi),
     customers: asRows(parts.customers).map(customerFromApi),
   };

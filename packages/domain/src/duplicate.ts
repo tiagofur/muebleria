@@ -105,6 +105,12 @@ export function duplicateModule(
           depth: p.depth,
         }))
       : undefined,
+    components: module.components
+      ? module.components.map((c) => ({
+          componentId: c.componentId,
+          quantity: c.quantity,
+        }))
+      : undefined,
     boardParts: module.boardParts.map((p) => cloneBoardPart(p, nextId())),
     hardwareLines: module.hardwareLines.map((l) => cloneHardwareLine(l, nextId())),
   };

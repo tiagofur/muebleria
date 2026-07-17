@@ -70,6 +70,8 @@ export type ModuleDraft = {
   structureId: string;
   /** Commercial measure options for sales (H09 / #104). */
   presets: MeasurePresetDraft[];
+  /** Attached reusable components (H07 / #102). */
+  components: { componentId: string; quantity: number }[];
   boardParts: BoardPartDraft[];
   hardwareLines: HardwareLineDraft[];
 };
@@ -89,6 +91,7 @@ export function emptyModuleDraft(): ModuleDraft {
     imageUrl: '',
     structureId: '',
     presets: [],
+    components: [],
     boardParts: [],
     hardwareLines: [],
   };
@@ -234,6 +237,10 @@ export function moduleToDraft(mod: Module): ModuleDraft {
       width: p.width,
       height: p.height,
       depth: p.depth,
+    })),
+    components: (mod.components ?? []).map((c) => ({
+      componentId: c.componentId,
+      quantity: c.quantity,
     })),
     boardParts: mod.boardParts.map(boardPartToDraft),
     hardwareLines: mod.hardwareLines.map(hardwareLineToDraft),

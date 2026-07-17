@@ -1083,6 +1083,101 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- FURNITURE COMPONENTS (H06 / #101) ---
+
+func (s *Server) HandleFurnitureComponents(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		list, err := s.Store.ListFurnitureComponents(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, list)
+
+	case http.MethodPost:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+			return
+		}
+		var c domain.FurnitureComponent
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.CreateFurnitureComponent(r.Context(), &c)
+		if err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, c)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleFurnitureComponentByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		c, err := s.Store.GetFurnitureComponentByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "component not found")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+			return
+		}
+		var c domain.FurnitureComponent
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.UpdateFurnitureComponent(r.Context(), id, &c)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodDelete:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+			return
+		}
+		err := s.Store.DeleteFurnitureComponent(r.Context(), id)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]string{"message": "component deleted"})
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 // --- STRUCTURES / CUERPOS (F049 / #99) ---
 
 func (s *Server) HandleStructures(w http.ResponseWriter, r *http.Request) {

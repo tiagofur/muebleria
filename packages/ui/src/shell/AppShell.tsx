@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  Box,
   FileText,
   LayoutDashboard,
   Layers,
@@ -44,6 +45,7 @@ export type AppNavId =
   | 'customers'
   | 'modules'
   | 'structures'
+  | 'components'
   | 'materials'
   | 'edges'
   | 'hardware'
@@ -137,6 +139,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     label: 'INGENIERÍA',
     items: [
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
+      { id: 'components', label: 'Componentes', icon: Box },
       { id: 'materials', label: 'Materiales', icon: Layers },
       { id: 'edges', label: 'Cantos', icon: Minus },
       { id: 'hardware', label: 'Herrajes', icon: Settings2 },
