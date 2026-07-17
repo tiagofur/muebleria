@@ -3,10 +3,15 @@
  */
 
 import { ResolutionError, ValidationError } from './errors';
+import {
+  resolveModuleMeasurePreset,
+  validateModulePresets,
+} from './measurePresets';
 import { effectiveOptionChoices } from './optionChoices';
 import type {
   BoardPart,
   Catalog,
+  Component,
   EdgeAssignment,
   EdgeBand,
   Grain,
@@ -17,6 +22,7 @@ import type {
   MaterialBoard,
   MaterialUsageRow,
   Module,
+  ModuleComponentInstance,
   OptionChoices,
   OptionGroup,
   PieceLabel,
@@ -357,6 +363,70 @@ export function validateBoardPart(
   }
 }
 
+/**
+ * Validate a reusable component (F049 / H07).
+ * Checks code, name, geometry dimensions, optionRoles, and edge assignments.
+ */
+export function validateComponent(component: Component): void {
+  if (!component.code?.trim()) {
+    throw new ValidationError('Component code must not be empty', {
+      componentId: component.id,
+      field: 'code',
+    });
+  }
+  if (!component.name?.trim()) {
+    throw new ValidationError('Component name must not be empty', {
+      componentId: component.id,
+      componentCode: component.code,
+      field: 'name',
+    });
+  }
+  if (component.geometry.kind === 'rectangular_board') {
+    if (!(component.geometry.lengthMm > 0)) {
+      throw new ValidationError('Component lengthMm must be > 0', {
+        componentId: component.id,
+        componentCode: component.code,
+        field: 'lengthMm',
+        lengthMm: component.geometry.lengthMm,
+      });
+    }
+    if (!(component.geometry.widthMm > 0)) {
+      throw new ValidationError('Component widthMm must be > 0', {
+        componentId: component.id,
+        componentCode: component.code,
+        field: 'widthMm',
+        widthMm: component.geometry.widthMm,
+      });
+    }
+    if (!(component.geometry.thicknessMm > 0)) {
+      throw new ValidationError('Component thicknessMm must be > 0', {
+        componentId: component.id,
+        componentCode: component.code,
+        field: 'thicknessMm',
+        thicknessMm: component.geometry.thicknessMm,
+      });
+    }
+  }
+  if (!component.optionRoles || component.optionRoles.length === 0) {
+    throw new ValidationError('Component optionRoles must be non-empty', {
+      componentId: component.id,
+      componentCode: component.code,
+      field: 'optionRoles',
+    });
+  }
+  if (component.defaultEdges.length !== 4) {
+    throw new ValidationError(
+      'Component defaultEdges must have exactly 4 assignments',
+      {
+        componentId: component.id,
+        componentCode: component.code,
+        field: 'edges',
+        edges: component.defaultEdges.length,
+      },
+    );
+  }
+}
+
 /** VAL-03 for hardware lines. */
 export function validateHardwareLine(
   line: HardwareLine,
@@ -375,7 +445,7 @@ export function validateHardwareLine(
   }
 }
 
-/** VAL-07 catalog/module empty names/codes. */
+/** VAL-07 catalog/module empty names/codes + component instance integrity. */
 export function validateModule(module: Module): void {
   if (!module.code?.trim()) {
     throw new ValidationError('Module code must not be empty', {
@@ -391,21 +461,26 @@ export function validateModule(module: Module): void {
     });
   }
 
-  for (const part of module.boardParts) {
-    validateBoardPart(part, module.code);
-    if (!part.description?.trim()) {
-      throw new ValidationError('Board part description must not be empty', {
-        moduleCode: module.code,
-        partId: part.id,
-        field: 'description',
-      });
+  // Module-level component instances (doors, shelves, …).
+  for (const instance of module.components ?? []) {
+    if (!instance.componentId?.trim()) {
+      throw new ValidationError(
+        'Module component instance must reference a componentId',
+        {
+          moduleCode: module.code,
+          field: 'componentId',
+        },
+      );
     }
-    if (!part.optionRole?.trim()) {
-      throw new ValidationError('Board part optionRole must not be empty', {
-        moduleCode: module.code,
-        partId: part.id,
-        field: 'optionRole',
-      });
+    if (!(instance.quantity > 0)) {
+      throw new ValidationError(
+        `Module component instance quantity must be > 0 (got ${instance.quantity})`,
+        {
+          moduleCode: module.code,
+          componentId: instance.componentId,
+          field: 'quantity',
+        },
+      );
     }
   }
 
@@ -422,11 +497,13 @@ export function validateModule(module: Module): void {
       );
     }
   }
+
+  validateModulePresets(module);
 }
 
 /**
  * Validate engineering Structure (cuerpo) — F049 / #99.
- * Same part rules as modules; no hardware lines on structures.
+ * A structure composes reusable Component instances (no board parts of its own).
  */
 export function validateStructure(structure: Structure): void {
   if (!structure.code?.trim()) {
@@ -442,13 +519,13 @@ export function validateStructure(structure: Structure): void {
       field: 'name',
     });
   }
-  if (structure.boardParts.length === 0) {
+  if (!structure.components || structure.components.length === 0) {
     throw new ValidationError(
-      'Structure must have at least one board part',
+      'Structure must have at least one component instance',
       {
         structureId: structure.id,
         structureCode: structure.code,
-        field: 'boardParts',
+        field: 'components',
       },
     );
   }
@@ -468,47 +545,25 @@ export function validateStructure(structure: Structure): void {
     }
   }
 
-  for (const part of structure.boardParts) {
-    validateBoardPart(part, structure.code);
-    if (!part.description?.trim()) {
-      throw new ValidationError('Board part description must not be empty', {
-        structureCode: structure.code,
-        partId: part.id,
-        field: 'description',
-      });
+  for (const instance of structure.components) {
+    if (!instance.componentId?.trim()) {
+      throw new ValidationError(
+        'Structure component instance must reference a componentId',
+        {
+          structureCode: structure.code,
+          field: 'componentId',
+        },
+      );
     }
-    if (!part.optionRole?.trim()) {
-      throw new ValidationError('Board part optionRole must not be empty', {
-        structureCode: structure.code,
-        partId: part.id,
-        field: 'optionRole',
-      });
-    }
-    if (part.lengthFormula?.trim()) {
-      const clean = part.lengthFormula.replace(/\s+/g, '');
-      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-        throw new ValidationError(
-          `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
-          {
-            structureCode: structure.code,
-            partId: part.id,
-            field: 'lengthFormula',
-          },
-        );
-      }
-    }
-    if (part.widthFormula?.trim()) {
-      const clean = part.widthFormula.replace(/\s+/g, '');
-      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-        throw new ValidationError(
-          `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
-          {
-            structureCode: structure.code,
-            partId: part.id,
-            field: 'widthFormula',
-          },
-        );
-      }
+    if (!(instance.quantity > 0)) {
+      throw new ValidationError(
+        `Structure component instance quantity must be > 0 (got ${instance.quantity})`,
+        {
+          structureCode: structure.code,
+          componentId: instance.componentId,
+          field: 'quantity',
+        },
+      );
     }
   }
 }
@@ -555,29 +610,29 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
 }
 
 /**
- * Resolve module template + option choices into concrete material/hardware IDs.
- * VAL-05 (empty cut list on export) is deferred to F004 / export path.
+ * Resolve board parts + hardware lines into material/hardware IDs.
+ * Extracted for reuse by both legacy and composed module paths.
  */
-export function resolveBom(
-  module: Module,
+function resolveBoardPartsAndHardware(
+  boardParts: readonly BoardPart[],
+  hardwareLines: readonly HardwareLine[],
   optionChoices: OptionChoices,
   catalog: Catalog,
+  moduleCode: string,
 ): ResolvedBom {
-  validateModule(module);
-
-  const boardParts: ResolvedBoardPart[] = module.boardParts.map((part) => {
+  const resolvedBoardParts: ResolvedBoardPart[] = boardParts.map((part) => {
     const material = requireMaterialChoice(
       part,
       optionChoices,
       catalog,
-      module.code,
+      moduleCode,
     );
     const edgeBandId = resolveEdgeBandId(
       part,
       material,
       optionChoices,
       catalog,
-      module.code,
+      moduleCode,
     );
 
     return {
@@ -593,16 +648,23 @@ export function resolveBom(
       optionRole: part.optionRole,
       materialId: material.id,
       edgeBandId,
+      x: part.x,
+      y: part.y,
+      z: part.z,
+      rotateX: part.rotateX,
+      rotateY: part.rotateY,
+      rotateZ: part.rotateZ,
+      thicknessMm: material.thicknessMm,
     };
   });
 
-  const hardwareLines: ResolvedHardwareLine[] = module.hardwareLines.map(
+  const resolvedHardwareLines: ResolvedHardwareLine[] = hardwareLines.map(
     (line) => {
       const hardwareId = requireHardwareId(
         line,
         optionChoices,
         catalog,
-        module.code,
+        moduleCode,
       );
       return {
         id: line.id,
@@ -614,7 +676,293 @@ export function resolveBom(
     },
   );
 
-  return { boardParts, hardwareLines };
+  return { boardParts: resolvedBoardParts, hardwareLines: resolvedHardwareLines };
+}
+
+/**
+ * Resolve a composed module (structure + component instances) into board parts.
+ *
+ * Since F053 a Structure no longer carries its own board parts; instead it
+ * composes reusable Component instances. So the composed board parts come from
+ * BOTH the structure's component instances and the module's own component
+ * instances, each expanded per quantity.
+ */
+function getComponentThickness(
+  component: Component,
+  optionChoices: OptionChoices,
+  catalog: Catalog,
+): number {
+  const role = component.optionRoles[0];
+  if (role) {
+    const choiceId = optionChoices[role];
+    if (choiceId) {
+      const material = catalog.materials.find((m) => m.id === choiceId);
+      if (material) {
+        return material.thicknessMm;
+      }
+    }
+  }
+  return component.geometry.kind === 'rectangular_board'
+    ? component.geometry.thicknessMm
+    : 18;
+}
+
+function expandComponentInstances(
+  instances: readonly ModuleComponentInstance[],
+  catalog: Catalog,
+  idPrefix: string,
+  dims: { width: number; height: number; depth: number },
+  optionChoices?: OptionChoices,
+): BoardPart[] {
+  const PW = dims.width;
+  const PD = dims.depth;
+  const PH = dims.height;
+
+  const parts: BoardPart[] = [];
+  for (const instance of instances) {
+    const component = catalog.components?.find(
+      (c) => c.id === instance.componentId,
+    );
+    if (!component) {
+      throw new ResolutionError(
+        `Component not found: ${instance.componentId}`,
+        {
+          componentId: instance.componentId,
+          field: 'componentId',
+        },
+      );
+    }
+
+    const edges = instance.overrides?.edges ?? component.defaultEdges;
+    const optionRole = component.optionRoles[0]!;
+
+    // Resolve component material thickness
+    const T = getComponentThickness(component, optionChoices ?? {}, catalog);
+
+    // Context for geometry evaluation (only parent dims + T are available)
+    const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T };
+
+    // Resolve dimensions (W and D of component)
+    let lengthMm = 0; // component depth (D)
+    let widthMm = 0;  // component width (W)
+    if (component.geometry.kind === 'rectangular_board') {
+      const lengthFormula =
+        instance.overrides?.lengthFormula ?? component.geometry.lengthFormula;
+      const widthFormula =
+        instance.overrides?.widthFormula ?? component.geometry.widthFormula;
+      lengthMm = lengthFormula
+        ? evaluatePartFormula(lengthFormula, geomDims, {
+            structureCode: component.code,
+            partDescription: component.name,
+            field: 'length',
+          })
+        : component.geometry.lengthMm;
+      widthMm = widthFormula
+        ? evaluatePartFormula(widthFormula, geomDims, {
+            structureCode: component.code,
+            partDescription: component.name,
+            field: 'width',
+          })
+        : component.geometry.widthMm;
+    }
+
+    // Now evaluate spatial coordinates with full context (including component W, H, D, and copy index i)
+    const H = T; // flat part height is its thickness
+    const xFormula = instance.overrides?.xFormula ?? component.xFormula;
+    const yFormula = instance.overrides?.yFormula ?? component.yFormula;
+    const zFormula = instance.overrides?.zFormula ?? component.zFormula;
+
+    const rotateX = instance.overrides?.rotateX ?? component.rotateX ?? 0;
+    const rotateY = instance.overrides?.rotateY ?? component.rotateY ?? 0;
+    const rotateZ = instance.overrides?.rotateZ ?? component.rotateZ ?? 0;
+
+    for (let i = 0; i < instance.quantity; i++) {
+      const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, i };
+
+      const x = xFormula
+        ? evaluatePartFormula(xFormula, spatialDims, {
+            structureCode: component.code,
+            partDescription: component.name,
+            field: 'x',
+          })
+        : 0;
+
+      const y = yFormula
+        ? evaluatePartFormula(yFormula, spatialDims, {
+            structureCode: component.code,
+            partDescription: component.name,
+            field: 'y',
+          })
+        : 0;
+
+      const z = zFormula
+        ? evaluatePartFormula(zFormula, spatialDims, {
+            structureCode: component.code,
+            partDescription: component.name,
+            field: 'z',
+          })
+        : 0;
+
+      parts.push({
+        id: `${idPrefix}${component.id}-copy-${i}`,
+        description: component.name,
+        quantity: 1,
+        lengthMm,
+        widthMm,
+        edges,
+        optionRole,
+        x,
+        y,
+        z,
+        rotateX,
+        rotateY,
+        rotateZ,
+      });
+    }
+  }
+  return parts;
+}
+
+export interface ComposedModuleInput {
+  readonly structure: Structure;
+  readonly componentInstances: readonly ModuleComponentInstance[];
+  readonly catalog: Catalog;
+  readonly dims: { width: number; height: number; depth: number };
+  readonly optionChoices?: OptionChoices;
+}
+
+export interface ComposedModuleResult {
+  readonly boardParts: readonly BoardPart[];
+  readonly hardwareLines: readonly HardwareLine[];
+}
+
+export function resolveComposedModule(
+  input: ComposedModuleInput,
+): ComposedModuleResult {
+  const { structure, componentInstances, catalog, dims, optionChoices } = input;
+
+  // Validate the selected dims against presets/externalDims (throws on mismatch).
+  resolveStructure(structure, dims);
+
+  // Structure component instances + module component instances, expanded.
+  const structureParts = expandComponentInstances(
+    structure.components ?? [],
+    catalog,
+    '',
+    dims,
+    optionChoices,
+  );
+  const moduleParts = expandComponentInstances(
+    componentInstances,
+    catalog,
+    '',
+    dims,
+    optionChoices,
+  );
+  const allParts = [...structureParts, ...moduleParts];
+
+  // Hardware lines deferred from MVP.
+  return {
+    boardParts: allParts,
+    hardwareLines: [],
+  };
+}
+
+/**
+ * Resolve module template + option choices into concrete material/hardware IDs.
+ *
+ * Since Fase 2 a Module no longer carries board parts of its own — it composes
+ * a Structure body + component instances. A module without a structureId yields
+ * no board parts (it may still carry hardware lines). VAL-05 (empty cut list
+ * on export) is enforced by the export path.
+ *
+ * Optional measurePresetId selects commercial size from Module.presets (H09).
+ * Falls back to Module.externalDims when no commercial presets are defined.
+ */
+export function resolveBom(
+  module: Module,
+  optionChoices: OptionChoices,
+  catalog: Catalog,
+  measurePresetId?: string,
+): ResolvedBom {
+  validateModule(module);
+
+  // Resolve the composed body (structure components) + module components.
+  let allParts: BoardPart[] = [];
+  let composedHardware: HardwareLine[] = [];
+  if (module.structureId) {
+    const structure = catalog.structures?.find(
+      (s) => s.id === module.structureId,
+    );
+    if (!structure) {
+      throw new ResolutionError(
+        `Structure not found: ${module.structureId}`,
+        {
+          moduleCode: module.code,
+          structureId: module.structureId,
+          field: 'structureId',
+        },
+      );
+    }
+
+    const preset = resolveModuleMeasurePreset(module, measurePresetId);
+    const dims = preset
+      ? {
+          width: preset.width,
+          height: preset.height,
+          depth: preset.depth,
+        }
+      : module.externalDims
+        ? {
+            width: module.externalDims.width,
+            height: module.externalDims.height,
+            depth: module.externalDims.depth,
+          }
+        : structure.externalDims
+          ? {
+              width: structure.externalDims.width,
+              height: structure.externalDims.height,
+              depth: structure.externalDims.depth,
+            }
+          : undefined;
+
+    if (!dims) {
+      throw new ResolutionError(
+        'Composed module requires a measure preset or externalDims',
+        {
+          moduleCode: module.code,
+          field: measurePresetId ? 'measurePresetId' : 'externalDims',
+        },
+      );
+    }
+
+    const composed = resolveComposedModule({
+      structure,
+      componentInstances: module.components ?? [],
+      catalog,
+      dims,
+      optionChoices,
+    });
+    allParts = [...composed.boardParts];
+    composedHardware = [...composed.hardwareLines];
+  } else {
+    // Fixed / non-composed path: still validate measurePresetId if presets exist.
+    resolveModuleMeasurePreset(module, measurePresetId);
+  }
+
+  // Merge composed parts/hardware with the module's own hardware lines.
+  const allHardware = [...composedHardware, ...module.hardwareLines];
+
+  for (const part of allParts) validateBoardPart(part, module.code);
+  for (const line of allHardware) validateHardwareLine(line, module.code);
+
+  return resolveBoardPartsAndHardware(
+    allParts,
+    allHardware,
+    optionChoices,
+    catalog,
+    module.code,
+  );
 }
 
 export function calcMaterialCostPerM2(
@@ -828,6 +1176,7 @@ function calcLiveProjectBreakdown(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -884,6 +1233,7 @@ function collectUsedUnitPrices(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1077,6 +1427,7 @@ export function generateCutRows(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1231,6 +1582,7 @@ export function generatePieceLabels(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1392,6 +1744,7 @@ export function generateProjectMaterialSummary(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1550,6 +1903,7 @@ export function generateHardwareList(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const line of bom.hardwareLines) {
@@ -1616,12 +1970,12 @@ export function generateHardwareList(
 }
 
 /**
- * Safely evaluates simple math formulas involving W, H, D variables and numbers.
+ * Safely evaluates simple math formulas involving W, H, D, T, PW, PH, PD variables and numbers.
  */
 export function evaluatePartFormula(
   formula: string,
-  dims: { W: number; H: number; D: number },
-  contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' }
+  dims: { W: number; H: number; D: number; PW?: number; PH?: number; PD?: number; T?: number; i?: number },
+  contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' | 'x' | 'y' | 'z' }
 ): number {
   const trimmed = formula.trim();
   if (!trimmed) {
@@ -1631,20 +1985,32 @@ export function evaluatePartFormula(
     });
   }
 
-  // Validate allowed characters: numbers, W, H, D, +, -, *, /, (, ), and whitespace.
+  // Validate allowed characters: numbers, W, H, D, P, T, L, i, +, -, *, /, (, ), and whitespace.
   const clean = trimmed.replace(/\s+/g, '');
-  if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
-    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números, W, H, D y operadores (+, -, *, /, paréntesis).`, {
+  if (!/^[0-9WHDTPLi+\-*/()]+$/.test(clean)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números, W, H, D, P, T, L, i y operadores (+, -, *, /, paréntesis).`, {
       ...contextInfo,
       field: contextInfo?.field,
     });
   }
 
+  // Determine parent vs component variables
+  const pw = dims.PW !== undefined ? dims.PW : dims.W;
+  const ph = dims.PH !== undefined ? dims.PH : dims.H;
+  const pd = dims.PD !== undefined ? dims.PD : dims.D;
+  const t = dims.T !== undefined ? dims.T : 0;
+
   // Substitute variables
   const expr = clean
+    .replace(/PW/g, String(pw))
+    .replace(/PH/g, String(ph))
+    .replace(/PD/g, String(pd))
     .replace(/W/g, String(dims.W))
     .replace(/H/g, String(dims.H))
-    .replace(/D/g, String(dims.D));
+    .replace(/D/g, String(dims.D))
+    .replace(/L/g, String(dims.D))
+    .replace(/T/g, String(t))
+    .replace(/i/g, String(dims.i ?? 0));
 
   try {
     // Safe evaluation using Function context
@@ -1662,83 +2028,35 @@ export function evaluatePartFormula(
 }
 
 /**
- * Resolves a cabinet body (Structure) at a specific preset dimension.
- * Validates dimensions match one of the allowed presets (if presets are defined).
- * Stretches parts according to their formulas.
+ * Validates selected outer dimensions for a structure body.
+ * Pure parametric gate (dims > 0) — commercial allowlists live on Module.presets.
+ * Structure.presets are engineering preview only and are not enforced here.
+ *
+ * Since F053 a Structure no longer carries board parts — it composes reusable
+ * Component instances (see resolveComposedModule). Returns an empty array;
+ * component-derived parts are produced by resolveComposedModule.
  */
 export function resolveStructure(
   structure: Structure,
   selectedDims: { width: number; height: number; depth: number },
 ): BoardPart[] {
-  const presets = structure.presets ?? [];
-  if (presets.length > 0) {
-    const matched = presets.find(
-      (p) =>
-        p.width === selectedDims.width &&
-        p.height === selectedDims.height &&
-        p.depth === selectedDims.depth,
+  if (
+    selectedDims.width <= 0 ||
+    selectedDims.height <= 0 ||
+    selectedDims.depth <= 0
+  ) {
+    throw new ValidationError(
+      'Las medidas de la estructura deben ser mayores a 0',
+      {
+        structureCode: structure.code,
+        selectedDims,
+        field: 'selectedDims',
+      },
     );
-    if (!matched) {
-      throw new ValidationError(
-        `Las medidas seleccionadas (${selectedDims.width}x${selectedDims.height}x${selectedDims.depth} mm) no están permitidas para la estructura "${structure.name}" (${structure.code}).`,
-        {
-          structureCode: structure.code,
-          selectedDims,
-          presets,
-        },
-      );
-    }
-  } else {
-    if (structure.externalDims) {
-      const ext = structure.externalDims;
-      if (
-        ext.width !== selectedDims.width ||
-        ext.height !== selectedDims.height ||
-        ext.depth !== selectedDims.depth
-      ) {
-        throw new ValidationError(
-          `Las medidas seleccionadas (${selectedDims.width}x${selectedDims.height}x${selectedDims.depth} mm) no coinciden con las medidas por defecto de la estructura "${structure.name}" (${structure.code}).`,
-          {
-            structureCode: structure.code,
-            selectedDims,
-            externalDims: ext,
-          },
-        );
-      }
-    }
   }
 
-  const dims = {
-    W: selectedDims.width,
-    H: selectedDims.height,
-    D: selectedDims.depth,
-  };
-
-  return structure.boardParts.map((part) => {
-    let resolvedLength = part.lengthMm;
-    let resolvedWidth = part.widthMm;
-
-    if (part.lengthFormula) {
-      resolvedLength = evaluatePartFormula(part.lengthFormula, dims, {
-        structureCode: structure.code,
-        partDescription: part.description,
-        field: 'length',
-      });
-    }
-
-    if (part.widthFormula) {
-      resolvedWidth = evaluatePartFormula(part.widthFormula, dims, {
-        structureCode: structure.code,
-        partDescription: part.description,
-        field: 'width',
-      });
-    }
-
-    return {
-      ...part,
-      lengthMm: resolvedLength,
-      widthMm: resolvedWidth,
-    };
-  });
+  // Structures contribute no board parts of their own — component instances
+  // are expanded by resolveComposedModule using the catalog Component geometry.
+  return [];
 }
 

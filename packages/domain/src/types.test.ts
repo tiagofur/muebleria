@@ -5,12 +5,15 @@ import {
   ValidationError,
   type BoardPart,
   type Catalog,
+  type Component,
+  type ComponentPlacement,
   type EdgeAssignment,
   type EdgeBand,
   type Hardware,
   type HardwareLine,
   type MaterialBoard,
   type Module,
+  type ModuleComponentInstance,
   type ModuleCategory,
   type OptionGroup,
   type HardwarePurchaseRow,
@@ -107,15 +110,24 @@ describe('domain entity types', () => {
       name: 'Gabinete base 60',
       externalDims: { width: 600, height: 720, depth: 590 },
       baseLaborCost: 150,
-      boardParts: [boardPart],
+      components: [
+        {
+          componentId: 'comp-costado',
+          quantity: 1,
+          placementOverride: 'lateral_derecho',
+          overrides: { notes: 'Con perforaciones' },
+        },
+      ],
       hardwareLines: [hardwareLine],
     };
 
-    expect(module.boardParts[0]?.optionRole).toBe('INTERIOR');
+    expect(module.components?.[0]?.placementOverride).toBe('lateral_derecho');
     expect(module.hardwareLines[0]?.quantity).toBe(2);
-    expect(module.boardParts[0]?.edges).toHaveLength(4);
+    expect(module.components?.[0]?.overrides?.notes).toBe('Con perforaciones');
     expect(module.externalDims?.depth).toBe(590);
     expect(module.categoryId).toBeUndefined();
+    // BoardPart type still constructs (used in resolved DTOs)
+    expect(boardPart.edges).toHaveLength(4);
   });
 
   it('constructs ModuleCategory hierarchy and optional module.categoryId', () => {
@@ -135,7 +147,6 @@ describe('domain entity types', () => {
       code: 'M1',
       name: 'Gabinete',
       categoryId: child.id,
-      boardParts: [],
       hardwareLines: [],
     };
     expect(child.parentId).toBe(root.id);
@@ -237,6 +248,7 @@ describe('domain entity types', () => {
       optionRole: 'INTERIOR',
       materialId: '11111111-1111-4111-8111-111111111111',
       edgeBandId: '22222222-2222-4222-8222-222222222222',
+      thicknessMm: 18,
     };
 
     const resolvedHw: ResolvedHardwareLine = {
@@ -310,6 +322,46 @@ describe('domain entity types', () => {
     expect(breakdown.directCost).toBe(166);
     expect(cutRow.L1).toBe(1);
     expect(purchaseRow.lineCost).toBe(70);
+  });
+
+  it('constructs Component and ModuleComponentInstance types (composable module)', () => {
+    const allEdges: readonly EdgeAssignment[] = [
+      { side: 'L1', enabled: true },
+      { side: 'L2', enabled: true },
+      { side: 'W1', enabled: true },
+      { side: 'W2', enabled: true },
+    ] as const;
+
+    const component: Component = {
+      id: 'comp-puerta',
+      code: 'COM-PUE-01',
+      name: 'Puerta',
+      placement: 'puerta' as ComponentPlacement,
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 717,
+        widthMm: 296,
+        thicknessMm: 18,
+      },
+      defaultEdges: allEdges,
+      optionRoles: ['FRENTE'],
+      active: true,
+    };
+
+    const instance: ModuleComponentInstance = {
+      componentId: 'comp-puerta',
+      quantity: 1,
+      placementOverride: 'frontal' as ComponentPlacement,
+      overrides: {
+        notes: 'Instalar con bisagra oculta',
+      },
+    };
+
+    expect(component.code).toBe('COM-PUE-01');
+    expect(component.geometry.kind).toBe('rectangular_board');
+    expect(instance.quantity).toBe(1);
+    expect(instance.placementOverride).toBe('frontal');
+    expect(instance.overrides?.notes).toBe('Instalar con bisagra oculta');
   });
 
   it('exposes DomainError hierarchy with optional context', () => {

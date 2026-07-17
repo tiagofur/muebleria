@@ -200,7 +200,7 @@ describe('@muebles/web F007 option groups + price gate', () => {
     expect(mod).toBeDefined();
     if (!mod) return;
 
-    const required = requiredGroupCodesForModule(mod, ws.catalog.optionGroups);
+    const required = requiredGroupCodesForModule(mod, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     expect(required).toEqual(
       expect.arrayContaining(['INTERIOR', 'FRENTE', 'BISAGRA']),
     );
@@ -253,14 +253,32 @@ describe('@muebles/web F008 module editor wiring', () => {
     }
 
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
-    const boardRoles = new Set(gab.boardParts.map((p) => p.optionRole));
-    expect(boardRoles.has('INTERIOR')).toBe(true);
-    expect(boardRoles.has('FRENTE')).toBe(true);
+    // Option roles now come from the module's component instances (+ its
+    // referenced structure's components), not from board parts.
+    const comps = ws.catalog.components ?? [];
+    const structs = ws.catalog.structures ?? [];
+    const rolesFor = (mod: typeof gab): Set<string> => {
+      const roles = new Set<string>();
+      const collect = (instances: readonly { componentId: string }[]) => {
+        for (const inst of instances) {
+          const c = comps.find((x) => x.id === inst.componentId);
+          if (c) for (const r of c.optionRoles) roles.add(r);
+        }
+      };
+      collect(gab.components ?? []);
+      const st = structs.find((s) => s.id === mod.structureId);
+      collect(st?.components ?? []);
+      return roles;
+    };
+    const gabRoles = rolesFor(gab);
+    expect(gabRoles.has('INTERIOR')).toBe(true);
+    expect(gabRoles.has('FRENTE')).toBe(true);
     expect(gab.hardwareLines.some((l) => l.optionRole === 'BISAGRA')).toBe(true);
     expect(gab.hardwareLines.some((l) => l.hardwareId)).toBe(true);
 
     const caj = ws.catalog.modules.find((m) => m.code === 'MOD-CAJ-01')!;
-    expect(caj.boardParts.some((p) => p.optionRole === 'INTERIOR')).toBe(true);
+    const cajRoles = rolesFor(caj);
+    expect(cajRoles.has('INTERIOR')).toBe(true);
     expect(caj.hardwareLines.some((l) => l.optionRole === 'CORREDERA')).toBe(
       true,
     );
@@ -288,8 +306,8 @@ describe('@muebles/web F008 module editor wiring', () => {
   it('cost preview with default option choices uses domain engine (MOD-06)', () => {
     const ws = createSeedWorkspace();
     const mod = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
-    const required = requiredGroupCodesForModule(mod, ws.catalog.optionGroups);
-    const choices = defaultOptionChoicesForModule(mod, ws.catalog.optionGroups);
+    const required = requiredGroupCodesForModule(mod, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
+    const choices = defaultOptionChoicesForModule(mod, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     const gate = canShowPricePreview(required, choices);
     expect(gate.ok).toBe(true);
 
@@ -334,7 +352,7 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
   it('option pickers for quotation only expose group members (OPT-04, PRJ-03)', () => {
     const ws = createSeedWorkspace();
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
-    const groups = groupsForModuleItem(gab, ws.catalog.optionGroups);
+    const groups = groupsForModuleItem(gab, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     const codes = groups.map((g) => g.code);
     expect(codes).toEqual(
       expect.arrayContaining(['INTERIOR', 'FRENTE', 'BISAGRA']),
@@ -365,7 +383,7 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
         : g,
     );
     const catalog = { ...ws.catalog, optionGroups };
-    const baseChoices = defaultChoicesForNewItem(gab, optionGroups);
+    const baseChoices = defaultChoicesForNewItem(gab, optionGroups, catalog.components, catalog.structures);
     const altInterior =
       optionGroups
         .find((g) => g.code === 'INTERIOR')!
@@ -387,10 +405,10 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
     expect(itemA.optionChoices.INTERIOR).not.toBe(itemB.optionChoices.INTERIOR);
 
     // PRJ-09: module master unchanged by choice diffs
-    const boardRolesBefore = gab.boardParts.map((p) => p.optionRole);
+    const componentsBefore = gab.components?.map((c) => c.componentId);
     expect(itemA.moduleId).toBe(gab.id);
     expect(itemB.moduleId).toBe(gab.id);
-    expect(gab.boardParts.map((p) => p.optionRole)).toEqual(boardRolesBefore);
+    expect(gab.components?.map((c) => c.componentId)).toEqual(componentsBefore);
 
     const now = new Date().toISOString();
     const project: Project = {
@@ -410,6 +428,8 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
       project,
       catalog.modules,
       catalog.optionGroups,
+      catalog.components,
+      catalog.structures,
     );
     expect(gate.ok).toBe(true);
 
@@ -435,13 +455,13 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
     expect(breakdownAligned.salePrice).toBeGreaterThan(0);
     // Different INTERIOR materials should generally change materials cost
     expect(breakdown.materialsCost).not.toBe(breakdownAligned.materialsCost);
-    expect(gab.boardParts.map((p) => p.optionRole)).toEqual(boardRolesBefore);
+    expect(gab.components?.map((c) => c.componentId)).toEqual(componentsBefore);
   });
 
   it('live totals use domain engine when required options complete (PRJ-06, UX-03)', () => {
     const ws = createSeedWorkspace();
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
-    const choices = defaultChoicesForNewItem(gab, ws.catalog.optionGroups);
+    const choices = defaultChoicesForNewItem(gab, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     const now = new Date().toISOString();
     const project: Project = {
       id: 'live',
@@ -485,6 +505,8 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
       blocked,
       ws.catalog.modules,
       ws.catalog.optionGroups,
+      ws.catalog.components,
+      ws.catalog.structures,
     );
     expect(blockedGate.ok).toBe(false);
   });
@@ -494,9 +516,9 @@ describe('@muebles/web F010 export Optimizer', () => {
   it('buildOptimizerExport produces buffer for seed project with complete choices', async () => {
     const ws = createSeedWorkspace();
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
-    const choices = defaultChoicesForNewItem(gab, ws.catalog.optionGroups);
+    const choices = defaultChoicesForNewItem(gab, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     // Seed may omit FONDO members; fill required roles from module when present.
-    const required = requiredGroupCodesForModule(gab, ws.catalog.optionGroups);
+    const required = requiredGroupCodesForModule(gab, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     const fullChoices = { ...choices };
     for (const code of required) {
       if (!fullChoices[code]) {
@@ -571,8 +593,8 @@ describe('@muebles/web F013 export lista de herrajes', () => {
   it('buildHardwareListExport produces buffer for seed project with complete choices', async () => {
     const ws = createSeedWorkspace();
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
-    const choices = defaultChoicesForNewItem(gab, ws.catalog.optionGroups);
-    const required = requiredGroupCodesForModule(gab, ws.catalog.optionGroups);
+    const choices = defaultChoicesForNewItem(gab, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
+    const required = requiredGroupCodesForModule(gab, ws.catalog.optionGroups, ws.catalog.components, ws.catalog.structures);
     const fullChoices = { ...choices };
     for (const code of required) {
       if (!fullChoices[code]) {

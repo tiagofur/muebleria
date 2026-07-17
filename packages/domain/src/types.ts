@@ -144,6 +144,12 @@ export interface BoardPart {
   readonly optionRole: string;
   readonly lengthFormula?: string;
   readonly widthFormula?: string;
+  readonly x?: number;
+  readonly y?: number;
+  readonly z?: number;
+  readonly rotateX?: number;
+  readonly rotateY?: number;
+  readonly rotateZ?: number;
 }
 
 export interface HardwareLine {
@@ -166,11 +172,20 @@ export interface Module {
   readonly name: string;
   /** Optional leaf-or-any-level category (MOD-09). Unset = uncategorized. */
   readonly categoryId?: string;
+  /** Structure reference for composed modules (F049 / H07). Required to resolve pieces. */
+  readonly structureId?: string;
+  /** Component instances placed directly on this module (doors, shelves, …).
+   * Combined with the referenced structure's components to produce board parts. */
+  readonly components?: readonly ModuleComponentInstance[];
   readonly externalDims?: ExternalDims;
+  /**
+   * Commercial measure options offered to sales (H09 / #104).
+   * Source of truth for sellable sizes — not Structure.presets.
+   */
+  readonly presets?: readonly DimensionPreset[];
   readonly baseLaborCost?: number;
   /** Relative media URL for sales showcase (F040). */
   readonly imageUrl?: string;
-  readonly boardParts: readonly BoardPart[];
   readonly hardwareLines: readonly HardwareLine[];
   readonly notes?: string;
 }
@@ -185,8 +200,8 @@ export interface DimensionPreset {
 
 /**
  * Reusable engineering **body** (cuerpo) — F049 / #99 / H04.
- * Composed later into a Module with components + measure presets (H05–H07).
- * Not used in quotation resolution until a module references it.
+ * Parametric via component formulas (W/H/D). Commercial size lists live on Module.
+ * `presets` is optional engineering preview only (H05 intermediate).
  */
 export interface Structure {
   readonly id: string;
@@ -194,11 +209,81 @@ export interface Structure {
   readonly name: string;
   /** Documented outer size of the body. */
   readonly externalDims?: ExternalDims;
-  readonly boardParts: readonly BoardPart[];
+  /** Optional engineering preview sizes — not the commercial allowlist (see Module.presets). */
   readonly presets?: readonly DimensionPreset[];
+  /** Component instances when this structure is used in a composed module. */
+  readonly components?: readonly ModuleComponentInstance[];
   readonly notes?: string;
   /** Soft-delete / hide from pickers. Default true when omitted. */
   readonly active?: boolean;
+}
+
+// --- Reusable components (F049 / H07) ---
+
+export type ComponentPlacement =
+  | 'base' | 'superior' | 'lateral_izquierdo' | 'lateral_derecho'
+  | 'frontal' | 'trasera' | 'interno' | 'puerta'
+  | 'frente_cajon' | 'custom';
+
+export type ComponentGeometry =
+  | {
+      readonly kind: 'rectangular_board';
+      /** Default length; overridden by lengthFormula at resolution time when present. */
+      readonly lengthMm: number;
+      /** Default width; overridden by widthFormula at resolution time when present. */
+      readonly widthMm: number;
+      readonly thicknessMm: number;
+      /** Optional parametric formula (W/H/D variables) — overrides lengthMm when set. */
+      readonly lengthFormula?: string;
+      /** Optional parametric formula (W/H/D variables) — overrides widthMm when set. */
+      readonly widthFormula?: string;
+    };
+
+export interface Perforation {
+  readonly id: string;
+  readonly relativePosition: { readonly xPercent: number; readonly yPercent: number };
+  readonly diameterMm: number;
+  readonly depthMm: number;
+  readonly type: 'through' | 'blind' | 'dowel' | 'shelf_pin' | 'hinge_cup';
+}
+
+export interface Component {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly placement: ComponentPlacement;
+  readonly geometry: ComponentGeometry;
+  readonly defaultEdges: readonly EdgeAssignment[];
+  readonly perforations?: readonly Perforation[];
+  readonly optionRoles: readonly string[];
+  readonly notes?: string;
+  readonly active: boolean;
+  readonly xFormula?: string;
+  readonly yFormula?: string;
+  readonly zFormula?: string;
+  readonly rotateX?: number;
+  readonly rotateY?: number;
+  readonly rotateZ?: number;
+}
+
+export interface ModuleComponentInstance {
+  readonly componentId: string;
+  readonly quantity: number;
+  readonly placementOverride?: ComponentPlacement;
+  readonly overrides?: {
+    readonly edges?: readonly EdgeAssignment[];
+    readonly notes?: string;
+    /** Per-instance length formula (W/H/D) — overrides the component's formula/length. */
+    readonly lengthFormula?: string;
+    /** Per-instance width formula (W/H/D) — overrides the component's formula/width. */
+    readonly widthFormula?: string;
+    readonly xFormula?: string;
+    readonly yFormula?: string;
+    readonly zFormula?: string;
+    readonly rotateX?: number;
+    readonly rotateY?: number;
+    readonly rotateZ?: number;
+  };
 }
 
 // --- Project / quotation ---
@@ -208,6 +293,11 @@ export interface ProjectItem {
   readonly moduleId: string;
   readonly quantity: number;
   readonly optionChoices: OptionChoices;
+  /**
+   * Selected commercial measure preset from Module.presets (H09 / #104).
+   * Required when the module defines presets; ignored when none.
+   */
+  readonly measurePresetId?: string;
 }
 
 export interface Project {
@@ -253,6 +343,8 @@ export interface Catalog {
   /** Hierarchical module categories (MOD-09). Empty/omitted = no taxonomy. */
   readonly categories?: readonly ModuleCategory[];
   readonly customers?: readonly Customer[];
+  /** Reusable components catalog (F049 / H07). */
+  readonly components?: readonly Component[];
   readonly users?: readonly User[];
 }
 
@@ -297,6 +389,13 @@ export interface ResolvedBoardPart {
   readonly optionRole: string;
   readonly materialId: string;
   readonly edgeBandId?: string;
+  readonly x?: number;
+  readonly y?: number;
+  readonly z?: number;
+  readonly rotateX?: number;
+  readonly rotateY?: number;
+  readonly rotateZ?: number;
+  readonly thicknessMm: number;
 }
 
 export interface ResolvedHardwareLine {

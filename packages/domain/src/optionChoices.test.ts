@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { effectiveOptionChoices } from './optionChoices';
 import { calcProjectBreakdown, resolveBom } from './engine';
-import type { Catalog, Module, Project } from './types';
+import type { Catalog, Component, Module, Project, Structure } from './types';
 import { ResolutionError } from './errors';
 
 describe('effectiveOptionChoices (F029 / #35)', () => {
@@ -37,27 +37,39 @@ describe('effectiveOptionChoices (F029 / #35)', () => {
 });
 
 function miniCatalog(): { catalog: Catalog; module: Module } {
+  // Composed module: a single INTERIOR component expanded via a structure.
+  // The test exercises option-choice resolution; board parts are produced by
+  // expanding the component instance (modules no longer carry boardParts).
+  const component: Component = {
+    id: 'comp-1',
+    code: 'COM-1',
+    name: 'Lateral',
+    placement: 'lateral_izquierdo',
+    geometry: { kind: 'rectangular_board', lengthMm: 700, widthMm: 500, thicknessMm: 15 },
+    defaultEdges: [
+      { side: 'L1', enabled: false },
+      { side: 'L2', enabled: false },
+      { side: 'W1', enabled: false },
+      { side: 'W2', enabled: false },
+    ],
+    optionRoles: ['INTERIOR'],
+    active: true,
+  };
+  const structure: Structure = {
+    id: 'struct-1',
+    code: 'EST-1',
+    name: 'Cuerpo',
+    externalDims: { width: 500, height: 700, depth: 500 },
+    components: [{ componentId: 'comp-1', quantity: 1 }],
+    presets: [{ id: 'preset-1', width: 500, height: 700, depth: 500 }],
+    active: true,
+  };
   const module: Module = {
     id: 'mod-1',
     code: 'MOD-1',
     name: 'Mueble',
-    boardParts: [
-      {
-        id: 'p1',
-        code: 'P1',
-        description: 'Lateral',
-        quantity: 1,
-        lengthMm: 700,
-        widthMm: 500,
-        edges: [
-          { side: 'L1', enabled: false },
-          { side: 'L2', enabled: false },
-          { side: 'W1', enabled: false },
-          { side: 'W2', enabled: false },
-        ],
-        optionRole: 'INTERIOR',
-      },
-    ],
+    structureId: 'struct-1',
+    externalDims: { width: 500, height: 700, depth: 500 },
     hardwareLines: [{ id: 'h1', quantity: 2, optionRole: 'BISAGRA' }],
   };
   const catalog: Catalog = {
@@ -119,6 +131,8 @@ function miniCatalog(): { catalog: Catalog; module: Module } {
       },
     ],
     modules: [module],
+    structures: [structure],
+    components: [component],
   };
   return { catalog, module };
 }

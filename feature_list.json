@@ -948,6 +948,27 @@
       ],
       "status": "done",
       "github_issue": 99
+    },
+    {
+      "id": "F051",
+      "phase": 10,
+      "name": "quote_measure_presets",
+      "title": "Cotización: preset de medida del mueble",
+      "description": "Presets comerciales en Module; vendedor elige medida en línea. Medida base obligatoria con estructura; más medidas opcionales. Issue #104 / H09.",
+      "acceptance": [
+        "Medida base en General del mueble",
+        "Más medidas opcionales en General",
+        "ProjectItem.measurePresetId en cotización",
+        "Misma plantilla dos anchos → dos precios/despieces",
+        "Preset inválido no se puede guardar",
+        "Proyectos cerrados respetan priceSnapshot",
+        "Tests de resolución en domain"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/104"
+      ],
+      "status": "done",
+      "github_issue": 104
     }
   ]
 }

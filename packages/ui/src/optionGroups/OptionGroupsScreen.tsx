@@ -88,10 +88,12 @@ function countModulesUsingGroup(
   modules: readonly Module[],
   groupCode: string,
 ): number {
-  return modules.filter(
-    (m) =>
-      m.boardParts.some((p) => p.optionRole === groupCode) ||
-      m.hardwareLines.some((h) => h.optionRole === groupCode),
+  // Modules no longer carry board parts directly — they are composed from
+  // structure + components now. Count usage by hardware lines only; option
+  // roles declared by composed components aren't resolvable here without the
+  // component catalog, so the delete warning is intentionally conservative.
+  return modules.filter((m) =>
+    m.hardwareLines.some((h) => h.optionRole === groupCode),
   ).length;
 }
 

@@ -110,6 +110,7 @@ muebles/
 - **Nunca commits de `.env` / `.env.local`.** Solo `.env.example`.
 - **Código e identificadores en inglés; copy de UI en español** (salvo que el archivo ya use otro idioma de forma consistente).
 - **No copies sistemas de diseño ajenos al root** (`PRODUCT.md` / `DESIGN.md` de Impeccable u otros). El producto del taller es `docs/prd.md`; la UI del taller es `docs/design.md`.
+- **Nunca ejecutes SQL destructivo** (`DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`, `DELETE` sin `WHERE`) sobre Postgres, ni siquiera "para resetear y aplicar migraciones". Eso borra datos reales del usuario de forma irreversible. Las migraciones nuevas son aditivas (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`) y se aplican al arrancar el server sin tocar datos existentes. Si un reset es estrictamente necesario, **para y pedí confirmación explícita al usuario primero**, y ofrecé hacer un `pg_dump` de respaldo antes.
 
 ### Calidad al cerrar (mínimo)
 

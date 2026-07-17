@@ -992,6 +992,22 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- SEED ---
+
+// HandleSeed populates the database with plantilla fixture data.
+// Idempotent: skips if materials already exist.
+func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
+	if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "solo administradores") {
+		return
+	}
+	if err := s.Store.SeedCatalog(r.Context()); err != nil {
+		respondWithInternalError(w, err, "seed")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
 // --- MODULES / TEMPLATES ---
 
 func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
@@ -1424,6 +1440,101 @@ func (s *Server) HandleWorkshopSettings(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		respondWithJSON(w, http.StatusOK, saved)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// --- COMPONENTS (F050 / #101) ---
+
+func (s *Server) HandleComponents(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		list, err := s.Store.ListComponents(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, list)
+
+	case http.MethodPost:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+			return
+		}
+		var c domain.Component
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.CreateComponent(r.Context(), &c)
+		if err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, c)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		c, err := s.Store.GetComponentByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "component not found")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+			return
+		}
+		var c domain.Component
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.UpdateComponent(r.Context(), id, &c)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodDelete:
+		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+			return
+		}
+		err := s.Store.DeleteComponent(r.Context(), id)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]string{"message": "component deleted"})
 
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")

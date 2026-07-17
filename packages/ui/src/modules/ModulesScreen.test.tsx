@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ComponentProps } from 'react';
 import type {
+  Component,
   Hardware,
   Module,
   ModuleCategory,
@@ -60,43 +61,48 @@ const categories: ModuleCategory[] = [
   { id: 'cat-child', name: 'Alacenas', parentId: 'cat-root', sortOrder: 0 },
 ];
 
+const catalogComponents: Component[] = [
+  {
+    id: 'comp-lat',
+    code: 'COM-LAT',
+    name: 'Lateral izquierdo',
+    placement: 'lateral_izquierdo',
+    geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+    defaultEdges: [
+      { side: 'L1', enabled: false },
+      { side: 'L2', enabled: false },
+      { side: 'W1', enabled: false },
+      { side: 'W2', enabled: false },
+    ],
+    optionRoles: ['INTERIOR'],
+    active: true,
+  },
+  {
+    id: 'comp-fondo',
+    code: 'COM-FON',
+    name: 'Fondo',
+    placement: 'trasera',
+    geometry: { kind: 'rectangular_board', lengthMm: 689, widthMm: 560, thicknessMm: 3 },
+    defaultEdges: [
+      { side: 'L1', enabled: false },
+      { side: 'L2', enabled: false },
+      { side: 'W1', enabled: false },
+      { side: 'W2', enabled: false },
+    ],
+    optionRoles: ['INTERIOR'],
+    active: true,
+  },
+];
+
 const modules: Module[] = [
   {
     id: 'mod-1',
     code: 'MOD-GAB-01',
     name: 'Bajo mesada 600',
     categoryId: 'cat-child',
-    boardParts: [
-      {
-        id: 'p1',
-        code: 'MOD-GAB-01-P01',
-        description: 'Lateral izquierdo',
-        quantity: 1,
-        lengthMm: 720,
-        widthMm: 560,
-        edges: [
-          { side: 'L1', enabled: true },
-          { side: 'L2', enabled: false },
-          { side: 'W1', enabled: false },
-          { side: 'W2', enabled: false },
-        ],
-        optionRole: 'INTERIOR',
-      },
-      {
-        id: 'p2',
-        code: 'MOD-GAB-01-P02',
-        description: 'Fondo',
-        quantity: 1,
-        lengthMm: 568,
-        widthMm: 560,
-        edges: [
-          { side: 'L1', enabled: false },
-          { side: 'L2', enabled: false },
-          { side: 'W1', enabled: false },
-          { side: 'W2', enabled: false },
-        ],
-        optionRole: 'INTERIOR',
-      },
+    components: [
+      { componentId: 'comp-lat', quantity: 1 },
+      { componentId: 'comp-fondo', quantity: 1 },
     ],
     hardwareLines: [
       {
@@ -110,23 +116,7 @@ const modules: Module[] = [
     id: 'mod-2',
     code: 'MOD-CAJ-01',
     name: 'Cajón standard',
-    boardParts: [
-      {
-        id: 'p3',
-        code: 'MOD-CAJ-01-P01',
-        description: 'Frente cajón',
-        quantity: 1,
-        lengthMm: 400,
-        widthMm: 150,
-        edges: [
-          { side: 'L1', enabled: true },
-          { side: 'L2', enabled: true },
-          { side: 'W1', enabled: true },
-          { side: 'W2', enabled: true },
-        ],
-        optionRole: 'INTERIOR',
-      },
-    ],
+    components: [],
     hardwareLines: [],
   },
 ];
@@ -165,6 +155,7 @@ function renderScreen(
         'mod-1': 202.5,
         'mod-2': null,
       }}
+      catalogComponents={catalogComponents}
       {...props}
     />,
   );
@@ -193,7 +184,7 @@ describe('ModulesScreen structure (F021)', () => {
     const card = screen.getByTestId('module-card-mod-1');
     expect(within(card).getByText('MOD-GAB-01')).toBeTruthy();
     expect(within(card).getByText('Bajo mesada 600')).toBeTruthy();
-    expect(within(card).getByText(/2 piezas/)).toBeTruthy();
+    expect(within(card).getByText(/2 componentes/)).toBeTruthy();
     expect(within(card).getByText(/1 herraje/)).toBeTruthy();
     expect(within(card).getByText('$202.50 MXN')).toBeTruthy();
 
@@ -289,40 +280,28 @@ describe('ModulesScreen navigation + modals (F021)', () => {
   });
 
 
-  it('Enter on part qty moves focus to same field on next row (#39)', async () => {
-    const user = userEvent.setup();
-    renderScreen();
-    await user.click(screen.getByTestId('module-card-mod-1'));
-    await user.click(screen.getByRole('button', { name: /^Editar$/ }));
-    const dialog = await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('module-editor-tab-parts'));
-
-    const parts = within(dialog).getByTestId('module-parts-grid');
-    const qtyInputs = within(parts).getAllByLabelText('Cantidad');
-    expect(qtyInputs.length).toBeGreaterThanOrEqual(2);
-
-    qtyInputs[0]!.focus();
-    await user.keyboard('{Enter}');
-    expect(document.activeElement).toBe(qtyInputs[1]);
-  });
-
-  it('shows editor tabs General/Piezas/Herrajes/Costo in Modal LG', async () => {
+  it('shows editor tabs General/Composición/Herrajes/Costo (no Piezas tab)', async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
     expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
-    expect(screen.getByTestId('module-editor-panel-parts').hidden).toBe(true);
 
-    await user.click(screen.getByTestId('module-editor-tab-parts'));
-    expect(screen.getByTestId('module-editor-panel-parts').hidden).toBe(false);
-    expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(true);
+    await user.click(screen.getByTestId('module-editor-tab-composition'));
+    expect(
+      screen.getByTestId('module-editor-panel-composition').hidden,
+    ).toBe(false);
+    expect(screen.getByTestId('structure-picker')).toBeTruthy();
 
     await user.click(screen.getByTestId('module-editor-tab-hardware'));
     expect(screen.getByTestId('module-editor-panel-hardware').hidden).toBe(false);
 
     await user.click(screen.getByTestId('module-editor-tab-cost'));
     expect(screen.getByTestId('module-editor-panel-cost').hidden).toBe(false);
+
+    // The board-parts editor tab is gone — modules compose structure + components.
+    expect(screen.queryByTestId('module-editor-tab-parts')).toBeNull();
+    expect(screen.queryByTestId('module-editor-panel-parts')).toBeNull();
   });
 
   it('opens create modal from requestCreateKey prop (Dashboard handoff)', () => {

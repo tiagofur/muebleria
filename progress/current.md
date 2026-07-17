@@ -1,24 +1,26 @@
 # Sesión actual
 
-- **Branch:** `feat/optimizer-cutlist-enrich-98`
-- **Issue:** [#98](https://github.com/tiagofur/muebleria/issues/98) — F048 cut-list enriquecida
-- **Estado:** rebased onto main (post #113 F046 + #114 F047) — conflictos resueltos
-- **PR:** https://github.com/tiagofur/muebleria/pull/115
+- **Branch:** `feat/presets-measure-100`
+- **Carpeta principal:** `/Users/tiagofur/dev/carpinteria/muebles`
+- **Issue:** [#104](https://github.com/tiagofur/muebleria/issues/104) — Cotización: preset de medida (H09 / F051)
+- **Estado:** usable en UI; dominio + Go + seed multi-medida
 
-## Contexto merge
+## Modelo UX
 
-Main ya tiene:
-- **F046** etiquetas PDF + `generatePieceLabels` / `formatEdgeBandingInstruction`
-- **F047** resumen m²/herrajes + `generateProjectMaterialSummary`
+| Campo | Dónde | Regla |
+|-------|--------|------|
+| Medida base | General | Obligatoria si hay estructura |
+| Más medidas | General (abajo) | Opcional; si hay lista, vendedor elige en cotización |
 
-Este PR añade **F048** sin pisar lo anterior:
-- `formatOptimizerPartDescription` + metadata en `ProductionCutRow`
-- Description enriquecida en cut-list; hoja **Referencias**
-- Paridad Go
+## Cómo probar
 
-## Entregado F048
+1. Hard refresh en app `muebles` (`:5173`)
+2. Muebles → editar → **General** → medida base + más medidas
+3. Seed `MOD-COMP-001` trae presets 300/400/600
+4. Cotización → agregar ese mueble → selector **Medida**
 
-- Description Optimizer: `CÓDIGO · Pieza · MÓDULO`
-- Metadata: partName, partCode, moduleCode, labelRef
-- Sheet **Referencias** (taller) sin tocar columnas A–J
-- feature_list: F046 + F047 + F048 done
+## Pendiente posible
+
+- Commit / PR
+- Migración `000021` en Postgres local (`migrate` / `./dev.sh`)
+- POST `/api/seed` para repoblar con module_presets

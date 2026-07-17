@@ -26,6 +26,11 @@ export type {
   Module,
   Structure,
   DimensionPreset,
+  ComponentPlacement,
+  ComponentGeometry,
+  Perforation,
+  Component,
+  ModuleComponentInstance,
   ProjectItem,
   Project,
   QuotePriceSnapshot,
@@ -110,10 +115,18 @@ export {
 
 export { DomainError, ValidationError, ResolutionError } from './errors';
 
-export type { BoardLineCost, HardwareLineCost, LineCost } from './engine';
+export {
+  defaultMeasurePresetId,
+  moduleHasMeasurePresets,
+  resolveModuleMeasurePreset,
+  validateModulePresets,
+} from './measurePresets';
+
+export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, ComposedModuleResult } from './engine';
 
 export {
   resolveBom,
+  resolveComposedModule,
   calcMaterialCostPerM2,
   calcBoardLineMetrics,
   calcBoardLineCost,
@@ -130,6 +143,7 @@ export {
   generateHardwareList,
   generateProjectMaterialSummary,
   validateBoardPart,
+  validateComponent,
   validateHardwareLine,
   validateModule,
   validateStructure,

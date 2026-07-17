@@ -66,27 +66,13 @@ const moduleGab: Module = {
   id: 'm1',
   code: 'MOD-GAB-01',
   name: 'Gabinete',
-  boardParts: [
-    {
-      id: 'p1',
-      description: 'Costado',
-      quantity: 1,
-      lengthMm: 720,
-      widthMm: 590,
-      edges: [],
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'p2',
-      description: 'Puerta',
-      quantity: 1,
-      lengthMm: 700,
-      widthMm: 300,
-      edges: [],
-      optionRole: 'FRENTE',
-    },
+  // Option roles now come from hardware lines (INTERIOR/FRENTE/BISAGRA)
+  // since modules compose structures + components instead of board parts.
+  hardwareLines: [
+    { id: 'h1', quantity: 2, optionRole: 'BISAGRA' },
+    { id: 'h2', quantity: 1, optionRole: 'INTERIOR' },
+    { id: 'h3', quantity: 1, optionRole: 'FRENTE' },
   ],
-  hardwareLines: [{ id: 'h1', quantity: 2, optionRole: 'BISAGRA' }],
 };
 
 const catalogs = {

@@ -77,6 +77,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/catalog/structures/{id}", authMW(http.HandlerFunc(server.HandleStructureByID)))
 	mux.Handle("DELETE /api/catalog/structures/{id}", authMW(http.HandlerFunc(server.HandleStructureByID)))
 
+	// Catálogo: Componentes reutilizables (F050 / #101)
+	mux.Handle("GET /api/catalog/components", authMW(http.HandlerFunc(server.HandleComponents)))
+	mux.Handle("POST /api/catalog/components", authMW(http.HandlerFunc(server.HandleComponents)))
+	mux.Handle("GET /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleComponentByID)))
+	mux.Handle("PUT /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleComponentByID)))
+	mux.Handle("DELETE /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleComponentByID)))
+
 	// Proyectos y cotizaciones
 	mux.Handle("GET /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
 	mux.Handle("POST /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
@@ -89,6 +96,9 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Assignable portfolio owners (admin + gerente_ventas) — F035
 	mux.Handle("GET /api/assignable-owners", authMW(http.HandlerFunc(server.HandleAssignableOwners)))
+
+	// Seed: populate database from plantilla fixtures (idempotent)
+	mux.Handle("POST /api/seed", authMW(http.HandlerFunc(server.HandleSeed)))
 
 	// Catalog media (F040) — upload mutate-catalog roles; GET any auth
 	mux.Handle("POST /api/media", authMW(http.HandlerFunc(server.HandleMediaUpload)))

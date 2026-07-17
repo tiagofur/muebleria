@@ -12,6 +12,7 @@ import {
   plantillaChoices,
   plantillaExpected,
   plantillaProject,
+  seedComposedModule,
 } from './__fixtures__/plantillaDemo';
 import {
   calcBoardLineCost,
@@ -29,16 +30,22 @@ import {
   resolveBom,
   transitionProjectStatus,
   validateCatalogEntityCodes,
+  validateComponent,
   validateModule,
   validateStructure,
+  validateBoardPart,
   evaluatePartFormula,
+  resolveComposedModule,
   resolveStructure,
 } from './engine';
 import { ResolutionError, ValidationError } from './errors';
 import type {
   Catalog,
+  Component,
+  ComponentPlacement,
   EdgeAssignment,
   Module,
+  ModuleComponentInstance,
   Project,
   Structure,
 } from './types';
@@ -134,6 +141,28 @@ function miniCatalog(overrides: Partial<Catalog> = {}): Catalog {
         optionIds: ['hw-a'],
       },
     ],
+    structures: [
+      {
+        id: 'struct-test',
+        code: 'EST-TEST',
+        name: 'Test structure',
+        externalDims: { width: 1000, height: 1000, depth: 500 },
+        components: [{ componentId: 'comp-side', quantity: 1 }],
+        active: true,
+      },
+    ],
+    components: [
+      {
+        id: 'comp-side',
+        code: 'COM-SIDE',
+        name: 'Side',
+        placement: 'lateral_izquierdo',
+        geometry: { kind: 'rectangular_board', lengthMm: 1000, widthMm: 500, thicknessMm: 18 },
+        defaultEdges: ALL_EDGES,
+        optionRoles: ['INTERIOR'],
+        active: true,
+      },
+    ],
     modules: [],
   };
   return { ...base, ...overrides };
@@ -144,18 +173,11 @@ function miniModule(overrides: Partial<Module> = {}): Module {
     id: 'mod-1',
     code: 'MOD-TEST',
     name: 'Test module',
-    boardParts: [
-      {
-        id: 'p1',
-        code: 'MOD-TEST-P01',
-        description: 'Side',
-        quantity: 1,
-        lengthMm: 1000,
-        widthMm: 500,
-        edges: ALL_EDGES,
-        optionRole: 'INTERIOR',
-      },
-    ],
+    externalDims: { width: 1000, height: 1000, depth: 500 },
+    structureId: 'struct-test',
+    // No module-level components — the single test piece comes from the
+    // referenced structure's component (comp-side × 1).
+    components: [],
     hardwareLines: [
       {
         id: 'h1',
@@ -165,6 +187,64 @@ function miniModule(overrides: Partial<Module> = {}): Module {
     ],
     ...overrides,
   };
+}
+
+/**
+ * Build a composed module + catalog around a single configurable test piece.
+ * Replaces the legacy "module with one boardPart" pattern: now the piece is a
+ * Component (lengthMm × widthMm, given edges/optionRole) referenced once from
+ * a structure-less composed module. Returns { module, catalog } so tests can
+ * resolve BOM or add extra catalog entities.
+ */
+function miniModuleWithPart(opts: {
+  lengthMm?: number;
+  widthMm?: number;
+  edges?: readonly EdgeAssignment[];
+  optionRole?: string;
+  hardwareLines?: Module['hardwareLines'];
+  catalogOverrides?: Partial<Catalog>;
+}): { module: Module; catalog: Catalog } {
+  const compId = 'comp-custom';
+  const role = opts.optionRole ?? 'INTERIOR';
+  const component: Component = {
+    id: compId,
+    code: 'COM-CUSTOM',
+    name: 'Custom part',
+    placement: 'interno',
+    geometry: {
+      kind: 'rectangular_board',
+      lengthMm: opts.lengthMm ?? 1000,
+      widthMm: opts.widthMm ?? 500,
+      thicknessMm: 18,
+    },
+    defaultEdges: opts.edges ?? ALL_EDGES,
+    optionRoles: [role],
+    active: true,
+  };
+  const catalog = miniCatalog({
+    components: [component],
+    structures: [
+      {
+        id: 'struct-custom',
+        code: 'EST-CUSTOM',
+        name: 'Custom structure',
+        externalDims: { width: 1000, height: 1000, depth: 500 },
+        components: [{ componentId: compId, quantity: 1 }],
+        active: true,
+      },
+    ],
+    ...opts.catalogOverrides,
+  });
+  const module: Module = {
+    id: 'mod-custom',
+    code: 'MOD-CUSTOM',
+    name: 'Custom module',
+    externalDims: { width: 1000, height: 1000, depth: 500 },
+    structureId: 'struct-custom',
+    components: [],
+    hardwareLines: opts.hardwareLines ?? [],
+  };
+  return { module, catalog };
 }
 
 describe('resolveBom', () => {
@@ -228,21 +308,7 @@ describe('resolveBom', () => {
   });
 
   it('omits edgeBandId when no edge flags are enabled', () => {
-    const catalog = miniCatalog();
-    const module = miniModule({
-      boardParts: [
-        {
-          id: 'p-no-edge',
-          description: 'Back',
-          quantity: 1,
-          lengthMm: 100,
-          widthMm: 100,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
-      hardwareLines: [],
-    });
+    const { module, catalog } = miniModuleWithPart({ edges: NO_EDGES });
 
     const bom = resolveBom(module, { INTERIOR: 'mat-a' }, catalog);
     expect(bom.boardParts[0]?.edgeBandId).toBeUndefined();
@@ -367,36 +433,27 @@ describe('calcLineCost', () => {
   it('applies wastePercent 10% to boardCost (PRD §13.2 / F014)', () => {
     // Known part: 1000×1000 mm → areaM2 = 1; costPerM2 = 100; waste = 10
     // costPerM2 is pre-calculated with waste: (100 / 1) * 1.10 = 110
-    const catalog = miniCatalog({
-      materials: [
-        {
-          id: 'mat-a',
-          code: 'TAB-A',
-          name: 'Mat A',
-          widthMm: 1000,
-          lengthMm: 1000,
-          thicknessMm: 15,
-          grainDefault: false,
-          boardPrice: 100,
-          wastePercent: 10,
-          costPerM2: 110,
-          active: true,
-        },
-      ],
-    });
-    const module = miniModule({
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Panel',
-          quantity: 1,
-          lengthMm: 1000,
-          widthMm: 1000,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
-      hardwareLines: [],
+    const { module, catalog } = miniModuleWithPart({
+      lengthMm: 1000,
+      widthMm: 1000,
+      edges: NO_EDGES,
+      catalogOverrides: {
+        materials: [
+          {
+            id: 'mat-a',
+            code: 'TAB-A',
+            name: 'Mat A',
+            widthMm: 1000,
+            lengthMm: 1000,
+            thicknessMm: 15,
+            grainDefault: false,
+            boardPrice: 100,
+            wastePercent: 10,
+            costPerM2: 110,
+            active: true,
+          },
+        ],
+      },
     });
     const bom = resolveBom(module, { INTERIOR: 'mat-a' }, catalog);
     const cost = calcBoardLineCost(bom.boardParts[0]!, catalog);
@@ -405,36 +462,27 @@ describe('calcLineCost', () => {
   });
 
   it('calculates boardCost without waste when wastePercent is 0', () => {
-    const catalog = miniCatalog({
-      materials: [
-        {
-          id: 'mat-a',
-          code: 'TAB-A',
-          name: 'Mat A',
-          widthMm: 1000,
-          lengthMm: 1000,
-          thicknessMm: 15,
-          grainDefault: false,
-          boardPrice: 100,
-          wastePercent: 0,
-          costPerM2: 100,
-          active: true,
-        },
-      ],
-    });
-    const module = miniModule({
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Panel',
-          quantity: 1,
-          lengthMm: 1000,
-          widthMm: 500,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
-      hardwareLines: [],
+    const { module, catalog } = miniModuleWithPart({
+      lengthMm: 1000,
+      widthMm: 500,
+      edges: NO_EDGES,
+      catalogOverrides: {
+        materials: [
+          {
+            id: 'mat-a',
+            code: 'TAB-A',
+            name: 'Mat A',
+            widthMm: 1000,
+            lengthMm: 1000,
+            thicknessMm: 15,
+            grainDefault: false,
+            boardPrice: 100,
+            wastePercent: 0,
+            costPerM2: 100,
+            active: true,
+          },
+        ],
+      },
     });
     const bom = resolveBom(module, { INTERIOR: 'mat-a' }, catalog);
     const cost = calcBoardLineCost(bom.boardParts[0]!, catalog);
@@ -443,19 +491,11 @@ describe('calcLineCost', () => {
   });
 
   it('computes hardwareCost = qty * costPerUnit', () => {
-    const catalog = miniCatalog();
-    const module = miniModule({
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Panel',
-          quantity: 1,
-          lengthMm: 100,
-          widthMm: 100,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
+    const { module, catalog } = miniModuleWithPart({
+      lengthMm: 100,
+      widthMm: 100,
+      edges: NO_EDGES,
+      hardwareLines: [{ id: 'h1', quantity: 2, optionRole: 'BISAGRA' }],
     });
     const bom = resolveBom(
       module,
@@ -469,24 +509,15 @@ describe('calcLineCost', () => {
 
 describe('calcProjectBreakdown', () => {
   it('aggregates directCost and salePrice per PRD §13.3', () => {
-    const module = miniModule({
-      baseLaborCost: 150,
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Panel',
-          quantity: 1,
-          lengthMm: 1000,
-          widthMm: 1000,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
-      hardwareLines: [
-        { id: 'h1', quantity: 2, optionRole: 'BISAGRA' },
-      ],
+    const { module, catalog } = miniModuleWithPart({
+      lengthMm: 1000,
+      widthMm: 1000,
+      edges: NO_EDGES,
+      hardwareLines: [{ id: 'h1', quantity: 2, optionRole: 'BISAGRA' }],
     });
-    const catalog = miniCatalog({ modules: [module] });
+    // baseLaborCost is not configurable via the helper; apply it directly.
+    const mod = { ...module, baseLaborCost: 150 };
+    const cat = { ...catalog, modules: [mod] };
     const project: Project = {
       id: 'proj-1',
       name: 'P',
@@ -498,7 +529,7 @@ describe('calcProjectBreakdown', () => {
       items: [
         {
           id: 'i1',
-          moduleId: module.id,
+          moduleId: mod.id,
           quantity: 2,
           optionChoices: { INTERIOR: 'mat-a', BISAGRA: 'hw-a' },
         },
@@ -507,10 +538,10 @@ describe('calcProjectBreakdown', () => {
       updatedAt: '2026-07-15T00:00:00.000Z',
     };
 
-    // per module unit: board=100, hw=40, direct=140; ×2 items
+    // per module unit: board=100 (1m²×100), hw=40, direct=140; ×2 items
     // laborModular = 2 * 150 = 300
     // sale = 280 * 1.35 + 300 + 500 = 1178
-    const breakdown = calcProjectBreakdown(project, catalog);
+    const breakdown = calcProjectBreakdown(project, cat);
     expect(breakdown.materialsCost).toBeCloseTo(200, 6);
     expect(breakdown.hardwareTotal).toBeCloseTo(80, 6);
     expect(breakdown.edgeTotal).toBeCloseTo(0, 6);
@@ -526,64 +557,55 @@ describe('calcProjectBreakdown', () => {
    * Display/export may round to 2 decimals; domain returns raw floats.
    */
   it('does not round breakdown fields to 2 decimals (TS/Go parity)', () => {
-    const catalog = miniCatalog({
-      materials: [
-        {
-          id: 'mat-a',
-          code: 'TAB-A',
-          name: 'Mat A',
-          widthMm: 1000,
-          lengthMm: 1000,
-          thicknessMm: 15,
-          grainDefault: false,
-          boardPrice: 100,
-          wastePercent: 0,
-          costPerM2: 160.333,
-          active: true,
-        },
-      ],
+    const { module: baseModule, catalog } = miniModuleWithPart({
+      lengthMm: 800,
+      widthMm: 600,
       edges: [
-        {
-          id: 'edge-a',
-          code: 'CAN-A',
-          name: 'Edge A',
-          thicknessMm: 0.5,
-          costPerMl: 3.333,
-          active: true,
-        },
-      ],
-      hardware: [
-        {
-          id: 'hw-a',
-          code: 'HER-A',
-          name: 'Hw A',
-          unit: 'piece',
-          costPerUnit: 7.777,
-          active: true,
-        },
-      ],
-      modules: [],
-    });
-    const module = miniModule({
-      baseLaborCost: 100.111,
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Panel',
-          quantity: 1,
-          lengthMm: 800,
-          widthMm: 600,
-          edges: [
-            { side: 'L1', enabled: true },
-            { side: 'L2', enabled: false },
-            { side: 'W1', enabled: true },
-            { side: 'W2', enabled: false },
-          ],
-          optionRole: 'INTERIOR',
-        },
+        { side: 'L1', enabled: true },
+        { side: 'L2', enabled: false },
+        { side: 'W1', enabled: true },
+        { side: 'W2', enabled: false },
       ],
       hardwareLines: [{ id: 'h1', quantity: 3, optionRole: 'BISAGRA' }],
+      catalogOverrides: {
+        materials: [
+          {
+            id: 'mat-a',
+            code: 'TAB-A',
+            name: 'Mat A',
+            widthMm: 1000,
+            lengthMm: 1000,
+            thicknessMm: 15,
+            grainDefault: false,
+            boardPrice: 100,
+            wastePercent: 0,
+            costPerM2: 160.333,
+            active: true,
+          },
+        ],
+        edges: [
+          {
+            id: 'edge-a',
+            code: 'CAN-A',
+            name: 'Edge A',
+            thicknessMm: 0.5,
+            costPerMl: 3.333,
+            active: true,
+          },
+        ],
+        hardware: [
+          {
+            id: 'hw-a',
+            code: 'HER-A',
+            name: 'Hw A',
+            unit: 'piece',
+            costPerUnit: 7.777,
+            active: true,
+          },
+        ],
+      },
     });
+    const module = { ...baseModule, baseLaborCost: 100.111 };
     const project: Project = {
       id: 'proj-1',
       name: 'No-round',
@@ -631,22 +653,12 @@ describe('calcProjectBreakdown', () => {
   });
 
   it('treats missing baseLaborCost as 0', () => {
-    const module = miniModule({
-      baseLaborCost: undefined,
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Panel',
-          quantity: 1,
-          lengthMm: 1000,
-          widthMm: 1000,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
+    const { module, catalog } = miniModuleWithPart({
+      lengthMm: 1000,
+      widthMm: 1000,
+      edges: NO_EDGES,
       hardwareLines: [],
     });
-    const catalog = miniCatalog({ modules: [module] });
     const project: Project = {
       id: 'proj-2',
       name: 'P',
@@ -667,7 +679,7 @@ describe('calcProjectBreakdown', () => {
       updatedAt: '2026-07-15T00:00:00.000Z',
     };
 
-    const breakdown = calcProjectBreakdown(project, catalog);
+    const breakdown = calcProjectBreakdown(project, { ...catalog, modules: [module] });
     expect(breakdown.laborModular).toBe(0);
     expect(breakdown.salePrice).toBeCloseTo(breakdown.directCost, 6);
   });
@@ -855,23 +867,18 @@ describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
 
 describe('validations VAL-01..07 (engine-time)', () => {
   it('VAL-01: rejects non-positive board dimensions', () => {
-    const module = miniModule({
-      boardParts: [
-        {
-          id: 'p-bad',
-          description: 'Bad',
-          quantity: 1,
-          lengthMm: 0,
-          widthMm: 100,
-          edges: NO_EDGES,
-          optionRole: 'INTERIOR',
-        },
-      ],
-      hardwareLines: [],
-    });
-    expect(() =>
-      resolveBom(module, { INTERIOR: 'mat-a' }, miniCatalog()),
-    ).toThrow(ValidationError);
+    // Board-part dimension validation runs on the expanded pieces inside
+    // resolveBom (validateBoardPart). Build a part directly to exercise it.
+    const badPart = {
+      id: 'p-bad',
+      description: 'Bad',
+      quantity: 1,
+      lengthMm: 0,
+      widthMm: 100,
+      edges: NO_EDGES,
+      optionRole: 'INTERIOR',
+    };
+    expect(() => validateBoardPart(badPart)).toThrow(ValidationError);
   });
 
   it('VAL-03: rejects hardware qty <= 0', () => {
@@ -890,35 +897,26 @@ describe('validations VAL-01..07 (engine-time)', () => {
     ).toThrow(ValidationError);
   });
 
-  it('F049: validateStructure accepts cuerpo with board parts', () => {
+  it('F049: validateStructure accepts cuerpo with component instances', () => {
     expect(() =>
       validateStructure({
         id: 'str-1',
         code: 'EST-GAB-CUERPO',
         name: 'Cuerpo gabinete',
-        boardParts: [
-          {
-            id: 'sp1',
-            code: 'P01',
-            description: 'Lateral izquierdo',
-            quantity: 1,
-            lengthMm: 720,
-            widthMm: 560,
-            edges: ALL_EDGES,
-            optionRole: 'INTERIOR',
-          },
+        components: [
+          { componentId: 'comp-costado', quantity: 2 },
         ],
       }),
     ).not.toThrow();
   });
 
-  it('F049: validateStructure rejects empty parts and bad dims', () => {
+  it('F049: validateStructure rejects empty components and bad quantity', () => {
     expect(() =>
       validateStructure({
         id: 'str-1',
         code: 'EST-X',
         name: 'X',
-        boardParts: [],
+        components: [],
       }),
     ).toThrow(ValidationError);
     expect(() =>
@@ -926,17 +924,17 @@ describe('validations VAL-01..07 (engine-time)', () => {
         id: 'str-1',
         code: 'EST-X',
         name: 'X',
-        boardParts: [
-          {
-            id: 'sp1',
-            description: 'Lateral',
-            quantity: 1,
-            lengthMm: 0,
-            widthMm: 100,
-            edges: ALL_EDGES,
-            optionRole: 'INTERIOR',
-          },
+        components: [
+          { componentId: 'comp-x', quantity: 0 },
         ],
+      }),
+    ).toThrow(ValidationError);
+    expect(() =>
+      validateStructure({
+        id: 'str-1',
+        code: 'EST-X',
+        name: 'X',
+        components: [{ componentId: '', quantity: 1 }],
       }),
     ).toThrow(ValidationError);
   });
@@ -962,6 +960,196 @@ describe('validations VAL-01..07 (engine-time)', () => {
     expect(() => validateCatalogEntityCodes(catalog)).toThrow(
       ValidationError,
     );
+  });
+});
+
+const ALL_EDGES_TRUE: readonly EdgeAssignment[] = [
+  { side: 'L1', enabled: true },
+  { side: 'L2', enabled: true },
+  { side: 'W1', enabled: true },
+  { side: 'W2', enabled: true },
+] as const;
+
+function validComponent(overrides: Partial<Component> = {}): Component {
+  return {
+    id: 'comp-test',
+    code: 'COM-TEST-01',
+    name: 'Componente de prueba',
+    placement: 'puerta' as ComponentPlacement,
+    geometry: {
+      kind: 'rectangular_board',
+      lengthMm: 717,
+      widthMm: 296,
+      thicknessMm: 18,
+    },
+    defaultEdges: ALL_EDGES_TRUE,
+    optionRoles: ['FRENTE'],
+    active: true,
+    ...overrides,
+  };
+}
+
+describe('validateComponent', () => {
+  it('passes for a valid component', () => {
+    expect(() => validateComponent(validComponent())).not.toThrow();
+  });
+
+  it('throws ValidationError when code is empty', () => {
+    expect(() => validateComponent(validComponent({ code: '' }))).toThrow(
+      ValidationError,
+    );
+    expect(() => validateComponent(validComponent({ code: '  ' }))).toThrow(
+      ValidationError,
+    );
+    try {
+      validateComponent(validComponent({ code: '' }));
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toBe('code');
+    }
+  });
+
+  it('throws ValidationError when name is empty', () => {
+    expect(() => validateComponent(validComponent({ name: '' }))).toThrow(
+      ValidationError,
+    );
+    expect(() => validateComponent(validComponent({ name: '  ' }))).toThrow(
+      ValidationError,
+    );
+    try {
+      validateComponent(validComponent({ name: '' }));
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toBe('name');
+    }
+  });
+
+  it('throws ValidationError when lengthMm is zero', () => {
+    expect(() =>
+      validateComponent(
+        validComponent({
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 0,
+            widthMm: 296,
+            thicknessMm: 18,
+          },
+        }),
+      ),
+    ).toThrow(ValidationError);
+    try {
+      validateComponent(
+        validComponent({
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 0,
+            widthMm: 296,
+            thicknessMm: 18,
+          },
+        }),
+      );
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toMatch(/lengthMm/i);
+    }
+  });
+
+  it('throws ValidationError when widthMm is zero', () => {
+    expect(() =>
+      validateComponent(
+        validComponent({
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 717,
+            widthMm: 0,
+            thicknessMm: 18,
+          },
+        }),
+      ),
+    ).toThrow(ValidationError);
+    try {
+      validateComponent(
+        validComponent({
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 717,
+            widthMm: 0,
+            thicknessMm: 18,
+          },
+        }),
+      );
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toMatch(/widthMm/i);
+    }
+  });
+
+  it('throws ValidationError when thicknessMm is zero', () => {
+    expect(() =>
+      validateComponent(
+        validComponent({
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 717,
+            widthMm: 296,
+            thicknessMm: 0,
+          },
+        }),
+      ),
+    ).toThrow(ValidationError);
+    try {
+      validateComponent(
+        validComponent({
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 717,
+            widthMm: 296,
+            thicknessMm: 0,
+          },
+        }),
+      );
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toMatch(/thicknessMm/i);
+    }
+  });
+
+  it('throws ValidationError when optionRoles is empty', () => {
+    expect(() =>
+      validateComponent(validComponent({ optionRoles: [] })),
+    ).toThrow(ValidationError);
+    try {
+      validateComponent(validComponent({ optionRoles: [] }));
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toBe('optionRoles');
+    }
+  });
+
+  it('throws ValidationError when defaultEdges has fewer than 4', () => {
+    expect(() =>
+      validateComponent(
+        validComponent({
+          defaultEdges: [
+            { side: 'L1', enabled: true },
+            { side: 'L2', enabled: true },
+          ],
+        }),
+      ),
+    ).toThrow(ValidationError);
+    try {
+      validateComponent(
+        validComponent({
+          defaultEdges: [
+            { side: 'L1', enabled: true },
+            { side: 'L2', enabled: true },
+          ],
+        }),
+      );
+    } catch (e) {
+      const err = e as ValidationError;
+      expect(err.context?.field).toBe('edges');
+    }
   });
 });
 
@@ -1017,8 +1205,9 @@ describe('golden: Plantilla_Muebles.xlsx', () => {
       plantillaCatalogWithModules,
     );
 
-    const puerta = bom.boardParts.find((p) => p.code === 'MOD-GAB-01-P08');
-    const costado = bom.boardParts.find((p) => p.code === 'MOD-GAB-01-P01');
+    // Pieces come from expanded components; find by description (component name).
+    const puerta = bom.boardParts.find((p) => p.description === 'Puerta Gabinete');
+    const costado = bom.boardParts.find((p) => p.description === 'Costado Gabinete');
     const bisagra = bom.hardwareLines.find((h) => h.id === 'gab-h01');
 
     expect(costado?.materialId).toBe(IDS.matArauco);
@@ -1088,7 +1277,12 @@ describe('generatePieceLabels (F046 / #96)', () => {
       gabOnlyProject,
       plantillaCatalogWithModules,
     );
-    expect(labels).toHaveLength(modGab01.boardParts.length);
+    const expectedCount = resolveBom(
+      modGab01,
+      plantillaChoices,
+      plantillaCatalogWithModules,
+    ).boardParts.length;
+    expect(labels).toHaveLength(expectedCount);
     for (const label of labels) {
       expect(label.description.toLowerCase()).not.toContain('bisagra');
       expect(label.materialName.length).toBeGreaterThan(0);
@@ -1111,7 +1305,8 @@ describe('generatePieceLabels (F046 / #96)', () => {
       },
       plantillaCatalogWithModules,
     );
-    const costado = labels.find((l) => l.description === 'Costado Derecho');
+    const costado = labels.find((l) => l.description === 'Costado Gabinete');
+    // component quantity 1 × item quantity 2 = 2
     expect(costado?.quantity).toBe(2);
   });
 
@@ -1181,17 +1376,22 @@ describe('generateCutRows', () => {
     };
 
     const rows = generateCutRows(project, plantillaCatalogWithModules);
-    const costado = rows.find((r) => r.partName === 'Costado Derecho');
+    const costado = rows.find((r) => r.partName === 'Costado Gabinete');
     // part.quantity = 1 × item.quantity = 3
     expect(costado?.quantity).toBe(3);
-    expect(costado?.description).toContain('Costado Derecho');
+    expect(costado?.description).toContain('Costado Gabinete');
     expect(costado?.description).toContain('MOD-GAB-01');
     expect(costado?.labelRef).toBeTruthy();
   });
 
   it('EXP-05: never includes hardware lines', () => {
     const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
-    expect(rows).toHaveLength(modGab01.boardParts.length);
+    const expectedCount = resolveBom(
+      modGab01,
+      plantillaChoices,
+      plantillaCatalogWithModules,
+    ).boardParts.length;
+    expect(rows).toHaveLength(expectedCount);
     for (const row of rows) {
       expect(row.description.toLowerCase()).not.toContain('bisagra');
       expect(row.description.toLowerCase()).not.toContain('jaladera');
@@ -1215,26 +1415,30 @@ describe('generateCutRows', () => {
     expect(cajPuertaIdx).toBeGreaterThanOrEqual(0);
     expect(gabPuertaIdx).toBeGreaterThan(cajPuertaIdx);
 
-    // Within one module: part codes P01..P08
+    // Within one module: all expanded component instances are present. Component
+    // instances have no part code, so internal order is by description/partId —
+    // we assert the multiset of part names rather than a fixed order.
     const gabOnly = generateCutRows(
       gabOnlyProject,
       plantillaCatalogWithModules,
     );
-    expect(gabOnly.map((r) => r.partName)).toEqual([
-      'Costado Derecho',
-      'Costado Izquierdo',
-      'Respaldo Gabinete',
-      'Piso Gabinete',
-      'Entrepano Gabinete',
-      'Manguete Frontal',
-      'Manguete Posterior',
-      'Puerta Gabinete',
-    ]);
+    expect([...gabOnly.map((r) => r.partName)].sort()).toEqual(
+      [
+        'Costado Gabinete',
+        'Costado Gabinete',
+        'Respaldo Gabinete',
+        'Piso Gabinete',
+        'Manguete',
+        'Manguete',
+        'Puerta Gabinete',
+        'Entrepaño Gabinete',
+      ].sort(),
+    );
   });
 
   it('maps material name, grain and edge flags from resolved BOM', () => {
     const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
-    const costado = rows.find((r) => r.partName === 'Costado Derecho');
+    const costado = rows.find((r) => r.partName === 'Costado Gabinete');
     const puerta = rows.find((r) => r.partName === 'Puerta Gabinete');
     const respaldo = rows.find((r) => r.partName === 'Respaldo Gabinete');
 
@@ -1270,7 +1474,7 @@ describe('generateCutRows', () => {
       id: 'mod-hw-only',
       code: 'MOD-HW',
       name: 'Hardware only',
-      boardParts: [],
+      // No structureId → no board parts produced; hardware-only module.
       hardwareLines: [
         {
           id: 'h1',
@@ -1588,43 +1792,11 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       { id: 'pr-300', name: 'Preset 300', width: 300, height: 720, depth: 560 },
       { id: 'pr-600', name: 'Preset 600', width: 600, height: 720, depth: 560 },
     ],
-    boardParts: [
-      {
-        id: 'bp-costado',
-        code: 'P01',
-        description: 'Costado Lateral',
-        quantity: 2,
-        lengthMm: 720,
-        widthMm: 560,
-        edges: testEdges,
-        optionRole: 'board_base',
-        lengthFormula: 'H',
-        widthFormula: 'D',
-      },
-      {
-        id: 'bp-base',
-        code: 'P02',
-        description: 'Base Estructura',
-        quantity: 1,
-        lengthMm: 464, // Default (500 - 36)
-        widthMm: 560,
-        edges: testEdges,
-        optionRole: 'board_base',
-        lengthFormula: 'W - 36',
-        widthFormula: 'D',
-      },
-      {
-        id: 'bp-entrepano',
-        code: 'P03',
-        description: 'Entrepaño Regulable',
-        quantity: 1,
-        lengthMm: 462, // Default (500 - 36 - 2)
-        widthMm: 550, // Default (560 - 10)
-        edges: testEdges,
-        optionRole: 'board_base',
-        lengthFormula: 'W - 36 - 2',
-        widthFormula: 'D - 10',
-      },
+    // Structures compose Component instances (F053); parts come from the
+    // referenced components, expanded by resolveComposedModule.
+    components: [
+      { componentId: 'comp-costado', quantity: 2 },
+      { componentId: 'comp-base', quantity: 1 },
     ],
   };
 
@@ -1659,59 +1831,50 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
   });
 
   describe('resolveStructure', () => {
-    it('resolves parts correctly for a valid preset (300)', () => {
+    it('accepts a valid preset dimension and returns no own board parts', () => {
+      // Structures contribute no board parts of their own since F053;
+      // pieces come from their component instances (resolveComposedModule).
       const parts = resolveStructure(mockStructure, { width: 300, height: 720, depth: 560 });
-      expect(parts).toHaveLength(3);
-
-      const lateral = parts.find((p) => p.id === 'bp-costado')!;
-      expect(lateral.lengthMm).toBe(720); // H
-      expect(lateral.widthMm).toBe(560);  // D
-
-      const base = parts.find((p) => p.id === 'bp-base')!;
-      expect(base.lengthMm).toBe(264); // 300 - 36
-
-      const entrepano = parts.find((p) => p.id === 'bp-entrepano')!;
-      expect(entrepano.lengthMm).toBe(262); // 300 - 36 - 2
-      expect(entrepano.widthMm).toBe(550);  // 560 - 10
+      expect(parts).toHaveLength(0);
     });
 
-    it('resolves parts correctly for a valid preset (600)', () => {
+    it('accepts a valid preset (600)', () => {
       const parts = resolveStructure(mockStructure, { width: 600, height: 720, depth: 560 });
-
-      const base = parts.find((p) => p.id === 'bp-base')!;
-      expect(base.lengthMm).toBe(564); // 600 - 36
-
-      const entrepano = parts.find((p) => p.id === 'bp-entrepano')!;
-      expect(entrepano.lengthMm).toBe(562); // 600 - 36 - 2
+      expect(parts).toHaveLength(0);
     });
 
-    it('rejects dimensions not in the preset list', () => {
-      expect(() =>
-        resolveStructure(mockStructure, { width: 400, height: 720, depth: 560 })
-      ).toThrow(ValidationError);
-      expect(() =>
-        resolveStructure(mockStructure, { width: 400, height: 720, depth: 560 })
-      ).toThrow(/no están permitidas/i);
+    it('accepts any positive dims (commercial allowlist is on Module)', () => {
+      const parts = resolveStructure(mockStructure, {
+        width: 400,
+        height: 720,
+        depth: 560,
+      });
+      expect(parts).toHaveLength(0);
     });
 
-    it('validates fallback to externalDims if presets list is empty', () => {
+    it('rejects non-positive dimensions', () => {
+      expect(() =>
+        resolveStructure(mockStructure, { width: 0, height: 720, depth: 560 }),
+      ).toThrow(/mayores a 0/i);
+    });
+
+    it('does not require structure.presets for stretch validation', () => {
       const structNoPresets: Structure = {
         ...mockStructure,
         presets: [],
       };
-      // Matches default externalDims exactly -> should resolve
-      const parts = resolveStructure(structNoPresets, { width: 500, height: 720, depth: 560 });
-      expect(parts[1]!.lengthMm).toBe(464);
-
-      // Differs from default -> should throw
-      expect(() =>
-        resolveStructure(structNoPresets, { width: 600, height: 720, depth: 560 })
-      ).toThrow(/no coinciden con las medidas por defecto/i);
+      expect(
+        resolveStructure(structNoPresets, {
+          width: 600,
+          height: 720,
+          depth: 560,
+        }),
+      ).toHaveLength(0);
     });
   });
 
-  describe('validateStructure preset & formulas checks', () => {
-    it('passes validation for valid structure with formulas and presets', () => {
+  describe('validateStructure preset checks', () => {
+    it('passes validation for valid structure with components and presets', () => {
       expect(() => validateStructure(mockStructure)).not.toThrow();
     });
 
@@ -1723,20 +1886,785 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(() => validateStructure(badStruct)).toThrow(ValidationError);
       expect(() => validateStructure(badStruct)).toThrow(/dimensiones del preset/i);
     });
+  });
+});
 
-    it('rejects board part with invalid characters in lengthFormula', () => {
-      const badStruct: Structure = {
-        ...mockStructure,
-        boardParts: [
-          {
-            ...mockStructure.boardParts[0]!,
-            lengthFormula: 'H + hello',
-          },
-        ],
-      };
-      expect(() => validateStructure(badStruct)).toThrow(ValidationError);
-      expect(() => validateStructure(badStruct)).toThrow(/caracteres no válidos/i);
+// --- Reusable component fixtures (F049 / H07) ---
+
+const MOCK_TEST_EDGES: readonly EdgeAssignment[] = [
+  { side: 'L1', enabled: false },
+  { side: 'L2', enabled: false },
+  { side: 'W1', enabled: false },
+  { side: 'W2', enabled: false },
+] as const;
+
+const MOCK_STRUCTURE: Structure = {
+  id: 'struct-under-test',
+  code: 'EST-TEST',
+  name: 'Estructura Test Presets',
+  externalDims: { width: 500, height: 720, depth: 560 },
+  presets: [
+    { id: 'pr-300', name: 'Preset 300', width: 300, height: 720, depth: 560 },
+    { id: 'pr-600', name: 'Preset 600', width: 600, height: 720, depth: 560 },
+  ],
+  // Structures compose Component instances (F053); the referenced components
+  // are expanded into board parts by resolveComposedModule.
+  components: [
+    { componentId: 'comp-costado', quantity: 2 },
+    { componentId: 'comp-base', quantity: 1 },
+  ],
+};
+
+const mockComponentCostado: Component = {
+  id: 'comp-costado',
+  code: 'COM-COS-01',
+  name: 'Costado Lateral',
+  placement: 'lateral_izquierdo' as ComponentPlacement,
+  geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+  defaultEdges: MOCK_TEST_EDGES,
+  optionRoles: ['board_base'],
+  active: true,
+};
+
+const mockComponentBase: Component = {
+  id: 'comp-base',
+  code: 'COM-BAS-01',
+  name: 'Base Estructura',
+  placement: 'base' as ComponentPlacement,
+  geometry: { kind: 'rectangular_board', lengthMm: 464, widthMm: 560, thicknessMm: 18 },
+  defaultEdges: MOCK_TEST_EDGES,
+  optionRoles: ['board_base'],
+  active: true,
+};
+
+const ALL_EDGES_PUERTA: readonly EdgeAssignment[] = [
+  { side: 'L1', enabled: true },
+  { side: 'L2', enabled: true },
+  { side: 'W1', enabled: true },
+  { side: 'W2', enabled: true },
+] as const;
+
+const EDGES_ENTREPANO: readonly EdgeAssignment[] = [
+  { side: 'L1', enabled: false },
+  { side: 'L2', enabled: false },
+  { side: 'W1', enabled: false },
+  { side: 'W2', enabled: true },
+] as const;
+
+const mockComponentPuerta: Component = {
+  id: 'comp-puerta',
+  code: 'COM-PUE-01',
+  name: 'Puerta',
+  placement: 'puerta' as ComponentPlacement,
+  geometry: { kind: 'rectangular_board', lengthMm: 717, widthMm: 296, thicknessMm: 18 },
+  defaultEdges: ALL_EDGES_PUERTA,
+  optionRoles: ['FRENTE'],
+  active: true,
+};
+
+const mockComponentEntrepano: Component = {
+  id: 'comp-entrepano',
+  code: 'COM-ENT-01',
+  name: 'Entrepaño Regulable',
+  placement: 'interno' as ComponentPlacement,
+  geometry: { kind: 'rectangular_board', lengthMm: 462, widthMm: 550, thicknessMm: 15 },
+  defaultEdges: EDGES_ENTREPANO,
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+function catalogWithComponents(): Catalog {
+  return {
+    ...miniCatalog(),
+    optionGroups: [
+      ...miniCatalog().optionGroups,
+      {
+        id: 'og-frente',
+        code: 'FRENTE',
+        name: 'Frente',
+        kind: 'board',
+        required: true,
+        optionIds: ['mat-a'],
+      },
+    ],
+  };
+}
+
+function miniComposedModule(overrides: Partial<Module> = {}): Module {
+  return {
+    id: 'mod-comp-test',
+    code: 'MOD-COMP-TEST',
+    name: 'Composed Module Test',
+    structureId: 'struct-under-test',
+    externalDims: { width: 600, height: 720, depth: 560 },
+    components: [
+      { componentId: 'comp-puerta', quantity: 1 },
+      { componentId: 'comp-entrepano', quantity: 2 },
+    ],
+    hardwareLines: [],
+    ...overrides,
+  };
+}
+
+describe('resolveComposedModule', () => {
+  it('returns correct board parts for structure components + Puerta×1 + Entrepaño×2', () => {
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [
+        mockComponentPuerta,
+        mockComponentEntrepano,
+        mockComponentCostado,
+        mockComponentBase,
+      ],
+    };
+    const dims = { width: 600, height: 720, depth: 560 };
+
+    const result = resolveComposedModule({
+      structure: MOCK_STRUCTURE,
+      componentInstances: [
+        { componentId: 'comp-puerta', quantity: 1 },
+        { componentId: 'comp-entrepano', quantity: 2 },
+      ],
+      catalog,
+      dims,
     });
+
+    // Structure component instances: costado×2 + base×1 = 3 expanded parts
+    // Module component instances: puerta×1 + entrepaño×2 = 3 expanded parts
+    // Total: 6 board parts
+    expect(result.boardParts).toHaveLength(6);
+    expect(result.hardwareLines).toHaveLength(0);
+
+    // Structure component parts expanded correctly (costado quantity 2)
+    const costados = result.boardParts.filter((p) =>
+      p.id.startsWith('comp-costado-copy'),
+    );
+    expect(costados).toHaveLength(2);
+    expect(costados[0]!.lengthMm).toBe(720);
+    expect(costados[0]!.widthMm).toBe(560);
+    expect(costados[0]!.quantity).toBe(1);
+
+    const bases = result.boardParts.filter((p) =>
+      p.id.startsWith('comp-base-copy'),
+    );
+    expect(bases).toHaveLength(1);
+    expect(bases[0]!.lengthMm).toBe(464);
+    expect(bases[0]!.widthMm).toBe(560);
+
+    // Puerta ×1
+    const puerta = result.boardParts.find(
+      (p) => p.id === 'comp-puerta-copy-0',
+    )!;
+    expect(puerta.description).toBe('Puerta');
+    expect(puerta.lengthMm).toBe(717);
+    expect(puerta.widthMm).toBe(296);
+    expect(puerta.quantity).toBe(1);
+    expect(puerta.optionRole).toBe('FRENTE');
+    expect(puerta.edges).toEqual(ALL_EDGES_PUERTA);
+
+    // Entrepaño ×2
+    const ent1 = result.boardParts.find(
+      (p) => p.id === 'comp-entrepano-copy-0',
+    )!;
+    const ent2 = result.boardParts.find(
+      (p) => p.id === 'comp-entrepano-copy-1',
+    )!;
+    expect(ent1).toBeDefined();
+    expect(ent2).toBeDefined();
+    expect(ent1.lengthMm).toBe(462);
+    expect(ent1.widthMm).toBe(550);
+    expect(ent1.optionRole).toBe('INTERIOR');
+    expect(ent1.edges).toEqual(EDGES_ENTREPANO);
+    expect(ent2.lengthMm).toBe(462);
+    expect(ent2.optionRole).toBe('INTERIOR');
+    expect(ent2.id).not.toBe(ent1.id);
+  });
+
+  it('uses instance edge overrides when provided', () => {
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [
+        mockComponentPuerta,
+        mockComponentCostado,
+        mockComponentBase,
+      ],
+    };
+    const overridesEdges: readonly EdgeAssignment[] = [
+      { side: 'L1', enabled: true },
+      { side: 'L2', enabled: false },
+      { side: 'W1', enabled: false },
+      { side: 'W2', enabled: false },
+    ];
+
+    const result = resolveComposedModule({
+      structure: MOCK_STRUCTURE,
+      componentInstances: [
+        {
+          componentId: 'comp-puerta',
+          quantity: 1,
+          overrides: { edges: overridesEdges },
+        },
+      ],
+      catalog,
+      dims: { width: 600, height: 720, depth: 560 },
+    });
+
+    const puerta = result.boardParts.find(
+      (p) => p.id === 'comp-puerta-copy-0',
+    )!;
+    expect(puerta.edges).toEqual(overridesEdges);
+  });
+
+  it('throws ResolutionError for unknown componentId', () => {
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [mockComponentPuerta],
+    };
+
+    expect(() =>
+      resolveComposedModule({
+        structure: MOCK_STRUCTURE,
+        componentInstances: [{ componentId: 'comp-unknown', quantity: 1 }],
+        catalog,
+        dims: { width: 600, height: 720, depth: 560 },
+      }),
+    ).toThrow(ResolutionError);
+  });
+});
+
+describe('resolveBom composed module dispatch', () => {
+  it('legacy module (no structureId) resolves exactly as before', () => {
+    const bom = resolveBom(modGab01, plantillaChoices, plantillaCatalogWithModules);
+
+    // Assert exact same output as pre-change golden behavior
+    // Pieces come from expanded components; find by description (component name).
+    const puerta = bom.boardParts.find((p) => p.description === 'Puerta Gabinete');
+    const costado = bom.boardParts.find((p) => p.description === 'Costado Gabinete');
+    const bisagra = bom.hardwareLines.find((h) => h.id === 'gab-h01');
+
+    expect(costado?.materialId).toBe(IDS.matArauco);
+    expect(costado?.edgeBandId).toBe(IDS.edgeArauco);
+    expect(puerta?.materialId).toBe(IDS.matMaderado);
+    expect(puerta?.edgeBandId).toBe(IDS.edgeMaderado);
+    expect(bisagra?.hardwareId).toBe(IDS.hwBisagra);
+  });
+
+  it('throws ResolutionError for unknown structureId', () => {
+    const module = miniComposedModule({
+      structureId: 'struct-unknown',
+    });
+    const catalog: Catalog = {
+      ...catalogWithComponents(),
+      structures: [],
+      components: [mockComponentPuerta, mockComponentEntrepano],
+      modules: [module],
+    };
+
+    expect(() =>
+      resolveBom(module, { FRENTE: 'mat-a', INTERIOR: 'mat-a' }, catalog),
+    ).toThrow(ResolutionError);
+  });
+
+  it('throws ResolutionError when composed module has no externalDims', () => {
+    const module = miniComposedModule({
+      externalDims: undefined,
+    });
+    const catalog: Catalog = {
+      ...catalogWithComponents(),
+      structures: [MOCK_STRUCTURE],
+      components: [mockComponentPuerta, mockComponentEntrepano],
+      modules: [module],
+    };
+
+    expect(() =>
+      resolveBom(module, { FRENTE: 'mat-a', INTERIOR: 'mat-a' }, catalog),
+    ).toThrow(ResolutionError);
+  });
+
+  it('resolves composed module through resolveBom with correct part count and materials', () => {
+    const catalog: Catalog = {
+      ...catalogWithComponents(),
+      structures: [MOCK_STRUCTURE],
+      components: [
+        mockComponentPuerta,
+        mockComponentEntrepano,
+        mockComponentCostado,
+        mockComponentBase,
+      ],
+    };
+    const module = miniComposedModule();
+    const fullCatalog: Catalog = { ...catalog, modules: [module] };
+
+    const bom = resolveBom(
+      module,
+      { board_base: 'mat-a', FRENTE: 'mat-a', INTERIOR: 'mat-a' },
+      fullCatalog,
+    );
+
+    // Structure components: costado×2 + base×1 = 3 expanded parts
+    // Module components: puerta×1 + entrepaño×2 = 3 expanded parts
+    // Total: 6 board parts
+    expect(bom.boardParts).toHaveLength(6);
+    expect(bom.hardwareLines).toHaveLength(0);
+
+    // Verify structure component parts have materials
+    const costados = bom.boardParts.filter((p) =>
+      p.id.startsWith('comp-costado-copy'),
+    );
+    expect(costados).toHaveLength(2);
+    for (const c of costados) {
+      expect(c.materialId).toBe('mat-a');
+      expect(c.optionRole).toBe('board_base');
+    }
+
+    // Verify module component parts have materials
+    const puerta = bom.boardParts.find(
+      (p) => p.id === 'comp-puerta-copy-0',
+    )!;
+    expect(puerta.materialId).toBe('mat-a');
+    expect(puerta.optionRole).toBe('FRENTE');
+    expect(puerta.grain).toBe(0);
+
+    const entrepanos = bom.boardParts.filter((p) =>
+      p.id.startsWith('comp-entrepano-copy'),
+    );
+    expect(entrepanos).toHaveLength(2);
+    for (const e of entrepanos) {
+      expect(e.materialId).toBe('mat-a');
+      expect(e.optionRole).toBe('INTERIOR');
+    }
+  });
+});
+
+describe('golden: composed module cost (F049 / H07)', () => {
+  it('mixed BOM project with legacy + composed modules resolves all correctly', () => {
+    // Build a catalog with hardware modGab01 needs (must match fixture IDs)
+    const catalog: Catalog = {
+      ...catalogWithComponents(),
+      hardware: [
+        {
+          id: 'hw-bisagra-cierre-lento',
+          code: 'HW-BIS-CL',
+          name: 'Bisagra Cierre Lento',
+          unit: 'piece',
+          costPerUnit: 35,
+          active: true,
+        },
+        {
+          id: 'hw-jaladera-acero',
+          code: 'HW-JAL-INOX',
+          name: 'Jaladera Acero Inox',
+          unit: 'piece',
+          costPerUnit: 45,
+          active: true,
+        },
+        {
+          id: 'hw-pata-regulable',
+          code: 'HW-PATA-REG',
+          name: 'Pata Regulable Plastica',
+          unit: 'piece',
+          costPerUnit: 15,
+          active: true,
+        },
+        {
+          id: 'hw-tornillo-4x50',
+          code: 'HW-TOR-4X50',
+          name: 'Tornillo 4x50 mm',
+          unit: 'piece',
+          costPerUnit: 0.5,
+          active: true,
+        },
+        {
+          id: 'hw-soporte-entrepano',
+          code: 'HW-SOP-ENT',
+          name: 'Soporte de Entrepaño',
+          unit: 'piece',
+          costPerUnit: 2,
+          active: true,
+        },
+      ],
+      optionGroups: [
+        ...catalogWithComponents().optionGroups,
+        {
+          id: 'og-bisagra-test',
+          code: 'BISAGRA',
+          name: 'Bisagra',
+          kind: 'hardware',
+          required: true,
+          optionIds: ['hw-bisagra-cierre-lento'],
+        },
+      ],
+      structures: [MOCK_STRUCTURE],
+      components: [
+        mockComponentPuerta,
+        mockComponentEntrepano,
+        mockComponentCostado,
+        mockComponentBase,
+      ],
+    };
+    const composedMod = miniComposedModule();
+    const fullCatalog: Catalog = {
+      ...catalog,
+      modules: [modGab01, composedMod],
+    };
+
+    const opts = {
+      FRENTE: 'mat-a',
+      INTERIOR: 'mat-a',
+      board_base: 'mat-a',
+      BISAGRA: 'hw-bisagra-cierre-lento',
+    };
+
+    // modGab01 is now itself a composed module (struct-gab-01 + components).
+    // It resolves against the plantilla catalog that carries its structure.
+    const gabBom = resolveBom(modGab01, plantillaChoices, plantillaCatalogWithModules);
+    expect(gabBom.boardParts.length).toBeGreaterThan(0);
+
+    const puertaGab = gabBom.boardParts.find(
+      (p) => p.description === 'Puerta Gabinete',
+    );
+    expect(puertaGab?.materialId).toBe(IDS.matMaderado);
+    expect(puertaGab?.optionRole).toBe('FRENTE');
+
+    const costadoGab = gabBom.boardParts.find(
+      (p) => p.description === 'Costado Gabinete',
+    );
+    expect(costadoGab?.materialId).toBe(IDS.matArauco);
+    expect(costadoGab?.optionRole).toBe('INTERIOR');
+
+    // Mock composed module resolves with correct structure + component parts
+    const composedBom = resolveBom(composedMod, opts, fullCatalog);
+    // Structure components: costado×2 + base×1 = 3 expanded parts
+    // Module components: puerta×1 + entrepaño×2 = 3 expanded parts
+    // Total: 6 board parts
+    expect(composedBom.boardParts).toHaveLength(6);
+
+    // Composed module has no hardware lines (deferred from MVP)
+    expect(composedBom.hardwareLines).toHaveLength(0);
+
+    // Both composed modules resolve without error
+    expect(gabBom.boardParts.length).toBe(8);
+    expect(composedBom.boardParts.length).toBe(6);
+  });
+
+  it('seed composed module resolves through resolveBom with correct part count', () => {
+    const bom = resolveBom(
+      seedComposedModule,
+      plantillaChoices,
+      plantillaCatalogWithModules,
+      'mod-preset-600',
+    );
+
+    // Structure components: costado×2 + base×1 = 3 expanded parts
+    // Module components: puerta×1 + entrepaño×2 = 3 expanded parts
+    // Total: 6 board parts
+    expect(bom.boardParts).toHaveLength(6);
+
+    // Verify module component parts resolved
+    const puerta = bom.boardParts.find(
+      (p) => p.id === 'seed-comp-puerta-copy-0',
+    );
+    expect(puerta).toBeDefined();
+    expect(puerta!.optionRole).toBe('FRENTE');
+
+    const entrepanos = bom.boardParts.filter((p) =>
+      p.id.startsWith('seed-comp-entrepano-copy'),
+    );
+    expect(entrepanos).toHaveLength(2);
+
+    // Verify structure component parts resolved
+    const costados = bom.boardParts.filter((p) =>
+      p.id.startsWith('seed-comp-costado-copy'),
+    );
+    expect(costados).toHaveLength(2);
+    expect(costados[0]!.optionRole).toBe('INTERIOR');
+  });
+
+  it('composed module through calcProjectBreakdown produces expected cost', () => {
+    const catalog: Catalog = {
+      ...catalogWithComponents(),
+      structures: [MOCK_STRUCTURE],
+      components: [
+        mockComponentPuerta,
+        mockComponentEntrepano,
+        mockComponentCostado,
+        mockComponentBase,
+      ],
+    };
+    const module = miniComposedModule();
+    const fullCatalog: Catalog = { ...catalog, modules: [module] };
+
+    const project: Project = {
+      id: 'proj-comp-golden',
+      name: 'Composed Module Golden',
+      customerId: 'C',
+      currency: 'MXN',
+      marginFactor: 1.0,
+      laborFixedCost: 0,
+      status: 'draft',
+      items: [
+        {
+          id: 'item-comp',
+          moduleId: module.id,
+          quantity: 1,
+          optionChoices: {
+            board_base: 'mat-a',
+            FRENTE: 'mat-a',
+            INTERIOR: 'mat-a',
+          },
+        },
+      ],
+      createdAt: '2026-07-15T00:00:00.000Z',
+      updatedAt: '2026-07-15T00:00:00.000Z',
+    };
+
+    const breakdown = calcProjectBreakdown(project, fullCatalog);
+
+    // All parts use mat-a which has costPerM2=100. Component geometry is FIXED
+    // in this phase (parametric formulas land in Fase 3).
+    // Structure components: costado×2 (720×560), base×1 (464×560)
+    //   costado area = 2 * (720*560)/1e6 = 0.8064 m2
+    //   base area    = 1 * (464*560)/1e6 = 0.25984 m2
+    // Module components: puerta×1 (717×296), entrepaño×2 (462×550)
+    //   puerta area  = 1 * (717*296)/1e6 = 0.212232 m2
+    //   entrepanos   = 2 * (462*550)/1e6 = 0.5082 m2
+    //   Total = 1.786672 m2 * 100 = 178.6672
+    expect(breakdown.materialsCost).toBeCloseTo(178.6672, 2);
+    expect(breakdown.directCost).toBeGreaterThan(0);
+
+    // No hardware on any parts
+    expect(breakdown.hardwareTotal).toBe(0);
+
+    // Edge cost: costado/base have no edges; Puerta (all 4 edges, costPerMl=10)
+    // plus 2× Entrepaño (W2 only, 462×550).
+    // Puerta: (2×717 + 2×296)/1000 × 10 = 20.26
+    // Entrepaño×2: 2 × (550/1000) × 10 = 11.0
+    expect(breakdown.edgeTotal).toBeCloseTo(31.26, 2);
+
+    // No labor
+    expect(breakdown.laborModular).toBe(0);
+    expect(breakdown.laborFixedCost).toBe(0);
+
+    // With marginFactor=1.0, salePrice = directCost
+    expect(breakdown.salePrice).toBeCloseTo(breakdown.directCost, 6);
+  });
+});
+
+
+describe('resolveBom with Module measure presets (H09 / #104)', () => {
+  const parametricBase: Component = {
+    id: 'comp-base-param',
+    code: 'COM-BAS-P',
+    name: 'Base paramétrica',
+    placement: 'base',
+    geometry: {
+      kind: 'rectangular_board',
+      lengthMm: 464,
+      widthMm: 560,
+      thicknessMm: 18,
+      lengthFormula: 'W-36',
+      widthFormula: 'D',
+    },
+    defaultEdges: MOCK_TEST_EDGES,
+    optionRoles: ['board_base'],
+    active: true,
+  };
+
+  const structure: Structure = {
+    id: 'st-param',
+    code: 'EST-PARAM',
+    name: 'Cuerpo paramétrico',
+    externalDims: { width: 500, height: 720, depth: 560 },
+    components: [{ componentId: 'comp-base-param', quantity: 1 }],
+  };
+
+  const commercialPresets = [
+    { id: 'p300', name: '300', width: 300, height: 720, depth: 560 },
+    { id: 'p600', name: '600', width: 600, height: 720, depth: 560 },
+  ] as const;
+
+  function catalogFor(module: Module): Catalog {
+    return {
+      ...catalogWithComponents(),
+      structures: [structure],
+      components: [parametricBase],
+      modules: [module],
+    };
+  }
+
+  it('same furniture template, two widths → two different despieces', () => {
+    const module: Module = {
+      id: 'mod-h09',
+      code: 'MOD-H09',
+      name: 'Gabinete H09',
+      structureId: 'st-param',
+      presets: [...commercialPresets],
+      hardwareLines: [],
+    };
+    const catalog = catalogFor(module);
+    const choices = { board_base: 'mat-a' };
+
+    const bom300 = resolveBom(module, choices, catalog, 'p300');
+    const bom600 = resolveBom(module, choices, catalog, 'p600');
+
+    expect(bom300.boardParts[0]!.lengthMm).toBe(264);
+    expect(bom600.boardParts[0]!.lengthMm).toBe(564);
+  });
+
+  it('rejects invalid measure preset on the module', () => {
+    const module: Module = {
+      id: 'mod-h09',
+      code: 'MOD-H09',
+      name: 'Gabinete H09',
+      structureId: 'st-param',
+      presets: [...commercialPresets],
+      hardwareLines: [],
+    };
+    expect(() =>
+      resolveBom(module, { board_base: 'mat-a' }, catalogFor(module), 'p999'),
+    ).toThrow(/no es válido/i);
+  });
+
+  it('two quote lines with different presets yield different sale prices', () => {
+    const module: Module = {
+      id: 'mod-h09',
+      code: 'MOD-H09',
+      name: 'Gabinete H09',
+      structureId: 'st-param',
+      presets: [...commercialPresets],
+      hardwareLines: [],
+      baseLaborCost: 0,
+    };
+    const catalog = catalogFor(module);
+    const baseProject = {
+      id: 'prj',
+      name: 'P',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft' as const,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const p300 = {
+      ...baseProject,
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'mod-h09',
+          quantity: 1,
+          optionChoices: { board_base: 'mat-a' },
+          measurePresetId: 'p300',
+        },
+      ],
+    };
+    const p600 = {
+      ...baseProject,
+      id: 'prj2',
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'mod-h09',
+          quantity: 1,
+          optionChoices: { board_base: 'mat-a' },
+          measurePresetId: 'p600',
+        },
+      ],
+    };
+    const price300 = calcProjectBreakdown(p300, catalog).salePrice;
+    const price600 = calcProjectBreakdown(p600, catalog).salePrice;
+    expect(price600).toBeGreaterThan(price300);
+  });
+});
+
+describe('3D Component spatial positioning & CAD variables', () => {
+  it('evaluates parent vs component dimensions and index variable correctly in evaluatePartFormula', () => {
+    const dims = { W: 100, H: 20, D: 50, PW: 600, PH: 720, PD: 560, T: 18, i: 1 };
+    expect(evaluatePartFormula('PW - W', dims)).toBe(500);
+    expect(evaluatePartFormula('i * (PW - T)', dims)).toBe(582);
+    expect(evaluatePartFormula('PD - D', dims)).toBe(510);
+    expect(evaluatePartFormula('PH - H', dims)).toBe(700);
+    expect(evaluatePartFormula('T * 2', dims)).toBe(36);
+  });
+
+  it('resolves composed module with X, Y, Z coordinates and rotations', () => {
+    const compCostado: Component = {
+      id: 'c-costado',
+      code: 'C-COS',
+      name: 'Costado',
+      placement: 'lateral_izquierdo',
+      geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18, lengthFormula: 'PH', widthFormula: 'PD' },
+      defaultEdges: MOCK_TEST_EDGES,
+      optionRoles: ['board_base'],
+      active: true,
+      xFormula: 'i * (PW - T)',
+      yFormula: '0',
+      zFormula: '0',
+      rotateY: 90,
+    };
+
+    const compPiso: Component = {
+      id: 'c-piso',
+      code: 'C-PIS',
+      name: 'Piso',
+      placement: 'base',
+      geometry: { kind: 'rectangular_board', lengthMm: 560, widthMm: 464, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 2*T' },
+      defaultEdges: MOCK_TEST_EDGES,
+      optionRoles: ['board_base'],
+      active: true,
+      xFormula: 'T',
+      yFormula: '0',
+      zFormula: '0',
+    };
+
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [compCostado, compPiso],
+    };
+
+    const structure: Structure = {
+      id: 'st-3d',
+      code: 'EST-3D',
+      name: 'Estructura 3D',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      components: [
+        { componentId: 'c-costado', quantity: 2 },
+        { componentId: 'c-piso', quantity: 1 },
+      ],
+    };
+
+    const result = resolveComposedModule({
+      structure,
+      componentInstances: [],
+      catalog,
+      dims: { width: 600, height: 720, depth: 560 },
+      optionChoices: { board_base: 'mat-a' }, // mat-a has thicknessMm: 18
+    });
+
+    expect(result.boardParts).toHaveLength(3);
+
+    // Left costado (i = 0)
+    const cost1 = result.boardParts[0]!;
+    expect(cost1.x).toBe(0);
+    expect(cost1.y).toBe(0);
+    expect(cost1.z).toBe(0);
+    expect(cost1.rotateY).toBe(90);
+
+    // Right costado (i = 1)
+    const cost2 = result.boardParts[1]!;
+    expect(cost2.x).toBe(600 - 15); // PW - T
+    expect(cost2.y).toBe(0);
+    expect(cost2.z).toBe(0);
+    expect(cost2.rotateY).toBe(90);
+
+    // Piso
+    const piso = result.boardParts[2]!;
+    expect(piso.widthMm).toBe(600 - 2*15); // PW - 2*T = 570
+    expect(piso.lengthMm).toBe(560);
+    expect(piso.x).toBe(15); // T
+    expect(piso.y).toBe(0);
+    expect(piso.z).toBe(0);
   });
 });
 

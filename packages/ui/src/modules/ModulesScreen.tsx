@@ -15,11 +15,16 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  Component,
   Hardware,
   Module,
   ModuleCategory,
   OptionGroup,
   QuoteBreakdown,
+  Structure,
+  MaterialBoard,
+  EdgeBand,
+  Catalog,
 } from '@muebles/domain';
 import {
   UNCATEGORIZED_FILTER,
@@ -30,6 +35,7 @@ import {
   categoryPath,
   childrenOf,
   filterModulesByCategory,
+  resolveBom,
   type CategoryFilterId,
 } from '@muebles/domain';
 import {
@@ -42,9 +48,11 @@ import {
   SearchX,
   Settings2,
   Trash2,
+  Box,
 } from 'lucide-react';
 import { validateNonNegativeNumber, validateRequiredName } from '../catalogs/catalogHelpers';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
+import { COMPONENT_PLACEMENTS } from '../components';
 import {
   CatalogImage,
   EmptyState,
@@ -52,6 +60,7 @@ import {
   PageLoading,
   SearchInput,
   useDebouncedValue,
+  Part3DViewer,
 } from '../common';
 import '../catalogs/catalogs.css';
 import {
@@ -70,34 +79,42 @@ import {
   optionGroupsForHardware,
   suggestPartCode,
   validateModuleCode,
+  defaultOptionChoicesForModule,
   type BoardPartDraft,
   type CategoryDraft,
+  type ComponentInstanceDraft,
   type HardwareLineDraft,
   type ModuleDraft,
   type ModulePartGridField,
 } from './moduleHelpers';
+import { ModuleMeasureSection } from './components/ModuleMeasureSection';
 import './modules.css';
 
-export type { ModuleDraft, BoardPartDraft, HardwareLineDraft, CategoryDraft };
+export type { ModuleDraft, BoardPartDraft, HardwareLineDraft, CategoryDraft, ComponentInstanceDraft };
 
-type ModuleEditorTab = 'general' | 'parts' | 'hardware' | 'cost';
+type ModuleEditorTab = 'general' | 'composition' | 'hardware' | 'cost';
 
 const MODULE_EDITOR_TABS: readonly {
   readonly id: ModuleEditorTab;
   readonly label: string;
 }[] = [
   { id: 'general', label: 'General' },
-  { id: 'parts', label: 'Piezas' },
+  { id: 'composition', label: 'Composición' },
   { id: 'hardware', label: 'Herrajes' },
   { id: 'cost', label: 'Costo' },
 ];
 
 function tabForModuleValidationError(message: string): ModuleEditorTab {
   const m = message.toLocaleLowerCase('es-UY');
-  if (m.includes('pieza') || m.includes('tablero') || m.includes('largo') || m.includes('ancho de pieza')) {
-    return 'parts';
-  }
   if (m.includes('herraje')) return 'hardware';
+  if (
+    m.includes('estructura') ||
+    m.includes('componente') ||
+    m.includes('composición') ||
+    m.includes('preset')
+  ) {
+    return 'composition';
+  }
   return 'general';
 }
 
@@ -107,6 +124,8 @@ export interface ModulesScreenProps {
   readonly modules: readonly Module[];
   readonly optionGroups: readonly OptionGroup[];
   readonly hardware: readonly Hardware[];
+  readonly materials?: readonly MaterialBoard[];
+  readonly edges?: readonly EdgeBand[];
   /** Hierarchical categories (MOD-09). Default empty. */
   readonly categories?: readonly ModuleCategory[];
   readonly onCreate: (draft: ModuleDraft) => void;
@@ -144,6 +163,10 @@ export interface ModulesScreenProps {
   readonly openModuleId?: string | null;
   /** Notifies parent when detail selection changes (for URL sync). */
   readonly onSelectionChange?: (moduleId: string | null) => void;
+  /** Catalog structures for composed module picker. */
+  readonly structures?: readonly Structure[];
+  /** Catalog components for composed module adder. */
+  readonly catalogComponents?: readonly Component[];
   /** F035: hide ABM when false (read-only templates). */
   readonly canMutate?: boolean;
   /**
@@ -253,6 +276,10 @@ export function ModulesScreen({
   openModuleId = null,
   onSelectionChange,
   loading = false,
+  structures: propStructures = [],
+  catalogComponents: propCatalogComponents = [],
+  materials: propMaterials = [],
+  edges: propEdges = [],
   canMutate = true,
   onUploadImage,
   resolveImageUrl = (u) => u,
@@ -280,6 +307,68 @@ export function ModulesScreen({
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [editorTab, setEditorTab] =
     useState<ModuleEditorTab>('general');
+  const [addComponentOpen, setAddComponentOpen] = useState(false);
+  const [componentSearch, setComponentSearch] = useState('');
+  const debouncedCompSearch = useDebouncedValue(componentSearch);
+  const [newCompId, setNewCompId] = useState('');
+  const [newCompQty, setNewCompQty] = useState(1);
+  const [show3DModal, setShow3DModal] = useState(false);
+  const [viewerModule, setViewerModule] = useState<Module | null>(null);
+
+  const structures = propStructures;
+  const catalogComponents = propCatalogComponents;
+  const composedEnabled = draft.structureId !== '';
+
+  const resolved3DParts = useMemo(() => {
+    if (!viewerModule) return [];
+    try {
+      const catalog: Catalog = {
+        materials: propMaterials,
+        edges: propEdges,
+        hardware: hardware,
+        optionGroups: optionGroups,
+        modules: modules,
+        structures: propStructures,
+        components: propCatalogComponents,
+      };
+      const choices = defaultOptionChoicesForModule(
+        viewerModule,
+        optionGroups,
+        propCatalogComponents,
+        propStructures,
+      );
+      const bom = resolveBom(viewerModule, choices, catalog);
+      return bom.boardParts;
+    } catch (e) {
+      console.error('Error resolving 3D parts:', e);
+      return [];
+    }
+  }, [
+    viewerModule,
+    propMaterials,
+    propEdges,
+    hardware,
+    optionGroups,
+    modules,
+    propStructures,
+    propCatalogComponents,
+  ]);
+
+  const selectedStructure = useMemo(
+    () => structures.find((s) => s.id === draft.structureId) ?? null,
+    [structures, draft.structureId],
+  );
+
+  const filteredCatalogComponents = useMemo(() => {
+    const q = debouncedCompSearch.trim().toLocaleLowerCase('es-UY');
+    if (!q) return catalogComponents.filter((c) => c.active);
+    return catalogComponents.filter(
+      (c) =>
+        c.active &&
+        (`${c.code} ${c.name}`.toLocaleLowerCase('es-UY').includes(q) ||
+          c.optionRoles.some((r) => r.toLocaleLowerCase('es-UY').includes(q))),
+    );
+  }, [catalogComponents, debouncedCompSearch]);
 
   const boardRoles = useMemo(
     () => optionGroupsForBoardParts(optionGroups),
@@ -443,15 +532,6 @@ export function ModulesScreen({
     setSelectedId(null);
   };
 
-  const updatePart = (id: string, patch: Partial<BoardPartDraft>) => {
-    setDraft((prev) => ({
-      ...prev,
-      boardParts: prev.boardParts.map((p) =>
-        p.id === id ? { ...p, ...patch } : p,
-      ),
-    }));
-  };
-
   const updateLine = (id: string, patch: Partial<HardwareLineDraft>) => {
     setDraft((prev) => ({
       ...prev,
@@ -461,49 +541,8 @@ export function ModulesScreen({
     }));
   };
 
-  /** After Enter adds a row, focus this field on the new part (issue #39). */
-  const pendingPartFocusRef = useRef<{
-    field: ModulePartGridField;
-  } | null>(null);
+  /** After Enter adds a row, focus this field on the new hardware line (issue #39). */
   const pendingHwFocusRef = useRef<{ field: 'qty' } | null>(null);
-
-  const addBoardPart = useCallback(
-    (focusField?: ModulePartGridField) => {
-      const id =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `part-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      if (focusField) {
-        pendingPartFocusRef.current = { field: focusField };
-      }
-      setDraft((prev) => {
-        const index = prev.boardParts.length + 1;
-        const part = emptyBoardPartDraft(id);
-        part.code = suggestPartCode(prev.code, index);
-        if (boardRoles[0]) {
-          part.optionRole = boardRoles[0].code;
-        }
-        return {
-          ...prev,
-          boardParts: [...prev.boardParts, part],
-        };
-      });
-    },
-    [boardRoles],
-  );
-
-  useEffect(() => {
-    const pending = pendingPartFocusRef.current;
-    if (!pending || draft.boardParts.length === 0) return;
-    const last = draft.boardParts[draft.boardParts.length - 1];
-    if (!last) return;
-    pendingPartFocusRef.current = null;
-    const el = document.getElementById(
-      modulePartGridInputId(last.id, pending.field),
-    ) as HTMLInputElement | null;
-    el?.focus();
-    el?.select?.();
-  }, [draft.boardParts]);
 
   useEffect(() => {
     const pending = pendingHwFocusRef.current;
@@ -517,36 +556,6 @@ export function ModulesScreen({
     el?.focus();
     el?.select?.();
   }, [draft.hardwareLines]);
-
-  const onPartsGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
-      return;
-    }
-    const target = event.target as HTMLElement;
-    if (target.tagName !== 'INPUT') return;
-    const field = target.getAttribute('data-grid-field');
-    const rowId = target.getAttribute('data-grid-row');
-    if (!field || !rowId) return;
-    if (field !== 'qty' && field !== 'length' && field !== 'width') return;
-
-    event.preventDefault();
-    const rowIds = draft.boardParts.map((p) => p.id);
-    const next = nextGridEnterTarget({
-      rowIds,
-      currentRowId: rowId,
-      field,
-    });
-    if (!next) return;
-    if (next.kind === 'focus') {
-      const el = document.getElementById(
-        modulePartGridInputId(next.rowId, next.field as ModulePartGridField),
-      ) as HTMLInputElement | null;
-      el?.focus();
-      el?.select?.();
-      return;
-    }
-    addBoardPart(next.field as ModulePartGridField);
-  };
 
   const onHardwareGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
@@ -576,13 +585,6 @@ export function ModulesScreen({
     }
     pendingHwFocusRef.current = { field: 'qty' };
     addHardwareLine();
-  };
-
-  const removeBoardPart = (id: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      boardParts: prev.boardParts.filter((p) => p.id !== id),
-    }));
   };
 
   const addHardwareLine = () => {
@@ -635,24 +637,18 @@ export function ModulesScreen({
       }
     }
 
-    for (const part of draft.boardParts) {
-      if (!part.description.trim()) {
-        return 'Cada pieza de tablero necesita descripción.';
+    if (draft.structureId.trim()) {
+      const w = Number(draft.externalWidth);
+      const h = Number(draft.externalHeight);
+      const d = Number(draft.externalDepth);
+      if (!(w > 0 && h > 0 && d > 0)) {
+        return 'Con estructura, la medida base (ancho, alto y profundidad) es obligatoria.';
       }
-      if (!part.optionRole.trim()) {
-        return 'Cada pieza de tablero necesita un rol de opción (optionRole).';
-      }
-      const qtyErr = validateNonNegativeNumber(part.quantity, 'Cantidad de pieza');
-      if (qtyErr) return qtyErr;
-      if (part.quantity <= 0) {
-        return 'La cantidad de pieza debe ser mayor a 0.';
-      }
-      const lErr = validateNonNegativeNumber(part.lengthMm, 'Largo');
-      if (lErr) return lErr;
-      const wErr = validateNonNegativeNumber(part.widthMm, 'Ancho');
-      if (wErr) return wErr;
-      if (part.lengthMm <= 0 || part.widthMm <= 0) {
-        return 'Largo y ancho de pieza deben ser mayores a 0.';
+    }
+
+    for (const preset of draft.presets) {
+      if (preset.width <= 0 || preset.height <= 0 || preset.depth <= 0) {
+        return 'Las opciones de medida adicionales deben tener ancho, alto y profundidad mayores a 0.';
       }
     }
 
@@ -789,11 +785,11 @@ export function ModulesScreen({
               onClick={() => setEditorTab(tab.id)}
             >
               {tab.label}
-              {tab.id === 'parts' && draft.boardParts.length > 0
-                ? ` (${draft.boardParts.length})`
-                : ''}
               {tab.id === 'hardware' && draft.hardwareLines.length > 0
                 ? ` (${draft.hardwareLines.length})`
+                : ''}
+              {tab.id === 'composition' && draft.components.length > 0
+                ? ` (${draft.components.length})`
                 : ''}
             </button>
           );
@@ -939,8 +935,14 @@ export function ModulesScreen({
         </div>
         <fieldset className="module-editor__dims-legend">
           <legend className="module-editor__section-title">
-            Dimensiones externas (opcionales, mm)
+            Medida base (mm)
+            {draft.structureId.trim() ? ' *' : ' (opcional)'}
           </legend>
+          <p className="catalog-empty" style={{ marginTop: 0 }}>
+            {draft.structureId.trim()
+              ? 'Obligatoria si el mueble usa estructura: es el tamaño de referencia (preview y cotización cuando no hay más opciones).'
+              : 'Opcional en módulos fijos. Si más abajo agregás opciones de medida, el vendedor elige en cotización.'}
+          </p>
           <div className="module-editor__grid module-editor__grid--dims">
             <div className="catalog-form__field">
               <label htmlFor="mod-w">Ancho</label>
@@ -983,190 +985,260 @@ export function ModulesScreen({
             </div>
           </div>
         </fieldset>
+
+        <ModuleMeasureSection
+          presets={draft.presets}
+          disabled={!canMutate}
+          onPresetsChange={(presets) =>
+            setDraft((prev) => ({ ...prev, presets }))
+          }
+          nextId={() =>
+            typeof crypto !== 'undefined' &&
+            typeof crypto.randomUUID === 'function'
+              ? crypto.randomUUID()
+              : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          }
+          canImportFromStructure={
+            (selectedStructure?.presets?.length ?? 0) > 0
+          }
+          onImportFromStructure={() => {
+            const fromStructure = (selectedStructure?.presets ?? []).map(
+              (pr) => ({
+                id:
+                  typeof crypto !== 'undefined' &&
+                  typeof crypto.randomUUID === 'function'
+                    ? crypto.randomUUID()
+                    : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                name: pr.name ?? '',
+                width: pr.width,
+                height: pr.height,
+                depth: pr.depth,
+              }),
+            );
+            setDraft((prev) => ({
+              ...prev,
+              presets: [...prev.presets, ...fromStructure],
+            }));
+          }}
+          canSeedFromBase={
+            Number(draft.externalWidth) > 0 &&
+            Number(draft.externalHeight) > 0 &&
+            Number(draft.externalDepth) > 0
+          }
+          onSeedFromBase={() => {
+            const w = Number(draft.externalWidth);
+            const h = Number(draft.externalHeight);
+            const d = Number(draft.externalDepth);
+            if (!(w > 0 && h > 0 && d > 0)) return;
+            const id =
+              typeof crypto !== 'undefined' &&
+              typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            setDraft((prev) => ({
+              ...prev,
+              presets: [
+                ...prev.presets,
+                {
+                  id,
+                  name: 'Medida base',
+                  width: w,
+                  height: h,
+                  depth: d,
+                },
+              ],
+            }));
+          }}
+        />
       </div>
 
       <div
         className="module-editor__section"
         role="tabpanel"
-        id="module-editor-panel-parts"
-        aria-labelledby="module-editor-tab-parts"
-        hidden={editorTab !== 'parts'}
-        data-testid="module-editor-panel-parts"
+        id="module-editor-panel-composition"
+        aria-labelledby="module-editor-tab-composition"
+        hidden={editorTab !== 'composition'}
+        data-testid="module-editor-panel-composition"
       >
         <div className="module-editor__section-header">
           <h4 className="module-editor__section-title">
-            Piezas de tablero ({draft.boardParts.length})
+            Composición
+            {draft.structureId
+              ? ` · ${selectedStructure?.code ?? 'estructura'}`
+              : ''}
           </h4>
           <button
             type="button"
             className="btn btn--small"
-            onClick={() => addBoardPart()}
+            disabled={!composedEnabled}
+            onClick={() => {
+              setAddComponentOpen(true);
+              setComponentSearch('');
+              setNewCompId('');
+              setNewCompQty(1);
+            }}
+            data-testid="add-component-btn"
           >
-            Agregar pieza
+            <Plus size={14} className="mr-1" /> Agregar componente
           </button>
         </div>
-        {draft.boardParts.length === 0 ? (
-          <p className="catalog-empty">
-            Sin piezas. Agregá al menos una para cotizar.
-          </p>
-        ) : (
-          <div
-            className="module-part-list"
-            data-testid="module-parts-grid"
-            onKeyDown={onPartsGridKeyDown}
+
+        <p className="catalog-empty" style={{ marginTop: 0 }}>
+          Elegí una estructura base y sumá componentes reutilizables (puerta,
+          entrepaño, etc.). Las piezas se derivan al cotizar.
+        </p>
+
+        <div className="catalog-form__field">
+          <label htmlFor="mod-structure">Estructura base</label>
+          <select
+            id="mod-structure"
+            value={draft.structureId}
+            onChange={(e) => {
+              const sid = e.target.value;
+              const struct = structures.find((s) => s.id === sid);
+              setDraft((prev) => ({
+                ...prev,
+                structureId: sid,
+                components: sid ? prev.components : [],
+                ...(struct?.externalDims
+                  ? {
+                      externalWidth: String(struct.externalDims.width),
+                      externalHeight: String(struct.externalDims.height),
+                      externalDepth: String(struct.externalDims.depth),
+                    }
+                  : {}),
+              }));
+            }}
+            data-testid="structure-picker"
           >
-            {draft.boardParts.map((part, index) => (
-              <div key={part.id} className="module-part-card">
-                <div className="module-part-card__header">
-                  <h5 className="module-part-card__title">Pieza {index + 1}</h5>
-                  <button
-                    type="button"
-                    className="btn btn--small btn--danger"
-                    onClick={() => removeBoardPart(part.id)}
-                  >
-                    Quitar
-                  </button>
-                </div>
-                <div className="module-editor__grid module-editor__grid--part">
-                  <div className="catalog-form__field module-editor__field--grow">
-                    <label htmlFor={modulePartGridInputId(part.id, 'code')}>
-                      Código pieza
-                    </label>
-                    <input
-                      id={modulePartGridInputId(part.id, 'code')}
-                      data-grid-row={part.id}
-                      data-grid-field="code"
-                      value={part.code}
-                      onChange={(e) =>
-                        updatePart(part.id, { code: e.target.value })
-                      }
-                      placeholder={suggestPartCode(draft.code, index + 1)}
-                    />
-                  </div>
-                  <div className="catalog-form__field module-editor__field--grow">
-                    <label htmlFor={modulePartGridInputId(part.id, 'desc')}>
-                      Descripción
-                    </label>
-                    <input
-                      id={modulePartGridInputId(part.id, 'desc')}
-                      data-grid-row={part.id}
-                      data-grid-field="desc"
-                      value={part.description}
-                      onChange={(e) =>
-                        updatePart(part.id, { description: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="catalog-form__field module-editor__field--narrow">
-                    <label htmlFor={modulePartGridInputId(part.id, 'qty')}>
-                      Cantidad
-                    </label>
-                    <input
-                      id={modulePartGridInputId(part.id, 'qty')}
-                      data-grid-row={part.id}
-                      data-grid-field="qty"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={part.quantity}
-                      onChange={(e) =>
-                        updatePart(part.id, {
-                          quantity: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="catalog-form__field module-editor__field--narrow">
-                    <label htmlFor={modulePartGridInputId(part.id, 'length')}>
-                      Largo (mm)
-                    </label>
-                    <input
-                      id={modulePartGridInputId(part.id, 'length')}
-                      data-grid-row={part.id}
-                      data-grid-field="length"
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={part.lengthMm}
-                      onChange={(e) =>
-                        updatePart(part.id, {
-                          lengthMm: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="catalog-form__field module-editor__field--narrow">
-                    <label htmlFor={modulePartGridInputId(part.id, 'width')}>
-                      Ancho (mm)
-                    </label>
-                    <input
-                      id={modulePartGridInputId(part.id, 'width')}
-                      data-grid-row={part.id}
-                      data-grid-field="width"
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={part.widthMm}
-                      onChange={(e) =>
-                        updatePart(part.id, {
-                          widthMm: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="module-part-card__role-edges">
-                  <div className="catalog-form__field module-part-card__role">
-                    <label htmlFor={`part-role-${part.id}`}>
-                      Rol (optionRole)
-                    </label>
-                    <select
-                      id={`part-role-${part.id}`}
-                      value={part.optionRole}
-                      onChange={(e) =>
-                        updatePart(part.id, { optionRole: e.target.value })
-                      }
-                      required
+            <option value="">— Sin estructura —</option>
+            {structures
+              .filter((s) => s.active !== false)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.code} — {s.name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        {composedEnabled && selectedStructure ? (
+          <>
+            {selectedStructure.components &&
+            selectedStructure.components.length > 0 ? (
+              <p className="catalog-empty" data-testid="structure-body-hint">
+                La estructura aporta {selectedStructure.components.length}{' '}
+                componente
+                {selectedStructure.components.length === 1 ? '' : 's'} de cuerpo.
+                Abajo sumás los de este mueble (puertas, entrepaños, …).
+              </p>
+            ) : null}
+
+            <h5 className="module-editor__section-title">
+              Componentes del mueble ({draft.components.length})
+            </h5>
+
+            {draft.components.length === 0 ? (
+              <p className="catalog-empty" data-testid="composed-section">
+                Sin componentes propios. Agregá reutilizables o cotizá solo con
+                el cuerpo de la estructura.
+              </p>
+            ) : (
+              <div
+                className="module-part-list"
+                data-testid="component-instance-list"
+              >
+                {draft.components.map((comp, idx) => {
+                  const catComp = catalogComponents.find(
+                    (c) => c.id === comp.componentId,
+                  );
+                  return (
+                    <div
+                      key={`${comp.componentId}-${idx}`}
+                      className="module-part-card"
+                      data-testid={`component-instance-${idx}`}
                     >
-                      <option value="">Seleccionar grupo…</option>
-                      {boardRoles.map((g) => (
-                        <option key={g.id} value={g.code}>
-                          {g.name} ({g.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div
-                    className="module-edge-flags"
-                    role="group"
-                    aria-label="Cantos (cintillas)"
-                  >
-                    <span className="module-edge-flags__label">Cantos</span>
-                    {(
-                      [
-                        ['edgeL1', 'L1'],
-                        ['edgeL2', 'L2'],
-                        ['edgeW1', 'W1'],
-                        ['edgeW2', 'W2'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <label key={key}>
-                        <input
-                          type="checkbox"
-                          checked={part[key]}
-                          onChange={(e) =>
-                            updatePart(part.id, { [key]: e.target.checked })
-                          }
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                      <div className="module-part-card__header">
+                        <h5 className="module-part-card__title">
+                          {catComp
+                            ? `${catComp.code} — ${catComp.name}`
+                            : comp.componentId}
+                        </h5>
+                        <button
+                          type="button"
+                          className="btn btn--small btn--danger"
+                          onClick={() => {
+                            setDraft((prev) => ({
+                              ...prev,
+                              components: prev.components.filter(
+                                (_, i) => i !== idx,
+                              ),
+                            }));
+                          }}
+                          data-testid={`remove-component-${idx}`}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                      <div className="module-editor__grid">
+                        <div className="catalog-form__field module-editor__field--narrow">
+                          <label>Cantidad</label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={comp.quantity}
+                            onChange={(e) => {
+                              const qty = Math.max(1, Number(e.target.value));
+                              setDraft((prev) => ({
+                                ...prev,
+                                components: prev.components.map((c, i) =>
+                                  i === idx ? { ...c, quantity: qty } : c,
+                                ),
+                              }));
+                            }}
+                            data-testid={`component-qty-${idx}`}
+                          />
+                        </div>
+                        <div className="catalog-form__field">
+                          <label>Ubicación (opcional)</label>
+                          <select
+                            value={comp.placementOverride ?? ''}
+                            onChange={(e) => {
+                              setDraft((prev) => ({
+                                ...prev,
+                                components: prev.components.map((c, i) =>
+                                  i === idx
+                                    ? {
+                                        ...c,
+                                        placementOverride:
+                                          e.target.value || undefined,
+                                      }
+                                    : c,
+                                ),
+                              }));
+                            }}
+                            data-testid={`component-placement-${idx}`}
+                          >
+                            <option value="">— Del componente —</option>
+                            {COMPONENT_PLACEMENTS.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            )}
+          </>
+        ) : (
+          <p className="catalog-empty" data-testid="composed-section">
+            Seleccioná una estructura base para componer el mueble.
+          </p>
         )}
       </div>
 
@@ -1387,11 +1459,15 @@ export function ModulesScreen({
               data-testid="module-category-path"
             >
               {categoryLabel}
-              <span className="workspace-chrome__dot" aria-hidden>
-                ·
-              </span>
-              {mod.boardParts.length} pieza
-              {mod.boardParts.length === 1 ? '' : 's'}
+              {(mod.components?.length ?? 0) > 0 ? (
+                <>
+                  <span className="workspace-chrome__dot" aria-hidden>
+                    ·
+                  </span>
+                  {mod.components!.length} componente
+                  {mod.components!.length === 1 ? '' : 's'}
+                </>
+              ) : null}
               <span className="workspace-chrome__dot" aria-hidden>
                 ·
               </span>
@@ -1422,6 +1498,19 @@ export function ModulesScreen({
           </span>
         </div>
         <div className="workspace-chrome__actions">
+          <button
+            type="button"
+            className="btn btn--outline"
+            style={{ marginRight: '8px' }}
+            onClick={() => {
+              setViewerModule(mod);
+              setShow3DModal(true);
+            }}
+            data-testid="view-3d-btn"
+          >
+            <Box size={16} strokeWidth={1.5} aria-hidden />
+            Vista 3D
+          </button>
           <button
             type="button"
             className="btn btn--primary"
@@ -1462,31 +1551,38 @@ export function ModulesScreen({
         groupLabels={groupLabels}
       />
 
-      <section className="module-detail__section" aria-label="Piezas de tablero">
+      <section className="module-detail__section" aria-label="Componentes">
         <h3 className="module-detail__section-title">
-          Piezas de tablero ({mod.boardParts.length})
+          Componentes ({mod.components?.length ?? 0})
         </h3>
-        {mod.boardParts.length === 0 ? (
-          <p className="module-detail__empty">Sin piezas de tablero.</p>
+        {(mod.components?.length ?? 0) === 0 ? (
+          <p className="module-detail__empty">
+            Sin componentes. Las piezas se derivan de la estructura + componentes.
+          </p>
         ) : (
-          mod.boardParts.map((part) => {
-            const edgesOn = part.edges
-              .filter((e) => e.enabled)
-              .map((e) => e.side)
-              .join(', ');
+          mod.components!.map((inst, idx) => {
+            const catComp = catalogComponents.find(
+              (c) => c.id === inst.componentId,
+            );
             return (
-              <div key={part.id} className="module-detail-row">
+              <div
+                key={`${inst.componentId}-${idx}`}
+                className="module-detail-row"
+              >
                 <span className="module-detail-row__code">
-                  {part.code ?? '—'}
+                  {catComp?.code ?? inst.componentId}
                 </span>
                 <div className="module-detail-row__main">
-                  {part.description}
+                  {catComp?.name ?? 'Componente'}
                   <span className="module-detail-row__sub">
-                    {part.lengthMm}×{part.widthMm} mm · rol {part.optionRole}
-                    {edgesOn ? ` · cantos ${edgesOn}` : ''} · veta según material
+                    {inst.placementOverride
+                      ? `Ubicación ${inst.placementOverride}`
+                      : (catComp?.placement ?? '—')}
                   </span>
                 </div>
-                <span className="module-detail-row__qty">×{part.quantity}</span>
+                <span className="module-detail-row__qty">
+                  ×{inst.quantity}
+                </span>
               </div>
             );
           })
@@ -1832,8 +1928,8 @@ export function ModulesScreen({
                     <div className="module-card__stats">
                       <span className="module-card__stat">
                         <Layers size={14} strokeWidth={1.5} aria-hidden />
-                        {mod.boardParts.length} pieza
-                        {mod.boardParts.length === 1 ? '' : 's'}
+                        {mod.components?.length ?? 0} componente
+                        {(mod.components?.length ?? 0) === 1 ? '' : 's'}
                       </span>
                       <span className="module-card__stat">
                         <Settings2 size={14} strokeWidth={1.5} aria-hidden />
@@ -1886,6 +1982,135 @@ export function ModulesScreen({
         }
       >
         {renderEditorForm()}
+      </Modal>
+
+      {/* Component Adder Modal */}
+      <Modal
+        open={addComponentOpen}
+        onClose={() => setAddComponentOpen(false)}
+        title="Agregar componente"
+        size="sm"
+        data-testid="component-adder-modal"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setAddComponentOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={!newCompId}
+              onClick={() => {
+                if (!newCompId) return;
+                setDraft((prev) => ({
+                  ...prev,
+                  components: [
+                    ...prev.components,
+                    {
+                      componentId: newCompId,
+                      quantity: newCompQty,
+                    },
+                  ],
+                }));
+                setAddComponentOpen(false);
+              }}
+              data-testid="confirm-add-component"
+            >
+              Agregar
+            </button>
+          </>
+        }
+      >
+        <div className="catalog-form">
+          <div className="catalog-form__field">
+            <label htmlFor="comp-adder-search">Buscar componente</label>
+            <input
+              id="comp-adder-search"
+              value={componentSearch}
+              onChange={(e) => setComponentSearch(e.target.value)}
+              placeholder="Buscar por código o nombre…"
+              autoFocus
+              data-testid="comp-adder-search"
+            />
+          </div>
+
+          {filteredCatalogComponents.length === 0 ? (
+            <p className="catalog-empty" style={{ fontStyle: 'italic' }}>
+              {componentSearch
+                ? 'Sin resultados'
+                : 'No hay componentes activos en el catálogo.'}
+            </p>
+          ) : (
+            <div
+              style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                marginBottom: '0.75rem',
+              }}
+              data-testid="comp-adder-list"
+            >
+              {filteredCatalogComponents.map((comp) => (
+                <label
+                  key={comp.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.5rem 0.75rem',
+                    cursor: 'pointer',
+                    background:
+                      newCompId === comp.id
+                        ? 'color-mix(in srgb, var(--primary) 10%, transparent)'
+                        : undefined,
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="comp-adder-radio"
+                    checked={newCompId === comp.id}
+                    onChange={() => setNewCompId(comp.id)}
+                    data-testid={`comp-radio-${comp.code}`}
+                  />
+                  <div>
+                    <span className="font-mono" style={{ fontSize: 'var(--text-xs)' }}>
+                      {comp.code}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-sm)', marginLeft: '0.5rem' }}>
+                      {comp.name}
+                    </span>
+                    <span className="text-muted" style={{ fontSize: 'var(--text-xs)', marginLeft: '0.5rem' }}>
+                      {comp.optionRoles.join(', ')}
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {newCompId && (
+            <div className="catalog-form__field">
+              <label htmlFor="comp-adder-qty">Cantidad</label>
+              <input
+                id="comp-adder-qty"
+                type="number"
+                min={1}
+                step={1}
+                value={newCompQty}
+                onChange={(e) =>
+                  setNewCompQty(Math.max(1, Number(e.target.value)))
+                }
+                data-testid="comp-adder-qty"
+              />
+            </div>
+          )}
+        </div>
       </Modal>
 
       <Modal
@@ -2082,6 +2307,25 @@ export function ModulesScreen({
           <strong>{deleteCategoryTarget?.name ?? ''}</strong>? Solo se puede
           si no tiene hijos.
         </p>
+      </Modal>
+
+      <Modal
+        open={show3DModal}
+        onClose={() => {
+          setShow3DModal(false);
+          setViewerModule(null);
+        }}
+        title={viewerModule ? `Vista 3D — ${viewerModule.code} - ${viewerModule.name}` : 'Vista 3D'}
+        size="lg"
+      >
+        {viewerModule ? (
+          <Part3DViewer
+            parts={resolved3DParts}
+            width={viewerModule.externalDims?.width ?? 800}
+            height={viewerModule.externalDims?.height ?? 700}
+            depth={viewerModule.externalDims?.depth ?? 500}
+          />
+        ) : null}
       </Modal>
     </section>
   );

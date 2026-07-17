@@ -81,12 +81,22 @@ type Store interface {
 	UpdateStructure(ctx context.Context, id string, st *domain.Structure) error
 	DeleteStructure(ctx context.Context, id string) error
 
+	// Catalog: components
+	ListComponents(ctx context.Context) ([]domain.Component, error)
+	GetComponentByID(ctx context.Context, id string) (*domain.Component, error)
+	CreateComponent(ctx context.Context, c *domain.Component) error
+	UpdateComponent(ctx context.Context, id string, c *domain.Component) error
+	DeleteComponent(ctx context.Context, id string) error
+
 	// Projects
 	ListProjects(ctx context.Context) ([]domain.Project, error)
 	GetProjectByID(ctx context.Context, id string) (*domain.Project, error)
 	CreateProject(ctx context.Context, p *domain.Project) error
 	UpdateProject(ctx context.Context, id string, p *domain.Project) error
 	DeleteProject(ctx context.Context, id string) error
+
+	// Seed: populate catalog from plantilla fixtures
+	SeedCatalog(ctx context.Context) error
 
 	// Workshop settings (F031 defaults + F044 COST-02 flag)
 	GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error)

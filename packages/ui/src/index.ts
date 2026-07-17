@@ -220,3 +220,11 @@ export {
   type StructureDraft,
   type StructuresScreenProps,
 } from './structures';
+
+export {
+  ComponentsScreen,
+  type ComponentDraft,
+  type ComponentsScreenProps,
+} from './components';
+
+export { Part3DViewer } from './common';

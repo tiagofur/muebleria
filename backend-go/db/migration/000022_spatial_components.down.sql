@@ -1,0 +1,6 @@
+ALTER TABLE components DROP COLUMN IF EXISTS x_formula;
+ALTER TABLE components DROP COLUMN IF EXISTS y_formula;
+ALTER TABLE components DROP COLUMN IF EXISTS z_formula;
+ALTER TABLE components DROP COLUMN IF EXISTS rotate_x;
+ALTER TABLE components DROP COLUMN IF EXISTS rotate_y;
+ALTER TABLE components DROP COLUMN IF EXISTS rotate_z;

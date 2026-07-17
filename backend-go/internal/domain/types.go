@@ -174,6 +174,14 @@ type Module struct {
 	HeightMm      int     `json:"height_mm,omitempty"`
 	DepthMm       int     `json:"depth_mm,omitempty"`
 	CategoryID    string  `json:"categoryId,omitempty"`
+	// StructureID references an engineering body for composed modules (F054 / #102).
+	// Empty for legacy/flat modules.
+	StructureID string `json:"structure_id,omitempty"`
+	// Presets are commercial measure options for sales (H09 / #104).
+	Presets []DimensionPreset `json:"presets,omitempty"`
+	// Components are module-level component instances (doors, shelves, …) for
+	// composed modules, beyond those inherited from StructureID.
+	Components   []ComponentInstance `json:"components,omitempty"`
 	// ImageURL relative media path for sales showcase (F040).
 	ImageURL      string         `json:"image_url,omitempty"`
 	BoardParts    []BoardPart    `json:"board_parts"`
@@ -200,7 +208,7 @@ type Structure struct {
 	WidthMm    int               `json:"width_mm,omitempty"`
 	HeightMm   int               `json:"height_mm,omitempty"`
 	DepthMm    int               `json:"depth_mm,omitempty"`
-	BoardParts []BoardPart       `json:"board_parts"`
+	Components []ComponentInstance `json:"components,omitempty"`
 	Presets    []DimensionPreset `json:"presets,omitempty"`
 	Notes      string            `json:"notes,omitempty"`
 	Active     bool              `json:"active"`
@@ -208,11 +216,78 @@ type Structure struct {
 	UpdatedAt  time.Time         `json:"updated_at"`
 }
 
+// ComponentInstance is a reference to a reusable component placed in a structure or module.
+type ComponentInstance struct {
+	ComponentID       string             `json:"componentId"`
+	Quantity          int                `json:"quantity"`
+	PlacementOverride *ComponentPlacement `json:"placementOverride,omitempty"`
+	// Overrides allow per-instance edge/formula overrides (mirrors TS overrides).
+	Overrides *ComponentInstanceOverrides `json:"overrides,omitempty"`
+}
+
+// ComponentInstanceOverrides mirrors ModuleComponentInstance.overrides from TS.
+type ComponentInstanceOverrides struct {
+	Edges         []EdgeAssignment `json:"edges,omitempty"`
+	LengthFormula string           `json:"lengthFormula,omitempty"`
+	WidthFormula  string           `json:"widthFormula,omitempty"`
+	XFormula      string           `json:"xFormula,omitempty"`
+	YFormula      string           `json:"yFormula,omitempty"`
+	ZFormula      string           `json:"zFormula,omitempty"`
+	RotateX       *int             `json:"rotateX,omitempty"`
+	RotateY       *int             `json:"rotateY,omitempty"`
+	RotateZ       *int             `json:"rotateZ,omitempty"`
+}
+
+// ComponentPlacement represents where a component goes in the cabinet structure.
+type ComponentPlacement string
+
+const (
+	PlacementBase             ComponentPlacement = "base"
+	PlacementSuperior         ComponentPlacement = "superior"
+	PlacementLateralIzquierdo ComponentPlacement = "lateral_izquierdo"
+	PlacementLateralDerecho   ComponentPlacement = "lateral_derecho"
+	PlacementFrontal          ComponentPlacement = "frontal"
+	PlacementTrasera          ComponentPlacement = "trasera"
+	PlacementInterno          ComponentPlacement = "interno"
+	PlacementPuerta           ComponentPlacement = "puerta"
+	PlacementFrenteCajon      ComponentPlacement = "frente_cajon"
+	PlacementCustom           ComponentPlacement = "custom"
+)
+
+// Component is a reusable engineering component (carcasa piece).
+// Mirrors the frontend Component type from @muebles/domain.
+type Component struct {
+	ID            string             `json:"id"`
+	Code          string             `json:"code"`
+	Name          string             `json:"name"`
+	Placement     ComponentPlacement `json:"placement"`
+	GeometryKind  string             `json:"geometry_kind"`
+	LengthMm      int                `json:"length_mm"`
+	WidthMm       int                `json:"width_mm"`
+	ThicknessMm   int                `json:"thickness_mm"`
+	DefaultEdges  []EdgeAssignment   `json:"default_edges"`
+	OptionRoles   []string           `json:"option_roles,omitempty"`
+	LengthFormula string             `json:"length_formula,omitempty"`
+	WidthFormula  string             `json:"width_formula,omitempty"`
+	XFormula      string             `json:"x_formula,omitempty"`
+	YFormula      string             `json:"y_formula,omitempty"`
+	ZFormula      string             `json:"z_formula,omitempty"`
+	RotateX       int                `json:"rotate_x,omitempty"`
+	RotateY       int                `json:"rotate_y,omitempty"`
+	RotateZ       int                `json:"rotate_z,omitempty"`
+	Notes         string             `json:"notes,omitempty"`
+	Active        bool               `json:"active"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
 type ProjectItem struct {
 	ID            string            `json:"id"`
 	ModuleID      string            `json:"module_id"`
 	Quantity      int               `json:"quantity"`
 	OptionChoices map[string]string `json:"option_choices"` // group_code -> choice_id
+	// MeasurePresetID selects Module.Presets entry for quotation (H09 / #104).
+	MeasurePresetID string `json:"measure_preset_id,omitempty"`
 }
 
 type Project struct {
@@ -263,6 +338,7 @@ type Catalog struct {
 	Modules      []Module         `json:"modules"`
 	Structures   []Structure      `json:"structures,omitempty"`
 	Categories   []ModuleCategory `json:"categories,omitempty"`
+	Components   []Component      `json:"components,omitempty"`
 }
 
 

@@ -4,6 +4,7 @@
 
 import type {
   BoardPart,
+  Component,
   EdgeAssignment,
   EdgeSide,
   HardwareLine,
@@ -11,6 +12,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   OptionGroupKind,
+  Structure,
 } from '@muebles/domain';
 import { childrenOf } from '@muebles/domain';
 import {
@@ -45,6 +47,20 @@ export type HardwareLineDraft = {
   hardwareId: string;
 };
 
+export interface ComponentInstanceDraft {
+  componentId: string;
+  quantity: number;
+  placementOverride?: string;
+}
+
+export type MeasurePresetDraft = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  depth: number;
+};
+
 export type ModuleDraft = {
   code: string;
   name: string;
@@ -57,8 +73,13 @@ export type ModuleDraft = {
   baseLaborCost: string;
   /** Relative media path (F040). */
   imageUrl: string;
-  boardParts: BoardPartDraft[];
   hardwareLines: HardwareLineDraft[];
+  /** Structure reference for composed modules. */
+  structureId: string;
+  /** Component instances for composed modules. */
+  components: ComponentInstanceDraft[];
+  /** Commercial measure options for sales (H09 / #104). */
+  presets: MeasurePresetDraft[];
 };
 
 const EDGE_SIDES: readonly EdgeSide[] = ['L1', 'L2', 'W1', 'W2'];
@@ -74,8 +95,20 @@ export function emptyModuleDraft(): ModuleDraft {
     externalDepth: '',
     baseLaborCost: '',
     imageUrl: '',
-    boardParts: [],
     hardwareLines: [],
+    structureId: '',
+    components: [],
+    presets: [],
+  };
+}
+
+export function emptyMeasurePresetDraft(id: string): MeasurePresetDraft {
+  return {
+    id,
+    name: '',
+    width: 0,
+    height: 0,
+    depth: 0,
   };
 }
 
@@ -178,8 +211,20 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     baseLaborCost:
       mod.baseLaborCost !== undefined ? String(mod.baseLaborCost) : '',
     imageUrl: mod.imageUrl ?? '',
-    boardParts: mod.boardParts.map(boardPartToDraft),
     hardwareLines: mod.hardwareLines.map(hardwareLineToDraft),
+    structureId: mod.structureId ?? '',
+    components: (mod.components ?? []).map((c) => ({
+      componentId: c.componentId,
+      quantity: c.quantity,
+      placementOverride: c.placementOverride,
+    })),
+    presets: (mod.presets ?? []).map((p) => ({
+      id: p.id,
+      name: p.name ?? '',
+      width: p.width,
+      height: p.height,
+      depth: p.depth,
+    })),
   };
 }
 
@@ -250,24 +295,53 @@ export function parseOptionalNumber(raw: string): number | undefined {
 /**
  * Default option choices for cost preview: first member of each required group used by the module.
  * Pure selection helper — does not compute prices.
+ *
+ * Option roles come from the module's component instances (+ the components of
+ * its referenced structure when structures are provided) and from hardware
+ * lines. Modules no longer carry board parts directly.
  */
 export function defaultOptionChoicesForModule(
   module: {
-    readonly boardParts: readonly { readonly optionRole: string }[];
+    readonly components?: readonly { readonly componentId: string }[];
+    readonly structureId?: string;
     readonly hardwareLines: readonly {
       readonly optionRole: string;
       readonly hardwareId?: string;
     }[];
   },
   optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
 ): Record<string, string> {
   const usedRoles = new Set<string>();
-  for (const part of module.boardParts) {
-    if (part.optionRole?.trim()) usedRoles.add(part.optionRole.trim());
-  }
   for (const line of module.hardwareLines) {
     if (line.hardwareId) continue;
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
+  }
+  // Collect optionRoles from the module's component instances
+  if (module.components && catalogComponents) {
+    for (const inst of module.components) {
+      const comp = catalogComponents.find((c) => c.id === inst.componentId);
+      if (comp) {
+        for (const role of comp.optionRoles) {
+          if (role.trim()) usedRoles.add(role.trim());
+        }
+      }
+    }
+  }
+  // Collect optionRoles from the referenced structure's component instances
+  if (module.structureId && catalogStructures && catalogComponents) {
+    const structure = catalogStructures.find((s) => s.id === module.structureId);
+    if (structure) {
+      for (const inst of structure.components ?? []) {
+        const comp = catalogComponents.find((c) => c.id === inst.componentId);
+        if (comp) {
+          for (const role of comp.optionRoles) {
+            if (role.trim()) usedRoles.add(role.trim());
+          }
+        }
+      }
+    }
   }
 
   const choices: Record<string, string> = {};

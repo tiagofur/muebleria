@@ -3,6 +3,7 @@
  */
 
 import type {
+  Component,
   Customer,
   EdgeBand,
   Hardware,
@@ -13,6 +14,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  Structure,
   WorkshopSettings,
 } from '@muebles/domain';
 import {
@@ -59,6 +61,8 @@ export type AddItemDraft = {
   quantity: number;
   /** Option choices for the new line (filled in add-item modal). */
   optionChoices: OptionChoices;
+  /** Commercial measure preset from Module.presets (H09). */
+  measurePresetId?: string;
 };
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
@@ -250,6 +254,7 @@ export function emptyAddItemDraft(
     moduleId,
     quantity: 1,
     optionChoices: mod ? defaultChoicesForNewItem(mod, optionGroups) : {},
+    measurePresetId: mod?.presets?.[0]?.id,
   };
 }
 
@@ -307,9 +312,11 @@ export function optionsForGroup(
 export function groupsForModuleItem(
   module: Module | undefined,
   optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
 ): OptionGroup[] {
   if (!module) return [];
-  const codes = requiredGroupCodesForModule(module, optionGroups);
+  const codes = requiredGroupCodesForModule(module, optionGroups, catalogComponents, catalogStructures);
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   return codes
     .map((code) => byCode.get(code))
@@ -324,6 +331,8 @@ export function canShowProjectPricePreview(
   project: Project,
   modules: readonly Module[],
   optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
 ): PricePreviewGateResult {
   const missing = new Set<string>();
   const byId = new Map(modules.map((m) => [m.id, m]));
@@ -334,7 +343,7 @@ export function canShowProjectPricePreview(
       missing.add(`módulo:${item.moduleId}`);
       continue;
     }
-    const required = requiredGroupCodesForModule(mod, optionGroups);
+    const required = requiredGroupCodesForModule(mod, optionGroups, catalogComponents, catalogStructures);
     const effective = effectiveOptionChoices(
       item.optionChoices,
       project.projectLevelChoices,
@@ -430,8 +439,10 @@ export function formatIsoDate(iso: string): string {
 export function defaultChoicesForNewItem(
   module: Module,
   optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
 ): OptionChoices {
-  const required = requiredGroupCodesForModule(module, optionGroups);
+  const required = requiredGroupCodesForModule(module, optionGroups, catalogComponents, catalogStructures);
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   const choices: Record<string, string> = {};
   for (const code of required) {

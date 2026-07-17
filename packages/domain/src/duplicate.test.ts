@@ -14,21 +14,20 @@ function sampleModule(overrides: Partial<Module> = {}): Module {
     notes: 'nota original',
     baseLaborCost: 100,
     externalDims: { width: 600, height: 720, depth: 500 },
-    boardParts: [
+    structureId: 'struct-1',
+    components: [
       {
-        id: 'part-1',
-        code: 'MOD-GAB-01-P01',
-        description: 'Lateral',
+        componentId: 'comp-puerta',
         quantity: 2,
-        lengthMm: 720,
-        widthMm: 500,
-        edges: [
-          { side: 'L1', enabled: true },
-          { side: 'L2', enabled: false },
-          { side: 'W1', enabled: true },
-          { side: 'W2', enabled: false },
-        ],
-        optionRole: 'INTERIOR',
+        placementOverride: 'frontal',
+        overrides: {
+          notes: 'Instalar con bisagra oculta',
+          edges: [
+            { side: 'L1', enabled: true },
+            { side: 'L2', enabled: false },
+          ],
+          lengthFormula: 'W - 2',
+        },
       },
     ],
     hardwareLines: [
@@ -142,16 +141,30 @@ describe('duplicateModule', () => {
     expect(copy.externalDims).toEqual({ width: 600, height: 720, depth: 500 });
     expect(copy.externalDims).not.toBe(original.externalDims);
 
-    expect(copy.boardParts).toHaveLength(1);
-    expect(copy.boardParts[0]!.id).toBe('nested-1');
-    expect(copy.boardParts[0]!.id).not.toBe(original.boardParts[0]!.id);
-    expect(copy.boardParts[0]!.description).toBe('Lateral');
-    expect(copy.boardParts[0]!.edges).toEqual(original.boardParts[0]!.edges);
-    expect(copy.boardParts[0]!.edges).not.toBe(original.boardParts[0]!.edges);
+    // structureId reference is preserved (deep copy does not clone the structure)
+    expect(copy.structureId).toBe('struct-1');
+
+    // components are deep-copied: equal content but fresh nested structure
+    expect(copy.components).toHaveLength(1);
+    expect(copy.components).not.toBe(original.components);
+    expect(copy.components![0]).not.toBe(original.components![0]);
+    expect(copy.components![0]).toEqual(original.components![0]);
+    expect(copy.components![0]!.overrides).toEqual(
+      original.components![0]!.overrides,
+    );
+    expect(copy.components![0]!.overrides).not.toBe(
+      original.components![0]!.overrides,
+    );
+    expect(copy.components![0]!.overrides?.edges).toEqual(
+      original.components![0]!.overrides?.edges,
+    );
+    expect(copy.components![0]!.overrides?.edges).not.toBe(
+      original.components![0]!.overrides?.edges,
+    );
 
     expect(copy.hardwareLines).toHaveLength(2);
-    expect(copy.hardwareLines[0]!.id).toBe('nested-2');
-    expect(copy.hardwareLines[1]!.id).toBe('nested-3');
+    expect(copy.hardwareLines[0]!.id).toBe('nested-1');
+    expect(copy.hardwareLines[1]!.id).toBe('nested-2');
     expect(copy.hardwareLines[0]!.id).not.toBe(original.hardwareLines[0]!.id);
     expect(copy.hardwareLines[1]!.hardwareId).toBe('hw-cat-1');
   });

@@ -29,7 +29,6 @@ const modules: readonly Module[] = [
     id: 'm1',
     code: 'A',
     name: 'Sin cat',
-    boardParts: [],
     hardwareLines: [],
   },
   {
@@ -37,7 +36,6 @@ const modules: readonly Module[] = [
     code: 'B',
     name: 'Cocina root',
     categoryId: 'c1',
-    boardParts: [],
     hardwareLines: [],
   },
   {
@@ -45,7 +43,6 @@ const modules: readonly Module[] = [
     code: 'C',
     name: 'Esquinera',
     categoryId: 'c1a1',
-    boardParts: [],
     hardwareLines: [],
   },
 ];

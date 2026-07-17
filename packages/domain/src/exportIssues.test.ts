@@ -7,7 +7,7 @@ import {
 } from './__fixtures__/plantillaDemo';
 import { collectExportIssues, domainErrorToExportIssue } from './exportIssues';
 import { ValidationError } from './errors';
-import type { Catalog, Module, Project } from './types';
+import type { Catalog, Component, Module, Project, Structure } from './types';
 import { generateCutRows } from './engine';
 
 const gabOnlyProject: Project = {
@@ -95,11 +95,13 @@ describe('collectExportIssues', () => {
   });
 
   it('VAL-05: module without board parts', () => {
+    // A module that composes no structure and no components yields zero board
+    // parts (components/hardware only). The export path must flag this as a
+    // "no hay piezas de tablero" issue — the new equivalent of boardParts: [].
     const emptyModule: Module = {
       id: 'mod-empty',
       code: 'MOD-EMPTY',
       name: 'Empty',
-      boardParts: [],
       hardwareLines: [],
     };
     const catalog: Catalog = {
@@ -122,31 +124,52 @@ describe('collectExportIssues', () => {
   });
 
   it('VAL-01: invalid board dimensions surface as issues', () => {
+    // Reproduces the old lengthMm:0 scenario at the composed-module level: a
+    // component with valid static geometry but a lengthFormula that resolves to
+    // 0 at the module's preset (W - 300 with W = 300). validateBoardPart then
+    // flags the expanded part with field 'lengthMm/widthMm'.
+    const badComponent: Component = {
+      id: 'comp-bad-dim',
+      code: 'COM-BAD',
+      name: 'Bad',
+      placement: 'interno',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 100,
+        widthMm: 100,
+        thicknessMm: 18,
+        lengthFormula: 'W - 300',
+      },
+      defaultEdges: [
+        { side: 'L1', enabled: false },
+        { side: 'L2', enabled: false },
+        { side: 'W1', enabled: false },
+        { side: 'W2', enabled: false },
+      ],
+      optionRoles: ['INTERIOR'],
+      active: true,
+    };
+    const badStructure: Structure = {
+      id: 'struct-bad-dim',
+      code: 'EST-BAD',
+      name: 'Bad Body',
+      externalDims: { width: 300, height: 720, depth: 590 },
+      components: [{ componentId: 'comp-bad-dim', quantity: 1 }],
+      presets: [{ id: 'preset-bad', width: 300, height: 720, depth: 590 }],
+      active: true,
+    };
     const badModule: Module = {
-      ...plantillaCatalogWithModules.modules.find((m) => m.id === IDS.modGab)!,
       id: 'mod-bad-dims',
       code: 'MOD-BAD',
-      boardParts: [
-        {
-          id: 'p-bad',
-          code: 'P01',
-          description: 'Bad',
-          quantity: 1,
-          lengthMm: 0,
-          widthMm: 100,
-          edges: [
-            { side: 'L1', enabled: false },
-            { side: 'L2', enabled: false },
-            { side: 'W1', enabled: false },
-            { side: 'W2', enabled: false },
-          ],
-          optionRole: 'INTERIOR',
-        },
-      ],
+      name: 'Bad Dims',
+      structureId: badStructure.id,
+      externalDims: { width: 300, height: 720, depth: 590 },
       hardwareLines: [],
     };
     const catalog: Catalog = {
       ...plantillaCatalogWithModules,
+      structures: [...(plantillaCatalogWithModules.structures ?? []), badStructure],
+      components: [...(plantillaCatalogWithModules.components ?? []), badComponent],
       modules: [...plantillaCatalogWithModules.modules, badModule],
     };
     const project: Project = {
@@ -162,7 +185,8 @@ describe('collectExportIssues', () => {
     };
     const issues = collectExportIssues(project, catalog);
     expect(issues.some((i) => i.field === 'lengthMm/widthMm')).toBe(true);
-    expect(issues.some((i) => i.partId === 'p-bad')).toBe(true);
+    // Expanded part id is `${componentId}-copy-${i}` (see expandComponentInstances).
+    expect(issues.some((i) => i.partId === 'comp-bad-dim-copy-0')).toBe(true);
   });
 
   it('VAL-06: inactive material choice is blocked', () => {

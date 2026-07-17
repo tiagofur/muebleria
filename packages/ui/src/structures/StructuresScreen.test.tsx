@@ -1,8 +1,29 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { StructuresScreen } from './StructuresScreen';
-import type { Structure } from '@muebles/domain';
+import type { Component, Structure } from '@muebles/domain';
+
+const mockCatalogComponent: Component = {
+  id: 'comp-costado',
+  code: 'COM-COS-01',
+  name: 'Costado Lateral',
+  placement: 'lateral_izquierdo',
+  geometry: {
+    kind: 'rectangular_board',
+    lengthMm: 720,
+    widthMm: 560,
+    thicknessMm: 18,
+  },
+  defaultEdges: [
+    { side: 'L1', enabled: false },
+    { side: 'L2', enabled: false },
+    { side: 'W1', enabled: false },
+    { side: 'W2', enabled: false },
+  ],
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
 
 const mockStructures: Structure[] = [
   {
@@ -12,23 +33,7 @@ const mockStructures: Structure[] = [
     notes: 'Estructura estándar de cocina para bajo mesada',
     active: true,
     externalDims: { width: 600, height: 720, depth: 560 },
-    boardParts: [
-      {
-        id: 'p1',
-        code: 'LAT-D',
-        description: 'Costado Derecho',
-        quantity: 1,
-        lengthMm: 720,
-        widthMm: 560,
-        edges: [
-          { side: 'L1', enabled: false },
-          { side: 'L2', enabled: false },
-          { side: 'W1', enabled: false },
-          { side: 'W2', enabled: false },
-        ],
-        optionRole: 'LATERAL',
-      },
-    ],
+    components: [{ componentId: 'comp-costado', quantity: 2 }],
   },
   {
     id: 's2',
@@ -37,9 +42,16 @@ const mockStructures: Structure[] = [
     notes: 'Estructura de colgar estándar',
     active: false,
     externalDims: { width: 600, height: 600, depth: 320 },
-    boardParts: [],
+    components: [{ componentId: 'comp-costado', quantity: 2 }],
   },
 ];
+
+function addCatalogComponentToDraft() {
+  fireEvent.click(screen.getByTestId('structure-editor-tab-components'));
+  fireEvent.click(screen.getByTestId('add-component-btn'));
+  fireEvent.click(screen.getByTestId('comp-radio-COM-COS-01'));
+  fireEvent.click(screen.getByTestId('confirm-add-component'));
+}
 
 describe('StructuresScreen', () => {
   afterEach(cleanup);
@@ -98,6 +110,7 @@ describe('StructuresScreen', () => {
       <StructuresScreen
         structures={[]}
         optionGroups={mockOptionGroups}
+        catalogComponents={[mockCatalogComponent]}
         onCreate={onCreate}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
@@ -127,32 +140,7 @@ describe('StructuresScreen', () => {
       target: { value: '560' },
     });
 
-    // Switch to parts tab
-    fireEvent.click(screen.getByTestId('structure-editor-tab-parts'));
-
-    // Add piece
-    fireEvent.click(screen.getByRole('button', { name: /Agregar pieza/i }));
-
-    expect(screen.getByTestId('part-item-0')).toBeTruthy();
-
-    fireEvent.change(screen.getByTestId('part-code-0'), {
-      target: { value: 'PIEZA-1' },
-    });
-    fireEvent.change(screen.getByTestId('part-desc-0'), {
-      target: { value: 'Costado izquierdo' },
-    });
-    fireEvent.change(screen.getByTestId('part-qty-0'), {
-      target: { value: '2' },
-    });
-    fireEvent.change(screen.getByTestId('part-length-0'), {
-      target: { value: '720' },
-    });
-    fireEvent.change(screen.getByTestId('part-width-0'), {
-      target: { value: '560' },
-    });
-    fireEvent.change(screen.getByTestId('part-role-0'), {
-      target: { value: 'LATERAL' },
-    });
+    addCatalogComponentToDraft();
 
     // Submit
     fireEvent.click(screen.getByTestId('save-btn'));
@@ -166,23 +154,38 @@ describe('StructuresScreen', () => {
       depthMm: 560,
       active: true,
       presets: [],
-      boardParts: [
-        expect.objectContaining({
-          code: 'PIEZA-1',
-          description: 'Costado izquierdo',
-          quantity: 2,
-          lengthMm: 720,
-          widthMm: 560,
-          optionRole: 'LATERAL',
-          lengthFormula: '',
-          widthFormula: '',
-          edgeL1: false,
-          edgeL2: false,
-          edgeW1: false,
-          edgeW2: false,
-        }),
-      ],
+      components: [{ componentId: 'comp-costado', quantity: 1 }],
     });
+  });
+
+  it('rejects save without at least one component', () => {
+    const onCreate = vi.fn();
+    render(
+      <StructuresScreen
+        structures={[]}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('create-structure-btn'));
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'EST-EMPTY' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Sin componentes' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/al menos un componente/i),
+    ).toBeTruthy();
   });
 
   it('filters by status chips', () => {
@@ -207,12 +210,13 @@ describe('StructuresScreen', () => {
     expect(screen.getByText('EST-ALTO-600')).toBeTruthy();
   });
 
-  it('allows managing presets and formulas in modal', () => {
+  it('allows managing presets in modal', () => {
     const onCreate = vi.fn();
     render(
       <StructuresScreen
         structures={[]}
         optionGroups={[{ id: 'g-lateral', code: 'LATERAL', name: 'Grupo Lateral', kind: 'board', optionIds: [], required: false }]}
+        catalogComponents={[mockCatalogComponent]}
         onCreate={onCreate}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
@@ -240,24 +244,7 @@ describe('StructuresScreen', () => {
     fireEvent.change(screen.getByTestId('preset-height-0'), { target: { value: '720' } });
     fireEvent.change(screen.getByTestId('preset-depth-0'), { target: { value: '560' } });
 
-    // Switch to parts tab
-    fireEvent.click(screen.getByTestId('structure-editor-tab-parts'));
-
-    // Add board part with formulas
-    fireEvent.click(screen.getByTestId('add-part-btn'));
-    fireEvent.change(screen.getByTestId('part-code-0'), { target: { value: 'P01' } });
-    fireEvent.change(screen.getByTestId('part-desc-0'), { target: { value: 'Costado' } });
-    fireEvent.change(screen.getByTestId('part-qty-0'), { target: { value: '2' } });
-    fireEvent.change(screen.getByTestId('part-length-0'), { target: { value: '720' } });
-    fireEvent.change(screen.getByTestId('part-width-0'), { target: { value: '560' } });
-    fireEvent.change(screen.getByTestId('part-role-0'), { target: { value: 'LATERAL' } });
-
-    // Fill length and width formulas
-    fireEvent.change(screen.getByTestId('part-length-formula-0'), { target: { value: 'H' } });
-    fireEvent.change(screen.getByTestId('part-width-formula-0'), { target: { value: 'D - 10' } });
-
-    // Verify preview resolved text is shown
-    expect(screen.getByTestId('part-resolved-preview-0')).toBeTruthy();
+    addCatalogComponentToDraft();
 
     // Submit
     fireEvent.click(screen.getByTestId('save-btn'));
@@ -270,6 +257,7 @@ describe('StructuresScreen', () => {
       heightMm: 0,
       depthMm: 0,
       active: true,
+      components: [{ componentId: 'comp-costado', quantity: 1 }],
       presets: [
         {
           id: expect.any(String),
@@ -278,18 +266,6 @@ describe('StructuresScreen', () => {
           height: 720,
           depth: 560,
         },
-      ],
-      boardParts: [
-        expect.objectContaining({
-          code: 'P01',
-          description: 'Costado',
-          quantity: 2,
-          lengthMm: 720,
-          widthMm: 560,
-          optionRole: 'LATERAL',
-          lengthFormula: 'H',
-          widthFormula: 'D - 10',
-        }),
       ],
     });
   });

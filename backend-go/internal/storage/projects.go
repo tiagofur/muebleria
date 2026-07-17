@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +12,77 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
+
+// loadModuleComponents returns the component instances placed directly on a
+// module (F054 / #102), beyond those inherited from its referenced structure.
+func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID string) ([]domain.ComponentInstance, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT component_id, quantity, placement_override, length_formula, width_formula, overrides
+		FROM module_components
+		WHERE module_id = $1
+		ORDER BY created_at ASC;
+	`, moduleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.ComponentInstance
+	for rows.Next() {
+		var ci domain.ComponentInstance
+		var placementOverride *string
+		var lengthFormula, widthFormula *string
+		var overridesJSON []byte
+		if err := rows.Scan(&ci.ComponentID, &ci.Quantity, &placementOverride, &lengthFormula, &widthFormula, &overridesJSON); err != nil {
+			return nil, err
+		}
+		if placementOverride != nil && *placementOverride != "" {
+			p := domain.ComponentPlacement(*placementOverride)
+			ci.PlacementOverride = &p
+		}
+		// Materialize overrides only when something is set.
+		hasFormula := (lengthFormula != nil && *lengthFormula != "") || (widthFormula != nil && *widthFormula != "")
+		if hasFormula || len(overridesJSON) > 0 && string(overridesJSON) != "null" {
+			ov := &domain.ComponentInstanceOverrides{}
+			if lengthFormula != nil {
+				ov.LengthFormula = *lengthFormula
+			}
+			if widthFormula != nil {
+				ov.WidthFormula = *widthFormula
+			}
+			if len(overridesJSON) > 0 && string(overridesJSON) != "null" {
+				var edgeStruct struct {
+					Edges []domain.EdgeAssignment `json:"edges"`
+				}
+				if err := json.Unmarshal(overridesJSON, &edgeStruct); err == nil && len(edgeStruct.Edges) > 0 {
+					ov.Edges = edgeStruct.Edges
+				}
+			}
+			ci.Overrides = ov
+		}
+		out = append(out, ci)
+	}
+	if out == nil {
+		out = []domain.ComponentInstance{}
+	}
+	return out, rows.Err()
+}
+
+// componentInstanceOverridesJSON serializes instance edge overrides for the
+// module_components.overrides JSONB column. Returns nil when no edges are set.
+func componentInstanceOverridesJSON(ov *domain.ComponentInstanceOverrides) []byte {
+	if ov == nil || len(ov.Edges) == 0 {
+		return nil
+	}
+	type edgesOnly struct {
+		Edges []domain.EdgeAssignment `json:"edges"`
+	}
+	b, err := json.Marshal(edgesOnly{Edges: ov.Edges})
+	if err != nil {
+		return nil
+	}
+	return b
+}
 
 // Cargar catálogo completo para el motor de cálculo
 func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, error) {
@@ -47,7 +119,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	cat.Categories = cats
 
 	// Cargar módulos y su despiece
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url FROM modules ORDER BY name ASC`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id FROM modules ORDER BY name ASC`
 	rows, err := s.Pool.Query(ctx, query)
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
@@ -60,7 +132,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		var notes *string
 		var categoryID *string
 		var imageURL *string
-		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL)
+		var structureID *string
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID)
 		if err != nil {
 			return cat, err
 		}
@@ -82,6 +155,22 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		if imageURL != nil {
 			m.ImageURL = *imageURL
 		}
+		if structureID != nil {
+			m.StructureID = *structureID
+		}
+
+		// Component instances placed directly on this module (F054).
+		modComponents, err := s.loadModuleComponents(ctx, m.ID)
+		if err != nil {
+			return cat, err
+		}
+		m.Components = modComponents
+
+		presets, err := s.loadModulePresets(ctx, m.ID)
+		if err != nil {
+			return cat, err
+		}
+		m.Presets = presets
 
 		// Cargar board parts de este módulo
 		partsQuery := `
@@ -163,6 +252,13 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		return cat, fmt.Errorf("error loading structures: %w", err)
 	}
 	cat.Structures = structures
+
+	// F050 reusable components
+	components, err := s.ListComponents(ctx)
+	if err != nil {
+		return cat, fmt.Errorf("error loading components: %w", err)
+	}
+	cat.Components = components
 
 	return cat, nil
 }
@@ -262,10 +358,59 @@ func replaceProjectLevelChoicesTx(ctx context.Context, tx pgx.Tx, projectID stri
 	return nil
 }
 
+// loadModulePresets returns commercial measure presets for a module (H09).
+func (s *PostgresStore) loadModulePresets(ctx context.Context, moduleID string) ([]domain.DimensionPreset, error) {
+	q := `
+		SELECT id, name, width_mm, height_mm, depth_mm
+		FROM module_presets
+		WHERE module_id = $1
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+	`
+	rows, err := s.Pool.Query(ctx, q, moduleID)
+	if err != nil {
+		return nil, fmt.Errorf("error query module presets: %w", err)
+	}
+	defer rows.Close()
+
+	presets := []domain.DimensionPreset{}
+	for rows.Next() {
+		var pr domain.DimensionPreset
+		if err := rows.Scan(&pr.ID, &pr.Name, &pr.WidthMm, &pr.HeightMm, &pr.DepthMm); err != nil {
+			return nil, err
+		}
+		presets = append(presets, pr)
+	}
+	return presets, rows.Err()
+}
+
+func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, presets []domain.DimensionPreset) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM module_presets WHERE module_id = $1`, moduleID); err != nil {
+		return fmt.Errorf("error clearing module presets: %w", err)
+	}
+	for _, pr := range presets {
+		var err error
+		if pr.ID != "" {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`, pr.ID, moduleID, pr.Name, pr.WidthMm, pr.HeightMm, pr.DepthMm)
+		} else {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO module_presets (module_id, name, width_mm, height_mm, depth_mm)
+				VALUES ($1, $2, $3, $4, $5)
+			`, moduleID, pr.Name, pr.WidthMm, pr.HeightMm, pr.DepthMm)
+		}
+		if err != nil {
+			return fmt.Errorf("error inserting module preset: %w", err)
+		}
+	}
+	return nil
+}
+
 // loadProjectItems returns all line items + option choices for a project.
 func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) ([]domain.ProjectItem, error) {
 	itemQuery := `
-		SELECT id, module_id, quantity
+		SELECT id, module_id, quantity, measure_preset_id
 		FROM project_items
 		WHERE project_id = $1;
 	`
@@ -278,8 +423,12 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 	items := []domain.ProjectItem{}
 	for rows.Next() {
 		var item domain.ProjectItem
-		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity); err != nil {
+		var measurePresetID *string
+		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID); err != nil {
 			return nil, err
+		}
+		if measurePresetID != nil {
+			item.MeasurePresetID = *measurePresetID
 		}
 
 		choicesQuery := `
@@ -316,17 +465,18 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 	for i := range items {
 		item := &items[i]
 		var err error
+		measureArg := nullIfEmpty(item.MeasurePresetID)
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_items (id, project_id, module_id, quantity)
-				VALUES ($1, $2, $3, $4)
-			`, item.ID, projectID, item.ModuleID, item.Quantity)
+				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id)
+				VALUES ($1, $2, $3, $4, $5)
+			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg)
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO project_items (project_id, module_id, quantity)
-				VALUES ($1, $2, $3)
+				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id)
+				VALUES ($1, $2, $3, $4)
 				RETURNING id
-			`, projectID, item.ModuleID, item.Quantity).Scan(&item.ID)
+			`, projectID, item.ModuleID, item.Quantity, measureArg).Scan(&item.ID)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting project item: %w", err)
@@ -496,11 +646,11 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO project_items (project_id, module_id, quantity)
-		VALUES ($1, $2, $3)
+		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id;
 	`
-	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity).Scan(&item.ID)
+	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID)).Scan(&item.ID)
 	if err != nil {
 		return err
 	}
@@ -636,14 +786,15 @@ func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, created_at, updated_at FROM modules WHERE id = $1`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, created_at, updated_at FROM modules WHERE id = $1`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var m domain.Module
 	var w, h, d *int
 	var notes *string
 	var categoryID *string
 	var imageURL *string
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &m.CreatedAt, &m.UpdatedAt)
+	var structureID *string
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -665,6 +816,21 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	if imageURL != nil {
 		m.ImageURL = *imageURL
 	}
+	if structureID != nil {
+		m.StructureID = *structureID
+	}
+
+	modComponents, err := s.loadModuleComponents(ctx, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	m.Components = modComponents
+
+	presets, err := s.loadModulePresets(ctx, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	m.Presets = presets
 
 	// BoardParts
 	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1`
@@ -737,24 +903,29 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		categoryArg = m.CategoryID
 	}
 
+	var structureArg interface{}
+	if m.StructureID != "" {
+		structureArg = m.StructureID
+	}
+
 	var queryInsert string
 	var errQuery error
 	if idToInsert != "" {
 		queryInsert = `
-			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL).
+		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg).
 			Scan(&m.CreatedAt, &m.UpdatedAt)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
-			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id, created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL).
+		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg).
 			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	}
 
@@ -825,7 +996,42 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		}
 	}
 
+	if err := replaceModuleComponentsTx(ctx, tx, m.ID, m.Components); err != nil {
+		return err
+	}
+	if err := insertModulePresetsTx(ctx, tx, m.ID, m.Presets); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
+}
+
+// replaceModuleComponentsTx deletes and re-inserts the module-level component
+// instances for a module (full replace semantics, like board parts/hardware).
+func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, components []domain.ComponentInstance) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM module_components WHERE module_id = $1`, moduleID); err != nil {
+		return fmt.Errorf("error clearing module components: %w", err)
+	}
+	for _, c := range components {
+		var lengthFormula, widthFormula interface{}
+		if c.Overrides != nil {
+			if c.Overrides.LengthFormula != "" {
+				lengthFormula = c.Overrides.LengthFormula
+			}
+			if c.Overrides.WidthFormula != "" {
+				widthFormula = c.Overrides.WidthFormula
+			}
+		}
+		overridesJSON := componentInstanceOverridesJSON(c.Overrides)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO module_components (module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides)
+			VALUES ($1, $2, $3, $4, $5, $6, $7);
+		`, moduleID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride),
+			lengthFormula, widthFormula, overridesJSON); err != nil {
+			return fmt.Errorf("error inserting module component: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.Module) error {
@@ -839,13 +1045,17 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	if m.CategoryID != "" {
 		categoryArg = m.CategoryID
 	}
+	var structureArg interface{}
+	if m.StructureID != "" {
+		structureArg = m.StructureID
+	}
 	query := `
 		UPDATE modules
-		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $10
+		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $11
 		RETURNING updated_at;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, id).Scan(&m.UpdatedAt)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, id).Scan(&m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("module not found")
@@ -922,6 +1132,13 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 		if err != nil {
 			return fmt.Errorf("error inserting hardware line: %w", err)
 		}
+	}
+
+	if err := replaceModuleComponentsTx(ctx, tx, id, m.Components); err != nil {
+		return err
+	}
+	if err := insertModulePresetsTx(ctx, tx, id, m.Presets); err != nil {
+		return err
 	}
 
 	m.ID = id

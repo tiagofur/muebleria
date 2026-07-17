@@ -59,26 +59,6 @@ const modules: Module[] = [
     id: 'm1',
     code: 'MOD-GAB-01',
     name: 'Gabinete',
-    boardParts: [
-      {
-        id: 'p1',
-        description: 'Costado',
-        quantity: 1,
-        lengthMm: 720,
-        widthMm: 590,
-        edges: edgesFromFlags(true, true, true, true),
-        optionRole: 'INTERIOR',
-      },
-      {
-        id: 'p2',
-        description: 'Puerta',
-        quantity: 1,
-        lengthMm: 700,
-        widthMm: 300,
-        edges: edgesFromFlags(true, true, true, true),
-        optionRole: 'FRENTE',
-      },
-    ],
     hardwareLines: [
       { id: 'h1', quantity: 2, optionRole: 'BISAGRA' },
       {
@@ -138,18 +118,19 @@ describe('edges / draft mapping', () => {
   it('moduleToDraft maps seed-like module fields', () => {
     const draft = moduleToDraft(modules[0]!);
     expect(draft.code).toBe('MOD-GAB-01');
-    expect(draft.boardParts).toHaveLength(2);
-    expect(draft.boardParts[0]!.optionRole).toBe('INTERIOR');
-    expect(draft.boardParts[0]!.edgeL1).toBe(true);
+    expect(draft.hardwareLines).toHaveLength(2);
     expect(draft.hardwareLines[0]!.mode).toBe('role');
     expect(draft.hardwareLines[1]!.mode).toBe('fixed');
     expect(draft.hardwareLines[1]!.hardwareId).toBe('hw-fixed');
+    // Modules compose structures + components instead of board parts.
+    expect(draft.components).toEqual([]);
+    expect(draft.structureId).toBe('');
   });
 
   it('emptyModuleDraft starts empty', () => {
     const d = emptyModuleDraft();
-    expect(d.boardParts).toEqual([]);
     expect(d.hardwareLines).toEqual([]);
+    expect(d.components).toEqual([]);
     expect(d.code).toBe('');
     expect(d.categoryId).toBe('');
   });
@@ -171,7 +152,33 @@ describe('suggestPartCode / defaultOptionChoicesForModule', () => {
   });
 
   it('defaults choices to first optionId of each used required role', () => {
-    const choices = defaultOptionChoicesForModule(modules[0]!, groups);
+    // Option roles now come from component instances (resolved via the
+    // components catalog) plus variable hardware lines.
+    const catalogComponents = [
+      {
+        id: 'comp-side',
+        code: 'C-LAT',
+        name: 'Lateral',
+        placement: 'lateral_izquierdo' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 720,
+          widthMm: 590,
+          thicknessMm: 18,
+        },
+        defaultEdges: edgesFromFlags(true, true, true, true),
+        optionRoles: ['INTERIOR', 'FRENTE'],
+        active: true,
+      },
+    ];
+    const choices = defaultOptionChoicesForModule(
+      {
+        components: [{ componentId: 'comp-side' }],
+        hardwareLines: modules[0]!.hardwareLines,
+      },
+      groups,
+      catalogComponents,
+    );
     expect(choices).toEqual({
       INTERIOR: 'mat-a',
       FRENTE: 'mat-c',
@@ -196,7 +203,6 @@ describe('filterModulesByQuery / formatModuleMoney (F021)', () => {
         id: 'm2',
         code: 'MOD-CAJ-01',
         name: 'Cajón standard',
-        boardParts: [],
         hardwareLines: [],
       },
     ];

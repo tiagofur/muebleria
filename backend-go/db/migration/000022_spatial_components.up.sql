@@ -1,0 +1,7 @@
+-- Add spatial/positioning and rotation columns to components table
+ALTER TABLE components ADD COLUMN IF NOT EXISTS x_formula VARCHAR(255);
+ALTER TABLE components ADD COLUMN IF NOT EXISTS y_formula VARCHAR(255);
+ALTER TABLE components ADD COLUMN IF NOT EXISTS z_formula VARCHAR(255);
+ALTER TABLE components ADD COLUMN IF NOT EXISTS rotate_x INT NOT NULL DEFAULT 0;
+ALTER TABLE components ADD COLUMN IF NOT EXISTS rotate_y INT NOT NULL DEFAULT 0;
+ALTER TABLE components ADD COLUMN IF NOT EXISTS rotate_z INT NOT NULL DEFAULT 0;

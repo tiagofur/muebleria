@@ -7,69 +7,35 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-func edgesFromFlags(l1, l2, w1, w2 bool) []domain.EdgeAssignment {
-	return []domain.EdgeAssignment{
-		{Side: "L1", Enabled: l1},
-		{Side: "L2", Enabled: l2},
-		{Side: "W1", Enabled: w1},
-		{Side: "W2", Enabled: w2},
-	}
-}
-
-func edgeFlagsFromPart(p domain.BoardPart) (l1, l2, w1, w2 bool) {
-	for _, e := range p.Edges {
-		switch e.Side {
-		case "L1":
-			l1 = e.Enabled
-		case "L2":
-			l2 = e.Enabled
-		case "W1":
-			w1 = e.Enabled
-		case "W2":
-			w2 = e.Enabled
-		}
-	}
-	return
-}
-
-func (s *PostgresStore) loadStructureParts(ctx context.Context, structureID string) ([]domain.BoardPart, error) {
-	partsQuery := `
-		SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula
-		FROM structure_board_parts
+func (s *PostgresStore) loadStructureComponents(ctx context.Context, structureID string) ([]domain.ComponentInstance, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT component_id, quantity, placement_override
+		FROM structure_components
 		WHERE structure_id = $1
-		ORDER BY code NULLS LAST, description;
-	`
-	pRows, err := s.Pool.Query(ctx, partsQuery, structureID)
+		ORDER BY created_at ASC;
+	`, structureID)
 	if err != nil {
 		return nil, err
 	}
-	defer pRows.Close()
+	defer rows.Close()
 
-	var parts []domain.BoardPart
-	for pRows.Next() {
-		var p domain.BoardPart
-		var code *string
-		var lengthFormula, widthFormula *string
-		var l1, l2, w1, w2 bool
-		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2, &lengthFormula, &widthFormula); err != nil {
+	var out []domain.ComponentInstance
+	for rows.Next() {
+		var ci domain.ComponentInstance
+		var placementOverride *string
+		if err := rows.Scan(&ci.ComponentID, &ci.Quantity, &placementOverride); err != nil {
 			return nil, err
 		}
-		if code != nil {
-			p.Code = *code
+		if placementOverride != nil && *placementOverride != "" {
+			p := domain.ComponentPlacement(*placementOverride)
+			ci.PlacementOverride = &p
 		}
-		if lengthFormula != nil {
-			p.LengthFormula = *lengthFormula
-		}
-		if widthFormula != nil {
-			p.WidthFormula = *widthFormula
-		}
-		p.Edges = edgesFromFlags(l1, l2, w1, w2)
-		parts = append(parts, p)
+		out = append(out, ci)
 	}
-	if parts == nil {
-		parts = []domain.BoardPart{}
+	if out == nil {
+		out = []domain.ComponentInstance{}
 	}
-	return parts, pRows.Err()
+	return out, rows.Err()
 }
 
 func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID string) ([]domain.DimensionPreset, error) {
@@ -103,7 +69,9 @@ func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID st
 	return presets, rows.Err()
 }
 
-// ListStructures returns all engineering structures with board parts and presets (F049/F050).
+// ListStructures returns all engineering structures with their component
+// instances and measure presets (F049/F053). Since F053 structures compose
+// reusable Component instances instead of carrying their own board parts.
 func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, created_at, updated_at
@@ -136,11 +104,11 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		if notes != nil {
 			st.Notes = *notes
 		}
-		parts, err := s.loadStructureParts(ctx, st.ID)
+		components, err := s.loadStructureComponents(ctx, st.ID)
 		if err != nil {
 			return nil, err
 		}
-		st.BoardParts = parts
+		st.Components = components
 
 		presets, err := s.loadStructurePresets(ctx, st.ID)
 		if err != nil {
@@ -182,11 +150,11 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 	if notes != nil {
 		st.Notes = *notes
 	}
-	parts, err := s.loadStructureParts(ctx, st.ID)
+	components, err := s.loadStructureComponents(ctx, st.ID)
 	if err != nil {
 		return nil, err
 	}
-	st.BoardParts = parts
+	st.Components = components
 
 	presets, err := s.loadStructurePresets(ctx, st.ID)
 	if err != nil {
@@ -202,6 +170,13 @@ func nullIfEmpty(s string) interface{} {
 		return nil
 	}
 	return s
+}
+
+func placementOverrideArg(p *domain.ComponentPlacement) interface{} {
+	if p == nil {
+		return nil
+	}
+	return string(*p)
 }
 
 func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structure) error {
@@ -221,12 +196,9 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	if st.DepthMm > 0 {
 		d = st.DepthMm
 	}
+	// New structures are always created active — consistent with every other
+	// catalog entity (handlers POST create as active; deactivation is via PUT).
 	active := true
-	if st.Active {
-		active = true
-	}
-	_ = st.Active
-	active = true
 
 	if st.ID != "" {
 		err = tx.QueryRow(ctx, `
@@ -246,27 +218,13 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	}
 	st.Active = active
 
-	for _, p := range st.BoardParts {
-		l1, l2, w1, w2 := edgeFlagsFromPart(p)
-		partID := p.ID
-		if !isValidUUID(partID) {
-			partID = ""
-		}
-		if partID != "" {
-			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_board_parts
-				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, partID, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
-		} else {
-			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_board_parts
-				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
-			`, st.ID, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
-		}
+	for _, c := range st.Components {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override)
+			VALUES ($1,$2,$3,$4);
+		`, st.ID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride))
 		if err != nil {
-			return fmt.Errorf("error inserting structure part: %w", err)
+			return fmt.Errorf("error inserting structure component: %w", err)
 		}
 	}
 
@@ -324,35 +282,21 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 		return fmt.Errorf("structure not found")
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM structure_board_parts WHERE structure_id = $1;`, id); err != nil {
-		return err
-	}
-
 	if _, err := tx.Exec(ctx, `DELETE FROM structure_presets WHERE structure_id = $1;`, id); err != nil {
 		return err
 	}
 
-	for _, p := range st.BoardParts {
-		l1, l2, w1, w2 := edgeFlagsFromPart(p)
-		partID := p.ID
-		if !isValidUUID(partID) {
-			partID = ""
-		}
-		if partID != "" {
-			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_board_parts
-				(id, structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-			`, partID, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
-		} else {
-			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_board_parts
-				(structure_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, length_formula, width_formula)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
-			`, id, nullIfEmpty(p.Code), p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, nullIfEmpty(p.LengthFormula), nullIfEmpty(p.WidthFormula))
-		}
+	if _, err := tx.Exec(ctx, `DELETE FROM structure_components WHERE structure_id = $1;`, id); err != nil {
+		return err
+	}
+
+	for _, c := range st.Components {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override)
+			VALUES ($1,$2,$3,$4);
+		`, id, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride))
 		if err != nil {
-			return fmt.Errorf("error replacing structure parts: %w", err)
+			return fmt.Errorf("error replacing structure component: %w", err)
 		}
 	}
 

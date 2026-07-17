@@ -210,6 +210,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'customers',
       'modules',
       'structures',
+      'components',
       'materials',
       'edges',
       'hardware',
@@ -224,6 +225,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanAccessModulesNav(role)) ids.add('modules');
   // F049: Estructuras only for ingeniero/admin (mutate modules), not vendedor vitrina
   if (roleCanMutateModules(role)) ids.add('structures');
+  if (roleCanMutateModules(role)) ids.add('components');
   if (roleCanAccessCatalogNav(role)) {
     ids.add('materials');
     ids.add('edges');

@@ -14,6 +14,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
   Catalog,
+  Component,
   Customer,
   EdgeBand,
   ExportIssue,
@@ -21,6 +22,7 @@ import type {
   MaterialBoard,
   Module,
   ModuleCategory,
+  ComponentPlacement,
   OptionChoices,
   OptionGroup,
   Project,
@@ -101,6 +103,8 @@ import {
   type CustomerDraft,
   StructuresScreen,
   type StructureDraft,
+  ComponentsScreen,
+  type ComponentDraft,
   PageLoading,
   type CommandPaletteItem,
 } from '@muebles/ui';
@@ -177,16 +181,6 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
           depth: depth ?? 0,
         }
       : undefined,
-    boardParts: draft.boardParts.map((p) => ({
-      id: p.id,
-      code: p.code.trim() || undefined,
-      description: p.description.trim(),
-      quantity: p.quantity,
-      lengthMm: p.lengthMm,
-      widthMm: p.widthMm,
-      edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
-      optionRole: p.optionRole.trim(),
-    })),
     hardwareLines: draft.hardwareLines.map((l) => ({
       id: l.id,
       quantity: l.quantity,
@@ -200,6 +194,24 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
           ? l.hardwareId.trim()
           : undefined,
     })),
+    structureId: draft.structureId.trim() || undefined,
+    components: draft.components.map((c) => ({
+      componentId: c.componentId,
+      quantity: c.quantity,
+      placementOverride: c.placementOverride
+        ? (c.placementOverride as ComponentPlacement)
+        : undefined,
+    })),
+    presets:
+      draft.presets.length > 0
+        ? draft.presets.map((p) => ({
+            id: p.id,
+            name: p.name.trim() || undefined,
+            width: p.width,
+            height: p.height,
+            depth: p.depth,
+          }))
+        : undefined,
   };
 }
 
@@ -215,18 +227,6 @@ function draftToStructure(id: string, draft: StructureDraft): Structure {
     notes: optionalNotes(draft.notes),
     active: draft.active !== false,
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
-    boardParts: draft.boardParts.map((p) => ({
-      id: p.id,
-      code: p.code.trim() || undefined,
-      description: p.description.trim(),
-      quantity: p.quantity,
-      lengthMm: p.lengthMm,
-      widthMm: p.widthMm,
-      edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
-      optionRole: p.optionRole.trim(),
-      lengthFormula: p.lengthFormula?.trim() || undefined,
-      widthFormula: p.widthFormula?.trim() || undefined,
-    })),
     presets: draft.presets && draft.presets.length > 0 ? draft.presets.map((pr) => ({
       id: pr.id,
       name: pr.name?.trim() || undefined,
@@ -234,6 +234,42 @@ function draftToStructure(id: string, draft: StructureDraft): Structure {
       height: pr.height,
       depth: pr.depth,
     })) : undefined,
+    components: draft.components.length > 0
+      ? draft.components.map((c) => ({
+          componentId: c.componentId,
+          quantity: c.quantity,
+          placementOverride: c.placementOverride
+            ? (c.placementOverride as ComponentPlacement)
+            : undefined,
+        }))
+      : undefined,
+  };
+}
+
+function draftToComponent(id: string, draft: ComponentDraft): Component {
+  return {
+    id,
+    code: draft.code.trim(),
+    name: draft.name.trim(),
+    placement: draft.placement as Component['placement'],
+    geometry: {
+      kind: 'rectangular_board',
+      lengthMm: draft.lengthMm,
+      widthMm: draft.widthMm,
+      thicknessMm: draft.thicknessMm,
+      lengthFormula: draft.lengthFormula.trim() || undefined,
+      widthFormula: draft.widthFormula.trim() || undefined,
+    },
+    defaultEdges: edgesFromFlags(draft.edgeL1, draft.edgeL2, draft.edgeW1, draft.edgeW2),
+    optionRoles: draft.optionRoles.split(',').map((s) => s.trim()).filter(Boolean),
+    notes: optionalNotes(draft.notes),
+    active: draft.active !== false,
+    xFormula: draft.xFormula.trim() || undefined,
+    yFormula: draft.yFormula.trim() || undefined,
+    zFormula: draft.zFormula.trim() || undefined,
+    rotateX: draft.rotateX || undefined,
+    rotateY: draft.rotateY || undefined,
+    rotateZ: draft.rotateZ || undefined,
   };
 }
 
@@ -249,10 +285,12 @@ function computeModuleCostPreview(
   previewBlocked: boolean;
   missingGroups: readonly string[];
 } {
-  const required = requiredGroupCodesForModule(module, catalog.optionGroups);
+  const required = requiredGroupCodesForModule(module, catalog.optionGroups, catalog.components, catalog.structures);
   const choices = defaultOptionChoicesForModule(
     module,
     catalog.optionGroups,
+    catalog.components,
+    catalog.structures,
   ) as OptionChoices;
   const gate = canShowPricePreview(required, choices);
   if (!gate.ok) {
@@ -648,6 +686,7 @@ function AppContent({
     navId === 'projects' ? routeEntityId : null;
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
   const routeStructureId = navId === 'structures' ? routeEntityId : null;
+  const routeComponentId = navId === 'components' ? routeEntityId : null;
 
   // Keep the address bar on a known section path (bookmarkable SPA routes).
   useEffect(() => {
@@ -754,6 +793,7 @@ function AppContent({
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
+  const components = catalog?.components ?? [];
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
   const projects = workspace?.projects ?? [];
@@ -1423,6 +1463,34 @@ function AppContent({
     });
   };
 
+  const createComponent = (draft: ComponentDraft) => {
+    const item = draftToComponent(newId(), draft);
+    patchCatalog((c) => ({
+      ...c,
+      components: [...(c.components ?? []), item],
+    }));
+    toast({ type: 'success', message: `✓ "${item.code}" creado` });
+  };
+
+  const updateComponent = (id: string, draft: ComponentDraft) => {
+    patchCatalog((c) => ({
+      ...c,
+      components: (c.components ?? []).map((comp) =>
+        comp.id === id ? draftToComponent(id, draft) : comp,
+      ),
+    }));
+    toast({ type: 'success', message: '✓ Cambios guardados' });
+  };
+
+  const toggleComponentActive = (id: string) => {
+    patchCatalog((c) => ({
+      ...c,
+      components: (c.components ?? []).map((comp) =>
+        comp.id === id ? { ...comp, active: !comp.active } : comp,
+      ),
+    }));
+  };
+
   const createCustomer = (draft: CustomerDraft) => {
     const ownerUserId = resolveOwnerOnCreate(
       authUser?.id,
@@ -1684,6 +1752,7 @@ function AppContent({
       moduleId: string;
       quantity: number;
       optionChoices: OptionChoices;
+      measurePresetId?: string;
     },
   ) => {
     const now = new Date().toISOString();
@@ -1692,6 +1761,7 @@ function AppContent({
       moduleId: input.moduleId,
       quantity: input.quantity,
       optionChoices: input.optionChoices,
+      measurePresetId: input.measurePresetId,
     };
     patchProjects((ps) =>
       ps.map((p) =>
@@ -2048,6 +2118,13 @@ function AppContent({
     [onEntitySelectionChange],
   );
 
+  const onComponentSelectionChange = useCallback(
+    (componentId: string | null) => {
+      onEntitySelectionChange('components', componentId);
+    },
+    [onEntitySelectionChange],
+  );
+
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
@@ -2304,6 +2381,10 @@ function AppContent({
           groupLabels={groupLabels}
           moduleEstimates={moduleEstimates}
           requestCreateKey={modulesCreateKey}
+          structures={structures}
+          catalogComponents={components}
+          materials={materials}
+          edges={edges}
           canMutate={canMutateModules}
           resolveImageUrl={resolveMediaUrl}
           onUploadImage={
@@ -2318,6 +2399,7 @@ function AppContent({
         <StructuresScreen
           structures={structures}
           optionGroups={optionGroups}
+          catalogComponents={components}
           onCreate={createStructure}
           onUpdate={updateStructure}
           onDelete={deleteStructure}
@@ -2325,6 +2407,18 @@ function AppContent({
           onReactivate={(id) => setStructureActive(id, true)}
           openStructureId={routeStructureId}
           onSelectionChange={onStructureSelectionChange}
+          canMutate={canMutateModules}
+        />
+      ) : null}
+      {navId === 'components' ? (
+        <ComponentsScreen
+          components={components}
+          optionGroups={optionGroups}
+          onCreate={createComponent}
+          onUpdate={updateComponent}
+          onToggleActive={toggleComponentActive}
+          openComponentId={routeComponentId}
+          onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
         />
       ) : null}

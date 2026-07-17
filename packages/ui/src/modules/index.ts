@@ -16,6 +16,8 @@ export {
   type ModuleShowcaseProps,
 } from './ModuleShowcase';
 
+export type { ComponentInstanceDraft } from './moduleHelpers';
+
 export {
   defaultOptionChoicesForModule,
   edgesFromFlags,

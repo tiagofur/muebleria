@@ -6,6 +6,8 @@
 import type {
   BoardPart,
   Catalog,
+  Component,
+  ComponentPlacement,
   Customer,
   EdgeBand,
   EdgeAssignment,
@@ -245,35 +247,44 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     height_mm: m.externalDims?.height ?? 0,
     depth_mm: m.externalDims?.depth ?? 0,
     categoryId: m.categoryId ?? '',
+    structure_id: m.structureId ?? '',
+    components: (m.components ?? []).map(componentInstanceToApi),
+    presets: (m.presets ?? []).map(presetToApi),
     image_url: m.imageUrl ?? '',
     notes: m.notes ?? '',
-    board_parts: m.boardParts.map(boardPartToApi),
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
   };
 }
 
 export function moduleFromApi(raw: Record<string, unknown>): Module {
-  const parts = raw.board_parts ?? raw.boardParts;
   const lines = raw.hardware_lines ?? raw.hardwareLines;
   const w = num(raw.width_mm ?? raw.widthMm);
   const h = num(raw.height_mm ?? raw.heightMm);
   const d = num(raw.depth_mm ?? raw.depthMm);
   const hasDims = w > 0 || h > 0 || d > 0;
   const categoryId = str(raw.categoryId ?? raw.category_id);
+  const structureId = str(raw.structure_id ?? raw.structureId);
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
   const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
+  const componentsRaw = raw.components;
+  const presetsRaw = raw.presets;
+  const presets = Array.isArray(presetsRaw)
+    ? (presetsRaw as Record<string, unknown>[]).map(presetFromApi)
+    : undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
     categoryId: categoryId || undefined,
+    structureId: structureId || undefined,
+    components: Array.isArray(componentsRaw)
+      ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
+      : undefined,
+    presets: presets && presets.length > 0 ? presets : undefined,
     baseLaborCost: labor > 0 ? labor : undefined,
     imageUrl,
     notes: str(raw.notes) || undefined,
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
-    boardParts: Array.isArray(parts)
-      ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
-      : [],
     hardwareLines: Array.isArray(lines)
       ? lines.map((l) => hardwareLineFromApi(l as Record<string, unknown>))
       : [],
@@ -281,6 +292,105 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
 }
 
 // --- Structures (F049 / #99) ---
+
+function componentInstanceToApi(
+  c: import('@muebles/domain').ModuleComponentInstance,
+): Record<string, unknown> {
+  const overrides: Record<string, unknown> = {};
+  if (c.overrides?.edges) {
+    overrides.edges = c.overrides.edges;
+  }
+  if (c.overrides?.notes) {
+    overrides.notes = c.overrides.notes;
+  }
+  if (c.overrides?.lengthFormula) {
+    overrides.lengthFormula = c.overrides.lengthFormula;
+  }
+  if (c.overrides?.widthFormula) {
+    overrides.widthFormula = c.overrides.widthFormula;
+  }
+  return {
+    componentId: c.componentId,
+    quantity: c.quantity,
+    placementOverride: c.placementOverride ?? null,
+    length_formula: c.overrides?.lengthFormula ?? '',
+    width_formula: c.overrides?.widthFormula ?? '',
+    overrides: Object.keys(overrides).length > 0 ? overrides : null,
+  };
+}
+
+function componentInstanceFromApi(
+  raw: Record<string, unknown>,
+): import('@muebles/domain').ModuleComponentInstance {
+  const placement = str(raw.placementOverride ?? raw.placement_override);
+  const overridesRaw =
+    raw.overrides && typeof raw.overrides === 'object'
+      ? (raw.overrides as Record<string, unknown>)
+      : undefined;
+  const edgesRaw = overridesRaw?.edges;
+  const lengthFormula =
+    str(
+      raw.length_formula ??
+        raw.lengthFormula ??
+        overridesRaw?.lengthFormula ??
+        overridesRaw?.length_formula,
+    ) || undefined;
+  const widthFormula =
+    str(
+      raw.width_formula ??
+        raw.widthFormula ??
+        overridesRaw?.widthFormula ??
+        overridesRaw?.width_formula,
+    ) || undefined;
+  const notes =
+    str(overridesRaw?.notes) || undefined;
+  const hasOverrides =
+    Array.isArray(edgesRaw) ||
+    Boolean(lengthFormula) ||
+    Boolean(widthFormula) ||
+    Boolean(notes);
+  return {
+    componentId: str(raw.componentId ?? raw.component_id),
+    quantity: num(raw.quantity, 1),
+    placementOverride: placement
+      ? (placement as import('@muebles/domain').ComponentPlacement)
+      : undefined,
+    overrides: hasOverrides
+      ? {
+          edges: Array.isArray(edgesRaw)
+            ? (edgesRaw as Record<string, unknown>[]).map((e) => ({
+                side: str(e.side, 'L1') as EdgeAssignment['side'],
+                enabled: bool(e.enabled),
+              }))
+            : undefined,
+          notes,
+          lengthFormula,
+          widthFormula,
+        }
+      : undefined,
+  };
+}
+
+function presetToApi(p: import('@muebles/domain').DimensionPreset): Record<string, unknown> {
+  return {
+    id: p.id,
+    name: p.name ?? '',
+    width_mm: p.width,
+    height_mm: p.height,
+    depth_mm: p.depth,
+  };
+}
+
+function presetFromApi(raw: Record<string, unknown>): import('@muebles/domain').DimensionPreset {
+  const name = str(raw.name);
+  return {
+    id: str(raw.id),
+    name: name || undefined,
+    width: num(raw.width_mm ?? raw.widthMm),
+    height: num(raw.height_mm ?? raw.heightMm),
+    depth: num(raw.depth_mm ?? raw.depthMm),
+  };
+}
 
 export function structureToApi(st: import('@muebles/domain').Structure): Record<string, unknown> {
   return {
@@ -292,17 +402,19 @@ export function structureToApi(st: import('@muebles/domain').Structure): Record<
     depth_mm: st.externalDims?.depth ?? 0,
     notes: st.notes ?? '',
     active: st.active !== false,
-    board_parts: st.boardParts.map(boardPartToApi),
+    components: (st.components ?? []).map(componentInstanceToApi),
+    presets: (st.presets ?? []).map(presetToApi),
   };
 }
 
 export function structureFromApi(raw: Record<string, unknown>): import('@muebles/domain').Structure {
-  const parts = raw.board_parts ?? raw.boardParts;
   const w = num(raw.width_mm ?? raw.widthMm);
   const h = num(raw.height_mm ?? raw.heightMm);
   const d = num(raw.depth_mm ?? raw.depthMm);
   const hasDims = w > 0 || h > 0 || d > 0;
   const activeRaw = raw.active;
+  const componentsRaw = raw.components;
+  const presetsRaw = raw.presets;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -310,9 +422,70 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
     notes: str(raw.notes) || undefined,
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
     active: activeRaw === false ? false : true,
-    boardParts: Array.isArray(parts)
-      ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
+    components: Array.isArray(componentsRaw)
+      ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
+      : undefined,
+    presets: Array.isArray(presetsRaw)
+      ? (presetsRaw as Record<string, unknown>[]).map(presetFromApi)
+      : undefined,
+  };
+}
+
+// --- Components (F050 / #101) ---
+
+export function componentToApi(c: Component): Record<string, unknown> {
+  const lengthFormula =
+    c.geometry.kind === 'rectangular_board' ? c.geometry.lengthFormula : undefined;
+  const widthFormula =
+    c.geometry.kind === 'rectangular_board' ? c.geometry.widthFormula : undefined;
+  return {
+    id: c.id,
+    code: c.code,
+    name: c.name,
+    placement: c.placement,
+    geometry_kind: c.geometry.kind,
+    length_mm: c.geometry.lengthMm,
+    width_mm: c.geometry.widthMm,
+    thickness_mm: c.geometry.thicknessMm,
+    length_formula: lengthFormula ?? '',
+    width_formula: widthFormula ?? '',
+    default_edges: c.defaultEdges.map((e) => ({ side: e.side, enabled: e.enabled })),
+    option_roles: [...c.optionRoles],
+    notes: c.notes ?? '',
+    active: c.active,
+  };
+}
+
+export function componentFromApi(raw: Record<string, unknown>): Component {
+  const placement = str(raw.placement, 'base') as ComponentPlacement;
+  const edgesRaw = raw.default_edges ?? raw.defaultEdges;
+  const rolesRaw = raw.option_roles ?? raw.optionRoles;
+  const lengthFormula = str(raw.length_formula ?? raw.lengthFormula) || undefined;
+  const widthFormula = str(raw.width_formula ?? raw.widthFormula) || undefined;
+  return {
+    id: str(raw.id),
+    code: str(raw.code),
+    name: str(raw.name),
+    placement,
+    geometry: {
+      kind: (str(raw.geometry_kind ?? raw.geometryKind, 'rectangular_board') as Component['geometry']['kind']),
+      lengthMm: num(raw.length_mm ?? raw.lengthMm),
+      widthMm: num(raw.width_mm ?? raw.widthMm),
+      thicknessMm: num(raw.thickness_mm ?? raw.thicknessMm),
+      lengthFormula,
+      widthFormula,
+    },
+    defaultEdges: Array.isArray(edgesRaw)
+      ? (edgesRaw as Record<string, unknown>[]).map((e) => ({
+          side: str(e.side, 'L1') as EdgeAssignment['side'],
+          enabled: bool(e.enabled),
+        }))
       : [],
+    optionRoles: Array.isArray(rolesRaw)
+      ? (rolesRaw as string[])
+      : [],
+    notes: str(raw.notes) || undefined,
+    active: bool(raw.active, true),
   };
 }
 
@@ -365,6 +538,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
       module_id: item.moduleId,
       quantity: item.quantity,
       option_choices: { ...item.optionChoices },
+      measure_preset_id: item.measurePresetId ?? '',
     })),
   };
 }
@@ -402,6 +576,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     items: itemsRaw.map((it): ProjectItem => {
       const row = it as Record<string, unknown>;
       const choices = row.option_choices ?? row.optionChoices;
+      const measurePresetId =
+        str(row.measure_preset_id ?? row.measurePresetId) || undefined;
       return {
         id: str(row.id),
         moduleId: str(row.module_id ?? row.moduleId),
@@ -410,6 +586,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
           choices && typeof choices === 'object' && !Array.isArray(choices)
             ? (choices as ProjectItem['optionChoices'])
             : {},
+        measurePresetId,
       };
     }),
   };
@@ -480,6 +657,7 @@ export function catalogFromApi(parts: {
   structures?: unknown;
   categories: unknown;
   customers: unknown;
+  components?: unknown;
 }): Catalog {
   const asRows = (v: unknown): Record<string, unknown>[] =>
     Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -493,6 +671,7 @@ export function catalogFromApi(parts: {
     structures: asRows(parts.structures).map(structureFromApi),
     categories: asRows(parts.categories).map(categoryFromApi),
     customers: asRows(parts.customers).map(customerFromApi),
+    components: asRows(parts.components).map(componentFromApi),
   };
 }
 

@@ -9,8 +9,10 @@ import {
   projectToApi,
   projectFromApi,
   breakdownFromApi,
+  componentToApi,
+  componentFromApi,
 } from './apiMappers';
-import type { MaterialBoard, Module, ModuleCategory, Project } from '@muebles/domain';
+import type { Component, MaterialBoard, Module, ModuleCategory, Project } from '@muebles/domain';
 
 describe('apiMappers', () => {
   it('maps material camelCase ↔ snake_case', () => {
@@ -40,24 +42,17 @@ describe('apiMappers', () => {
     });
   });
 
-  it('maps module boardParts to board_parts with length_mm', () => {
+  it('maps module components + structureId to API and back', () => {
     const mod: Module = {
       id: 'mod1',
       code: 'GAB-01',
       name: 'Gab',
       categoryId: 'cat1',
-      baseLaborCost: 50,
-      boardParts: [
-        {
-          id: 'p1',
-          description: 'Lateral',
-          quantity: 2,
-          lengthMm: 720,
-          widthMm: 500,
-          edges: [{ side: 'L1', enabled: true }],
-          optionRole: 'INTERIOR',
-        },
+      structureId: 'struct-1',
+      components: [
+        { componentId: 'comp-1', quantity: 2, placementOverride: 'puerta' },
       ],
+      baseLaborCost: 50,
       hardwareLines: [
         {
           id: 'h1',
@@ -70,14 +65,17 @@ describe('apiMappers', () => {
     const api = moduleToApi(mod);
     expect(api.base_labor_cost).toBe(50);
     expect(api.categoryId).toBe('cat1');
-    const parts = api.board_parts as Record<string, unknown>[];
-    expect(parts[0]?.length_mm).toBe(720);
-    expect(parts[0]?.option_role).toBe('INTERIOR');
+    expect(api.structure_id).toBe('struct-1');
+    const comps = api.components as Record<string, unknown>[];
+    expect(comps[0]?.componentId).toBe('comp-1');
+    expect(comps[0]?.quantity).toBe(2);
     const lines = api.hardware_lines as Record<string, unknown>[];
     expect(lines[0]?.hardware_id).toBe('hw1');
 
     const round = moduleFromApi(api as Record<string, unknown>);
-    expect(round.boardParts[0]?.lengthMm).toBe(720);
+    expect(round.structureId).toBe('struct-1');
+    expect(round.components?.[0]?.componentId).toBe('comp-1');
+    expect(round.components?.[0]?.quantity).toBe(2);
     expect(round.baseLaborCost).toBe(50);
     expect(round.hardwareLines[0]?.hardwareId).toBe('hw1');
   });
@@ -171,5 +169,62 @@ describe('apiMappers', () => {
     expect(bd.salePrice).toBe(0);
     // marginFactor defaults to 1 (no margin) rather than 0 (which would zero the price).
     expect(bd.marginFactor).toBe(1);
+  });
+});
+
+describe('component formula mappers', () => {
+  it('round-trips component length/width formulas', () => {
+    const c: Component = {
+      id: 'c1',
+      code: 'COM-1',
+      name: 'Puerta',
+      placement: 'puerta',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 700,
+        widthMm: 300,
+        thicknessMm: 18,
+        lengthFormula: 'H-3',
+        widthFormula: 'W/2-2',
+      },
+      defaultEdges: [
+        { side: 'L1', enabled: true },
+        { side: 'L2', enabled: true },
+        { side: 'W1', enabled: false },
+        { side: 'W2', enabled: false },
+      ],
+      optionRoles: ['FRENTE'],
+      active: true,
+    };
+    const api = componentToApi(c);
+    expect(api.length_formula).toBe('H-3');
+    expect(api.width_formula).toBe('W/2-2');
+    const round = componentFromApi(api as Record<string, unknown>);
+    expect(round.geometry.lengthFormula).toBe('H-3');
+    expect(round.geometry.widthFormula).toBe('W/2-2');
+  });
+
+  it('round-trips module component instance formula overrides', () => {
+    const mod: Module = {
+      id: 'mod1',
+      code: 'GAB-01',
+      name: 'Gab',
+      structureId: 'struct-1',
+      components: [
+        {
+          componentId: 'comp-1',
+          quantity: 1,
+          placementOverride: 'puerta',
+          overrides: { lengthFormula: 'H-5', widthFormula: 'W-10' },
+        },
+      ],
+      hardwareLines: [],
+    };
+    const api = moduleToApi(mod);
+    const comps = api.components as Record<string, unknown>[];
+    expect(comps[0]?.length_formula).toBe('H-5');
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.components?.[0]?.overrides?.lengthFormula).toBe('H-5');
+    expect(round.components?.[0]?.overrides?.widthFormula).toBe('W-10');
   });
 });

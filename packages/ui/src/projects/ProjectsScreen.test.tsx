@@ -93,27 +93,12 @@ const modules: Module[] = [
     id: 'mod-1',
     code: 'MOD-GAB-01',
     name: 'Bajo mesada',
-    boardParts: [
-      {
-        id: 'p1',
-        description: 'Lateral',
-        quantity: 1,
-        lengthMm: 720,
-        widthMm: 560,
-        edges: [],
-        optionRole: 'INTERIOR',
-      },
-      {
-        id: 'p2',
-        description: 'Puerta',
-        quantity: 1,
-        lengthMm: 700,
-        widthMm: 300,
-        edges: [],
-        optionRole: 'FRENTE',
-      },
+    // Option roles come from hardware lines (modules compose structures +
+    // components, not board parts directly).
+    hardwareLines: [
+      { id: 'h1', quantity: 1, optionRole: 'INTERIOR' },
+      { id: 'h2', quantity: 1, optionRole: 'FRENTE' },
     ],
-    hardwareLines: [],
   },
 ];
 

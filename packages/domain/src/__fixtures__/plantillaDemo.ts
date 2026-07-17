@@ -18,12 +18,14 @@
 
 import type {
   Catalog,
+  Component,
   Customer,
   EdgeAssignment,
   Module,
   OptionChoices,
   Project,
   QuoteBreakdown,
+  Structure,
 } from '../types';
 
 const edgesAll = (
@@ -263,89 +265,13 @@ export const modGab01: Module = {
   code: 'MOD-GAB-01',
   name: 'Gabinete 1 Puerta 300 x 720 x 590 mm',
   externalDims: { width: 300, height: 720, depth: 590 },
-  // Excel has no per-module labor; project-level fixed only
-  boardParts: [
-    {
-      id: 'gab-p01',
-      code: 'MOD-GAB-01-P01',
-      description: 'Costado Derecho',
-      quantity: 1,
-      lengthMm: 720,
-      widthMm: 590,
-      edges: edgesAll(true, true, true, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p02',
-      code: 'MOD-GAB-01-P02',
-      description: 'Costado Izquierdo',
-      quantity: 1,
-      lengthMm: 720,
-      widthMm: 590,
-      edges: edgesAll(true, true, true, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p03',
-      code: 'MOD-GAB-01-P03',
-      description: 'Respaldo Gabinete',
-      quantity: 1,
-      lengthMm: 689,
-      widthMm: 269,
-      edges: edgesAll(false, false, false, false),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p04',
-      code: 'MOD-GAB-01-P04',
-      description: 'Piso Gabinete',
-      quantity: 1,
-      lengthMm: 590,
-      widthMm: 269,
-      edges: edgesAll(false, false, true, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p05',
-      code: 'MOD-GAB-01-P05',
-      description: 'Entrepano Gabinete',
-      quantity: 1,
-      lengthMm: 520,
-      widthMm: 269,
-      edges: edgesAll(false, false, false, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p06',
-      code: 'MOD-GAB-01-P06',
-      description: 'Manguete Frontal',
-      quantity: 1,
-      lengthMm: 269,
-      widthMm: 120,
-      edges: edgesAll(true, true, false, false),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p07',
-      code: 'MOD-GAB-01-P07',
-      description: 'Manguete Posterior',
-      quantity: 1,
-      lengthMm: 269,
-      widthMm: 120,
-      edges: edgesAll(true, true, false, false),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'gab-p08',
-      code: 'MOD-GAB-01-P08',
-      description: 'Puerta Gabinete',
-      quantity: 1,
-      lengthMm: 717,
-      widthMm: 296,
-      edges: edgesAll(true, true, true, true),
-      optionRole: 'FRENTE',
-    },
+  structureId: 'struct-gab-01',
+  // Module-level components: door (front) + shelf (interior), beyond the body.
+  components: [
+    { componentId: 'comp-gab-puerta', quantity: 1 },
+    { componentId: 'comp-gab-entrepano', quantity: 1 },
   ],
+  // Excel has no per-module labor; project-level fixed only
   hardwareLines: [
     {
       id: 'gab-h01',
@@ -384,87 +310,12 @@ export const modCaj01: Module = {
   code: 'MOD-CAJ-01',
   name: 'Cajonera 4 Cajones 500 x 720 x 590 mm',
   externalDims: { width: 500, height: 720, depth: 590 },
-  boardParts: [
-    {
-      id: 'caj-p01',
-      code: 'MOD-CAJ-01-P01',
-      description: 'Costado Derecho',
-      quantity: 1,
-      lengthMm: 720,
-      widthMm: 590,
-      edges: edgesAll(true, true, true, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'caj-p02',
-      code: 'MOD-CAJ-01-P02',
-      description: 'Costado Izquierdo',
-      quantity: 1,
-      lengthMm: 720,
-      widthMm: 590,
-      edges: edgesAll(true, true, true, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'caj-p03',
-      code: 'MOD-CAJ-01-P03',
-      description: 'Piso Gabinete',
-      quantity: 1,
-      lengthMm: 590,
-      widthMm: 469,
-      edges: edgesAll(false, false, true, true),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'caj-p04',
-      code: 'MOD-CAJ-01-P04',
-      description: 'Respaldo Gabinete',
-      quantity: 1,
-      lengthMm: 689,
-      widthMm: 469,
-      edges: edgesAll(false, false, false, false),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'caj-p05',
-      code: 'MOD-CAJ-01-P05',
-      description: 'Frente de Cajón',
-      quantity: 4,
-      lengthMm: 175,
-      widthMm: 496,
-      edges: edgesAll(true, true, true, true),
-      optionRole: 'FRENTE',
-    },
-    {
-      id: 'caj-p06',
-      code: 'MOD-CAJ-01-P06',
-      description: 'Lateral de Cajón',
-      quantity: 8,
-      lengthMm: 500,
-      widthMm: 120,
-      edges: edgesAll(true, false, false, false),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'caj-p07',
-      code: 'MOD-CAJ-01-P07',
-      description: 'Frente/Tras Cajón',
-      quantity: 4,
-      lengthMm: 412,
-      widthMm: 120,
-      edges: edgesAll(true, false, false, false),
-      optionRole: 'INTERIOR',
-    },
-    {
-      id: 'caj-p08',
-      code: 'MOD-CAJ-01-P08',
-      description: 'Fondo de Cajón (MDF)',
-      quantity: 4,
-      lengthMm: 500,
-      widthMm: 442,
-      edges: edgesAll(false, false, false, false),
-      optionRole: 'FONDO',
-    },
+  structureId: 'struct-caj-01',
+  components: [
+    { componentId: 'comp-caj-frente', quantity: 4 },
+    { componentId: 'comp-caj-lateral', quantity: 8 },
+    { componentId: 'comp-caj-frentetras', quantity: 4 },
+    { componentId: 'comp-caj-fondo', quantity: 4 },
   ],
   hardwareLines: [
     {
@@ -493,9 +344,368 @@ export const modCaj01: Module = {
   ],
 };
 
+// --- Reusable component seeds (F049 / H07) ---
+
+export const seedComponentPuerta: Component = {
+  id: 'seed-comp-puerta',
+  code: 'COM-PUE-01',
+  name: 'Puerta',
+  placement: 'puerta',
+  geometry: { kind: 'rectangular_board', lengthMm: 717, widthMm: 296, thicknessMm: 18 },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['FRENTE'],
+  active: true,
+};
+
+export const seedComponentEntrepano: Component = {
+  id: 'seed-comp-entrepano',
+  code: 'COM-ENT-01',
+  name: 'Entrepaño Regulable',
+  placement: 'interno',
+  geometry: { kind: 'rectangular_board', lengthMm: 462, widthMm: 550, thicknessMm: 15 },
+  defaultEdges: edgesAll(false, false, false, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+export const seedComponentCostado: Component = {
+  id: 'seed-comp-costado',
+  code: 'COM-COS-01',
+  name: 'Costado Lateral',
+  placement: 'lateral_izquierdo',
+  geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+export const seedComponentBase: Component = {
+  id: 'seed-comp-base',
+  code: 'COM-BAS-01',
+  name: 'Base Estructura',
+  placement: 'base',
+  geometry: { kind: 'rectangular_board', lengthMm: 564, widthMm: 560, thicknessMm: 18 },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+// --- Parametric components for MOD-GAB-01 / MOD-CAJ-01 (Fase 2+3) ---
+// Geometry formulas reproduce the exact Excel dimensions at each module's
+// preset (W=width, H=height, D=depth in mm), so golden cost numbers are
+// preserved while pieces become reusable + parametric.
+
+/** Gabinete body: costado (L=H, W=D), respaldo, piso, manguetes. */
+/** Gabinete body: costado (L=H, W=D), respaldo, piso, manguetes. */
+const compGabCostado: Component = {
+  id: 'comp-gab-costado',
+  code: 'COM-GAB-COS',
+  name: 'Costado Gabinete',
+  placement: 'lateral_izquierdo',
+  geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 590, thicknessMm: 18, lengthFormula: 'PH', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'i * (PW - T)',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 90,
+  rotateZ: 0,
+};
+const compGabRespaldo: Component = {
+  id: 'comp-gab-respaldo',
+  code: 'COM-GAB-RES',
+  name: 'Respaldo Gabinete',
+  placement: 'trasera',
+  geometry: { kind: 'rectangular_board', lengthMm: 689, widthMm: 269, thicknessMm: 18, lengthFormula: 'PH - 31', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: 'T',
+  rotateX: 90,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compGabPiso: Component = {
+  id: 'comp-gab-piso',
+  code: 'COM-GAB-PIS',
+  name: 'Piso Gabinete',
+  placement: 'base',
+  geometry: { kind: 'rectangular_board', lengthMm: 590, widthMm: 269, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compGabManguete: Component = {
+  id: 'comp-gab-manguete',
+  code: 'COM-GAB-MAN',
+  name: 'Manguete',
+  placement: 'frontal',
+  geometry: { kind: 'rectangular_board', lengthMm: 269, widthMm: 120, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: '120' },
+  defaultEdges: edgesAll(true, true, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: 'i * (PD - 120)',
+  zFormula: 'PH - T',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+/** Gabinete module-level components: door + shelf. */
+const compGabPuerta: Component = {
+  id: 'comp-gab-puerta',
+  code: 'COM-GAB-PUE',
+  name: 'Puerta Gabinete',
+  placement: 'puerta',
+  geometry: { kind: 'rectangular_board', lengthMm: 717, widthMm: 296, thicknessMm: 18, lengthFormula: 'PH - 3', widthFormula: 'PW - 4' },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['FRENTE'],
+  active: true,
+  xFormula: '2',
+  yFormula: 'PD',
+  zFormula: '2',
+  rotateX: 90,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compGabEntrepano: Component = {
+  id: 'comp-gab-entrepano',
+  code: 'COM-GAB-ENT',
+  name: 'Entrepaño Gabinete',
+  placement: 'interno',
+  geometry: { kind: 'rectangular_board', lengthMm: 520, widthMm: 269, thicknessMm: 18, lengthFormula: 'PH - 200', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, false, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: '150 + i * 200',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+
+/** Cajonera body: costados, piso, respaldo. */
+const compCajCostado: Component = {
+  id: 'comp-caj-costado',
+  code: 'COM-CAJ-COS',
+  name: 'Costado Cajonera',
+  placement: 'lateral_izquierdo',
+  geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 590, thicknessMm: 18, lengthFormula: 'PH', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'i * (PW - T)',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 90,
+  rotateZ: 0,
+};
+const compCajPiso: Component = {
+  id: 'comp-caj-piso',
+  code: 'COM-CAJ-PIS',
+  name: 'Piso Cajonera',
+  placement: 'base',
+  geometry: { kind: 'rectangular_board', lengthMm: 590, widthMm: 469, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compCajRespaldo: Component = {
+  id: 'comp-caj-respaldo',
+  code: 'COM-CAJ-RES',
+  name: 'Respaldo Cajonera',
+  placement: 'trasera',
+  geometry: { kind: 'rectangular_board', lengthMm: 689, widthMm: 469, thicknessMm: 18, lengthFormula: 'PH - 31', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: 'T',
+  rotateX: 90,
+  rotateY: 0,
+  rotateZ: 0,
+};
+/** Cajonera module-level components: drawer parts. */
+const compCajFrente: Component = {
+  id: 'comp-caj-frente',
+  code: 'COM-CAJ-FRE',
+  name: 'Frente de Cajón',
+  placement: 'frente_cajon',
+  geometry: { kind: 'rectangular_board', lengthMm: 175, widthMm: 496, thicknessMm: 18 },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['FRENTE'],
+  active: true,
+  xFormula: '2',
+  yFormula: 'PD',
+  zFormula: 'i * 175',
+  rotateX: 90,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compCajLateral: Component = {
+  id: 'comp-caj-lateral',
+  code: 'COM-CAJ-LAT',
+  name: 'Lateral de Cajón',
+  placement: 'interno',
+  geometry: { kind: 'rectangular_board', lengthMm: 500, widthMm: 120, thicknessMm: 18, lengthFormula: 'PW', widthFormula: '120' },
+  defaultEdges: edgesAll(true, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'i * (PW - T)',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 90,
+  rotateZ: 0,
+};
+const compCajFrenteTras: Component = {
+  id: 'comp-caj-frentetras',
+  code: 'COM-CAJ-FTC',
+  name: 'Frente/Tras Cajón',
+  placement: 'interno',
+  geometry: { kind: 'rectangular_board', lengthMm: 412, widthMm: 120, thicknessMm: 18, lengthFormula: 'PW - 88', widthFormula: '120' },
+  defaultEdges: edgesAll(true, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: 'i * (PD - 120)',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compCajFondo: Component = {
+  id: 'comp-caj-fondo',
+  code: 'COM-CAJ-FON',
+  name: 'Fondo de Cajón',
+  placement: 'trasera',
+  geometry: { kind: 'rectangular_board', lengthMm: 500, widthMm: 442, thicknessMm: 3, lengthFormula: 'PW', widthFormula: 'PW - 58' },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['FONDO'],
+  active: true,
+  xFormula: '29',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+
+/** Bodies (structures) for the two seed modules. */
+const structGab01: Structure = {
+  id: 'struct-gab-01',
+  code: 'EST-GAB-01',
+  name: 'Cuerpo Gabinete 1 Puerta',
+  externalDims: { width: 300, height: 720, depth: 590 },
+  components: [
+    { componentId: 'comp-gab-costado', quantity: 2 },
+    { componentId: 'comp-gab-respaldo', quantity: 1 },
+    { componentId: 'comp-gab-piso', quantity: 1 },
+    { componentId: 'comp-gab-manguete', quantity: 2 },
+  ],
+  presets: [{ id: 'preset-gab-300', name: '300×720×590', width: 300, height: 720, depth: 590 }],
+  active: true,
+};
+const structCaj01: Structure = {
+  id: 'struct-caj-01',
+  code: 'EST-CAJ-01',
+  name: 'Cuerpo Cajonera 4 Cajones',
+  externalDims: { width: 500, height: 720, depth: 590 },
+  components: [
+    { componentId: 'comp-caj-costado', quantity: 2 },
+    { componentId: 'comp-caj-piso', quantity: 1 },
+    { componentId: 'comp-caj-respaldo', quantity: 1 },
+  ],
+  presets: [{ id: 'preset-caj-500', name: '500×720×590', width: 500, height: 720, depth: 590 }],
+  active: true,
+};
+
+// --- Composed module seed ---
+
+export const seedComposedModule: Module = {
+  id: 'seed-mod-comp-001',
+  code: 'MOD-COMP-001',
+  name: 'Gabinete Compuesto 600',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  structureId: 'seed-struct-test',
+  components: [
+    { componentId: 'seed-comp-puerta', quantity: 1 },
+    { componentId: 'seed-comp-entrepano', quantity: 2 },
+  ],
+  // Commercial multi-size options for quote (#104). Base 600 remains the default size.
+  presets: [
+    { id: 'mod-preset-300', name: 'Ancho 300', width: 300, height: 720, depth: 560 },
+    { id: 'mod-preset-400', name: 'Ancho 400', width: 400, height: 720, depth: 560 },
+    { id: 'mod-preset-600', name: 'Ancho 600', width: 600, height: 720, depth: 560 },
+  ],
+  hardwareLines: [],
+  notes: 'Mueble compuesto demo: estructura + puerta + entrepaños + presets 300/400/600',
+};
+
+/**
+ * Valid structure fixture for seed/testing.
+ *
+ * Since F053 a Structure composes reusable Component instances instead of
+ * carrying its own board parts. This fixture references the costado and base
+ * components so the structure contributes those pieces to composed modules.
+ */
+const SEED_STRUCTURE: Structure = {
+  id: 'seed-struct-test',
+  code: 'EST-COMP-600',
+  name: 'Estructura Compuesta 600',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  components: [
+    { componentId: 'seed-comp-costado', quantity: 2 },
+    { componentId: 'seed-comp-base', quantity: 1 },
+  ],
+  presets: [
+    { id: 'preset-600', name: 'Ancho 600', width: 600, height: 720, depth: 560 },
+  ],
+  active: true,
+};
+
 export const plantillaCatalogWithModules: Catalog = {
   ...plantillaCatalog,
-  modules: [modGab01, modCaj01],
+  modules: [modGab01, modCaj01, seedComposedModule],
+  structures: [structGab01, structCaj01, SEED_STRUCTURE],
+  components: [
+    seedComponentPuerta,
+    seedComponentEntrepano,
+    seedComponentCostado,
+    seedComponentBase,
+    compGabCostado,
+    compGabRespaldo,
+    compGabPiso,
+    compGabManguete,
+    compGabPuerta,
+    compGabEntrepano,
+    compCajCostado,
+    compCajPiso,
+    compCajRespaldo,
+    compCajFrente,
+    compCajLateral,
+    compCajFrenteTras,
+    compCajFondo,
+  ],
 };
 
 export const plantillaProject: Project = {

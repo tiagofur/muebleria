@@ -3,14 +3,37 @@
  */
 
 import type {
+  Component,
   EdgeBand,
   Hardware,
   MaterialBoard,
   OptionChoices,
   OptionGroup,
   OptionGroupKind,
+  Structure,
 } from '@muebles/domain';
 import { filterActiveForPicker, normalizeCode } from '../catalogs/catalogHelpers';
+
+/**
+ * Collect optionRoles from a module's component instances AND the component
+ * instances of its referenced structure (when both catalogs are provided).
+ * Modules no longer carry board parts, so roles come from components.
+ */
+function collectComponentRoles(
+  componentInstances: readonly { componentId: string }[] | undefined,
+  catalogComponents: readonly Component[] | undefined,
+  out: Set<string>,
+): void {
+  if (!componentInstances || !catalogComponents) return;
+  for (const inst of componentInstances) {
+    const comp = catalogComponents.find((c) => c.id === inst.componentId);
+    if (comp) {
+      for (const role of comp.optionRoles) {
+        if (role.trim()) out.add(role.trim());
+      }
+    }
+  }
+}
 
 export type CatalogMember = {
   readonly id: string;
@@ -115,26 +138,33 @@ export function canShowPricePreview(
 }
 
 /**
- * Codes of groups that are `required` and appear as optionRole on the module
- * (board parts or hardware lines without fixed hardwareId).
+ * Codes of groups that are `required` and appear as an optionRole used by the
+ * module — via hardware lines without a fixed hardwareId, or via the optionRoles
+ * of the module's component instances and its referenced structure's components.
+ * Modules no longer carry board parts directly.
  */
 export function requiredGroupCodesForModule(
   module: {
-    readonly boardParts: readonly { readonly optionRole: string }[];
     readonly hardwareLines: readonly {
       readonly optionRole: string;
       readonly hardwareId?: string;
     }[];
+    readonly components?: readonly { readonly componentId: string }[];
+    readonly structureId?: string;
   },
   optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
 ): string[] {
   const usedRoles = new Set<string>();
-  for (const part of module.boardParts) {
-    if (part.optionRole?.trim()) usedRoles.add(part.optionRole.trim());
-  }
   for (const line of module.hardwareLines) {
     if (line.hardwareId) continue;
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
+  }
+  collectComponentRoles(module.components, catalogComponents, usedRoles);
+  if (module.structureId && catalogStructures && catalogComponents) {
+    const structure = catalogStructures.find((s) => s.id === module.structureId);
+    collectComponentRoles(structure?.components, catalogComponents, usedRoles);
   }
 
   const required = optionGroups

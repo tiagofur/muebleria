@@ -80,8 +80,26 @@ function collectMissingChoiceIssues(
   issues: ExportIssue[],
 ): void {
   const roles = new Set<string>();
-  for (const part of module.boardParts) {
-    if (part.optionRole?.trim()) roles.add(part.optionRole);
+  // Roles come from module-level component instances (resolved to their
+  // optionRoles), the referenced structure's components, and hardware lines.
+  for (const instance of module.components ?? []) {
+    const comp = catalog.components?.find((c) => c.id === instance.componentId);
+    if (comp) {
+      for (const role of comp.optionRoles) {
+        if (role.trim()) roles.add(role);
+      }
+    }
+  }
+  if (module.structureId) {
+    const structure = catalog.structures?.find((s) => s.id === module.structureId);
+    for (const instance of structure?.components ?? []) {
+      const comp = catalog.components?.find((c) => c.id === instance.componentId);
+      if (comp) {
+        for (const role of comp.optionRoles) {
+          if (role.trim()) roles.add(role);
+        }
+      }
+    }
   }
   for (const line of module.hardwareLines) {
     if (!line.hardwareId && line.optionRole?.trim()) {
@@ -135,37 +153,8 @@ function collectItemStructuralIssues(
     return undefined;
   }
 
-  for (const part of module.boardParts) {
-    try {
-      validateBoardPart(part, module.code);
-    } catch (error) {
-      pushDomainError(issues, error, {
-        moduleCode: module.code,
-        partId: part.id,
-        partCode: part.code,
-        projectItemId: item.id,
-      });
-    }
-    if (!part.description?.trim()) {
-      issues.push({
-        message: 'Board part description must not be empty',
-        field: 'description',
-        moduleCode: module.code,
-        partId: part.id,
-        projectItemId: item.id,
-      });
-    }
-    if (!part.optionRole?.trim()) {
-      issues.push({
-        message: 'Board part optionRole must not be empty',
-        field: 'optionRole',
-        moduleCode: module.code,
-        partId: part.id,
-        projectItemId: item.id,
-      });
-    }
-  }
-
+  // Board parts are no longer stored on the module; integrity is enforced by
+  // resolveBom (component lookup, dimension resolution, material/edge choice).
   for (const line of module.hardwareLines) {
     try {
       validateHardwareLine(line, module.code);
@@ -182,7 +171,7 @@ function collectItemStructuralIssues(
   // Resolve BOM only when local structure/options look complete (VAL-06, refs, edges).
   if (issues.length === before) {
     try {
-      resolveBom(module, choices, catalog);
+      resolveBom(module, choices, catalog, item.measurePresetId);
     } catch (error) {
       pushDomainError(issues, error, {
         moduleCode: module.code,
@@ -221,7 +210,18 @@ export function collectExportIssues(
       project.projectLevelChoices,
     );
     if (module) {
-      boardPartSlots += module.boardParts.length;
+      // Count resolved board parts (component instances expanded) instead of a
+      // flat boardParts array, since modules now compose a structure + components.
+      try {
+        const bom = resolveBom(
+          module,
+          effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
+          catalog,
+        );
+        boardPartSlots += bom.boardParts.length;
+      } catch {
+        // Resolution errors are already collected by collectItemStructuralIssues.
+      }
     }
   }
 

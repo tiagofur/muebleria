@@ -19,6 +19,7 @@ import {
   Menu,
   Minus,
   Package,
+  Puzzle,
   Settings,
   Settings2,
   ShieldCheck,
@@ -44,6 +45,7 @@ export type AppNavId =
   | 'customers'
   | 'modules'
   | 'structures'
+  | 'components'
   | 'materials'
   | 'edges'
   | 'hardware'
@@ -137,6 +139,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     label: 'INGENIERÍA',
     items: [
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
+      { id: 'components', label: 'Componentes', icon: Puzzle },
       { id: 'materials', label: 'Materiales', icon: Layers },
       { id: 'edges', label: 'Cantos', icon: Minus },
       { id: 'hardware', label: 'Herrajes', icon: Settings2 },

@@ -7,6 +7,7 @@ import type { WorkspaceRepository } from './workspaceRepository';
 import {
   catalogFromApi,
   categoryToApi,
+  componentToApi,
   customerToApi,
   edgeToApi,
   hardwareToApi,
@@ -114,6 +115,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       customers,
       categories,
       structures,
+      components,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -123,6 +125,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/customers'),
       fetchJson('/catalog/categories'),
       fetchJson('/catalog/structures').catch(() => []),
+      fetchJson('/catalog/components').catch(() => []),
     ]);
 
     return catalogFromApi({
@@ -134,6 +137,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       structures,
       categories,
       customers,
+      components,
     });
   }
 
@@ -231,6 +235,16 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         `/catalog/option-groups/${og.id}`,
         '/catalog/option-groups',
         optionGroupToApi(og),
+      );
+    }
+
+    // Components before structures/modules: structure_components and
+    // module_components FK reference components(id).
+    for (const c of catalog.components ?? []) {
+      await this.upsert(
+        `/catalog/components/${c.id}`,
+        '/catalog/components',
+        componentToApi(c),
       );
     }
 

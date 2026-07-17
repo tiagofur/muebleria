@@ -270,6 +270,11 @@
   resize: vertical;
 }
 
+.catalog-form__field select[multiple] {
+  height: auto;
+  min-height: 100px;
+}
+
 .catalog-form__field input[type='checkbox'] {
   width: auto;
   align-self: flex-start;

@@ -21,7 +21,6 @@ const sample: Module = {
   categoryId: 'cat-cocina',
   imageUrl: '/api/media/abc.webp',
   externalDims: { width: 600, height: 720, depth: 550 },
-  boardParts: [],
   hardwareLines: [],
 };
 
@@ -31,7 +30,6 @@ const living: Module = {
   name: 'Sin foto living',
   categoryId: 'cat-living',
   imageUrl: undefined,
-  boardParts: [],
   hardwareLines: [],
 };
 

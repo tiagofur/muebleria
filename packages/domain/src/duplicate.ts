@@ -3,7 +3,7 @@
  * No I/O, no catalog mutation — callers append the returned entity.
  */
 
-import type { BoardPart, HardwareLine, Module, Project, ProjectItem } from './types';
+import type { HardwareLine, Module, ModuleComponentInstance, Project, ProjectItem } from './types';
 
 function normalizeCodeKey(code: string): string {
   return code.trim().toLocaleUpperCase('es-UY');
@@ -49,16 +49,21 @@ function defaultNestedId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function cloneBoardPart(part: BoardPart, newId: string): BoardPart {
+function cloneComponentInstance(c: ModuleComponentInstance): ModuleComponentInstance {
   return {
-    id: newId,
-    code: part.code,
-    description: part.description,
-    quantity: part.quantity,
-    lengthMm: part.lengthMm,
-    widthMm: part.widthMm,
-    edges: part.edges.map((e) => ({ side: e.side, enabled: e.enabled })),
-    optionRole: part.optionRole,
+    componentId: c.componentId,
+    quantity: c.quantity,
+    placementOverride: c.placementOverride,
+    overrides: c.overrides
+      ? {
+          edges: c.overrides.edges
+            ? c.overrides.edges.map((e) => ({ side: e.side, enabled: e.enabled }))
+            : undefined,
+          notes: c.overrides.notes,
+          lengthFormula: c.overrides.lengthFormula,
+          widthFormula: c.overrides.widthFormula,
+        }
+      : undefined,
   };
 }
 
@@ -74,7 +79,8 @@ function cloneHardwareLine(line: HardwareLine, newId: string): HardwareLine {
 
 /**
  * Deep-copy a module template with a new id/code and fresh nested entity ids.
- * Does not mutate the original module. Preserves optional categoryId.
+ * Does not mutate the original module. Preserves optional categoryId,
+ * structureId reference, and component instances.
  */
 export function duplicateModule(
   module: Module,
@@ -86,6 +92,8 @@ export function duplicateModule(
     code: options.newCode,
     name: options.newName ?? `${module.name} (copia)`,
     categoryId: module.categoryId,
+    structureId: module.structureId,
+    components: module.components?.map(cloneComponentInstance),
     externalDims: module.externalDims
       ? {
           width: module.externalDims.width,
@@ -93,9 +101,17 @@ export function duplicateModule(
           depth: module.externalDims.depth,
         }
       : undefined,
+    presets: module.presets
+      ? module.presets.map((p) => ({
+          id: nextId(),
+          name: p.name,
+          width: p.width,
+          height: p.height,
+          depth: p.depth,
+        }))
+      : undefined,
     baseLaborCost: module.baseLaborCost,
     notes: module.notes,
-    boardParts: module.boardParts.map((p) => cloneBoardPart(p, nextId())),
     hardwareLines: module.hardwareLines.map((l) => cloneHardwareLine(l, nextId())),
   };
 }
@@ -121,6 +137,7 @@ export function duplicateProject(
     moduleId: item.moduleId,
     quantity: item.quantity,
     optionChoices: { ...item.optionChoices },
+    measurePresetId: item.measurePresetId,
   }));
 
   return {

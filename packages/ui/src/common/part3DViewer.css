@@ -1,0 +1,190 @@
+.three-d-viewer-container {
+  position: relative;
+  width: 100%;
+  height: 480px;
+  background-color: var(--color-bg-viewport, #18181b);
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--color-border, #27272a);
+}
+
+.three-d-instructions {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background-color: rgba(24, 24, 27, 0.75);
+  color: var(--color-text-secondary, #a1a1aa);
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-xs, 12px);
+  pointer-events: none;
+  z-index: 10;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.three-d-viewport {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1000px;
+}
+
+.three-d-scene {
+  position: relative;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  transition: transform 0.1s ease-out;
+}
+
+/* Axis Grid Helpers */
+.origin-axes {
+  position: absolute;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.axis {
+  position: absolute;
+  height: 2px;
+  transform-origin: left center;
+}
+
+.axis-x {
+  background: #ef4444; /* Red X */
+  transform: translate3d(0, 0, 0);
+}
+
+.axis-y {
+  background: #3b82f6; /* Blue Y */
+  transform: rotateY(-90deg) translate3d(0, 0, 0);
+}
+
+.axis-z {
+  background: #22c55e; /* Green Z */
+  transform: rotateZ(-90deg) translate3d(0, 0, 0);
+}
+
+/* Board Parts / 3D Cubes */
+.part-cube {
+  position: absolute;
+  transform-style: preserve-3d;
+  pointer-events: auto;
+}
+
+.face {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transform-origin: 0 0;
+  backface-visibility: visible;
+}
+
+/* Role Colors */
+.role-frente .face {
+  background-color: rgba(217, 119, 6, 0.7); /* Warm amber wood grain look */
+  border-color: rgba(251, 191, 36, 0.8);
+}
+
+.role-interior .face {
+  background-color: rgba(244, 244, 245, 0.8); /* Clean melamine white/gray */
+  border-color: rgba(161, 161, 170, 0.6);
+}
+
+.role-fondo .face {
+  background-color: rgba(113, 63, 18, 0.75); /* Thinner backboard fiberwood */
+  border-color: rgba(180, 83, 9, 0.6);
+}
+
+/* Hover effects */
+.part-cube.hovered .face {
+  background-color: var(--color-primary-semi, rgba(59, 130, 246, 0.65)) !important;
+  border-color: var(--color-primary, #3b82f6) !important;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+/* 3D Cube Face transformations */
+.face-front {
+  /* transform: translate3d(0, 0, d) */
+}
+
+.face-back {
+  /* transform: rotateY(180deg) */
+}
+
+.face-top {
+  /* transform: rotateX(90deg) */
+}
+
+.face-bottom {
+  /* transform: rotateX(-90deg) translate3d(0, 0, -h) */
+}
+
+.face-left {
+  /* transform: rotateY(-90deg) */
+}
+
+.face-right {
+  /* transform: rotateY(90deg) translate3d(0, 0, -w) */
+}
+
+/* Part Details Overlay Card */
+.part-details-overlay {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 200px;
+  background-color: rgba(24, 24, 27, 0.9);
+  border: 1px solid var(--color-border, #27272a);
+  border-radius: var(--radius-md, 8px);
+  padding: 12px;
+  color: var(--color-text, #fafafa);
+  font-size: var(--font-sm, 13px);
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(4px);
+}
+
+.part-details-overlay h4 {
+  margin: 0 0 6px 0;
+  font-size: var(--font-md, 14px);
+  color: var(--color-primary-light, #60a5fa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.part-details-overlay p {
+  margin: 2px 0;
+  color: var(--color-text-secondary, #d4d4d8);
+}
+
+.part-details-overlay strong {
+  color: var(--color-text, #fafafa);
+}
+
+.part-details-overlay .role-badge {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.part-details-overlay .role-badge span {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--color-text, #fafafa);
+}
+
+.part-details-overlay .position-details {
+  font-size: 11px;
+  color: var(--color-text-tertiary, #71717a);
+  margin-top: 4px;
+}

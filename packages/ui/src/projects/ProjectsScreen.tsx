@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  Component,
   Customer,
   EdgeBand,
   ExportIssue,
@@ -25,7 +26,9 @@ import type {
   ProjectItem,
   ProjectMaterialSummary,
   QuoteBreakdown,
+  Structure,
   WorkshopSettings,
+  Catalog,
 } from '@muebles/domain';
 import {
   cascadeOptions,
@@ -33,6 +36,7 @@ import {
   effectiveOptionChoices,
   filterModulesByCategory,
   isProjectClosed,
+  resolveBom,
   type CategoryFilterId,
 } from '@muebles/domain';
 import {
@@ -45,6 +49,7 @@ import {
   Plus,
   SearchX,
   Trash2,
+  Box,
 } from 'lucide-react';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
 import {
@@ -54,6 +59,7 @@ import {
   PageLoading,
   SearchInput,
   useDebouncedValue,
+  Part3DViewer,
 } from '../common';
 import '../catalogs/catalogs.css';
 import { PricePreviewGate } from '../optionGroups/PricePreviewGate';
@@ -81,6 +87,7 @@ import {
   type AddItemDraft,
   type ProjectDraft,
 } from './projectHelpers';
+import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import './projects.css';
 
 export type { ProjectDraft, AddItemDraft };
@@ -94,6 +101,9 @@ export interface ProjectsScreenProps {
   /** Module categories for PRJ-11 cascade filter in add-item modal. */
   readonly categories?: readonly ModuleCategory[];
   readonly optionGroups: readonly OptionGroup[];
+  /** Component + structure catalogs to resolve option roles from composed modules. */
+  readonly catalogComponents?: readonly Component[];
+  readonly catalogStructures?: readonly Structure[];
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
@@ -114,7 +124,12 @@ export interface ProjectsScreenProps {
   readonly onDuplicate?: (id: string) => void;
   readonly onAddItem: (
     projectId: string,
-    input: { moduleId: string; quantity: number; optionChoices: OptionChoices },
+    input: {
+      moduleId: string;
+      quantity: number;
+      optionChoices: OptionChoices;
+      measurePresetId?: string;
+    },
   ) => void;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
@@ -228,6 +243,8 @@ export function ProjectsScreen({
   materials,
   edges,
   hardware,
+  catalogComponents = [],
+  catalogStructures = [],
   customers = [],
   canAssignOwner = false,
   assignableOwners = [],
@@ -292,6 +309,8 @@ export function ProjectsScreen({
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
+  const [show3DModal, setShow3DModal] = useState(false);
+  const [viewerItem, setViewerItem] = useState<{ item: ProjectItem; mod: Module } | null>(null);
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(
     null,
   );
@@ -310,6 +329,45 @@ export function ProjectsScreen({
     selectedId !== null
       ? (projects.find((p) => p.id === selectedId) ?? null)
       : null;
+
+  const resolved3DParts = useMemo(() => {
+    if (!viewerItem || !selectedProject) return [];
+    try {
+      const { item, mod } = viewerItem;
+      const catalogObj: Catalog = {
+        materials,
+        edges,
+        hardware,
+        optionGroups,
+        modules,
+        structures: catalogStructures,
+        components: catalogComponents,
+      };
+
+      const defaultChoices = defaultOptionChoicesForModule(mod, optionGroups, catalogComponents, catalogStructures);
+      const mergedChoices = {
+        ...defaultChoices,
+        ...(selectedProject.projectLevelChoices ?? {}),
+        ...item.optionChoices,
+      };
+
+      const bom = resolveBom(mod, mergedChoices, catalogObj, item.measurePresetId || undefined);
+      return bom.boardParts;
+    } catch (e) {
+      console.error('Error resolving project item 3D parts:', e);
+      return [];
+    }
+  }, [
+    viewerItem,
+    selectedProject,
+    materials,
+    edges,
+    hardware,
+    optionGroups,
+    modules,
+    catalogStructures,
+    catalogComponents,
+  ]);
 
   // Domain breakdown target: selected detail project
   useEffect(() => {
@@ -491,6 +549,7 @@ export function ProjectsScreen({
       moduleId,
       quantity: addItem.quantity || 1,
       optionChoices,
+      measurePresetId: mod?.presets?.[0]?.id,
     });
   };
 
@@ -525,13 +584,31 @@ export function ProjectsScreen({
       }
     }
 
+    if ((mod.presets?.length ?? 0) > 0) {
+      const presetOk = mod.presets!.some((p) => p.id === addItem.measurePresetId);
+      if (!presetOk) {
+        setItemError('Elegí un preset de medida válido para este mueble.');
+        return;
+      }
+    }
+
     setItemError(null);
     onAddItem(selectedId, {
       moduleId: addItem.moduleId,
       quantity: addItem.quantity,
       optionChoices: addItem.optionChoices,
+      measurePresetId: addItem.measurePresetId,
     });
     closeAddItemModal();
+  };
+
+  const updateItemMeasurePreset = (item: ProjectItem, measurePresetId: string) => {
+    if (!selectedId) return;
+    setItemError(null);
+    onUpdateItem(selectedId, {
+      ...item,
+      measurePresetId: measurePresetId || undefined,
+    });
   };
 
   const updateItemQuantity = (item: ProjectItem, quantity: number) => {
@@ -920,6 +997,31 @@ export function ProjectsScreen({
             }
           />
         </div>
+        {addModule && (addModule.presets?.length ?? 0) > 0 ? (
+          <div className="catalog-form__field">
+            <label htmlFor="add-measure-preset">Medida</label>
+            <select
+              id="add-measure-preset"
+              value={addItem.measurePresetId ?? ''}
+              onChange={(e) =>
+                setAddItem({
+                  ...addItem,
+                  measurePresetId: e.target.value || undefined,
+                })
+              }
+              data-testid="add-item-measure-preset"
+            >
+              <option value="">Elegí medida…</option>
+              {addModule.presets!.map((pr) => (
+                <option key={pr.id} value={pr.id}>
+                  {pr.name?.trim()
+                    ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth} mm)`
+                    : `${pr.width}×${pr.height}×${pr.depth} mm`}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       {addGroups.length === 0 ? (
@@ -1408,38 +1510,54 @@ export function ProjectsScreen({
                           ? `${mod.name} — ${mod.code}`
                           : `Mueble desconocido (${item.moduleId})`}
                       </h4>
-                      {confirmRemoveItemId === item.id ? (
-                        <span className="project-inline-confirm">
-                          <span className="project-inline-confirm__text">
-                            ¿Quitar?
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {mod && (
+                          <button
+                            type="button"
+                            className="btn btn--small btn--outline"
+                            onClick={() => {
+                              setViewerItem({ item, mod });
+                              setShow3DModal(true);
+                            }}
+                            data-testid={`view-3d-btn-${item.id}`}
+                          >
+                            <Box size={14} strokeWidth={1.5} aria-hidden />
+                            3D
+                          </button>
+                        )}
+                        {confirmRemoveItemId === item.id ? (
+                          <span className="project-inline-confirm">
+                            <span className="project-inline-confirm__text">
+                              ¿Quitar?
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn--small btn--danger"
+                              onClick={() => {
+                                onRemoveItem(project.id, item.id);
+                                setConfirmRemoveItemId(null);
+                              }}
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--small"
+                              onClick={() => setConfirmRemoveItemId(null)}
+                            >
+                              Cancelar
+                            </button>
                           </span>
+                        ) : (
                           <button
                             type="button"
                             className="btn btn--small btn--danger"
-                            onClick={() => {
-                              onRemoveItem(project.id, item.id);
-                              setConfirmRemoveItemId(null);
-                            }}
+                            onClick={() => setConfirmRemoveItemId(item.id)}
                           >
-                            Confirmar
+                            Quitar
                           </button>
-                          <button
-                            type="button"
-                            className="btn btn--small"
-                            onClick={() => setConfirmRemoveItemId(null)}
-                          >
-                            Cancelar
-                          </button>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn--small btn--danger"
-                          onClick={() => setConfirmRemoveItemId(item.id)}
-                        >
-                          Quitar
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     <div className="project-editor__grid">
@@ -1456,6 +1574,30 @@ export function ProjectsScreen({
                           }
                         />
                       </div>
+                      {mod && (mod.presets?.length ?? 0) > 0 ? (
+                        <div className="catalog-form__field">
+                          <label htmlFor={`item-measure-${item.id}`}>
+                            Medida
+                          </label>
+                          <select
+                            id={`item-measure-${item.id}`}
+                            value={item.measurePresetId ?? ''}
+                            onChange={(e) =>
+                              updateItemMeasurePreset(item, e.target.value)
+                            }
+                            data-testid={`item-measure-preset-${item.id}`}
+                          >
+                            <option value="">Elegí medida…</option>
+                            {mod.presets!.map((pr) => (
+                              <option key={pr.id} value={pr.id}>
+                                {pr.name?.trim()
+                                  ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth} mm)`
+                                  : `${pr.width}×${pr.height}×${pr.depth} mm`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
                     </div>
 
                     {groups.length === 0 ? (
@@ -1880,6 +2022,25 @@ export function ProjectsScreen({
           borrador? Se borra el snapshot de precios congelados y vuelve a
           recalcular con el catálogo actual.
         </p>
+      </Modal>
+
+      <Modal
+        open={show3DModal}
+        onClose={() => {
+          setShow3DModal(false);
+          setViewerItem(null);
+        }}
+        title={viewerItem ? `Vista 3D — ${viewerItem.mod.code} - ${viewerItem.mod.name}` : 'Vista 3D'}
+        size="lg"
+      >
+        {viewerItem ? (
+          <Part3DViewer
+            parts={resolved3DParts}
+            width={viewerItem.mod.externalDims?.width ?? 800}
+            height={viewerItem.mod.externalDims?.height ?? 700}
+            depth={viewerItem.mod.externalDims?.depth ?? 500}
+          />
+        ) : null}
       </Modal>
     </section>
   );

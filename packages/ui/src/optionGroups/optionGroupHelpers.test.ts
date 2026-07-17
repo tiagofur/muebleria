@@ -172,13 +172,27 @@ describe('canShowPricePreview (OPT-05)', () => {
 });
 
 describe('requiredGroupCodesForModule', () => {
-  it('collects required roles used by parts and variable hardware lines', () => {
+  it('collects required roles used by components and variable hardware lines', () => {
+    const catalogComponents = [
+      {
+        id: 'comp-side',
+        code: 'C-LAT',
+        name: 'Lateral',
+        placement: 'lateral_izquierdo' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 720,
+          widthMm: 560,
+          thicknessMm: 18,
+        },
+        defaultEdges: [],
+        optionRoles: ['INTERIOR', 'FRENTE'],
+        active: true,
+      },
+    ];
     const codes = requiredGroupCodesForModule(
       {
-        boardParts: [
-          { optionRole: 'INTERIOR' },
-          { optionRole: 'FRENTE' },
-        ],
+        components: [{ componentId: 'comp-side' }],
         hardwareLines: [
           { optionRole: 'BISAGRA' },
           { optionRole: 'FIXED', hardwareId: 'h-fixed' },
@@ -195,6 +209,7 @@ describe('requiredGroupCodesForModule', () => {
           optionIds: ['m1'],
         },
       ],
+      catalogComponents,
     );
     expect(codes.sort()).toEqual(['BISAGRA', 'FRENTE', 'INTERIOR']);
   });
@@ -202,8 +217,7 @@ describe('requiredGroupCodesForModule', () => {
   it('ignores optional groups even if used', () => {
     const codes = requiredGroupCodesForModule(
       {
-        boardParts: [{ optionRole: 'EDGE-OPT' }],
-        hardwareLines: [],
+        hardwareLines: [{ optionRole: 'EDGE-OPT' }],
       },
       groups,
     );

@@ -112,22 +112,41 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
     const seed = createSeedWorkspace();
     const gab = seed.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
     const caj = seed.catalog.modules.find((m) => m.code === 'MOD-CAJ-01')!;
+    const comps = seed.catalog.components ?? [];
+    const structs = seed.catalog.structures ?? [];
 
     expect(gab).toBeDefined();
     expect(caj).toBeDefined();
 
-    const gabBoardRoles = new Set(gab.boardParts.map((p) => p.optionRole));
-    expect(gabBoardRoles.has('INTERIOR')).toBe(true);
-    expect(gabBoardRoles.has('FRENTE')).toBe(true);
+    // Collect optionRoles from the module's component instances + its
+    // referenced structure's component instances (modules no longer carry
+    // board parts directly).
+    const rolesFor = (mod: typeof gab): Set<string> => {
+      const roles = new Set<string>();
+      const collect = (componentIds: readonly { componentId: string }[]) => {
+        for (const inst of componentIds) {
+          const c = comps.find((x) => x.id === inst.componentId);
+          if (c) for (const r of c.optionRoles) roles.add(r);
+        }
+      };
+      collect(mod.components ?? []);
+      const st = structs.find((s) => s.id === mod.structureId);
+      collect(st?.components ?? []);
+      return roles;
+    };
+
+    const gabRoles = rolesFor(gab);
+    expect(gabRoles.has('INTERIOR')).toBe(true);
+    expect(gabRoles.has('FRENTE')).toBe(true);
     expect(gab.hardwareLines.some((l) => l.optionRole === 'BISAGRA')).toBe(true);
     expect(gab.hardwareLines.some((l) => l.optionRole === 'FIXED' && l.hardwareId)).toBe(
       true,
     );
 
-    const cajBoardRoles = new Set(caj.boardParts.map((p) => p.optionRole));
-    expect(cajBoardRoles.has('INTERIOR')).toBe(true);
-    expect(cajBoardRoles.has('FRENTE')).toBe(true);
-    expect(cajBoardRoles.has('FONDO')).toBe(true);
+    const cajRoles = rolesFor(caj);
+    expect(cajRoles.has('INTERIOR')).toBe(true);
+    expect(cajRoles.has('FRENTE')).toBe(true);
+    expect(cajRoles.has('FONDO')).toBe(true);
     expect(caj.hardwareLines.some((l) => l.optionRole === 'CORREDERA')).toBe(
       true,
     );
@@ -173,16 +192,20 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
     const rows = generateCutRows(demo, seed.catalog);
 
     expect(rows).toHaveLength(8);
-    expect(rows.map((r) => r.partName)).toEqual([
-      'Costado Derecho',
-      'Costado Izquierdo',
-      'Respaldo Gabinete',
-      'Piso Gabinete',
-      'Entrepano Gabinete',
-      'Manguete Frontal',
-      'Manguete Posterior',
-      'Puerta Gabinete',
-    ]);
+    // Pieces come from expanded component instances (no partCode → unstable
+    // internal order); assert the multiset of part names instead.
+    expect([...rows.map((r) => r.partName)].sort()).toEqual(
+      [
+        'Costado Gabinete',
+        'Costado Gabinete',
+        'Respaldo Gabinete',
+        'Piso Gabinete',
+        'Entrepaño Gabinete',
+        'Manguete',
+        'Manguete',
+        'Puerta Gabinete',
+      ].sort(),
+    );
     for (const row of rows) {
       expect(row.description.toLowerCase()).not.toMatch(
         /bisagra|jaladera|tornillo|corredera|pata|soporte/,

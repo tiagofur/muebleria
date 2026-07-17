@@ -255,6 +255,26 @@ func (s *stubStore) DeleteStructure(context.Context, string) error {
 	s.stubNotUsed("DeleteStructure")
 	return nil
 }
+func (s *stubStore) ListComponents(context.Context) ([]domain.Component, error) {
+	s.stubNotUsed("ListComponents")
+	return nil, nil
+}
+func (s *stubStore) GetComponentByID(context.Context, string) (*domain.Component, error) {
+	s.stubNotUsed("GetComponentByID")
+	return nil, nil
+}
+func (s *stubStore) CreateComponent(context.Context, *domain.Component) error {
+	s.stubNotUsed("CreateComponent")
+	return nil
+}
+func (s *stubStore) UpdateComponent(context.Context, string, *domain.Component) error {
+	s.stubNotUsed("UpdateComponent")
+	return nil
+}
+func (s *stubStore) DeleteComponent(context.Context, string) error {
+	s.stubNotUsed("DeleteComponent")
+	return nil
+}
 func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 	if s.listProjects != nil {
 		return s.listProjects, nil
@@ -286,6 +306,10 @@ func (s *stubStore) UpsertWorkshopSettings(_ context.Context, ws domain.Workshop
 	cp := ws
 	s.workshopSettings = &cp
 	return ws, nil
+}
+
+func (s *stubStore) SeedCatalog(_ context.Context) error {
+	return nil // not used by handler tests
 }
 
 // dupErr mimics the wrapped error the storage layer returns on a unique
