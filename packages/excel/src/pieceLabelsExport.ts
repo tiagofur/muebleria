@@ -2,11 +2,13 @@
  * Piece labels PDF writer — workshop printout with edge-banding instruction (F046 / #96).
  */
 
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type PDFImage } from 'pdf-lib';
+import QRCode from 'qrcode';
 import type { PieceLabel } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import { pieceLabelQrPayload, ValidationError } from '@muebles/domain';
 
 export interface PieceLabelsPdfInput {
+  readonly projectId: string;
   readonly projectName: string;
   readonly customerName?: string;
   readonly labels: readonly PieceLabel[];
@@ -58,6 +60,22 @@ function truncateToWidth(
   return `${t}…`;
 }
 
+async function qrPngBytes(payload: string): Promise<Uint8Array> {
+  const dataUrl = await QRCode.toDataURL(payload, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 128,
+    color: { dark: '#111111', light: '#ffffff' },
+  });
+  const base64 = dataUrl.split(',')[1] ?? '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 function drawLabelCard(
   page: PDFPage,
   label: PieceLabel,
@@ -67,6 +85,7 @@ function drawLabelCard(
   height: number,
   font: PDFFont,
   fontBold: PDFFont,
+  qrImage: PDFImage | null,
 ): void {
   const pad = 8;
   page.drawRectangle({
@@ -79,8 +98,9 @@ function drawLabelCard(
     color: rgb(1, 1, 1),
   });
 
+  const qrSize = qrImage ? Math.min(52, height - pad * 2) : 0;
   let cursorY = yTop - pad - 11;
-  const maxW = width - pad * 2;
+  const maxW = width - pad * 2 - (qrSize > 0 ? qrSize + 8 : 0);
   const title = label.partCode
     ? `${label.partCode} · ${label.description}`
     : label.description;
@@ -121,6 +141,14 @@ function drawLabelCard(
     9,
     maxW,
   );
+  if (qrImage) {
+    page.drawImage(qrImage, {
+      x: x + width - pad - qrSize,
+      y: yTop - height + pad,
+      width: qrSize,
+      height: qrSize,
+    });
+  }
   void cursorY;
 }
 
@@ -168,6 +196,22 @@ export async function pieceLabelsPdfExport(
 
     let top = PAGE_HEIGHT - MARGIN - 8;
     for (const label of chunk) {
+      const payload = pieceLabelQrPayload({
+        projectId: input.projectId,
+        moduleCode: label.moduleCode,
+        partCode: label.partCode,
+        description: label.description,
+        materialCode: label.materialCode,
+        lengthMm: label.lengthMm,
+        widthMm: label.widthMm,
+      });
+      let qrImage: PDFImage | null = null;
+      try {
+        const png = await qrPngBytes(payload);
+        qrImage = await doc.embedPng(png);
+      } catch {
+        qrImage = null;
+      }
       drawLabelCard(
         page,
         label,
@@ -177,6 +221,7 @@ export async function pieceLabelsPdfExport(
         LABEL_HEIGHT,
         font,
         fontBold,
+        qrImage,
       );
       top -= LABEL_HEIGHT + LABEL_GAP;
     }

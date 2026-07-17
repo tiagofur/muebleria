@@ -55,6 +55,7 @@ export async function buildPieceLabelsExport(
     const labels = generatePieceLabels(project, catalog);
     const customer = customers.find((c) => c.id === project.customerId);
     const buffer = await pieceLabelsPdfExport({
+      projectId: project.id,
       projectName: project.name,
       customerName: customer?.name,
       labels,

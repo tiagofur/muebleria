@@ -25,6 +25,7 @@ const sampleLabel: PieceLabel = {
 describe('pieceLabelsPdfExport (F046 / #96)', () => {
   it('writes a valid PDF with at least one page', async () => {
     const bytes = await pieceLabelsPdfExport({
+      projectId: 'proj-demo',
       projectName: 'Cocina demo',
       customerName: 'Cliente Test',
       labels: [sampleLabel],
@@ -41,6 +42,7 @@ describe('pieceLabelsPdfExport (F046 / #96)', () => {
       partCode: `P${String(i + 1).padStart(2, '0')}`,
     }));
     const bytes = await pieceLabelsPdfExport({
+      projectId: 'proj-demo',
       projectName: 'Proyecto grande',
       labels,
     });
@@ -50,7 +52,7 @@ describe('pieceLabelsPdfExport (F046 / #96)', () => {
 
   it('rejects empty labels', async () => {
     await expect(
-      pieceLabelsPdfExport({ projectName: 'X', labels: [] }),
+      pieceLabelsPdfExport({ projectId: 'p', projectName: 'X', labels: [] }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

@@ -217,3 +217,6 @@ export type {
 } from './scenarioCompare';
 
 export { DEFAULT_INSTALLATION_CHECKLIST } from './types';
+
+export { pieceLabelQrPayload } from './pieceLabelQr';
+export type { PieceLabelQrFields } from './pieceLabelQr';

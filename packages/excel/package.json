@@ -21,10 +21,12 @@
   "dependencies": {
     "@muebles/domain": "workspace:*",
     "exceljs": "^4.4.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.32",
+    "@types/qrcode": "^1.5.6",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }
