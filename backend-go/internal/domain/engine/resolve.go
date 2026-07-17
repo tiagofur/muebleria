@@ -19,6 +19,11 @@ import (
 //
 // measurePresetID selects commercial size from Module.Presets (H09 / #104).
 // Grain is inherited from material.
+//
+// structureRevisionPin (#108, Slice 2) optionally freezes the structure to a
+// historical revision when the calling line item is part of a closed quote.
+// It is the last variadic slot so existing callers stay source-compatible.
+// Passing nil (or omitting it) resolves against the live structure.
 func ResolveBom(
 	module domain.Module,
 	optionChoices map[string]string,
@@ -36,13 +41,54 @@ func ResolveBom(
 
 	rawParts := module.BoardParts
 	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModuleParts(module, catalog, presetID)
+		composed, err := expandComposedModuleParts(module, catalog, presetID, nil)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
 		rawParts = composed
 	}
+	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
+}
 
+// ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
+// optional structureRevisionPin so closed-quote items can resolve against the
+// exact structure revision they were quoted with. When pin is nil it behaves
+// identically to ResolveBom. Mirrors TS resolveBom(item, ..., pin).
+//
+// Errors from a stale/unknown pin are returned as *StructureRevisionError so
+// callers (e.g. quote breakdown) can surface them with context rather than
+// silently falling back to live resolution.
+func ResolveBomWithPin(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	measurePresetID string,
+	pin *int,
+) (domain.ResolvedBom, error) {
+	if err := ValidateModule(module); err != nil {
+		return domain.ResolvedBom{}, err
+	}
+
+	rawParts := module.BoardParts
+	if strings.TrimSpace(module.StructureID) != "" {
+		composed, err := expandComposedModuleParts(module, catalog, measurePresetID, pin)
+		if err != nil {
+			return domain.ResolvedBom{}, err
+		}
+		rawParts = composed
+	}
+	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
+}
+
+// resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
+// board parts and the module's hardware lines. Shared by ResolveBom and
+// ResolveBomWithPin so the two paths cannot drift.
+func resolveBomFromParts(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	rawParts []domain.BoardPart,
+) (domain.ResolvedBom, error) {
 	boardParts := make([]domain.ResolvedBoardPart, 0, len(rawParts))
 	for _, part := range rawParts {
 		material, err := ResolveMaterial(part, optionChoices, catalog.Materials)
@@ -104,10 +150,19 @@ func expandComposedModuleParts(
 	module domain.Module,
 	catalog domain.Catalog,
 	measurePresetID string,
+	structureRevisionPin *int,
 ) ([]domain.BoardPart, error) {
-	structure, ok := findStructure(catalog, module.StructureID)
+	found, ok := findStructure(catalog, module.StructureID)
 	if !ok {
 		return nil, fmt.Errorf("structure not found: %s", module.StructureID)
+	}
+	// #108 (Slice 2): honor a pinned revision. When pin is nil or matches the
+	// current revision the live structure is used; when pin points to a
+	// historical snapshot the structure is reified from that snapshot; when pin
+	// is unknown we fail loudly with context (mirrors TS resolveStructureForPin).
+	structure, err := ResolveStructureForPin(found, structureRevisionPin)
+	if err != nil {
+		return nil, err
 	}
 	dims, err := resolveModuleDims(module, measurePresetID)
 	if err != nil {

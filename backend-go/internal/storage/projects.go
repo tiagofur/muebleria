@@ -437,7 +437,7 @@ func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, pres
 // loadProjectItems returns all line items + option choices for a project.
 func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) ([]domain.ProjectItem, error) {
 	itemQuery := `
-		SELECT id, module_id, quantity, measure_preset_id
+		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin
 		FROM project_items
 		WHERE project_id = $1;
 	`
@@ -451,11 +451,16 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 	for rows.Next() {
 		var item domain.ProjectItem
 		var measurePresetID *string
-		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID); err != nil {
+		var structureRevisionPin *int
+		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin); err != nil {
 			return nil, err
 		}
 		if measurePresetID != nil {
 			item.MeasurePresetID = *measurePresetID
+		}
+		if structureRevisionPin != nil {
+			pin := *structureRevisionPin
+			item.StructureRevisionPin = &pin
 		}
 
 		choicesQuery := `
@@ -493,17 +498,18 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		item := &items[i]
 		var err error
 		measureArg := nullIfEmpty(item.MeasurePresetID)
+		pinArg := structurePinArg(item.StructureRevisionPin)
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id)
-				VALUES ($1, $2, $3, $4, $5)
-			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg)
+				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg)
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id)
-				VALUES ($1, $2, $3, $4)
+				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin)
+				VALUES ($1, $2, $3, $4, $5)
 				RETURNING id
-			`, projectID, item.ModuleID, item.Quantity, measureArg).Scan(&item.ID)
+			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg).Scan(&item.ID)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting project item: %w", err)
@@ -518,6 +524,15 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		}
 	}
 	return nil
+}
+
+// structurePinArg converts a *int pin into a pgx-compatible argument (nil when
+// unset, so the column stays NULL and the item resolves live).
+func structurePinArg(pin *int) interface{} {
+	if pin == nil {
+		return nil
+	}
+	return *pin
 }
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
@@ -685,11 +700,11 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id;
 	`
-	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID)).Scan(&item.ID)
+	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin)).Scan(&item.ID)
 	if err != nil {
 		return err
 	}

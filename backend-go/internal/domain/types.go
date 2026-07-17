@@ -206,19 +206,46 @@ type DimensionPreset struct {
 
 // Structure is a reusable engineering body (cuerpo) — F049 / #99.
 // Not composed into modules until H07; dual path keeps fixed modules working.
+//
+// #108 (Slice 2): Structures are versioned. Each edit bumps Revision and
+// pushes an immutable snapshot of the previous BOM-relevant fields onto
+// History. The zero value (Revision == 0) is treated as DEFAULT (1) by the
+// engine helpers so legacy rows keep working.
 type Structure struct {
-	ID         string            `json:"id"`
-	Code       string            `json:"code"`
-	Name       string            `json:"name"`
-	WidthMm    int               `json:"width_mm,omitempty"`
-	HeightMm   int               `json:"height_mm,omitempty"`
-	DepthMm    int               `json:"depth_mm,omitempty"`
+	ID         string              `json:"id"`
+	Code       string              `json:"code"`
+	Name       string              `json:"name"`
+	WidthMm    int                 `json:"width_mm,omitempty"`
+	HeightMm   int                 `json:"height_mm,omitempty"`
+	DepthMm    int                 `json:"depth_mm,omitempty"`
 	Components []ComponentInstance `json:"components,omitempty"`
-	Presets    []DimensionPreset `json:"presets,omitempty"`
-	Notes      string            `json:"notes,omitempty"`
-	Active     bool              `json:"active"`
-	CreatedAt  time.Time         `json:"created_at"`
-	UpdatedAt  time.Time         `json:"updated_at"`
+	Presets    []DimensionPreset   `json:"presets,omitempty"`
+	Notes      string              `json:"notes,omitempty"`
+	Active     bool                `json:"active"`
+	// Revision is the monotonic version of the structure's BOM-relevant fields.
+	// Starts at 1 (DEFAULT_STRUCTURE_REVISION); legacy rows (0 / missing) are
+	// normalised to 1 by the engine helpers.
+	Revision int `json:"revision,omitempty"`
+	// History holds immutable snapshots of superseded revisions (newest-first),
+	// mirroring the TS `history` field. Loaded lazily by storage when needed.
+	History   []StructureRevision `json:"history,omitempty"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
+}
+
+// StructureRevision is an immutable snapshot of a Structure's BOM-relevant
+// fields at a given revision (#108). It mirrors the TS StructureRevision type:
+// only the fields that affect ResolveBom are captured (notes/active/history are
+// intentionally dropped).
+type StructureRevision struct {
+	Revision   int                 `json:"revision"`
+	Code       string              `json:"code"`
+	Name       string              `json:"name"`
+	WidthMm    int                 `json:"width_mm,omitempty"`
+	HeightMm   int                 `json:"height_mm,omitempty"`
+	DepthMm    int                 `json:"depth_mm,omitempty"`
+	Components []ComponentInstance `json:"components,omitempty"`
+	Presets    []DimensionPreset   `json:"presets,omitempty"`
 }
 
 // ComponentInstance is a reference to a reusable component placed in a structure or module.
@@ -293,6 +320,10 @@ type ProjectItem struct {
 	OptionChoices map[string]string `json:"option_choices"` // group_code -> choice_id
 	// MeasurePresetID selects Module.Presets entry for quotation (H09 / #104).
 	MeasurePresetID string `json:"measure_preset_id,omitempty"`
+	// StructureRevisionPin freezes the structure revision used by this line item
+	// (#108). nil = live (current revision). Pinned at close time so the BOM of
+	// a closed quote is not silently mutated by later structure edits.
+	StructureRevisionPin *int `json:"structure_revision_pin,omitempty"`
 }
 
 type Project struct {
