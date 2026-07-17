@@ -41,6 +41,8 @@ func main() {
 		runCreate(os.Args[2:])
 	case "reset-password":
 		runResetPassword(os.Args[2:])
+	case "seed":
+		runSeed(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -54,6 +56,7 @@ func usage() {
 	fmt.Fprint(os.Stderr, `Usage:
   admin create         --email <email> [--name <name>]
   admin reset-password --email <email>
+  admin seed
 
 Environment:
   DATABASE_URL    Postgres DSN (defaults to local dev).
@@ -205,4 +208,82 @@ func validateEmail(email string) error {
 func fatal(err error) {
 	fmt.Fprintf(os.Stderr, "admin: %v\n", err)
 	os.Exit(1)
+}
+
+func runSeed(args []string) {
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+
+	log.Println("Cleaning database tables...")
+	truncateQuery := `
+		TRUNCATE TABLE 
+			board_parts, 
+			components, 
+			customers, 
+			edge_bands, 
+			hardware_lines, 
+			hardwares, 
+			material_boards, 
+			module_categories, 
+			module_components, 
+			module_presets, 
+			modules, 
+			option_group_members, 
+			option_groups, 
+			project_item_choices, 
+			project_items, 
+			project_level_choices, 
+			projects, 
+			quote_snapshots, 
+			snapshot_prices, 
+			structure_components, 
+			structure_presets, 
+			structures, 
+			workshop_settings 
+		CASCADE;
+	`
+	if _, err := store.Pool.Exec(ctx, truncateQuery); err != nil {
+		fatal(fmt.Errorf("cleaning tables: %w", err))
+	}
+
+	log.Println("Seeding database with demo data...")
+	if err := store.SeedCatalog(ctx); err != nil {
+		fatal(fmt.Errorf("seeding catalog: %w", err))
+	}
+
+	log.Println("Backfilling owner_user_id for demo customer and project...")
+	backfillProjectQuery := `
+		UPDATE projects
+		SET owner_user_id = (
+			SELECT id FROM users
+			WHERE role = 'admin' AND active = true
+			ORDER BY created_at ASC
+			LIMIT 1
+		)
+		WHERE owner_user_id IS NULL;
+	`
+	backfillCustomerQuery := `
+		UPDATE customers
+		SET owner_user_id = (
+			SELECT id FROM users
+			WHERE role = 'admin' AND active = true
+			ORDER BY created_at ASC
+			LIMIT 1
+		)
+		WHERE owner_user_id IS NULL;
+	`
+
+	if _, err := store.Pool.Exec(ctx, backfillProjectQuery); err != nil {
+		fatal(fmt.Errorf("backfilling project owner: %w", err))
+	}
+	if _, err := store.Pool.Exec(ctx, backfillCustomerQuery); err != nil {
+		fatal(fmt.Errorf("backfilling customer owner: %w", err))
+	}
+
+	log.Println("✓ Database seeded successfully with demo data linked to admin.")
 }

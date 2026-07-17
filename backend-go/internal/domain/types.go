@@ -85,11 +85,15 @@ type MaterialBoard struct {
 	// DefaultEdgeBandID links the default edge band by id (never by name).
 	DefaultEdgeBandID string `json:"default_edge_band_id,omitempty"`
 	// ImageURL is a relative media path (e.g. /api/media/xxx.webp), never base64.
-	ImageURL  string    `json:"image_url,omitempty"`
-	Notes     string    `json:"notes,omitempty"`
-	Active    bool      `json:"active"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ImageURL string `json:"image_url,omitempty"`
+	// PreviewColor is #RRGGBB for 3D / color-only client preview.
+	PreviewColor string `json:"preview_color,omitempty"`
+	// PreviewTextureURL optional relative media path for textured 3D (color mode ignores it).
+	PreviewTextureURL string    `json:"preview_texture_url,omitempty"`
+	Notes             string    `json:"notes,omitempty"`
+	Active            bool      `json:"active"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type EdgeBand struct {

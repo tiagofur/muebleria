@@ -8,6 +8,7 @@ import {
   validateModulePresets,
 } from './measurePresets';
 import { effectiveOptionChoices } from './optionChoices';
+import { defaultPoseForPlacement } from './spatialPlacement';
 import type {
   BoardPart,
   Catalog,
@@ -766,42 +767,58 @@ function expandComponentInstances(
         : component.geometry.widthMm;
     }
 
-    // Now evaluate spatial coordinates with full context (including component W, H, D, and copy index i)
-    const H = T; // flat part height is its thickness
+    // Spatial coords: per-axis formula when set; empty axes keep placement pose.
+    const H = T; // part thickness available as H in spatial formulas (use PH for parent height)
     const xFormula = instance.overrides?.xFormula ?? component.xFormula;
     const yFormula = instance.overrides?.yFormula ?? component.yFormula;
     const zFormula = instance.overrides?.zFormula ?? component.zFormula;
 
-    const rotateX = instance.overrides?.rotateX ?? component.rotateX ?? 0;
-    const rotateY = instance.overrides?.rotateY ?? component.rotateY ?? 0;
-    const rotateZ = instance.overrides?.rotateZ ?? component.rotateZ ?? 0;
+    const placement =
+      instance.placementOverride?.trim() || component.placement || 'custom';
 
     for (let i = 0; i < instance.quantity; i++) {
       const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, i };
+      const placementPose = defaultPoseForPlacement(
+        placement,
+        { PW, PH, PD, T },
+        i,
+        instance.quantity,
+      );
 
-      const x = xFormula
+      const x = xFormula?.trim()
         ? evaluatePartFormula(xFormula, spatialDims, {
             structureCode: component.code,
             partDescription: component.name,
             field: 'x',
           })
-        : 0;
-
-      const y = yFormula
+        : placementPose.x;
+      const y = yFormula?.trim()
         ? evaluatePartFormula(yFormula, spatialDims, {
             structureCode: component.code,
             partDescription: component.name,
             field: 'y',
           })
-        : 0;
-
-      const z = zFormula
+        : placementPose.y;
+      const z = zFormula?.trim()
         ? evaluatePartFormula(zFormula, spatialDims, {
             structureCode: component.code,
             partDescription: component.name,
             field: 'z',
           })
-        : 0;
+        : placementPose.z;
+      // Explicit rotate on component/override wins over placement default.
+      const rotateX =
+        instance.overrides?.rotateX ??
+        component.rotateX ??
+        placementPose.rotateX;
+      const rotateY =
+        instance.overrides?.rotateY ??
+        component.rotateY ??
+        placementPose.rotateY;
+      const rotateZ =
+        instance.overrides?.rotateZ ??
+        component.rotateZ ??
+        placementPose.rotateZ;
 
       parts.push({
         id: `${idPrefix}${component.id}-copy-${i}`,

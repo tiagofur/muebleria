@@ -53,6 +53,8 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
     waste_percent: m.wastePercent,
     cost_per_m2: m.costPerM2,
     default_edge_band_id: m.defaultEdgeBandId ?? '',
+    preview_color: m.previewColor ?? '',
+    preview_texture_url: m.previewTextureUrl ?? '',
     notes: m.notes ?? '',
     active: m.active,
   };
@@ -61,6 +63,10 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
 export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
   const defaultEdge =
     str(raw.default_edge_band_id ?? raw.defaultEdgeBandId) || undefined;
+  const previewColor =
+    str(raw.preview_color ?? raw.previewColor) || undefined;
+  const previewTextureUrl =
+    str(raw.preview_texture_url ?? raw.previewTextureUrl) || undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -74,6 +80,8 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     wastePercent: num(raw.waste_percent ?? raw.wastePercent),
     costPerM2: num(raw.cost_per_m2 ?? raw.costPerM2),
     defaultEdgeBandId: defaultEdge,
+    previewColor,
+    previewTextureUrl,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
   };
@@ -293,6 +301,12 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
 
 // --- Structures (F049 / #99) ---
 
+function optionalRotate(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function componentInstanceToApi(
   c: import('@muebles/domain').ModuleComponentInstance,
 ): Record<string, unknown> {
@@ -309,12 +323,24 @@ function componentInstanceToApi(
   if (c.overrides?.widthFormula) {
     overrides.widthFormula = c.overrides.widthFormula;
   }
+  if (c.overrides?.xFormula) overrides.xFormula = c.overrides.xFormula;
+  if (c.overrides?.yFormula) overrides.yFormula = c.overrides.yFormula;
+  if (c.overrides?.zFormula) overrides.zFormula = c.overrides.zFormula;
+  if (c.overrides?.rotateX !== undefined) overrides.rotateX = c.overrides.rotateX;
+  if (c.overrides?.rotateY !== undefined) overrides.rotateY = c.overrides.rotateY;
+  if (c.overrides?.rotateZ !== undefined) overrides.rotateZ = c.overrides.rotateZ;
   return {
     componentId: c.componentId,
     quantity: c.quantity,
     placementOverride: c.placementOverride ?? null,
     length_formula: c.overrides?.lengthFormula ?? '',
     width_formula: c.overrides?.widthFormula ?? '',
+    x_formula: c.overrides?.xFormula ?? '',
+    y_formula: c.overrides?.yFormula ?? '',
+    z_formula: c.overrides?.zFormula ?? '',
+    rotate_x: c.overrides?.rotateX ?? null,
+    rotate_y: c.overrides?.rotateY ?? null,
+    rotate_z: c.overrides?.rotateZ ?? null,
     overrides: Object.keys(overrides).length > 0 ? overrides : null,
   };
 }
@@ -342,12 +368,48 @@ function componentInstanceFromApi(
         overridesRaw?.widthFormula ??
         overridesRaw?.width_formula,
     ) || undefined;
+  const xFormula =
+    str(
+      raw.x_formula ??
+        raw.xFormula ??
+        overridesRaw?.xFormula ??
+        overridesRaw?.x_formula,
+    ) || undefined;
+  const yFormula =
+    str(
+      raw.y_formula ??
+        raw.yFormula ??
+        overridesRaw?.yFormula ??
+        overridesRaw?.y_formula,
+    ) || undefined;
+  const zFormula =
+    str(
+      raw.z_formula ??
+        raw.zFormula ??
+        overridesRaw?.zFormula ??
+        overridesRaw?.z_formula,
+    ) || undefined;
+  const rotateX = optionalRotate(
+    raw.rotate_x ?? raw.rotateX ?? overridesRaw?.rotateX ?? overridesRaw?.rotate_x,
+  );
+  const rotateY = optionalRotate(
+    raw.rotate_y ?? raw.rotateY ?? overridesRaw?.rotateY ?? overridesRaw?.rotate_y,
+  );
+  const rotateZ = optionalRotate(
+    raw.rotate_z ?? raw.rotateZ ?? overridesRaw?.rotateZ ?? overridesRaw?.rotate_z,
+  );
   const notes =
     str(overridesRaw?.notes) || undefined;
   const hasOverrides =
     Array.isArray(edgesRaw) ||
     Boolean(lengthFormula) ||
     Boolean(widthFormula) ||
+    Boolean(xFormula) ||
+    Boolean(yFormula) ||
+    Boolean(zFormula) ||
+    rotateX !== undefined ||
+    rotateY !== undefined ||
+    rotateZ !== undefined ||
     Boolean(notes);
   return {
     componentId: str(raw.componentId ?? raw.component_id),
@@ -366,6 +428,12 @@ function componentInstanceFromApi(
           notes,
           lengthFormula,
           widthFormula,
+          xFormula,
+          yFormula,
+          zFormula,
+          rotateX,
+          rotateY,
+          rotateZ,
         }
       : undefined,
   };
@@ -449,6 +517,13 @@ export function componentToApi(c: Component): Record<string, unknown> {
     thickness_mm: c.geometry.thicknessMm,
     length_formula: lengthFormula ?? '',
     width_formula: widthFormula ?? '',
+    x_formula: c.xFormula ?? '',
+    y_formula: c.yFormula ?? '',
+    z_formula: c.zFormula ?? '',
+    // null = unset (placement heuristics); 0 is a valid explicit rotation
+    rotate_x: c.rotateX !== undefined ? c.rotateX : null,
+    rotate_y: c.rotateY !== undefined ? c.rotateY : null,
+    rotate_z: c.rotateZ !== undefined ? c.rotateZ : null,
     default_edges: c.defaultEdges.map((e) => ({ side: e.side, enabled: e.enabled })),
     option_roles: [...c.optionRoles],
     notes: c.notes ?? '',
@@ -462,6 +537,12 @@ export function componentFromApi(raw: Record<string, unknown>): Component {
   const rolesRaw = raw.option_roles ?? raw.optionRoles;
   const lengthFormula = str(raw.length_formula ?? raw.lengthFormula) || undefined;
   const widthFormula = str(raw.width_formula ?? raw.widthFormula) || undefined;
+  const xFormula = str(raw.x_formula ?? raw.xFormula) || undefined;
+  const yFormula = str(raw.y_formula ?? raw.yFormula) || undefined;
+  const zFormula = str(raw.z_formula ?? raw.zFormula) || undefined;
+  const rotateX = optionalRotate(raw.rotate_x ?? raw.rotateX);
+  const rotateY = optionalRotate(raw.rotate_y ?? raw.rotateY);
+  const rotateZ = optionalRotate(raw.rotate_z ?? raw.rotateZ);
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -486,6 +567,12 @@ export function componentFromApi(raw: Record<string, unknown>): Component {
       : [],
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
+    xFormula,
+    yFormula,
+    zFormula,
+    rotateX,
+    rotateY,
+    rotateZ,
   };
 }
 

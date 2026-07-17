@@ -74,6 +74,7 @@ export {
   roleCanAccessCatalogNav,
   roleCanAccessCustomers,
   roleCanAccessModulesNav,
+  roleCanAccessShowcaseNav,
   roleCanAccessNav,
   roleCanAccessProjects,
   roleCanAccessSettings,
@@ -121,6 +122,18 @@ export {
   resolveModuleMeasurePreset,
   validateModulePresets,
 } from './measurePresets';
+
+export {
+  DEFAULT_MATERIAL_PREVIEW_COLOR,
+  isValidPreviewColor,
+  normalizePreviewColor,
+} from './materialPreview';
+
+export {
+  defaultPoseForPlacement,
+  type PlacementDims,
+  type SpatialPose,
+} from './spatialPlacement';
 
 export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, ComposedModuleResult } from './engine';
 

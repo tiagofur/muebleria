@@ -37,6 +37,15 @@ export interface MaterialBoard {
   readonly defaultEdgeBandId?: string;
   /** Relative media URL (e.g. /api/media/xxx.webp) — never base64 (F040). */
   readonly imageUrl?: string;
+  /**
+   * Solid color for 3D / fast client preview (`#RRGGBB` or `#RGB`).
+   * Use for solid-color boards (paint, lacquer) and color-only view mode.
+   */
+  readonly previewColor?: string;
+  /**
+   * Optional texture map for 3D (relative media URL). Color-only mode ignores this.
+   */
+  readonly previewTextureUrl?: string;
   readonly notes?: string;
   readonly active: boolean;
 }

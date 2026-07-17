@@ -40,9 +40,10 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 			p := domain.ComponentPlacement(*placementOverride)
 			ci.PlacementOverride = &p
 		}
-		// Materialize overrides only when something is set.
+		// Materialize overrides when formulas, edges, or spatial fields are set.
 		hasFormula := (lengthFormula != nil && *lengthFormula != "") || (widthFormula != nil && *widthFormula != "")
-		if hasFormula || len(overridesJSON) > 0 && string(overridesJSON) != "null" {
+		hasJSON := len(overridesJSON) > 0 && string(overridesJSON) != "null" && string(overridesJSON) != "{}"
+		if hasFormula || hasJSON {
 			ov := &domain.ComponentInstanceOverrides{}
 			if lengthFormula != nil {
 				ov.LengthFormula = *lengthFormula
@@ -50,15 +51,25 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 			if widthFormula != nil {
 				ov.WidthFormula = *widthFormula
 			}
-			if len(overridesJSON) > 0 && string(overridesJSON) != "null" {
-				var edgeStruct struct {
-					Edges []domain.EdgeAssignment `json:"edges"`
-				}
-				if err := json.Unmarshal(overridesJSON, &edgeStruct); err == nil && len(edgeStruct.Edges) > 0 {
-					ov.Edges = edgeStruct.Edges
+			if hasJSON {
+				// Full override blob: edges + spatial formulas/rotates.
+				if err := json.Unmarshal(overridesJSON, ov); err != nil {
+					// Fallback: edges-only legacy shape.
+					var edgeStruct struct {
+						Edges []domain.EdgeAssignment `json:"edges"`
+					}
+					if err2 := json.Unmarshal(overridesJSON, &edgeStruct); err2 == nil && len(edgeStruct.Edges) > 0 {
+						ov.Edges = edgeStruct.Edges
+					}
 				}
 			}
-			ci.Overrides = ov
+			// Drop empty override bag (only zero-value fields).
+			if ov.LengthFormula != "" || ov.WidthFormula != "" ||
+				ov.XFormula != "" || ov.YFormula != "" || ov.ZFormula != "" ||
+				len(ov.Edges) > 0 ||
+				ov.RotateX != nil || ov.RotateY != nil || ov.RotateZ != nil {
+				ci.Overrides = ov
+			}
 		}
 		out = append(out, ci)
 	}
@@ -68,16 +79,20 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 	return out, rows.Err()
 }
 
-// componentInstanceOverridesJSON serializes instance edge overrides for the
-// module_components.overrides JSONB column. Returns nil when no edges are set.
+// componentInstanceOverridesJSON serializes instance overrides (edges + spatial)
+// for module_components.overrides JSONB. Returns nil when nothing to store.
 func componentInstanceOverridesJSON(ov *domain.ComponentInstanceOverrides) []byte {
-	if ov == nil || len(ov.Edges) == 0 {
+	if ov == nil {
 		return nil
 	}
-	type edgesOnly struct {
-		Edges []domain.EdgeAssignment `json:"edges"`
+	if len(ov.Edges) == 0 &&
+		ov.XFormula == "" && ov.YFormula == "" && ov.ZFormula == "" &&
+		ov.RotateX == nil && ov.RotateY == nil && ov.RotateZ == nil {
+		// length/width live in dedicated columns; empty bag → null
+		return nil
 	}
-	b, err := json.Marshal(edgesOnly{Edges: ov.Edges})
+	// Marshal full overrides; omit empty string formulas via omitempty on domain tags.
+	b, err := json.Marshal(ov)
 	if err != nil {
 		return nil
 	}

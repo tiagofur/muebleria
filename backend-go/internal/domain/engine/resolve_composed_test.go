@@ -21,6 +21,28 @@ func TestEvaluatePartFormula(t *testing.T) {
 	if v != 298 {
 		t.Fatalf("got %d want 298", v)
 	}
+	// Parent aliases + thickness (TS parity for seed formulas like PH / PD).
+	v, err = evaluatePartFormula("PH", formulaDims{W: 600, H: 720, D: 560, PW: 600, PH: 720, PD: 560, T: 18})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 720 {
+		t.Fatalf("PH got %d want 720", v)
+	}
+	v, err = evaluatePartFormula("PD-T", formulaDims{W: 600, H: 720, D: 560, PW: 600, PH: 720, PD: 560, T: 18})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 542 {
+		t.Fatalf("PD-T got %d want 542", v)
+	}
+	v, err = evaluatePartFormula("PW/2+i", formulaDims{W: 600, H: 720, D: 560, PW: 600, I: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 302 {
+		t.Fatalf("PW/2+i got %d want 302", v)
+	}
 }
 
 func TestResolveBom_ComposedModule(t *testing.T) {
@@ -35,6 +57,7 @@ func TestResolveBom_ComposedModule(t *testing.T) {
 	compCostado := domain.Component{
 		ID: "comp-costado", Code: "COS", Name: "Costado", Placement: domain.PlacementLateralIzquierdo,
 		GeometryKind: "rectangular_board", LengthMm: 720, WidthMm: 560, ThicknessMm: 18,
+		LengthFormula: "PH", WidthFormula: "PD",
 		DefaultEdges: []domain.EdgeAssignment{
 			{Side: "L1", Enabled: false}, {Side: "L2", Enabled: false},
 			{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},

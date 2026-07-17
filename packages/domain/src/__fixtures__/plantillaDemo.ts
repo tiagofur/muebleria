@@ -96,6 +96,7 @@ export const plantillaCatalog: Catalog = {
       wastePercent: 0,
       costPerM2: 160,
       defaultEdgeBandId: IDS.edgeArauco,
+      previewColor: '#F5F5F0',
       active: true,
     },
     {
@@ -110,6 +111,7 @@ export const plantillaCatalog: Catalog = {
       wastePercent: 0,
       costPerM2: 290,
       defaultEdgeBandId: IDS.edgeMaderado,
+      previewColor: '#C4A574',
       active: true,
     },
     {
@@ -124,6 +126,7 @@ export const plantillaCatalog: Catalog = {
       wastePercent: 0,
       costPerM2: 75,
       defaultEdgeBandId: IDS.edgeMdf,
+      previewColor: '#8B7355',
       active: true,
     },
   ],

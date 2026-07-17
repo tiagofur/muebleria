@@ -177,13 +177,24 @@ export function roleCanAccessCatalogNav(role: string | null | undefined): boolea
   );
 }
 
-export function roleCanAccessModulesNav(role: string | null | undefined): boolean {
+/** Trabajo → Vitrina (catálogo comercial). */
+export function roleCanAccessShowcaseNav(
+  role: string | null | undefined,
+): boolean {
   return (
     role === 'admin' ||
     role === 'ingeniero' ||
     role === 'gerente_ventas' ||
     role === 'vendedor'
   );
+}
+
+/**
+ * Ingeniería → Muebles (plantillas ABM).
+ * Mutate is still gated by `roleCanMutateModules` on the screen.
+ */
+export function roleCanAccessModulesNav(role: string | null | undefined): boolean {
+  return roleCanMutateModules(role);
 }
 
 /** Spanish labels for taller UI. */
@@ -208,6 +219,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'home',
       'projects',
       'customers',
+      'showcase',
       'modules',
       'structures',
       'components',
@@ -222,10 +234,13 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   const ids = new Set<string>(['home']);
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
+  if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
+  // Ingeniería: Muebles + Estructuras + Componentes (admin / ingeniero)
   if (roleCanAccessModulesNav(role)) ids.add('modules');
-  // F049: Estructuras only for ingeniero/admin (mutate modules), not vendedor vitrina
-  if (roleCanMutateModules(role)) ids.add('structures');
-  if (roleCanMutateModules(role)) ids.add('components');
+  if (roleCanMutateModules(role)) {
+    ids.add('structures');
+    ids.add('components');
+  }
   if (roleCanAccessCatalogNav(role)) {
     ids.add('materials');
     ids.add('edges');

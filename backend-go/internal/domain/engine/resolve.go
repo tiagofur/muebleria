@@ -214,15 +214,23 @@ func expandComponentInstances(
 				widthFormula = inst.Overrides.WidthFormula
 			}
 		}
+		// Parent dims + part thickness (TS geomDims: W/H/D, PW/PH/PD, T).
+		// Length/width formulas evaluate once with i=0 (same as typical non-spatial use).
+		evalDims := formulaDims{
+			W: dims.W, H: dims.H, D: dims.D,
+			PW: dims.W, PH: dims.H, PD: dims.D,
+			T: comp.ThicknessMm,
+			I: 0,
+		}
 		if lengthFormula != "" {
-			v, err := evaluatePartFormula(lengthFormula, dims)
+			v, err := evaluatePartFormula(lengthFormula, evalDims)
 			if err != nil {
 				return nil, fmt.Errorf("component %s length formula: %w", comp.Code, err)
 			}
 			lengthMm = v
 		}
 		if widthFormula != "" {
-			v, err := evaluatePartFormula(widthFormula, dims)
+			v, err := evaluatePartFormula(widthFormula, evalDims)
 			if err != nil {
 				return nil, fmt.Errorf("component %s width formula: %w", comp.Code, err)
 			}
@@ -244,11 +252,14 @@ func expandComponentInstances(
 	return parts, nil
 }
 
+// formulaDims holds parent and optional part variables (TS evaluatePartFormula parity).
 type formulaDims struct {
-	W, H, D int
+	W, H, D    int
+	PW, PH, PD int
+	T, I       int
 }
 
-// evaluatePartFormula evaluates simple math with W/H/D variables (TS parity).
+// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/i (TS parity).
 func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	trimmed := strings.TrimSpace(formula)
 	if trimmed == "" {
@@ -257,6 +268,7 @@ func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	clean := strings.ReplaceAll(trimmed, " ", "")
 	for _, r := range clean {
 		if unicode.IsDigit(r) || r == 'W' || r == 'H' || r == 'D' ||
+			r == 'P' || r == 'T' || r == 'L' || r == 'i' ||
 			r == '+' || r == '-' || r == '*' || r == '/' || r == '(' || r == ')' {
 			continue
 		}
@@ -280,6 +292,27 @@ type formulaParser struct {
 	s    string
 	i    int
 	dims formulaDims
+}
+
+func (p *formulaParser) parentW() int {
+	if p.dims.PW != 0 {
+		return p.dims.PW
+	}
+	return p.dims.W
+}
+
+func (p *formulaParser) parentH() int {
+	if p.dims.PH != 0 {
+		return p.dims.PH
+	}
+	return p.dims.H
+}
+
+func (p *formulaParser) parentD() int {
+	if p.dims.PD != 0 {
+		return p.dims.PD
+	}
+	return p.dims.D
 }
 
 func (p *formulaParser) parseExpr() (float64, error) {
@@ -358,6 +391,19 @@ func (p *formulaParser) parseFactor() (float64, error) {
 		p.i++
 		return v, nil
 	}
+	// Multi-char parent vars before single-letter W/H/D (TS substitutes PW before W).
+	if strings.HasPrefix(p.s[p.i:], "PW") {
+		p.i += 2
+		return float64(p.parentW()), nil
+	}
+	if strings.HasPrefix(p.s[p.i:], "PH") {
+		p.i += 2
+		return float64(p.parentH()), nil
+	}
+	if strings.HasPrefix(p.s[p.i:], "PD") {
+		p.i += 2
+		return float64(p.parentD()), nil
+	}
 	if p.s[p.i] == 'W' {
 		p.i++
 		return float64(p.dims.W), nil
@@ -366,9 +412,17 @@ func (p *formulaParser) parseFactor() (float64, error) {
 		p.i++
 		return float64(p.dims.H), nil
 	}
-	if p.s[p.i] == 'D' {
+	if p.s[p.i] == 'D' || p.s[p.i] == 'L' {
 		p.i++
 		return float64(p.dims.D), nil
+	}
+	if p.s[p.i] == 'T' {
+		p.i++
+		return float64(p.dims.T), nil
+	}
+	if p.s[p.i] == 'i' {
+		p.i++
+		return float64(p.dims.I), nil
 	}
 	start := p.i
 	for p.i < len(p.s) && (unicode.IsDigit(rune(p.s[p.i])) || p.s[p.i] == '.') {

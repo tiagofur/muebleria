@@ -204,6 +204,45 @@ describe('component formula mappers', () => {
     expect(round.geometry.widthFormula).toBe('W/2-2');
   });
 
+  it('round-trips component spatial formulas and rotates', () => {
+    const c: Component = {
+      id: 'c-spatial',
+      code: 'LAT',
+      name: 'Lateral',
+      placement: 'lateral_izquierdo',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 720,
+        widthMm: 560,
+        thicknessMm: 18,
+        lengthFormula: 'PH',
+        widthFormula: 'PD',
+      },
+      defaultEdges: [],
+      optionRoles: ['INTERIOR'],
+      active: true,
+      xFormula: '0',
+      yFormula: 'T',
+      zFormula: 'PH/2',
+      rotateX: 90,
+      rotateY: 90,
+      rotateZ: 0,
+    };
+    const api = componentToApi(c);
+    expect(api.x_formula).toBe('0');
+    expect(api.y_formula).toBe('T');
+    expect(api.z_formula).toBe('PH/2');
+    expect(api.rotate_x).toBe(90);
+    expect(api.rotate_y).toBe(90);
+    const round = componentFromApi(api as Record<string, unknown>);
+    expect(round.xFormula).toBe('0');
+    expect(round.yFormula).toBe('T');
+    expect(round.zFormula).toBe('PH/2');
+    expect(round.rotateX).toBe(90);
+    expect(round.rotateY).toBe(90);
+    expect(round.rotateZ).toBe(0);
+  });
+
   it('round-trips module component instance formula overrides', () => {
     const mod: Module = {
       id: 'mod1',
@@ -215,7 +254,13 @@ describe('component formula mappers', () => {
           componentId: 'comp-1',
           quantity: 1,
           placementOverride: 'puerta',
-          overrides: { lengthFormula: 'H-5', widthFormula: 'W-10' },
+          overrides: {
+            lengthFormula: 'H-5',
+            widthFormula: 'W-10',
+            xFormula: 'T',
+            zFormula: '100',
+            rotateY: 0,
+          },
         },
       ],
       hardwareLines: [],
@@ -223,8 +268,12 @@ describe('component formula mappers', () => {
     const api = moduleToApi(mod);
     const comps = api.components as Record<string, unknown>[];
     expect(comps[0]?.length_formula).toBe('H-5');
+    expect(comps[0]?.x_formula).toBe('T');
     const round = moduleFromApi(api as Record<string, unknown>);
     expect(round.components?.[0]?.overrides?.lengthFormula).toBe('H-5');
     expect(round.components?.[0]?.overrides?.widthFormula).toBe('W-10');
+    expect(round.components?.[0]?.overrides?.xFormula).toBe('T');
+    expect(round.components?.[0]?.overrides?.zFormula).toBe('100');
+    expect(round.components?.[0]?.overrides?.rotateY).toBe(0);
   });
 });

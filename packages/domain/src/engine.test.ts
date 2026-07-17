@@ -2666,5 +2666,100 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(piso.y).toBe(0);
     expect(piso.z).toBe(0);
   });
+
+  it('uses placement defaults when component has no x/y/z formulas', () => {
+    const compLat: Component = {
+      id: 'c-lat-default',
+      code: 'C-LAT',
+      name: 'Lateral sin fórmulas',
+      placement: 'lateral_izquierdo',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 720,
+        widthMm: 560,
+        thicknessMm: 18,
+        lengthFormula: 'PH',
+        widthFormula: 'PD',
+      },
+      defaultEdges: MOCK_TEST_EDGES,
+      optionRoles: ['board_base'],
+      active: true,
+      // no xFormula / yFormula / zFormula
+    };
+
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [compLat],
+    };
+
+    const structure: Structure = {
+      id: 'st-pose',
+      code: 'EST-POSE',
+      name: 'Estructura pose',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      components: [{ componentId: 'c-lat-default', quantity: 2 }],
+    };
+
+    const result = resolveComposedModule({
+      structure,
+      componentInstances: [],
+      catalog,
+      dims: { width: 600, height: 720, depth: 560 },
+      optionChoices: { board_base: 'mat-a' },
+    });
+
+    expect(result.boardParts).toHaveLength(2);
+    expect(result.boardParts[0]!.x).toBe(0);
+    expect(result.boardParts[0]!.rotateX).toBe(90);
+    expect(result.boardParts[0]!.rotateY).toBe(90);
+    // mat-a thickness 15 → PW - T = 585
+    expect(result.boardParts[1]!.x).toBe(585);
+    expect(result.boardParts[1]!.rotateX).toBe(90);
+    expect(result.boardParts[1]!.rotateY).toBe(90);
+  });
+
+  it('keeps placement axes when only one spatial formula is set', () => {
+    const comp: Component = {
+      id: 'c-partial-z',
+      code: 'C-PZ',
+      name: 'Solo Z',
+      placement: 'base',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 560,
+        widthMm: 564,
+        thicknessMm: 18,
+        lengthFormula: 'PD',
+        widthFormula: 'PW - 2*T',
+      },
+      defaultEdges: MOCK_TEST_EDGES,
+      optionRoles: ['board_base'],
+      active: true,
+      zFormula: '100',
+    };
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [comp],
+    };
+    const structure: Structure = {
+      id: 'st-partial',
+      code: 'EST-P',
+      name: 'Partial',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      components: [{ componentId: 'c-partial-z', quantity: 1 }],
+    };
+    const result = resolveComposedModule({
+      structure,
+      componentInstances: [],
+      catalog,
+      dims: { width: 600, height: 720, depth: 560 },
+      optionChoices: { board_base: 'mat-a' },
+    });
+    const part = result.boardParts[0]!;
+    // placement base: x = T (15), y = 0; only z overridden
+    expect(part.x).toBe(15);
+    expect(part.y).toBe(0);
+    expect(part.z).toBe(100);
+  });
 });
 

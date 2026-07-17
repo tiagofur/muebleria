@@ -64,7 +64,7 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('produccion').has('projects')).toBe(true);
   });
 
-  it('F049: structures + components nav for ingeniero/admin (not vendedor)', () => {
+  it('Ingeniería Muebles/Estructuras/Componentes vs Trabajo Vitrina', () => {
     expect(navIdsForRole('ingeniero').has('structures')).toBe(true);
     expect(navIdsForRole('admin').has('structures')).toBe(true);
     expect(navIdsForRole('vendedor').has('structures')).toBe(false);
@@ -73,6 +73,11 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole(null).has('components')).toBe(true);
     expect(navIdsForRole('ingeniero').has('components')).toBe(true);
     expect(navIdsForRole('vendedor').has('components')).toBe(false);
+    expect(navIdsForRole('ingeniero').has('modules')).toBe(true);
+    expect(navIdsForRole('vendedor').has('modules')).toBe(false);
+    expect(navIdsForRole('vendedor').has('showcase')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('showcase')).toBe(true);
+    expect(navIdsForRole('produccion').has('showcase')).toBe(false);
   });
 
   it('labels roles in Spanish de taller', () => {
