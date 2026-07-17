@@ -20,6 +20,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   QuoteBreakdown,
+  Structure,
 } from '@muebles/domain';
 import {
   UNCATEGORIZED_FILTER,
@@ -76,6 +77,7 @@ import {
   type ModuleDraft,
   type ModulePartGridField,
 } from './moduleHelpers';
+import { ModuleMeasureSection } from './components/ModuleMeasureSection';
 import './modules.css';
 
 export type { ModuleDraft, BoardPartDraft, HardwareLineDraft, CategoryDraft };
@@ -109,6 +111,8 @@ export interface ModulesScreenProps {
   readonly hardware: readonly Hardware[];
   /** Hierarchical categories (MOD-09). Default empty. */
   readonly categories?: readonly ModuleCategory[];
+  /** Engineering structures for composed furniture (H07/H09). */
+  readonly structures?: readonly Structure[];
   readonly onCreate: (draft: ModuleDraft) => void;
   readonly onUpdate: (id: string, draft: ModuleDraft) => void;
   readonly onDelete: (id: string) => void;
@@ -236,6 +240,7 @@ export function ModulesScreen({
   optionGroups,
   hardware,
   categories = [],
+  structures = [],
   onCreate,
   onUpdate,
   onDelete,
@@ -635,6 +640,16 @@ export function ModulesScreen({
       }
     }
 
+    for (const preset of draft.presets) {
+      if (preset.width <= 0 || preset.height <= 0 || preset.depth <= 0) {
+        return 'Las dimensiones de los presets de medida deben ser mayores a 0.';
+      }
+    }
+
+    if (draft.structureId.trim() && draft.presets.length === 0) {
+      return 'Un mueble con estructura necesita al menos un preset de medida comercial.';
+    }
+
     for (const part of draft.boardParts) {
       if (!part.description.trim()) {
         return 'Cada pieza de tablero necesita descripción.';
@@ -983,6 +998,25 @@ export function ModulesScreen({
             </div>
           </div>
         </fieldset>
+
+        <ModuleMeasureSection
+          structureId={draft.structureId}
+          presets={draft.presets}
+          structures={structures}
+          disabled={!canMutate}
+          onStructureIdChange={(structureId) =>
+            setDraft((prev) => ({ ...prev, structureId }))
+          }
+          onPresetsChange={(presets) =>
+            setDraft((prev) => ({ ...prev, presets }))
+          }
+          nextId={() =>
+            typeof crypto !== 'undefined' &&
+            typeof crypto.randomUUID === 'function'
+              ? crypto.randomUUID()
+              : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          }
+        />
       </div>
 
       <div

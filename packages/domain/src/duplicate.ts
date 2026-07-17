@@ -95,6 +95,16 @@ export function duplicateModule(
       : undefined,
     baseLaborCost: module.baseLaborCost,
     notes: module.notes,
+    structureId: module.structureId,
+    presets: module.presets
+      ? module.presets.map((p) => ({
+          id: nextId(),
+          name: p.name,
+          width: p.width,
+          height: p.height,
+          depth: p.depth,
+        }))
+      : undefined,
     boardParts: module.boardParts.map((p) => cloneBoardPart(p, nextId())),
     hardwareLines: module.hardwareLines.map((l) => cloneHardwareLine(l, nextId())),
   };
@@ -121,6 +131,7 @@ export function duplicateProject(
     moduleId: item.moduleId,
     quantity: item.quantity,
     optionChoices: { ...item.optionChoices },
+    measurePresetId: item.measurePresetId,
   }));
 
   return {

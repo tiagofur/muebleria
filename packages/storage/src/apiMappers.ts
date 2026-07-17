@@ -235,6 +235,39 @@ function hardwareLineFromApi(raw: Record<string, unknown>): HardwareLine {
   };
 }
 
+function dimensionPresetToApi(p: {
+  id: string;
+  name?: string;
+  width: number;
+  height: number;
+  depth: number;
+}): Record<string, unknown> {
+  return {
+    id: p.id,
+    name: p.name ?? '',
+    width_mm: p.width,
+    height_mm: p.height,
+    depth_mm: p.depth,
+  };
+}
+
+function dimensionPresetFromApi(raw: Record<string, unknown>): {
+  id: string;
+  name?: string;
+  width: number;
+  height: number;
+  depth: number;
+} {
+  const name = str(raw.name);
+  return {
+    id: str(raw.id),
+    name: name || undefined,
+    width: num(raw.width_mm ?? raw.widthMm ?? raw.width),
+    height: num(raw.height_mm ?? raw.heightMm ?? raw.height),
+    depth: num(raw.depth_mm ?? raw.depthMm ?? raw.depth),
+  };
+}
+
 export function moduleToApi(m: Module): Record<string, unknown> {
   return {
     id: m.id,
@@ -247,6 +280,8 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     categoryId: m.categoryId ?? '',
     image_url: m.imageUrl ?? '',
     notes: m.notes ?? '',
+    structure_id: m.structureId ?? '',
+    presets: (m.presets ?? []).map(dimensionPresetToApi),
     board_parts: m.boardParts.map(boardPartToApi),
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
   };
@@ -255,6 +290,7 @@ export function moduleToApi(m: Module): Record<string, unknown> {
 export function moduleFromApi(raw: Record<string, unknown>): Module {
   const parts = raw.board_parts ?? raw.boardParts;
   const lines = raw.hardware_lines ?? raw.hardwareLines;
+  const presetsRaw = raw.presets;
   const w = num(raw.width_mm ?? raw.widthMm);
   const h = num(raw.height_mm ?? raw.heightMm);
   const d = num(raw.depth_mm ?? raw.depthMm);
@@ -262,6 +298,10 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const categoryId = str(raw.categoryId ?? raw.category_id);
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
   const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
+  const structureId = str(raw.structure_id ?? raw.structureId) || undefined;
+  const presets = Array.isArray(presetsRaw)
+    ? presetsRaw.map((p) => dimensionPresetFromApi(p as Record<string, unknown>))
+    : undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -271,6 +311,8 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     imageUrl,
     notes: str(raw.notes) || undefined,
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
+    structureId,
+    presets: presets && presets.length > 0 ? presets : undefined,
     boardParts: Array.isArray(parts)
       ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
       : [],
@@ -293,16 +335,21 @@ export function structureToApi(st: import('@muebles/domain').Structure): Record<
     notes: st.notes ?? '',
     active: st.active !== false,
     board_parts: st.boardParts.map(boardPartToApi),
+    presets: (st.presets ?? []).map(dimensionPresetToApi),
   };
 }
 
 export function structureFromApi(raw: Record<string, unknown>): import('@muebles/domain').Structure {
   const parts = raw.board_parts ?? raw.boardParts;
+  const presetsRaw = raw.presets;
   const w = num(raw.width_mm ?? raw.widthMm);
   const h = num(raw.height_mm ?? raw.heightMm);
   const d = num(raw.depth_mm ?? raw.depthMm);
   const hasDims = w > 0 || h > 0 || d > 0;
   const activeRaw = raw.active;
+  const presets = Array.isArray(presetsRaw)
+    ? presetsRaw.map((p) => dimensionPresetFromApi(p as Record<string, unknown>))
+    : undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -313,6 +360,7 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
     boardParts: Array.isArray(parts)
       ? parts.map((p) => boardPartFromApi(p as Record<string, unknown>))
       : [],
+    presets: presets && presets.length > 0 ? presets : undefined,
   };
 }
 
@@ -365,6 +413,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
       module_id: item.moduleId,
       quantity: item.quantity,
       option_choices: { ...item.optionChoices },
+      measure_preset_id: item.measurePresetId ?? '',
     })),
   };
 }
@@ -402,6 +451,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     items: itemsRaw.map((it): ProjectItem => {
       const row = it as Record<string, unknown>;
       const choices = row.option_choices ?? row.optionChoices;
+      const measurePresetId =
+        str(row.measure_preset_id ?? row.measurePresetId) || undefined;
       return {
         id: str(row.id),
         moduleId: str(row.module_id ?? row.moduleId),
@@ -410,6 +461,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
           choices && typeof choices === 'object' && !Array.isArray(choices)
             ? (choices as ProjectItem['optionChoices'])
             : {},
+        measurePresetId,
       };
     }),
   };

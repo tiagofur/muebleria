@@ -59,6 +59,8 @@ export type AddItemDraft = {
   quantity: number;
   /** Option choices for the new line (filled in add-item modal). */
   optionChoices: OptionChoices;
+  /** Commercial measure preset from Module.presets (H09). */
+  measurePresetId?: string;
 };
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
@@ -250,6 +252,7 @@ export function emptyAddItemDraft(
     moduleId,
     quantity: 1,
     optionChoices: mod ? defaultChoicesForNewItem(mod, optionGroups) : {},
+    measurePresetId: mod?.presets?.[0]?.id,
   };
 }
 

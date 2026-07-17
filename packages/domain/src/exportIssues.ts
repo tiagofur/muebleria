@@ -182,7 +182,7 @@ function collectItemStructuralIssues(
   // Resolve BOM only when local structure/options look complete (VAL-06, refs, edges).
   if (issues.length === before) {
     try {
-      resolveBom(module, choices, catalog);
+      resolveBom(module, choices, catalog, item.measurePresetId);
     } catch (error) {
       pushDomainError(issues, error, {
         moduleCode: module.code,

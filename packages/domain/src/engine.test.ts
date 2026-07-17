@@ -1685,28 +1685,33 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(entrepano.lengthMm).toBe(562); // 600 - 36 - 2
     });
 
-    it('rejects dimensions not in the preset list', () => {
-      expect(() =>
-        resolveStructure(mockStructure, { width: 400, height: 720, depth: 560 })
-      ).toThrow(ValidationError);
-      expect(() =>
-        resolveStructure(mockStructure, { width: 400, height: 720, depth: 560 })
-      ).toThrow(/no están permitidas/i);
+    it('accepts any positive dims (commercial allowlist is on Module)', () => {
+      const parts = resolveStructure(mockStructure, {
+        width: 400,
+        height: 720,
+        depth: 560,
+      });
+      const base = parts.find((p) => p.id === 'bp-base')!;
+      expect(base.lengthMm).toBe(364); // 400 - 36
     });
 
-    it('validates fallback to externalDims if presets list is empty', () => {
+    it('rejects non-positive dimensions', () => {
+      expect(() =>
+        resolveStructure(mockStructure, { width: 0, height: 720, depth: 560 }),
+      ).toThrow(/mayores a 0/i);
+    });
+
+    it('stretches with formulas without requiring structure.presets', () => {
       const structNoPresets: Structure = {
         ...mockStructure,
         presets: [],
       };
-      // Matches default externalDims exactly -> should resolve
-      const parts = resolveStructure(structNoPresets, { width: 500, height: 720, depth: 560 });
-      expect(parts[1]!.lengthMm).toBe(464);
-
-      // Differs from default -> should throw
-      expect(() =>
-        resolveStructure(structNoPresets, { width: 600, height: 720, depth: 560 })
-      ).toThrow(/no coinciden con las medidas por defecto/i);
+      const parts = resolveStructure(structNoPresets, {
+        width: 600,
+        height: 720,
+        depth: 560,
+      });
+      expect(parts.find((p) => p.id === 'bp-base')!.lengthMm).toBe(564);
     });
   });
 
@@ -1737,6 +1742,231 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(() => validateStructure(badStruct)).toThrow(ValidationError);
       expect(() => validateStructure(badStruct)).toThrow(/caracteres no válidos/i);
     });
+  });
+});
+
+describe('resolveBom with Module measure presets (H09 / #104)', () => {
+  const structure: Structure = {
+    id: 'st-body',
+    code: 'EST-BODY',
+    name: 'Cuerpo base',
+    externalDims: { width: 500, height: 720, depth: 560 },
+    boardParts: [
+      {
+        id: 'bp-lat',
+        description: 'Lateral',
+        quantity: 2,
+        lengthMm: 720,
+        widthMm: 560,
+        lengthFormula: 'H',
+        widthFormula: 'D',
+        edges: [
+          { side: 'L1', enabled: true },
+          { side: 'L2', enabled: false },
+          { side: 'W1', enabled: false },
+          { side: 'W2', enabled: false },
+        ],
+        optionRole: 'INTERIOR',
+      },
+      {
+        id: 'bp-base',
+        description: 'Base',
+        quantity: 1,
+        lengthMm: 464,
+        widthMm: 560,
+        lengthFormula: 'W-36',
+        widthFormula: 'D',
+        edges: [
+          { side: 'L1', enabled: false },
+          { side: 'L2', enabled: false },
+          { side: 'W1', enabled: false },
+          { side: 'W2', enabled: false },
+        ],
+        optionRole: 'INTERIOR',
+      },
+    ],
+  };
+
+  const commercialPresets = [
+    { id: 'p300', name: '300', width: 300, height: 720, depth: 560 },
+    { id: 'p600', name: '600', width: 600, height: 720, depth: 560 },
+  ] as const;
+
+  function catalogWithStructure(module: Module): Catalog {
+    return {
+      materials: [
+        {
+          id: 'mat-a',
+          code: 'MAT-A',
+          name: 'Melamina',
+          widthMm: 1830,
+          lengthMm: 2750,
+          thicknessMm: 18,
+          grainDefault: false,
+          boardPrice: 1000,
+          wastePercent: 0,
+          costPerM2: 200,
+          defaultEdgeBandId: 'edge-a',
+          active: true,
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-a',
+          code: 'EDGE-A',
+          name: 'Canto A',
+          thicknessMm: 1,
+          costPerMl: 10,
+          active: true,
+        },
+      ],
+      hardware: [],
+      optionGroups: [
+        {
+          id: 'og-int',
+          code: 'INTERIOR',
+          name: 'Interior',
+          kind: 'board',
+          required: true,
+          optionIds: ['mat-a'],
+        },
+      ],
+      modules: [module],
+      structures: [structure],
+    };
+  }
+
+  it('same furniture template, two widths → two different despieces', () => {
+    const module: Module = {
+      id: 'mod-comp',
+      code: 'MOD-COMP',
+      name: 'Gabinete compuesto',
+      structureId: 'st-body',
+      presets: [...commercialPresets],
+      boardParts: [],
+      hardwareLines: [],
+    };
+    const catalog = catalogWithStructure(module);
+
+    const bom300 = resolveBom(module, { INTERIOR: 'mat-a' }, catalog, 'p300');
+    const bom600 = resolveBom(module, { INTERIOR: 'mat-a' }, catalog, 'p600');
+
+    const base300 = bom300.boardParts.find((p) => p.id === 'bp-base')!;
+    const base600 = bom600.boardParts.find((p) => p.id === 'bp-base')!;
+    expect(base300.lengthMm).toBe(264);
+    expect(base600.lengthMm).toBe(564);
+    expect(base300.lengthMm).not.toBe(base600.lengthMm);
+  });
+
+  it('rejects invalid measure preset on the module', () => {
+    const module: Module = {
+      id: 'mod-comp',
+      code: 'MOD-COMP',
+      name: 'Gabinete compuesto',
+      structureId: 'st-body',
+      presets: [...commercialPresets],
+      boardParts: [],
+      hardwareLines: [],
+    };
+    const catalog = catalogWithStructure(module);
+    expect(() =>
+      resolveBom(module, { INTERIOR: 'mat-a' }, catalog, 'p999'),
+    ).toThrow(/no es válido/i);
+  });
+
+  it('two quote lines with different presets yield different sale prices', () => {
+    const module: Module = {
+      id: 'mod-comp',
+      code: 'MOD-COMP',
+      name: 'Gabinete compuesto',
+      structureId: 'st-body',
+      presets: [...commercialPresets],
+      boardParts: [],
+      hardwareLines: [],
+      baseLaborCost: 0,
+    };
+    const catalog = catalogWithStructure(module);
+
+    const project300: Project = {
+      id: 'prj-1',
+      name: 'P300',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'mod-comp',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a' },
+          measurePresetId: 'p300',
+        },
+      ],
+    };
+    const project600: Project = {
+      ...project300,
+      id: 'prj-2',
+      name: 'P600',
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'mod-comp',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a' },
+          measurePresetId: 'p600',
+        },
+      ],
+    };
+
+    const price300 = calcProjectBreakdown(project300, catalog).salePrice;
+    const price600 = calcProjectBreakdown(project600, catalog).salePrice;
+    expect(price600).toBeGreaterThan(price300);
+  });
+
+  it('closed project keeps snapshot price when measure preset would change live calc', () => {
+    const module: Module = {
+      id: 'mod-comp',
+      code: 'MOD-COMP',
+      name: 'Gabinete compuesto',
+      structureId: 'st-body',
+      presets: [...commercialPresets],
+      boardParts: [],
+      hardwareLines: [],
+      baseLaborCost: 0,
+    };
+    const catalog = catalogWithStructure(module);
+    const draft: Project = {
+      id: 'prj-snap',
+      name: 'Snap',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'mod-comp',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a' },
+          measurePresetId: 'p300',
+        },
+      ],
+    };
+    const quoted = transitionProjectStatus(
+      draft,
+      'quoted',
+      catalog,
+      '2026-02-01T00:00:00.000Z',
+    );
+    const frozen = quoted.priceSnapshot!.breakdown.salePrice;
+    expect(calcProjectBreakdown(quoted, catalog).salePrice).toBe(frozen);
   });
 });
 

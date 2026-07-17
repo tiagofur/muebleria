@@ -175,12 +175,16 @@ type Module struct {
 	DepthMm       int     `json:"depth_mm,omitempty"`
 	CategoryID    string  `json:"categoryId,omitempty"`
 	// ImageURL relative media path for sales showcase (F040).
-	ImageURL      string         `json:"image_url,omitempty"`
-	BoardParts    []BoardPart    `json:"board_parts"`
-	HardwareLines []HardwareLine `json:"hardware_lines"`
-	Notes         string         `json:"notes,omitempty"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	ImageURL string `json:"image_url,omitempty"`
+	// StructureID links composed furniture to an engineering body (H07 / #102).
+	StructureID string `json:"structure_id,omitempty"`
+	// Presets are commercial measure options for sales (H09 / #104).
+	Presets       []DimensionPreset `json:"presets,omitempty"`
+	BoardParts    []BoardPart       `json:"board_parts"`
+	HardwareLines []HardwareLine    `json:"hardware_lines"`
+	Notes         string            `json:"notes,omitempty"`
+	CreatedAt     time.Time         `json:"created_at"`
+	UpdatedAt     time.Time         `json:"updated_at"`
 }
 
 type DimensionPreset struct {
@@ -213,6 +217,8 @@ type ProjectItem struct {
 	ModuleID      string            `json:"module_id"`
 	Quantity      int               `json:"quantity"`
 	OptionChoices map[string]string `json:"option_choices"` // group_code -> choice_id
+	// MeasurePresetID selects Module.Presets entry for quotation (H09 / #104).
+	MeasurePresetID string `json:"measure_preset_id,omitempty"`
 }
 
 type Project struct {

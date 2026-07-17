@@ -170,6 +170,17 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
     categoryId: draft.categoryId.trim() || undefined,
     baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
     imageUrl: draft.imageUrl.trim() || undefined,
+    structureId: draft.structureId.trim() || undefined,
+    presets:
+      draft.presets.length > 0
+        ? draft.presets.map((p) => ({
+            id: p.id,
+            name: p.name.trim() || undefined,
+            width: p.width,
+            height: p.height,
+            depth: p.depth,
+          }))
+        : undefined,
     externalDims: hasDims
       ? {
           width: width ?? 0,
@@ -186,6 +197,8 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
       widthMm: p.widthMm,
       edges: edgesFromFlags(p.edgeL1, p.edgeL2, p.edgeW1, p.edgeW2),
       optionRole: p.optionRole.trim(),
+      lengthFormula: p.lengthFormula?.trim() || undefined,
+      widthFormula: p.widthFormula?.trim() || undefined,
     })),
     hardwareLines: draft.hardwareLines.map((l) => ({
       id: l.id,
@@ -1684,6 +1697,7 @@ function AppContent({
       moduleId: string;
       quantity: number;
       optionChoices: OptionChoices;
+      measurePresetId?: string;
     },
   ) => {
     const now = new Date().toISOString();
@@ -1692,6 +1706,7 @@ function AppContent({
       moduleId: input.moduleId,
       quantity: input.quantity,
       optionChoices: input.optionChoices,
+      measurePresetId: input.measurePresetId,
     };
     patchProjects((ps) =>
       ps.map((p) =>
@@ -2288,6 +2303,7 @@ function AppContent({
           optionGroups={optionGroups}
           hardware={hardware}
           categories={categories}
+          structures={structures}
           onCreate={createModule}
           onUpdate={updateModule}
           onDelete={deleteModule}
