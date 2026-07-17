@@ -77,6 +77,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/catalog/structures/{id}", authMW(http.HandlerFunc(server.HandleStructureByID)))
 	mux.Handle("DELETE /api/catalog/structures/{id}", authMW(http.HandlerFunc(server.HandleStructureByID)))
 
+	// Catálogo: Componentes reutilizables (H06 / #101)
+	mux.Handle("GET /api/catalog/components", authMW(http.HandlerFunc(server.HandleFurnitureComponents)))
+	mux.Handle("POST /api/catalog/components", authMW(http.HandlerFunc(server.HandleFurnitureComponents)))
+	mux.Handle("GET /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleFurnitureComponentByID)))
+	mux.Handle("PUT /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleFurnitureComponentByID)))
+	mux.Handle("DELETE /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleFurnitureComponentByID)))
+
 	// Proyectos y cotizaciones
 	mux.Handle("GET /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
 	mux.Handle("POST /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))

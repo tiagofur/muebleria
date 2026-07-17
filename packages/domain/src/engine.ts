@@ -7,12 +7,14 @@ import {
   resolveModuleMeasurePreset,
   validateModulePresets,
 } from './measurePresets';
+import { isFurnitureComponentKind } from './furnitureComponents';
 import { effectiveOptionChoices } from './optionChoices';
 import type {
   BoardPart,
   Catalog,
   EdgeAssignment,
   EdgeBand,
+  FurnitureComponent,
   Grain,
   Hardware,
   HardwareLine,
@@ -21,6 +23,7 @@ import type {
   MaterialBoard,
   MaterialUsageRow,
   Module,
+  ModuleComponentRef,
   OptionChoices,
   OptionGroup,
   PieceLabel,
@@ -427,7 +430,232 @@ export function validateModule(module: Module): void {
     }
   }
 
+  validateModuleComponentRefs(module.components, module.code);
   validateModulePresets(module);
+}
+
+export function validateModuleComponentRefs(
+  refs: readonly ModuleComponentRef[] | undefined,
+  moduleCode: string,
+): void {
+  if (!refs?.length) return;
+  for (const ref of refs) {
+    if (!ref.componentId?.trim()) {
+      throw new ValidationError(
+        'La referencia de componente necesita componentId',
+        { moduleCode, field: 'components' },
+      );
+    }
+    if (!Number.isFinite(ref.quantity) || ref.quantity < 1) {
+      throw new ValidationError(
+        'La cantidad del componente debe ser un entero ≥ 1',
+        {
+          moduleCode,
+          componentId: ref.componentId,
+          field: 'components.quantity',
+        },
+      );
+    }
+  }
+}
+
+/**
+ * Validate reusable component template (H06 / #101).
+ */
+export function validateFurnitureComponent(
+  component: FurnitureComponent,
+): void {
+  if (!component.code?.trim()) {
+    throw new ValidationError('El código del componente no puede estar vacío', {
+      componentId: component.id,
+      field: 'code',
+    });
+  }
+  if (!component.name?.trim()) {
+    throw new ValidationError('El nombre del componente no puede estar vacío', {
+      componentId: component.id,
+      componentCode: component.code,
+      field: 'name',
+    });
+  }
+  if (!isFurnitureComponentKind(component.kind)) {
+    throw new ValidationError(
+      `Tipo de componente no válido: ${String(component.kind)}`,
+      {
+        componentCode: component.code,
+        field: 'kind',
+      },
+    );
+  }
+  if (
+    component.boardParts.length === 0 &&
+    component.hardwareLines.length === 0
+  ) {
+    throw new ValidationError(
+      'El componente debe tener al menos una pieza o un herraje',
+      {
+        componentCode: component.code,
+        field: 'boardParts',
+      },
+    );
+  }
+
+  for (const part of component.boardParts) {
+    validateBoardPart(part, component.code);
+    if (!part.description?.trim()) {
+      throw new ValidationError(
+        'La descripción de la pieza no puede estar vacía',
+        {
+          componentCode: component.code,
+          partId: part.id,
+          field: 'description',
+        },
+      );
+    }
+    if (!part.optionRole?.trim()) {
+      throw new ValidationError(
+        'La pieza del componente necesita un rol de opción',
+        {
+          componentCode: component.code,
+          partId: part.id,
+          field: 'optionRole',
+        },
+      );
+    }
+    if (part.lengthFormula?.trim()) {
+      const clean = part.lengthFormula.replace(/\s+/g, '');
+      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
+        throw new ValidationError(
+          `La fórmula de largo "${part.lengthFormula}" contiene caracteres no válidos.`,
+          {
+            componentCode: component.code,
+            partId: part.id,
+            field: 'lengthFormula',
+          },
+        );
+      }
+    }
+    if (part.widthFormula?.trim()) {
+      const clean = part.widthFormula.replace(/\s+/g, '');
+      if (!/^[0-9WHD+\-*/()]+$/.test(clean)) {
+        throw new ValidationError(
+          `La fórmula de ancho "${part.widthFormula}" contiene caracteres no válidos.`,
+          {
+            componentCode: component.code,
+            partId: part.id,
+            field: 'widthFormula',
+          },
+        );
+      }
+    }
+  }
+
+  for (const line of component.hardwareLines) {
+    validateHardwareLine(line, moduleCodeForHw(component));
+    if (!line.optionRole?.trim() && !line.hardwareId) {
+      throw new ValidationError(
+        'El herraje del componente necesita optionRole o hardwareId fijo',
+        {
+          componentCode: component.code,
+          hardwareLineId: line.id,
+          field: 'optionRole',
+        },
+      );
+    }
+  }
+}
+
+function moduleCodeForHw(component: FurnitureComponent): string {
+  return component.code;
+}
+
+/**
+ * Stretch component parts at furniture outer dims (H06).
+ */
+export function resolveFurnitureComponentParts(
+  component: FurnitureComponent,
+  selectedDims?: { width: number; height: number; depth: number },
+): BoardPart[] {
+  validateFurnitureComponent(component);
+  if (!selectedDims) {
+    return component.boardParts.map((p) => ({ ...p }));
+  }
+  if (
+    selectedDims.width <= 0 ||
+    selectedDims.height <= 0 ||
+    selectedDims.depth <= 0
+  ) {
+    throw new ValidationError(
+      'Las medidas para resolver el componente deben ser mayores a 0',
+      {
+        componentCode: component.code,
+        selectedDims,
+        field: 'selectedDims',
+      },
+    );
+  }
+  return applyDimsToParts(component.boardParts, selectedDims, {
+    componentCode: component.code,
+  });
+}
+
+/**
+ * Expand module.components into board parts + hardware (quantity applied).
+ */
+export function expandModuleComponents(
+  refs: readonly ModuleComponentRef[] | undefined,
+  catalog: Catalog,
+  selectedDims: { width: number; height: number; depth: number } | undefined,
+  moduleCode: string,
+): { boardParts: BoardPart[]; hardwareLines: HardwareLine[] } {
+  if (!refs?.length) {
+    return { boardParts: [], hardwareLines: [] };
+  }
+
+  const boardParts: BoardPart[] = [];
+  const hardwareLines: HardwareLine[] = [];
+
+  for (const ref of refs) {
+    const component = catalog.components?.find((c) => c.id === ref.componentId);
+    if (!component) {
+      throw new ResolutionError(
+        `Componente no encontrado: ${ref.componentId}`,
+        {
+          moduleCode,
+          componentId: ref.componentId,
+          field: 'components',
+        },
+      );
+    }
+    if (component.active === false) {
+      throw new ValidationError(
+        `El componente "${component.name}" (${component.code}) está inactivo`,
+        {
+          moduleCode,
+          componentId: component.id,
+          field: 'components',
+        },
+      );
+    }
+
+    const parts = resolveFurnitureComponentParts(component, selectedDims);
+    for (let i = 0; i < ref.quantity; i += 1) {
+      for (const part of parts) {
+        boardParts.push({
+          ...part,
+          id: `${part.id}__${component.id}__${i}`,
+        });
+      }
+      for (const line of component.hardwareLines) {
+        hardwareLines.push({
+          ...line,
+          id: `${line.id}__${component.id}__${i}`,
+        });
+      }
+    }
+  }
+
+  return { boardParts, hardwareLines };
 }
 
 /**
@@ -558,6 +786,9 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
   for (const st of catalog.structures ?? []) {
     validateStructure(st);
   }
+  for (const comp of catalog.components ?? []) {
+    validateFurnitureComponent(comp);
+  }
 }
 
 /**
@@ -608,13 +839,24 @@ export function resolveBom(
       ? resolveStructure(structure, selectedDims)
       : [];
 
+  const expanded = expandModuleComponents(
+    module.components,
+    catalog,
+    selectedDims,
+    module.code,
+  );
+
   const ownParts = selectedDims
     ? applyDimsToParts(module.boardParts, selectedDims, {
         moduleCode: module.code,
       })
     : [...module.boardParts];
 
-  const rawParts: BoardPart[] = [...structureParts, ...ownParts];
+  const rawParts: BoardPart[] = [
+    ...structureParts,
+    ...expanded.boardParts,
+    ...ownParts,
+  ];
 
   const boardParts: ResolvedBoardPart[] = rawParts.map((part) => {
     const material = requireMaterialChoice(
@@ -647,23 +889,26 @@ export function resolveBom(
     };
   });
 
-  const hardwareLines: ResolvedHardwareLine[] = module.hardwareLines.map(
-    (line) => {
-      const hardwareId = requireHardwareId(
-        line,
-        optionChoices,
-        catalog,
-        module.code,
-      );
-      return {
-        id: line.id,
-        quantity: line.quantity,
-        descriptionOverride: line.descriptionOverride,
-        optionRole: line.optionRole,
-        hardwareId,
-      };
-    },
-  );
+  const rawHardware: HardwareLine[] = [
+    ...expanded.hardwareLines,
+    ...module.hardwareLines,
+  ];
+
+  const hardwareLines: ResolvedHardwareLine[] = rawHardware.map((line) => {
+    const hardwareId = requireHardwareId(
+      line,
+      optionChoices,
+      catalog,
+      module.code,
+    );
+    return {
+      id: line.id,
+      quantity: line.quantity,
+      descriptionOverride: line.descriptionOverride,
+      optionRole: line.optionRole,
+      hardwareId,
+    };
+  });
 
   return { boardParts, hardwareLines };
 }
@@ -707,7 +952,11 @@ function resolveSelectedDims(
 function applyDimsToParts(
   parts: readonly BoardPart[],
   selectedDims: { width: number; height: number; depth: number },
-  context: { moduleCode?: string; structureCode?: string },
+  context: {
+    moduleCode?: string;
+    structureCode?: string;
+    componentCode?: string;
+  },
 ): BoardPart[] {
   const dims = {
     W: selectedDims.width,

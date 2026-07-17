@@ -13,6 +13,7 @@ import {
   materialToApi,
   moduleToApi,
   structureToApi,
+  furnitureComponentToApi,
   optionGroupToApi,
   projectFromApi,
   projectToApi,
@@ -114,6 +115,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       customers,
       categories,
       structures,
+      components,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -123,6 +125,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/customers'),
       fetchJson('/catalog/categories'),
       fetchJson('/catalog/structures').catch(() => []),
+      fetchJson('/catalog/components').catch(() => []),
     ]);
 
     return catalogFromApi({
@@ -132,6 +135,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       optionGroups,
       modules,
       structures,
+      components,
       categories,
       customers,
     });
@@ -239,6 +243,14 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         `/catalog/structures/${st.id}`,
         '/catalog/structures',
         structureToApi(st),
+      );
+    }
+
+    for (const comp of catalog.components ?? []) {
+      await this.upsert(
+        `/catalog/components/${comp.id}`,
+        '/catalog/components',
+        furnitureComponentToApi(comp),
       );
     }
 

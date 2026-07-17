@@ -985,6 +985,57 @@
       ],
       "status": "done",
       "github_issue": 104
+    },
+    {
+      "id": "F052",
+      "phase": 10,
+      "name": "furniture_components_catalog",
+      "title": "Componentes reutilizables (puerta, entrepaño…)",
+      "description": "Catálogo de FurnitureComponent con piezas/herrajes y fórmulas W/H/D. CRUD API + domain. Issue #101 / H06.",
+      "acceptance": [
+        "Crear/editar componente Puerta y Entrepaño",
+        "Validaciones y tests de dominio",
+        "No reemplaza módulos fijos existentes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/101"
+      ],
+      "status": "done",
+      "github_issue": 101
+    },
+    {
+      "id": "F053",
+      "phase": 10,
+      "name": "composed_module_structure_components",
+      "title": "Mueble compuesto: estructura + componentes + medidas",
+      "description": "Module.structureId + Module.components + presets; resolveBom dual path. Issue #102 / H07.",
+      "acceptance": [
+        "Crear mueble con estructura y/o componentes + presets",
+        "resolveBom produce despiece y precio",
+        "Módulos fijos siguen verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/102"
+      ],
+      "status": "done",
+      "github_issue": 102
+    },
+    {
+      "id": "F054",
+      "phase": 10,
+      "name": "engineering_ui_components_flow",
+      "title": "UI Ingeniería: Componentes + armar mueble",
+      "description": "Nav Componentes, ComponentsScreen, adjuntar componentes en editor de mueble. Issue #103 / H08.",
+      "acceptance": [
+        "Flujo estructura → componente → mueble en UI",
+        "Validaciones en español de taller",
+        "RBAC ingeniero/admin mutan catálogo"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/103"
+      ],
+      "status": "done",
+      "github_issue": 103
     }
   ]
 }

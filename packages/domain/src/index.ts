@@ -26,6 +26,9 @@ export type {
   Module,
   Structure,
   DimensionPreset,
+  FurnitureComponent,
+  FurnitureComponentKind,
+  ModuleComponentRef,
   ProjectItem,
   Project,
   QuotePriceSnapshot,
@@ -117,6 +120,12 @@ export {
   validateModulePresets,
 } from './measurePresets';
 
+export {
+  FURNITURE_COMPONENT_KINDS,
+  furnitureComponentKindLabelEs,
+  isFurnitureComponentKind,
+} from './furnitureComponents';
+
 export type { BoardLineCost, HardwareLineCost, LineCost } from './engine';
 
 export {
@@ -140,6 +149,10 @@ export {
   validateHardwareLine,
   validateModule,
   validateStructure,
+  validateFurnitureComponent,
+  validateModuleComponentRefs,
+  expandModuleComponents,
+  resolveFurnitureComponentParts,
   validateCatalogEntityCodes,
   evaluatePartFormula,
   resolveStructure,

@@ -220,3 +220,10 @@ export {
   type StructureDraft,
   type StructuresScreenProps,
 } from './structures';
+
+export {
+  ComponentsScreen,
+  componentDraftToEntity,
+  type ComponentDraft,
+  type ComponentsScreenProps,
+} from './componentsCatalog';

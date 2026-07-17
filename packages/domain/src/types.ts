@@ -183,6 +183,47 @@ export interface Module {
    * Source of truth for allowed sizes — not Structure.presets.
    */
   readonly presets?: readonly DimensionPreset[];
+  /**
+   * Attached reusable components (H07 / #102). Expanded at resolveBom.
+   * Dual path: omit/empty keeps fixed modules unchanged.
+   */
+  readonly components?: readonly ModuleComponentRef[];
+}
+
+/**
+ * Kind of reusable engineering add-on (H06 / #101).
+ * Spanish workshop labels in UI; codes stay stable in API.
+ */
+export type FurnitureComponentKind =
+  | 'puerta'
+  | 'entrepaño'
+  | 'frente_cajon'
+  | 'lateral'
+  | 'otro';
+
+/**
+ * Instance of a catalog component on a furniture template (H07 / #102).
+ */
+export interface ModuleComponentRef {
+  readonly componentId: string;
+  /** How many times to include this component (e.g. 2 doors). */
+  readonly quantity: number;
+}
+
+/**
+ * Reusable catalog component — door, shelf, drawer front, etc. (H06 / #101).
+ * Parametric via board part formulas (W/H/D) like Structure; commercial sizes live on Module.
+ */
+export interface FurnitureComponent {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly kind: FurnitureComponentKind;
+  readonly boardParts: readonly BoardPart[];
+  readonly hardwareLines: readonly HardwareLine[];
+  readonly notes?: string;
+  /** Soft-delete / hide from pickers. Default true when omitted. */
+  readonly active?: boolean;
 }
 
 export interface DimensionPreset {
@@ -263,9 +304,12 @@ export interface Catalog {
   readonly modules: readonly Module[];
   /**
    * Engineering bodies (F049). Omitted/undefined treated as [] for older workspaces.
-   * Does not affect module resolution until modules compose structures (H07).
    */
   readonly structures?: readonly Structure[];
+  /**
+   * Reusable components (H06 / #101). Omitted/undefined treated as [].
+   */
+  readonly components?: readonly FurnitureComponent[];
   /** Hierarchical module categories (MOD-09). Empty/omitted = no taxonomy. */
   readonly categories?: readonly ModuleCategory[];
   readonly customers?: readonly Customer[];

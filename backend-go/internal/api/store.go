@@ -81,6 +81,13 @@ type Store interface {
 	UpdateStructure(ctx context.Context, id string, st *domain.Structure) error
 	DeleteStructure(ctx context.Context, id string) error
 
+	// Catalog: furniture components (H06 / #101)
+	ListFurnitureComponents(ctx context.Context) ([]domain.FurnitureComponent, error)
+	GetFurnitureComponentByID(ctx context.Context, id string) (*domain.FurnitureComponent, error)
+	CreateFurnitureComponent(ctx context.Context, c *domain.FurnitureComponent) error
+	UpdateFurnitureComponent(ctx context.Context, id string, c *domain.FurnitureComponent) error
+	DeleteFurnitureComponent(ctx context.Context, id string) error
+
 	// Projects
 	ListProjects(ctx context.Context) ([]domain.Project, error)
 	GetProjectByID(ctx context.Context, id string) (*domain.Project, error)

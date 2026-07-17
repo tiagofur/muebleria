@@ -154,6 +154,7 @@ describe('edges / draft mapping', () => {
     expect(d.categoryId).toBe('');
     expect(d.structureId).toBe('');
     expect(d.presets).toEqual([]);
+    expect(d.components).toEqual([]);
   });
 
   it('flattens category tree for selects', () => {

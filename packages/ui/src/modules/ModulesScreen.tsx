@@ -78,6 +78,7 @@ import {
   type ModulePartGridField,
 } from './moduleHelpers';
 import { ModuleMeasureSection } from './components/ModuleMeasureSection';
+import { ModuleComponentsSection } from './components/ModuleComponentsSection';
 import './modules.css';
 
 export type { ModuleDraft, BoardPartDraft, HardwareLineDraft, CategoryDraft };
@@ -113,6 +114,8 @@ export interface ModulesScreenProps {
   readonly categories?: readonly ModuleCategory[];
   /** Engineering structures for composed furniture (H07/H09). */
   readonly structures?: readonly Structure[];
+  /** Reusable components catalog for attaching to furniture (H07 / #102). */
+  readonly furnitureComponents?: readonly import('@muebles/domain').FurnitureComponent[];
   readonly onCreate: (draft: ModuleDraft) => void;
   readonly onUpdate: (id: string, draft: ModuleDraft) => void;
   readonly onDelete: (id: string) => void;
@@ -241,6 +244,7 @@ export function ModulesScreen({
   hardware,
   categories = [],
   structures = [],
+  furnitureComponents = [],
   onCreate,
   onUpdate,
   onDelete,
@@ -1015,6 +1019,15 @@ export function ModulesScreen({
             typeof crypto.randomUUID === 'function'
               ? crypto.randomUUID()
               : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          }
+        />
+
+        <ModuleComponentsSection
+          componentsCatalog={furnitureComponents}
+          refs={draft.components}
+          canMutate={canMutate}
+          onChange={(components) =>
+            setDraft((prev) => ({ ...prev, components }))
           }
         />
       </div>

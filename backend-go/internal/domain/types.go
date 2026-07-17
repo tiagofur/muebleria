@@ -179,12 +179,34 @@ type Module struct {
 	// StructureID links composed furniture to an engineering body (H07 / #102).
 	StructureID string `json:"structure_id,omitempty"`
 	// Presets are commercial measure options for sales (H09 / #104).
-	Presets       []DimensionPreset `json:"presets,omitempty"`
-	BoardParts    []BoardPart       `json:"board_parts"`
-	HardwareLines []HardwareLine    `json:"hardware_lines"`
-	Notes         string            `json:"notes,omitempty"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
+	Presets []DimensionPreset `json:"presets,omitempty"`
+	// Components attaches reusable catalog components (H07 / #102).
+	Components    []ModuleComponentRef `json:"components,omitempty"`
+	BoardParts    []BoardPart          `json:"board_parts"`
+	HardwareLines []HardwareLine       `json:"hardware_lines"`
+	Notes         string               `json:"notes,omitempty"`
+	CreatedAt     time.Time            `json:"created_at"`
+	UpdatedAt     time.Time            `json:"updated_at"`
+}
+
+// ModuleComponentRef links a module template to a furniture component (H07).
+type ModuleComponentRef struct {
+	ComponentID string `json:"component_id"`
+	Quantity    int    `json:"quantity"`
+}
+
+// FurnitureComponent is a reusable add-on (puerta, entrepaño, …) — H06 / #101.
+type FurnitureComponent struct {
+	ID            string         `json:"id"`
+	Code          string         `json:"code"`
+	Name          string         `json:"name"`
+	Kind          string         `json:"kind"`
+	BoardParts    []BoardPart    `json:"board_parts"`
+	HardwareLines []HardwareLine `json:"hardware_lines"`
+	Notes         string         `json:"notes,omitempty"`
+	Active        bool           `json:"active"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 type DimensionPreset struct {
@@ -266,9 +288,10 @@ type Catalog struct {
 	Edges        []EdgeBand       `json:"edges"`
 	Hardware     []Hardware       `json:"hardware"`
 	OptionGroups []OptionGroup    `json:"option_groups"`
-	Modules      []Module         `json:"modules"`
-	Structures   []Structure      `json:"structures,omitempty"`
-	Categories   []ModuleCategory `json:"categories,omitempty"`
+	Modules      []Module              `json:"modules"`
+	Structures   []Structure           `json:"structures,omitempty"`
+	Components   []FurnitureComponent  `json:"components,omitempty"`
+	Categories   []ModuleCategory      `json:"categories,omitempty"`
 }
 
 

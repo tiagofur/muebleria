@@ -57,6 +57,7 @@ describe('AppShell nav model (F017)', () => {
 
     expect(ingenieria.items.map((i) => i.id)).toEqual([
       'structures',
+      'components',
       'materials',
       'edges',
       'hardware',
@@ -64,6 +65,7 @@ describe('AppShell nav model (F017)', () => {
     ]);
     expect(ingenieria.items.map((i) => i.label)).toEqual([
       'Estructuras',
+      'Componentes',
       'Materiales',
       'Cantos',
       'Herrajes',
