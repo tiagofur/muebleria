@@ -9,7 +9,7 @@
 | **Estructura** | Cuerpo reutilizable de taller (laterales, fondo, techo, base…). Catálogo de ingeniería. |
 | **Componente** | (H06) Puerta, entrepaño, etc. — aún no implementado. |
 | **Mueble** | Plantilla cotizable actual (`Module`) con piezas fijas. Sigue funcionando **sin** estructuras. |
-| **Preset de medida** | (H05) Valores 300/400/500… — aún no implementado. |
+| **Preset de medida** | **Comercial en el mueble** (`Module.presets`, H09 / #104). La estructura es paramétrica (fórmulas); opcionalmente puede tener presets de preview de ingeniería. |
 
 ## Composición futura (no en F049)
 

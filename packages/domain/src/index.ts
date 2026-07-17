@@ -110,6 +110,13 @@ export {
 
 export { DomainError, ValidationError, ResolutionError } from './errors';
 
+export {
+  defaultMeasurePresetId,
+  moduleHasMeasurePresets,
+  resolveModuleMeasurePreset,
+  validateModulePresets,
+} from './measurePresets';
+
 export type { BoardLineCost, HardwareLineCost, LineCost } from './engine';
 
 export {

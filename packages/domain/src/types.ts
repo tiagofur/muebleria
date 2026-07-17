@@ -173,6 +173,16 @@ export interface Module {
   readonly boardParts: readonly BoardPart[];
   readonly hardwareLines: readonly HardwareLine[];
   readonly notes?: string;
+  /**
+   * Optional engineering body for composed furniture (H07 / #102).
+   * When set, quotation resolution stretches the structure at the chosen measure preset.
+   */
+  readonly structureId?: string;
+  /**
+   * Commercial measure options offered to sales (H09 / #104).
+   * Source of truth for allowed sizes — not Structure.presets.
+   */
+  readonly presets?: readonly DimensionPreset[];
 }
 
 export interface DimensionPreset {
@@ -185,8 +195,8 @@ export interface DimensionPreset {
 
 /**
  * Reusable engineering **body** (cuerpo) — F049 / #99 / H04.
- * Composed later into a Module with components + measure presets (H05–H07).
- * Not used in quotation resolution until a module references it.
+ * Parametric via part formulas (W/H/D). Commercial size lists live on Module.
+ * `presets` is optional engineering preview only (H05 intermediate).
  */
 export interface Structure {
   readonly id: string;
@@ -195,6 +205,7 @@ export interface Structure {
   /** Documented outer size of the body. */
   readonly externalDims?: ExternalDims;
   readonly boardParts: readonly BoardPart[];
+  /** Optional engineering preview sizes — not the commercial allowlist (see Module.presets). */
   readonly presets?: readonly DimensionPreset[];
   readonly notes?: string;
   /** Soft-delete / hide from pickers. Default true when omitted. */
@@ -208,6 +219,11 @@ export interface ProjectItem {
   readonly moduleId: string;
   readonly quantity: number;
   readonly optionChoices: OptionChoices;
+  /**
+   * Selected commercial measure preset from Module.presets (H09 / #104).
+   * Required when the module defines presets; ignored for fixed modules without presets.
+   */
+  readonly measurePresetId?: string;
 }
 
 export interface Project {

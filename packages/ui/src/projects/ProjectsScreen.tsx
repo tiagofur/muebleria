@@ -114,7 +114,12 @@ export interface ProjectsScreenProps {
   readonly onDuplicate?: (id: string) => void;
   readonly onAddItem: (
     projectId: string,
-    input: { moduleId: string; quantity: number; optionChoices: OptionChoices },
+    input: {
+      moduleId: string;
+      quantity: number;
+      optionChoices: OptionChoices;
+      measurePresetId?: string;
+    },
   ) => void;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
@@ -491,6 +496,7 @@ export function ProjectsScreen({
       moduleId,
       quantity: addItem.quantity || 1,
       optionChoices,
+      measurePresetId: mod?.presets?.[0]?.id,
     });
   };
 
@@ -525,13 +531,31 @@ export function ProjectsScreen({
       }
     }
 
+    if ((mod.presets?.length ?? 0) > 0) {
+      const presetOk = mod.presets!.some((p) => p.id === addItem.measurePresetId);
+      if (!presetOk) {
+        setItemError('Elegí un preset de medida válido para este mueble.');
+        return;
+      }
+    }
+
     setItemError(null);
     onAddItem(selectedId, {
       moduleId: addItem.moduleId,
       quantity: addItem.quantity,
       optionChoices: addItem.optionChoices,
+      measurePresetId: addItem.measurePresetId,
     });
     closeAddItemModal();
+  };
+
+  const updateItemMeasurePreset = (item: ProjectItem, measurePresetId: string) => {
+    if (!selectedId) return;
+    setItemError(null);
+    onUpdateItem(selectedId, {
+      ...item,
+      measurePresetId: measurePresetId || undefined,
+    });
   };
 
   const updateItemQuantity = (item: ProjectItem, quantity: number) => {
@@ -920,6 +944,31 @@ export function ProjectsScreen({
             }
           />
         </div>
+        {addModule && (addModule.presets?.length ?? 0) > 0 ? (
+          <div className="catalog-form__field">
+            <label htmlFor="add-measure-preset">Medida</label>
+            <select
+              id="add-measure-preset"
+              value={addItem.measurePresetId ?? ''}
+              onChange={(e) =>
+                setAddItem({
+                  ...addItem,
+                  measurePresetId: e.target.value || undefined,
+                })
+              }
+              data-testid="add-item-measure-preset"
+            >
+              <option value="">Elegí medida…</option>
+              {addModule.presets!.map((pr) => (
+                <option key={pr.id} value={pr.id}>
+                  {pr.name?.trim()
+                    ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth} mm)`
+                    : `${pr.width}×${pr.height}×${pr.depth} mm`}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       {addGroups.length === 0 ? (
@@ -1456,6 +1505,30 @@ export function ProjectsScreen({
                           }
                         />
                       </div>
+                      {mod && (mod.presets?.length ?? 0) > 0 ? (
+                        <div className="catalog-form__field">
+                          <label htmlFor={`item-measure-${item.id}`}>
+                            Medida
+                          </label>
+                          <select
+                            id={`item-measure-${item.id}`}
+                            value={item.measurePresetId ?? ''}
+                            onChange={(e) =>
+                              updateItemMeasurePreset(item, e.target.value)
+                            }
+                            data-testid={`item-measure-preset-${item.id}`}
+                          >
+                            <option value="">Elegí medida…</option>
+                            {mod.presets!.map((pr) => (
+                              <option key={pr.id} value={pr.id}>
+                                {pr.name?.trim()
+                                  ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth} mm)`
+                                  : `${pr.width}×${pr.height}×${pr.depth} mm`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
                     </div>
 
                     {groups.length === 0 ? (

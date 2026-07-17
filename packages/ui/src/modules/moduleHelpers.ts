@@ -4,6 +4,7 @@
 
 import type {
   BoardPart,
+  DimensionPreset,
   EdgeAssignment,
   EdgeSide,
   HardwareLine,
@@ -45,6 +46,14 @@ export type HardwareLineDraft = {
   hardwareId: string;
 };
 
+export type MeasurePresetDraft = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  depth: number;
+};
+
 export type ModuleDraft = {
   code: string;
   name: string;
@@ -57,6 +66,10 @@ export type ModuleDraft = {
   baseLaborCost: string;
   /** Relative media path (F040). */
   imageUrl: string;
+  /** Engineering body for composed furniture (H07/H09). */
+  structureId: string;
+  /** Commercial measure options for sales (H09 / #104). */
+  presets: MeasurePresetDraft[];
   boardParts: BoardPartDraft[];
   hardwareLines: HardwareLineDraft[];
 };
@@ -74,9 +87,45 @@ export function emptyModuleDraft(): ModuleDraft {
     externalDepth: '',
     baseLaborCost: '',
     imageUrl: '',
+    structureId: '',
+    presets: [],
     boardParts: [],
     hardwareLines: [],
   };
+}
+
+export function emptyMeasurePresetDraft(id: string): MeasurePresetDraft {
+  return {
+    id,
+    name: '',
+    width: 0,
+    height: 0,
+    depth: 0,
+  };
+}
+
+export function formatMeasurePresetLabel(preset: {
+  readonly name?: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}): string {
+  const dims = `${preset.width}×${preset.height}×${preset.depth} mm`;
+  const name = preset.name?.trim();
+  return name ? `${name} (${dims})` : dims;
+}
+
+export function presetsToDomain(
+  presets: readonly MeasurePresetDraft[],
+): DimensionPreset[] | undefined {
+  if (presets.length === 0) return undefined;
+  return presets.map((p) => ({
+    id: p.id,
+    name: p.name.trim() || undefined,
+    width: p.width,
+    height: p.height,
+    depth: p.depth,
+  }));
 }
 
 export function emptyBoardPartDraft(id: string): BoardPartDraft {
@@ -178,6 +227,14 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     baseLaborCost:
       mod.baseLaborCost !== undefined ? String(mod.baseLaborCost) : '',
     imageUrl: mod.imageUrl ?? '',
+    structureId: mod.structureId ?? '',
+    presets: (mod.presets ?? []).map((p) => ({
+      id: p.id,
+      name: p.name ?? '',
+      width: p.width,
+      height: p.height,
+      depth: p.depth,
+    })),
     boardParts: mod.boardParts.map(boardPartToDraft),
     hardwareLines: mod.hardwareLines.map(hardwareLineToDraft),
   };

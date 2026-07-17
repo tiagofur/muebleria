@@ -3,6 +3,10 @@
  */
 
 import { ResolutionError, ValidationError } from './errors';
+import {
+  resolveModuleMeasurePreset,
+  validateModulePresets,
+} from './measurePresets';
 import { effectiveOptionChoices } from './optionChoices';
 import type {
   BoardPart,
@@ -422,6 +426,8 @@ export function validateModule(module: Module): void {
       );
     }
   }
+
+  validateModulePresets(module);
 }
 
 /**
@@ -556,16 +562,61 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
 
 /**
  * Resolve module template + option choices into concrete material/hardware IDs.
+ * Optional measurePresetId selects commercial size from Module.presets (H09).
+ * When Module.structureId is set, structure parts stretch via formulas at those dims.
  * VAL-05 (empty cut list on export) is deferred to F004 / export path.
  */
 export function resolveBom(
   module: Module,
   optionChoices: OptionChoices,
   catalog: Catalog,
+  measurePresetId?: string,
 ): ResolvedBom {
   validateModule(module);
 
-  const boardParts: ResolvedBoardPart[] = module.boardParts.map((part) => {
+  const structure = module.structureId
+    ? findStructure(catalog, module.structureId)
+    : undefined;
+
+  if (module.structureId && !structure) {
+    throw new ResolutionError(
+      `Estructura no encontrada: ${module.structureId}`,
+      {
+        moduleCode: module.code,
+        structureId: module.structureId,
+        field: 'structureId',
+      },
+    );
+  }
+
+  const preset = resolveModuleMeasurePreset(module, measurePresetId);
+  const selectedDims = resolveSelectedDims(module, structure, preset);
+
+  if (module.structureId && !selectedDims) {
+    throw new ValidationError(
+      `El mueble "${module.name}" (${module.code}) usa una estructura y necesita un preset de medida o medidas externas.`,
+      {
+        moduleCode: module.code,
+        structureId: module.structureId,
+        field: 'measurePresetId',
+      },
+    );
+  }
+
+  const structureParts =
+    structure && selectedDims
+      ? resolveStructure(structure, selectedDims)
+      : [];
+
+  const ownParts = selectedDims
+    ? applyDimsToParts(module.boardParts, selectedDims, {
+        moduleCode: module.code,
+      })
+    : [...module.boardParts];
+
+  const rawParts: BoardPart[] = [...structureParts, ...ownParts];
+
+  const boardParts: ResolvedBoardPart[] = rawParts.map((part) => {
     const material = requireMaterialChoice(
       part,
       optionChoices,
@@ -615,6 +666,81 @@ export function resolveBom(
   );
 
   return { boardParts, hardwareLines };
+}
+
+function findStructure(
+  catalog: Catalog,
+  structureId: string,
+): Structure | undefined {
+  return catalog.structures?.find((s) => s.id === structureId);
+}
+
+function resolveSelectedDims(
+  module: Module,
+  structure: Structure | undefined,
+  preset: { width: number; height: number; depth: number } | undefined,
+): { width: number; height: number; depth: number } | undefined {
+  if (preset) {
+    return {
+      width: preset.width,
+      height: preset.height,
+      depth: preset.depth,
+    };
+  }
+  if (module.externalDims) {
+    return {
+      width: module.externalDims.width,
+      height: module.externalDims.height,
+      depth: module.externalDims.depth,
+    };
+  }
+  if (structure?.externalDims) {
+    return {
+      width: structure.externalDims.width,
+      height: structure.externalDims.height,
+      depth: structure.externalDims.depth,
+    };
+  }
+  return undefined;
+}
+
+function applyDimsToParts(
+  parts: readonly BoardPart[],
+  selectedDims: { width: number; height: number; depth: number },
+  context: { moduleCode?: string; structureCode?: string },
+): BoardPart[] {
+  const dims = {
+    W: selectedDims.width,
+    H: selectedDims.height,
+    D: selectedDims.depth,
+  };
+
+  return parts.map((part) => {
+    let resolvedLength = part.lengthMm;
+    let resolvedWidth = part.widthMm;
+
+    if (part.lengthFormula) {
+      resolvedLength = evaluatePartFormula(part.lengthFormula, dims, {
+        ...context,
+        partDescription: part.description,
+        field: 'length',
+      });
+    }
+
+    if (part.widthFormula) {
+      resolvedWidth = evaluatePartFormula(part.widthFormula, dims, {
+        ...context,
+        partDescription: part.description,
+        field: 'width',
+      });
+    }
+
+    return {
+      ...part,
+      lengthMm: resolvedLength,
+      widthMm: resolvedWidth,
+    };
+  });
 }
 
 export function calcMaterialCostPerM2(
@@ -828,6 +954,7 @@ function calcLiveProjectBreakdown(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -884,6 +1011,7 @@ function collectUsedUnitPrices(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1077,6 +1205,7 @@ export function generateCutRows(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1231,6 +1360,7 @@ export function generatePieceLabels(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1392,6 +1522,7 @@ export function generateProjectMaterialSummary(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const part of bom.boardParts) {
@@ -1550,6 +1681,7 @@ export function generateHardwareList(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
       catalog,
+      item.measurePresetId,
     );
 
     for (const line of bom.hardwareLines) {
@@ -1621,7 +1753,12 @@ export function generateHardwareList(
 export function evaluatePartFormula(
   formula: string,
   dims: { W: number; H: number; D: number },
-  contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' }
+  contextInfo?: {
+    structureCode?: string;
+    moduleCode?: string;
+    partDescription: string;
+    field: 'length' | 'width';
+  },
 ): number {
   const trimmed = formula.trim();
   if (!trimmed) {
@@ -1662,83 +1799,31 @@ export function evaluatePartFormula(
 }
 
 /**
- * Resolves a cabinet body (Structure) at a specific preset dimension.
- * Validates dimensions match one of the allowed presets (if presets are defined).
- * Stretches parts according to their formulas.
+ * Resolves a cabinet body (Structure) at concrete outer dimensions.
+ * Pure parametric stretch via part formulas — commercial allowlists live on Module.
+ * Structure.presets are engineering preview only and are not enforced here.
  */
 export function resolveStructure(
   structure: Structure,
   selectedDims: { width: number; height: number; depth: number },
 ): BoardPart[] {
-  const presets = structure.presets ?? [];
-  if (presets.length > 0) {
-    const matched = presets.find(
-      (p) =>
-        p.width === selectedDims.width &&
-        p.height === selectedDims.height &&
-        p.depth === selectedDims.depth,
+  if (
+    selectedDims.width <= 0 ||
+    selectedDims.height <= 0 ||
+    selectedDims.depth <= 0
+  ) {
+    throw new ValidationError(
+      'Las medidas de la estructura deben ser mayores a 0',
+      {
+        structureCode: structure.code,
+        selectedDims,
+        field: 'selectedDims',
+      },
     );
-    if (!matched) {
-      throw new ValidationError(
-        `Las medidas seleccionadas (${selectedDims.width}x${selectedDims.height}x${selectedDims.depth} mm) no están permitidas para la estructura "${structure.name}" (${structure.code}).`,
-        {
-          structureCode: structure.code,
-          selectedDims,
-          presets,
-        },
-      );
-    }
-  } else {
-    if (structure.externalDims) {
-      const ext = structure.externalDims;
-      if (
-        ext.width !== selectedDims.width ||
-        ext.height !== selectedDims.height ||
-        ext.depth !== selectedDims.depth
-      ) {
-        throw new ValidationError(
-          `Las medidas seleccionadas (${selectedDims.width}x${selectedDims.height}x${selectedDims.depth} mm) no coinciden con las medidas por defecto de la estructura "${structure.name}" (${structure.code}).`,
-          {
-            structureCode: structure.code,
-            selectedDims,
-            externalDims: ext,
-          },
-        );
-      }
-    }
   }
 
-  const dims = {
-    W: selectedDims.width,
-    H: selectedDims.height,
-    D: selectedDims.depth,
-  };
-
-  return structure.boardParts.map((part) => {
-    let resolvedLength = part.lengthMm;
-    let resolvedWidth = part.widthMm;
-
-    if (part.lengthFormula) {
-      resolvedLength = evaluatePartFormula(part.lengthFormula, dims, {
-        structureCode: structure.code,
-        partDescription: part.description,
-        field: 'length',
-      });
-    }
-
-    if (part.widthFormula) {
-      resolvedWidth = evaluatePartFormula(part.widthFormula, dims, {
-        structureCode: structure.code,
-        partDescription: part.description,
-        field: 'width',
-      });
-    }
-
-    return {
-      ...part,
-      lengthMm: resolvedLength,
-      widthMm: resolvedWidth,
-    };
+  return applyDimsToParts(structure.boardParts, selectedDims, {
+    structureCode: structure.code,
   });
 }
 
