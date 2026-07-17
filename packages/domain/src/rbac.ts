@@ -208,6 +208,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'home',
       'projects',
       'customers',
+      'showcase',
       'modules',
       'structures',
       'components',
@@ -222,9 +223,12 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   const ids = new Set<string>(['home']);
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
-  if (roleCanAccessModulesNav(role)) ids.add('modules');
-  // F049/H06: Estructuras + Componentes only for ingeniero/admin (mutate modules)
+  // #118: commercial vitrina for all who can browse modules (vendedor, etc.)
+  if (roleCanAccessModulesNav(role)) ids.add('showcase');
+  // Plantilla ABM only when role may mutate catalog modules (ingeniero/admin)
   if (roleCanMutateModules(role)) {
+    ids.add('modules');
+    // F049/H06: Estructuras + Componentes only for ingeniero/admin
     ids.add('structures');
     ids.add('components');
   }

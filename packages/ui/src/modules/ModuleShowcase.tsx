@@ -1,5 +1,5 @@
 /**
- * Sales showcase of modules — photos without BOM/cost editing (F040 / F043).
+ * Sales showcase of modules — commercial detail without BOM/cost editing (#118).
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
@@ -7,18 +7,33 @@ import {
   filterModulesByCategory,
   UNCATEGORIZED_FILTER,
   type CategoryFilterId,
+  type FurnitureComponent,
   type Module,
   type ModuleCategory,
+  type OptionGroup,
 } from '@muebles/domain';
-import { Package, Search, ShoppingCart } from 'lucide-react';
+import { Package, Search, ShoppingCart, Wrench } from 'lucide-react';
 import { CatalogImage } from '../common/CatalogImage';
 import { EmptyState, Modal, SearchInput, useDebouncedValue } from '../common';
 import { matchesCodeOrName } from '../catalogs/catalogHelpers';
+import {
+  formatMeasurePresetLine,
+  formatModuleMoney,
+  optionGroupCodesForModule,
+} from './moduleHelpers';
 import './moduleShowcase.css';
 
 export type ModuleShowcaseProps = {
   readonly modules: readonly Module[];
   readonly categories?: readonly ModuleCategory[];
+  readonly optionGroups?: readonly OptionGroup[];
+  /** Catalog components for resolving option roles on composed modules. */
+  readonly furnitureComponents?: readonly FurnitureComponent[];
+  /**
+   * Sale-price estimate per module id (domain-computed in shell).
+   * `null` = blocked / unavailable. Omit key = unknown.
+   */
+  readonly saleEstimates?: Readonly<Record<string, number | null>>;
   /** Resolve relative /api/media paths with auth if needed. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
   /** Open read-only detail (defaults to internal modal when omitted). */
@@ -28,6 +43,11 @@ export type ModuleShowcaseProps = {
    * When omitted, detail still shows without the CTA.
    */
   readonly onUseInQuote?: (moduleId: string) => void;
+  /**
+   * Engineering dual-access (#118): open plantilla editor.
+   * Only for roles that may mutate modules.
+   */
+  readonly onOpenPlantillas?: () => void;
 };
 
 function dimLabel(m: Module): string {
@@ -47,12 +67,28 @@ function categoryLabel(
   return cat?.name ?? null;
 }
 
+function saleLabel(
+  moduleId: string,
+  saleEstimates: Readonly<Record<string, number | null>> | undefined,
+): string {
+  if (!saleEstimates || !(moduleId in saleEstimates)) {
+    return 'Precio al cotizar';
+  }
+  const value = saleEstimates[moduleId];
+  if (value == null) return 'Precio no disponible';
+  return formatModuleMoney(value);
+}
+
 export function ModuleShowcase({
   modules,
   categories = [],
+  optionGroups = [],
+  furnitureComponents = [],
+  saleEstimates,
   resolveImageUrl = (u) => u,
   onSelect,
   onUseInQuote,
+  onOpenPlantillas,
 }: ModuleShowcaseProps): ReactNode {
   const [query, setQuery] = useState('');
   const debounced = useDebouncedValue(query);
@@ -91,6 +127,14 @@ export function ModuleShowcase({
     ? (modules.find((m) => m.id === detailId) ?? null)
     : null;
 
+  const detailOptionGroups = useMemo(() => {
+    if (!detail) return [];
+    const codes = new Set(
+      optionGroupCodesForModule(detail, furnitureComponents),
+    );
+    return optionGroups.filter((g) => codes.has(g.code));
+  }, [detail, furnitureComponents, optionGroups]);
+
   function openDetail(moduleId: string): void {
     setDetailId(moduleId);
     onSelect?.(moduleId);
@@ -107,16 +151,29 @@ export function ModuleShowcase({
         <div>
           <h2 className="module-showcase__title">Vitrina de muebles</h2>
           <p className="module-showcase__lead">
-            Catálogo visual para cotizar. Las medidas son de referencia; el
-            despiece lo arma ingeniería.
+            Catálogo comercial para mostrar al cliente y cotizar. El despiece lo
+            arma ingeniería en plantillas.
           </p>
         </div>
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Buscar mueble…"
-          aria-label="Buscar en vitrina"
-        />
+        <div className="module-showcase__header-actions">
+          {onOpenPlantillas ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={onOpenPlantillas}
+              data-testid="showcase-open-plantillas"
+            >
+              <Wrench size={14} strokeWidth={1.5} aria-hidden />
+              Ir a plantillas
+            </button>
+          ) : null}
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Buscar mueble…"
+            aria-label="Buscar en vitrina"
+          />
+        </div>
       </header>
 
       {showCategoryFilter ? (
@@ -230,6 +287,12 @@ export function ModuleShowcase({
                       {catName ? (
                         <p className="module-showcase-card__cat">{catName}</p>
                       ) : null}
+                      <p
+                        className="module-showcase-card__price"
+                        data-testid={`showcase-card-price-${m.id}`}
+                      >
+                        {saleLabel(m.id, saleEstimates)}
+                      </p>
                     </div>
                   </button>
                   {onUseInQuote ? (
@@ -302,8 +365,14 @@ export function ModuleShowcase({
                 <dd>{detail.code}</dd>
               </div>
               <div>
-                <dt>Medidas</dt>
+                <dt>Medida base</dt>
                 <dd>{dimLabel(detail)}</dd>
+              </div>
+              <div>
+                <dt>Precio de venta</dt>
+                <dd data-testid="showcase-detail-price">
+                  {saleLabel(detail.id, saleEstimates)}
+                </dd>
               </div>
               {categoryLabel(detail, categories) ? (
                 <div>
@@ -312,12 +381,51 @@ export function ModuleShowcase({
                 </div>
               ) : null}
             </dl>
+
+            {(detail.presets?.length ?? 0) > 0 ? (
+              <div
+                className="module-showcase-detail__block"
+                data-testid="showcase-detail-presets"
+              >
+                <h3 className="module-showcase-detail__block-title">
+                  Medidas disponibles
+                </h3>
+                <ul className="module-showcase-detail__list">
+                  {detail.presets!.map((pr) => (
+                    <li key={pr.id}>{formatMeasurePresetLine(pr)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {detailOptionGroups.length > 0 ? (
+              <div
+                className="module-showcase-detail__block"
+                data-testid="showcase-detail-options"
+              >
+                <h3 className="module-showcase-detail__block-title">
+                  Opciones de material / color
+                </h3>
+                <ul className="module-showcase-detail__list">
+                  {detailOptionGroups.map((g) => (
+                    <li key={g.id}>
+                      <strong>{g.name}</strong>
+                      <span className="module-showcase-detail__muted">
+                        {' '}
+                        ({g.code}) — se elige al cotizar
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             {detail.notes ? (
               <p className="module-showcase-detail__notes">{detail.notes}</p>
             ) : (
               <p className="module-showcase-detail__notes module-showcase-detail__notes--muted">
-                Vista de solo lectura. El despiece y costos los define
-                ingeniería al armar la cotización.
+                Vista de solo lectura. El despiece y costos de taller los define
+                ingeniería; acá solo se muestra lo comercial.
               </p>
             )}
           </div>
