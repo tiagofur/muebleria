@@ -116,6 +116,28 @@ export function ModuleEditorGeneralPanel({
           </div>
         </div>
       </div>
+      <div className="catalog-form__field" data-testid="module-furniture-type-field">
+        <label htmlFor="mod-furniture-type">Tipo de mueble</label>
+        <select
+          id="mod-furniture-type"
+          value={draft.furnitureType}
+          onChange={(e) =>
+            setDraft({
+              ...draft,
+              furnitureType: e.target.value as ModuleDraft['furnitureType'],
+            })
+          }
+          data-testid="module-furniture-type"
+        >
+          <option value="inferior">Inferior (gabinete)</option>
+          <option value="superior">Superior (alacena)</option>
+          <option value="alto">Alto (despensa)</option>
+        </select>
+        <p className="module-editor__hint">
+          Define el tipo fundamental. Los defaults de medida del proyecto se
+          aplican por tipo al agregar el mueble a una cotización.
+        </p>
+      </div>
       <div
         className="module-editor__grid module-editor__grid--spaced"
         data-testid="module-category-cascade"

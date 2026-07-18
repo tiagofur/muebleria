@@ -319,6 +319,32 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.queryByTestId('module-editor-tab-composition')).toBeNull();
   });
 
+  it('general panel exposes furnitureType select (default inferior) and persists on save (#109)', async () => {
+    const user = userEvent.setup();
+    const { onCreate } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    await screen.findByRole('dialog');
+
+    const select = screen.getByTestId('module-furniture-type') as HTMLSelectElement;
+    expect(select.value).toBe('inferior');
+
+    // Fill required identity fields so save is enabled.
+    await user.type(screen.getByLabelText('Código'), 'MOD-TEST-1');
+    await user.type(screen.getByLabelText('Nombre'), 'Test Alacena');
+    await user.selectOptions(select, 'superior');
+    expect(select.value).toBe('superior');
+
+    // Save (Guardar button in the editor chrome).
+    await user.click(screen.getByRole('button', { name: /^Guardar/i }));
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledTimes(1);
+    });
+    const draft = onCreate.mock.calls[0]![0];
+    expect(draft.furnitureType).toBe('superior');
+  });
+
   it('opens create modal from requestCreateKey prop (Dashboard handoff)', () => {
     renderScreen({ requestCreateKey: 1 });
     const dialog = screen.getByRole('dialog');
