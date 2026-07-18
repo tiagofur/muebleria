@@ -10,9 +10,11 @@
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "test": "pnpm -r --if-present run test",
-    "typecheck": "pnpm -r --if-present run typecheck"
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "visual": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
