@@ -415,9 +415,11 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, id, code, name string, baseL
 		notesArg = notes
 	}
 
+	// All seed modules are base cabinets (inferior). furniture_type defaults to
+	// '' → 'inferior' on read (#109). Explicit here for clarity.
 	_, err := tx.Exec(ctx, `
-		INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, furniture_type, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'inferior',$9,$10)`,
 		id, code, name, baseLaborCost, w, h, d, notesArg, now, now)
 	if err != nil {
 		return fmt.Errorf("seed module %s: %w", code, err)
