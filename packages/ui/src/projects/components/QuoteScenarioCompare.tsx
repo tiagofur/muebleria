@@ -180,9 +180,9 @@ export function QuoteScenarioCompare({
                 fontWeight: 700,
                 color:
                   result.delta > 0
-                    ? 'var(--danger, #b91c1c)'
+                    ? 'var(--danger-700)'
                     : result.delta < 0
-                      ? 'var(--success, #15803d)'
+                      ? 'var(--success-700)'
                       : undefined,
               }}
               data-testid="scenario-delta"

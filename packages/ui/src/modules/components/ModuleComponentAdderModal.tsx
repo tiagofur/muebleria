@@ -79,7 +79,7 @@ export function ModuleComponentAdderModal({
             style={{
               maxHeight: '200px',
               overflowY: 'auto',
-              border: '1px solid var(--border)',
+              border: '1px solid var(--border-default)',
               borderRadius: 'var(--radius-sm)',
               marginBottom: '0.75rem',
             }}
@@ -96,9 +96,9 @@ export function ModuleComponentAdderModal({
                   cursor: 'pointer',
                   background:
                     newCompId === comp.id
-                      ? 'color-mix(in srgb, var(--primary) 10%, transparent)'
+                      ? 'color-mix(in srgb, var(--brand-500) 10%, transparent)'
                       : undefined,
-                  borderBottom: '1px solid var(--border)',
+                  borderBottom: '1px solid var(--border-default)',
                 }}
               >
                 <input

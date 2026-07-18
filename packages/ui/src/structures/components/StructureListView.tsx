@@ -171,8 +171,8 @@ export function StructureListView({
                               key={pr.id}
                               className="badge badge--neutral text-small"
                               style={{
-                                border: '1px solid var(--border)',
-                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--surface-card)',
                               }}
                             >
                               {pr.name

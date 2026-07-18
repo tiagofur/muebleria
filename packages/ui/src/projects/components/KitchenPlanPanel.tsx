@@ -325,9 +325,9 @@ export function KitchenPlanPanel({
             data-testid="kitchen-plan-svg"
             style={{
               maxWidth: '100%',
-              background: 'var(--surface-2, #f4f4f5)',
+              background: 'var(--surface-hover)',
               borderRadius: 8,
-              border: '1px solid var(--border, #e4e4e7)',
+              border: '1px solid var(--border-default)',
             }}
           >
             {frames.map((f) => {
@@ -342,7 +342,7 @@ export function KitchenPlanPanel({
                     y1={y1}
                     x2={x2}
                     y2={y2}
-                    stroke="var(--text, #18181b)"
+                    stroke="var(--text-primary)"
                     strokeWidth={4}
                     strokeLinecap="square"
                   />
@@ -393,8 +393,8 @@ export function KitchenPlanPanel({
                   height={rh}
                   fill={
                     p.elevation === 'wall'
-                      ? 'var(--accent, #2563eb)'
-                      : 'var(--success, #16a34a)'
+                      ? 'var(--brand-600)'
+                      : 'var(--success-700)'
                   }
                   opacity={0.75}
                   data-testid={`kitchen-plan-box-${p.itemId}-${p.instanceIndex}`}

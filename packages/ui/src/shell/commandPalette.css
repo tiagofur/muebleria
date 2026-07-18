@@ -70,7 +70,7 @@
 
 .cmd-palette__kbd {
   flex-shrink: 0;
-  padding: 0.1rem var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-hover);
@@ -158,7 +158,7 @@
 
 .cmd-palette__hint kbd {
   display: inline-block;
-  margin: 0 0.1rem;
+  margin: 0 var(--space-1);
   padding: 0 0.3rem;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);

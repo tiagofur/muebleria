@@ -18,8 +18,11 @@
 
 .catalog-page__title {
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
 }
 
 .catalog-page__toolbar {
@@ -35,8 +38,18 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--density-filter-gap);
+  gap: var(--space-3);
   width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+/* Search grows to fill — Linear/Stripe toolbar pattern */
+.catalog-page__filters > :first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 
 /* Single-column list (form lives in modal) */
@@ -89,8 +102,10 @@
 
 .catalog-table th,
 .catalog-table td {
-  padding: var(--density-table-pad-y) var(--density-table-pad-x);
-  min-height: var(--density-row-min-height);
+  /* density token (issue #49 contract); horizontal + min-height carry the
+     comfortable ~40px scan rhythm that the redesign wants. */
+  padding: var(--density-table-pad-y) var(--space-3);
+  min-height: 2.5rem; /* 40px — comfortable scan rhythm, not cramped */
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
@@ -100,8 +115,11 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--surface-hover);
+  background: var(--surface-input);
   font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   color: var(--text-secondary);
   /* Edge while content scrolls under header */
@@ -110,6 +128,10 @@
 
 .catalog-table tr:last-child td {
   border-bottom: none;
+}
+
+.catalog-table__row {
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .catalog-table__row.is-inactive {
@@ -125,7 +147,7 @@
 }
 
 .catalog-table__row.is-clickable:hover {
-  background: var(--surface-hover);
+  background: var(--surface-input);
 }
 
 .catalog-table__row.is-clickable.is-selected:hover {
@@ -153,37 +175,37 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1);
-  opacity: 0;
-  pointer-events: none;
+  /* Always visible at reduced prominence; full on hover/focus/expanded.
+     Was opacity:0 (hidden until hover) — that made actions invisible and
+     is the #1 usability complaint on catalog tables. */
+  opacity: 0.55;
   transition: var(--transition-opacity);
 }
 
-/* Reveal actions on hover / keyboard focus within the row */
+/* Full prominence on hover / keyboard focus / expanded row */
 .catalog-table__row:hover .catalog-table__actions,
 .catalog-table__row:focus-within .catalog-table__actions,
 .catalog-table__row[data-expanded='true'] .catalog-table__actions {
   opacity: 1;
-  pointer-events: auto;
 }
 
 @media (hover: none) {
   .catalog-table__actions {
     opacity: 1;
-    pointer-events: auto;
   }
 }
 
 .catalog-table__detail-row td {
   padding: 0;
-  background: var(--surface-app);
+  background: var(--surface-input);
   border-bottom: 1px solid var(--border-default);
 }
 
 .catalog-row-detail {
-  padding: var(--density-card-pad) var(--space-4);
+  padding: var(--space-4) var(--space-4);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-3) var(--space-4);
   font-size: var(--text-base);
 }
 
@@ -283,7 +305,7 @@
 /* Domain-derived preview (shell injects formula; tokens only — issue #14). */
 .catalog-form__calculated-value {
   padding: var(--space-2);
-  background: var(--surface-muted, var(--surface-input));
+  background: var(--surface-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-weight: var(--weight-semibold);
@@ -299,7 +321,7 @@
 
 .catalog-form__error {
   margin: 0;
-  padding: var(--space-2) 0.65rem;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--danger-50);
   color: var(--danger-700);
@@ -324,7 +346,7 @@
   flex: 1 1 12rem;
   min-width: 0;
   font: inherit;
-  padding: 0.45rem 0.55rem;
+  padding: var(--space-2) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-input);
@@ -373,11 +395,15 @@
 }
 
 .catalog-badge {
-  display: inline-block;
-  padding: 0.1rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-full);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .catalog-badge--active {
@@ -535,7 +561,7 @@
   width: 100%;
   font: inherit;
   text-align: left;
-  padding: 0.45rem 0.55rem;
+  padding: var(--space-2) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-input);
@@ -655,7 +681,7 @@
 .catalog-picker__option-text {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -743,7 +769,7 @@
 .workspace-chrome__identity {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -789,7 +815,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.125rem;
+  gap: var(--space-1);
   flex: 0 0 auto;
   min-width: 6.5rem;
 }
@@ -849,7 +875,7 @@
 .material-color-swatch {
   display: inline-block;
   vertical-align: middle;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm, 4px);
 }
 
@@ -864,7 +890,7 @@
   width: 44px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md, 6px);
   background: transparent;
   cursor: pointer;
@@ -885,7 +911,7 @@
 .catalog-image {
   display: block;
   object-fit: cover;
-  background: var(--surface-muted);
+  background: var(--surface-input);
 }
 
 .catalog-image--sm {

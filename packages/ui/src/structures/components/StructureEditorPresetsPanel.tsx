@@ -62,7 +62,7 @@ export function StructureEditorPresetsPanel({
             color: 'var(--text-muted)',
             padding: '2rem 1rem',
             textAlign: 'center',
-            border: '1px dashed var(--border)',
+            border: '1px dashed var(--border-default)',
             borderRadius: '8px',
           }}
         >
@@ -78,10 +78,10 @@ export function StructureEditorPresetsPanel({
             flexDirection: 'column',
             gap: '0.75rem',
             marginBottom: '1.5rem',
-            background: 'var(--bg-card)',
+            background: 'var(--surface-card)',
             padding: '1rem',
             borderRadius: '8px',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--border-default)',
           }}
         >
           {presets.map((preset, idx) => (
@@ -186,9 +186,9 @@ export function StructureEditorPresetsPanel({
             style={{
               padding: '0.25rem 0.5rem',
               borderRadius: '4px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-body)',
-              color: 'var(--text)',
+              border: '1px solid var(--border-default)',
+              background: 'var(--surface-app)',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
             }}
             data-testid="preview-preset-select"

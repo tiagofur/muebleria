@@ -219,7 +219,7 @@
 .catalog-image {
   display: block;
   object-fit: cover;
-  background: var(--surface-muted);
+  background: var(--surface-input);
 }
 
 .catalog-image--sm {

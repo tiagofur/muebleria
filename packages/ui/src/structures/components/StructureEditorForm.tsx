@@ -71,7 +71,7 @@ export function StructureEditorForm({
         style={{
           display: 'flex',
           gap: '0.5rem',
-          borderBottom: '1px solid var(--border)',
+          borderBottom: '1px solid var(--border-default)',
           marginBottom: '1.5rem',
         }}
       >
@@ -95,9 +95,9 @@ export function StructureEditorForm({
                 background: 'none',
                 border: 'none',
                 borderBottom: selected
-                  ? '2px solid var(--primary)'
+                  ? '2px solid var(--brand-500)'
                   : '2px solid transparent',
-                color: selected ? 'var(--primary)' : 'var(--text-muted)',
+                color: selected ? 'var(--brand-500)' : 'var(--text-muted)',
                 padding: '0.75rem 1rem',
                 cursor: 'pointer',
                 fontWeight: selected ? '600' : '400',

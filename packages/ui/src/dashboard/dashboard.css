@@ -3,7 +3,7 @@
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-8);
   max-width: 72rem;
 }
 
@@ -21,15 +21,17 @@
   gap: var(--space-3);
 }
 
+/* Icon decorative next to H1 is noise (Linear/Stripe don't use it on inner pages).
+   Keep the node for a11y/markup but hide visually. */
 .dashboard__title-icon {
-  color: var(--brand-500);
-  flex-shrink: 0;
+  display: none;
 }
 
 .dashboard__title {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   line-height: var(--leading-tight);
 }
@@ -106,10 +108,11 @@
   line-height: var(--leading-normal);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--surface-muted);
+  background: var(--surface-input);
 }
 
 .dashboard-stat {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -125,36 +128,44 @@
   .dashboard-stat {
     transition:
       border-color var(--duration-fast) var(--ease-out),
-      box-shadow var(--duration-fast) var(--ease-out);
+      box-shadow var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
   }
 
   .dashboard-stat:hover {
     border-color: var(--border-brand);
     box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
   }
 }
 
+/* Icon floats as a quiet accent top-right instead of leading the value.
+   Keeps the same DOM; only visual order changes. */
 .dashboard-stat__icon {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 2rem;
   height: 2rem;
   border-radius: var(--radius-md);
-  background: var(--brand-50);
-  color: var(--brand-600);
+  background: var(--surface-input);
+  color: var(--text-muted);
 }
 
 .dashboard-stat__label {
   margin: 0;
+  padding-right: 2.5rem; /* keep clear of the floating icon */
   font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
   line-height: var(--leading-tight);
 }
 
 .dashboard-stat__value {
-  margin: 0;
+  margin: auto 0 0;
   font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
   color: var(--text-primary);
@@ -162,15 +173,11 @@
   line-height: var(--leading-tight);
 }
 
-/* One stat carries the money story; counts stay quieter. */
-.dashboard-stat--emphasis {
-  border-color: var(--border-brand);
-  background: var(--surface-selected);
-}
-
+/* Emphasis is carried by internal hierarchy, not an ad-hoc purple border:
+   brand icon chip + brand-tinted value. Same elevation as the others. */
 .dashboard-stat--emphasis .dashboard-stat__icon {
   background: var(--brand-100);
-  color: var(--brand-700);
+  color: var(--brand-600);
 }
 
 .dashboard-stat--emphasis .dashboard-stat__value {
@@ -215,9 +222,9 @@
 
 .dashboard-owners-table th,
 .dashboard-owners-table td {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   text-align: left;
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
 }
 
@@ -225,16 +232,24 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--surface-muted);
+  background: var(--surface-input);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
   font-size: var(--text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 
 .dashboard-owners-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.dashboard-owners-table tbody tr {
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.dashboard-owners-table tbody tr:hover {
+  background: var(--surface-input);
 }
 
 .dashboard-owners-table__name {
@@ -245,6 +260,7 @@
 .dashboard-owners-table__num {
   font-variant-numeric: tabular-nums;
   text-align: right;
+  color: var(--text-primary);
 }
 
 .dashboard-owners-table th:nth-child(n + 3),
@@ -295,13 +311,13 @@
     transition:
       border-color var(--duration-fast) var(--ease-out),
       box-shadow var(--duration-fast) var(--ease-out),
-      background var(--duration-fast) var(--ease-out);
+      transform var(--duration-fast) var(--ease-out);
   }
 
   .dashboard-recent-card:hover {
     border-color: var(--border-brand);
     box-shadow: var(--shadow-md);
-    background: var(--surface-hover);
+    transform: translateY(-1px);
   }
 }
 
