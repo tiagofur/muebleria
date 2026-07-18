@@ -7,6 +7,7 @@ import type {
   Component,
   EdgeAssignment,
   EdgeSide,
+  FurnitureType,
   HardwareLine,
   Module,
   ModuleCategory,
@@ -67,6 +68,8 @@ export type ModuleDraft = {
   notes: string;
   /** Optional module category (any depth). Empty string = uncategorized. */
   categoryId: string;
+  /** Fundamental furniture type for project measure defaults (#109). */
+  furnitureType: FurnitureType;
   externalWidth: string;
   externalHeight: string;
   externalDepth: string;
@@ -90,6 +93,7 @@ export function emptyModuleDraft(): ModuleDraft {
     name: '',
     notes: '',
     categoryId: '',
+    furnitureType: 'inferior',
     externalWidth: '',
     externalHeight: '',
     externalDepth: '',
@@ -205,6 +209,7 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     name: mod.name,
     notes: mod.notes ?? '',
     categoryId: mod.categoryId ?? '',
+    furnitureType: mod.furnitureType ?? 'inferior',
     externalWidth: mod.externalDims ? String(mod.externalDims.width) : '',
     externalHeight: mod.externalDims ? String(mod.externalDims.height) : '',
     externalDepth: mod.externalDims ? String(mod.externalDims.depth) : '',

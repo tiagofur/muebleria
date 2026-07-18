@@ -268,6 +268,7 @@ export const modGab01: Module = {
   code: 'MOD-GAB-01',
   name: 'Gabinete 1 Puerta 300 x 720 x 590 mm',
   externalDims: { width: 300, height: 720, depth: 590 },
+  furnitureType: 'inferior',
   structureId: 'struct-gab-01',
   // Module-level components: door (front) + shelf (interior), beyond the body.
   components: [
@@ -313,6 +314,7 @@ export const modCaj01: Module = {
   code: 'MOD-CAJ-01',
   name: 'Cajonera 4 Cajones 500 x 720 x 590 mm',
   externalDims: { width: 500, height: 720, depth: 590 },
+  furnitureType: 'inferior',
   structureId: 'struct-caj-01',
   components: [
     { componentId: 'comp-caj-frente', quantity: 4 },
@@ -652,6 +654,7 @@ export const seedComposedModule: Module = {
   code: 'MOD-COMP-001',
   name: 'Gabinete Compuesto 600',
   externalDims: { width: 600, height: 720, depth: 560 },
+  furnitureType: 'inferior',
   structureId: 'seed-struct-test',
   components: [
     { componentId: 'seed-comp-puerta', quantity: 1 },
@@ -689,10 +692,173 @@ const SEED_STRUCTURE: Structure = {
   active: true,
 };
 
+// --- Superior (Alacena) and Alto (Despensa) seed modules (#109 / H14) ---
+// Minimal-but-valid parametric bodies. Components use PH/PW/PD formulas so the
+// resolved pieces adapt to any preset dims. Not a "correct" alacena/despensa
+// model — they exist so the seed showcases the three furniture types and the
+// project measure-defaults UI has something to pre-select for each type.
+
+/** Superior (alacena): costados + base + respaldo. Shallow depth (~320). */
+const compAlacenaCostado: Component = {
+  id: 'comp-alacena-costado',
+  code: 'COM-ALA-COS',
+  name: 'Costado Alacena',
+  placement: 'lateral_izquierdo',
+  geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 320, thicknessMm: 18, lengthFormula: 'PH', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'i * (PW - T)',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 90,
+  rotateY: 90,
+  rotateZ: 0,
+};
+const compAlacenaBase: Component = {
+  id: 'comp-alacena-base',
+  code: 'COM-ALA-BAS',
+  name: 'Base Alacena',
+  placement: 'base',
+  geometry: { kind: 'rectangular_board', lengthMm: 320, widthMm: 569, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compAlacenaRespaldo: Component = {
+  id: 'comp-alacena-respaldo',
+  code: 'COM-ALA-RES',
+  name: 'Respaldo Alacena',
+  placement: 'trasera',
+  geometry: { kind: 'rectangular_board', lengthMm: 689, widthMm: 569, thicknessMm: 18, lengthFormula: 'PH - 31', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: 'T',
+  rotateX: 90,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const structAlacena: Structure = {
+  id: 'struct-alacena-600',
+  code: 'EST-ALA-600',
+  name: 'Cuerpo Alacena 600',
+  externalDims: { width: 600, height: 720, depth: 320 },
+  components: [
+    { componentId: 'comp-alacena-costado', quantity: 2 },
+    { componentId: 'comp-alacena-base', quantity: 1 },
+    { componentId: 'comp-alacena-respaldo', quantity: 1 },
+  ],
+  presets: [{ id: 'preset-alacena-600', name: '600×720×320', width: 600, height: 720, depth: 320 }],
+  active: true,
+};
+export const seedModAlacena: Module = {
+  id: 'seed-mod-alacena-001',
+  code: 'MOD-ALA-001',
+  name: 'Alacena 1 Puerta 600 x 720 x 320 mm',
+  externalDims: { width: 600, height: 720, depth: 320 },
+  furnitureType: 'superior',
+  structureId: 'struct-alacena-600',
+  hardwareLines: [
+    { id: 'ala-h01', quantity: 2, optionRole: 'BISAGRA' },
+  ],
+  presets: [
+    { id: 'ala-preset-600', name: 'Ancho 600', width: 600, height: 720, depth: 320 },
+    { id: 'ala-preset-800', name: 'Ancho 800', width: 800, height: 720, depth: 320 },
+  ],
+  notes: 'Alacena (superior) demo: cuerpo poco profundo para colgar.',
+};
+
+/** Alto (despensa): tall body (~2100 height). */
+const compDespensaCostado: Component = {
+  id: 'comp-despensa-costado',
+  code: 'COM-DES-COS',
+  name: 'Costado Despensa',
+  placement: 'lateral_izquierdo',
+  geometry: { kind: 'rectangular_board', lengthMm: 2100, widthMm: 600, thicknessMm: 18, lengthFormula: 'PH', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'i * (PW - T)',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 90,
+  rotateY: 90,
+  rotateZ: 0,
+};
+const compDespensaBase: Component = {
+  id: 'comp-despensa-base',
+  code: 'COM-DES-BAS',
+  name: 'Base Despensa',
+  placement: 'base',
+  geometry: { kind: 'rectangular_board', lengthMm: 600, widthMm: 569, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, true, true),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: '0',
+  rotateX: 0,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const compDespensaRespaldo: Component = {
+  id: 'comp-despensa-respaldo',
+  code: 'COM-DES-RES',
+  name: 'Respaldo Despensa',
+  placement: 'trasera',
+  geometry: { kind: 'rectangular_board', lengthMm: 2069, widthMm: 569, thicknessMm: 18, lengthFormula: 'PH - 31', widthFormula: 'PW - 31' },
+  defaultEdges: edgesAll(false, false, false, false),
+  optionRoles: ['INTERIOR'],
+  active: true,
+  xFormula: 'T',
+  yFormula: '0',
+  zFormula: 'T',
+  rotateX: 90,
+  rotateY: 0,
+  rotateZ: 0,
+};
+const structDespensa: Structure = {
+  id: 'struct-despensa-600',
+  code: 'EST-DES-600',
+  name: 'Cuerpo Despensa 600',
+  externalDims: { width: 600, height: 2100, depth: 600 },
+  components: [
+    { componentId: 'comp-despensa-costado', quantity: 2 },
+    { componentId: 'comp-despensa-base', quantity: 1 },
+    { componentId: 'comp-despensa-respaldo', quantity: 1 },
+  ],
+  presets: [{ id: 'preset-despensa-600', name: '600×2100×600', width: 600, height: 2100, depth: 600 }],
+  active: true,
+};
+export const seedModDespensa: Module = {
+  id: 'seed-mod-despensa-001',
+  code: 'MOD-DES-001',
+  name: 'Despensa 2 Puertas 600 x 2100 x 600 mm',
+  externalDims: { width: 600, height: 2100, depth: 600 },
+  furnitureType: 'alto',
+  structureId: 'struct-despensa-600',
+  hardwareLines: [
+    { id: 'des-h01', quantity: 4, optionRole: 'BISAGRA' },
+  ],
+  presets: [
+    { id: 'des-preset-2100', name: 'Alto 2100', width: 600, height: 2100, depth: 600 },
+  ],
+  notes: 'Despensa (alto) demo: cuerpo alto tipo pantry.',
+};
+
 export const plantillaCatalogWithModules: Catalog = {
   ...plantillaCatalog,
-  modules: [modGab01, modCaj01, seedComposedModule],
-  structures: [structGab01, structCaj01, SEED_STRUCTURE],
+  modules: [modGab01, modCaj01, seedComposedModule, seedModAlacena, seedModDespensa],
+  structures: [structGab01, structCaj01, SEED_STRUCTURE, structAlacena, structDespensa],
   components: [
     seedComponentPuerta,
     seedComponentEntrepano,
@@ -711,6 +877,12 @@ export const plantillaCatalogWithModules: Catalog = {
     compCajLateral,
     compCajFrenteTras,
     compCajFondo,
+    compAlacenaCostado,
+    compAlacenaBase,
+    compAlacenaRespaldo,
+    compDespensaCostado,
+    compDespensaBase,
+    compDespensaRespaldo,
   ],
 };
 

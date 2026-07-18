@@ -175,6 +175,7 @@ function draftToModule(id: string, draft: ModuleDraft): Module {
     name: draft.name.trim(),
     notes: optionalNotes(draft.notes),
     categoryId: draft.categoryId.trim() || undefined,
+    furnitureType: draft.furnitureType,
     baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
     imageUrl: draft.imageUrl.trim() || undefined,
     externalDims: hasDims
@@ -1840,6 +1841,24 @@ function AppContent({
     );
   };
 
+  const updateMeasureDefaults = (
+    projectId: string,
+    defaults: Project['measureDefaults'],
+  ) => {
+    const now = new Date().toISOString();
+    patchProjects((ps) =>
+      ps.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              measureDefaults: defaults,
+              updatedAt: now,
+            }
+          : p,
+      ),
+    );
+  };
+
 
 
   const updateInstallationChecklist = (
@@ -2638,6 +2657,7 @@ function AppContent({
           onUpdateItem={updateProjectItem}
           onRemoveItem={removeProjectItem}
           onUpdateProjectLevelChoices={updateProjectLevelChoices}
+          onUpdateMeasureDefaults={updateMeasureDefaults}
           onUpdateKitchenLayout={updateKitchenLayout}
           onApplyScenarioB={applyScenarioB}
           onDuplicateWithScenarioB={duplicateWithScenarioB}

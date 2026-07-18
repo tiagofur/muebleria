@@ -138,6 +138,95 @@ describe('apiMappers', () => {
     expect(projectFromApi(api as Record<string, unknown>).customerId).toBe('c1');
   });
 
+  it('round-trips module furnitureType (snake + camel read) (#109)', () => {
+    const mod: Module = {
+      id: 'mod1',
+      code: 'ALA-01',
+      name: 'Alacena',
+      furnitureType: 'superior',
+      hardwareLines: [],
+    };
+    const api = moduleToApi(mod);
+    expect(api.furniture_type).toBe('superior');
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.furnitureType).toBe('superior');
+
+    // camelCase read path (legacy / JS shell) — snake key absent
+    const { furniture_type: _omit, ...apiNoSnake } = api as Record<string, unknown>;
+    const camel = moduleFromApi({ ...apiNoSnake, furnitureType: 'alto' });
+    expect(camel.furnitureType).toBe('alto');
+
+    // Invalid value → undefined (treated as legacy inferior)
+    const invalid = moduleFromApi({
+      id: 'x',
+      code: 'X',
+      name: 'X',
+      furniture_type: 'bogus',
+      hardware_lines: [],
+    } as Record<string, unknown>);
+    expect(invalid.furnitureType).toBeUndefined();
+  });
+
+  it('round-trips project measureDefaults keyed by furnitureType (#109)', () => {
+    const p: Project = {
+      id: 'pr1',
+      name: 'Cotiz',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      measureDefaults: {
+        inferior: { depth: 560, height: 720 },
+        superior: { depth: 320 },
+      },
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    expect(api.measure_defaults).toEqual({
+      inferior: { depth: 560, height: 720 },
+      superior: { depth: 320 },
+    });
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.measureDefaults).toEqual({
+      inferior: { depth: 560, height: 720 },
+      superior: { depth: 320 },
+    });
+  });
+
+  it('omits measure_defaults when empty and reads camelCase (#109)', () => {
+    const p: Project = {
+      id: 'pr1',
+      name: 'Cotiz',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(projectToApi(p).measure_defaults).toBeNull();
+    expect(projectFromApi({ ...p }).measureDefaults).toBeUndefined();
+
+    // camelCase read + partial dims (only height)
+    const fromCamel = projectFromApi({
+      ...p,
+      measureDefaults: { alto: { height: 2100 } },
+    } as Record<string, unknown>);
+    expect(fromCamel.measureDefaults).toEqual({ alto: { height: 2100 } });
+
+    // zero/negative dims are dropped (treated as unset)
+    const zeroDropped = projectFromApi({
+      ...p,
+      measure_defaults: { inferior: { depth: 0, height: 720 } },
+    } as Record<string, unknown>);
+    expect(zeroDropped.measureDefaults).toEqual({ inferior: { height: 720 } });
+  });
+
   it('categoryToApi keeps parentId camelCase for Go', () => {
     expect(
       categoryToApi({

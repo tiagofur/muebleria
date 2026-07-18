@@ -256,6 +256,7 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     depth_mm: m.externalDims?.depth ?? 0,
     categoryId: m.categoryId ?? '',
     structure_id: m.structureId ?? '',
+    furniture_type: m.furnitureType ?? '',
     components: (m.components ?? []).map(componentInstanceToApi),
     presets: (m.presets ?? []).map(presetToApi),
     image_url: m.imageUrl ?? '',
@@ -263,6 +264,8 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
   };
 }
+
+const FURNITURE_TYPES = new Set(['inferior', 'superior', 'alto']);
 
 export function moduleFromApi(raw: Record<string, unknown>): Module {
   const lines = raw.hardware_lines ?? raw.hardwareLines;
@@ -272,6 +275,10 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const hasDims = w > 0 || h > 0 || d > 0;
   const categoryId = str(raw.categoryId ?? raw.category_id);
   const structureId = str(raw.structure_id ?? raw.structureId);
+  const furnitureTypeRaw = str(raw.furniture_type ?? raw.furnitureType);
+  const furnitureType = FURNITURE_TYPES.has(furnitureTypeRaw)
+    ? (furnitureTypeRaw as Module['furnitureType'])
+    : undefined;
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
   const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
   const componentsRaw = raw.components;
@@ -285,6 +292,7 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     name: str(raw.name),
     categoryId: categoryId || undefined,
     structureId: structureId || undefined,
+    furnitureType,
     components: Array.isArray(componentsRaw)
       ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
       : undefined,
@@ -731,6 +739,68 @@ function kitchenLayoutFromApi(
   return { walls, placements };
 }
 
+const MEASURE_DEFAULT_TYPES = new Set(['inferior', 'superior', 'alto']);
+
+/**
+ * Serialize Project.measureDefaults to the API shape (#109). Drops types whose
+ * dims are all empty; returns null when the whole map is empty.
+ */
+function measureDefaultsToApi(
+  defaults: Project['measureDefaults'],
+): Record<string, { depth?: number; height?: number }> | null {
+  if (!defaults) return null;
+  const out: Record<string, { depth?: number; height?: number }> = {};
+  for (const [type, dims] of Object.entries(defaults)) {
+    if (!MEASURE_DEFAULT_TYPES.has(type)) continue;
+    if (!dims) continue;
+    const entry: { depth?: number; height?: number } = {};
+    if (typeof dims.depth === 'number' && Number.isFinite(dims.depth)) {
+      entry.depth = dims.depth;
+    }
+    if (typeof dims.height === 'number' && Number.isFinite(dims.height)) {
+      entry.height = dims.height;
+    }
+    if (entry.depth !== undefined || entry.height !== undefined) {
+      out[type] = entry;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Parse Project.measureDefaults from the API shape (#109). Accepts snake or
+ * camel key; returns undefined for empty/invalid input.
+ */
+function measureDefaultsFromApi(
+  raw: unknown,
+): Project['measureDefaults'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: {
+    [type in 'inferior' | 'superior' | 'alto']?: {
+      depth?: number;
+      height?: number;
+    };
+  } = {};
+  for (const type of MEASURE_DEFAULT_TYPES) {
+    const entry = src[type] as
+      | { depth?: unknown; height?: unknown }
+      | undefined;
+    if (!entry || typeof entry !== 'object') continue;
+    const dims: { depth?: number; height?: number } = {};
+    const depth = num(entry.depth);
+    if (depth > 0) dims.depth = depth;
+    const height = num(entry.height);
+    if (height > 0) dims.height = height;
+    if (dims.depth !== undefined || dims.height !== undefined) {
+      (out as Record<string, { depth?: number; height?: number }>)[type] = dims;
+    }
+  }
+  return Object.keys(out).length > 0
+    ? (out as Project['measureDefaults'])
+    : undefined;
+}
+
 export function projectToApi(p: Project): Record<string, unknown> {
   return {
     id: p.id,
@@ -744,6 +814,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
     status: p.status,
     notes: p.notes ?? '',
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
+    measure_defaults: measureDefaultsToApi(p.measureDefaults),
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
     nesting_import: p.nestingImport
       ? {
@@ -805,6 +876,9 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
       projectLevelChoices && Object.keys(projectLevelChoices).length > 0
         ? projectLevelChoices
         : undefined,
+    measureDefaults: measureDefaultsFromApi(
+      raw.measure_defaults ?? raw.measureDefaults,
+    ),
     kitchenLayout: kitchenLayoutFromApi(
       raw.kitchen_layout ?? raw.kitchenLayout,
     ),

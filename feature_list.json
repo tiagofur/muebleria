@@ -969,6 +969,32 @@
       ],
       "status": "done",
       "github_issue": 104
+    },
+    {
+      "id": "F055",
+      "phase": 10,
+      "name": "project_measure_defaults",
+      "title": "Parámetros de medida a nivel proyecto (por tipo de mueble)",
+      "description": "Defaults de medida (fondo/alto) a nivel proyecto, keyeados por FurnitureType (inferior/superior/alto). Al agregar un mueble a la cotización, se pre-selecciona el preset del módulo más cercano a los defaults del tipo de ese módulo. Override por línea vía measurePresetId existente. Snapshot respeta valores efectivos al cerrar (priceSnapshot existente). Introduce FurnitureType enum first-class en Module para desacoplar los defaults del árbol de categorías editable. Issue #109 / H14. Paridad TS + backend-go.",
+      "acceptance": [
+        "FurnitureType enum ('inferior'|'superior'|'alto') en Module (dominio TS + Go)",
+        "Seed con los 3 tipos representados (inferiores existentes + 1 superior + 1 alto nuevos, BOM válido)",
+        "Project.measureDefaults keyed por tipo, editable live en pantalla de proyecto",
+        "Al agregar ítem, selectModuleForAdd pre-selecciona preset más cercano a los defaults del tipo del módulo",
+        "Override por línea (measurePresetId) siempre gana al default del proyecto",
+        "Snapshot congela valores efectivos al cerrar (priceSnapshot existente)",
+        "Editor de módulo permite setear furnitureType",
+        "Storage mappers (TS + Go) round-trip furnitureType y measureDefaults",
+        "Migración Go aditiva (ADD COLUMN IF NOT EXISTS + tabla nueva IF NOT EXISTS)",
+        "pnpm test + typecheck + init.sh verde; go test verde; server arranca con env válido"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/109",
+        "docs/prd.md §6.7",
+        "docs/architecture.md"
+      ],
+      "status": "done",
+      "github_issue": 109
     }
   ]
 }

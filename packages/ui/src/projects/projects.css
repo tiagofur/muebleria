@@ -365,6 +365,80 @@
   margin-top: var(--space-2);
 }
 
+/* Project measure defaults (#109): one row per furnitureType, each with a
+ * labeled Fondo/Alto pair. Kept as a self-contained grid so the inputs don't
+ * inherit the column-stretch of catalog-form__field (which crammed them). */
+.measure-defaults-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.measure-defaults-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.measure-defaults-row__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.measure-defaults-row__inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.measure-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.measure-input__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.measure-input__field {
+  font: inherit;
+  padding: var(--density-control-pad-y) var(--density-control-pad-x);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  transition: var(--transition-colors);
+  width: 100%;
+}
+
+.measure-input__field:focus-visible {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Badge on each quote line indicating the module's furnitureType (#109). */
+.project-item-type-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  border: 1px solid var(--border-subtle);
+}
+
 /* Spacing between options and items comes from .project-detail__main gap. */
 .project-level-options {
   margin-bottom: 0;

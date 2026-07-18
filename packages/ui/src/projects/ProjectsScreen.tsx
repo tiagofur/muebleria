@@ -16,6 +16,7 @@ import type {
   Customer,
   EdgeBand,
   ExportIssue,
+  FurnitureType,
   Hardware,
   MaterialBoard,
   Module,
@@ -38,6 +39,7 @@ import {
   nestingImportFromRows,
   filterModulesByCategory,
   isProjectClosed,
+  pickPresetByMeasureDefaults,
   type CategoryFilterId,
 } from '@muebles/domain';
 import {
@@ -88,6 +90,7 @@ import {
   resolveCustomerName,
   setItemOptionChoice,
   setProjectLevelChoice,
+  furnitureTypeLabel,
   validateItemQuantity,
   validateProjectDraft,
   type AddItemDraft,
@@ -166,6 +169,14 @@ export interface ProjectsScreenProps {
   readonly onUpdateProjectLevelChoices?: (
     projectId: string,
     choices: OptionChoices,
+  ) => void;
+  /** #109: project-level measure defaults keyed by furnitureType. Pre-selects
+   * the closest module preset when adding an item; per-line override wins. */
+  readonly onUpdateMeasureDefaults?: (
+    projectId: string,
+    defaults:
+      | { readonly [type in FurnitureType]?: { readonly depth?: number; readonly height?: number } }
+      | undefined,
   ) => void;
   /**
    * Notifies parent when the selected project id changes (null = list / none).
@@ -293,6 +304,7 @@ export function ProjectsScreen({
   onUpdateInstallationChecklist,
   onImportNesting,
   onUpdateProjectLevelChoices,
+  onUpdateMeasureDefaults,
   onSelectionChange,
   breakdown = null,
   materialSummary = null,
@@ -574,7 +586,9 @@ export function ProjectsScreen({
       moduleId,
       quantity: addItem.quantity || 1,
       optionChoices,
-      measurePresetId: mod?.presets?.[0]?.id,
+      measurePresetId: mod
+        ? pickPresetByMeasureDefaults(mod, selectedProject?.measureDefaults)
+        : undefined,
     });
   };
 
@@ -671,6 +685,44 @@ export function ProjectsScreen({
       optionId,
     );
     onUpdateProjectLevelChoices(selectedId, choices);
+  };
+
+  /**
+   * Merge a partial measure default (per furnitureType, depth/height) into the
+   * project's measureDefaults (#109). Empty values clear the dimension; a type
+   * with no remaining dims is dropped; an empty map clears the whole field.
+   */
+  const updateMeasureDefaults = (
+    type: FurnitureType,
+    field: 'depth' | 'height',
+    value: string,
+  ) => {
+    if (!selectedId || !selectedProject || !onUpdateMeasureDefaults) return;
+    const prev = { ...(selectedProject.measureDefaults ?? {}) } as Record<
+      FurnitureType,
+      { depth?: number; height?: number } | undefined
+    >;
+    const typeEntry = prev[type] ? { ...prev[type]! } : {};
+    const parsed = value.trim() === '' ? undefined : Number(value);
+    if (field === 'depth') {
+      if (parsed === undefined || Number.isNaN(parsed)) delete typeEntry.depth;
+      else typeEntry.depth = parsed;
+    } else {
+      if (parsed === undefined || Number.isNaN(parsed)) delete typeEntry.height;
+      else typeEntry.height = parsed;
+    }
+    if (typeEntry.depth === undefined && typeEntry.height === undefined) {
+      delete prev[type];
+    } else {
+      prev[type] = typeEntry;
+    }
+    const hasAny = (Object.keys(prev) as FurnitureType[]).some(
+      (k) => prev[k] !== undefined,
+    );
+    onUpdateMeasureDefaults(
+      selectedId,
+      hasAny ? (prev as Project['measureDefaults']) : undefined,
+    );
   };
 
   const handleDelete = (id: string) => {
@@ -1517,6 +1569,109 @@ export function ProjectsScreen({
           </section>
         ) : null}
 
+        {onUpdateMeasureDefaults && !isProjectClosed(project.status) ? (
+          (() => {
+            // Render one row per furnitureType actually used by the catalog.
+            const typesInUse = Array.from(
+              new Set(
+                modules.map((m) => m.furnitureType ?? 'inferior'),
+              ),
+            ) as FurnitureType[];
+            if (typesInUse.length === 0) return null;
+            const labels: Record<FurnitureType, string> = {
+              inferior: 'Inferiores (gabinetes)',
+              superior: 'Superiores (alacenas)',
+              alto: 'Altos (despensas)',
+            };
+            return (
+              <section
+                className="project-detail__section project-measure-defaults"
+                aria-label="Parámetros de medida del proyecto"
+                data-testid="project-measure-defaults"
+              >
+                <div className="project-detail__section-header">
+                  <h3 className="project-detail__section-title">
+                    Parámetros de medida
+                  </h3>
+                </div>
+                <p className="project-editor__hint">
+                  Defaults de fondo/alto (mm) por tipo de mueble. Al agregar un
+                  mueble se pre-selecciona el preset más cercano; cada línea
+                  puede override.
+                </p>
+                <div className="measure-defaults-grid">
+                  {typesInUse.map((type) => {
+                    const entry = project.measureDefaults?.[type];
+                    return (
+                      <div
+                        key={type}
+                        className="measure-defaults-row"
+                        data-testid={`project-measure-default-${type}`}
+                      >
+                        <span className="measure-defaults-row__label">
+                          {labels[type]}
+                        </span>
+                        <div className="measure-defaults-row__inputs">
+                          <div className="measure-input">
+                            <label
+                              htmlFor={`md-${type}-depth`}
+                              className="measure-input__label"
+                            >
+                              Fondo (mm)
+                            </label>
+                            <input
+                              id={`md-${type}-depth`}
+                              className="measure-input__field"
+                              type="number"
+                              min={1}
+                              step="any"
+                              placeholder="Ej. 560"
+                              value={entry?.depth ?? ''}
+                              onChange={(e) =>
+                                updateMeasureDefaults(
+                                  type,
+                                  'depth',
+                                  e.target.value,
+                                )
+                              }
+                              data-testid={`project-measure-default-${type}-depth`}
+                            />
+                          </div>
+                          <div className="measure-input">
+                            <label
+                              htmlFor={`md-${type}-height`}
+                              className="measure-input__label"
+                            >
+                              Alto (mm)
+                            </label>
+                            <input
+                              id={`md-${type}-height`}
+                              className="measure-input__field"
+                              type="number"
+                              min={1}
+                              step="any"
+                              placeholder="Ej. 720"
+                              value={entry?.height ?? ''}
+                              onChange={(e) =>
+                                updateMeasureDefaults(
+                                  type,
+                                  'height',
+                                  e.target.value,
+                                )
+                              }
+                              data-testid={`project-measure-default-${type}-height`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })()
+        ) : null}
+
         <KitchenPlanPanel
           project={project}
           modules={modules}
@@ -1622,6 +1777,14 @@ export function ProjectsScreen({
                         {mod
                           ? `${mod.name} — ${mod.code}`
                           : `Mueble desconocido (${item.moduleId})`}
+                        {mod?.furnitureType ? (
+                          <span
+                            className="project-item-type-badge"
+                            data-testid={`project-item-type-badge-${item.id}`}
+                          >
+                            {furnitureTypeLabel(mod.furnitureType)}
+                          </span>
+                        ) : null}
                         {item.structureRevisionPin !== undefined ? (
                           <ProjectItemStructureRevisionIndicator
                             pin={item.structureRevisionPin}

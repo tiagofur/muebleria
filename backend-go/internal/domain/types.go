@@ -182,6 +182,10 @@ type Module struct {
 	// StructureID references an engineering body for composed modules (F054 / #102).
 	// Empty for legacy/flat modules.
 	StructureID string `json:"structure_id,omitempty"`
+	// FurnitureType is the fundamental furniture type for project measure
+	// defaults (#109 / H14): "inferior" | "superior" | "alto". Empty = inferior
+	// (legacy default).
+	FurnitureType string `json:"furniture_type,omitempty"`
 	// Presets are commercial measure options for sales (H09 / #104).
 	Presets []DimensionPreset `json:"presets,omitempty"`
 	// Components are module-level component instances (doors, shelves, …) for
@@ -341,6 +345,12 @@ type Project struct {
 	// ProjectLevelChoices are defaults for all line items (F029 / #35).
 	// Effective: item.OptionChoices[role] if set, else ProjectLevelChoices[role].
 	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
+	// MeasureDefaults are project-level measure defaults keyed by furniture type
+	// (#109 / H14). At add-item time the closest module preset for the module's
+	// furnitureType is pre-selected. Per-line MeasurePresetID always wins.
+	// Shape: { "inferior"|"superior"|"alto": { "depth": 560, "height": 720 } }.
+	// nil/empty = no project defaults.
+	MeasureDefaults json.RawMessage `json:"measure_defaults,omitempty"`
 	// KitchenLayout is optional walls+placements plan (#133). JSON object or null.
 	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`

@@ -26,6 +26,7 @@ export type {
   Module,
   Structure,
   StructureRevision,
+  FurnitureType,
   DimensionPreset,
   ComponentPlacement,
   ComponentGeometry,
@@ -125,6 +126,7 @@ export { DomainError, ValidationError, ResolutionError } from './errors';
 export {
   defaultMeasurePresetId,
   moduleHasMeasurePresets,
+  pickPresetByMeasureDefaults,
   resolveModuleMeasurePreset,
   validateModulePresets,
 } from './measurePresets';

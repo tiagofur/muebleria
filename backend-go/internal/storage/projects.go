@@ -134,7 +134,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	cat.Categories = cats
 
 	// Cargar módulos y su despiece
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id FROM modules ORDER BY name ASC`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type FROM modules ORDER BY name ASC`
 	rows, err := s.Pool.Query(ctx, query)
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
@@ -148,7 +148,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		var categoryID *string
 		var imageURL *string
 		var structureID *string
-		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID)
+		var furnitureType *string
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType)
 		if err != nil {
 			return cat, err
 		}
@@ -172,6 +173,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		}
 		if structureID != nil {
 			m.StructureID = *structureID
+		}
+		if furnitureType != nil {
+			m.FurnitureType = *furnitureType
 		}
 
 		// Component instances placed directly on this module (F054).
@@ -282,7 +286,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, measure_defaults, created_at, updated_at
 		FROM projects
 		ORDER BY updated_at DESC;
 	`
@@ -301,7 +305,8 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var kitchenLayout []byte
 		var installationChecklist []byte
 		var nestingImport []byte
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &nestingImport, &p.CreatedAt, &p.UpdatedAt)
+		var measureDefaults []byte
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &nestingImport, &measureDefaults, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -322,6 +327,9 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		}
 		if len(nestingImport) > 0 && string(nestingImport) != "null" {
 			p.NestingImport = nestingImport
+		}
+		if len(measureDefaults) > 0 && string(measureDefaults) != "null" {
+			p.MeasureDefaults = measureDefaults
 		}
 
 		// Load items so FE reload keeps line items (calculate + UI depend on them).
@@ -537,7 +545,7 @@ func structurePinArg(pin *int) interface{} {
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, measure_defaults, created_at, updated_at
 		FROM projects
 		WHERE id = $1;
 	`
@@ -549,7 +557,8 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var kitchenLayout []byte
 	var installationChecklist []byte
 	var nestingImport []byte
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &nestingImport, &p.CreatedAt, &p.UpdatedAt)
+	var measureDefaults []byte
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &installationChecklist, &nestingImport, &measureDefaults, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -570,6 +579,9 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	}
 	if len(nestingImport) > 0 && string(nestingImport) != "null" {
 		p.NestingImport = nestingImport
+	}
+	if len(measureDefaults) > 0 && string(measureDefaults) != "null" {
+		p.MeasureDefaults = measureDefaults
 	}
 
 	items, err := s.loadProjectItems(ctx, p.ID)
@@ -663,19 +675,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, measure_defaults)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport)).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults)).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, installation_checklist, nesting_import, measure_defaults)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport)).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults)).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -764,10 +776,10 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	query := `
 		UPDATE projects
 		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7,
-		    owner_user_id = $8, kitchen_layout = $9, installation_checklist = $10, nesting_import = $11, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $12;
+		    owner_user_id = $8, kitchen_layout = $9, installation_checklist = $10, nesting_import = $11, measure_defaults = $12, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $13;
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), id)
 	if err != nil {
 		return err
 	}
@@ -840,7 +852,7 @@ func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, created_at, updated_at FROM modules WHERE id = $1`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, created_at, updated_at FROM modules WHERE id = $1`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var m domain.Module
 	var w, h, d *int
@@ -848,7 +860,8 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	var categoryID *string
 	var imageURL *string
 	var structureID *string
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &m.CreatedAt, &m.UpdatedAt)
+	var furnitureType *string
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -872,6 +885,9 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 	if structureID != nil {
 		m.StructureID = *structureID
+	}
+	if furnitureType != nil {
+		m.FurnitureType = *furnitureType
 	}
 
 	modComponents, err := s.loadModuleComponents(ctx, m.ID)
@@ -966,20 +982,20 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 	var errQuery error
 	if idToInsert != "" {
 		queryInsert = `
-			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 			RETURNING created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg).
+		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType).
 			Scan(&m.CreatedAt, &m.UpdatedAt)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
-			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING id, created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg).
+		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType).
 			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	}
 
@@ -1105,11 +1121,11 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	}
 	query := `
 		UPDATE modules
-		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11
+		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $12
 		RETURNING updated_at;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, id).Scan(&m.UpdatedAt)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, id).Scan(&m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("module not found")
