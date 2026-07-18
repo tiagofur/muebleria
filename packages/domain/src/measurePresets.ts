@@ -4,7 +4,7 @@
  */
 
 import { ValidationError } from './errors';
-import type { DimensionPreset, Module } from './types';
+import type { DimensionPreset, FurnitureType, Module, Project } from './types';
 
 export function moduleHasMeasurePresets(module: Module): boolean {
   return (module.presets?.length ?? 0) > 0;
@@ -73,6 +73,64 @@ export function resolveModuleMeasurePreset(
 /** Default preset id when adding a line (first commercial option). */
 export function defaultMeasurePresetId(module: Module): string | undefined {
   return module.presets?.[0]?.id;
+}
+
+/**
+ * Pick the module preset whose depth/height best match the project defaults
+ * for the module's furniture type (#109 / H14).
+ *
+ * - Resolves the module type (`module.furnitureType ?? 'inferior'`).
+ * - Reads the matching entry from `defaults`. If none, or no depth/height set,
+ *   falls back to the first preset (== `defaultMeasurePresetId`).
+ * - Otherwise picks the preset with the smallest absolute-mm distance, summed
+ *   over the dimensions present in the project default (depth and/or height).
+ *   Ties keep the first preset in definition order (stable).
+ * - Returns `undefined` when the module has no presets (fixed-dims path).
+ */
+export function pickPresetByMeasureDefaults(
+  module: Module,
+  defaults?: Project['measureDefaults'] | null,
+): string | undefined {
+  const presets = module.presets ?? [];
+  const first = presets[0];
+  if (!first) return undefined;
+
+  const type: FurnitureType = module.furnitureType ?? 'inferior';
+  const target = defaults?.[type];
+  const wantDepth = typeof target?.depth === 'number';
+  const wantHeight = typeof target?.height === 'number';
+  if (!wantDepth && !wantHeight) {
+    return first.id;
+  }
+
+  let best = first;
+  let bestDist = distanceFor(best, target, wantDepth, wantHeight);
+  for (let i = 1; i < presets.length; i++) {
+    const candidate = presets[i];
+    if (!candidate) continue;
+    const d = distanceFor(candidate, target, wantDepth, wantHeight);
+    if (d < bestDist) {
+      best = candidate;
+      bestDist = d;
+    }
+  }
+  return best.id;
+}
+
+function distanceFor(
+  preset: DimensionPreset,
+  target: { readonly depth?: number; readonly height?: number },
+  wantDepth: boolean,
+  wantHeight: boolean,
+): number {
+  let dist = 0;
+  if (wantDepth && typeof target.depth === 'number') {
+    dist += Math.abs(preset.depth - target.depth);
+  }
+  if (wantHeight && typeof target.height === 'number') {
+    dist += Math.abs(preset.height - target.height);
+  }
+  return dist;
 }
 
 export function validateModulePresets(module: Module): void {

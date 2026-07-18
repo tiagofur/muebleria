@@ -175,6 +175,14 @@ export interface ExternalDims {
   readonly depth: number;
 }
 
+/**
+ * Fundamental furniture type (#109 / H14). Workshops distinguish base/wall/tall
+ * units with different proportions (e.g. depth ~560 for inferiors, ~320 for
+ * superiors, height ~2100 for altos). Project measure defaults are keyed by
+ * this type. Unset on a Module defaults to `'inferior'` for legacy fixtures.
+ */
+export type FurnitureType = 'inferior' | 'superior' | 'alto';
+
 export interface Module {
   readonly id: string;
   readonly code: string;
@@ -187,6 +195,8 @@ export interface Module {
    * Combined with the referenced structure's components to produce board parts. */
   readonly components?: readonly ModuleComponentInstance[];
   readonly externalDims?: ExternalDims;
+  /** Fundamental furniture type for project measure defaults (#109). */
+  readonly furnitureType?: FurnitureType;
   /**
    * Commercial measure options offered to sales (H09 / #104).
    * Source of truth for sellable sizes — not Structure.presets.
@@ -421,6 +431,18 @@ export interface Project {
    * Empty/missing line values inherit the project default.
    */
   readonly projectLevelChoices?: OptionChoices;
+  /**
+   * Project-level measure defaults keyed by furniture type (#109 / H14).
+   * When set, the add-item flow pre-selects the module preset whose depth/height
+   * is closest to these values for the module's furnitureType. Per-line
+   * measurePresetId always wins. Dimensions in mm.
+   */
+  readonly measureDefaults?: {
+    readonly [type in FurnitureType]?: {
+      readonly depth?: number;
+      readonly height?: number;
+    };
+  };
   /**
    * Optional kitchen plan (walls + placements). Omitted = linear 3D run only.
    */
