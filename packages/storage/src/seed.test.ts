@@ -5,10 +5,12 @@
 import {
   calcProjectBreakdown,
   generateCutRows,
+  resolveBom,
 } from '@muebles/domain';
 import {
   GAB_ONLY_GOLDEN,
   IDS,
+  plantillaChoices,
   plantillaGabOnlyExpected,
 } from '@muebles/domain/fixtures';
 import { describe, expect, it } from 'vitest';
@@ -232,5 +234,50 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
 
     // Same shape as dual-module fixture GAB-only project
     expect(demo.items[0]!.moduleId).toBe(GAB_ONLY_GOLDEN.project.items[0]!.moduleId);
+  });
+
+  it('seed catalog covers the three furniture types (#109 / H14)', () => {
+    const seed = createSeedWorkspace();
+    const types = new Set(
+      seed.catalog.modules.map((m) => m.furnitureType ?? 'inferior'),
+    );
+    expect(types.has('inferior')).toBe(true);
+    expect(types.has('superior')).toBe(true);
+    expect(types.has('alto')).toBe(true);
+  });
+
+  it('superior (alacena) and alto (despensa) seed modules resolve BOM without error (#109)', () => {
+    // Smoke: the new modules must produce a valid resolved BOM at their default
+    // preset. Not asserting golden costs — just that the parametric bodies
+    // (costados + base + respaldo) don't throw on resolve.
+    const seed = createSeedWorkspace();
+    const alacena = seed.catalog.modules.find((m) => m.code === 'MOD-ALA-001')!;
+    const despensa = seed.catalog.modules.find((m) => m.code === 'MOD-DES-001')!;
+
+    expect(alacena).toBeDefined();
+    expect(despensa).toBeDefined();
+    expect(alacena.furnitureType).toBe('superior');
+    expect(despensa.furnitureType).toBe('alto');
+
+    // Use plantillaChoices (covers INTERIOR/FRENTE/BISAGRA) so the required
+    // hardware role on the seed bodies resolves. Same choices the demo project
+    // uses for MOD-GAB-01.
+    const choices = plantillaChoices;
+
+    const alacenaBom = resolveBom(
+      alacena,
+      choices,
+      seed.catalog,
+      alacena.presets?.[0]?.id,
+    );
+    expect(alacenaBom.boardParts.length).toBeGreaterThan(0);
+
+    const despensaBom = resolveBom(
+      despensa,
+      choices,
+      seed.catalog,
+      despensa.presets?.[0]?.id,
+    );
+    expect(despensaBom.boardParts.length).toBeGreaterThan(0);
   });
 });
