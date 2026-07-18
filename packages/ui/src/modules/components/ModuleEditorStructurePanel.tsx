@@ -4,6 +4,7 @@
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { Structure } from '@muebles/domain';
+import { StructureRevisionBadge } from '../../structures';
 import type { ModuleDraft } from '../moduleHelpers';
 
 export type ModuleEditorStructurePanelProps = {
@@ -67,6 +68,12 @@ export function ModuleEditorStructurePanel({
               </option>
             ))}
         </select>
+        {selectedStructure ? (
+          <StructureRevisionBadge
+            structure={selectedStructure}
+            testId="module-editor-selected-structure-revision"
+          />
+        ) : null}
       </div>
       {selectedStructure?.components &&
       selectedStructure.components.length > 0 ? (

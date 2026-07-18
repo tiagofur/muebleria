@@ -35,6 +35,7 @@ import type {
 } from '@muebles/domain';
 import {
   applyRoleChoiceToProject,
+  bumpStructureRevision,
   calcMaterialCostPerM2,
   calcProjectBreakdown,
   generateProjectMaterialSummary,
@@ -1447,9 +1448,17 @@ function AppContent({
   const updateStructure = (id: string, draft: StructureDraft) => {
     patchCatalog((c) => ({
       ...c,
-      structures: (c.structures ?? []).map((s) =>
-        s.id === id ? draftToStructure(id, draft) : s,
-      ),
+      structures: (c.structures ?? []).map((s) => {
+        if (s.id !== id) return s;
+        // #108: editing a structure bumps its revision and pushes an immutable
+        // snapshot of the previous revision into history. Quotes that already
+        // pinned a prior revision keep resolving to the frozen snapshot.
+        const { structure } = bumpStructureRevision(
+          s,
+          draftToStructure(id, draft),
+        );
+        return structure;
+      }),
     }));
     toast({ type: 'success', message: '✓ Cambios guardados' });
   };

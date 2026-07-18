@@ -616,6 +616,18 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if statusChanging && p.Status == domain.StatusProduced && p.PriceSnapshot == nil {
 			p.PriceSnapshot = existing.PriceSnapshot
 		}
+		// #108: closing a quote pins each item's structure revision so later
+		// edits to the structure do not silently mutate the closed quote's BOM.
+		// Same caveat as PriceSnapshot above: the handler builds the freeze
+		// inline rather than calling TransitionProjectStatus.
+		if statusChanging && engine.IsProjectClosed(p.Status) {
+			catalog, cerr := s.Store.GetFullCatalog(r.Context())
+			if cerr != nil {
+				respondWithInternalError(w, cerr, "handler: load catalog for structure pins")
+				return
+			}
+			p.Items = engine.CaptureProjectItemStructurePins(p.Items, catalog)
+		}
 		err = s.Store.UpdateProject(r.Context(), id, &p)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
