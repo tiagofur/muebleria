@@ -11,8 +11,17 @@ import {
   breakdownFromApi,
   componentToApi,
   componentFromApi,
+  structureToApi,
+  structureFromApi,
 } from './apiMappers';
-import type { Component, MaterialBoard, Module, ModuleCategory, Project } from '@muebles/domain';
+import type {
+  Component,
+  MaterialBoard,
+  Module,
+  ModuleCategory,
+  Project,
+  Structure,
+} from '@muebles/domain';
 
 describe('apiMappers', () => {
   it('maps material camelCase ↔ snake_case', () => {
@@ -169,6 +178,132 @@ describe('apiMappers', () => {
     expect(bd.salePrice).toBe(0);
     // marginFactor defaults to 1 (no margin) rather than 0 (which would zero the price).
     expect(bd.marginFactor).toBe(1);
+  });
+
+  it('round-trips structure revision + history (#108)', () => {
+    const st: Structure = {
+      id: 's1',
+      code: 'EST-1',
+      name: 'Body',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      revision: 3,
+      history: [
+        {
+          revision: 2,
+          code: 'EST-1',
+          name: 'Body v2',
+          externalDims: { width: 600, height: 700, depth: 560 },
+        },
+        {
+          revision: 1,
+          code: 'EST-1',
+          name: 'Body v1',
+        },
+      ],
+      active: true,
+    };
+    const api = structureToApi(st);
+    expect(api.revision).toBe(3);
+    const history = api.history as Record<string, unknown>[];
+    expect(history).toHaveLength(2);
+    expect(history[0]?.revision).toBe(2);
+    expect(history[0]?.width_mm).toBe(600);
+    expect(history[0]?.height_mm).toBe(700);
+    expect(history[1]?.revision).toBe(1);
+
+    const round = structureFromApi(api as Record<string, unknown>);
+    expect(round.revision).toBe(3);
+    expect(round.history).toHaveLength(2);
+    expect(round.history?.[0]?.revision).toBe(2);
+    expect(round.history?.[0]?.externalDims?.height).toBe(700);
+    expect(round.history?.[1]?.name).toBe('Body v1');
+  });
+
+  it('structureToApi defaults missing revision to 1 (#108 legacy payloads)', () => {
+    // Legacy structures that never carried a revision must be emitted as
+    // revision: 1 so the Go backend never sees a zero revision.
+    const st: Structure = {
+      id: 's-legacy',
+      code: 'EST-OLD',
+      name: 'Legacy',
+      active: true,
+    };
+    const api = structureToApi(st);
+    expect(api.revision).toBe(1);
+    expect(api.history).toEqual([]);
+  });
+
+  it('structureFromApi defaults missing revision/history safely (#108)', () => {
+    const round = structureFromApi({
+      id: 's2',
+      code: 'EST-2',
+      name: 'Body',
+      // no revision, no history — must default, never throw
+    });
+    expect(round.revision).toBe(1);
+    expect(round.history).toBeUndefined();
+  });
+
+  it('round-trips project item structureRevisionPin (#108)', () => {
+    const p: Project = {
+      id: 'pr-pin',
+      name: 'Cotiz',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'quoted',
+      items: [
+        {
+          id: 'i-pinned',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: {},
+          structureRevisionPin: 3,
+        },
+        {
+          id: 'i-live',
+          moduleId: 'm2',
+          quantity: 1,
+          optionChoices: {},
+          // no pin — live revision
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const items = api.items as Record<string, unknown>[];
+    expect(items[0]?.structure_revision_pin).toBe(3);
+    // Unpinned → null on the wire (nullable number, not undefined).
+    expect(items[1]?.structure_revision_pin).toBeNull();
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.items[0]?.structureRevisionPin).toBe(3);
+    expect(round.items[1]?.structureRevisionPin).toBeUndefined();
+  });
+
+  it('projectFromApi tolerates null/absent structure_revision_pin (#108)', () => {
+    // Go backend emits `null` for the nullable column; older payloads omit it.
+    const fromNull = projectFromApi({
+      id: 'p',
+      name: 'n',
+      customer_id: 'c',
+      currency: 'MXN',
+      margin_factor: 1.35,
+      labor_fixed_cost: 0,
+      status: 'draft',
+      items: [
+        {
+          id: 'i',
+          module_id: 'm',
+          quantity: 1,
+          option_choices: {},
+          structure_revision_pin: null,
+        },
+      ],
+    });
+    expect(fromNull.items[0]?.structureRevisionPin).toBeUndefined();
   });
 });
 

@@ -169,9 +169,9 @@ function collectItemStructuralIssues(
   collectMissingChoiceIssues(module, choices, catalog, item.id, issues);
 
   // Resolve BOM only when local structure/options look complete (VAL-06, refs, edges).
-  if (issues.length === before) {
+    if (issues.length === before) {
     try {
-      resolveBom(module, choices, catalog, item.measurePresetId);
+      resolveBom(module, choices, catalog, item.measurePresetId, item.structureRevisionPin);
     } catch (error) {
       pushDomainError(issues, error, {
         moduleCode: module.code,
@@ -217,6 +217,8 @@ export function collectExportIssues(
           module,
           effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
           catalog,
+          item.measurePresetId,
+          item.structureRevisionPin,
         );
         boardPartSlots += bom.boardParts.length;
       } catch {

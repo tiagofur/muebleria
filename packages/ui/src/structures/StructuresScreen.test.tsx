@@ -269,5 +269,23 @@ describe('StructuresScreen', () => {
       ],
     });
   });
+
+  it('#108: shows revision badge normalized to Rev 1 for legacy structures', () => {
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    // mockStructures[0] has no explicit revision; the badge must normalize to 1.
+    const badge = screen.getByTestId('structure-revision-EST-GAB-720');
+    expect(badge.textContent).toBe('Rev 1');
+  });
 });
 

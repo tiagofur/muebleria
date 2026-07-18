@@ -121,3 +121,25 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
+
+/* #108 — Structure revision badge. Informative by default (live revision),
+   muted when pinned (audit / closed-quote context). */
+.structure-revision-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-mono);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-500) 10%, var(--surface-card));
+  color: var(--accent-600);
+  white-space: nowrap;
+}
+
+.structure-revision-badge--pinned {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  border-color: var(--border-default);
+}

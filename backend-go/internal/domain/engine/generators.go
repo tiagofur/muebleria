@@ -49,7 +49,7 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 			return nil, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		bom, err := ResolveBom(module, choicesForItem(project, item), catalog, item.MeasurePresetID)
+		bom, err := ResolveBomWithPin(module, choicesForItem(project, item), catalog, item.MeasurePresetID, item.StructureRevisionPin)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +133,7 @@ func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]dom
 			return nil, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		bom, err := ResolveBom(module, choicesForItem(project, item), catalog, item.MeasurePresetID)
+		bom, err := ResolveBomWithPin(module, choicesForItem(project, item), catalog, item.MeasurePresetID, item.StructureRevisionPin)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ func collectUsedUnitPrices(project domain.Project, catalog domain.Catalog) (
 		if !ok {
 			continue
 		}
-		bom, resolveErr := ResolveBom(module, choicesForItem(project, item), catalog, item.MeasurePresetID)
+		bom, resolveErr := ResolveBomWithPin(module, choicesForItem(project, item), catalog, item.MeasurePresetID, item.StructureRevisionPin)
 		if resolveErr != nil {
 			return nil, nil, nil, resolveErr
 		}
@@ -253,9 +253,14 @@ func CaptureQuoteSnapshot(
 }
 
 // TransitionProjectStatus applies PRD §7.4 close/reopen snapshot rules.
-// - draft → quoted/accepted: attach fresh priceSnapshot
-// - quoted/accepted → draft: remove priceSnapshot
+// - draft → quoted/accepted: attach fresh priceSnapshot + peg structureRevisionPin
+// - quoted/accepted → draft: remove priceSnapshot (pins are CONSERVED, see #108)
 // - quoted ↔ accepted: keep existing snapshot (re-freeze only if missing)
+//
+// #108 (Slice 2): pins are captured on close (so the BOM stays frozen against
+// later structure edits) and conserved on reopen (they are audit history of
+// which revision the quote used). On close→close the pins are left untouched
+// when a snapshot already exists, matching the TS closed→closed branch.
 func TransitionProjectStatus(
 	project domain.Project,
 	newStatus domain.ProjectStatus,
@@ -274,12 +279,17 @@ func TransitionProjectStatus(
 		}
 		out.Status = newStatus
 		out.PriceSnapshot = &snap
+		out.Items = CaptureProjectItemStructurePins(out.Items, catalog)
 		return out, nil
 	}
 
 	if wasClosed && !willClose {
 		out.Status = newStatus
 		out.PriceSnapshot = nil
+		// Pins are intentionally conserved (#108): they are the audit trail of
+		// which structure revision was used when the quote was closed, and let
+		// a reopened quote be re-resolved against the exact revision until the
+		// next close overwrites them. Mirrors TS reopen semantics.
 		return out, nil
 	}
 
@@ -292,6 +302,7 @@ func TransitionProjectStatus(
 			}
 			out.PriceSnapshot = &snap
 		}
+		// Keep closed→closed pins as-is (do not re-freeze). Matches TS.
 		return out, nil
 	}
 

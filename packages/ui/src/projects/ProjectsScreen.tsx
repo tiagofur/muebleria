@@ -69,6 +69,7 @@ import { KitchenPlanPanel } from './components/KitchenPlanPanel';
 import { ProjectPresentationMode } from './components/ProjectPresentationMode';
 import { QuoteScenarioCompare } from './components/QuoteScenarioCompare';
 import { InstallationChecklistPanel } from './components/InstallationChecklistPanel';
+import { ProjectItemStructureRevisionIndicator } from './components/ProjectItemStructureRevisionIndicator';
 import {
   customersForProjectPicker,
   defaultChoicesForNewItem,
@@ -1621,6 +1622,12 @@ export function ProjectsScreen({
                         {mod
                           ? `${mod.name} — ${mod.code}`
                           : `Mueble desconocido (${item.moduleId})`}
+                        {item.structureRevisionPin !== undefined ? (
+                          <ProjectItemStructureRevisionIndicator
+                            pin={item.structureRevisionPin}
+                            testId={`project-item-revision-pin-${item.id}`}
+                          />
+                        ) : null}
                       </h4>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         {mod && (

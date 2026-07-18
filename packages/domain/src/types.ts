@@ -211,6 +211,11 @@ export interface DimensionPreset {
  * Reusable engineering **body** (cuerpo) — F049 / #99 / H04.
  * Parametric via component formulas (W/H/D). Commercial size lists live on Module.
  * `presets` is optional engineering preview only (H05 intermediate).
+ *
+ * #108 — Versioned structure: editing a published structure bumps `revision`
+ * and pushes an immutable snapshot of the previous revision into `history`.
+ * `revision` is optional on the type so legacy fixtures / old persisted
+ * workspaces keep compiling; versioning helpers normalize missing → 1.
  */
 export interface Structure {
   readonly id: string;
@@ -225,6 +230,30 @@ export interface Structure {
   readonly notes?: string;
   /** Soft-delete / hide from pickers. Default true when omitted. */
   readonly active?: boolean;
+  /**
+   * Monotonic revision number (#108). Defaults to 1 when absent (legacy data).
+   * Incremented by `bumpStructureRevision` on each edit.
+   */
+  readonly revision?: number;
+  /**
+   * Immutable snapshots of previous revisions (#108), newest first.
+   * `history[0]` is always the most recently superseded revision.
+   */
+  readonly history?: readonly StructureRevision[];
+}
+
+/**
+ * Immutable snapshot of a superseded Structure revision (#108).
+ * Captures only the fields that affect BOM resolution so the pinned revision
+ * can be re-resolved exactly as it was at quotation time.
+ */
+export interface StructureRevision {
+  readonly revision: number;
+  readonly code: string;
+  readonly name: string;
+  readonly externalDims?: ExternalDims;
+  readonly presets?: readonly DimensionPreset[];
+  readonly components?: readonly ModuleComponentInstance[];
 }
 
 // --- Reusable components (F049 / H07) ---
@@ -307,6 +336,12 @@ export interface ProjectItem {
    * Required when the module defines presets; ignored when none.
    */
   readonly measurePresetId?: string;
+  /**
+   * Pinned structure revision (#108). Pegged onto the item when the project is
+   * closed (quoted/accepted/produced) so later structure edits don't mutate the
+   * frozen BOM. Re-resolving uses `resolveStructureRevision(structure, pin)`.
+   */
+  readonly structureRevisionPin?: number;
 }
 
 /** Floor base vs wall-hung elevation for kitchen plan (#133). */

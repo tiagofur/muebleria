@@ -52,6 +52,55 @@ function migrateV1ToV2(workspace: Workspace): Workspace {
 }
 
 /**
+ * #108 (Slice 3) — `Structure` gained `revision` + `history` in Slice 1
+ * (both optional on the type so legacy fixtures keep compiling). On-disk v2
+ * workspaces predate the change, so we backfill defaults additively:
+ * missing `revision` → 1, missing `history` → []. Existing values are
+ * preserved verbatim (additive, never destructive).
+ *
+ * `project.items[].structureRevisionPin` is intentionally NOT migrated:
+ * legacy items had no pin, and the absence of a pin means "use live revision"
+ * (current behavior). Forcing a pin would freeze BOMs that were never frozen.
+ */
+function migrateV2ToV3(workspace: Workspace): Workspace {
+  // Workspace.json is untyped on disk; read structures loosely so we can
+  // detect missing fields without the readonly tuple types getting in the way.
+  type LooseStructure = {
+    revision?: number;
+    history?: readonly unknown[];
+  };
+  const structures = workspace.catalog.structures as unknown as
+    | readonly LooseStructure[]
+    | undefined;
+
+  if (!structures || structures.length === 0) {
+    return { ...workspace, schemaVersion: SCHEMA_VERSION };
+  }
+
+  const needsBackfill = structures.some(
+    (s) => s && (s.revision === undefined || s.history === undefined),
+  );
+  if (!needsBackfill) {
+    return { ...workspace, schemaVersion: SCHEMA_VERSION };
+  }
+
+  const migratedStructures = structures.map((s) => {
+    if (!s) return s;
+    return {
+      ...s,
+      revision: s.revision ?? 1,
+      history: s.history ?? [],
+    };
+  });
+
+  const catalog: Catalog = {
+    ...workspace.catalog,
+    structures: migratedStructures as unknown as Catalog['structures'],
+  };
+  return { ...workspace, schemaVersion: SCHEMA_VERSION, catalog };
+}
+
+/**
  * Forward-compatible loader: applies versioned migrations to on-disk payloads.
  * Unknown future versions pass through unchanged (best-effort).
  */
@@ -60,6 +109,9 @@ function migrateWorkspace(workspace: Workspace): Workspace {
   let current = workspace;
   if (version < 2) {
     current = migrateV1ToV2(current);
+  }
+  if (version < 3) {
+    current = migrateV2ToV3(current);
   }
   return current;
 }

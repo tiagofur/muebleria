@@ -460,7 +460,54 @@ function presetFromApi(raw: Record<string, unknown>): import('@muebles/domain').
   };
 }
 
+/**
+ * Map an immutable `StructureRevision` snapshot (#108) to API JSON.
+ * Mirrors the subset of `Structure` fields that affect BOM resolution
+ * (no `notes`/`active` — irrelevant for re-resolution, see Slice 1).
+ */
+function structureRevisionToApi(
+  r: import('@muebles/domain').StructureRevision,
+): Record<string, unknown> {
+  return {
+    revision: r.revision,
+    code: r.code,
+    name: r.name,
+    width_mm: r.externalDims?.width ?? 0,
+    height_mm: r.externalDims?.height ?? 0,
+    depth_mm: r.externalDims?.depth ?? 0,
+    components: (r.components ?? []).map(componentInstanceToApi),
+    presets: (r.presets ?? []).map(presetToApi),
+  };
+}
+
+function structureRevisionFromApi(
+  raw: Record<string, unknown>,
+): import('@muebles/domain').StructureRevision {
+  const w = num(raw.width_mm ?? raw.widthMm);
+  const h = num(raw.height_mm ?? raw.heightMm);
+  const d = num(raw.depth_mm ?? raw.depthMm);
+  const hasDims = w > 0 || h > 0 || d > 0;
+  const componentsRaw = raw.components;
+  const presetsRaw = raw.presets;
+  return {
+    revision: num(raw.revision, 1),
+    code: str(raw.code),
+    name: str(raw.name),
+    externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
+    components: Array.isArray(componentsRaw)
+      ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
+      : undefined,
+    presets: Array.isArray(presetsRaw)
+      ? (presetsRaw as Record<string, unknown>[]).map(presetFromApi)
+      : undefined,
+  };
+}
+
 export function structureToApi(st: import('@muebles/domain').Structure): Record<string, unknown> {
+  // #108 — `revision` defaults to 1 when absent (domain normalizes the same way
+  // via `structureRevision`). Always emit it so the Go side never sees a zero
+  // revision from legacy FE payloads.
+  const revision = st.revision ?? 1;
   return {
     id: st.id,
     code: st.code,
@@ -470,6 +517,8 @@ export function structureToApi(st: import('@muebles/domain').Structure): Record<
     depth_mm: st.externalDims?.depth ?? 0,
     notes: st.notes ?? '',
     active: st.active !== false,
+    revision,
+    history: (st.history ?? []).map(structureRevisionToApi),
     components: (st.components ?? []).map(componentInstanceToApi),
     presets: (st.presets ?? []).map(presetToApi),
   };
@@ -483,6 +532,11 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
   const activeRaw = raw.active;
   const componentsRaw = raw.components;
   const presetsRaw = raw.presets;
+  const revisionRaw = raw.revision;
+  const historyRaw = raw.history;
+  const history = Array.isArray(historyRaw)
+    ? (historyRaw as Record<string, unknown>[]).map(structureRevisionFromApi)
+    : undefined;
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -490,6 +544,12 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
     notes: str(raw.notes) || undefined,
     externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
     active: activeRaw === false ? false : true,
+    // #108 — default to 1 when the API payload omits `revision` (legacy rows).
+    revision: typeof revisionRaw === 'number' && Number.isFinite(revisionRaw)
+      ? revisionRaw
+      : 1,
+    // Keep `history` undefined when absent so empty arrays don't pollute JSON.
+    history: history && history.length > 0 ? history : undefined,
     components: Array.isArray(componentsRaw)
       ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
       : undefined,
@@ -709,6 +769,10 @@ export function projectToApi(p: Project): Record<string, unknown> {
       quantity: item.quantity,
       option_choices: { ...item.optionChoices },
       measure_preset_id: item.measurePresetId ?? '',
+      // #108 — null when unpinned (live revision). 0 is not a valid revision,
+      // but we still emit it verbatim if someone sets it; the resolver rejects
+      // unknown pins loudly rather than silently degrading.
+      structure_revision_pin: item.structureRevisionPin ?? null,
     })),
   };
 }
@@ -789,6 +853,9 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
       const choices = row.option_choices ?? row.optionChoices;
       const measurePresetId =
         str(row.measure_preset_id ?? row.measurePresetId) || undefined;
+      const pinRaw = row.structure_revision_pin ?? row.structureRevisionPin;
+      const structureRevisionPin =
+        typeof pinRaw === 'number' && Number.isFinite(pinRaw) ? pinRaw : undefined;
       return {
         id: str(row.id),
         moduleId: str(row.module_id ?? row.moduleId),
@@ -798,6 +865,9 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
             ? (choices as ProjectItem['optionChoices'])
             : {},
         measurePresetId,
+        // #108 — undefined when null/absent (live revision). Only finite numbers
+        // survive; that's what `resolveStructureRevision` expects.
+        structureRevisionPin,
       };
     }),
   };

@@ -42,6 +42,8 @@ type stubStore struct {
 	deleteProjectCalled bool
 	// F044 workshop settings (nil → defaults, flag false)
 	workshopSettings *domain.WorkshopSettings
+	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
+	catalogOverride *domain.Catalog
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -217,7 +219,14 @@ func (s *stubStore) DeleteCategory(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
-	s.stubNotUsed("GetFullCatalog")
+	// #108: HandleProjectByID now loads the catalog to pin structure revisions
+	// when a quote is closed. Tests that need to exercise pinning inject a
+	// catalog via catalogOverride; otherwise an empty catalog is fine —
+	// CaptureProjectItemStructurePins leaves items without a structure/module
+	// untouched.
+	if s.catalogOverride != nil {
+		return *s.catalogOverride, nil
+	}
 	return domain.Catalog{}, nil
 }
 func (s *stubStore) GetModuleByID(context.Context, string) (*domain.Module, error) {
@@ -1043,5 +1052,56 @@ func TestDecodeJSONBody_RejectsOversized(t *testing.T) {
 	}
 	if rr.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413", rr.Code)
+	}
+}
+
+// TestF108_ClosingQuotePinsStructureRevision guards the #108 wire-up: when a
+// project transitions into a closed status via HandleProjectByID, each item
+// whose module references a structure must receive a StructureRevisionPin
+// equal to that structure's current revision.
+func TestF108_ClosingQuotePinsStructureRevision(t *testing.T) {
+	rev := 3
+	catalog := &domain.Catalog{
+		Modules: []domain.Module{
+			{ID: "m1", Code: "MOD-1", Name: "M", StructureID: "st1"},
+		},
+		Structures: []domain.Structure{
+			{ID: "st1", Code: "EST-1", Name: "Cuerpo", Active: true, Revision: rev},
+		},
+	}
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "adm1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
+			Items: []domain.ProjectItem{
+				{ID: "it1", ModuleID: "m1", Quantity: 1},
+			},
+		},
+		catalogOverride: catalog,
+	}
+	srv := &Server{Store: store}
+	// Move draft → quoted (closed). The item has no incoming pin.
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"it1","module_id":"m1","quantity":1}],"status":"quoted","owner_user_id":"adm1"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "adm1", string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d want 200 body=%s", rr.Code, rr.Body.String())
+	}
+	var got domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(got.Items))
+	}
+	pin := got.Items[0].StructureRevisionPin
+	if pin == nil {
+		t.Fatalf("expected StructureRevisionPin to be set on close, got nil")
+	}
+	if *pin != rev {
+		t.Fatalf("StructureRevisionPin = %d, want %d (structure's current revision)", *pin, rev)
 	}
 }

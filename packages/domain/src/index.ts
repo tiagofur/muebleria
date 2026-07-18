@@ -25,6 +25,7 @@ export type {
   ExternalDims,
   Module,
   Structure,
+  StructureRevision,
   DimensionPreset,
   ComponentPlacement,
   ComponentGeometry,
@@ -217,6 +218,18 @@ export type {
 } from './scenarioCompare';
 
 export { DEFAULT_INSTALLATION_CHECKLIST } from './types';
+
+export {
+  DEFAULT_STRUCTURE_REVISION,
+  bumpStructureRevision,
+  captureProjectItemStructurePins,
+  reifyResolvedStructure,
+  resolveStructureForPin,
+  resolveStructureRevision,
+  snapshotStructureRevision,
+  structureRevision,
+} from './structures/versioning';
+export type { ResolvedStructureRevision } from './structures/versioning';
 
 export { pieceLabelQrPayload } from './pieceLabelQr';
 export type { PieceLabelQrFields } from './pieceLabelQr';

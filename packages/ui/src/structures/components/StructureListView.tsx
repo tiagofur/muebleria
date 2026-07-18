@@ -17,6 +17,7 @@ import {
   SearchInput,
   StatusChips,
 } from '../../common';
+import { StructureRevisionBadge } from './StructureRevisionBadge';
 import type { CatalogStatusFilter } from '../../catalogs';
 
 export type StructureListViewProps = {
@@ -126,6 +127,10 @@ export function StructureListView({
                     <span className="structure-card__code font-mono">
                       {item.code}
                     </span>
+                    <StructureRevisionBadge
+                      structure={item}
+                      testId={`structure-revision-${item.code}`}
+                    />
                     {!item.active ? (
                       <span className="badge badge--inactive ml-2">
                         Inactivo
