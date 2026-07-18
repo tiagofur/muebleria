@@ -143,3 +143,88 @@ ejecutar consistencia**.
 **Orden recomendado:** el #2 (layout) entrega el cambio visible más grande con
 menor riesgo. #1 habilita el resto. #3 toca UX de interacción (más delicado,
 pedir confirmación antes).
+
+---
+
+## Resultado de la ejecución — F052 (2026-07-17)
+
+> Issue GitHub: [#145](https://github.com/tiagofur/muebleria/issues/145) ·
+> Branch: `chore/ui-token-migration-v3` (basada en `feat/structures-versioning-108`).
+
+### Fase 1 — Migración de tokens: ✅ COMPLETA
+
+Cero referencias a tokens indefinidos en `packages/ui/src` + `apps/web/src`
+(verificado con `scripts/check-tokens.mjs`). Migración aplicada:
+
+| Token indefinido | → Canónico | Sitios |
+|------------------|-----------|-------:|
+| `--surface-border` | `--border-default` | 14 |
+| `--surface-disabled` | `--surface-hover` | 3 |
+| `--surface-muted` | `--surface-input` | 5 |
+| `--border` (bare) | `--border-default` | 2 CSS + ~12 inline TSX |
+| `--primary` (bare) | `--brand-500` | 5 |
+| `--success` (bare) | `--success-500` / `-700` | 5 |
+| `--text` (bare) | `--text-primary` | 3 |
+| `--danger`/`--accent` (bare) | `--danger-700`/`--brand-600` | 3 |
+| `--bg-card`/`--bg-body`/`--surface-2` | `--surface-card`/`--app`/`--hover` | 4 |
+| `--surface-base`/`--text-on-dark`/`#1a1c1e` | `--surface-sidebar`/`--text-inverse` | 3 |
+| `--color-border`/`--color-text`/`--color-text-muted` | `--border-default`/`--text-primary`/`--text-muted` | 5 |
+
+**DEFERRIDO** (namespace alien autocontenido): `part3DViewer.css`,
+`moduleScene3d.css` — issue separado cuando se refactorice el visor 3D.
+
+### Fase 2 — Normalización de spacing: ✅ COMPLETA
+
+47 valores rem ad-hoc reemplazados por `var(--space-N)` con política de
+redondeo documentada:
+
+| Valor ad-hoc | → Token | px resultante |
+|-------------|---------|---------------|
+| `0.1`/`0.125`/`0.15`/`0.35`/`0.4rem` | `--space-1` | 4px |
+| `0.45`/`0.55rem` | `--space-2` | 8px |
+| `0.65`/`0.85rem` | `--space-3` | 12px |
+| `1.1`/`1.15rem` | `--space-4` | 16px |
+
+Archivos: `projects.css` (21), `modules.css` (10), `optionGroups.css` (7),
+`catalogs.css` (7), `commandPalette.css` (2).
+
+### Fase 2b — `!important`: ✅ RESUELTO
+
+`projects.css:509-510` (`.project-totals__sale`): reescrito como
+`.project-totals__grid .project-totals__sale` para ganar especificidad sin
+forzar. Cero `!important` en feature CSS (los de `reset.css` reduced-motion
+son legítimos y se preservan).
+
+### Fase 3 — Guarda preventiva: ✅ COMPLETA
+
+- `scripts/check-tokens.mjs`: detecta referencias a tokens indefinidos en
+  `.css`/`.tsx` (excluye tests y visores 3D deferidos).
+- Integrado en `init.sh` §5 como **warning** (no hard-fail, para no bloquear
+  desarrollo legítimo de tokens nuevos).
+
+### Verificación
+
+| Check | Estado |
+|-------|--------|
+| `pnpm test` (monorepo) | ✅ verde |
+| `pnpm typecheck` (6 packages) | ✅ verde |
+| `pnpm build` | ✅ 2627 módulos, CSS 101 KB |
+| `./init.sh` | ✅ "Entorno listo" |
+| `node scripts/check-tokens.mjs` | ✅ "Cero referencias a tokens indefinidos" |
+| Playwright screenshots (6 superficies) | ✅ 6/6 estables |
+
+### Infraestructura nueva
+
+- **Playwright visual regression**: `playwright.config.ts` + `tests/visual/baseline.spec.ts`
+  (6 superficies: login, home, materials, projects-list, modules-list,
+  project-detail). Script `pnpm visual`. Red de seguridad que los tests
+  unitarios (que stubbean CSS a `{}`) no pueden proveer.
+- Baselines commitados en `tests/visual/baseline.spec.ts-snapshots/`.
+
+### Fases pendientes (issues de seguimiento en #145)
+
+- **Fase 3 del plan original**: expand-row → vista detalle (UX, delicado)
+- **Fase 4**: `z-index` semántico + cards anidados
+- **Fase 5**: polish de estados hover/focus/active consistentes
+- **Namespace 3D**: tokenización de `part3DViewer.css`/`moduleScene3d.css`
+

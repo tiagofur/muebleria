@@ -9,6 +9,13 @@
 # Local agent/harness state (plans, scratch)
 # Logs / caches
 # OS / IDE
+# Playwright (F052 visual baseline): keep committed baselines, ignore run artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+# Before/after evidence from manual visual audits (not test baselines)
+/tests/visual/_before-after/
 # Temp
 # Test / coverage
 *.log

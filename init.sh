@@ -134,9 +134,25 @@ else
   fi
 fi
 
-# ── 5. Resumen ───────────────────────────────────────────────────────────────
+# ── 5. Deuda de tokens de design system (F052, warning) ──────────────────────
 echo ""
-echo "── 5. Resumen ──────────────────────────────────────────"
+echo "── 5. Deuda de tokens (design system) ─────────────────"
+
+if [ -f "scripts/check-tokens.mjs" ] && command -v node >/dev/null 2>&1; then
+  if node scripts/check-tokens.mjs --quiet >/dev/null 2>&1; then
+    ok "Cero referencias a tokens indefinidos (visores 3D除外)"
+  else
+    warn "Hay referencias a tokens indefinidos en .css/.tsx (excluye tests y 3D)."
+    warn "Correr 'node scripts/check-tokens.mjs' para ver el detalle."
+    warn "No bloquea el gate: es aviso para evitar degradar el design system."
+  fi
+else
+  info "check-tokens.mjs no disponible — saltando guarda de tokens."
+fi
+
+# ── 6. Resumen ───────────────────────────────────────────────────────────────
+echo ""
+echo "── 6. Resumen ──────────────────────────────────────────"
 
 if [ $EXIT_CODE -eq 0 ]; then
   ok "Entorno listo. Puedes empezar a trabajar."

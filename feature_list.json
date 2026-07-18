@@ -969,6 +969,77 @@
       ],
       "status": "done",
       "github_issue": 104
+    },
+    {
+      "id": "F052",
+      "phase": 10,
+      "name": "ui_token_layout_consistency",
+      "title": "UI — Judgment Day Fase 1+2: migración de tokens + spacing consistente",
+      "description": "Cerrar la migración incompleta del design system (docs/judgment-day-ui-2026-07-17.md, issue #145). Reemplazar ~80 referencias a tokens indefinidos/legacy (--surface-border, --surface-muted, --surface-disabled, --border bare, --primary/--success/--text bare, --bg-card/--bg-body/--surface-base/--text-on-dark, presentation-mode --color-*) por tokens canónicos ya existentes en tokens.css. Sin renombrar canónicos. Normalizar ~50 valores rem ad-hoc a escala --space-* estricta. Resolver !important en projects.css:509-510. Red de seguridad: Playwright screenshots. DEFERIDO: namespace 3D (part3DViewer.css, moduleScene3d.css).",
+      "acceptance": [
+        "Cero referencias a tokens indefinidos en packages/ui/src + apps/web/src (excepto visores 3D deferidos)",
+        "Cero valores rem/px fuera de la escala --space-* en spacing de feature CSS",
+        "Cero !important en projects.css (los de reset.css reduced-motion se preservan)",
+        "Playwright screenshots: diffs solo intencionales y documentados",
+        "pnpm test + pnpm typecheck + pnpm build + init.sh verde",
+        "Script scripts/check-tokens.mjs integrado como warning en init.sh"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/145",
+        "docs/judgment-day-ui-2026-07-17.md",
+        "docs/design.md §3 §7"
+      ],
+      "status": "done",
+      "github_issue": 145
+    },
+    {
+      "id": "F053",
+      "phase": 10,
+      "name": "ui_home_redesign_visible",
+      "title": "UI — Judgment Day Fase 3: rediseño visible del Home/Dashboard",
+      "description": "Respuesta directa al feedback del usuario: «no veo cambios ni mejoras en la UI/UX». F052 fue cimientos invisibles (tokens/spacing); F053 es el rediseño VISIBLE del Home/Dashboard siguiendo el registro product (Linear/Stripe class). Intensidad: pulido profundo (no estructural). Cambios perceptibles: jerarquía tipográfica clara (h1 de pantalla 28px/600 + page eyebrow), stats cards unificadas con profundidad consistente (--shadow-sm + hover lift uniforme), eliminación del borde morado ad-hoc solo en una card (emphasis ahora por elevación suave, no borde), header más limpio (acciones agrupadas, eyebrow de contexto), recent cards con mejor ritmo de escaneo, tabla «Por responsable» con jerarquía y separación clara. Fuente: docs/judgment-day-ui-2026-07-17.md §Fase 3, PRODUCT.md register=product, design.md.",
+      "acceptance": [
+        "h1 del Home claramente jerárquico sobre los títulos de sección (escalón visible, no 1px)",
+        "Stats cards uniformes: misma elevación, mismo radio, mismo padding; sin borde de color ad-hoc en una sola",
+        "Stat emphasis (Total cotizado) se distingue por jerarquía interna (número más grande/color brand), no por borde morado ad-hoc",
+        "Hover en cards: feedback sutil y consistente (border-brand + shadow-md + translateY -1px) en todas las cards, no solo algunas",
+        "Tabla «Por responsable»: encabezados con peso claro, filas con ritmo (altura mínima, separación), alineación numérica tabular",
+        "Recent cards: densidad coherente con stats (mismo radio, mismo borde, mismo hover)",
+        "Playwright screenshot ANTES/DESPUÉS documentado en progress/",
+        "pnpm test + pnpm typecheck + init.sh verde",
+        "Cumple bans de impeccable: sin side-stripe, sin gradient text, sin glassmorphism, sin hero-metric template"
+      ],
+      "references": [
+        "docs/judgment-day-ui-2026-07-17.md",
+        "docs/PRODUCT.md",
+        "docs/design.md §3 §4 §5"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "F054",
+      "phase": 10,
+      "name": "ui_catalogs_table_redesign",
+      "title": "UI — Judgment Day Fase 3: rediseño de tabla de Catálogos",
+      "description": "Rediseño VISIBLE del patrón de tabla de catálogos (Materiales, Cantos, Herrajes) — el patrón que se replica en 5 pantallas. Intensidad: pulido profundo. Cambios perceptibles: (1) título de página 18px→22px para jerarquía de pantalla coherente con Home; (2) ritmo de filas — altura mínima 40px (escaneo cómodo, no claustrofóbico); (3) acciones SIEMPRE visibles con opacidad 0.45 en reposo (no solo hover — era la queja de \"acciones invisibles\"); (4) status badge con inline-flex y dot alineado; (5) header de tabla con tracking + uppercase sutil + fondo --surface-input; (6) barra search+filters agrupada como toolbar Linear-style; (7) detail row con mejor padding y fondo diferenciado. Patrón reutilizable: CatalogTable + catalogs.css se usan en Materials/Edges/Hardware. Fuente: docs/judgment-day-ui-2026-07-17.md, PRODUCT.md register=product, design.md §4.2.",
+      "acceptance": [
+        "Título de catálogo jerárquico sobre la tabla (22px, coherente con Home)",
+        "Filas con altura mínima ~40px (escaneo cómodo, no comprimido)",
+        "Acciones de fila visibles en reposo (opacidad ~0.45), no solo en hover",
+        "Status badge con dot + texto alineados (inline-flex)",
+        "Header de tabla con fondo --surface-input, uppercase + tracking sutil",
+        "Barra search+filters como toolbar cohesiva (no dos controles sueltos)",
+        "Hover de fila consistente con Home (--surface-input, no --surface-hover pesado)",
+        "Playwright screenshot ANTES/DESPUÉS documentado en progress/",
+        "pnpm test + typecheck + init.sh verde",
+        "Cumple bans impeccable + no rompe CatalogTable.test/MaterialsCatalog.test/HardwareCatalog.test"
+      ],
+      "references": [
+        "docs/judgment-day-ui-2026-07-17.md",
+        "docs/PRODUCT.md",
+        "docs/design.md §4.2"
+      ],
+      "status": "done"
     }
   ]
 }
