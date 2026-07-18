@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import type {
@@ -171,6 +171,7 @@ function renderScreen(
   const onUpdateItem = vi.fn();
   const onRemoveItem = vi.fn();
   const onUpdateProjectLevelChoices = vi.fn();
+  const onUpdateMeasureDefaults = vi.fn();
   const onSelectionChange = vi.fn();
   const onExport = vi.fn();
   const onExportHardware = vi.fn();
@@ -191,6 +192,7 @@ function renderScreen(
       onUpdateItem={onUpdateItem}
       onRemoveItem={onRemoveItem}
       onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
+      onUpdateMeasureDefaults={onUpdateMeasureDefaults}
       onSelectionChange={onSelectionChange}
       breakdown={null}
       projectEstimates={{ 'prj-1': 202.5, 'prj-2': null }}
@@ -209,6 +211,7 @@ function renderScreen(
     onUpdateItem,
     onRemoveItem,
     onUpdateProjectLevelChoices,
+    onUpdateMeasureDefaults,
     onSelectionChange,
     onExport,
     onExportHardware,
@@ -590,5 +593,186 @@ describe('ProjectsScreen F022', () => {
       within(dialog).getByRole('button', { name: /^Eliminar$/i }),
     );
     expect(onDelete).toHaveBeenCalledWith('prj-1');
+  });
+});
+
+describe('ProjectsScreen project measure defaults (#109)', () => {
+  const modulesAllTypes: Module[] = [
+    {
+      id: 'mod-inf',
+      code: 'MOD-GAB',
+      name: 'Gabinete',
+      furnitureType: 'inferior',
+      presets: [
+        { id: 'p560', name: 'Fondo 560', width: 600, height: 720, depth: 560 },
+        { id: 'p590', name: 'Fondo 590', width: 600, height: 720, depth: 590 },
+      ],
+      hardwareLines: [],
+    },
+    {
+      id: 'mod-sup',
+      code: 'MOD-ALA',
+      name: 'Alacena',
+      furnitureType: 'superior',
+      presets: [
+        { id: 's320', name: 'Fondo 320', width: 600, height: 720, depth: 320 },
+      ],
+      hardwareLines: [],
+    },
+    {
+      id: 'mod-alto',
+      code: 'MOD-DES',
+      name: 'Despensa',
+      furnitureType: 'alto',
+      presets: [
+        { id: 'a2100', name: 'Alto 2100', width: 600, height: 2100, depth: 600 },
+      ],
+      hardwareLines: [],
+    },
+  ];
+
+  it('renders the measure-defaults section with one row per furnitureType in catalog (draft project)', async () => {
+    const user = userEvent.setup();
+    renderScreen({ modules: modulesAllTypes });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    expect(screen.getByTestId('project-measure-defaults')).toBeTruthy();
+    expect(screen.getByTestId('project-measure-default-inferior')).toBeTruthy();
+    expect(screen.getByTestId('project-measure-default-superior')).toBeTruthy();
+    expect(screen.getByTestId('project-measure-default-alto')).toBeTruthy();
+  });
+
+  it('omits the section when no onUpdateMeasureDefaults prop is passed', async () => {
+    const user = userEvent.setup();
+    renderScreen({ modules: modulesAllTypes, onUpdateMeasureDefaults: undefined });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    expect(screen.queryByTestId('project-measure-defaults')).toBeNull();
+  });
+
+  it('omits the section for closed projects (quoted/produced)', async () => {
+    const user = userEvent.setup();
+    renderScreen({ modules: modulesAllTypes });
+
+    await user.click(screen.getByTestId('project-card-prj-2')); // status: 'quoted'
+
+    expect(screen.queryByTestId('project-measure-defaults')).toBeNull();
+  });
+
+  it('updates inferior depth default live and calls onUpdateMeasureDefaults', async () => {
+    const user = userEvent.setup();
+    const { onUpdateMeasureDefaults } = renderScreen({ modules: modulesAllTypes });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    fireEvent.change(
+      screen.getByTestId('project-measure-default-inferior-depth'),
+      { target: { value: '560' } },
+    );
+
+    expect(onUpdateMeasureDefaults).toHaveBeenCalledTimes(1);
+    const lastCall = onUpdateMeasureDefaults.mock.calls.at(-1)!;
+    expect(lastCall[0]).toBe('prj-1');
+    expect(lastCall[1]).toEqual({ inferior: { depth: 560 } });
+  });
+
+  it('clears the whole field when both dimensions of a type are emptied', async () => {
+    const user = userEvent.setup();
+    const projectsWithDefaults: Project[] = [
+      {
+        ...projects[0]!,
+        measureDefaults: { inferior: { depth: 560 } },
+      },
+    ];
+    const { onUpdateMeasureDefaults } = renderScreen({
+      modules: modulesAllTypes,
+      projects: projectsWithDefaults,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const depthInput = screen.getByTestId(
+      'project-measure-default-inferior-depth',
+    ) as HTMLInputElement;
+    expect(depthInput.value).toBe('560');
+
+    await user.clear(depthInput);
+
+    expect(onUpdateMeasureDefaults).toHaveBeenLastCalledWith('prj-1', undefined);
+  });
+
+  it('selectModuleForAdd pre-selects the preset matching the project default (#109)', async () => {
+    const user = userEvent.setup();
+    // mod-inf has presets 560 and 590. Project default inferior.depth=590 should
+    // pre-select the 590 preset when the module is picked in the add-item modal.
+    const projectsWithDefaults: Project[] = [
+      {
+        ...projects[0]!,
+        measureDefaults: { inferior: { depth: 590 } },
+      },
+    ];
+    renderScreen({ modules: modulesAllTypes, projects: projectsWithDefaults });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /Agregar mueble/i }));
+
+    // Open the module picker and select the inferior module.
+    await user.click(screen.getByLabelText('Mueble'));
+    await user.click(
+      screen.getByRole('option', { name: /MOD-GAB — Gabinete/i }),
+    );
+
+    const presetSelect = screen.getByTestId(
+      'add-item-measure-preset',
+    ) as HTMLSelectElement;
+    expect(presetSelect.value).toBe('p590');
+  });
+
+  it('shows a furnitureType badge on each quote line (#109)', async () => {
+    const user = userEvent.setup();
+    // prj-1 has item-1 → mod-1 (default module fixture has no furnitureType →
+    // badge should be absent). Add a typed module + project that uses it.
+    const typedModules: Module[] = [
+      {
+        id: 'mod-typed-sup',
+        code: 'MOD-ALA',
+        name: 'Alacena',
+        furnitureType: 'superior',
+        presets: [
+          { id: 's320', width: 600, height: 720, depth: 320 },
+        ],
+        hardwareLines: [],
+      },
+    ];
+    const projectsWithTypedItem: Project[] = [
+      {
+        ...projects[0]!,
+        items: [
+          {
+            id: 'item-typed',
+            moduleId: 'mod-typed-sup',
+            quantity: 1,
+            optionChoices: {},
+          },
+        ],
+      },
+    ];
+    renderScreen({ modules: typedModules, projects: projectsWithTypedItem });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    const badge = screen.getByTestId('project-item-type-badge-item-typed');
+    expect(badge.textContent).toBe('Superior');
+  });
+
+  it('omits the furnitureType badge when module has no type (legacy)', async () => {
+    const user = userEvent.setup();
+    renderScreen(); // mod-1 has no furnitureType
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    expect(
+      screen.queryByTestId('project-item-type-badge-item-1'),
+    ).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import type {
   Component,
   Customer,
   EdgeBand,
+  FurnitureType,
   Hardware,
   MaterialBoard,
   Module,
@@ -461,4 +462,19 @@ export function countItemsWithModule(
   moduleId: string,
 ): number {
   return items.filter((i) => i.moduleId === moduleId).length;
+}
+
+/**
+ * Short display label for a FurnitureType (#109). Used by the measure-defaults
+ * section and the per-line type badge. `undefined` defaults to 'inferior'.
+ */
+export function furnitureTypeLabel(type: FurnitureType | undefined): string {
+  switch (type ?? 'inferior') {
+    case 'inferior':
+      return 'Inferior';
+    case 'superior':
+      return 'Superior';
+    case 'alto':
+      return 'Alto';
+  }
 }
