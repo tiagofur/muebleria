@@ -86,7 +86,8 @@ describe('design system (F016)', () => {
   it('responsive pass: card grids 1/2/3 and table scroll affordance (issue #34)', () => {
     const modules = read(join(uiRoot, 'src/modules/modules.css'));
     const projects = read(join(uiRoot, 'src/projects/projects.css'));
-    const catalogs = read(join(uiRoot, 'src/catalogs/catalogs.css'));
+    // Since F1 UI sub-fase 1c, table base lives in common/dataTable.css.
+    const dataTable = read(join(uiRoot, 'src/common/dataTable.css'));
     const shell = read(join(uiRoot, 'src/shell/appShell.css'));
 
     for (const [label, css] of [
@@ -106,26 +107,27 @@ describe('design system (F016)', () => {
       );
     }
 
-    expect(catalogs).toContain('overscroll-behavior-x: contain');
-    expect(catalogs).toContain('-webkit-overflow-scrolling: touch');
-    expect(catalogs).toContain('var(--touch-min)');
-    expect(catalogs).toMatch(/@media \(max-width: 639px\)/);
-    expect(catalogs).toMatch(/@media \(max-width: 767px\)/);
+    expect(dataTable).toContain('overscroll-behavior-x: contain');
+    expect(dataTable).toContain('-webkit-overflow-scrolling: touch');
+    expect(dataTable).toContain('var(--touch-min)');
+    expect(dataTable).toMatch(/@media \(max-width: 639px\)/);
     expect(shell).toContain('var(--touch-min)');
   });
 
   it('catalog tables and modals use density tokens (issue #49)', () => {
+    // Since F1 UI sub-fase 1c, table density lives in common/dataTable.css.
+    const dataTable = read(join(uiRoot, 'src/common/dataTable.css'));
     const catalogs = read(join(uiRoot, 'src/catalogs/catalogs.css'));
     const modal = read(join(uiRoot, 'src/common/modal.css'));
     const buttons = read(join(uiRoot, 'src/common/buttons.css'));
-    expect(catalogs).toContain('var(--density-table-pad-y)');
+    expect(dataTable).toContain('var(--density-table-pad-y)');
     expect(catalogs).toContain('var(--density-page-gap)');
     // .btn density lives in common/buttons.css since F0 UI Fase 0
     expect(buttons).toContain('var(--density-btn-pad-y)');
     expect(modal).toContain('var(--density-modal-body)');
     expect(modal).toContain('var(--density-modal-header-y)');
     // No ad-hoc table cell padding left on th/td base rule
-    expect(catalogs).not.toMatch(
+    expect(dataTable).not.toMatch(
       /\.catalog-table th,\s*\.catalog-table td\s*\{[^}]*padding:\s*0\.55rem/,
     );
   });

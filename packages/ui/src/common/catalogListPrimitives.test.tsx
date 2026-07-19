@@ -189,14 +189,17 @@ describe('catalog list CSS guards (F020)', () => {
   });
 
   it('sticky column headers on catalog table scrollport (issue #56)', () => {
-    const css = read('../catalogs/catalogs.css');
-    expect(css).toMatch(/\.catalog-table-wrap\s*\{[^}]*overflow:\s*auto/s);
-    expect(css).toMatch(/\.catalog-table-wrap\s*\{[^}]*max-height:/s);
-    expect(css).toMatch(
-      /\.catalog-table th\s*\{[^}]*position:\s*sticky/s,
-    );
-    expect(css).toMatch(/\.catalog-table th\s*\{[^}]*top:\s*0/s);
+    // Since F1 UI sub-fase 1c, table base lives in common/dataTable.css.
+    // Selectors are grouped (.catalog-table-wrap, .users-table-wrap, etc.)
+    // so we assert on the contract: overflow, max-height, sticky th, separate.
+    const css = read('./dataTable.css');
+    expect(css).toMatch(/overflow:\s*auto/);
+    expect(css).toMatch(/max-height:\s*min\(70vh/);
+    expect(css).toMatch(/position:\s*sticky/);
+    expect(css).toMatch(/top:\s*0/);
     expect(css).toMatch(/border-collapse:\s*separate/);
+    expect(css).toContain('.catalog-table-wrap');
+    expect(css).toContain('.catalog-table');
   });
 
   it('catalog layout is single-column (no permanent side form grid)', () => {

@@ -1,0 +1,87 @@
+/**
+ * Page header — top-of-screen title + actions + filters row.
+ * docs/design.md §4.1 (layout general), §6.x (per-screen specs).
+ *
+ * Equivalent class names are aliased to the same definitions; feature CSS no
+ * longer redefines the header block. New code should prefer .page-header.
+ *
+ *   .page-header            .catalog-page__header
+ *                           .dashboard__header
+ *                           .prod-queue__header
+ *                           .module-showcase__header
+ *
+ * Title sizes are unified to --text-xl (F1 UI 1d decision: every screen
+ * title at 22px; subtitle at --text-base, secondary).
+ *
+ * Sub-blocks (toolbar/filters/actions/title-row) are also aliased.
+ */
+
+.page-header,
+.catalog-page__header,
+.dashboard__header,
+.prod-queue__header,
+.module-showcase__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--density-toolbar-gap);
+}
+
+/* —— Title —— */
+.page-header__title,
+.catalog-page__title,
+.dashboard__title,
+.prod-queue__title,
+.module-showcase__title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+/* —— Title row (title + optional inline badge) —— */
+.page-header__title-row,
+.dashboard__title-row,
+.prod-queue__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* —— Subtitle / lead —— */
+.page-header__subtitle,
+.dashboard__subtitle,
+.prod-queue__subtitle,
+.module-showcase__lead {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+/* —— Actions (right-aligned) —— */
+.page-header__actions,
+.catalog-page__toolbar,
+.dashboard__actions,
+.prod-queue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--density-toolbar-gap);
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+/* —— Filters (full-width below) —— */
+.page-header__filters,
+.catalog-page__filters,
+.module-showcase__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--density-filter-gap);
+  width: 100%;
+}

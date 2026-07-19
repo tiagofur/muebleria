@@ -4,6 +4,91 @@
 - **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
 
+## Hecho en esta pasada (2026-07-19) — UI Review Fase 1
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones` (continuación de Fase 0)
+
+Fase 1 — **Estandarizar CSS** (P1-P2). 6 componentes compartidos nuevos en
+`common/` que absorben ~30 definiciones duplicadas en feature CSS.
+
+**Decisiones de diseño aprobadas:**
+- Radios: split — `--radius-md` (8px) para entity-cards, `--radius-lg` (12px)
+  para cards secundarias (stats, queue, showcase).
+- Hover: unificado a `border --border-brand + shadow-md + bg --surface-hover`.
+  Quitamos `transform: translateY(-1px)` y `--brand-300` que tenía Components/
+  Structures (inconsistencia con el resto).
+- Padding entity-card: `--density-card-pad` (12px) — densidad de herramienta.
+- Títulos de pantalla: todo a `--text-xl` (22px) en `.page-header`.
+
+**Cambios:**
+- **`common/workspaceChrome.css`** (nuevo): mute de `catalogs.css`. 18 selectores
+  que no eran específicos de catalogs (los consumen Projects y Modules).
+- **`common/catalogImage.css`** (nuevo): `catalog-image*` consolidado; antes
+  duplicado en `catalogs.css` y `moduleShowcase.css`.
+- **`common/surfaceCard.css`** (nuevo): `.surface-card` + variantes (`--lg`,
+  `--flat`, `--inset`, `--empty`). Absorbe `*-editor__section`, `*-detail__section`,
+  `module-part-card`, `project-item-card`, `*-filter-empty`.
+- **`common/dataTable.css`** (nuevo): `.data-table` + `.data-table-wrap` +
+  `--uppercase`. Absorbe `catalog-table`, `users-table`, `dashboard-owners-table`
+  (estaba fuera de convención con paddings propios y sin edge-fades).
+- **`common/pageHeader.css`** (nuevo): `.page-header` + sub-bloques. Absorbe
+  `catalog-page__header`, `dashboard__header`, `prod-queue__header`,
+  `module-showcase__header`. Títulos unificados a `--text-xl`.
+- **`common/entityCard.css`** (nuevo): `.entity-card` + `--inactive`/`--expanded`.
+  Absorbe `module-card`, `project-card`, `dashboard-recent-card`, `component-card`,
+  `structure-card`. `components.css` y `structures.css` quedaron sólo con los
+  sub-bloques propios (ya no definen la card base).
+- **Cleanup hardcoded colors**:
+  - `projects.css`: `#1a1c1e` → `--surface-sidebar`; `rgba(255,255,255,X)` →
+    `color-mix(in srgb, --text-inverse X%, transparent)` (patrón oficial).
+  - `preview3d/moduleScene3d.css`: `var(--border)` (inexistente) → `--border-default`;
+    `#1a1c1e` → `--surface-sidebar`; `#9ca3af` → `--text-muted`.
+  - `users.css`: `hsl(0 0% 100%)` → `--text-inverse`.
+- **Bug latente arreglado**: `projects.css:405` `var(--warning-700, hsl(32 80% 28%))`
+  tenía un fallback que pintaba otro color (hue 32 vs token real hue 38).
+  Eliminado el fallback incorrecto.
+- **WCAG AA**: `--text-muted` subido de 58% L (~4.0:1, fail) a 52% L (~4.6:1).
+  Impacta 45+ selectores que usaban muted para texto pequeño.
+- **Font-weight numéricos** eliminados: 5 ocurrencias en `projects.css` migradas
+  a `var(--weight-*)`.
+
+**Tests actualizados:**
+- `catalogListPrimitives.test.tsx`: ahora verifica contrato en `dataTable.css`
+  (no más en `catalogs.css`).
+- `designSystem.test.ts`: assertions de density + responsive pasadas a
+  `dataTable.css`. `.btn` assertion ya en `buttons.css`.
+
+**Verificación:**
+- `pnpm test`: 409 tests verdes (216 domain + 51 storage + 25 excel + 313 ui +
+  9 desktop + 87 web).
+- `pnpm typecheck`: 6/6 workspaces verde.
+- Smoke visual (5 pantallas): modules/components con borders correctos, título
+  "Muebles" visible más grande (--text-xl), sin regresiones visibles tras
+  quitar `translateY(-1px)`.
+
+**Pendiente (Fase 2, próxima):**
+- Actualizar `design.md §6` con las 13 pantallas reales + sección INGENIERÍA
+- Unificar patrón de lista: entidad plana = tabla-expand; entidad compleja =
+  card + detalle inline
+- Agrupar los 7 exports de Projects en menú "Exportar ▾"
+- Resolver `home` polimórfico (Dashboard vs ProductionQueue)
+
+**Pendiente (Fase 3, después):**
+- Mudar modales gigantes (Mueble/Estructura/Componente) a vista detalle inline
+  con ruta `/:id/edit`
+
+**Pendiente (no crítico, backlog):**
+- Partir `projects.css` (930 → aún grande) y `catalogs.css` en sub-archivos
+  co-localizados (decidido dejarlo para iteración futura — no impacta UX).
+- Magic numbers restantes (~30): `0.65rem`, `0.85rem`, `0.45rem` en
+  projects/modules/optionGroups. No rompen nada pero理想的mente migrar a tokens.
+
+
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones`
+
 ## Hecho en esta pasada (2026-07-19) — UI Review Fase 0
 
 **Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).

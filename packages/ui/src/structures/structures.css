@@ -1,4 +1,10 @@
-/* Card grid and style for engineering bodies (cuerpos) */
+/* Card grid + entity-card styles for engineering bodies (estructuras).
+ *
+ * The .structure-card base, hover, focus-visible, --inactive and --expanded
+ * variants live in common/entityCard.css (F1 UI 1e). Only the grid + the
+ * feature-scoped sub-blocks stay here.
+ */
+
 .structure-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -6,39 +12,11 @@
   margin-top: var(--space-4);
 }
 
+/* Internal layout (entity-card base already sets cursor/border/bg). */
 .structure-card {
-  background-color: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  transition: all var(--duration-normal) var(--ease-out);
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   position: relative;
-}
-
-.structure-card:hover {
-  border-color: var(--brand-300);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.structure-card--inactive {
-  opacity: 0.7;
-  border-color: var(--border-default);
-  background-color: var(--surface-disabled);
-}
-
-.structure-card--expanded {
-  grid-column: 1 / -1;
-  cursor: default;
-  border-color: var(--brand-400);
-  box-shadow: var(--shadow-md);
-}
-
-.structure-card--expanded:hover {
-  transform: none;
 }
 
 .structure-card__summary {

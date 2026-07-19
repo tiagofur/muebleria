@@ -11,7 +11,13 @@
     },
     "./design-system/tokens.css": "./src/design-system/tokens.css",
     "./design-system/reset.css": "./src/design-system/reset.css",
-    "./common/buttons.css": "./src/common/buttons.css"
+    "./common/buttons.css": "./src/common/buttons.css",
+    "./common/workspaceChrome.css": "./src/common/workspaceChrome.css",
+    "./common/catalogImage.css": "./src/common/catalogImage.css",
+    "./common/surfaceCard.css": "./src/common/surfaceCard.css",
+    "./common/dataTable.css": "./src/common/dataTable.css",
+    "./common/pageHeader.css": "./src/common/pageHeader.css",
+    "./common/entityCard.css": "./src/common/entityCard.css"
   },
   "files": [
     "src"

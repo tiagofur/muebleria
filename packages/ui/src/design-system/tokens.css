@@ -61,7 +61,8 @@
   /* —— Text —— */
   --text-primary: hsl(230 18% 12%);
   --text-secondary: hsl(230 12% 40%);
-  --text-muted: hsl(230 10% 58%);
+  /* WCAG AA: 52% L on white surfaces ~4.6:1 (was 58% L ~4.0:1, F1 UI 1f). */
+  --text-muted: hsl(230 10% 52%);
   --text-disabled: hsl(230 10% 74%);
   --text-inverse: hsl(0 0% 100%);
   --text-brand: var(--brand-600);
