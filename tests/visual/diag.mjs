@@ -1,0 +1,17 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const errors = [];
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
+await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(3000);
+const bodyText = (await page.locator('body').innerText()).slice(0, 400);
+const rootHtml = (await page.locator('#root').innerHTML()).slice(0, 600);
+console.log('=== console errors ===');
+console.log(errors.join('\n') || '(none)');
+console.log('\n=== body text ===');
+console.log(bodyText || '(empty)');
+console.log('\n=== #root html first 600 ===');
+console.log(rootHtml || '(empty)');
+await browser.close();
