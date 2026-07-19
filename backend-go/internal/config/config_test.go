@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -82,5 +84,59 @@ func TestLoadConfig_RejectsBadRateLimit(t *testing.T) {
 	_, err := LoadConfig()
 	if err == nil {
 		t.Fatal("expected error for bad RATE_LIMIT_RPS, got nil")
+	}
+}
+
+// MediaDir defaults to ~/.muebles-media (absolute, outside the repo) when
+// MEDIA_DIR is unset. This is the root-cause fix for catalog images going
+// missing after a git clean / re-clone: the store must outlive the worktree.
+func TestLoadConfig_MediaDirDefaultsToHome(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("MEDIA_DIR", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	want := filepath.Join(home, ".muebles-media")
+	if cfg.MediaDir != want {
+		t.Errorf("MediaDir = %q, want %q", cfg.MediaDir, want)
+	}
+	if !filepath.IsAbs(cfg.MediaDir) {
+		t.Errorf("MediaDir should be absolute, got %q", cfg.MediaDir)
+	}
+}
+
+// An explicit MEDIA_DIR wins (back-compat for existing deployments).
+func TestLoadConfig_MediaDirOverride(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("MEDIA_DIR", "/var/lib/muebles/media")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if cfg.MediaDir != "/var/lib/muebles/media" {
+		t.Errorf("MediaDir = %q, want explicit override", cfg.MediaDir)
+	}
+}
+
+// Whitespace-only MEDIA_DIR falls back to the default (operator typo defense).
+func TestLoadConfig_MediaDirWhitespaceFallsBack(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("MEDIA_DIR", "   ")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".muebles-media")
+	if cfg.MediaDir != want {
+		t.Errorf("MediaDir = %q, want default %q", cfg.MediaDir, want)
 	}
 }

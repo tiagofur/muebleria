@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -43,6 +44,8 @@ func main() {
 		runResetPassword(os.Args[2:])
 	case "seed":
 		runSeed(os.Args[2:])
+	case "clean-media":
+		runCleanMedia(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -57,12 +60,17 @@ func usage() {
   admin create         --email <email> [--name <name>]
   admin reset-password --email <email>
   admin seed
+  admin clean-media [--apply]
 
 Environment:
   DATABASE_URL    Postgres DSN (defaults to local dev).
   ADMIN_PASSWORD  If set, used instead of the interactive prompt.
+  MEDIA_DIR       Catalog image directory (defaults to ~/.muebles-media).
 
-The password must be at least 8 characters.
+clean-media scans material_boards.image_url, material_boards.preview_texture_url,
+hardwares.image_url and modules.image_url, and reports any URL whose file is
+missing on disk. Pass --apply to set those columns to '' so the catalog shows
+"Sin foto" instead of a broken <img>. Default is dry-run (no DB changes).
 `)
 }
 
@@ -286,4 +294,148 @@ func runSeed(args []string) {
 	}
 
 	log.Println("✓ Database seeded successfully with demo data linked to admin.")
+}
+
+// runCleanMedia scans catalog image_url / preview_texture_url columns for URLs
+// whose underlying file no longer exists on disk (typical after losing the
+// media directory: git clean, re-clone, machine change). Without --apply it
+// only reports; with --apply it sets the dangling column to ''.
+//
+// This is the recovery path for the historical "se pierden las imágenes"
+// symptom: the file is gone but the DB row still references it, so the catalog
+// shows a broken <img>. Cleaning the URL makes the UI show "Sin foto".
+func runCleanMedia(args []string) {
+	fs := flag.NewFlagSet("clean-media", flag.ExitOnError)
+	apply := fs.Bool("apply", false, "set dangling image_url/preview_texture_url columns to '' (default: dry-run)")
+	_ = fs.Parse(args)
+
+	mediaDir := resolveMediaDir()
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+
+	// (table, column) pairs that hold catalog media URLs. Each is scanned and,
+	// when --apply is set, updated independently so a failure on one column
+	// does not block the others.
+	targets := []struct {
+		table, column string
+	}{
+		{"material_boards", "image_url"},
+		{"material_boards", "preview_texture_url"},
+		{"hardwares", "image_url"},
+		{"modules", "image_url"},
+	}
+
+	totalDangling := 0
+	totalCleared := 0
+	for _, t := range targets {
+		query := fmt.Sprintf("SELECT id, %s FROM %s WHERE %s <> '' AND %s IS NOT NULL", t.column, t.table, t.column, t.column)
+		rows, err := store.Pool.Query(ctx, query)
+		if err != nil {
+			fatal(fmt.Errorf("scanning %s.%s: %w", t.table, t.column, err))
+		}
+		type dangling struct {
+			id  string
+			url string
+		}
+		var found []dangling
+		for rows.Next() {
+			var id, url string
+			if err := rows.Scan(&id, &url); err != nil {
+				rows.Close()
+				fatal(fmt.Errorf("scanning row in %s.%s: %w", t.table, t.column, err))
+			}
+			name := mediaFilenameFromURL(url)
+			if name == "" {
+				// External URL or malformed — leave it alone, it's not our file.
+				continue
+			}
+			path := filepath.Join(mediaDir, name)
+			if _, err := os.Stat(path); err == nil {
+				continue // file exists, healthy
+			} else if !os.IsNotExist(err) {
+				// Permission or other FS error — report but do not touch.
+				log.Printf("  ! %s.%s id=%s: stat error: %v", t.table, t.column, id, err)
+				continue
+			}
+			found = append(found, dangling{id, url})
+		}
+		rows.Close()
+
+		if len(found) == 0 {
+			continue
+		}
+		totalDangling += len(found)
+		for _, d := range found {
+			log.Printf("  • %s.%s id=%s url=%s", t.table, t.column, d.id, d.url)
+		}
+
+		if !*apply {
+			continue
+		}
+		// Clear each dangling row individually. Cheap and avoids constructing
+		// a parameterized IN-list; counts are small in practice.
+		for _, d := range found {
+			upd := fmt.Sprintf("UPDATE %s SET %s = '' WHERE id = $1", t.table, t.column)
+			if _, err := store.Pool.Exec(ctx, upd, d.id); err != nil {
+				log.Printf("  ! failed to clear %s.%s id=%s: %v", t.table, t.column, d.id, err)
+				continue
+			}
+			totalCleared++
+		}
+	}
+
+	if totalDangling == 0 {
+		log.Printf("No dangling media URLs in %s.", mediaDir)
+		return
+	}
+	if *apply {
+		log.Printf("✓ Cleared %d/%d dangling URLs in DB. (mediaDir=%s)", totalCleared, totalDangling, mediaDir)
+	} else {
+		log.Printf("Found %d dangling URL(s) in DB. Re-run with --apply to clear them. (mediaDir=%s)", totalDangling, mediaDir)
+	}
+}
+
+// resolveMediaDir mirrors the server's MediaDir resolution (env override or
+// default ~/.muebles-media). Kept here rather than imported from internal/api
+// so the admin CLI does not pull the HTTP layer.
+func resolveMediaDir() string {
+	if v := strings.TrimSpace(os.Getenv("MEDIA_DIR")); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fatal(fmt.Errorf("resolving home dir for media store: %w", err))
+	}
+	return filepath.Join(home, ".muebles-media")
+}
+
+// mediaFilenameFromURL extracts the on-disk filename from a stored media URL.
+// Mirrors internal/api.mediaFilenameFromURL so the admin CLI stays decoupled
+// from the HTTP package. Returns "" for anything that is not a catalog media
+// URL or that looks like a path-escape attempt.
+func mediaFilenameFromURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	url := strings.TrimSpace(raw)
+	const prefix = "/api/media/"
+	idx := strings.Index(url, prefix)
+	if idx < 0 {
+		return ""
+	}
+	name := url[idx+len(prefix):]
+	if i := strings.Index(name, "?"); i >= 0 {
+		name = name[:i]
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
+		return ""
+	}
+	return name
 }

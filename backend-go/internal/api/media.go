@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -169,4 +170,65 @@ func randomHex(n int) (string, error) {
 		return "", fmt.Errorf("rand: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// mediaURLPrefix is the public path served by HandleMediaGet. URLs returned to
+// clients look like "/api/media/<filename>"; this prefix is what we strip to
+// recover the on-disk filename for lifecycle cleanup.
+const mediaURLPrefix = "/api/media/"
+
+// mediaFilenameFromURL extracts the on-disk filename from a stored media URL.
+// It accepts the canonical form ("/api/media/<name>") and tolerates absolute or
+// query-suffixed variants. Returns empty string for anything that is not a
+// catalog media URL (external URLs, data:, empty, etc.) so callers can no-op.
+// It refuses path separators and ".." — same defenses as HandleMediaGet.
+func mediaFilenameFromURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	url := strings.TrimSpace(raw)
+	// Find the media prefix anywhere; tolerate absolute hosts.
+	idx := strings.Index(url, mediaURLPrefix)
+	if idx < 0 {
+		return ""
+	}
+	name := url[idx+len(mediaURLPrefix):]
+	// Drop query string ("?token=...") if present.
+	if i := strings.Index(name, "?"); i >= 0 {
+		name = name[:i]
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
+		return ""
+	}
+	return name
+}
+
+// deleteMediaFileByURL removes the on-disk file referenced by a media URL.
+// It is best-effort: missing files are not an error (idempotent re-runs,
+// re-entry after partial cleanup), and any other IO error is logged but does
+// not propagate — losing a catalog image is annoying, failing a successful DB
+// commit because we could not delete a stale file is worse.
+//
+// Returns true when a file was actually removed, false otherwise (no URL,
+// unknown host/path, not found, or error).
+func deleteMediaFileByURL(mediaDir, url string) bool {
+	name := mediaFilenameFromURL(url)
+	if name == "" || strings.TrimSpace(mediaDir) == "" {
+		return false
+	}
+	path := filepath.Join(mediaDir, name)
+	cleanRoot := filepath.Clean(mediaDir)
+	if !strings.HasPrefix(filepath.Clean(path), cleanRoot+string(os.PathSeparator)) {
+		// Path escape attempt — refuse, do not log the raw value.
+		return false
+	}
+	err := os.Remove(path)
+	if err == nil {
+		return true
+	}
+	if !os.IsNotExist(err) {
+		log.Printf("media cleanup: failed to remove %s: %v", path, err)
+	}
+	return false
 }

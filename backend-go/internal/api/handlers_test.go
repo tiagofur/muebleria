@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -45,9 +47,20 @@ type stubStore struct {
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
 	catalogOverride *domain.Catalog
 	// #110: project templates hooks.
-	listProjectTemplates  []domain.ProjectTemplate
-	lastCreatedTemplate   *domain.ProjectTemplate
-	deleteTemplateCalled  bool
+	listProjectTemplates []domain.ProjectTemplate
+	lastCreatedTemplate  *domain.ProjectTemplate
+	deleteTemplateCalled bool
+	// Catalog media lifecycle hooks (F040 cleanup).
+	updateMaterialCalled     bool
+	updateMaterialReceived   *domain.MaterialBoard
+	hardwareReturnedByID     *domain.Hardware
+	updateHardwareCalled     bool
+	updateHardwareReceived   *domain.Hardware
+	moduleReturnedByID       *domain.Module
+	updateModuleCalled       bool
+	updateModuleReceived     *domain.Module
+	deleteModuleCalled       bool
+	deleteModuleReceivedID   string
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -134,12 +147,13 @@ func (s *stubStore) ListMaterialBoards(context.Context) ([]domain.MaterialBoard,
 	}
 	return []domain.MaterialBoard{}, nil
 }
-func (s *stubStore) UpdateMaterialBoard(context.Context, string, *domain.MaterialBoard) error {
-	s.stubNotUsed("UpdateMaterialBoard")
+func (s *stubStore) UpdateMaterialBoard(_ context.Context, _ string, m *domain.MaterialBoard) error {
+	s.updateMaterialCalled = true
+	cp := *m
+	s.updateMaterialReceived = &cp
 	return nil
 }
 func (s *stubStore) DeactivateMaterialBoard(context.Context, string) error {
-	s.stubNotUsed("DeactivateMaterialBoard")
 	return nil
 }
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {
@@ -167,15 +181,16 @@ func (s *stubStore) ListHardwares(context.Context) ([]domain.Hardware, error) {
 	return nil, nil
 }
 func (s *stubStore) GetHardwareByID(context.Context, string) (*domain.Hardware, error) {
-	s.stubNotUsed("GetHardwareByID")
-	return nil, nil
+	return s.hardwareReturnedByID, nil
 }
 func (s *stubStore) CreateHardware(context.Context, *domain.Hardware) error {
 	s.stubNotUsed("CreateHardware")
 	return nil
 }
-func (s *stubStore) UpdateHardware(context.Context, string, *domain.Hardware) error {
-	s.stubNotUsed("UpdateHardware")
+func (s *stubStore) UpdateHardware(_ context.Context, _ string, h *domain.Hardware) error {
+	s.updateHardwareCalled = true
+	cp := *h
+	s.updateHardwareReceived = &cp
 	return nil
 }
 func (s *stubStore) DeactivateHardware(context.Context, string) error {
@@ -234,19 +249,21 @@ func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
 	return domain.Catalog{}, nil
 }
 func (s *stubStore) GetModuleByID(context.Context, string) (*domain.Module, error) {
-	s.stubNotUsed("GetModuleByID")
-	return nil, nil
+	return s.moduleReturnedByID, nil
 }
 func (s *stubStore) CreateModule(context.Context, *domain.Module) error {
 	s.stubNotUsed("CreateModule")
 	return nil
 }
-func (s *stubStore) UpdateModule(context.Context, string, *domain.Module) error {
-	s.stubNotUsed("UpdateModule")
+func (s *stubStore) UpdateModule(_ context.Context, _ string, m *domain.Module) error {
+	s.updateModuleCalled = true
+	cp := *m
+	s.updateModuleReceived = &cp
 	return nil
 }
-func (s *stubStore) DeleteModule(context.Context, string) error {
-	s.stubNotUsed("DeleteModule")
+func (s *stubStore) DeleteModule(_ context.Context, id string) error {
+	s.deleteModuleCalled = true
+	s.deleteModuleReceivedID = id
 	return nil
 }
 func (s *stubStore) ListStructures(context.Context) ([]domain.Structure, error) {
@@ -1207,5 +1224,206 @@ func TestHandleProjectTemplateByIDDelete(t *testing.T) {
 	}
 	if !store.deleteTemplateCalled {
 		t.Fatalf("expected DeleteProjectTemplate to be called")
+	}
+}
+
+// --- Catalog media lifecycle cleanup (F040) ---
+
+// writeMediaFile plants a fake media file on disk so we can assert it gets
+// deleted by the handler after the corresponding DB row is updated/deleted.
+func writeMediaFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+		t.Fatalf("plant %s: %v", p, err)
+	}
+	return p
+}
+
+func fileExists(t *testing.T, path string) bool {
+	t.Helper()
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	t.Fatalf("stat %s: %v", path, err)
+	return false
+}
+
+// TestHandleMaterialByIDUpdateCleansReplacedImage verifies that PUTting a
+// material with a different image_url deletes the previous file from disk.
+// Regression: before the fix, replaced files accumulated as orphans.
+func TestHandleMaterialByIDUpdateCleansReplacedImage(t *testing.T) {
+	dir := t.TempDir()
+	oldImgPath := writeMediaFile(t, dir, "old.jpg")
+	oldTexPath := writeMediaFile(t, dir, "oldtex.webp")
+	// "new.jpg" is referenced by the new payload but does not need to exist on
+	// disk for the cleanup path — the GET handler will just 404 for it, which
+	// is fine; we are testing that the OLD file is removed.
+
+	store := &stubStore{
+		materialReturnedByID: &domain.MaterialBoard{
+			ID:                "m1",
+			ImageURL:          "/api/media/old.jpg",
+			PreviewTextureURL: "/api/media/oldtex.webp",
+		},
+	}
+	srv := &Server{Store: store, MediaDir: dir}
+
+	body := strings.NewReader(`{"code":"C","name":"N","image_url":"/api/media/new.jpg","preview_texture_url":"","board_price":1,"waste_percent":0,"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "m1")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterialByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !store.updateMaterialCalled {
+		t.Fatal("UpdateMaterialBoard not called")
+	}
+	if fileExists(t, oldImgPath) {
+		t.Error("old image file should be deleted after URL changed")
+	}
+	if fileExists(t, oldTexPath) {
+		t.Error("old texture file should be deleted after URL changed")
+	}
+}
+
+// When the URL does NOT change, the file must be preserved.
+func TestHandleMaterialByIDUpdateKeepsSameImage(t *testing.T) {
+	dir := t.TempDir()
+	imgPath := writeMediaFile(t, dir, "keep.jpg")
+
+	store := &stubStore{
+		materialReturnedByID: &domain.MaterialBoard{
+			ID:       "m1",
+			ImageURL: "/api/media/keep.jpg",
+		},
+	}
+	srv := &Server{Store: store, MediaDir: dir}
+
+	body := strings.NewReader(`{"code":"C","name":"Renamed","image_url":"/api/media/keep.jpg","board_price":1,"waste_percent":0,"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "m1")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterialByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !fileExists(t, imgPath) {
+		t.Error("image file should be preserved when URL did not change")
+	}
+}
+
+func TestHandleHardwareByIDUpdateCleansReplacedImage(t *testing.T) {
+	dir := t.TempDir()
+	oldImg := writeMediaFile(t, dir, "hw-old.png")
+
+	store := &stubStore{
+		hardwareReturnedByID: &domain.Hardware{
+			ID:       "h1",
+			ImageURL: "/api/media/hw-old.png",
+		},
+	}
+	srv := &Server{Store: store, MediaDir: dir}
+
+	body := strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"image_url":"/api/media/hw-new.png","active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", body), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "h1")
+	rr := httptest.NewRecorder()
+	srv.HandleHardwareByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if fileExists(t, oldImg) {
+		t.Error("old hardware image should be deleted after URL changed")
+	}
+}
+
+func TestHandleModuleByIDUpdateCleansReplacedImage(t *testing.T) {
+	dir := t.TempDir()
+	oldImg := writeMediaFile(t, dir, "mod-old.webp")
+
+	store := &stubStore{
+		moduleReturnedByID: &domain.Module{
+			ID:       "mod1",
+			ImageURL: "/api/media/mod-old.webp",
+		},
+	}
+	srv := &Server{Store: store, MediaDir: dir}
+
+	body := strings.NewReader(`{"code":"MC","name":"N","base_labor_cost":0,"width_mm":100,"height_mm":100,"depth_mm":100,"image_url":"/api/media/mod-new.webp"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/modules/mod1", body), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "mod1")
+	rr := httptest.NewRecorder()
+	srv.HandleModuleByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if fileExists(t, oldImg) {
+		t.Error("old module image should be deleted after URL changed")
+	}
+}
+
+// Physical delete of a module must also remove the image file.
+func TestHandleModuleByIDDeleteRemovesImage(t *testing.T) {
+	dir := t.TempDir()
+	imgPath := writeMediaFile(t, dir, "mod-del.jpg")
+
+	store := &stubStore{
+		moduleReturnedByID: &domain.Module{
+			ID:       "mod1",
+			ImageURL: "/api/media/mod-del.jpg",
+		},
+	}
+	srv := &Server{Store: store, MediaDir: dir}
+
+	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/modules/mod1", nil), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "mod1")
+	rr := httptest.NewRecorder()
+	srv.HandleModuleByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !store.deleteModuleCalled || store.deleteModuleReceivedID != "mod1" {
+		t.Errorf("DeleteModule not called correctly: called=%v id=%q", store.deleteModuleCalled, store.deleteModuleReceivedID)
+	}
+	if fileExists(t, imgPath) {
+		t.Error("module image should be deleted after physical delete")
+	}
+}
+
+// Soft delete (DeactivateMaterialBoard) must NOT touch the file: the row may
+// be reactivated later and the image should still be there.
+func TestHandleMaterialByIDSoftDeleteKeepsImage(t *testing.T) {
+	dir := t.TempDir()
+	imgPath := writeMediaFile(t, dir, "keep-on-deactivate.jpg")
+
+	store := &stubStore{
+		materialReturnedByID: &domain.MaterialBoard{
+			ID:       "m1",
+			ImageURL: "/api/media/keep-on-deactivate.jpg",
+		},
+	}
+	srv := &Server{Store: store, MediaDir: dir}
+
+	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/materials/m1", nil), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "m1")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterialByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !fileExists(t, imgPath) {
+		t.Error("image file must survive soft delete (deactivate)")
 	}
 }

@@ -439,6 +439,13 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &m) {
 			return
 		}
+		// Snapshot current media URLs so we can clean up replaced files after a
+		// successful commit. Reading first keeps cleanup off the failure path.
+		prevImage, prevTexture := "", ""
+		if cur, err := s.Store.GetMaterialBoardByID(r.Context(), id); err == nil && cur != nil {
+			prevImage = cur.ImageURL
+			prevTexture = cur.PreviewTextureURL
+		}
 		err := s.Store.UpdateMaterialBoard(r.Context(), id, &m)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -447,6 +454,12 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 			}
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if prevImage != m.ImageURL {
+			deleteMediaFileByURL(s.MediaDir, prevImage)
+		}
+		if prevTexture != m.PreviewTextureURL {
+			deleteMediaFileByURL(s.MediaDir, prevTexture)
 		}
 		respondWithJSON(w, http.StatusOK, m)
 
@@ -882,6 +895,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &h) {
 			return
 		}
+		// Snapshot current media URL so we can clean up the replaced file after
+		// a successful commit.
+		prevImage := ""
+		if cur, err := s.Store.GetHardwareByID(r.Context(), id); err == nil && cur != nil {
+			prevImage = cur.ImageURL
+		}
 		err := s.Store.UpdateHardware(r.Context(), id, &h)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -894,6 +913,9 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			}
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if prevImage != h.ImageURL {
+			deleteMediaFileByURL(s.MediaDir, prevImage)
 		}
 		respondWithJSON(w, http.StatusOK, h)
 
@@ -1080,6 +1102,12 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &m) {
 			return
 		}
+		// Snapshot current media URL so we can clean up the replaced file after
+		// a successful commit.
+		prevImage := ""
+		if cur, err := s.Store.GetModuleByID(r.Context(), id); err == nil && cur != nil {
+			prevImage = cur.ImageURL
+		}
 		err := s.Store.UpdateModule(r.Context(), id, &m)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -1093,17 +1121,27 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		if prevImage != m.ImageURL {
+			deleteMediaFileByURL(s.MediaDir, prevImage)
+		}
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar muebles plantilla") {
 			return
 		}
+		// Physical delete: capture the image URL before deleting the row, then
+		// remove the file so we don't accumulate orphaned media on disk.
+		prevImage := ""
+		if cur, err := s.Store.GetModuleByID(r.Context(), id); err == nil && cur != nil {
+			prevImage = cur.ImageURL
+		}
 		err := s.Store.DeleteModule(r.Context(), id)
 		if err != nil {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		deleteMediaFileByURL(s.MediaDir, prevImage)
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "module deleted"})
 
 	default:

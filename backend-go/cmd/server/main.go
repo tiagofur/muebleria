@@ -45,7 +45,10 @@ func main() {
 	//   go run ./cmd/admin create --email <email>
 	//   go run ./cmd/admin reset-password --email <email>
 
-	// Crear Server API (media dir for catalog images F040)
+	// Crear Server API (media dir for catalog images F040). Log the resolved
+	// path so operators know where uploads land (it lives outside the repo by
+	// default, so it survives clean/clone cycles but is not obvious from cwd).
+	log.Printf("Media store: %s", cfg.MediaDir)
 	serverAPI := api.NewServerWithMedia(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.MediaDir)
 	handler := api.RegisterRoutes(serverAPI)
 
