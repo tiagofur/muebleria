@@ -24,6 +24,7 @@ import type {
   Module,
   OptionChoices,
   Project,
+  ProjectTemplate,
   QuoteBreakdown,
   Structure,
 } from '../types';
@@ -1012,6 +1013,52 @@ export const GOLDEN_FIXTURE = {
     laborFixed: 'Resumen y Cotización!B17',
   },
 } as const;
+
+/**
+ * Seed project template (#110 / H15): "Cocina estándar 3 m". Mixes the three
+ * furniture types (inferior + superior + alto) so it doubles as a demo of the
+ * project measure-defaults feature (#109). A fresh-open workspace exposes it so
+ * the user can start a quote from a recipe instead of from scratch.
+ *
+ * Items reference seed modules by id; optionChoices carry INTERIOR/FRENTE/FONDO/
+ * BISAGRA defaults so resolveBom doesn't throw. No customer/status — a template
+ * is a recipe, not a quote.
+ */
+export const seedCocinaEstandarTemplate: ProjectTemplate = {
+  id: 'tmpl-cocina-estandar-3m',
+  name: 'Cocina estándar 3 m',
+  currency: 'MXN',
+  marginFactor: 1.35,
+  laborFixedCost: 1200,
+  items: [
+    {
+      id: 'tmpl-item-gab',
+      moduleId: IDS.modGab,
+      quantity: 2,
+      optionChoices: plantillaChoices,
+    },
+    {
+      id: 'tmpl-item-caj',
+      moduleId: IDS.modCaj,
+      quantity: 1,
+      optionChoices: plantillaChoices,
+    },
+    {
+      id: 'tmpl-item-alacena',
+      moduleId: 'seed-mod-alacena-001',
+      quantity: 2,
+      optionChoices: plantillaChoices,
+      measurePresetId: 'ala-preset-600',
+    },
+  ],
+  measureDefaults: {
+    inferior: { depth: 590, height: 720 },
+    superior: { depth: 320, height: 720 },
+  },
+  notes: 'Plantilla demo: 2 gabinetes + 1 cajonera (inferiores) + 2 alacenas (superiores).',
+  createdAt: '2026-07-01T00:00:00.000Z',
+  updatedAt: '2026-07-01T00:00:00.000Z',
+};
 
 /** F011 GAB-only golden (seed demo quotation path). */
 export const GAB_ONLY_GOLDEN = {

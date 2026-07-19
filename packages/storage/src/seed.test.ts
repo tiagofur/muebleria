@@ -4,6 +4,7 @@
 
 import {
   calcProjectBreakdown,
+  createProjectFromTemplate,
   generateCutRows,
   resolveBom,
 } from '@muebles/domain';
@@ -279,5 +280,44 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
       despensa.presets?.[0]?.id,
     );
     expect(despensaBom.boardParts.length).toBeGreaterThan(0);
+  });
+
+  it('seeds the Cocina estándar template (#110 / H15)', () => {
+    const seed = createSeedWorkspace();
+    expect(seed.projectTemplates).toBeDefined();
+    expect(seed.projectTemplates?.length).toBeGreaterThanOrEqual(1);
+    const tmpl = seed.projectTemplates!.find(
+      (t) => t.id === 'tmpl-cocina-estandar-3m',
+    );
+    expect(tmpl).toBeDefined();
+    expect(tmpl!.name).toBe('Cocina estándar 3 m');
+    // Mixes the three furniture-type families.
+    expect(tmpl!.items.length).toBeGreaterThanOrEqual(3);
+    // No customer/status — a template is a recipe, not a quote.
+    expect('customerId' in tmpl!).toBe(false);
+    expect('status' in tmpl!).toBe(false);
+  });
+
+  it('creating a project from the seed template yields a valid editable quote (#110)', () => {
+    const seed = createSeedWorkspace();
+    const tmpl = seed.projectTemplates![0]!;
+    const now = '2026-07-18T00:00:00.000Z';
+    let n = 0;
+    const project = createProjectFromTemplate(tmpl, {
+      newId: 'prj-from-template',
+      itemIdFactory: () => `item-${++n}`,
+      nowIso: now,
+      customerId: 'cust-ana',
+      name: 'Cocina nueva',
+    });
+    expect(project.id).toBe('prj-from-template');
+    expect(project.status).toBe('draft');
+    expect(project.customerId).toBe('cust-ana');
+    expect(project.items).toHaveLength(tmpl.items.length);
+    // Items reference real seed modules → resolveBom should not throw.
+    for (const item of project.items) {
+      const mod = seed.catalog.modules.find((m) => m.id === item.moduleId);
+      expect(mod).toBeDefined();
+    }
   });
 });
