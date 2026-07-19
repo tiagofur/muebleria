@@ -95,6 +95,13 @@ type Store interface {
 	UpdateProject(ctx context.Context, id string, p *domain.Project) error
 	DeleteProject(ctx context.Context, id string) error
 
+	// Project templates (#110 / H15)
+	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)
+	GetProjectTemplateByID(ctx context.Context, id string) (*domain.ProjectTemplate, error)
+	CreateProjectTemplate(ctx context.Context, t domain.ProjectTemplate) error
+	UpdateProjectTemplate(ctx context.Context, id string, t domain.ProjectTemplate) error
+	DeleteProjectTemplate(ctx context.Context, id string) error
+
 	// Seed: populate catalog from plantilla fixtures
 	SeedCatalog(ctx context.Context) error
 

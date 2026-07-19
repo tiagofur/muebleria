@@ -1552,3 +1552,116 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
+
+// --- Project templates (#110 / H15) ---
+
+// HandleProjectTemplates: GET (list) / POST (create). Templates are a recipe
+// collection (no customer/owner scoping) — readable by anyone who can access
+// projects, mutable by engineer/admin (catalog-style RBAC).
+func (s *Server) HandleProjectTemplates(w http.ResponseWriter, r *http.Request) {
+	role := actorRole(claimsFromRequest(r))
+
+	switch r.Method {
+	case http.MethodGet:
+		if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+			return
+		}
+		list, err := s.Store.ListProjectTemplates(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, list)
+
+	case http.MethodPost:
+		if !requirePermission(w, domain.RoleCanMutateModules(role), "no tenés permiso para crear plantillas") {
+			return
+		}
+		var t domain.ProjectTemplate
+		if !decodeJSONBody(w, r, &t) {
+			return
+		}
+		if t.Currency == "" {
+			t.Currency = "MXN"
+		}
+		if t.MarginFactor == 0 {
+			t.MarginFactor = 1.35
+		}
+		if t.Items == nil {
+			t.Items = []domain.ProjectItem{}
+		}
+		if err := s.Store.CreateProjectTemplate(r.Context(), t); err != nil {
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El registro ya existe")
+				return
+			}
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, t)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleProjectTemplateByID: GET / PUT / DELETE on /project-templates/{id}.
+func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing template id")
+		return
+	}
+	role := actorRole(claimsFromRequest(r))
+
+	switch r.Method {
+	case http.MethodGet:
+		if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+			return
+		}
+		t, err := s.Store.GetProjectTemplateByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "template not found")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, t)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.RoleCanMutateModules(role), "no tenés permiso para editar plantillas") {
+			return
+		}
+		var t domain.ProjectTemplate
+		if !decodeJSONBody(w, r, &t) {
+			return
+		}
+		if t.Currency == "" {
+			t.Currency = "MXN"
+		}
+		if t.Items == nil {
+			t.Items = []domain.ProjectItem{}
+		}
+		if err := s.Store.UpdateProjectTemplate(r.Context(), id, t); err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		updated, err := s.Store.GetProjectTemplateByID(r.Context(), id)
+		if err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, updated)
+
+	case http.MethodDelete:
+		if !requirePermission(w, domain.RoleCanMutateModules(role), "no tenés permiso para borrar plantillas") {
+			return
+		}
+		if err := s.Store.DeleteProjectTemplate(r.Context(), id); err != nil {
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]bool{"ok": true})
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}

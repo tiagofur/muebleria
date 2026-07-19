@@ -361,6 +361,28 @@ type Project struct {
 	UpdatedAt     time.Time           `json:"updated_at"`
 }
 
+// ProjectTemplate is a reusable project recipe (#110 / H15). Slimmed Project:
+// no customer, status, priceSnapshot, owner, or runtime-only fields. "Crear
+// desde plantilla" clones a fresh draft Project from one of these (the clone
+// logic lives in the TS domain; Go only persists CRUD).
+type ProjectTemplate struct {
+	ID                string        `json:"id"`
+	Name              string        `json:"name"`
+	Currency          string        `json:"currency"`
+	MarginFactor      float64       `json:"margin_factor"`
+	LaborFixedCost    float64       `json:"labor_fixed_cost"`
+	Items             []ProjectItem `json:"items"`
+	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
+	// MeasureDefaults / KitchenLayout / InstallationChecklist are JSON blobs
+	// mirroring the Project fields of the same names.
+	MeasureDefaults        json.RawMessage `json:"measure_defaults,omitempty"`
+	KitchenLayout          json.RawMessage `json:"kitchen_layout,omitempty"`
+	InstallationChecklist  json.RawMessage `json:"installation_checklist,omitempty"`
+	Notes                  string          `json:"notes,omitempty"`
+	CreatedAt              time.Time       `json:"created_at"`
+	UpdatedAt              time.Time       `json:"updated_at"`
+}
+
 type QuoteBreakdown struct {
 	MaterialsCost  float64 `json:"materials_cost"`
 	EdgeTotal      float64 `json:"edge_total"`
