@@ -470,6 +470,35 @@ export interface Project {
   readonly priceSnapshot?: QuotePriceSnapshot;
 }
 
+/**
+ * Reusable project template (#110 / H15). Slimmed Project: no customer, status,
+ * priceSnapshot, owner, or runtime-only fields (nestingImport, createdBy).
+ * "Crear desde plantilla" clones a new editable draft Project from one of these
+ * via `createProjectFromTemplate`. Items here do NOT carry `structureRevisionPin`
+ * — a fresh quote resolves against the live structure revision.
+ */
+export interface ProjectTemplate {
+  readonly id: string;
+  readonly name: string;
+  /** Default currency/margin/labor applied to projects created from this template. */
+  readonly currency: string;
+  readonly marginFactor: number;
+  readonly laborFixedCost: number;
+  readonly items: readonly ProjectItem[];
+  readonly projectLevelChoices?: OptionChoices;
+  readonly measureDefaults?: {
+    readonly [type in FurnitureType]?: {
+      readonly depth?: number;
+      readonly height?: number;
+    };
+  };
+  readonly kitchenLayout?: ProjectKitchenLayout;
+  readonly installationChecklist?: readonly InstallationChecklistItem[];
+  readonly notes?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 // --- Workspace containers (persistable shape) ---
 
 export interface Catalog {
@@ -510,6 +539,12 @@ export interface Workspace {
   readonly schemaVersion: number;
   readonly catalog: Catalog;
   readonly projects: readonly Project[];
+  /**
+   * Reusable project templates (#110 / H15). Optional; older workspaces omit
+   * this and it's treated as []. Templates are a separate collection, NOT
+   * flagged Projects, so list/dashboard/counts stay clean.
+   */
+  readonly projectTemplates?: readonly ProjectTemplate[];
   /** Optional; older workspaces omit this and use product defaults. */
   readonly settings?: WorkshopSettings;
 }

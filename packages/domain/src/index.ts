@@ -35,6 +35,7 @@ export type {
   ModuleComponentInstance,
   ProjectItem,
   Project,
+  ProjectTemplate,
   PlacementElevation,
   KitchenWall,
   ProjectItemPlacement,
@@ -180,13 +181,17 @@ export {
 } from './exportIssues';
 
 export type {
+  CreateProjectFromTemplateOptions,
   DuplicateModuleOptions,
   DuplicateProjectOptions,
+  ProjectToTemplateOptions,
 } from './duplicate';
 export {
   suggestDuplicateCode,
   duplicateModule,
   duplicateProject,
+  createProjectFromTemplate,
+  projectToTemplate,
 } from './duplicate';
 
 export {
