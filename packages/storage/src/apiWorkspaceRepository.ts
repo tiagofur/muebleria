@@ -1,4 +1,4 @@
-import type { Catalog, Project, Workspace, WorkshopSettings } from '@muebles/domain';
+import type { Catalog, Project, ProjectTemplate, Workspace, WorkshopSettings } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
   withWorkshopSettings,
@@ -16,6 +16,8 @@ import {
   structureToApi,
   optionGroupToApi,
   projectFromApi,
+  projectTemplateFromApi,
+  projectTemplateToApi,
   projectToApi,
   sortCategoriesForSave,
   workshopSettingsFromApi,
@@ -51,10 +53,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const catalog = await this.getCatalog();
     const projects = await this.getProjects();
     const settings = await this.getWorkshopSettings();
+    const projectTemplates = await this.getProjectTemplates();
     return withWorkshopSettings({
       schemaVersion: SCHEMA_VERSION,
       catalog,
       projects,
+      projectTemplates,
       settings,
     });
   }
@@ -66,6 +70,9 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     await this.saveCatalog(workspace.catalog);
     for (const p of workspace.projects) {
       await this.saveProject(p);
+    }
+    for (const t of workspace.projectTemplates ?? []) {
+      await this.saveProjectTemplate(t);
     }
   }
 
@@ -325,6 +332,53 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   async deleteProject(projectId: string): Promise<void> {
     await fetch(`${this.baseUrl}/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+  }
+
+  // --- Project templates (#110 / H15) ---
+
+  async getProjectTemplates(): Promise<readonly ProjectTemplate[]> {
+    const res = await fetch(`${this.baseUrl}/project-templates`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      // Endpoint may not exist yet on older backends → treat as empty.
+      return [];
+    }
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : [];
+    return list.map((t) =>
+      projectTemplateFromApi(t as Record<string, unknown>),
+    );
+  }
+
+  async createProjectTemplate(template: ProjectTemplate): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/project-templates`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(projectTemplateToApi(template)),
+    });
+    if (res.ok) return;
+    const text = await res.text().catch(() => '');
+    if (isConflict(res.status, text)) return;
+    console.error(
+      `API create failed /project-templates: ${res.status} ${text}`,
+    );
+    throw new Error(`Failed to create project template: ${res.status} ${text}`);
+  }
+
+  async saveProjectTemplate(template: ProjectTemplate): Promise<void> {
+    await this.upsert(
+      `/project-templates/${template.id}`,
+      '/project-templates',
+      projectTemplateToApi(template),
+    );
+  }
+
+  async deleteProjectTemplate(templateId: string): Promise<void> {
+    await fetch(`${this.baseUrl}/project-templates/${templateId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });

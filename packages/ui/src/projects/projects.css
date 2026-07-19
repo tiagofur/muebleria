@@ -866,3 +866,65 @@
   overflow: hidden;
   background: #1a1c1e;
 }
+
+/* Project templates picker / management (#110 / H15) */
+.template-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.template-picker-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  text-align: left;
+  font: inherit;
+}
+
+.template-picker-item:hover {
+  border-color: var(--border-brand);
+  background: var(--surface-input);
+}
+
+.template-picker-item__name {
+  flex: 1;
+  font-weight: var(--weight-semibold);
+}
+
+.template-picker-item__meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.template-management-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+}
+
+.template-management-row__name {
+  flex: 1;
+  font-weight: var(--weight-semibold);
+}
+
+.template-management-row__meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-right: var(--space-2);
+}

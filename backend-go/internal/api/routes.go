@@ -91,6 +91,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
+	// Plantillas de proyecto (#110 / H15)
+	mux.Handle("GET /api/project-templates", authMW(http.HandlerFunc(server.HandleProjectTemplates)))
+	mux.Handle("POST /api/project-templates", authMW(http.HandlerFunc(server.HandleProjectTemplates)))
+	mux.Handle("GET /api/project-templates/{id}", authMW(http.HandlerFunc(server.HandleProjectTemplateByID)))
+	mux.Handle("PUT /api/project-templates/{id}", authMW(http.HandlerFunc(server.HandleProjectTemplateByID)))
+	mux.Handle("DELETE /api/project-templates/{id}", authMW(http.HandlerFunc(server.HandleProjectTemplateByID)))
+
 	// Cálculo financiero
 	mux.Handle("POST /api/projects/{id}/calculate", authMW(http.HandlerFunc(server.HandleProjectCalculate)))
 

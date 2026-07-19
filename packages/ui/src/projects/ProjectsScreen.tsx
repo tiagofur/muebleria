@@ -26,6 +26,7 @@ import type {
   Project,
   ProjectItem,
   ProjectMaterialSummary,
+  ProjectTemplate,
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
@@ -47,6 +48,7 @@ import {
   ChevronLeft,
   Copy,
   FileText,
+  LayoutTemplate,
   Package,
   Pencil,
   Plus,
@@ -130,6 +132,18 @@ export interface ProjectsScreenProps {
   readonly onDelete: (id: string) => void;
   /** Deep-copy project as draft (F015). Shell owns ids/timestamps. */
   readonly onDuplicate?: (id: string) => void;
+  // --- Project templates (#110 / H15) ---
+  /** Reusable project templates available to start a quote from. */
+  readonly projectTemplates?: readonly ProjectTemplate[];
+  /** Save a project as a new reusable template. */
+  readonly onSaveAsTemplate?: (projectId: string, name: string) => void;
+  /** Clone a template into a new editable draft quote. */
+  readonly onCreateFromTemplate?: (
+    templateId: string,
+    draft: ProjectDraft,
+  ) => void;
+  /** Delete a reusable template. */
+  readonly onDeleteTemplate?: (templateId: string) => void;
   readonly onAddItem: (
     projectId: string,
     input: {
@@ -295,6 +309,10 @@ export function ProjectsScreen({
   onUpdate,
   onDelete,
   onDuplicate,
+  projectTemplates,
+  onSaveAsTemplate,
+  onCreateFromTemplate,
+  onDeleteTemplate,
   onAddItem,
   onUpdateItem,
   onRemoveItem,
@@ -369,6 +387,14 @@ export function ProjectsScreen({
   const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(
     null,
   );
+  // --- Project templates (#110 / H15) ---
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [fromTemplateDraft, setFromTemplateDraft] = useState<ProjectTemplate | null>(null);
+  const [fromTemplateName, setFromTemplateName] = useState('');
+  const [fromTemplateCustomer, setFromTemplateCustomer] = useState('');
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
+  const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
+  const [templatesManagementOpen, setTemplatesManagementOpen] = useState(false);
 
   const catalogs = useMemo(
     () => ({ materials, edges, hardware }),
@@ -507,6 +533,74 @@ export function ProjectsScreen({
     setNewCustomerMode(false);
     setError(null);
     setMetaModalOpen(true);
+  };
+
+  // --- Project templates (#110 / H15) ---
+
+  const startFromTemplate = () => {
+    if (!projectTemplates || projectTemplates.length === 0) return;
+    setFromTemplateDraft(null);
+    setFromTemplateName('');
+    setFromTemplateCustomer('');
+    setError(null);
+    setTemplatePickerOpen(true);
+  };
+
+  const pickTemplate = (template: ProjectTemplate) => {
+    setFromTemplateDraft(template);
+    setFromTemplateName(`${template.name}`);
+    setFromTemplateCustomer('');
+  };
+
+  const confirmFromTemplate = (e: FormEvent) => {
+    e.preventDefault();
+    if (!fromTemplateDraft || !onCreateFromTemplate) return;
+    const name = fromTemplateName.trim();
+    if (!name) {
+      setError('Elegí un nombre para la cotización.');
+      return;
+    }
+    const customerId = fromTemplateCustomer.trim();
+    if (!customerId) {
+      setError('Elegí un cliente.');
+      return;
+    }
+    // Reuse ProjectDraft shape so the shell handles currency/margin/labor via
+    // the same path as createProject. Name + customerId are the template picks.
+    const payload: ProjectDraft = {
+      ...emptyProjectDraft(workshopSettings),
+      name,
+      customerId,
+      currency: fromTemplateDraft.currency,
+      marginFactor: String(fromTemplateDraft.marginFactor),
+      laborFixedCost: String(fromTemplateDraft.laborFixedCost),
+      notes: fromTemplateDraft.notes ?? '',
+      status: 'draft',
+    };
+    setError(null);
+    onCreateFromTemplate(fromTemplateDraft.id, payload);
+    setTemplatePickerOpen(false);
+    setFromTemplateDraft(null);
+  };
+
+  const startSaveAsTemplate = () => {
+    if (!selectedProject) return;
+    setSaveAsTemplateName(selectedProject.name);
+    setSaveAsTemplateOpen(true);
+  };
+
+  const confirmSaveAsTemplate = (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedProject || !onSaveAsTemplate) return;
+    const name = saveAsTemplateName.trim();
+    if (!name) return;
+    onSaveAsTemplate(selectedProject.id, name);
+    setSaveAsTemplateOpen(false);
+  };
+
+  const requestDeleteTemplate = (templateId: string) => {
+    if (!onDeleteTemplate) return;
+    onDeleteTemplate(templateId);
   };
 
   const startEditMeta = (project: Project) => {
@@ -1167,6 +1261,35 @@ export function ProjectsScreen({
             Nueva cotización
           </button>
           ) : null}
+          {canMutate &&
+          projectTemplates &&
+          projectTemplates.length > 0 &&
+          onCreateFromTemplate ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={startFromTemplate}
+              data-testid="new-from-template-btn"
+            >
+              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
+              Desde plantilla
+            </button>
+          ) : null}
+          {canMutate &&
+          projectTemplates &&
+          projectTemplates.length > 0 &&
+          onDeleteTemplate ? (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setTemplatesManagementOpen(true)}
+              data-testid="manage-templates-btn"
+              title="Gestionar plantillas"
+            >
+              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
+              Plantillas
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1182,13 +1305,31 @@ export function ProjectsScreen({
       ) : null}
 
       {isTrulyEmpty ? (
-        <EmptyState
-          icon={FileText}
-          title="No hay cotizaciones"
-          description="Creá la primera cotización para un cliente y agregá muebles del catálogo."
-          actionLabel="Nueva cotización"
-          onAction={startCreate}
-        />
+        <div>
+          <EmptyState
+            icon={FileText}
+            title="No hay cotizaciones"
+            description="Creá la primera cotización para un cliente y agregá muebles del catálogo."
+            actionLabel="Nueva cotización"
+            onAction={startCreate}
+          />
+          {canMutate &&
+          projectTemplates &&
+          projectTemplates.length > 0 &&
+          onCreateFromTemplate ? (
+            <div style={{ textAlign: 'center', marginTop: 'var(--space-3)' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={startFromTemplate}
+                data-testid="empty-from-template-btn"
+              >
+                <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
+                Crear desde plantilla
+              </button>
+            </div>
+          ) : null}
+        </div>
       ) : isFilterEmpty ? (
         <EmptyState
           variant="no-results"
@@ -1465,6 +1606,17 @@ export function ProjectsScreen({
             >
               <Copy size={16} strokeWidth={1.5} aria-hidden />
               Duplicar
+            </button>
+          ) : null}
+          {canMutate && onSaveAsTemplate ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={startSaveAsTemplate}
+              data-testid={`save-as-template-btn-${project.id}`}
+            >
+              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
+              Guardar como plantilla
             </button>
           ) : null}
           {canMarkProduced &&
@@ -2447,6 +2599,189 @@ export function ProjectsScreen({
           setViewerQuoteRun(false);
         }}
       />
+
+      {/* Project templates (#110 / H15) */}
+      <Modal
+        open={templatePickerOpen}
+        onClose={() => {
+          setTemplatePickerOpen(false);
+          setFromTemplateDraft(null);
+        }}
+        title="Crear cotización desde plantilla"
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setTemplatePickerOpen(false);
+                setFromTemplateDraft(null);
+              }}
+            >
+              Cancelar
+            </button>
+            {fromTemplateDraft ? (
+              <button
+                type="submit"
+                form="from-template-form"
+                className="btn btn--primary"
+              >
+                Crear cotización
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        {!fromTemplateDraft ? (
+          <ul
+            className="template-picker-list"
+            data-testid="template-picker-list"
+          >
+            {(projectTemplates ?? []).map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  className="template-picker-item"
+                  onClick={() => pickTemplate(t)}
+                  data-testid={`template-pick-${t.id}`}
+                >
+                  <LayoutTemplate
+                    size={18}
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  <span className="template-picker-item__name">{t.name}</span>
+                  <span className="template-picker-item__meta">
+                    {t.items.length} mueble{t.items.length === 1 ? '' : 's'}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <form id="from-template-form" onSubmit={confirmFromTemplate}>
+            <p className="project-editor__hint" style={{ marginBottom: 'var(--space-3)' }}>
+              Plantilla: <strong>{fromTemplateDraft.name}</strong> ·{' '}
+              {fromTemplateDraft.items.length} mueble
+              {fromTemplateDraft.items.length === 1 ? '' : 's'}
+            </p>
+            <div className="catalog-form__field">
+              <label htmlFor="from-template-name">Nombre de la cotización</label>
+              <input
+                id="from-template-name"
+                value={fromTemplateName}
+                onChange={(e) => setFromTemplateName(e.target.value)}
+                required
+                data-testid="from-template-name"
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="from-template-customer">Cliente</label>
+              <select
+                id="from-template-customer"
+                value={fromTemplateCustomer}
+                onChange={(e) => setFromTemplateCustomer(e.target.value)}
+                required
+                data-testid="from-template-customer"
+              >
+                <option value="">Elegí un cliente…</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {error ? (
+              <p className="project-editor__error" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={saveAsTemplateOpen}
+        onClose={() => setSaveAsTemplateOpen(false)}
+        title="Guardar como plantilla"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setSaveAsTemplateOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="save-as-template-form"
+              className="btn btn--primary"
+            >
+              Guardar plantilla
+            </button>
+          </>
+        }
+      >
+        <form id="save-as-template-form" onSubmit={confirmSaveAsTemplate}>
+          <div className="catalog-form__field">
+            <label htmlFor="save-as-template-name">Nombre de la plantilla</label>
+            <input
+              id="save-as-template-name"
+              value={saveAsTemplateName}
+              onChange={(e) => setSaveAsTemplateName(e.target.value)}
+              required
+              data-testid="save-as-template-name"
+            />
+          </div>
+          <p className="project-editor__hint">
+            La plantilla guardará los muebles, opciones, defaults de medida y
+            plano de disposición. No incluye cliente ni estado.
+          </p>
+        </form>
+      </Modal>
+
+      <Modal
+        open={templatesManagementOpen}
+        onClose={() => setTemplatesManagementOpen(false)}
+        title="Plantillas de proyecto"
+        size="md"
+        footer={
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setTemplatesManagementOpen(false)}
+          >
+            Cerrar
+          </button>
+        }
+      >
+        <ul
+          className="template-picker-list"
+          data-testid="template-management-list"
+        >
+          {(projectTemplates ?? []).map((t) => (
+            <li key={t.id} className="template-management-row">
+              <span className="template-management-row__name">{t.name}</span>
+              <span className="template-management-row__meta">
+                {t.items.length} mueble{t.items.length === 1 ? '' : 's'}
+              </span>
+              <button
+                type="button"
+                className="btn btn--small btn--danger"
+                onClick={() => requestDeleteTemplate(t.id)}
+                data-testid={`delete-template-${t.id}`}
+              >
+                <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+                Borrar
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Modal>
     </section>
   );
 }

@@ -20,6 +20,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  ProjectTemplate,
   QuoteBreakdown,
   WorkshopSettings,
 } from '@muebles/domain';
@@ -944,6 +945,96 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         structureRevisionPin,
       };
     }),
+  };
+}
+
+// --- Project templates (#110 / H15) ---
+
+export function projectTemplateToApi(
+  t: ProjectTemplate,
+): Record<string, unknown> {
+  return {
+    id: t.id,
+    name: t.name,
+    currency: t.currency,
+    margin_factor: t.marginFactor,
+    labor_fixed_cost: t.laborFixedCost,
+    project_level_choices: { ...(t.projectLevelChoices ?? {}) },
+    measure_defaults: measureDefaultsToApi(t.measureDefaults),
+    kitchen_layout: kitchenLayoutToApi(t.kitchenLayout),
+    installation_checklist: t.installationChecklist
+      ? t.installationChecklist.map((c) => ({
+          id: c.id,
+          label: c.label,
+          done: c.done,
+        }))
+      : null,
+    notes: t.notes ?? '',
+    // Templates never pin a structure revision; the field is omitted per item.
+    items: t.items.map((item) => ({
+      id: item.id,
+      module_id: item.moduleId,
+      quantity: item.quantity,
+      option_choices: { ...item.optionChoices },
+      measure_preset_id: item.measurePresetId ?? '',
+    })),
+  };
+}
+
+export function projectTemplateFromApi(
+  raw: Record<string, unknown>,
+): ProjectTemplate {
+  const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
+  const levelRaw = raw.project_level_choices ?? raw.projectLevelChoices;
+  const projectLevelChoices =
+    levelRaw && typeof levelRaw === 'object' && !Array.isArray(levelRaw)
+      ? (levelRaw as ProjectTemplate['projectLevelChoices'])
+      : undefined;
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    currency: str(raw.currency, 'MXN'),
+    marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
+    laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
+    projectLevelChoices:
+      projectLevelChoices && Object.keys(projectLevelChoices).length > 0
+        ? projectLevelChoices
+        : undefined,
+    measureDefaults: measureDefaultsFromApi(
+      raw.measure_defaults ?? raw.measureDefaults,
+    ),
+    kitchenLayout: kitchenLayoutFromApi(
+      raw.kitchen_layout ?? raw.kitchenLayout,
+    ),
+    installationChecklist: (() => {
+      const rawList = raw.installation_checklist ?? raw.installationChecklist;
+      if (!Array.isArray(rawList)) return undefined;
+      const items = rawList as Record<string, unknown>[];
+      const mapped = items.map((r) => ({
+        id: str(r.id),
+        label: str(r.label),
+        done: Boolean(r.done),
+      }));
+      return mapped.length > 0 ? mapped : undefined;
+    })(),
+    notes: str(raw.notes) || undefined,
+    items: itemsRaw.map((item) => {
+      const r = item as Record<string, unknown>;
+      const choices = r.option_choices ?? r.optionChoices;
+      return {
+        id: str(r.id),
+        moduleId: str(r.module_id ?? r.moduleId),
+        quantity: Math.max(1, Math.floor(num(r.quantity, 1))),
+        optionChoices:
+          choices && typeof choices === 'object' && !Array.isArray(choices)
+            ? (choices as ProjectItem['optionChoices'])
+            : {},
+        measurePresetId:
+          str(r.measure_preset_id ?? r.measurePresetId) || undefined,
+      };
+    }),
+    createdAt: str(raw.created_at ?? raw.createdAt, ''),
+    updatedAt: str(raw.updated_at ?? raw.updatedAt, ''),
   };
 }
 

@@ -1,8 +1,64 @@
 # Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch:** `feat/project-measure-defaults-109` (basada en `main`)
+- **Branch:** `feat/project-templates-110` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
+
+## Hecho en esta pasada (2026-07-18) — F056 Plantillas de proyecto (#110)
+
+**Feature:** `F056 — project_templates` (issue #110, [BAJO] → feature grande)
+**Branch:** `feat/project-templates-110`
+
+Plantillas de proyecto reutilizables. Colección separada `Workspace.projectTemplates`
++ tipo `ProjectTemplate` (entidad distinta de Project: sin customer/status/
+snapshot/owner). Flujo: "Guardar como plantilla" desde un proyecto → "Crear desde
+plantilla" clona a proyecto nuevo editable → borrar plantilla. Clone completo
+incluyendo kitchenLayout (con remap de `placements.itemId`).
+
+**Cambios por capa:**
+- **Dominio TS:** tipo `ProjectTemplate` + `Workspace.projectTemplates` (opcional,
+  no requiere migración). Helpers `projectToTemplate` (extrae receta, sin pin) y
+  `createProjectFromTemplate` (reminta ids, remapea kitchenLayout placements vía
+  idMap posicional, status 'draft'). 8 tests.
+- **Storage TS:** mappers `projectTemplateToApi/FromApi` (reusando kitchenLayout,
+  measureDefaults, items mappers). 4 métodos en `WorkspaceRepository` + 3
+  adapters (jsonFileStorage, apiWorkspaceRepository, localStorageWorkspaceRepository).
+  3 tests.
+- **Seed:** plantilla demo "Cocina estándar 3 m" (2 gabinetes + 1 cajonera + 2
+  alacenas; measureDefaults inferiores/superiores). Test seed incluye plantilla +
+  crear proyecto desde ella produce items válidos.
+- **UI:** props (projectTemplates + 3 callbacks). Toolbar "Desde plantilla" +
+  "Plantillas" (gestión). Chrome "Guardar como plantilla". Empty state con 2da
+  acción. 3 modales: picker (lista + form nombre/cliente), save (input nombre),
+  management (lista + borrar). CSS nuevo (.template-picker-list/.item,
+  .template-management-row). 5 tests.
+- **Backend Go (paridad completa):** `ProjectTemplate` struct + tabla
+  `project_templates` (JSONB para blobs anidados + items) en migración 000029
+  aditiva. Storage CRUD + handlers HTTP + routes `/api/project-templates`.
+  RBAC: lectura = `RoleCanAccessProjects`, mutación = `RoleCanMutateModules`.
+  Seed "Cocina estándar 3 m". 4 tests HTTP (list, createForbiddenForVendedor,
+  createEngineerOK, delete).
+
+**Verificación:** typecheck 6/6 verde · TS tests 699 (domain 216 · storage 51 ·
+excel 25 · ui 311 · desktop 9 · web 87) · Go tests ok · `./init.sh` verde.
+
+**Decisiones clave (aprobadas por usuario):**
+- Modelo A: colección separada `Workspace.projectTemplates` + tipo
+  `ProjectTemplate` (entidad distinta, sin customer/status/snapshot/owner).
+  No contamina filtros/dashboard/queries.
+- Clone completo including kitchenLayout (con remap de placements.itemId).
+- ABM mínimo: guardar desde proyecto + crear desde plantilla + borrar.
+- Go incluido con paridad completa.
+
+**Notas técnicas / fuera de alcance:**
+- Items de plantilla NO llevan `structureRevisionPin` (la cotización nueva
+  cotiza contra la revisión viva; el pin es de cierre).
+- Go almacena items como JSONB en `project_templates` (sin tabla separada de
+  template_items) para simplicidad y consistencia con los otros blobs.
+- No hay editor rico de plantillas (no se editan items in-place); el flujo es
+  guardar desde un proyecto real. ABM rico queda como follow-up.
+- No se siembran módulos superiores/altos en Go seed (solo MOD-GAB-01/MOD-CAJ-01);
+  la plantilla seed Go usa esos 2.
 
 ## Hecho en esta pasada (2026-07-18) — F055 Parámetros de medida a nivel proyecto (#109)
 

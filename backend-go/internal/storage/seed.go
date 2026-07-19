@@ -389,6 +389,35 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		}
 	}
 
+	// #110 / H15: seed a "Cocina estándar 3 m" project template. Items stored
+	// as JSONB (mirrors the table shape). 2 gabinetes + 1 cajonera, defaults
+	// inferiores (depth 590). Idempotent: skip if a template row exists.
+	var templateCount int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM project_templates`).Scan(&templateCount); err != nil {
+		return fmt.Errorf("seed template count: %w", err)
+	}
+	if templateCount == 0 {
+		itemsJSON := fmt.Sprintf(`[
+			{"id":"%s","module_id":"%s","quantity":2,"option_choices":{"INTERIOR":"%s","FRENTE":"%s","FONDO":"%s","BISAGRA":"%s"}},
+			{"id":"%s","module_id":"%s","quantity":1,"option_choices":{"INTERIOR":"%s","FRENTE":"%s","FONDO":"%s","BISAGRA":"%s"}}
+		]`, "tmpl-item-1", seedModGab, seedMatArauco, seedMatMaderado, seedMatMdf, seedHwBisagra,
+			"tmpl-item-2", seedModCaj, seedMatArauco, seedMatMaderado, seedMatMdf, seedHwBisagra)
+		measureDefaults := `{"inferior":{"depth":590,"height":720}}`
+		_, err = tx.Exec(ctx, `
+			INSERT INTO project_templates (id, name, currency, margin_factor, labor_fixed_cost, measure_defaults, items, notes, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+			"tmpl-cocina-estandar-3m",
+			"Cocina estándar 3 m",
+			"MXN", 1.35, 1200.0,
+			measureDefaults,
+			itemsJSON,
+			"Plantilla demo: 2 gabinetes + 1 cajonera (inferiores).",
+		)
+		if err != nil {
+			return fmt.Errorf("seed project template: %w", err)
+		}
+	}
+
 	return tx.Commit(ctx)
 }
 

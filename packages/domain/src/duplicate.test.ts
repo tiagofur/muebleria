@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createProjectFromTemplate,
   duplicateModule,
   duplicateProject,
+  projectToTemplate,
   suggestDuplicateCode,
 } from './duplicate';
-import type { Module, Project, QuotePriceSnapshot } from './types';
+import type {
+  Module,
+  Project,
+  ProjectTemplate,
+  QuotePriceSnapshot,
+} from './types';
 
 function sampleModule(overrides: Partial<Module> = {}): Module {
   return {
@@ -266,5 +273,244 @@ describe('duplicateProject', () => {
     });
     expect(copy.items[0]!.moduleId).toBe(master.id);
     expect(master).toEqual(masterBefore);
+  });
+});
+
+describe('projectToTemplate (#110 / H15)', () => {
+  it('extracts clonable fields and drops customer/status/snapshot/owner', () => {
+    const original = sampleProject();
+    const now = '2026-07-18T00:00:00.000Z';
+    const template = projectToTemplate(original, {
+      newId: 'tmpl-1',
+      name: 'Cocina estándar',
+      nowIso: now,
+    });
+
+    expect(template.id).toBe('tmpl-1');
+    expect(template.name).toBe('Cocina estándar');
+    expect(template.currency).toBe('UYU');
+    expect(template.marginFactor).toBe(1.35);
+    expect(template.laborFixedCost).toBe(50);
+    expect(template.notes).toBe('urgente');
+    expect(template.createdAt).toBe(now);
+    expect(template.updatedAt).toBe(now);
+
+    // Carried.
+    expect(template.items).toHaveLength(2);
+    expect(template.items[0]!.moduleId).toBe('mod-gab');
+    expect(template.items[0]!.optionChoices).toEqual({
+      INTERIOR: 'mat-a',
+      FRENTE: 'mat-b',
+    });
+
+    // Dropped — a template has no customer/status/snapshot/owner.
+    expect('customerId' in template).toBe(false);
+    expect('status' in template).toBe(false);
+    expect('priceSnapshot' in template).toBe(false);
+    expect('ownerUserId' in template).toBe(false);
+  });
+
+  it('defaults name to project name + (plantilla) when not provided', () => {
+    const template = projectToTemplate(sampleProject(), {
+      newId: 'tmpl-1',
+      nowIso: '2026-07-18T00:00:00.000Z',
+    });
+    expect(template.name).toBe('Cocina Ana (plantilla)');
+  });
+
+  it('copies measureDefaults, kitchenLayout, installationChecklist', () => {
+    const original = {
+      ...sampleProject(),
+      measureDefaults: { inferior: { depth: 560, height: 720 } },
+      kitchenLayout: {
+        walls: [
+          { id: 'w1', lengthMm: 3000, angleDeg: 0 },
+        ],
+        placements: [
+          {
+            itemId: 'item-1',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor' as const,
+          },
+        ],
+      },
+      installationChecklist: [
+        { id: 'c1', label: 'Verificar medidas', done: false },
+      ],
+    };
+    const template = projectToTemplate(original, {
+      newId: 'tmpl-1',
+      nowIso: '2026-07-18T00:00:00.000Z',
+    });
+    expect(template.measureDefaults).toEqual({
+      inferior: { depth: 560, height: 720 },
+    });
+    expect(template.kitchenLayout?.walls).toHaveLength(1);
+    // itemId preserved verbatim in the template (remap happens at create time).
+    expect(template.kitchenLayout?.placements[0]!.itemId).toBe('item-1');
+    expect(template.installationChecklist).toEqual([
+      { id: 'c1', label: 'Verificar medidas', done: false },
+    ]);
+  });
+
+  it('does not mutate the original project', () => {
+    const original = sampleProject();
+    const before = structuredClone(original);
+    projectToTemplate(original, {
+      newId: 'tmpl-1',
+      nowIso: '2026-07-18T00:00:00.000Z',
+    });
+    expect(original).toEqual(before);
+  });
+});
+
+describe('createProjectFromTemplate (#110 / H15)', () => {
+  function sampleTemplate(
+    overrides: Partial<ProjectTemplate> = {},
+  ): ProjectTemplate {
+    return {
+      id: 'tmpl-1',
+      name: 'Cocina estándar 3 m',
+      currency: 'MXN',
+      marginFactor: 1.4,
+      laborFixedCost: 100,
+      items: [
+        {
+          id: 't-item-1',
+          moduleId: 'mod-gab',
+          quantity: 2,
+          optionChoices: { INTERIOR: 'mat-a' },
+          measurePresetId: 'preset-560',
+        },
+        {
+          id: 't-item-2',
+          moduleId: 'mod-ala',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a' },
+        },
+      ],
+      kitchenLayout: {
+        walls: [
+          { id: 'w1', lengthMm: 3000, angleDeg: 0 },
+        ],
+        placements: [
+          {
+            itemId: 't-item-1',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+          {
+            itemId: 't-item-2',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 600,
+            elevation: 'wall',
+          },
+        ],
+      },
+      measureDefaults: { inferior: { depth: 560 }, superior: { depth: 320 } },
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('builds a draft project with reminted ids and assigned customer/owner', () => {
+    let n = 0;
+    const now = '2026-07-18T00:00:00.000Z';
+    const project = createProjectFromTemplate(sampleTemplate(), {
+      newId: 'prj-new',
+      itemIdFactory: () => `item-new-${++n}`,
+      nowIso: now,
+      customerId: 'cust-bruno',
+      name: 'Cocina Bruno',
+      ownerUserId: 'user-1',
+      createdBy: 'user-0',
+    });
+
+    expect(project.id).toBe('prj-new');
+    expect(project.name).toBe('Cocina Bruno');
+    expect(project.customerId).toBe('cust-bruno');
+    expect(project.ownerUserId).toBe('user-1');
+    expect(project.createdBy).toBe('user-0');
+    expect(project.status).toBe('draft');
+    expect(project.priceSnapshot).toBeUndefined();
+    expect(project.currency).toBe('MXN');
+    expect(project.marginFactor).toBe(1.4);
+
+    expect(project.items).toHaveLength(2);
+    expect(project.items[0]!.id).toBe('item-new-1');
+    expect(project.items[1]!.id).toBe('item-new-2');
+    // Items don't carry structureRevisionPin (fresh quote = live revision).
+    expect(project.items[0]!.structureRevisionPin).toBeUndefined();
+    expect(project.items[0]!.moduleId).toBe('mod-gab');
+    expect(project.items[0]!.measurePresetId).toBe('preset-560');
+  });
+
+  it('remaps kitchenLayout placements to the new item ids', () => {
+    let n = 0;
+    const project = createProjectFromTemplate(sampleTemplate(), {
+      newId: 'prj-new',
+      itemIdFactory: () => `item-new-${++n}`,
+      nowIso: '2026-07-18T00:00:00.000Z',
+      customerId: 'cust-x',
+      name: 'X',
+    });
+    const newIds = project.items.map((i) => i.id);
+    expect(project.kitchenLayout?.placements).toHaveLength(2);
+    expect(project.kitchenLayout?.placements[0]!.itemId).toBe(newIds[0]);
+    expect(project.kitchenLayout?.placements[1]!.itemId).toBe(newIds[1]);
+    // Walls preserved.
+    expect(project.kitchenLayout?.walls).toHaveLength(1);
+  });
+
+  it('carries measureDefaults, projectLevelChoices, installationChecklist', () => {
+    const project = createProjectFromTemplate(
+      sampleTemplate({
+        projectLevelChoices: { INTERIOR: 'mat-a' },
+        installationChecklist: [{ id: 'c1', label: 'Ok', done: false }],
+      }),
+      {
+        newId: 'prj-new',
+        itemIdFactory: () => 'item-x',
+        nowIso: '2026-07-18T00:00:00.000Z',
+        customerId: 'cust-x',
+        name: 'X',
+      },
+    );
+    expect(project.measureDefaults).toEqual({
+      inferior: { depth: 560 },
+      superior: { depth: 320 },
+    });
+    expect(project.projectLevelChoices).toEqual({ INTERIOR: 'mat-a' });
+    expect(project.installationChecklist).toEqual([
+      { id: 'c1', label: 'Ok', done: false },
+    ]);
+  });
+
+  it('round-trip: project → template → project preserves item count + structure', () => {
+    const original = sampleProject();
+    const template = projectToTemplate(original, {
+      newId: 'tmpl-1',
+      nowIso: '2026-07-18T00:00:00.000Z',
+    });
+    const roundTrip = createProjectFromTemplate(template, {
+      newId: 'prj-new',
+      itemIdFactory: () => 'item-rt',
+      nowIso: '2026-07-18T00:00:00.000Z',
+      customerId: 'cust-rt',
+      name: 'RT',
+    });
+    expect(roundTrip.items).toHaveLength(original.items.length);
+    expect(roundTrip.items.map((i) => i.moduleId)).toEqual(
+      original.items.map((i) => i.moduleId),
+    );
+    expect(roundTrip.items.map((i) => i.quantity)).toEqual(
+      original.items.map((i) => i.quantity),
+    );
   });
 });

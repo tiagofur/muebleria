@@ -18,6 +18,7 @@ import type {
   Module,
   OptionGroup,
   Project,
+  ProjectTemplate,
   QuoteBreakdown,
 } from '@muebles/domain';
 import { ProjectsScreen } from './ProjectsScreen';
@@ -167,6 +168,9 @@ function renderScreen(
   const onUpdate = vi.fn();
   const onDelete = vi.fn();
   const onDuplicate = vi.fn();
+  const onSaveAsTemplate = vi.fn();
+  const onCreateFromTemplate = vi.fn();
+  const onDeleteTemplate = vi.fn();
   const onAddItem = vi.fn();
   const onUpdateItem = vi.fn();
   const onRemoveItem = vi.fn();
@@ -188,6 +192,9 @@ function renderScreen(
       onUpdate={onUpdate}
       onDelete={onDelete}
       onDuplicate={onDuplicate}
+      onSaveAsTemplate={onSaveAsTemplate}
+      onCreateFromTemplate={onCreateFromTemplate}
+      onDeleteTemplate={onDeleteTemplate}
       onAddItem={onAddItem}
       onUpdateItem={onUpdateItem}
       onRemoveItem={onRemoveItem}
@@ -207,6 +214,9 @@ function renderScreen(
     onUpdate,
     onDelete,
     onDuplicate,
+    onSaveAsTemplate,
+    onCreateFromTemplate,
+    onDeleteTemplate,
     onAddItem,
     onUpdateItem,
     onRemoveItem,
@@ -774,5 +784,107 @@ describe('ProjectsScreen project measure defaults (#109)', () => {
     expect(
       screen.queryByTestId('project-item-type-badge-item-1'),
     ).toBeNull();
+  });
+});
+
+describe('ProjectsScreen project templates (#110)', () => {
+  const sampleTemplate: ProjectTemplate = {
+    id: 'tmpl-test',
+    name: 'Cocina test',
+    currency: 'MXN',
+    marginFactor: 1.35,
+    laborFixedCost: 0,
+    items: [
+      { id: 'ti-1', moduleId: 'mod-1', quantity: 2, optionChoices: {} },
+      { id: 'ti-2', moduleId: 'mod-1', quantity: 1, optionChoices: {} },
+    ],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  };
+
+  it('toolbar shows "Desde plantilla" only when templates + handler present', async () => {
+    const user = userEvent.setup();
+    // No templates prop → no button.
+    renderScreen();
+    expect(screen.queryByTestId('new-from-template-btn')).toBeNull();
+    cleanup();
+
+    // With templates + handler → button appears.
+    renderScreen({
+      projectTemplates: [sampleTemplate],
+      onCreateFromTemplate: vi.fn(),
+    });
+    expect(screen.getByTestId('new-from-template-btn')).toBeTruthy();
+
+    await user.click(screen.getByTestId('new-from-template-btn'));
+    expect(screen.getByText('Crear cotización desde plantilla')).toBeTruthy();
+    expect(screen.getByTestId('template-pick-tmpl-test')).toBeTruthy();
+  });
+
+  it('picker → choose template → fill name+customer → onCreateFromTemplate', async () => {
+    const user = userEvent.setup();
+    const { onCreateFromTemplate } = renderScreen({
+      projectTemplates: [sampleTemplate],
+    });
+
+    await user.click(screen.getByTestId('new-from-template-btn'));
+    await user.click(screen.getByTestId('template-pick-tmpl-test'));
+
+    // Name input is pre-filled with the template name as a suggestion.
+    const nameInput = screen.getByTestId('from-template-name') as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Cocina nueva');
+    await user.selectOptions(
+      screen.getByTestId('from-template-customer'),
+      'cust-ana',
+    );
+    await user.click(screen.getByRole('button', { name: /Crear cotización/i }));
+
+    expect(onCreateFromTemplate).toHaveBeenCalledTimes(1);
+    const [templateId, draft] = onCreateFromTemplate.mock.calls[0]!;
+    expect(templateId).toBe('tmpl-test');
+    expect(draft.name).toBe('Cocina nueva');
+    expect(draft.customerId).toBe('cust-ana');
+  });
+
+  it('empty state shows "Crear desde plantilla" when templates exist', () => {
+    renderScreen({
+      projects: [],
+      projectTemplates: [sampleTemplate],
+    });
+    expect(screen.getByTestId('empty-from-template-btn')).toBeTruthy();
+  });
+
+  it('chrome shows "Guardar como plantilla" on draft projects and saves', async () => {
+    const user = userEvent.setup();
+    const { onSaveAsTemplate } = renderScreen({
+      projectTemplates: [sampleTemplate],
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const saveBtn = screen.getByTestId('save-as-template-btn-prj-1');
+    await user.click(saveBtn);
+
+    const nameInput = screen.getByTestId(
+      'save-as-template-name',
+    ) as HTMLInputElement;
+    expect(nameInput.value).toBe('Cocina Ana'); // defaults to project name
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Mi plantilla');
+    await user.click(screen.getByRole('button', { name: /Guardar plantilla/i }));
+
+    expect(onSaveAsTemplate).toHaveBeenCalledWith('prj-1', 'Mi plantilla');
+  });
+
+  it('management modal lists templates with a delete button', async () => {
+    const user = userEvent.setup();
+    const { onDeleteTemplate } = renderScreen({
+      projectTemplates: [sampleTemplate],
+    });
+
+    await user.click(screen.getByTestId('manage-templates-btn'));
+    await user.click(screen.getByTestId('delete-template-tmpl-test'));
+
+    expect(onDeleteTemplate).toHaveBeenCalledWith('tmpl-test');
   });
 });

@@ -44,6 +44,10 @@ type stubStore struct {
 	workshopSettings *domain.WorkshopSettings
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
 	catalogOverride *domain.Catalog
+	// #110: project templates hooks.
+	listProjectTemplates  []domain.ProjectTemplate
+	lastCreatedTemplate   *domain.ProjectTemplate
+	deleteTemplateCalled  bool
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -319,6 +323,28 @@ func (s *stubStore) UpsertWorkshopSettings(_ context.Context, ws domain.Workshop
 
 func (s *stubStore) SeedCatalog(_ context.Context) error {
 	return nil // not used by handler tests
+}
+
+// #110 / H15 — project templates stubs (no behavior; tests below inject data).
+func (s *stubStore) ListProjectTemplates(_ context.Context) ([]domain.ProjectTemplate, error) {
+	return s.listProjectTemplates, nil
+}
+func (s *stubStore) GetProjectTemplateByID(_ context.Context, _ string) (*domain.ProjectTemplate, error) {
+	return nil, errors.New("template not found")
+}
+func (s *stubStore) CreateProjectTemplate(_ context.Context, t domain.ProjectTemplate) error {
+	cp := t
+	s.lastCreatedTemplate = &cp
+	return nil
+}
+func (s *stubStore) UpdateProjectTemplate(_ context.Context, _ string, t domain.ProjectTemplate) error {
+	cp := t
+	s.lastCreatedTemplate = &cp
+	return nil
+}
+func (s *stubStore) DeleteProjectTemplate(_ context.Context, _ string) error {
+	s.deleteTemplateCalled = true
+	return nil
 }
 
 // dupErr mimics the wrapped error the storage layer returns on a unique
@@ -1103,5 +1129,83 @@ func TestF108_ClosingQuotePinsStructureRevision(t *testing.T) {
 	}
 	if *pin != rev {
 		t.Fatalf("StructureRevisionPin = %d, want %d (structure's current revision)", *pin, rev)
+	}
+}
+
+// --- Project templates (#110 / H15) ---
+
+func TestHandleProjectTemplatesList(t *testing.T) {
+	templates := []domain.ProjectTemplate{
+		{ID: "tmpl-1", Name: "Cocina test", Currency: "MXN", MarginFactor: 1.35, Items: []domain.ProjectItem{}},
+	}
+	srv := &Server{Store: &stubStore{listProjectTemplates: templates}}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/project-templates", nil), "v1", string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectTemplates(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	var got []domain.ProjectTemplate
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "tmpl-1" {
+		t.Fatalf("got = %+v, want one tmpl-1", got)
+	}
+}
+
+func TestHandleProjectTemplatesCreateRequiresEngineer(t *testing.T) {
+	// Vendedor cannot create templates — should be 403.
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"tmpl-x","name":"X","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/project-templates", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectTemplates(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("vendedor status = %d, want 403", rr.Code)
+	}
+	if store.lastCreatedTemplate != nil {
+		t.Fatalf("vendedor should not have created a template")
+	}
+}
+
+func TestHandleProjectTemplatesCreateEngineerOK(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"tmpl-x","name":"Cocina 3m","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/project-templates", body), "v1", string(domain.RoleIngeniero))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectTemplates(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.lastCreatedTemplate == nil || store.lastCreatedTemplate.Name != "Cocina 3m" {
+		t.Fatalf("created template not captured: %+v", store.lastCreatedTemplate)
+	}
+}
+
+func TestHandleProjectTemplateByIDDelete(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/project-templates/tmpl-x", nil), "v1", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "tmpl-x")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectTemplateByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if !store.deleteTemplateCalled {
+		t.Fatalf("expected DeleteProjectTemplate to be called")
 	}
 }
