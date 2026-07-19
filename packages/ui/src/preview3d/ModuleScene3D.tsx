@@ -17,6 +17,9 @@ export type ModuleScene3DProps = {
   readonly style?: CSSProperties;
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
+  readonly cameraView?: { readonly type: 'front' | 'top' | 'side' | 'isometric'; readonly ts: number } | null;
+  readonly cameraType?: 'perspective' | 'orthographic';
+  readonly showWireframe?: boolean;
 };
 
 /** Detect WebGL so tests/jsdom can skip Canvas. */
@@ -41,6 +44,9 @@ export function ModuleScene3D({
   style,
   colorMode = 'material',
   materialColors,
+  cameraView,
+  cameraType,
+  showWireframe,
 }: ModuleScene3DProps): ReactNode {
   return (
     <FurnitureScene3D
@@ -66,6 +72,9 @@ export function ModuleScene3D({
       showFloor={false}
       colorMode={colorMode}
       materialColors={materialColors}
+      cameraView={cameraView}
+      cameraType={cameraType}
+      showWireframe={showWireframe}
     />
   );
 }

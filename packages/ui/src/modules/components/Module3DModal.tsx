@@ -1,17 +1,12 @@
 /**
  * Module 3D preview modal — BOM from components + optional measure preset.
- * Prefers React Three Fiber; falls back to CSS Part3DViewer without WebGL.
+ * Uses unified Furniture3DViewer for camera controls, projection, wireframe, color mode.
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module } from '@muebles/domain';
-import { Modal, Part3DViewer } from '../../common';
-import {
-  ModuleScene3D,
-  canUseWebGL,
-  materialColorMap,
-  type BoardColorMode,
-} from '../../preview3d';
+import { Modal } from '../../common';
+import { Furniture3DViewer } from '../../common';
 import {
   resolveModule3DPreview,
   type Module3DCatalogInput,
@@ -22,8 +17,6 @@ export type Module3DModalProps = {
   readonly module: Module | null;
   readonly catalog: Module3DCatalogInput;
   readonly onClose: () => void;
-  /** Force CSS viewer (tests / low-end). Default: WebGL when available. */
-  readonly forceCssViewer?: boolean;
 };
 
 export function Module3DModal({
@@ -31,11 +24,8 @@ export function Module3DModal({
   module,
   catalog,
   onClose,
-  forceCssViewer = false,
 }: Module3DModalProps): ReactNode {
   const [presetId, setPresetId] = useState<string>('');
-  const [useR3f, setUseR3f] = useState(false);
-  const [colorMode, setColorMode] = useState<BoardColorMode>('material');
 
   useEffect(() => {
     if (!module) {
@@ -46,20 +36,10 @@ export function Module3DModal({
     setPresetId(first);
   }, [module]);
 
-  useEffect(() => {
-    if (!open) return;
-    setUseR3f(!forceCssViewer && canUseWebGL());
-  }, [open, forceCssViewer]);
-
   const preview = useMemo(() => {
     if (!module) return null;
     return resolveModule3DPreview(module, catalog, presetId || undefined);
   }, [module, catalog, presetId]);
-
-  const materialColors = useMemo(
-    () => materialColorMap(catalog.materials),
-    [catalog.materials],
-  );
 
   const title = module
     ? `Vista 3D — ${module.code} - ${module.name}`
@@ -69,50 +49,31 @@ export function Module3DModal({
     <Modal open={open} onClose={onClose} title={title} size="lg">
       {module && preview ? (
         <div data-testid="module-3d-modal-body">
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '0.75rem',
-              marginBottom: '0.75rem',
-              alignItems: 'flex-end',
-            }}
-          >
-            {preview.presets.length > 0 ? (
-              <div className="catalog-form__field" style={{ marginBottom: 0 }}>
-                <label htmlFor="module-3d-preset">Medida (preset)</label>
-                <select
-                  id="module-3d-preset"
-                  value={presetId}
-                  onChange={(e) => setPresetId(e.target.value)}
-                  data-testid="module-3d-preset-select"
-                >
-                  {preview.presets.map((pr) => (
-                    <option key={pr.id} value={pr.id}>
-                      {pr.name?.trim()
-                        ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth})`
-                        : `${pr.width}×${pr.height}×${pr.depth} mm`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-            <div className="catalog-form__field" style={{ marginBottom: 0 }}>
-              <label htmlFor="module-3d-color-mode">Colores</label>
+          {/* Preset selector (module-specific) */}
+          {preview.presets.length > 0 ? (
+            <div
+              className="catalog-form__field"
+              style={{ marginBottom: '0.75rem' }}
+            >
+              <label htmlFor="module-3d-preset">Medida (preset)</label>
               <select
-                id="module-3d-color-mode"
-                value={colorMode}
-                onChange={(e) =>
-                  setColorMode(e.target.value as BoardColorMode)
-                }
-                data-testid="module-3d-color-mode"
+                id="module-3d-preset"
+                value={presetId}
+                onChange={(e) => setPresetId(e.target.value)}
+                data-testid="module-3d-preset-select"
               >
-                <option value="material">Material (rápido)</option>
-                <option value="role">Por rol (taller)</option>
+                {preview.presets.map((pr) => (
+                  <option key={pr.id} value={pr.id}>
+                    {pr.name?.trim()
+                      ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth})`
+                      : `${pr.width}×${pr.height}×${pr.depth} mm`}
+                  </option>
+                ))}
               </select>
             </div>
-          </div>
+          ) : null}
 
+          {/* Error / empty states */}
           {preview.error ? (
             <p className="catalog-form__error" data-testid="module-3d-error">
               {preview.error}
@@ -126,24 +87,15 @@ export function Module3DModal({
             </p>
           ) : null}
 
+          {/* Unified 3D viewer with all controls */}
           {!preview.empty ? (
-            useR3f ? (
-              <ModuleScene3D
-                parts={preview.parts}
-                width={preview.width}
-                height={preview.height}
-                depth={preview.depth}
-                colorMode={colorMode}
-                materialColors={materialColors}
-              />
-            ) : (
-              <Part3DViewer
-                parts={preview.parts}
-                width={preview.width}
-                height={preview.height}
-                depth={preview.depth}
-              />
-            )
+            <Furniture3DViewer
+              parts={preview.parts}
+              width={preview.width}
+              height={preview.height}
+              depth={preview.depth}
+              testId="module-3d-viewer"
+            />
           ) : null}
         </div>
       ) : null}

@@ -74,7 +74,14 @@ CHANGES_REQUESTED -> ver progress/review_<id>.md
 
 - ❌ Nunca apruebes con tests rojos.
 - ❌ Nunca apruebes con `./init.sh` en rojo.
+- ❌ Nunca apruebes con trabajo **no pushed**: corré `git status` y
+  `git log origin/<rama>..HEAD`; si hay commits locales sin push, marcá
+  `CHANGES_REQUESTED` pidiendo `git push` antes de cerrar. El trabajo no
+  pushed es frágil (ver `docs/git-workflow.md`).
 - ❌ Nunca edites el código del implementador. Di qué falla, no lo arregles.
+- ❌ Si el diff mezcla archivos de features distintas (trabajo "ajeno"),
+  marcá `CHANGES_REQUESTED`: pedí separación en commit/rama atómica. Esto
+  fue la causa del incidente 3D de 2026-07.
 - ✅ Sé concreto: cita archivos y líneas. Nada de feedback genérico.
 - ✅ Si el golden test diverge intencionalmente (ej. merma), verifica que
   esté documentado en el test con un comentario explicativo.

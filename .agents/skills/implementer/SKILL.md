@@ -77,6 +77,14 @@ Si la feature que implementas toca **cualquiera** de estas cosas, es trabajo UI/
 - **UI/UX**: nunca uses colores, espaciados, sombras ni radios hardcodeados. Usa
   siempre las variables CSS de `packages/ui/src/design-system/tokens.css`
   (definidas en `docs/design.md`). Ninguna excepción.
+- **No mezcles trabajo de features distintas** en un mismo commit o stash. Si
+  mientras implementás #N tocás archivos que pertenecen a #M (trabajo "ajeno"),
+  **pará y reportá al líder**. "Mezcla involuntaria" como mensaje de stash es
+  la receta para perder el trabajo — esto pasó en julio 2026 con el stack 3D.
+- **`git stash` NO es depósito entre sesiones.** Si vas a cerrar la sesión con
+  trabajo incompleto, commitealo en rama `wip/` y pusheala. Leé
+  `docs/git-workflow.md` antes de cerrar sesión o tocar stashes.
+- **Antes de cerrar sesión: `git push`.** HEAD local == origin.
 
 ## Comunicación con el líder
 

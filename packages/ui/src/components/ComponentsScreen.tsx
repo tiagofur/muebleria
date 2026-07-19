@@ -9,7 +9,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Component, OptionGroup } from '@muebles/domain';
+import type { Component, OptionGroup, MaterialBoard } from '@muebles/domain';
 import {
   Modal,
   useDebouncedValue,
@@ -28,6 +28,7 @@ import {
 } from './componentDraft';
 import { ComponentEditorForm } from './editor/ComponentEditorForm';
 import { ComponentListView } from './editor/ComponentListView';
+import { materialColorMap } from '../preview3d';
 import './components.css';
 
 export type { ComponentDraft };
@@ -39,6 +40,7 @@ export {
 export interface ComponentsScreenProps {
   readonly components: readonly Component[];
   readonly optionGroups: readonly OptionGroup[];
+  readonly materials?: readonly MaterialBoard[];
   readonly onCreate: (draft: ComponentDraft) => void;
   readonly onUpdate: (id: string, draft: ComponentDraft) => void;
   readonly onToggleActive: (id: string) => void;
@@ -50,6 +52,7 @@ export interface ComponentsScreenProps {
 export function ComponentsScreen({
   components,
   optionGroups,
+  materials = [],
   onCreate,
   onUpdate,
   onToggleActive,
@@ -79,7 +82,32 @@ export function ComponentsScreen({
   const [editorTab, setEditorTab] = useState<ComponentEditorTab>('general');
   const [error, setError] = useState<string | null>(null);
 
+  const materialColors = useMemo(
+    () => materialColorMap(materials),
+    [materials],
+  );
+
   const previewParts = useMemo(() => {
+    const roles = draft.optionRoles
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    let firstMaterialId = 'preview-material';
+
+    for (const role of roles) {
+      const group = optionGroups.find(
+        (g) => g.code.toUpperCase() === role.toUpperCase() && g.kind === 'board',
+      );
+      if (group && group.optionIds.length > 0) {
+        const matId = group.optionIds[0];
+        if (matId) {
+          firstMaterialId = matId;
+          break;
+        }
+      }
+    }
+
     return [
       {
         id: 'preview',
@@ -97,10 +125,10 @@ export function ComponentsScreen({
         quantity: 1,
         grain: 0 as const,
         edges: [],
-        materialId: 'preview-material',
+        materialId: firstMaterialId,
       },
     ];
-  }, [draft]);
+  }, [draft, optionGroups]);
 
   const normalizedComponents = useMemo(() => {
     return components.map((c) => ({
@@ -220,6 +248,7 @@ export function ComponentsScreen({
           editingId={editingId}
           optionGroups={optionGroups}
           previewParts={previewParts}
+          materialColors={materialColors}
         />
       </Modal>
     </div>

@@ -45,4 +45,4 @@ export { PageLoading, type PageLoadingProps } from './PageLoading';
 export { InlineLoading, type InlineLoadingProps } from './InlineLoading';
 export { ListSkeleton, type ListSkeletonProps } from './ListSkeleton';
 export { submitBusyLabel } from './submitBusy';
-export { Part3DViewer } from './Part3DViewer';
+export { Furniture3DViewer, type Furniture3DViewerProps } from './Furniture3DViewer';

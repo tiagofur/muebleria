@@ -73,6 +73,7 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `.impeccable/live/config.json` | Live mode: shell Vite `apps/web/index.html` | Antes de `$impeccable live` |
 | `docs/technical_design.md` | Decisiones técnicas de implementación | Cuando el diseño de solución no está claro |
 | `docs/verification.md` | Cómo demostrar que funciona | Antes de declarar `done` |
+| `docs/git-workflow.md` | **Preservación de trabajo**: cómo guardar/cerrar sesión, por qué NO usar `git stash` como depósito, recuperación de commits perdidos | **OBLIGATORIO** antes de cerrar sesión o tocar `git stash` |
 | `CHECKPOINTS.md` | Criterios del revisor | Para auto-evaluarte |
 | `.agents/skills/` | Cómo actuar según tu rol (leader / implementer / reviewer) | Lee tu rol |
 | `README.md` | Stack, env vars, arranque backend | Setup / ops |
@@ -114,6 +115,10 @@ muebles/
 - **Código e identificadores en inglés; copy de UI en español** (salvo que el archivo ya use otro idioma de forma consistente).
 - **No copies sistemas de diseño ajenos al root** (`PRODUCT.md` / `DESIGN.md` de Impeccable u otros). El producto del taller es `docs/prd.md`; la UI del taller es `docs/design.md`.
 - **Nunca ejecutes SQL destructivo** (`DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`, `DELETE` sin `WHERE`) sobre Postgres, ni siquiera "para resetear y aplicar migraciones". Eso borra datos reales del usuario de forma irreversible. Las migraciones nuevas son aditivas (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`) y se aplican al arrancar el server sin tocar datos existentes. Si un reset es estrictamente necesario, **para y pedí confirmación explícita al usuario primero**, y ofrecé hacer un `pg_dump` de respaldo antes.
+- **`git stash` NO es depósito.** Stashes no se sincronizan con GitHub y se rompen al aplicar si contienen archivos nuevos (ver `docs/git-workflow.md`). Si vas a cerrar sesión o cambiar de contexto, **commit en rama `wip/` + push a origin**. Lo que no está pushed no existe.
+- **Antes de cerrar sesión: `git push`.** HEAD local debe ser igual a origin. Nunca te vayas con trabajo no pushed.
+- **No mezcles features distintas** en un mismo commit/stash. Si tu feature toca archivos "ajenos" a otra, abrí rama separada o commitealo en commit atómico con mensaje claro. Ver `docs/git-workflow.md §2`.
+- **`git stash apply --include-untracked`** SIEMPRE que apliques un stash heredado (porque sino perdés los archivos nuevos y rompe la compilación).
 
 ### Calidad al cerrar (mínimo)
 
@@ -121,6 +126,7 @@ muebles/
 2. Si cambió TS: `pnpm typecheck` verde  
 3. Si cambió Go: tests/`go test` del paquete tocado + server arranca con env válido  
 4. Evidencia en `progress/` según el skill del rol  
+5. **`git push`** — HEAD local == origin. Ver `docs/git-workflow.md`.
 
 ---
 

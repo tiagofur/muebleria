@@ -1,21 +1,25 @@
 /**
  * Component editor — 3D preview tab.
+ * Uses the unified Furniture3DViewer from common.
  */
 
 import type { ReactNode } from 'react';
-import { Part3DViewer } from '../../common';
+import { Furniture3DViewer, type Furniture3DViewerProps } from '../../common';
 import type { ComponentDraft } from '../componentDraft';
+import type { ResolvedBoardPart } from '@muebles/domain';
 
 export type ComponentEditorPreviewPanelProps = {
   readonly draft: ComponentDraft;
-  readonly previewParts: Parameters<typeof Part3DViewer>[0]['parts'];
+  readonly previewParts: readonly ResolvedBoardPart[];
   readonly hidden: boolean;
+  readonly materialColors?: Furniture3DViewerProps['materialColors'];
 };
 
 export function ComponentEditorPreviewPanel({
   draft,
   previewParts,
   hidden,
+  materialColors,
 }: ComponentEditorPreviewPanelProps): ReactNode {
   return (
     <div
@@ -28,14 +32,19 @@ export function ComponentEditorPreviewPanel({
       <p className="text-small text-muted mb-4">
         Vista previa tridimensional del componente según sus dimensiones y rotación.
       </p>
-      <div className="component-editor__preview-section mt-4 mb-4">
-        <Part3DViewer
-          parts={previewParts}
-          width={(draft.widthMm || 300) * 1.5}
-          height={(draft.thicknessMm || 18) * 1.5}
-          depth={(draft.lengthMm || 500) * 1.5}
-        />
-      </div>
+
+      <Furniture3DViewer
+        parts={previewParts}
+        width={draft.widthMm || 300}
+        height={draft.thicknessMm || 18}
+        depth={draft.lengthMm || 500}
+        materialColors={materialColors}
+        initialColorMode="material"
+        initialProjection="perspective"
+        initialWireframe={false}
+        hideControls={false}
+        testId="component-editor-3d-viewer"
+      />
     </div>
   );
 }

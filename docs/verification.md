@@ -96,11 +96,19 @@ pnpm --filter @muebles/desktop test
 - ❌ Mock del filesystem → usa `fs.mkdtempSync` real.
 - ❌ Marcar feature `done` sin `pnpm test` verde.
 - ❌ Golden test que ignora divergencias → documenta o corrige.
+- ❌ Cerrar sesión con trabajo **no pushed** → `git push` antes. Si lo
+  perdiste, no hay evidencia que valga. Ver `docs/git-workflow.md`.
+- ❌ Usar `git stash` para guardar trabajo entre sesiones → commitealo en
+  rama `wip/` y pusheala. Los stashes se rompen al aplicar si tienen
+  archivos nuevos (incidente 3D de 2026-07).
+- ❌ Mezclar archivos de features distintas en un mismo commit/stash →
+  reportá al líder y separá en commit/rama atómica.
 
 ## Verificación final antes de cerrar
 
 ```bash
 ./init.sh
+git push                          # OBLIGATORIO. HEAD local == origin.
 ```
 
 Salida esperada: `[OK] Entorno listo. Puedes empezar a trabajar.`
@@ -108,3 +116,8 @@ Salida esperada: `[OK] Entorno listo. Puedes empezar a trabajar.`
 Si `./init.sh` está rojo, **no** marques nada como `done`.
 Anota el bloqueo en `progress/current.md` y cambia el estado a `blocked` en
 `feature_list.json`.
+
+Si el `git push` falla o dejás trabajo no pushed, **no cierres la
+sesión**. El trabajo solo en tu disco está a un cierre malo de perderse
+(ver `docs/git-workflow.md`). Hacé commit en rama `wip/` y empuja aunque
+el código esté incompleto.
