@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from '@muebles/ui';
 import '@muebles/ui/design-system/tokens.css';
 import '@muebles/ui/design-system/reset.css';
+import '@muebles/ui/common/buttons.css';
 import { App } from './App';
 import './app.css';
 

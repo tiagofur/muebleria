@@ -10,7 +10,8 @@
       "default": "./src/index.ts"
     },
     "./design-system/tokens.css": "./src/design-system/tokens.css",
-    "./design-system/reset.css": "./src/design-system/reset.css"
+    "./design-system/reset.css": "./src/design-system/reset.css",
+    "./common/buttons.css": "./src/common/buttons.css"
   },
   "files": [
     "src"

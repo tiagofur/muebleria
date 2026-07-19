@@ -137,17 +137,9 @@
   color: var(--text-muted);
 }
 
-/* Status badges */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-}
-
+/* Status badges — local to users (active/pending). The shared .status-badge
+   base + project-status variants live in projects.css (design.md §5.2).
+   These are role-status-specific modifiers, kept here for co-location. */
 .status-badge--active {
   background: var(--success-50);
   color: var(--success-700);
@@ -158,62 +150,5 @@
   color: var(--warning-700);
 }
 
-/* Generic buttons (reusable btn classes) */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  border: 1px solid transparent;
-}
-
-.btn--sm {
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
-}
-
-.btn--ghost {
-  background: transparent;
-  color: var(--text-secondary);
-  border-color: var(--border-default);
-}
-
-.btn--ghost:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.btn--success {
-  background: var(--success-500);
-  color: hsl(0 0% 100%);
-  border-color: var(--success-500);
-}
-
-.btn--success:hover:not(:disabled) {
-  background: var(--success-700);
-  border-color: var(--success-700);
-}
-
-.btn--danger {
-  background: transparent;
-  color: var(--danger-500);
-  border-color: var(--danger-500);
-}
-
-.btn--danger:hover:not(:disabled) {
-  background: var(--danger-50);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
-}
+/* .btn and its modifiers live in common/buttons.css (F0 UI Fase 0).
+   Users screen uses .btn--small from the shared system; no overrides needed. */

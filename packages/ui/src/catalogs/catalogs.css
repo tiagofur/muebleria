@@ -283,7 +283,7 @@
 /* Domain-derived preview (shell injects formula; tokens only — issue #14). */
 .catalog-form__calculated-value {
   padding: var(--space-2);
-  background: var(--surface-muted, var(--surface-input));
+  background: var(--surface-muted);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-weight: var(--weight-semibold);
@@ -402,96 +402,14 @@
   border: 0;
 }
 
-.btn {
-  font: inherit;
-  font-size: var(--text-base);
-  padding: var(--density-btn-pad-y) var(--density-btn-pad-x);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--surface-card);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
+/* .btn and its modifiers (.btn--primary/--ghost/--danger/--small/--icon)
+   live in common/buttons.css (F0 UI Fase 0). Only catalog-scoped overrides
+   and phone/tablet touch targets for catalog tables belong here. */
 
-.btn:hover {
-  background: var(--surface-hover);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.btn--primary {
-  background: var(--brand-500);
-  border-color: var(--brand-500);
-  color: var(--text-inverse);
-}
-
-.btn--primary:hover {
-  background: var(--brand-600);
-  border-color: var(--brand-600);
-}
-
-.btn--danger {
-  color: var(--danger-500);
-  border-color: hsl(0 55% 85%);
-}
-
-.btn--danger:hover {
-  background: var(--danger-50);
-}
-
-.btn--ghost {
-  border-color: transparent;
-  background: transparent;
-}
-
-.btn--ghost:hover {
-  background: var(--surface-hover);
-}
-
-.btn--small {
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.btn--icon {
-  padding: var(--space-1);
-  width: 1.75rem;
-  height: 1.75rem;
-  justify-content: center;
-}
-
-/* Touch-friendly targets on phone / tablet portrait (issue #34) — denser desktop unchanged */
+/* Touch-friendly targets on phone / tablet portrait (issue #34) — denser desktop unchanged.
+   Global .btn touch rules live in buttons.css; this block keeps the catalog-
+   specific table/toolbar gaps compact on phone. */
 @media (max-width: 767px) {
-  .btn {
-    min-height: var(--touch-min);
-  }
-
-  .btn--small {
-    min-height: var(--touch-min);
-    min-width: var(--touch-min);
-    padding-inline: var(--space-3);
-    justify-content: center;
-  }
-
-  .btn--icon {
-    width: var(--touch-min);
-    height: var(--touch-min);
-    min-width: var(--touch-min);
-    min-height: var(--touch-min);
-  }
-
   .catalog-table__actions {
     gap: var(--space-2);
   }
@@ -849,8 +767,8 @@
 .material-color-swatch {
   display: inline-block;
   vertical-align: middle;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
 }
 
 .material-preview-color-row {
@@ -864,8 +782,8 @@
   width: 44px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   background: transparent;
   cursor: pointer;
 }

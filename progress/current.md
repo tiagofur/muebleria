@@ -1,8 +1,68 @@
 # Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch:** `feat/project-templates-110` (basada en `main`)
+- **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
+
+## Hecho en esta pasada (2026-07-19) — UI Review Fase 0
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones`
+
+Fase 0 — **Estabilizar** (P0, UX invisible). Cierra bugs de render y unifica `.btn`.
+
+**Cambios:**
+- **`tokens.css`**: definidos tokens auxiliares que el CSS referenciaba sin definir:
+  - `--surface-muted` (hsl 220 14% 96%), `--surface-disabled` (hsl 220 12% 94%)
+  - Escala completa `--success-100..700` (antes solo 50/500/700)
+  - Aliases de compat: `--surface-border` → `--border-default`; `--surface-base` →
+    `--surface-sidebar`; `--text-on-dark` → `--text-inverse`; `--color-text*`,
+    `--color-border`, `--success`/`--warning`/`--danger`/`--info` (sin escala) →
+    sus contrapartes canónicas. Esto resuelve el bug donde Components/Structures
+    no renderizaban bordes (var(--surface-border) era undefined).
+- **`common/buttons.css`** (nuevo): `.btn` unificado con modifiers
+  `--primary/--ghost/--danger/--success/--small/--icon`. Exportado como
+  `@muebles/ui/common/buttons.css`. Cargado en `apps/web/src/main.tsx` después
+  de reset.css.
+- **`catalogs/catalogs.css`**: borrada la definición de `.btn` (vive en
+  buttons.css ahora). Limpieza de fallbacks redundantes (`var(--surface-muted, …)`,
+  `var(--radius-sm, 4px)`). Arreglado `var(--border)` (sin sufijo) →
+  `var(--border-default)` en material-color-swatch y preview-color-picker.
+- **`users/users.css`**: borrada la segunda definición de `.btn` (incompatible
+  con la de catalogs: modifiers `--sm/--ghost/--success/--danger`, sin density).
+  Migración de TSX: `btn--sm` → `btn--small` (4 sitios en UsersScreen.tsx).
+- **`components/components.css`** y **`structures/structures.css`**: migrados
+  todos los `var(--surface-border)` → `var(--border-default)` / `--border-subtle`,
+  `var(--surface-overlay)` (incorrecto para fondo) → `var(--surface-muted)`,
+  `var(--success)` (sin escala) → `var(--success-500)` / `--success-700`.
+  Hardcoded `2px`/`4px`/`6px`/`10px` → tokens `--space-1/2/3`. Hardcoded
+  `font-weight: 600` → `var(--weight-semibold)`. Estructura idéntica en ambos
+  archivos (candidatos obvios para Fase 1: extraer `.entity-card` compartido).
+- **`projects/projects.css`**: bloque `.project-material-summary` migrado de
+  nomenclatura ajena (`--color-text*`, `--color-border` con fallbacks hardcoded)
+  a tokens canónicos (`--text-primary`, `--text-secondary`, `--border-default`).
+  Modo presentación (`.project-presentation`): `--surface-base`/`--text-on-dark`
+  con fallback → `--surface-sidebar`/`--text-inverse`.
+
+**Tests nuevos (regression guards en `designSystem.test.ts`):**
+1. `feature CSS only references tokens that exist in tokens.css`: parsea todos
+   los .css bajo `packages/ui/src` y verifica que cada `var(--x)` esté definido
+   en tokens.css o tenga fallback inline.
+2. `.btn base + modifiers live in common/buttons.css only`: garantiza que ningún
+   feature CSS vuelva a definir `.btn {` top-level.
+3. Package.json exporta `./common/buttons.css`.
+
+**Verificación:**
+- `pnpm test`: 313 (ui) + 87 (web) + 9 (desktop) = 409 tests verdes.
+- `pnpm typecheck`: 6/6 workspaces verde.
+- Smoke visual (playwright, 4 pantallas): Components ahora muestra bordes de
+  card correctos; Materials/Structures/Users sin regresión visual.
+
+**Pendiente (Fase 1, próxima):**
+- Extraer `.surface-card` / `.entity-card` / `.data-table` / `.page-header`
+- Eliminar magic numbers (`0.65rem`, `0.85rem`, etc.)
+- Ajustar `--text-muted` para WCAG AA
+- Partir `projects.css` (930 líneas) y `catalogs.css` (923 líneas)
 
 ## Hecho en esta pasada (2026-07-18) — F056 Plantillas de proyecto (#110)
 

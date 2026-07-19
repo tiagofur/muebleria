@@ -148,7 +148,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
         </div>
         <button
           type="button"
-          className="btn btn--ghost btn--sm"
+          className="btn btn--ghost btn--small"
           onClick={load}
           disabled={loading}
           title="Recargar"
@@ -250,7 +250,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                     {!u.active && (
                       <button
                         type="button"
-                        className="btn btn--success btn--sm"
+                        className="btn btn--success btn--small"
                         disabled={actionId === u.id}
                         onClick={() => void approve(u.id)}
                         title="Aprobar"
@@ -262,7 +262,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                     {u.active && (
                       <button
                         type="button"
-                        className="btn btn--ghost btn--sm"
+                        className="btn btn--ghost btn--small"
                         disabled
                         title="Gestionar rol con el selector de la izquierda"
                       >
@@ -272,7 +272,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                     {!u.active && (
                       <button
                         type="button"
-                        className="btn btn--danger btn--sm"
+                        className="btn btn--danger btn--small"
                         disabled={actionId === u.id}
                         onClick={() => void reject(u.id)}
                         title="Rechazar"
