@@ -2727,6 +2727,7 @@ function AppContent({
         <ComponentsScreen
           components={components}
           optionGroups={optionGroups}
+          materials={materials}
           onCreate={createComponent}
           onUpdate={updateComponent}
           onToggleActive={toggleComponentActive}

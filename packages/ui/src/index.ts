@@ -227,7 +227,6 @@ export {
   type ComponentsScreenProps,
 } from './components';
 
-export { Part3DViewer } from './common';
 export {
   ModuleScene3D,
   FurnitureScene3D,

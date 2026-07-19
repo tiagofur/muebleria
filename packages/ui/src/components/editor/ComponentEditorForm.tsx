@@ -8,8 +8,8 @@ import type {
   ReactNode,
   SetStateAction,
 } from 'react';
-import type { OptionGroup } from '@muebles/domain';
-import { Part3DViewer } from '../../common';
+import type { OptionGroup, ResolvedBoardPart } from '@muebles/domain';
+import type { MaterialColorLookup } from '../../preview3d';
 import {
   COMPONENT_EDITOR_TABS,
   type ComponentDraft,
@@ -32,7 +32,8 @@ export type ComponentEditorFormProps = {
   readonly setDraft: Dispatch<SetStateAction<ComponentDraft>>;
   readonly editingId: string | null;
   readonly optionGroups: readonly OptionGroup[];
-  readonly previewParts: Parameters<typeof Part3DViewer>[0]['parts'];
+  readonly previewParts: readonly ResolvedBoardPart[];
+  readonly materialColors?: MaterialColorLookup;
 };
 
 export function ComponentEditorForm({
@@ -47,6 +48,7 @@ export function ComponentEditorForm({
   editingId,
   optionGroups,
   previewParts,
+  materialColors,
 }: ComponentEditorFormProps): ReactNode {
   return (
     <form id={formId} onSubmit={onSubmit} className="catalog-form">
@@ -138,6 +140,7 @@ export function ComponentEditorForm({
         draft={draft}
         previewParts={previewParts}
         hidden={editorTab !== 'preview3d'}
+        materialColors={materialColors}
       />
 
       <div className="modal__footer mt-6">

@@ -1,16 +1,12 @@
 /**
  * Project / quote 3D modal — linear kitchen run of line items.
+ * Uses FurnitureScene3D (R3F) only. No CSS fallback.
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module, Project, ProjectItem } from '@muebles/domain';
-import { Modal, Part3DViewer } from '../../common';
-import {
-  FurnitureScene3D,
-  canUseWebGL,
-  materialColorMap,
-  type BoardColorMode,
-} from '../../preview3d';
+import { Modal } from '../../common';
+import { FurnitureScene3D, canUseWebGL, materialColorMap, type BoardColorMode } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
 
@@ -24,7 +20,6 @@ export type Project3DModalProps = {
    * When null, preview the whole quote run.
    */
   readonly focus?: { item: ProjectItem; module: Module } | null;
-  readonly forceCssViewer?: boolean;
 };
 
 export function Project3DModal({
@@ -33,15 +28,14 @@ export function Project3DModal({
   catalog,
   onClose,
   focus = null,
-  forceCssViewer = false,
 }: Project3DModalProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
 
   useEffect(() => {
     if (!open) return;
-    setUseR3f(!forceCssViewer && canUseWebGL());
-  }, [open, forceCssViewer]);
+    setUseR3f(canUseWebGL());
+  }, [open]);
 
   const preview = useMemo(() => {
     if (!project) return null;
@@ -60,11 +54,6 @@ export function Project3DModal({
     : focus
       ? `Vista 3D — ${focus.module.code} - ${focus.module.name}`
       : `Vista 3D cotización — ${project.name}`;
-
-  const cssFallback =
-    preview && preview.modules.length === 1
-      ? preview.modules[0]
-      : preview?.modules.find((m) => m.parts.length > 0) ?? null;
 
   return (
     <Modal open={open} onClose={onClose} title={title} size="lg">
@@ -143,22 +132,33 @@ export function Project3DModal({
               colorMode={colorMode}
               materialColors={materialColors}
             />
-          ) : preview.modules.length > 1 ? (
-            <p
+          ) : (
+            <div
               className="catalog-empty"
+              style={{
+                padding: '2rem',
+                textAlign: 'center',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--error-500)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--error-700)',
+              }}
               data-testid="project-3d-webgl-required"
             >
-              La corrida multi-módulo necesita WebGL. Activá la aceleración
-              gráfica o abrí un solo mueble para la vista simple.
-            </p>
-          ) : cssFallback ? (
-            <Part3DViewer
-              parts={cssFallback.parts}
-              width={cssFallback.width}
-              height={cssFallback.height}
-              depth={cssFallback.depth}
-            />
-          ) : null}
+              <h4>⚠️ WebGL requerido</h4>
+              <p>
+                La vista 3D de la cotización completa necesita WebGL
+                (Three.js / React Three Fiber).
+              </p>
+              <ul style={{ textAlign: 'left', maxWidth: '400px', margin: '1rem auto' }}>
+                <li>Verificá que el navegador tenga WebGL habilitado</li>
+                <li>En Firefox: <code>about:config</code> → <code>webgl.disabled = false</code></li>
+                <li>En Chrome/Edge: <code>chrome://flags</code> → buscá "WebGL"</li>
+                <li>Algunas extensiones de privacidad/seguridad bloquean <code>canvas.getContext('webgl')</code></li>
+                <li>CSP estricta puede impedir canvas 3D</li>
+              </ul>
+            </div>
+          )}
         </div>
       ) : null}
     </Modal>

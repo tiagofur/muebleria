@@ -23,7 +23,6 @@ import {
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
-import { Part3DViewer } from '../../common';
 
 export type ProjectPresentationModeProps = {
   readonly open: boolean;
@@ -104,11 +103,6 @@ export function ProjectPresentationMode({
   );
 
   if (!open) return null;
-
-  const cssFallback =
-    preview.modules.length === 1
-      ? preview.modules[0]
-      : preview.modules.find((m) => m.parts.length > 0) ?? null;
 
   return (
     <div
@@ -214,17 +208,25 @@ export function ProjectPresentationMode({
               colorMode="material"
               materialColors={materialColors}
             />
-          ) : cssFallback ? (
-            <Part3DViewer
-              parts={cssFallback.parts}
-              width={cssFallback.width}
-              height={cssFallback.height}
-              depth={cssFallback.depth}
-            />
           ) : (
-            <p className="catalog-empty">
-              Activá WebGL para ver la corrida completa en 3D.
-            </p>
+            <div
+              className="catalog-empty"
+              style={{
+                padding: '2rem',
+                textAlign: 'center',
+                background: 'var(--surface-hover)',
+                border: '1px solid var(--error-500)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--error-700)',
+              }}
+              data-testid="presentation-webgl-required"
+            >
+              <h4>⚠️ WebGL requerido</h4>
+              <p>
+                La vista 3D necesita WebGL (Three.js / React Three Fiber).
+                Verificá que tu navegador lo soporte y no esté bloqueado.
+              </p>
+            </div>
           )}
         </section>
       </div>

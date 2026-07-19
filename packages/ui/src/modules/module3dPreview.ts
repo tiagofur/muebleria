@@ -1,5 +1,5 @@
 /**
- * Pure helper: resolve composed module BOM for Part3DViewer.
+ * Pure helper: resolve composed module BOM for the 3D viewer (Furniture3DViewer / R3F).
  * Picks default measure preset when the module has commercial presets.
  */
 
