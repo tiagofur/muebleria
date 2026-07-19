@@ -28,6 +28,7 @@ import type {
   Project,
   ProjectItem,
   ProjectMaterialSummary,
+  ProjectTemplate,
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
@@ -41,6 +42,8 @@ import {
   generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
+  projectToTemplate,
+  createProjectFromTemplate,
   navIdsForRole,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
@@ -1781,6 +1784,104 @@ function AppContent({
     toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
   };
 
+  // --- Project templates (#110 / H15) ---
+
+  const saveAsTemplate = (projectId: string, name: string) => {
+    const source = projects.find((p) => p.id === projectId);
+    if (!source) return;
+    const now = new Date().toISOString();
+    const template: ProjectTemplate = projectToTemplate(source, {
+      newId: newId(),
+      name,
+      nowIso: now,
+    });
+    setWorkspace((prev) =>
+      prev
+        ? {
+            ...prev,
+            projectTemplates: [...(prev.projectTemplates ?? []), template],
+          }
+        : prev,
+    );
+    repository.createProjectTemplate(template).catch((err) => {
+      console.error('Error al guardar plantilla:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo guardar la plantilla en el servidor',
+      });
+    });
+    toast({ type: 'success', message: `✓ Plantilla "${name}" guardada` });
+  };
+
+  const createFromTemplate = (
+    templateId: string,
+    draft: ProjectDraft,
+  ) => {
+    const template = (workspace?.projectTemplates ?? []).find(
+      (t) => t.id === templateId,
+    );
+    if (!template) return;
+    const now = new Date().toISOString();
+    const resolved = resolveCustomerFromDraft(
+      draft,
+      workspace?.catalog.customers ?? [],
+    );
+    const ownerUserId = resolveOwnerOnCreate(
+      authUser?.id,
+      authUser?.role,
+      draft.ownerUserId,
+    );
+    const project = createProjectFromTemplate(template, {
+      newId: newId(),
+      itemIdFactory: newId,
+      nowIso: now,
+      customerId: resolved.customerId,
+      name: draft.name,
+      ownerUserId,
+      createdBy: authUser?.id,
+    });
+    setWorkspace((prev) =>
+      prev
+        ? {
+            ...prev,
+            catalog: { ...prev.catalog, customers: resolved.customers },
+            projects: [...prev.projects, project],
+          }
+        : prev,
+    );
+    repository.saveCatalog({ ...workspace!.catalog, customers: resolved.customers }).catch((err) => {
+      console.error('Error al guardar catálogo:', err);
+    });
+    repository.createProject(project).catch((err) => {
+      console.error('Error al crear proyecto desde plantilla:', err);
+      toast({
+        type: 'error',
+        message: 'No se pudo crear la cotización en el servidor',
+      });
+    });
+    toast({
+      type: 'success',
+      message: `✓ Cotización "${draft.name}" creada desde plantilla`,
+    });
+  };
+
+  const deleteTemplate = (templateId: string) => {
+    setWorkspace((prev) =>
+      prev
+        ? {
+            ...prev,
+            projectTemplates: (prev.projectTemplates ?? []).filter(
+              (t) => t.id !== templateId,
+            ),
+          }
+        : prev,
+    );
+    repository.deleteProjectTemplate(templateId).catch((err) => {
+      console.error('Error al borrar plantilla:', err);
+    });
+    toast({ type: 'info', message: '↓ Plantilla eliminada' });
+  };
+
   const addProjectItem = (
     projectId: string,
     input: {
@@ -2653,6 +2754,10 @@ function AppContent({
           onUpdate={updateProject}
           onDelete={deleteProject}
           onDuplicate={duplicateProjectById}
+          projectTemplates={workspace?.projectTemplates ?? []}
+          onSaveAsTemplate={saveAsTemplate}
+          onCreateFromTemplate={createFromTemplate}
+          onDeleteTemplate={deleteTemplate}
           onAddItem={addProjectItem}
           onUpdateItem={updateProjectItem}
           onRemoveItem={removeProjectItem}
