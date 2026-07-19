@@ -2,7 +2,7 @@
  * LocalStorage implementation of WorkspaceRepository for Guest mode.
  */
 
-import type { Catalog, Project, Workspace } from '@muebles/domain';
+import type { Catalog, Project, ProjectTemplate, Workspace } from '@muebles/domain';
 import { withWorkshopSettings } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import { createSeedWorkspace } from './seed';
@@ -79,6 +79,36 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     this.saveWorkspace({
       ...ws,
       projects: ws.projects.filter((p) => p.id !== projectId),
+    });
+  }
+
+  // --- Project templates (#110 / H15) ---
+
+  async getProjectTemplates(): Promise<readonly ProjectTemplate[]> {
+    return this.getWorkspace().projectTemplates ?? [];
+  }
+
+  async createProjectTemplate(template: ProjectTemplate): Promise<void> {
+    return this.saveProjectTemplate(template);
+  }
+
+  async saveProjectTemplate(template: ProjectTemplate): Promise<void> {
+    const ws = this.getWorkspace();
+    const current = ws.projectTemplates ?? [];
+    const exists = current.some((t) => t.id === template.id);
+    const projectTemplates = exists
+      ? current.map((t) => (t.id === template.id ? template : t))
+      : [...current, template];
+    this.saveWorkspace({ ...ws, projectTemplates });
+  }
+
+  async deleteProjectTemplate(templateId: string): Promise<void> {
+    const ws = this.getWorkspace();
+    this.saveWorkspace({
+      ...ws,
+      projectTemplates: (ws.projectTemplates ?? []).filter(
+        (t) => t.id !== templateId,
+      ),
     });
   }
 }

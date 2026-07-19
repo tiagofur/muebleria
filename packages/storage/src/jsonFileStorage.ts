@@ -5,7 +5,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import type { Catalog, Project, Workspace } from '@muebles/domain';
+import type { Catalog, Project, ProjectTemplate, Workspace } from '@muebles/domain';
 
 import { createSeedWorkspace, SCHEMA_VERSION } from './seed';
 import type { WorkspaceRepository } from './workspaceRepository';
@@ -179,6 +179,37 @@ export class JSONFileStorage implements WorkspaceRepository {
     await this.save({
       ...workspace,
       projects: workspace.projects.filter((p) => p.id !== projectId),
+    });
+  }
+
+  // --- Project templates (#110 / H15) ---
+
+  async getProjectTemplates(): Promise<readonly ProjectTemplate[]> {
+    const workspace = await this.load();
+    return workspace.projectTemplates ?? [];
+  }
+
+  async createProjectTemplate(template: ProjectTemplate): Promise<void> {
+    return this.saveProjectTemplate(template);
+  }
+
+  async saveProjectTemplate(template: ProjectTemplate): Promise<void> {
+    const workspace = await this.load();
+    const current = workspace.projectTemplates ?? [];
+    const index = current.findIndex((t) => t.id === template.id);
+    const next =
+      index === -1
+        ? [...current, template]
+        : current.map((t, i) => (i === index ? template : t));
+    await this.save({ ...workspace, projectTemplates: next });
+  }
+
+  async deleteProjectTemplate(templateId: string): Promise<void> {
+    const workspace = await this.load();
+    const current = workspace.projectTemplates ?? [];
+    await this.save({
+      ...workspace,
+      projectTemplates: current.filter((t) => t.id !== templateId),
     });
   }
 }

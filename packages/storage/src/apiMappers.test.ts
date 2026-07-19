@@ -8,6 +8,8 @@ import {
   sortCategoriesForSave,
   projectToApi,
   projectFromApi,
+  projectTemplateToApi,
+  projectTemplateFromApi,
   breakdownFromApi,
   componentToApi,
   componentFromApi,
@@ -20,6 +22,7 @@ import type {
   Module,
   ModuleCategory,
   Project,
+  ProjectTemplate,
   Structure,
 } from '@muebles/domain';
 
@@ -499,5 +502,113 @@ describe('component formula mappers', () => {
     expect(round.components?.[0]?.overrides?.xFormula).toBe('T');
     expect(round.components?.[0]?.overrides?.zFormula).toBe('100');
     expect(round.components?.[0]?.overrides?.rotateY).toBe(0);
+  });
+});
+
+describe('apiMappers — project templates (#110)', () => {
+  it('round-trips ProjectTemplate with items + kitchenLayout + measureDefaults', () => {
+    const t: ProjectTemplate = {
+      id: 'tmpl-1',
+      name: 'Cocina estándar 3 m',
+      currency: 'MXN',
+      marginFactor: 1.4,
+      laborFixedCost: 100,
+      items: [
+        {
+          id: 'ti-1',
+          moduleId: 'mod-gab',
+          quantity: 2,
+          optionChoices: { INTERIOR: 'mat-a' },
+          measurePresetId: 'preset-560',
+        },
+      ],
+      projectLevelChoices: { INTERIOR: 'mat-a' },
+      measureDefaults: { inferior: { depth: 560, height: 720 } },
+      kitchenLayout: {
+        walls: [
+          { id: 'w1', lengthMm: 3000, angleDeg: 0 },
+        ],
+        placements: [
+          {
+            itemId: 'ti-1',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+      installationChecklist: [
+        { id: 'c1', label: 'Verificar', done: false },
+      ],
+      notes: 'Template de cocina',
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    };
+    const api = projectTemplateToApi(t);
+    expect(api.name).toBe('Cocina estándar 3 m');
+    expect(api.margin_factor).toBe(1.4);
+    expect(api.measure_defaults).toEqual({
+      inferior: { depth: 560, height: 720 },
+    });
+    expect(api.kitchen_layout).not.toBeNull();
+    // Items carry no structure_revision_pin (templates never pin).
+    const items = api.items as Record<string, unknown>[];
+    expect(items[0]!.module_id).toBe('mod-gab');
+    expect('structure_revision_pin' in items[0]!).toBe(false);
+
+    const round = projectTemplateFromApi(api as Record<string, unknown>);
+    expect(round.id).toBe('tmpl-1');
+    expect(round.name).toBe('Cocina estándar 3 m');
+    expect(round.items).toHaveLength(1);
+    expect(round.items[0]!.moduleId).toBe('mod-gab');
+    expect(round.items[0]!.measurePresetId).toBe('preset-560');
+    expect(round.measureDefaults).toEqual({
+      inferior: { depth: 560, height: 720 },
+    });
+    expect(round.kitchenLayout?.placements[0]!.itemId).toBe('ti-1');
+    expect(round.installationChecklist).toEqual([
+      { id: 'c1', label: 'Verificar', done: false },
+    ]);
+  });
+
+  it('omits optionals cleanly and reads camelCase', () => {
+    const api = projectTemplateToApi({
+      id: 'tmpl-2',
+      name: 'Vacía',
+      currency: 'UYU',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      items: [],
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    });
+    expect(api.kitchen_layout).toBeNull();
+    expect(api.measure_defaults).toBeNull();
+    expect(api.installation_checklist).toBeNull();
+    expect(api.project_level_choices).toEqual({});
+
+    const round = projectTemplateFromApi(api as Record<string, unknown>);
+    expect(round.kitchenLayout).toBeUndefined();
+    expect(round.measureDefaults).toBeUndefined();
+    expect(round.installationChecklist).toBeUndefined();
+    expect(round.projectLevelChoices).toBeUndefined();
+    expect(round.items).toEqual([]);
+  });
+
+  it('dual-reads snake/camel keys', () => {
+    const fromCamel = projectTemplateFromApi({
+      id: 't3',
+      name: 'X',
+      currency: 'MXN',
+      marginFactor: 1.5,
+      laborFixedCost: 200,
+      items: [],
+      measureDefaults: { alto: { height: 2100 } },
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    } as Record<string, unknown>);
+    expect(fromCamel.measureDefaults).toEqual({ alto: { height: 2100 } });
+    expect(fromCamel.marginFactor).toBe(1.5);
   });
 });
