@@ -995,6 +995,32 @@
       ],
       "status": "done",
       "github_issue": 109
+    },
+    {
+      "id": "F056",
+      "phase": 10,
+      "name": "project_templates",
+      "title": "Plantillas de proyecto (ej. cocina 3 m)",
+      "description": "Plantillas de proyecto reutilizables (#110 / H15). Colección separada Workspace.projectTemplates + tipo ProjectTemplate (entidad distinta de Project: sin customer/status/snapshot/owner). Flujo: 'Guardar como plantilla' desde un proyecto, 'Crear desde plantilla' (toolbar + empty state) clona a proyecto nuevo editable, borrar plantilla. Clone completo including kitchenLayout (con remap de placements.itemId) + items + projectLevelChoices + measureDefaults + installationChecklist. Los items de la plantilla NO llevan structureRevisionPin (la cotización nueva cotiza contra la revisión viva). Paridad TS + backend-go. Seed con plantilla demo 'Cocina estándar 3 m'.",
+      "acceptance": [
+        "Crear proyecto desde plantilla en < 1 minuto de flujo",
+        "El proyecto resultante es editable y cotizable",
+        "No comparte identidad con la plantilla (clone real con nuevos ids)",
+        "ProjectTemplate como entidad separada en Workspace (no flag en Project)",
+        "Clone preserva items + projectLevelChoices + measureDefaults + kitchenLayout (remap placements)",
+        "ABM mínimo: guardar desde proyecto, crear desde plantilla, borrar",
+        "Storage mappers + repository methods (TS + Go) para projectTemplates",
+        "Migración Go aditiva (CREATE TABLE IF NOT EXISTS project_templates + project_template_items)",
+        "Seed con plantilla demo",
+        "pnpm test + typecheck + init.sh verde; go test verde"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/110",
+        "docs/prd.md",
+        "docs/architecture.md"
+      ],
+      "status": "done",
+      "github_issue": 110
     }
   ]
 }
