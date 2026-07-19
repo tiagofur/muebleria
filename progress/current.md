@@ -4,6 +4,99 @@
 - **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
 
+## Hecho en esta pasada (2026-07-19) — UI Review Fase 2
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones` (continuación de Fase 0 + 1)
+
+Fase 2 — **Reorganizar navegación y flujos** (P1 visible).
+
+**Decisiones aprobadas:**
+- Home polimórfico: agregar nav id `production` (Cola) propio para
+  `roleUsesProductionQueue`. `home` siempre es Dashboard para todos los roles.
+- Exports de Projects: Opción B adaptativa — primary Optimizer + menú
+  "Más exports ▾" para los 6 restantes agrupados por Producción/Comercial.
+- Crear `DropdownMenu` reusable en `common/` para menús contextuales futuros.
+- Actualizar `design.md` completo (§4.1 + §6) con las 13 pantallas reales.
+
+**Cambios:**
+
+- **`design.md §4.1`** — actualizada la tabla nav canónica: 3 secciones
+  (TRABAJO/INGENIERÍA/CONFIG) con 13 items en lugar de las 2 secciones y 8
+  items documentados. ASCII diagram actualizado con la nueva sección
+  INGENIERÍA y la nueva nav Cola (condicional por rol). Tabla de
+  vocabulario ampliada con Vitrina, Cola, Estructuras, Componentes, Ajustes.
+
+- **`design.md §4.2.1`** (nueva) — regla canónica de patrón por tipo de entidad:
+  entidad plana = tabla-expand; entidad compleja = card-detalle;
+  comercial = card-grid. Documenta que Components/Structures están
+  pendientes de migrar a card-detalle en Fase 3.
+
+- **`design.md §6`** — ampliada de 6 a 13 subsecciones (12 nav + Login/Register):
+  - §6.6 Vitrina (showcase, F040/F043)
+  - §6.7 Cola de producción (production nav — nuevo)
+  - §6.8 Estructuras (structures, F049)
+  - §6.9 Componentes (components)
+  - §6.10 Ajustes (settings, F031)
+  - §6.11 Usuarios (users, F026)
+  - §6.13 Registro (RegisterScreen)
+  - §6.1 Home: documentadas variantes `homeMode` (default/sales/engineering)
+  - §6.2 Cotizaciones: documentada la nueva agrupación de exports
+  - §6.3 Muebles: corregido de "sección TRABAJO" → "INGENIERÍA"
+
+- **`packages/domain/src/rbac.ts`** — `navIdsForRole` ahora incluye `'production'`
+  cuando `roleUsesProductionQueue(role)` (solo `produccion`). Guest no lo
+  recibe (no hay cola localmente).
+
+- **`packages/ui/src/shell/AppShell.tsx`**:
+  - `'production'` añadido al `AppNavId` (union type).
+  - Sección TRABAJO ahora tiene 5 items: Inicio, Cotizaciones, Clientes,
+    Vitrina, Cola (icono `Factory`).
+  - Filtrado normal vía `allowedNavIds`: el sidebar solo muestra Cola si el
+    rol tiene el permiso.
+
+- **`apps/web/src/routes.ts`** — `production: '/produccion'` añadido a
+  `NAV_PATHS`. Excluido de `EntitySection` (no es entidad con deep-link `:id`).
+
+- **`apps/web/src/App.tsx`** — routing simplificado:
+  - `navId === 'home'` SIEMPRE monta Dashboard (ya sin el if/else
+    polimórfico). Se eliminó el branch `useProductionQueue ? ProductionQueue :
+    Dashboard`.
+  - `navId === 'production' && useProductionQueue` monta ProductionQueue.
+
+- **`packages/ui/src/common/DropdownMenu.tsx`** (nuevo) — componente menu
+  contextual accesible: trigger button + popup con role="menu"/"menuitem",
+  secciones opcionales con labels, click-outside, Esc, flechas, Enter.
+  No depende de Radix ni libs externas.
+
+- **`packages/ui/src/common/dropdownMenu.css`** (nuevo) — estilos con tokens.
+
+- **`packages/ui/src/projects/ProjectsScreen.tsx`** — chrome reorganizado:
+  - **Exportar Optimizer** (`btn--primary`): directo, mantiene `data-testid
+    project-chrome-export`. Disabled cuando productionExportDisabled.
+  - **Más exports ▾** (`DropdownMenu` con trigger `btn`): secciones
+    Producción (Herrajes, Etiquetas, Pack) + Comercial (Cotización, PDF
+    listado, PDF resumen). Cada item disabled según sus condiciones.
+    Las secciones solo se renderizan si tienen items (props presentes).
+  - Eliminados los 6 botones de export individuales.
+  - Resto (Presentar, Editar, Duplicar, Guardar plantilla, Marcar producción,
+    Reabrir, Eliminar) sin cambios.
+
+**Verificación:**
+- `pnpm test`: 710 tests verdes (217 + 51 + 25 + 321 + 9 + 87). 8 tests
+  nuevos para DropdownMenu (a11y, click, escape, outside, disabled,
+  aria-expanded). 1 test nuevo en rbac para `production` nav id.
+- `pnpm typecheck`: 6/6 workspaces verde.
+- Smoke visual: chrome de Projects pasó de 14 botones a 6-7 visibles,
+  menú "Más exports ▾" abre con sección Producción/Comercial correctamente.
+
+**Pendiente (Fase 3, próxima):**
+- Mudar modales gigantes (Mueble/Estructura/Componente) a vista detalle
+  inline con ruta `/:id/edit`.
+- Migrar Components y Structures de tabla-expand/card-expand a card-detalle.
+
+
+
 ## Hecho en esta pasada (2026-07-19) — UI Review Fase 1
 
 **Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).

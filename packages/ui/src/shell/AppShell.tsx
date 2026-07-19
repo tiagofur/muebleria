@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   FileText,
+  Factory,
   LayoutDashboard,
   Layers,
   LayoutGrid,
@@ -45,6 +46,7 @@ export type AppNavId =
   | 'projects'
   | 'customers'
   | 'showcase'
+  | 'production'
   | 'modules'
   | 'structures'
   | 'components'
@@ -135,6 +137,12 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'customers', label: 'Clientes', icon: Users },
       /** Commercial catalog — not engineering ABM. */
       { id: 'showcase', label: 'Vitrina', icon: Store },
+      /**
+       * Plant production queue. Filtered out unless allowedNavIds includes it
+       * (rbac.ts navIdsForRole adds 'production' only for roles with
+       * roleUsesProductionQueue). design.md §6.7.
+       */
+      { id: 'production', label: 'Cola', icon: Factory },
     ],
   },
   {

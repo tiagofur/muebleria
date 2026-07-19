@@ -2511,61 +2511,60 @@ function AppContent({
       onCommandItem={onCommandItem}
     >
       {navId === 'home' ? (
-        useProductionQueue ? (
-          <ProductionQueue
-            projects={projects}
-            customerLabelFor={(customerId) =>
-              resolveCustomerName(customerId, customers)
-            }
-            salePriceFor={(id) => projectEstimates[id] ?? null}
-            onExportOptimizer={(id) => {
-              void handleExportOptimizer(id);
-            }}
-            onExportHardware={(id) => {
-              void handleExportHardwareList(id);
-            }}
-            onExportPieceLabels={(id) => {
-              void handleExportPieceLabels(id);
-            }}
-            onExportProductionPack={(id) => {
-              void handleExportProductionPack(id);
-            }}
-            onMarkProduced={markProjectProduced}
-            exportBusy={exportBusy}
-          />
-        ) : (
-          <Dashboard
-            stats={dashboardStats}
-            recentProjects={dashboardRecent}
-            projectsCount={projects.length}
-            onOpenProject={onDashboardOpenProject}
-            onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
-            onNewModule={canMutateModules ? onDashboardNewModule : undefined}
-            onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
-            ownerBreakdown={dashboardOwnerBreakdown}
-            homeMode={dashboardHomeMode}
-            onOpenShowcase={
-              dashboardHomeMode === 'sales'
-                ? onDashboardOpenShowcase
-                : undefined
-            }
-            onOpenMaterials={
-              dashboardHomeMode === 'engineering'
-                ? onDashboardOpenMaterials
-                : undefined
-            }
-            onOpenModules={
-              dashboardHomeMode === 'engineering'
-                ? onDashboardOpenModules
-                : undefined
-            }
-            modulesWithoutPhotoCount={
-              dashboardHomeMode === 'engineering'
-                ? modulesWithoutPhotoCount
-                : undefined
-            }
-          />
-        )
+        <Dashboard
+          stats={dashboardStats}
+          recentProjects={dashboardRecent}
+          projectsCount={projects.length}
+          onOpenProject={onDashboardOpenProject}
+          onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
+          onNewModule={canMutateModules ? onDashboardNewModule : undefined}
+          onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
+          ownerBreakdown={dashboardOwnerBreakdown}
+          homeMode={dashboardHomeMode}
+          onOpenShowcase={
+            dashboardHomeMode === 'sales'
+              ? onDashboardOpenShowcase
+              : undefined
+          }
+          onOpenMaterials={
+            dashboardHomeMode === 'engineering'
+              ? onDashboardOpenMaterials
+              : undefined
+          }
+          onOpenModules={
+            dashboardHomeMode === 'engineering'
+              ? onDashboardOpenModules
+              : undefined
+          }
+          modulesWithoutPhotoCount={
+            dashboardHomeMode === 'engineering'
+              ? modulesWithoutPhotoCount
+              : undefined
+          }
+        />
+      ) : null}
+      {navId === 'production' && useProductionQueue ? (
+        <ProductionQueue
+          projects={projects}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
+          }
+          salePriceFor={(id) => projectEstimates[id] ?? null}
+          onExportOptimizer={(id) => {
+            void handleExportOptimizer(id);
+          }}
+          onExportHardware={(id) => {
+            void handleExportHardwareList(id);
+          }}
+          onExportPieceLabels={(id) => {
+            void handleExportPieceLabels(id);
+          }}
+          onExportProductionPack={(id) => {
+            void handleExportProductionPack(id);
+          }}
+          onMarkProduced={markProjectProduced}
+          exportBusy={exportBusy}
+        />
       ) : null}
       {navId === 'materials' ? (
         <MaterialsCatalog

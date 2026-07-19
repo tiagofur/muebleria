@@ -11,6 +11,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   projects: '/projects',
   customers: '/customers',
   showcase: '/showcase',
+  production: '/produccion',
   modules: '/modules',
   structures: '/structures',
   components: '/components',
@@ -25,7 +26,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
 /** Sections that support `/section/:id` deep links for entity rows. */
 export type EntitySection = Exclude<
   AppNavId,
-  'home' | 'users' | 'settings' | 'showcase'
+  'home' | 'users' | 'settings' | 'showcase' | 'production'
 >;
 
 const ENTITY_SECTIONS: readonly EntitySection[] = [

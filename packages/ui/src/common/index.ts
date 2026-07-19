@@ -4,6 +4,12 @@
 
 export { BrandMark, type BrandMarkProps } from './BrandMark';
 export { CatalogImage, type CatalogImageProps } from './CatalogImage';
+export {
+  DropdownMenu,
+  type DropdownMenuItem,
+  type DropdownMenuSection,
+  type DropdownMenuProps,
+} from './DropdownMenu';
 export { Modal, type ModalProps, type ModalSize } from './Modal';
 export {
   ToastProvider,

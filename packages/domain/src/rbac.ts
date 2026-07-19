@@ -214,7 +214,7 @@ export function roleLabelEs(role: string | null | undefined): string {
 /** Nav section ids that a role may open (guest = all). */
 export function navIdsForRole(role: string | null | undefined): ReadonlySet<string> {
   if (role == null) {
-    // guest / local mode — full tool
+    // guest / local mode — full tool (no `production` nav, no RBAC to plant queue)
     return new Set([
       'home',
       'projects',
@@ -249,6 +249,9 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   }
   if (roleCanAccessSettings(role)) ids.add('settings');
   if (roleCanManageUsers(role)) ids.add('users');
+  // Fase 2 UI: production queue is its own nav (used to be polymorphic home).
+  // Only roles that use the queue get the dedicated nav entry.
+  if (roleUsesProductionQueue(role)) ids.add('production');
   return ids;
 }
 
