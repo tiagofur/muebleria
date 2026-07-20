@@ -115,6 +115,16 @@ export interface ModulesScreenProps {
    * null / '' = list view.
    */
   readonly openModuleId?: string | null;
+  /**
+   * Open editor for this module id when set (URL `/modules/:id/edit`, Fase 3 UI).
+   * Sentinel `'new'` means create-new editor. null / undefined = not in edit mode.
+   */
+  readonly openModuleEditId?: string | null;
+  /**
+   * Navigate to the editor route. The shell handles the URL change.
+   * Pass `'new'` for the create-new editor.
+   */
+  readonly onRequestEdit?: (moduleId: string) => void;
   /** Notifies parent when detail selection changes (for URL sync). */
   readonly onSelectionChange?: (moduleId: string | null) => void;
   /** Catalog structures for composed module picker. */
@@ -152,6 +162,8 @@ export function ModulesScreen({
   moduleEstimates = {},
   requestCreateKey = 0,
   openModuleId = null,
+  openModuleEditId = null,
+  onRequestEdit,
   onSelectionChange,
   loading = false,
   structures: propStructures = [],
@@ -328,19 +340,60 @@ export function ModulesScreen({
   }, [modules, selectedId]);
 
   // Notify shell of detail selection (URL sync).
+  // Skip when in edit mode — the edit URL (`/modules/:id/edit`) is owned by
+  // `openModuleEditId` and we must not navigate back to the view URL.
   useEffect(() => {
+    if (openModuleEditId) return;
     onSelectionChange?.(selectedId);
-  }, [selectedId, onSelectionChange]);
+  }, [selectedId, onSelectionChange, openModuleEditId]);
 
   // Sync detail from shell URL (`/modules` vs `/modules/:id`).
+  // Note: in edit mode (`/modules/:id/edit`), `openModuleId` is null because
+  // the URL has the `/edit` suffix. We use `openModuleEditId` to keep
+  // `selectedId` pointed at the right module so the editor and the
+  // "back to detail" flow work.
   useEffect(() => {
-    if (openModuleId == null || openModuleId === '') {
-      setSelectedId(null);
+    const viewId = openModuleId;
+    const editId =
+      openModuleEditId && openModuleEditId !== 'new' ? openModuleEditId : null;
+    const target = viewId ?? editId;
+    if (target == null || target === '') {
+      // Only clear selection if we're not in edit mode at all (else we'd
+      // accidentally navigate back to the list when entering the editor).
+      if (!openModuleEditId) setSelectedId(null);
       return;
     }
-    if (!modules.some((m) => m.id === openModuleId)) return;
-    setSelectedId(openModuleId);
-  }, [openModuleId, modules]);
+    if (!modules.some((m) => m.id === target)) return;
+    setSelectedId(target);
+  }, [openModuleId, openModuleEditId, modules]);
+
+  /**
+   * Sync edit mode from shell URL (`/modules/:id/edit` — Fase 3 UI).
+   * - `'new'` sentinel: open create-new editor (still uses the existing modal
+   *   in this sub-fase; will become inline in 3a.2).
+   * - Real id: open edit on that module. For 3a.1 we still route through the
+   *   modal to preserve behavior; the inline layout lands in 3a.2.
+   * - null / '': close the editor.
+   */
+  useEffect(() => {
+    if (openModuleEditId == null || openModuleEditId === '') {
+      return;
+    }
+    if (openModuleEditId === 'new') {
+      setEditingId(null);
+      setDraft(emptyModuleDraft());
+      setError(null);
+      setModalOpen(true);
+      return;
+    }
+    const module = modules.find((m) => m.id === openModuleEditId);
+    if (!module) return;
+    setEditingId(module.id);
+    setDraft(moduleToDraft(module));
+    setEditorTab('general');
+    setError(null);
+    setModalOpen(true);
+  }, [openModuleEditId, modules]);
 
   // Open create modal from shell (Dashboard quick action)
   useEffect(() => {
@@ -360,15 +413,34 @@ export function ModulesScreen({
     }
   }, [modalOpen, editingId, selectedId, onEditingChange]);
 
+  /**
+   * Close the editor. When the editor was opened via the URL (`openModuleEditId`),
+   * navigate back to the view (or list, for create-new). Otherwise (legacy
+   * modal triggered by `requestCreateKey` etc.) just close locally.
+   */
   const closeModal = () => {
     setModalOpen(false);
     setEditingId(null);
     setDraft(emptyModuleDraft());
     setError(null);
     setEditorTab('general');
+    if (openModuleEditId && onSelectionChange) {
+      // After closing the editor, go back to the view (selectedId) or the list.
+      onSelectionChange(selectedId);
+    }
   };
 
+  /**
+   * Open the editor (create-new). When `onRequestEdit` is wired (Fase 3 UI),
+   * the shell navigates to `/modules/new/edit` and the effect on
+   * `openModuleEditId` triggers the actual editor open. Otherwise (legacy /
+   * tests), open the modal directly.
+   */
   const startCreate = () => {
+    if (onRequestEdit) {
+      onRequestEdit('new');
+      return;
+    }
     setEditingId(null);
     setDraft(emptyModuleDraft());
     setError(null);
@@ -376,7 +448,17 @@ export function ModulesScreen({
     setModalOpen(true);
   };
 
+  /**
+   * Open the editor (edit existing). When `onRequestEdit` is wired (Fase 3 UI),
+   * the shell navigates to `/modules/:id/edit` and the effect on
+   * `openModuleEditId` triggers the actual editor open. Otherwise (legacy /
+   * tests), open the modal directly.
+   */
   const startEdit = (item: Module) => {
+    if (onRequestEdit) {
+      onRequestEdit(item.id);
+      return;
+    }
     setEditingId(item.id);
     setDraft(moduleToDraft(item));
     setError(null);

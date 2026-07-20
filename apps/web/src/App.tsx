@@ -129,12 +129,16 @@ import {
   deliverExcelFile,
 } from './exportOptimizer';
 import {
+  componentEditIdFromPath,
   entityIdFromPath,
   entityPath,
   isEntitySection,
+  moduleEditIdFromPath,
+  moduleEditPath,
   navFromPath,
   pathForNav,
   projectPath,
+  structureEditIdFromPath,
   type EntitySection,
 } from './routes';
 import {
@@ -695,6 +699,13 @@ function AppContent({
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
   const routeStructureId = navId === 'structures' ? routeEntityId : null;
   const routeComponentId = navId === 'components' ? routeEntityId : null;
+  // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
+  const routeModuleEditId =
+    navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;
+  const routeStructureEditId =
+    navId === 'structures' ? structureEditIdFromPath(location.pathname) : null;
+  const routeComponentEditId =
+    navId === 'components' ? componentEditIdFromPath(location.pathname) : null;
 
   // Keep the address bar on a known section path (bookmarkable SPA routes).
   useEffect(() => {
@@ -2409,6 +2420,27 @@ function AppContent({
     [location.pathname, navigate],
   );
 
+  /**
+   * Navigate to the inline editor route `/section/:id/edit` (Fase 3 UI).
+   * Used by ModulesScreen / StructuresScreen / ComponentsScreen when the user
+   * clicks "Editar" on the read-only detail. Replaces the old Modal LG flow.
+   * For "Nuevo", the screen passes the NEW_ENTITY_ID sentinel.
+   */
+  const onEntityEditRequest = useCallback(
+    (section: EntitySection, id: string) => {
+      const target =
+        section === 'modules'
+          ? moduleEditPath(id)
+          : section === 'structures'
+            ? `${entityPath(section, id)}/edit`
+            : `${entityPath(section, id)}/edit`;
+      if (location.pathname !== target) {
+        navigate(target);
+      }
+    },
+    [location.pathname, navigate],
+  );
+
   const onProjectSelectionChange = useCallback(
     (projectId: string | null) => {
       onEntitySelectionChange('projects', projectId);
@@ -2688,6 +2720,8 @@ function AppContent({
           onEditingChange={setEditingModuleId}
           onSelectionChange={onModuleSelectionChange}
           openModuleId={routeModuleId}
+          openModuleEditId={routeModuleEditId}
+          onRequestEdit={(id) => onEntityEditRequest('modules', id)}
           costPreview={showCosts ? modulePreview.costPreview : null}
           previewBlocked={modulePreview.previewBlocked}
           missingGroups={modulePreview.missingGroups}
