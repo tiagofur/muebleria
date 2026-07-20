@@ -2775,6 +2775,8 @@ function AppContent({
           onUpdate={updateComponent}
           onToggleActive={toggleComponentActive}
           openComponentId={routeComponentId}
+          openComponentEditId={routeComponentEditId}
+          onRequestEdit={(id) => onEntityEditRequest('components', id)}
           onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
         />
