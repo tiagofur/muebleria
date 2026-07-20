@@ -132,6 +132,7 @@ import {
   componentEditIdFromPath,
   entityIdFromPath,
   entityPath,
+  isEntityEditPath,
   isEntitySection,
   moduleEditIdFromPath,
   moduleEditPath,
@@ -2411,6 +2412,13 @@ function AppContent({
     (section: EntitySection, id: string | null) => {
       if (section === 'projects') {
         setExportErrors([]);
+      }
+      // Fase 3 UI: do not navigate away from /section/:id/edit. The editor
+      // owns the URL while open; ModulesScreen's onSelectionChange effect can
+      // still fire (e.g. when selectedId changes from null → id), but if we
+      // are currently in edit mode we keep the URL stable.
+      if (isEntityEditPath(location.pathname, section)) {
+        return;
       }
       const target = id ? entityPath(section, id) : pathForNav(section);
       if (location.pathname !== target) {

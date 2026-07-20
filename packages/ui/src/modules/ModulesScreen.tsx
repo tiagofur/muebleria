@@ -60,6 +60,7 @@ import {
 } from './moduleHelpers';
 import { ModuleCategoryModals } from './components/ModuleCategoryModals';
 import { ModuleComponentAdderModal } from './components/ModuleComponentAdderModal';
+import { CostPreviewPanel } from './components/CostPreviewPanel';
 import { ModuleDetailView } from './components/ModuleDetailView';
 import { ModuleEditorForm } from './components/ModuleEditorForm';
 import { ModuleListView } from './components/ModuleListView';
@@ -731,6 +732,208 @@ export function ModulesScreen({
     return (
       <section className="catalog-page" aria-label="Muebles">
         <PageLoading label="Cargando muebles…" data-testid="modules-loading" />
+      </section>
+    );
+  }
+
+  // Fase 3 UI 3a.2: when `openModuleEditId` is active and the shell wires
+  // `onRequestEdit`, render the editor inline (no Modal LG) with a sticky
+  // chrome + main/aside layout. Otherwise fall back to the legacy modal flow
+  // (used by tests / older code paths).
+  const inlineEditMode =
+    !!openModuleEditId && !!onRequestEdit && modalOpen;
+
+  if (inlineEditMode) {
+    return (
+      <section
+        className="catalog-page module-editor-page"
+        aria-label={editingId ? 'Editar mueble' : 'Nuevo mueble'}
+        data-testid="module-editor-page"
+      >
+        <header className="workspace-chrome">
+          <div className="workspace-chrome__lead">
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={closeModal}
+              aria-label="Volver a la lista"
+              data-testid="module-editor-back"
+            >
+              ← Lista
+            </button>
+            <div className="workspace-chrome__identity">
+              <span className="workspace-chrome__code">
+                {editingId ? draft.code || '—' : 'NUEVO'}
+              </span>
+              <p className="workspace-chrome__title">
+                {editingId ? 'Editar mueble' : 'Nuevo mueble'}
+              </p>
+            </div>
+          </div>
+          <div className="workspace-chrome__actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={closeModal}
+              data-testid="module-editor-cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              form={formId}
+              data-testid="module-editor-save"
+            >
+              Guardar
+            </button>
+          </div>
+        </header>
+
+        <div className="module-editor-page__body">
+          <div className="module-editor-page__main">
+            <ModuleEditorForm
+              formId={formId}
+              error={error}
+              onSubmit={handleSubmit}
+              editorTab={editorTab}
+              setEditorTab={setEditorTab}
+              draft={draft}
+              setDraft={setDraft}
+              draftCascade={draftCascade}
+              draftCascadeOpts={draftCascadeOpts}
+              setDraftCascadeLevel={setDraftCascadeLevel}
+              resolveImageUrl={resolveImageUrl}
+              onUploadImage={onUploadImage}
+              structures={structures}
+              selectedStructure={selectedStructure ?? undefined}
+              catalogComponents={catalogComponents}
+              composedEnabled={composedEnabled}
+              onRequestAddComponent={() => {
+                setAddComponentOpen(true);
+                setComponentSearch('');
+                setNewCompId('');
+                setNewCompQty(1);
+              }}
+              canMutate={canMutate}
+              hardwareRoles={hardwareRoles}
+              activeHardware={activeHardware}
+              onAddHardware={addHardwareLine}
+              onRemoveHardware={removeHardwareLine}
+              onUpdateHardware={updateLine}
+              onHardwareGridKeyDown={onHardwareGridKeyDown}
+              editingId={editingId}
+              costPreview={costPreview}
+              previewBlocked={previewBlocked}
+              missingGroups={missingGroups}
+              groupLabels={groupLabels}
+            />
+          </div>
+          <aside
+            className="module-editor-page__aside"
+            aria-label="Vista previa de costo"
+          >
+            <CostPreviewPanel
+              costPreview={costPreview}
+              previewBlocked={previewBlocked}
+              missingGroups={missingGroups}
+              groupLabels={groupLabels}
+              allowEmptyHint
+            />
+          </aside>
+        </div>
+
+        {/* Sub-modals still attached to the editor flow. */}
+        <ModuleComponentAdderModal
+          open={addComponentOpen}
+          onClose={() => setAddComponentOpen(false)}
+          componentSearch={componentSearch}
+          onSearchChange={setComponentSearch}
+          filteredComponents={filteredCatalogComponents}
+          newCompId={newCompId}
+          onSelect={setNewCompId}
+          newCompQty={newCompQty}
+          onQtyChange={setNewCompQty}
+          onConfirm={() => {
+            if (!newCompId) return;
+            setDraft((prev) => ({
+              ...prev,
+              components: [
+                ...prev.components,
+                {
+                  componentId: newCompId,
+                  quantity: newCompQty,
+                },
+              ],
+            }));
+            setAddComponentOpen(false);
+          }}
+        />
+        <ModuleCategoryModals
+          categories={categories}
+          flatCategories={flatCategories}
+          manageOpen={manageCategoriesOpen}
+          onCloseManage={closeManageCategories}
+          onOpenCreate={openCreateCategory}
+          formOpen={categoryModalOpen}
+          onCloseForm={closeCategoryModal}
+          categoryFormId={categoryFormId}
+          editingCategoryId={editingCategoryId}
+          categoryDraft={categoryDraft}
+          setCategoryDraft={setCategoryDraft}
+          categoryError={categoryError}
+          onSubmitForm={handleCategorySubmit}
+          onEditCategory={openEditCategory}
+          onRequestDeleteCategory={setConfirmDeleteCategoryId}
+          onCreateCategory={onCreateCategory}
+          onDeleteCategory={onDeleteCategory}
+          deleteTarget={deleteCategoryTarget}
+          confirmDeleteCategoryId={confirmDeleteCategoryId}
+          onCancelDelete={() => setConfirmDeleteCategoryId(null)}
+          onConfirmDelete={() => {
+            if (confirmDeleteCategoryId) {
+              handleDeleteCategory(confirmDeleteCategoryId);
+            }
+          }}
+        />
+        <Modal
+          open={!!confirmDeleteId}
+          onClose={() => setConfirmDeleteId(null)}
+          title="Eliminar mueble"
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={() => {
+                  if (confirmDeleteId) handleDelete(confirmDeleteId);
+                }}
+              >
+                Eliminar
+              </button>
+            </>
+          }
+        >
+          <p>¿Seguro que querés eliminar este mueble? No se puede deshacer.</p>
+        </Modal>
+
+        <Module3DModal
+          open={show3DModal}
+          module={viewerModule}
+          catalog={module3dCatalog}
+          onClose={() => {
+            setShow3DModal(false);
+            setViewerModule(null);
+          }}
+        />
       </section>
     );
   }

@@ -621,3 +621,46 @@
     transition: none;
   }
 }
+
+/* —— Inline editor page (Fase 3 UI 3a.2) —— */
+/* Replaces the Modal LG when /modules/:id/edit is active. Main + sticky aside
+   pattern matches ProjectsScreen detail. The form retains its tabs; the aside
+   shows the cost preview persistently so the user does not need to switch. */
+
+.module-editor-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap);
+}
+
+.module-editor-page__body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--density-page-gap);
+  align-items: start;
+}
+
+.module-editor-page__main {
+  min-width: 0;
+}
+
+.module-editor-page__aside {
+  position: sticky;
+  top: calc(var(--space-6) + 56px); /* topbar height + page gap */
+}
+
+@media (min-width: 1100px) {
+  .module-editor-page__body {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+}
+
+/* In inline mode the form should not constrain its width like the modal did. */
+.module-editor-page .module-editor.catalog-form--wide {
+  max-width: none;
+}
+
+/* Tabs in inline mode can wrap onto a second row on narrower screens. */
+.module-editor-page .module-editor__tabs {
+  flex-wrap: wrap;
+}
