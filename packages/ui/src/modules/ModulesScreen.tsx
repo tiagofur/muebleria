@@ -185,6 +185,12 @@ export function ModulesScreen({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ModuleDraft>(emptyModuleDraft);
+  /**
+   * Snapshot of the draft taken when the editor opened (Fase 3 UI 3a.3).
+   * Used to detect a "dirty" draft and warn before discarding on close.
+   */
+  const [initialDraft, setInitialDraft] = useState<ModuleDraft | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** MD modal: list + manage actions (not mixed into the filter sidebar). */
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
@@ -381,16 +387,20 @@ export function ModulesScreen({
       return;
     }
     if (openModuleEditId === 'new') {
+      const fresh = emptyModuleDraft();
       setEditingId(null);
-      setDraft(emptyModuleDraft());
+      setDraft(fresh);
+      setInitialDraft(fresh);
       setError(null);
       setModalOpen(true);
       return;
     }
     const module = modules.find((m) => m.id === openModuleEditId);
     if (!module) return;
+    const fresh = moduleToDraft(module);
     setEditingId(module.id);
-    setDraft(moduleToDraft(module));
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
@@ -399,8 +409,10 @@ export function ModulesScreen({
   // Open create modal from shell (Dashboard quick action)
   useEffect(() => {
     if (!requestCreateKey) return;
+    const fresh = emptyModuleDraft();
     setEditingId(null);
-    setDraft(emptyModuleDraft());
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setError(null);
     setModalOpen(true);
   }, [requestCreateKey]);
@@ -415,20 +427,42 @@ export function ModulesScreen({
   }, [modalOpen, editingId, selectedId, onEditingChange]);
 
   /**
-   * Close the editor. When the editor was opened via the URL (`openModuleEditId`),
-   * navigate back to the view (or list, for create-new). Otherwise (legacy
-   * modal triggered by `requestCreateKey` etc.) just close locally.
+   * True when the user has changed the draft since opening the editor
+   * (Fase 3 UI 3a.3). Used to warn before discarding on close.
    */
-  const closeModal = () => {
+  const isDraftDirty =
+    initialDraft != null &&
+    JSON.stringify(draft) !== JSON.stringify(initialDraft);
+
+  /**
+   * Hard close: clear all editor state, no warn. Called after a successful
+   * save or after the user confirms discard.
+   */
+  const forceCloseEditor = () => {
     setModalOpen(false);
     setEditingId(null);
     setDraft(emptyModuleDraft());
+    setInitialDraft(null);
     setError(null);
     setEditorTab('general');
+    setConfirmDiscard(false);
     if (openModuleEditId && onSelectionChange) {
       // After closing the editor, go back to the view (selectedId) or the list.
       onSelectionChange(selectedId);
     }
+  };
+
+  /**
+   * Close the editor. When the draft is dirty, ask the user to confirm
+   * discarding changes via the confirm-discard modal. Otherwise close
+   * immediately.
+   */
+  const closeModal = () => {
+    if (isDraftDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    forceCloseEditor();
   };
 
   /**
@@ -442,8 +476,10 @@ export function ModulesScreen({
       onRequestEdit('new');
       return;
     }
+    const fresh = emptyModuleDraft();
     setEditingId(null);
-    setDraft(emptyModuleDraft());
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setError(null);
     setEditorTab('general');
     setModalOpen(true);
@@ -460,8 +496,10 @@ export function ModulesScreen({
       onRequestEdit(item.id);
       return;
     }
+    const fresh = moduleToDraft(item);
     setEditingId(item.id);
-    setDraft(moduleToDraft(item));
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setError(null);
     setEditorTab('general');
     setModalOpen(true);
@@ -627,7 +665,8 @@ export function ModulesScreen({
     } else {
       onCreate(draft);
     }
-    closeModal();
+    // Use forceCloseEditor: we just saved, no dirty-discard warn.
+    forceCloseEditor();
   };
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -642,7 +681,9 @@ export function ModulesScreen({
       setSelectedId(null);
     }
     if (editingId === id) {
-      closeModal();
+      // The entity being edited is gone — close without warn (no point in
+      // keeping a draft for a deleted module).
+      forceCloseEditor();
     }
   };
 
@@ -925,6 +966,37 @@ export function ModulesScreen({
           <p>¿Seguro que querés eliminar este mueble? No se puede deshacer.</p>
         </Modal>
 
+        <Modal
+          open={confirmDiscard}
+          onClose={() => setConfirmDiscard(false)}
+          title="Descartar cambios"
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={forceCloseEditor}
+                data-testid="module-editor-discard-confirm"
+              >
+                Descartar y salir
+              </button>
+            </>
+          }
+        >
+          <p>
+            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+            que querés descartar?
+          </p>
+        </Modal>
+
         <Module3DModal
           open={show3DModal}
           module={viewerModule}
@@ -1122,6 +1194,37 @@ export function ModulesScreen({
               : 'este mueble'}
           </strong>
           ? Esta acción no se puede deshacer.
+        </p>
+      </Modal>
+
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="Descartar cambios"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDiscard(false)}
+            >
+              Seguir editando
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={forceCloseEditor}
+              data-testid="module-editor-discard-confirm"
+            >
+              Descartar y salir
+            </button>
+          </>
+        }
+      >
+        <p>
+          Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+          que querés descartar?
         </p>
       </Modal>
 
