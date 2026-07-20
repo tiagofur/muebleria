@@ -25,6 +25,8 @@ export type ModalProps = {
   readonly size?: ModalSize;
   readonly children: ReactNode;
   readonly footer?: ReactNode;
+  /** Optional test id for the modal panel (Fase 3 UI). */
+  readonly dataTestId?: string;
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -57,6 +59,7 @@ export function Modal({
   size = 'md',
   children,
   footer,
+  dataTestId,
 }: ModalProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -206,6 +209,7 @@ export function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={onPanelKeyDown}
+        data-testid={dataTestId}
       >
         <header className="ui-modal__header">
           <h2 id={titleId} className="ui-modal__title">
