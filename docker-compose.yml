@@ -1,9 +1,11 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
     container_name: muebles-postgres
+    # Auto-arranque cuando Docker Desktop arranca (p.ej. tras reiniciar la
+    # máquina). unless-stopped respeta un `docker compose down` explícito:
+    # solo se reabre si el último estado no fue "stopped" por el usuario.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
