@@ -121,3 +121,23 @@
   color: var(--text-muted);
   border-color: var(--border-default);
 }
+
+/* —— Inline editor page (Fase 3 UI 3b) —— */
+/* Replaces the Modal LG when /structures/:id/edit is active. The
+   StructureEditorForm retains its built-in Cancelar/Guardar footer; we only
+   add a sticky chrome with identity + back button on top. */
+
+.structure-editor-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap);
+}
+
+.structure-editor-page__main {
+  min-width: 0;
+}
+
+/* The form was styled assuming a modal body; allow it to fill the page width. */
+.structure-editor-page .catalog-form {
+  max-width: none;
+}

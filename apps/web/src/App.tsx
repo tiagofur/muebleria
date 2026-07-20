@@ -2760,6 +2760,8 @@ function AppContent({
           onDeactivate={(id) => setStructureActive(id, false)}
           onReactivate={(id) => setStructureActive(id, true)}
           openStructureId={routeStructureId}
+          openStructureEditId={routeStructureEditId}
+          onRequestEdit={(id) => onEntityEditRequest('structures', id)}
           onSelectionChange={onStructureSelectionChange}
           canMutate={canMutateModules}
         />
