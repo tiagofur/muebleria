@@ -14,6 +14,7 @@ import type { Component, OptionGroup, MaterialBoard } from '@muebles/domain';
 import {
   Modal,
   useDebouncedValue,
+  useDraftSession,
   useRoutableEntitySelection,
 } from '../common';
 import {
@@ -91,7 +92,11 @@ export function ComponentsScreen({
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ComponentDraft>(emptyComponentDraft);
+  const draftKey = `component-draft:${openComponentEditId ?? 'idle'}`;
+  const [draft, setDraft, clearDraft] = useDraftSession<ComponentDraft>(
+    draftKey,
+    emptyComponentDraft(),
+  );
   /**
    * Snapshot of the draft taken when the editor opened (Fase 3 UI 3c).
    * Used to detect dirty draft and warn before discarding on close.
@@ -164,11 +169,23 @@ export function ComponentsScreen({
    */
   useEffect(() => {
     if (openComponentEditId == null || openComponentEditId === '') return;
+    // Fase 3 follow-up: respect persisted draft if it exists (survives nav/F5).
+    const hasPersisted = (() => {
+      try {
+        return sessionStorage.getItem(draftKey) !== null;
+      } catch {
+        return false;
+      }
+    })();
     if (openComponentEditId === 'new') {
-      const fresh = emptyComponentDraft();
+      if (!hasPersisted) {
+        const fresh = emptyComponentDraft();
+        setDraft(fresh);
+        setInitialDraft(fresh);
+      } else {
+        setInitialDraft(draft);
+      }
       setEditingId(null);
-      setDraft(fresh);
-      setInitialDraft(fresh);
       setEditorTab('general');
       setError(null);
       setModalOpen(true);
@@ -176,13 +193,18 @@ export function ComponentsScreen({
     }
     const component = components.find((c) => c.id === openComponentEditId);
     if (!component) return;
-    const fresh = componentToDraft(component);
+    if (!hasPersisted) {
+      const fresh = componentToDraft(component);
+      setDraft(fresh);
+      setInitialDraft(fresh);
+    } else {
+      setInitialDraft(draft);
+    }
     setEditingId(component.id);
-    setDraft(fresh);
-    setInitialDraft(fresh);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openComponentEditId, components]);
 
   const rows = useMemo(
@@ -213,6 +235,7 @@ export function ComponentsScreen({
     setEditorTab('general');
     setError(null);
     setConfirmDiscard(false);
+    clearDraft();
     if (openComponentEditId && onSelectionChange) {
       onSelectionChange(expandedId);
     }

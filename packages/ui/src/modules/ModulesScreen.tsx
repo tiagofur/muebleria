@@ -39,6 +39,7 @@ import {
   Modal,
   PageLoading,
   useDebouncedValue,
+  useDraftSession,
 } from '../common';
 import '../catalogs/catalogs.css';
 import {
@@ -184,7 +185,16 @@ export function ModulesScreen({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ModuleDraft>(emptyModuleDraft);
+  /**
+   * Fase 3 follow-up: draft persisted to sessionStorage so it survives F5 /
+   * navigation to other sections and back. Key is derived from
+   * `openModuleEditId` so each entity has its own slot.
+   */
+  const draftKey = `module-draft:${openModuleEditId ?? 'idle'}`;
+  const [draft, setDraft, clearDraft] = useDraftSession<ModuleDraft>(
+    draftKey,
+    emptyModuleDraft(),
+  );
   /**
    * Snapshot of the draft taken when the editor opened (Fase 3 UI 3a.3).
    * Used to detect a "dirty" draft and warn before discarding on close.
@@ -386,24 +396,43 @@ export function ModulesScreen({
     if (openModuleEditId == null || openModuleEditId === '') {
       return;
     }
+    // Fase 3 follow-up: if useDraftSession already loaded a persisted draft on
+    // mount, do NOT overwrite it — the user has unsaved work that survived
+    // navigation/F5. Only set editor modal open + editingId.
+    const hasPersisted = (() => {
+      try {
+        return sessionStorage.getItem(draftKey) !== null;
+      } catch {
+        return false;
+      }
+    })();
     if (openModuleEditId === 'new') {
-      const fresh = emptyModuleDraft();
+      if (!hasPersisted) {
+        const fresh = emptyModuleDraft();
+        setDraft(fresh);
+        setInitialDraft(fresh);
+      } else {
+        setInitialDraft(draft);
+      }
       setEditingId(null);
-      setDraft(fresh);
-      setInitialDraft(fresh);
       setError(null);
       setModalOpen(true);
       return;
     }
     const module = modules.find((m) => m.id === openModuleEditId);
     if (!module) return;
-    const fresh = moduleToDraft(module);
+    if (!hasPersisted) {
+      const fresh = moduleToDraft(module);
+      setDraft(fresh);
+      setInitialDraft(fresh);
+    } else {
+      setInitialDraft(draft);
+    }
     setEditingId(module.id);
-    setDraft(fresh);
-    setInitialDraft(fresh);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openModuleEditId, modules]);
 
   // Open create modal from shell (Dashboard quick action)
@@ -446,6 +475,8 @@ export function ModulesScreen({
     setError(null);
     setEditorTab('general');
     setConfirmDiscard(false);
+    // Fase 3 follow-up: clear persisted draft so next session starts fresh.
+    clearDraft();
     if (openModuleEditId && onSelectionChange) {
       // After closing the editor, go back to the view (selectedId) or the list.
       onSelectionChange(selectedId);

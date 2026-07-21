@@ -38,6 +38,16 @@ describe('useDraftSession', () => {
     expect(sessionStorage.getItem('write')).toContain('"name":"changed"');
   });
 
+  it('setDraft accepts an updater function (Dispatch<SetStateAction>)', () => {
+    const { result } = renderHook(() =>
+      useDraftSession<{ count: number }>('updater', { count: 0 }),
+    );
+    act(() => result.current[1]((prev) => ({ count: prev.count + 1 })));
+    act(() => result.current[1]((prev) => ({ count: prev.count + 5 })));
+    expect(result.current[0]).toEqual({ count: 6 });
+    expect(sessionStorage.getItem('updater')).toContain('"count":6');
+  });
+
   it('clearDraft removes the key from sessionStorage (state untouched)', () => {
     const { result } = renderHook(() =>
       useDraftSession<{ name: string }>('clear', { name: 'init' }),
@@ -88,5 +98,24 @@ describe('useDraftSession', () => {
       value: original,
       configurable: true,
     });
+  });
+
+  it('reloads from sessionStorage when key changes (no remount)', () => {
+    sessionStorage.setItem('module-draft:mod-1', JSON.stringify({ name: 'edited-1' }));
+    sessionStorage.setItem('module-draft:mod-2', JSON.stringify({ name: 'edited-2' }));
+
+    const { result, rerender } = renderHook(
+      ({ key }) => useDraftSession(key, { name: 'fresh' }),
+      { initialProps: { key: 'module-draft:mod-1' } },
+    );
+    expect(result.current[0]).toEqual({ name: 'edited-1' });
+
+    // Switch to a different entity: hook should reload, not keep the old draft.
+    rerender({ key: 'module-draft:mod-2' });
+    expect(result.current[0]).toEqual({ name: 'edited-2' });
+
+    // Switch to a key with no persisted value: should use the fresh initial.
+    rerender({ key: 'module-draft:mod-3' });
+    expect(result.current[0]).toEqual({ name: 'fresh' });
   });
 });
