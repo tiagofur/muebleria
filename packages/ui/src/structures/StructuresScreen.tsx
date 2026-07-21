@@ -487,6 +487,67 @@ export function StructuresScreen({
           canMutate={canMutate}
         />
 
+        {/* Legacy editor modal (used when onRequestEdit is not wired, e.g.
+            tests). When the shell wires onRequestEdit, the editor opens
+            inline via the inlineEditMode branch above. */}
+        <Modal
+          open={modalOpen}
+          title={editingId ? 'Editar Estructura' : 'Nueva Estructura'}
+          onClose={closeModal}
+          size="lg"
+          data-testid="structure-modal"
+        >
+          <StructureEditorForm
+            formId={formId}
+            error={error}
+            onSubmit={onSubmit}
+            onCancel={closeModal}
+            editorTab={editorTab}
+            setEditorTab={setEditorTab}
+            draft={draft}
+            setDraft={setDraft}
+            editingId={editingId}
+            catalogComponents={catalogComponents}
+            onRequestAddComponent={() => {
+              setAddComponentOpen(true);
+              setComponentSearch('');
+              setNewCompId('');
+              setNewCompQty(1);
+            }}
+            previewPresetId={previewPresetId}
+            onPreviewPresetChange={setPreviewPresetId}
+            onAddPreset={addPreset}
+            onRemovePreset={removePreset}
+            onUpdatePreset={updatePreset}
+          />
+        </Modal>
+
+        <ModuleComponentAdderModal
+          open={addComponentOpen}
+          onClose={() => setAddComponentOpen(false)}
+          componentSearch={componentSearch}
+          onSearchChange={setComponentSearch}
+          filteredComponents={filteredComponents}
+          newCompId={newCompId}
+          onSelect={setNewCompId}
+          newCompQty={newCompQty}
+          onQtyChange={setNewCompQty}
+          onConfirm={() => {
+            if (!newCompId) return;
+            setDraft((prev) => ({
+              ...prev,
+              components: [
+                ...prev.components,
+                {
+                  componentId: newCompId,
+                  quantity: newCompQty,
+                },
+              ],
+            }));
+            setAddComponentOpen(false);
+          }}
+        />
+
         <Modal
           open={confirmDiscard}
           onClose={() => setConfirmDiscard(false)}

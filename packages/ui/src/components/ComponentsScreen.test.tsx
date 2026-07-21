@@ -171,11 +171,11 @@ describe('ComponentsScreen', () => {
       />,
     );
 
-    // Click on component card to expand
+    // Click on component card to open detail view (card-detalle)
     fireEvent.click(screen.getByText('COM-PUE-01'));
 
-    // Click edit
-    fireEvent.click(screen.getByTestId('edit-btn-COM-PUE-01'));
+    // Click edit from detail view
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
 
     // Modify name
     const nameInput = screen.getByTestId('input-name');
@@ -228,10 +228,11 @@ describe('ComponentsScreen', () => {
       />,
     );
 
-    // Expand active component card
+    // Open detail view by clicking the component name
     fireEvent.click(screen.getAllByText('Puerta')[0]!);
-    // Click deactivate
-    fireEvent.click(screen.getByTestId('toggle-active-btn-COM-PUE-01'));
+    // Detail view exposes toggle via a button (no longer a row action)
+    const toggleBtn = screen.getByRole('button', { name: /Desactivar/i });
+    fireEvent.click(toggleBtn);
 
     expect(onToggleActive).toHaveBeenCalledWith('c1');
   });
@@ -267,9 +268,9 @@ describe('ComponentsScreen', () => {
       />,
     );
 
-    // Expand active component card
+    // Open detail view
     fireEvent.click(screen.getAllByText('Puerta')[0]!);
-    expect(screen.getByTestId('edit-btn-COM-PUE-01')).toBeTruthy();
+    expect(screen.getByTestId('component-detail-edit')).toBeTruthy();
 
     // Rerender with canMutate=false
     rerender(
@@ -283,7 +284,7 @@ describe('ComponentsScreen', () => {
       />,
     );
 
-    expect(screen.queryByTestId('edit-btn-COM-PUE-01')).toBeNull();
+    expect(screen.queryByTestId('component-detail-edit')).toBeNull();
     expect(screen.queryByRole('button', { name: /Nuevo Componente/i })).toBeNull();
   });
 });
