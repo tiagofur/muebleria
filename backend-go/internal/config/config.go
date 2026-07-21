@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -63,8 +64,19 @@ func LoadConfig() (Config, error) {
 	}
 
 	mediaDir := os.Getenv("MEDIA_DIR")
-	if mediaDir == "" {
-		mediaDir = "data/media"
+	if strings.TrimSpace(mediaDir) == "" {
+		// Default to an absolute path OUTSIDE the repo (~/.muebles-media).
+		// The previous default ("data/media" relative to CWD) sat inside the
+		// working tree and was gitignored, so any git clean / re-clone / machine
+		// change silently wiped uploaded catalog images while the DB kept
+		// referencing them — the catalog then showed broken <img> tags with no
+		// error. A user-home dir survives those operations. Override with
+		// MEDIA_DIR (absolute or relative) when you need a different location.
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return Config{}, fmt.Errorf("resolving home dir for media store: %w", err)
+		}
+		mediaDir = filepath.Join(home, ".muebles-media")
 	}
 
 	return Config{

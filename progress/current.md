@@ -1,7 +1,94 @@
 # Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`)
+- **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`, actualizada con media store + docker fixes de main vía merge commit)
+- **Otras ramas merged en main:** `wip/media-persistent-store` (media store persistente + lifecycle cleanup), `wip/docker-autostart` (Postgres auto-arranque).
+
+## Hecho en esta pasada (2026-07-19) — media store persistente + lifecycle cleanup
+
+**Síntoma reportado:** al subir una imagen a un material, se guarda y se ve,
+pero "en algún momento se pierde y ya no aparecen". Mismo riesgo para hardware
+y modules (todos comparten `/api/media/<hash>`).
+
+### Diagnóstico (probado, no especulativo)
+
+- Las imágenes se guardaban en `backend-go/data/media/` (relativo al CWD),
+  **carpeta bajo `.gitignore`** (`data/media/`) y **no respaldada**.
+- La DB **sí** persiste las URLs (`material_boards.image_url`,
+  `material_boards.preview_texture_url`, `hardwares.image_url`,
+  `modules.image_url`).
+- Probé end-to-end: subida → guardado → reinicio del backend → la imagen
+  **sigue accesible**. El reinicio NO pierde imágenes.
+- La pérdida ocurre cuando se borra el directorio `backend-go/data/media/`
+  (git clean, re-clone, cambio de máquina, etc.): el FS pierde el archivo
+  pero la DB sigue apuntando → 404 silencioso → "ya no aparecen".
+- Confirmé 2 materiales con `image_url` apuntando a archivos inexistentes.
+
+### Fix — rama `wip/media-persistent-store`
+
+1. **Store persistente (causa raíz)** — `internal/config/config.go`:
+   cuando `MEDIA_DIR` no está seteada, ahora defaultea a
+   `~/.muebles-media` (absoluta, fuera del repo, sobrevive a clean/clone).
+   Override vía `MEDIA_DIR` sigue funcionando (back-compat).
+   `cmd/server/main.go` loguea la ruta efectiva al arranque.
+2. **Lifecycle cleanup** — `internal/api/media.go` + `handlers.go`:
+   - Helper `mediaFilenameFromURL` (extrae `<name>`, rechaza path-escape) y
+     `deleteMediaFileByURL` (best-effort, idempotente).
+   - PUT material: snapshot previo de `image_url` + `preview_texture_url`;
+     tras commit exitoso, si cambiaron, borra los archivos viejos.
+   - PUT hardware y PUT module: igual para `image_url`.
+   - DELETE module (físico): borra `image_url` antes/después del delete.
+   - Soft delete (DeactivateMaterialBoard/Hardware): **no** toca el FS
+     (la fila puede reactivarse).
+3. **CLI `admin clean-media [--apply]`** — `cmd/admin/main.go`: escanea las
+   4 columnas, detecta URLs cuyo archivo no existe en `MediaDir`. Sin
+   `--apply` es dry-run (solo reporta). Con `--apply` setea a `''`.
+   Resuelve las URLs huérfanas históricas.
+4. `.env.example`: documentación de `MEDIA_DIR` y cómo correr `clean-media`.
+
+### Tests (van con la feature)
+
+- `internal/config/config_test.go`: default `~/.muebles-media`, override,
+  whitespace fallback.
+- `internal/api/media_test.go`: 11 casos de `mediaFilenameFromURL` + 6 casos
+  de `deleteMediaFileByURL`.
+- `internal/api/handlers_test.go`: 6 tests de cleanup (PUT material
+  cambia/conserva imagen, PUT hardware, PUT module, DELETE module, soft
+  delete no toca FS).
+- `cmd/admin/admin_test.go`: `resolveMediaDir`, `mediaFilenameFromURL`.
+
+### Verificación ejecutada
+
+- `go test ./...` ✓ (todos los paquetes, incluyendo storage con Postgres).
+- `pnpm typecheck` ✓ (6 workspaces).
+- `pnpm test` ✓ (311 + 9 + 87 = 407 tests TS).
+- E2E con server real: subida a `MEDIA_DIR` override, cleanup en PUT,
+  cleanup en DELETE module, `clean-media` dry-run reportó 2 huérfanos,
+  `--apply` los limpió (DB quedó en 0 huérfanos).
+- Aplicado `clean-media --apply` sobre la DB local del usuario: 2 URLs
+  huérfanas limpiadas. Esos materiales ahora muestran "Sin foto".
+
+### Archivos modificados / creados
+
+- `backend-go/internal/config/config.go` — MediaDir default persistente.
+- `backend-go/internal/config/config_test.go` — tests del default.
+- `backend-go/internal/api/media.go` — helpers de cleanup.
+- `backend-go/internal/api/media_test.go` — tests de helpers.
+- `backend-go/internal/api/handlers.go` — lifecycle cleanup.
+- `backend-go/internal/api/handlers_test.go` — stub extendido + 6 tests.
+- `backend-go/cmd/admin/main.go` — subcomando `clean-media`.
+- `backend-go/cmd/admin/admin_test.go` — tests del CLI.
+- `backend-go/cmd/server/main.go` — log de `Media store`.
+- `.env.example` — documentación `MEDIA_DIR` + `clean-media`.
+
+---
+
+# Sesión anterior (2026-07-18) — F056 Plantillas de proyecto (#110)
+
+> La sección de abajo describe la sesión anterior para contexto histórico.
+> Esa feature está mergueada a main; este archivo se mantiene como bitácora.
+
+- **Branch (sesión anterior):** `feat/project-templates-110` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
 
 ## Hecho en esta pasada (2026-07-20) — UI Review Fase 3 (CIERRE)

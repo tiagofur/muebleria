@@ -89,3 +89,95 @@ func TestMediaUploadDeniedVendedor(t *testing.T) {
 		t.Fatalf("status %d want 403", rr.Code)
 	}
 }
+
+func TestMediaFilenameFromURL(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"canonical", "/api/media/abc.png", "abc.png"},
+		{"with token query", "/api/media/abc.png?token=secret", "abc.png"},
+		{"absolute host", "http://localhost:8080/api/media/abc.webp", "abc.webp"},
+		{"external url", "https://cdn.example.com/img.png", ""},
+		{"data uri", "data:image/png;base64,xx", ""},
+		{"path escape", "/api/media/../etc/passwd", ""},
+		{"path separator slash", "/api/media/sub/abc.png", ""},
+		{"backslash", "/api/media/abc.png\\x", ""},
+		{"only prefix", "/api/media/", ""},
+		{"whitespace trimmed", "  /api/media/abc.jpg  ", "abc.jpg"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := mediaFilenameFromURL(c.in)
+			if got != c.want {
+				t.Errorf("mediaFilenameFromURL(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestDeleteMediaFileByURL(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a real file to delete.
+	existing := filepath.Join(dir, "real.jpg")
+	if err := os.WriteFile(existing, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("removes existing file", func(t *testing.T) {
+		got := deleteMediaFileByURL(dir, "/api/media/real.jpg")
+		if !got {
+			t.Fatal("expected deleteMediaFileByURL to return true")
+		}
+		if _, err := os.Stat(existing); !os.IsNotExist(err) {
+			t.Errorf("file should be gone, stat err=%v", err)
+		}
+	})
+
+	t.Run("missing file is no-op", func(t *testing.T) {
+		got := deleteMediaFileByURL(dir, "/api/media/never-existed.png")
+		if got {
+			t.Error("expected false for missing file")
+		}
+	})
+
+	t.Run("empty url is no-op", func(t *testing.T) {
+		got := deleteMediaFileByURL(dir, "")
+		if got {
+			t.Error("expected false for empty url")
+		}
+	})
+
+	t.Run("external url is no-op", func(t *testing.T) {
+		got := deleteMediaFileByURL(dir, "https://cdn.example.com/x.png")
+		if got {
+			t.Error("expected false for external url")
+		}
+	})
+
+	t.Run("path escape is refused", func(t *testing.T) {
+		// Plant a file outside the dir to prove we don't delete it.
+		parent := filepath.Dir(dir)
+		target := filepath.Join(parent, "escape-target.txt")
+		_ = os.WriteFile(target, []byte("secret"), 0o600)
+		t.Cleanup(func() { _ = os.Remove(target) })
+
+		got := deleteMediaFileByURL(dir, "/api/media/../"+filepath.Base(target))
+		if got {
+			t.Error("expected false for path escape")
+		}
+		if _, err := os.Stat(target); err != nil {
+			t.Errorf("escape target should still exist, err=%v", err)
+		}
+	})
+
+	t.Run("empty media dir is no-op", func(t *testing.T) {
+		got := deleteMediaFileByURL("", "/api/media/real.jpg")
+		if got {
+			t.Error("expected false when mediaDir is empty")
+		}
+	})
+}
