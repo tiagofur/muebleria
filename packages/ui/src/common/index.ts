@@ -41,6 +41,7 @@ export {
   type UseRoutableEntitySelectionOptions,
   type UseRoutableEntitySelectionResult,
 } from './useRoutableEntitySelection';
+export { useDraftSession } from './useDraftSession';
 export { EMPTY_PLACEHOLDER, formatEmpty } from './formatEmpty';
 export {
   formatMoneyDisplay,
