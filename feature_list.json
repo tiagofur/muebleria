@@ -1021,6 +1021,114 @@
       ],
       "status": "done",
       "github_issue": 110
+    },
+    {
+      "id": "F057",
+      "phase": 11,
+      "name": "phase0_zustand_stores",
+      "title": "Stores Zustand + migrar estado de App.tsx",
+      "description": "Fase 0 (Perfect App Roadmap §5.0.1). App.tsx hoy tiene ~2880 líneas con 31 useCallback y TODO el estado de catálogo/auth/exports/breakdown/selection/drafts. Migrar a stores Zustand separados por responsabilidad: projectStore (proyecto activo + draft + selection), catalogStore (materiales/cantos/herrajes/grupos/optionGroups + cache + invalidation), workspaceStore (workspace + sesión + RBAC), uiStore (toasts, modales, command palette, theme). App.tsx pasa a ser shell delgado que cablea stores a screens. Sin cambios funcionales; solo reorganización de estado. ES LA BASE para que Fase 0.2-0.5 y Fase 1 (board-first canvas) sean construibles. Sin esto, cualquier cosa nueva arriba hereda la deuda.",
+      "acceptance": [
+        "4 stores Zustand creados: projectStore, catalogStore, workspaceStore, uiStore",
+        "App.tsx < 800 líneas (objetivo: < 600)",
+        "Cero useCallback en App.tsx salvo los estrictamente necesarios para pasar a screens (objetivo: < 10)",
+        "Sin stores duplicados: cada pieza de estado vive en un solo store",
+        "Persistencia selectiva (solo workspaceStore + uiStore.theme con persist middleware)",
+        "Cero regression funcional: smoke visual en 5 pantallas (Dashboard, Cotizaciones, Muebles, Materiales, Producción) idéntico a pre-refactor",
+        "pnpm test verde (todos los suites existentes) · pnpm typecheck 6/6 verde · ./init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §3 (D4 refactor arquitectura primero), §4.1 (stores objetivo), §5 Fase 0",
+        "docs/architecture.md §Estado objetivo",
+        "docs/IDEAS/PRD.md §4.3 (patrón Command, base para stores)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F058",
+      "phase": 11,
+      "name": "phase0_split_projects_screen",
+      "title": "Partir ProjectsScreen (2793 L) en lista + detalle + exports",
+      "description": "Fase 0 (Perfect App Roadmap §5.0.2). ProjectsScreen.tsx hoy (2793 líneas) contiene: lista de cotizaciones + vista detalle con chrome sticky + 7 modales (metadata, add-item, confirm-delete, confirm-reopen, save-as-template, templates-management, presentación) + 3D + checklist + scenario compare + 8 callbacks de export. Es el corazón de la app y es inmanejeable. Parte en: ProjectsListScreen (lista con filtros, búsqueda, plantillas toolbar), ProjectDetailScreen (chrome sticky + body con items + totales + paneles), ProjectExportsPanel (toolbar de exports + dropdown + builders). Mantiene rutas existentes (/projects, /projects/:id).",
+      "acceptance": [
+        "ProjectsListScreen.tsx < 600 líneas",
+        "ProjectDetailScreen.tsx < 800 líneas",
+        "ProjectExportsPanel.tsx < 300 líneas (exports toolbar)",
+        "Sub-componentes extraídos para modales (ProjectMetadataModal, ProjectAddItemModal, ProjectConfirmReopenModal, etc.)",
+        "Cada sub-componente < 200 líneas",
+        "Cero regression funcional: deep-link /projects/:id funciona, todos los exports funcionan, plantillas funcionan, 3D funciona",
+        "Smoke Playwright (si existen tests e2e) pasa; tests unitarios existentes actualizados pasan",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.2, §1.2 (causa #2 de officinesca)",
+        "packages/ui/src/projects/ProjectsScreen.tsx (archivo a partir)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F059",
+      "phase": 11,
+      "name": "phase0_entity_editor_layout",
+      "title": "Abstraer EntityEditorLayout<Tab,Draft> común (Modules/Structures/Components)",
+      "description": "Fase 0 (Perfect App Roadmap §5.0.3). ModulesScreen (1273 L), StructuresScreen (780 L), ComponentsScreen (569 L) comparten arquitectura idéntica: useState para modalOpen/editingId/selectedId/editorTab/draft/error + EditorForm con tablist + paneles + ListView + DetailView + Draft type + EditorTab union + ruta /section/:id/edit + NEW_ENTITY_ID sentinel + tabForValidationError(). Hoy replicado 3 veces a mano. Extraer EntityEditorLayout<Tab extends string, Draft> genérico en packages/ui/src/common/ que absorba ~70% del boilerplate. Los 3 screens pasan a ser configuración (entity name, tabs config, validators) en vez de implementación repetida.",
+      "acceptance": [
+        "EntityEditorLayout<Tab,Draft> component existe en packages/ui/src/common/",
+        "ModulesScreen.tsx < 600 líneas (configuración sobre EntityEditorLayout)",
+        "StructuresScreen.tsx < 500 líneas",
+        "ComponentsScreen.tsx < 400 líneas",
+        "Tests de contrato: las 3 entidades siguen exponiendo el mismo comportamiento (deep-link /:id/edit, NEW_ENTITY_ID, tabs, validation focus)",
+        "Smoke visual: abrir/editar/guardar un Module, Structure y Component en menos clicks que antes",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §1.2 (causa #3), §5 Fase 0 slice 0.3, §3 D5 no más Modales LG",
+        "packages/ui/src/modules/ModulesScreen.tsx",
+        "packages/ui/src/structures/StructuresScreen.tsx",
+        "packages/ui/src/components/ComponentsScreen.tsx"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F060",
+      "phase": 11,
+      "name": "phase0_split_engine",
+      "title": "Partir engine.ts (2108 L) por responsabilidad",
+      "description": "Fase 0 (Perfect App Roadmap §5.0.4). packages/domain/src/engine.ts (2108 líneas) es un monolito con resolveBom + calcLineCost + calcProjectBreakdown + validaciones + generateCutRows + helpers de hardware + pricing + snapshot. Parte en archivos por responsabilidad manteniendo exports públicos en index.ts (sin breaking changes para consumidores): bom/ (resolución), pricing/ (costos y breakdown), cut/ (production cut rows), hardware/ (hardware list + purchase rows), validate/ (VAL-01 a VAL-07), snapshot/ (price snapshot). Misma tarea en backend-go/internal/domain/engine/ si aplica (ya está más partido). Base para que Fase 1 (board-first canvas) pueda invocar cálculos selectivos al mover una pieza.",
+      "acceptance": [
+        "engine.ts eliminado o < 200 líneas (solo re-export barrel)",
+        "Sub-archivos por responsabilidad: bom.ts, pricing.ts, cut.ts, hardware.ts, validate.ts, snapshot.ts (o sub-carpetas)",
+        "packages/domain/src/index.ts mantiene exports públicos idénticos (sin breaking changes)",
+        "Todos los tests existentes pasan sin modificarse (golden tests incluidos)",
+        "pnpm --filter @muebles/domain test verde · pnpm typecheck verde · ./init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.4",
+        "docs/prd.md §13 (reglas de cálculo)",
+        "packages/domain/src/engine.ts (archivo a partir)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F061",
+      "phase": 11,
+      "name": "phase0_command_pattern_undoredo",
+      "title": "Command pattern + undo/redo sobre mutaciones de proyecto",
+      "description": "Fase 0 (Perfect App Roadmap §5.0.5). Implementar patrón Command (PRD §4.3) sobre mutaciones de proyecto: AddModuleItemCommand, RemoveModuleItemCommand, ChangeOptionChoiceCommand, UpdateProjectItemCommand, etc. CommandManager con dos stacks (undo/redo) y límite configurable (default 50). Atajos Cmd+Z / Cmd+Shift+Z. Cableado inicial sobre el projectStore de F057. NO cubre mutaciones de canvas (eso vendrá con Fase 1 board-first) — solo sienta la base. Es lo que hace que la app empiece a sentirse como 'herramienta' en vez de 'formulario': el usuario puede equivocarse y deshacer.",
+      "acceptance": [
+        "Command interface (execute, undo, describe) y CommandManager en packages/domain o packages/ui/src/common/",
+        "Comandos para mutaciones de proyecto: addItem, removeItem, changeOptionChoice, updateProjectItem, changeQty",
+        "Atajos Cmd+Z / Cmd+Shift+Z funcionan en ProjectDetailScreen",
+        "Límite de stack configurable (default 50)",
+        "Test unitario: secuencia execute/undo/redo mantiene estado consistente",
+        "Smoke: usuario agrega item, undo lo quita, redo lo vuelve a poner",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.5, §4.3 (Command + undo/redo)",
+        "docs/IDEAS/PRD.md §4.3 (patrón Command original)"
+      ],
+      "status": "pending"
     }
   ]
 }
