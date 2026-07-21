@@ -19,6 +19,7 @@ import type {
 import {
   Modal,
   useDebouncedValue,
+  useDraftSession,
   useRoutableEntitySelection,
 } from '../common';
 import {
@@ -98,7 +99,11 @@ export function StructuresScreen({
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<StructureDraft>(emptyStructureDraft);
+  const draftKey = `structure-draft:${openStructureEditId ?? 'idle'}`;
+  const [draft, setDraft, clearDraft] = useDraftSession<StructureDraft>(
+    draftKey,
+    emptyStructureDraft(),
+  );
   /**
    * Snapshot of the draft taken when the editor opened (Fase 3 UI 3b).
    * Used to detect dirty draft and warn before discarding on close.
@@ -144,11 +149,23 @@ export function StructuresScreen({
    */
   useEffect(() => {
     if (openStructureEditId == null || openStructureEditId === '') return;
+    // Fase 3 follow-up: respect persisted draft if it exists (survives nav/F5).
+    const hasPersisted = (() => {
+      try {
+        return sessionStorage.getItem(draftKey) !== null;
+      } catch {
+        return false;
+      }
+    })();
     if (openStructureEditId === 'new') {
-      const fresh = emptyStructureDraft();
+      if (!hasPersisted) {
+        const fresh = emptyStructureDraft();
+        setDraft(fresh);
+        setInitialDraft(fresh);
+      } else {
+        setInitialDraft(draft);
+      }
       setEditingId(null);
-      setDraft(fresh);
-      setInitialDraft(fresh);
       setEditorTab('general');
       setError(null);
       setModalOpen(true);
@@ -156,13 +173,18 @@ export function StructuresScreen({
     }
     const structure = structures.find((s) => s.id === openStructureEditId);
     if (!structure) return;
-    const fresh = structureToDraft(structure);
+    if (!hasPersisted) {
+      const fresh = structureToDraft(structure);
+      setDraft(fresh);
+      setInitialDraft(fresh);
+    } else {
+      setInitialDraft(draft);
+    }
     setEditingId(structure.id);
-    setDraft(fresh);
-    setInitialDraft(fresh);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openStructureEditId, structures]);
 
   const addPreset = () => {
@@ -233,6 +255,7 @@ export function StructuresScreen({
     setEditorTab('general');
     setError(null);
     setConfirmDiscard(false);
+    clearDraft();
     if (openStructureEditId && onSelectionChange) {
       onSelectionChange(expandedId);
     }

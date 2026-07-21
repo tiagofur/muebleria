@@ -8,7 +8,8 @@
  *
  * - On first mount: if sessionStorage has a value for `key`, return it;
  *   otherwise return `initialDraft` and seed sessionStorage.
- * - setDraft(next): update both React state and sessionStorage.
+ * - setDraft(next | (prev) => next): update both React state and sessionStorage.
+ *   Accepts the same shapes as React's setState (value OR updater function).
  * - clearDraft(): remove the key from sessionStorage (called on save or
  *   discard). Leaves the React state alone (caller decides what to do).
  *
@@ -24,7 +25,7 @@
  * in-memory state, same behavior as before this hook existed.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 function readSession<T>(key: string): T | null {
   try {
@@ -55,7 +56,7 @@ function removeSession(key: string): void {
 export function useDraftSession<T>(
   key: string,
   initialDraft: T,
-): readonly [T, (next: T) => void, () => void] {
+): readonly [T, Dispatch<SetStateAction<T>>, () => void] {
   const [state, setState] = useState<T>(() => {
     const persisted = readSession<T>(key);
     if (persisted !== null) return persisted;
@@ -63,19 +64,41 @@ export function useDraftSession<T>(
     return initialDraft;
   });
 
-  // Keep the key in a ref so the session-stored key stays in sync even if
-  // the caller changes the key (e.g. navigating from /new/edit to /:id/edit
-  // after first save).
+  // Keep the key in a ref so the wrapped setDraft can resolve updater functions
+  // with the latest key even after a re-render with a new key. Updated only
+  // inside the key-change effect (NOT on every render, so the effect can
+  // detect a real change).
   const keyRef = useRef(key);
-  keyRef.current = key;
 
-  const setDraft = useCallback(
-    (next: T) => {
-      setState(next);
-      writeSession(keyRef.current, next);
-    },
-    [],
-  );
+  // When the key changes (e.g. navigating from /new/edit to /:id/edit), reload
+  // from sessionStorage. This lets the same hook instance back multiple editor
+  // entries without forcing a component remount.
+  useEffect(() => {
+    if (keyRef.current === key) return; // first mount or no change
+    keyRef.current = key;
+    const persisted = readSession<T>(key);
+    if (persisted !== null) {
+      setState(persisted);
+    } else {
+      writeSession(key, initialDraft);
+      setState(initialDraft);
+    }
+    // We intentionally only depend on `key`. initialDraft is captured at the
+    // moment the key changes; that's what callers expect (e.g. fresh empty
+    // draft for 'new', or moduleToDraft(item) for an existing entity).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const setDraft = useCallback<Dispatch<SetStateAction<T>>>((next) => {
+    setState((prev) => {
+      const resolved =
+        typeof next === 'function'
+          ? (next as (prev: T) => T)(prev)
+          : next;
+      writeSession(keyRef.current, resolved);
+      return resolved;
+    });
+  }, []);
 
   const clearDraft = useCallback(() => {
     removeSession(keyRef.current);
