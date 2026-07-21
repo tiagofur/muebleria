@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   calcProjectBreakdown,
   collectExportIssues,
@@ -106,17 +106,46 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
     expect(mainSrc).toMatch(/<ErrorBoundary>[\s\S]*<App\s*\/>/);
   });
 
-  it('#13: workspace load failure offers explicit recover (no silent seed)', () => {
+  it('#13: workspace load failure surfaces error (no silent seed) — F057 behavior test', async () => {
+    // F057: workspace lifecycle moved to workspaceStore. Behavior test
+    // replaces the old text-matching against App.tsx (which no longer
+    // contains repository.load()/setWorkspaceLoadError literally).
+    const { createWorkspaceStore } = await import('./stores/workspaceStore');
+    const failingRepo = {
+      load: async () => {
+        throw new Error('backend down');
+      },
+      save: async () => {},
+      saveCatalog: async () => {},
+      saveProject: async () => {},
+      createProject: async () => {},
+      deleteProject: async () => {},
+      createProjectTemplate: async () => {},
+      deleteProjectTemplate: async () => {},
+    };
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: () => failingRepo as never },
+    });
+    store.getState().enterAsGuest();
+
+    // Silence the expected console.error from loadWorkspace catch path.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await store.getState().loadWorkspace();
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    // Surfaces error — does NOT seed demo silently.
+    expect(store.getState().workspace).toBeNull();
+    expect(store.getState().workspaceLoadError).toBe('backend down');
+  });
+
+  it('#13: App.tsx still wires Usar datos demo button on load error (UI copy)', () => {
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appSrc).toContain('workspaceLoadError');
+    // The recover CTA copy must remain in the UI even if the wiring moved
+    // to the store — this guards the user-facing recover flow (#13).
     expect(appSrc).toContain('Usar datos demo');
-    // Load catch must set error, not auto-seed.
-    const loadCatch = appSrc.match(
-      /repository\s*\n?\s*\.load\(\)[\s\S]*?\.catch\(\(err\) => \{([\s\S]*?)\}\);/,
-    );
-    expect(loadCatch?.[1]).toBeTruthy();
-    expect(loadCatch?.[1]).toContain('setWorkspaceLoadError');
-    expect(loadCatch?.[1]).not.toContain('createSeedWorkspace');
   });
 });
 

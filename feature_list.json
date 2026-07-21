@@ -1025,22 +1025,96 @@
     {
       "id": "F057",
       "phase": 11,
-      "name": "phase0_zustand_stores",
-      "title": "Stores Zustand + migrar estado de App.tsx",
-      "description": "Fase 0 (Perfect App Roadmap §5.0.1). App.tsx hoy tiene ~2880 líneas con 31 useCallback y TODO el estado de catálogo/auth/exports/breakdown/selection/drafts. Migrar a stores Zustand separados por responsabilidad: projectStore (proyecto activo + draft + selection), catalogStore (materiales/cantos/herrajes/grupos/optionGroups + cache + invalidation), workspaceStore (workspace + sesión + RBAC), uiStore (toasts, modales, command palette, theme). App.tsx pasa a ser shell delgado que cablea stores a screens. Sin cambios funcionales; solo reorganización de estado. ES LA BASE para que Fase 0.2-0.5 y Fase 1 (board-first canvas) sean construibles. Sin esto, cualquier cosa nueva arriba hereda la deuda.",
+      "name": "phase0_workspace_store",
+      "title": "workspaceStore Zustand: sesión + load workspace + RBAC + workshopSettings",
+      "description": "Fase 0 / Sub-slice 1 de 4 (Perfect App Roadmap §5.0.1, sub-slicing aprobado). F057 original partió en 4: F057 (workspaceStore), F062 (catalogStore), F063 (projectStore), F064 (uiStore). Este slice cubre SOLO workspaceStore. Migra de App.tsx/SessionGate: session (SessionMode), authGate (login|register), loginLoading/Error, registerLoading/Error, workspace (solo settings + loaded flag + schemaVersion), workspaceLoadError, assignableOwners, repository (API vs LocalStorage), authToken/authUser selectors. Acciones: enterAsGuest, login, register, logout, loadWorkspace (hidrata solo settings en este slice), loadAssignableOwners, saveWorkshopSettings, setAuthGate, resolveMediaUrl, uploadCatalogImage. SessionGate se simplifica (sin useState propios, lee del store). App.tsx < 2500 líneas (objetivo F057 específico; el objetivo < 600 llega al cerrar F062+F063+F064). BASE para que el resto de stores (F062/F063/F064) sean construibles. ToastProvider NO se toca en F057 (se migra en F064).",
       "acceptance": [
-        "4 stores Zustand creados: projectStore, catalogStore, workspaceStore, uiStore",
-        "App.tsx < 800 líneas (objetivo: < 600)",
-        "Cero useCallback en App.tsx salvo los estrictamente necesarios para pasar a screens (objetivo: < 10)",
-        "Sin stores duplicados: cada pieza de estado vive en un solo store",
-        "Persistencia selectiva (solo workspaceStore + uiStore.theme con persist middleware)",
-        "Cero regression funcional: smoke visual en 5 pantallas (Dashboard, Cotizaciones, Muebles, Materiales, Producción) idéntico a pre-refactor",
-        "pnpm test verde (todos los suites existentes) · pnpm typecheck 6/6 verde · ./init.sh verde"
+        "workspaceStore Zustand creado en apps/web/src/stores/workspaceStore.ts con session, authGate, login/register states, workspace (settings+loaded flag), workspaceLoadError, assignableOwners, repository getter, authToken/authUser selectors",
+        "apps/web/src/stores/ con barrel export (index.ts)",
+        "zustand ^5.0.14 declarado como dep directa en apps/web/package.json",
+        "SessionGate simplificado (sin useState propios, lee del store)",
+        "apps/web/src/stores/workspaceStore.test.ts con behavior tests: login success, login failure, enterAsGuest, logout, loadWorkspace success/failure, loadAssignableOwners, saveWorkshopSettings",
+        "Tests actualizados (App.test.ts + designSystemShell.test.ts) sin text-matching frágil — asserts de comportamiento del store",
+        "Cero regression funcional: smoke Playwright (6 screenshots) pasa o se re-baselinea con justificación documentada",
+        "Persistencia selectiva (solo session en sessionStorage via persist middleware); workspace lo persiste el repository como siempre",
+        "App.tsx < 2500 líneas (objetivo F057 específico)",
+        "pnpm test verde · pnpm typecheck 6/6 verde · ./init.sh verde"
       ],
       "references": [
         "docs/perfect-app-roadmap.md §3 (D4 refactor arquitectura primero), §4.1 (stores objetivo), §5 Fase 0",
         "docs/architecture.md §Estado objetivo",
-        "docs/IDEAS/PRD.md §4.3 (patrón Command, base para stores)"
+        "apps/web/src/App.tsx (SessionGate + estado a migrar)"
+      ],
+      "status": "in_progress"
+    },
+    {
+      "id": "F062",
+      "phase": 11,
+      "name": "phase0_catalog_store",
+      "title": "catalogStore Zustand: catálogos + módulos + estructuras + componentes + customers",
+      "description": "Fase 0 / Sub-slice 2 de 4 (Perfect App Roadmap §5.0.1). Migra de App.tsx/AppContent: catálogo (materials, edges, hardware, optionGroups, categories), entidades reutilizables (modules, structures, components), customers, y todos los handlers de mutación (create/update/delete + activate/deactivate) que hoy viven como useCallback en App.tsx. patchCatalog wrapper (con workspaceRef + setWorkspace + repository.saveCatalog) se vuelve un action directo del store usando setState + get(). Cero cambio funcional. Depende de F057 cerrado (workspaceStore provee repository + session).",
+      "acceptance": [
+        "catalogStore Zustand creado en apps/web/src/stores/catalogStore.ts con todos los catálogos y entidades",
+        "Todos los handlers de mutación de catálogo (create/update/delete + activate) migrados como actions del store",
+        "patchCatalog wrapper eliminado (replaced by store setState + persist action)",
+        "App.tsx ya no tiene handlers de catálogo (los consume del store)",
+        "moduleEstimates, modulesWithoutPhotoCount, groupLabels pasan a ser selectors del store",
+        "Tests de comportamiento cubren: createMaterial, updateMaterial (con alerta #138), createCategory con validación de subcategorías, duplicateModule",
+        "Cero regression funcional: smoke Playwright pasa",
+        "App.tsx reducido (progreso hacia < 600 líneas)",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.1 (sub-slice 2)",
+        "apps/web/src/App.tsx (handlers create/update/delete de catálogo)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F063",
+      "phase": 11,
+      "name": "phase0_project_store",
+      "title": "projectStore Zustand: proyectos + items + templates + backend breakdown",
+      "description": "Fase 0 / Sub-slice 3 de 4 (Perfect App Roadmap §5.0.1). Migra de App.tsx/AppContent: projects, projectTemplates, backendBreakdown, breakdownLoading, breakdownError, editingModuleId, y todos los handlers de mutación de proyecto (create/update/delete project, add/remove/update item, changeOptionChoice, updateMeasureDefaults, updateKitchenLayout, saveAsTemplate, createFromTemplate, deleteTemplate, applyScenarioB, importNestingResult, markProduced, reopen). patchProjects wrapper se vuelve action del store. useEffect de backend breakdown (POST /projects/:id/calculate con debounce) pasa a action refreshBackendBreakdown(). Depende de F057 + F062.",
+      "acceptance": [
+        "projectStore Zustand creado en apps/web/src/stores/projectStore.ts con projects, projectTemplates, breakdown",
+        "Todos los handlers de mutación de proyecto migrados como actions del store",
+        "patchProjects wrapper eliminado",
+        "refreshBackendBreakdown con debounce como action del store",
+        "projectQuote, materialSummary, projectEstimates, selectedProject pasan a selectors",
+        "createProject y updateProject manejan la coordinación con catalogStore.customers (cross-store action)",
+        "Tests de comportamiento cubren: createProject, addProjectItem, applyScenarioB, saveAsTemplate, markProduced",
+        "Cero regression funcional: smoke Playwright pasa",
+        "App.tsx reducido significativamente (objetivo < 1000 líneas tras este slice)",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.1 (sub-slice 3)",
+        "apps/web/src/App.tsx (handlers de proyecto)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F064",
+      "phase": 11,
+      "name": "phase0_ui_store_toasts",
+      "title": "uiStore Zustand: toasts (reemplaza ToastProvider) + exportBusy/errors + createKeys + command palette",
+      "description": "Fase 0 / Sub-slice 4 de 4 (Perfect App Roadmap §5.0.1). Cierra F057-F064: uiStore unifica el resto de estado UI. Migra ToastProvider (único createContext de packages/ui) a uiStore: toasts viven en el store, ToastProvider se simplifica a un renderer suscrito que escucha uiStore. Migra también exportBusy, exportErrors, projectsCreateKey/modulesCreateKey/materialsCreateKey, command palette items. App.tsx finalmente < 600 líneas. Depende de F057 + F062 + F063. Decisiones confirmadas: D-migrar ToastProvider a uiStore; reescribir Toast.test.ts + index.test.ts + designSystemShell.test.ts a behavior tests del store.",
+      "acceptance": [
+        "uiStore Zustand creado en apps/web/src/stores/uiStore.ts con toasts[], exportBusy, exportErrors, createKeys, commandItems",
+        "ToastProvider migrado a renderer suscrito a uiStore (ToastProvider ya no usa createContext)",
+        "pushToast(input), dismissToast(id), beginExit(id) actions del store",
+        "exportBusy/errors movidos al store",
+        "createKeys movidos al store",
+        "commandItems movidos al store",
+        "Toast.test.ts + index.test.ts + designSystemShell.test.ts actualizados a behavior tests",
+        "App.tsx < 600 líneas (objetivo final Fase 0 slice 0.1)",
+        "Cero regression funcional: smoke Playwright pasa",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.1 (sub-slice 4), §3 D5 no más Modales LG",
+        "packages/ui/src/common/Toast.tsx (archivo a migrar)"
       ],
       "status": "pending"
     },
