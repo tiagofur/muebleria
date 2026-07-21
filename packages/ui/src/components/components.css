@@ -170,3 +170,13 @@
 .component-editor-page__main {
   min-width: 0;
 }
+
+/* —— ComponentDetailView (Fase 3 follow-up) —— */
+/* Reuses module-detail__section / __title / __row / __preset-list / __notes
+   from modules.css. Only the container hook is component-specific. */
+
+.component-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap);
+}

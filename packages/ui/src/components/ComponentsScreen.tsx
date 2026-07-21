@@ -27,6 +27,7 @@ import {
   type ComponentDraft,
   type ComponentEditorTab,
 } from './componentDraft';
+import { ComponentDetailView } from './editor/ComponentDetailView';
 import { ComponentEditorForm } from './editor/ComponentEditorForm';
 import { ComponentListView } from './editor/ComponentListView';
 import { materialColorMap } from '../preview3d';
@@ -81,7 +82,7 @@ export function ComponentsScreen({
     () => components.map((c) => c.id),
     [components],
   );
-  const { selectedId: expandedId, toggleSelectedId } =
+  const { selectedId: expandedId, setSelectedId, toggleSelectedId } =
     useRoutableEntitySelection({
       openEntityId: openComponentId,
       onSelectionChange,
@@ -391,6 +392,83 @@ export function ComponentsScreen({
           </p>
         </Modal>
       </section>
+    );
+  }
+
+  // Fase 3 follow-up: card-detalle. When a row is expanded (selected), render
+  // the dedicated read-only ComponentDetailView instead of the card grid.
+  const selectedComponent = expandedId
+    ? (normalizedComponents.find((c) => c.id === expandedId) ?? null)
+    : null;
+
+  if (selectedComponent) {
+    return (
+      <div className="catalog-page" data-testid="components-screen">
+        <ComponentDetailView
+          component={selectedComponent}
+          onBack={() => setSelectedId(null)}
+          onEdit={handleEdit}
+          onToggleActive={canMutate ? handleToggleActive : undefined}
+          canMutate={canMutate}
+        />
+
+        {/* Legacy editor modal (used when onRequestEdit is not wired, e.g.
+            tests). When the shell wires onRequestEdit, the editor opens
+            inline via the inlineEditMode branch above. */}
+        <Modal
+          open={modalOpen}
+          title={editingId ? 'Editar Componente' : 'Nuevo Componente'}
+          onClose={closeModal}
+          size="lg"
+          data-testid="component-modal"
+        >
+          <ComponentEditorForm
+            formId={formId}
+            error={error}
+            onSubmit={onSubmit}
+            onCancel={closeModal}
+            editorTab={editorTab}
+            setEditorTab={setEditorTab}
+            draft={draft}
+            setDraft={setDraft}
+            editingId={editingId}
+            optionGroups={optionGroups}
+            previewParts={previewParts}
+            materialColors={materialColors}
+          />
+        </Modal>
+
+        <Modal
+          open={confirmDiscard}
+          onClose={() => setConfirmDiscard(false)}
+          title="Descartar cambios"
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={forceCloseEditor}
+                data-testid="component-editor-discard-confirm"
+              >
+                Descartar y salir
+              </button>
+            </>
+          }
+        >
+          <p>
+            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+            que querés descartar?
+          </p>
+        </Modal>
+      </div>
     );
   }
 
