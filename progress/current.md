@@ -1,71 +1,31 @@
-# Sesión actual — F057 workspaceStore
+# Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch:** `wip/perfect-app-fase-0` (basada en `main` post #155 docs/perfect-app-roadmap)
-- **Feature:** F057 — phase0_workspace_store (sub-slice 1 de 4 de la Fase 0 Perfect App)
-- **Iniciada:** 2026-07-21
+- **Branch activa:** `wip/perfect-app-fase-0` (F057 commiteada y pushed; PR pendiente de merge)
 - **META issue:** #156 Perfect App roadmap
+- **Última feature cerrada:** F057 — phase0_workspace_store → `progress/close_F057.md`
 
-## Contexto estratégico
+## Estado Fase 0 (Perfect App Roadmap §5)
 
-Rumbo confirmado con el usuario (`docs/perfect-app-roadmap.md`):
-board-first + 3D por rol + herramienta de oficio. Fase 0 = deuda técnica
-antes de features nuevas. F057 es sub-slice 1 de 4 (workspaceStore,
-catalogStore, projectStore, uiStore).
+| ID | Feature | Estado |
+|---|---|---|
+| F057 | workspaceStore Zustand | ✅ done (sub-slice 1/4) |
+| F062 | catalogStore (catálogos + módulos + estructuras + componentes + customers) | ⏳ pending (próximo) |
+| F063 | projectStore (proyectos + items + templates + breakdown) | ⏳ pending |
+| F064 | uiStore + ToastProvider migration | ⏳ pending |
+| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending |
+| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
+| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
+| F061 | Command pattern + undo/redo | ⏳ pending |
 
-## Plan F057 (slice aprobado)
+## Próximo slice recomendado
 
-1. ✅ Ajustar `feature_list.json` — F057 rescrita (workspaceStore), F062/F063/F064 creadas.
-2. Marcar F057 `in_progress` + este `current.md`.
-3. Agregar `zustand ^5.0.14` a `apps/web/package.json` (ya está en lockfile transitivo).
-4. Crear `apps/web/src/stores/` + `workspaceStore.ts` + `index.ts`.
-5. Escribir `workspaceStore.test.ts` (behavior tests).
-6. Migrar estado en App.tsx (SessionGate + workspace load + assignableOwners + workshopSettings).
-7. Actualizar `App.test.ts` + `designSystemShell.test.ts` (text-matching → behavior).
-8. Verificar: `pnpm test`, `pnpm typecheck`, `./init.sh`, smoke Playwright.
-9. Llamar reviewer.
+**F062 catalogStore**: mueve ~30 handlers de mutación de catálogo desde App.tsx
+al store, elimina `patchCatalog` wrapper y reduce el uso de `workspaceRef` para
+catálogo. Sienta la base para que F063 migre los handlers de proyecto.
 
-## Invariante F057
+## Notas
 
-- Solo migra **sesión + workspace load + assignableOwners + workshopSettings + repository + authToken/User**.
-- ToastProvider **NO se toca** (se migra en F064).
-- catálogo, proyectos, handlers de mutación de catálogo/proyecto **NO se tocan** (F062/F063).
-- `workspaceRef`, `patchCatalog`, `patchProjects` siguen existiendo hasta F062/F063.
-- App.tsx objetivo: < 2500 líneas (de 2880). El objetivo < 600 llega al cerrar F062+F063+F064.
-
-## Estado que migra a workspaceStore
-
-| Origen (App.tsx/SessionGate) | Destination (workspaceStore) |
-|---|---|
-| `session` (SessionMode \| null) + sessionStorage | store + persist (sessionStorage) |
-| `authGate` ('login' \| 'register') | store |
-| `loginLoading/Error`, `registerLoading/Error` | store |
-| `workspace` (solo settings + schemaVersion + loaded flag) | store (catálogo y proyectos en F062/F063) |
-| `workspaceLoadError` | store |
-| `assignableOwners` | store |
-| `repository` (API vs LocalStorage) | store getter derivado de `session` |
-| `authToken`, `authUser` (leídos de localStorage) | store selectors |
-
-## Acciones del store
-
-- `enterAsGuest()`, `login(email, password)`, `register(name, email, password)`, `logout()`
-- `loadWorkspace()` (hidrata solo settings en este slice)
-- `loadAssignableOwners()`
-- `saveWorkshopSettings(settings)`
-- `setAuthGate(mode)`
-- `resolveMediaUrl(url)`, `uploadCatalogImage(file)`
-
-## Tests a actualizar
-
-- `App.test.ts`: `#13 recover de load failure` (text-matching → behavior store)
-- `designSystemShell.test.ts`: `Slice E LoginGate`, `Slice F logout` (text-matching → behavior store)
-- `F019 ToastProvider`: **NO se toca** en F057 (se reescribe en F064).
-
-## Decisiones del sub-slicing (aprobadas)
-
-- F057 original (los 4 stores) era muy grande para un PR. Se dividió en:
-  - **F057** = workspaceStore
-  - **F062** = catalogStore
-  - **F063** = projectStore
-  - **F064** = uiStore (incluye migrar ToastProvider)
-- Tests text-matching se reescriben a behavior tests (mejor calidad, durable).
+- App.tsx está en 2810 L (de 2880 pre-F057). Bajará fuerte en F062/F063/F064.
+- Los snapshots de Playwright (`tests/visual/baseline.spec.ts-snapshots/`)
+  están untracked en main (issue preexistente, no de F057).

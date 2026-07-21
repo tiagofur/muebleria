@@ -1043,9 +1043,10 @@
       "references": [
         "docs/perfect-app-roadmap.md §3 (D4 refactor arquitectura primero), §4.1 (stores objetivo), §5 Fase 0",
         "docs/architecture.md §Estado objetivo",
-        "apps/web/src/App.tsx (SessionGate + estado a migrar)"
+        "apps/web/src/App.tsx (SessionGate + estado a migrar)",
+        "META issue #156 (Perfect App roadmap)"
       ],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "F062",
