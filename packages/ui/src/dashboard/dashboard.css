@@ -7,44 +7,12 @@
   max-width: 72rem;
 }
 
-.dashboard__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.dashboard__title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
+/* .dashboard__header / __title / __title-row / __subtitle / __actions moved
+   to common/pageHeader.css (F1 UI 1d). */
 
 .dashboard__title-icon {
   color: var(--brand-500);
   flex-shrink: 0;
-}
-
-.dashboard__title {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  color: var(--text-primary);
-  line-height: var(--leading-tight);
-}
-
-.dashboard__subtitle {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: var(--leading-normal);
-}
-
-.dashboard__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 /* Stat cards: 2 cols mobile, 4 cols md+ (acceptance #7) */
@@ -197,44 +165,28 @@
   line-height: var(--leading-normal);
 }
 
-/* F037 — portfolio by owner (gerente/admin) */
-.dashboard-owners-wrap {
-  overflow: auto;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-card);
-  box-shadow: var(--shadow-sm);
-}
-
-.dashboard-owners-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--text-sm);
-}
+/* F037 — portfolio by owner (gerente/admin).
+   Base table styles (wrap + th/td + sticky header + last-row border) moved to
+   common/dataTable.css (F1 UI 1c). Only column-specific tweaks stay here. */
 
 .dashboard-owners-table th,
 .dashboard-owners-table td {
-  padding: var(--space-2) var(--space-3);
-  text-align: left;
-  border-bottom: 1px solid var(--border-default);
   white-space: nowrap;
 }
 
-.dashboard-owners-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--surface-muted);
+.dashboard-owners-table__name {
   font-weight: var(--weight-semibold);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  color: var(--text-primary);
 }
 
-.dashboard-owners-table tbody tr:last-child td {
-  border-bottom: none;
+.dashboard-owners-table__num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dashboard-owners-table th:nth-child(n + 3),
+.dashboard-owners-table td:nth-child(n + 3) {
+  text-align: right;
 }
 
 .dashboard-owners-table__name {
@@ -273,42 +225,16 @@
   }
 }
 
+/* .dashboard-recent-card base + hover + focus-visible moved to
+   common/entityCard.css (F1 UI 1e). Local overrides: dashboard recent cards
+   are "secondary" entity-cards (airier padding + larger radius). */
+
 .dashboard-recent-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  width: 100%;
-  margin: 0;
   padding: var(--space-4);
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  background: var(--surface-card);
-  box-shadow: var(--shadow-sm);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .dashboard-recent-card {
-    transition:
-      border-color var(--duration-fast) var(--ease-out),
-      box-shadow var(--duration-fast) var(--ease-out),
-      background var(--duration-fast) var(--ease-out);
-  }
-
-  .dashboard-recent-card:hover {
-    border-color: var(--border-brand);
-    box-shadow: var(--shadow-md);
-    background: var(--surface-hover);
-  }
-}
-
-.dashboard-recent-card:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-  border-color: var(--border-brand);
 }
 
 .dashboard-recent-card__top {

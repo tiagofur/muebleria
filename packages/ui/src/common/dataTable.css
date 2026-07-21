@@ -1,0 +1,170 @@
+/**
+ * Data table — shared table system for catalogs, users, and dense lists.
+ * docs/design.md §6.4 (catalogs pattern), §3.8 (breakpoints/touch).
+ *
+ * Three equivalent class names are aliased to the same definitions so feature
+ * CSS no longer redefines the table block. New code should prefer .data-table:
+ *
+ *   .data-table-wrap        .catalog-table-wrap    .users-table-wrap
+ *   .data-table             .catalog-table         .users-table
+ *                           .dashboard-owners-table
+ *
+ * Variantes:
+ *   .data-table--uppercase  headers en uppercase + tracking 0.02em (users/owners)
+ *
+ * Row modifiers (still feature-scoped, defined here for parity):
+ *   .catalog-table__row.is-clickable / .is-inactive / .is-selected
+ *   .users-table__row--pending
+ */
+
+/* —— Scrollport wrapper —— */
+.data-table-wrap,
+.catalog-table-wrap,
+.users-table-wrap,
+.dashboard-owners-wrap {
+  overflow: auto;
+  max-height: min(70vh, calc(100vh - 14rem));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  /* Edge fades hint that more columns may be off-screen */
+  background-image:
+    linear-gradient(to right, var(--surface-card), transparent),
+    linear-gradient(to left, var(--surface-card), transparent);
+  background-position:
+    left center,
+    right center;
+  background-repeat: no-repeat;
+  background-size:
+    1.25rem 100%,
+    1.25rem 100%;
+  background-attachment: local, local;
+}
+
+/* —— Table base —— */
+.data-table,
+.catalog-table,
+.users-table,
+.dashboard-owners-table {
+  width: 100%;
+  /* separate + 0 spacing: sticky thead works reliably across browsers */
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-base);
+}
+
+/* Phone: ensure multi-column tables can scroll instead of crushing cells */
+@media (max-width: 639px) {
+  .data-table,
+  .catalog-table,
+  .users-table {
+    min-width: 32rem;
+  }
+
+  .users-table {
+    min-width: 36rem;
+  }
+}
+
+/* —— Cells (th + td) —— */
+.data-table th,
+.data-table td,
+.catalog-table th,
+.catalog-table td,
+.users-table th,
+.users-table td,
+.dashboard-owners-table th,
+.dashboard-owners-table td {
+  padding: var(--density-table-pad-y) var(--density-table-pad-x);
+  min-height: var(--density-row-min-height);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+/* —— Sticky header (th) —— */
+.data-table th,
+.catalog-table th,
+.users-table th,
+.dashboard-owners-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-hover);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  color: var(--text-secondary);
+  /* Edge while content scrolls under header */
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
+/* —— Uppercase variant (users / owners / pending headers) —— */
+.data-table--uppercase th,
+.users-table th,
+.dashboard-owners-table th {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: var(--text-sm);
+}
+
+/* —— Last row no border —— */
+.data-table tr:last-child td,
+.catalog-table tr:last-child td,
+.users-table tr:last-child td,
+.dashboard-owners-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* —— Row state modifiers (clickable / selected / inactive) —— */
+.catalog-table__row.is-inactive,
+.users-table__row.is-inactive {
+  opacity: 0.55;
+}
+
+.catalog-table__row.is-selected {
+  background: var(--surface-selected);
+}
+
+.catalog-table__row.is-clickable,
+.users-table__row.is-clickable {
+  cursor: pointer;
+}
+
+.catalog-table__row.is-clickable:hover,
+.users-table__row.is-clickable:hover {
+  background: var(--surface-hover);
+}
+
+.catalog-table__row.is-clickable.is-selected:hover {
+  background: var(--surface-selected);
+}
+
+.catalog-table__row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--brand-400);
+}
+
+.users-table__row--pending td {
+  background: var(--warning-50);
+}
+
+/* —— Touch targets on phone (issue #34) —— */
+@media (max-width: 639px) {
+  .users-table__actions .btn,
+  .users-table__actions .btn--small,
+  .catalog-table__actions .btn,
+  .catalog-table__actions .btn--small {
+    min-height: var(--touch-min);
+  }
+
+  .data-table th,
+  .data-table td,
+  .catalog-table th,
+  .catalog-table td {
+    min-height: var(--touch-min);
+  }
+}

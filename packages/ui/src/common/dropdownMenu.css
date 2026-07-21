@@ -1,0 +1,127 @@
+/**
+ * DropdownMenu — contextual popup menu.
+ * Used by ProjectsScreen chrome "Más exports ▾" and future row-action menus.
+ */
+
+.dropdown-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.dropdown-menu__chevron {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.dropdown-menu__list {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 50;
+  min-width: 16rem;
+  max-width: min(24rem, calc(100vw - var(--space-4) * 2));
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-lg);
+  /* Avoids clipping by parent scrollports; consumers should still ensure the
+     trigger isn't inside an overflow:hidden ancestor. */
+  overflow: auto;
+  max-height: min(70vh, calc(100vh - 14rem));
+  scrollbar-width: thin;
+}
+
+.dropdown-menu__section {
+  /* Section wrapper — no direct styling beyond its children. */
+}
+
+.dropdown-menu__section + .dropdown-menu__section {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dropdown-menu__section-label {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.dropdown-menu__section-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dropdown-menu__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  transition: var(--transition-colors);
+}
+
+.dropdown-menu__item:hover,
+.dropdown-menu__item--highlighted {
+  background: var(--surface-hover);
+}
+
+.dropdown-menu__item:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.dropdown-menu__item--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dropdown-menu__item--disabled:hover {
+  background: transparent;
+}
+
+.dropdown-menu__item-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.dropdown-menu__item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dropdown-menu__item-label {
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+}
+
+.dropdown-menu__item-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+
+@media (max-width: 639px) {
+  .dropdown-menu__list {
+    /* Full-width below phone breakpoint to fit touch targets. */
+    min-width: min(20rem, calc(100vw - var(--space-4)));
+  }
+
+  .dropdown-menu__item {
+    min-height: var(--touch-min);
+  }
+}

@@ -129,12 +129,17 @@ import {
   deliverExcelFile,
 } from './exportOptimizer';
 import {
+  componentEditIdFromPath,
   entityIdFromPath,
   entityPath,
+  isEntityEditPath,
   isEntitySection,
+  moduleEditIdFromPath,
+  moduleEditPath,
   navFromPath,
   pathForNav,
   projectPath,
+  structureEditIdFromPath,
   type EntitySection,
 } from './routes';
 import {
@@ -695,6 +700,13 @@ function AppContent({
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
   const routeStructureId = navId === 'structures' ? routeEntityId : null;
   const routeComponentId = navId === 'components' ? routeEntityId : null;
+  // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
+  const routeModuleEditId =
+    navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;
+  const routeStructureEditId =
+    navId === 'structures' ? structureEditIdFromPath(location.pathname) : null;
+  const routeComponentEditId =
+    navId === 'components' ? componentEditIdFromPath(location.pathname) : null;
 
   // Keep the address bar on a known section path (bookmarkable SPA routes).
   useEffect(() => {
@@ -2401,7 +2413,35 @@ function AppContent({
       if (section === 'projects') {
         setExportErrors([]);
       }
+      // Fase 3 UI: do not navigate away from /section/:id/edit. The editor
+      // owns the URL while open; ModulesScreen's onSelectionChange effect can
+      // still fire (e.g. when selectedId changes from null → id), but if we
+      // are currently in edit mode we keep the URL stable.
+      if (isEntityEditPath(location.pathname, section)) {
+        return;
+      }
       const target = id ? entityPath(section, id) : pathForNav(section);
+      if (location.pathname !== target) {
+        navigate(target);
+      }
+    },
+    [location.pathname, navigate],
+  );
+
+  /**
+   * Navigate to the inline editor route `/section/:id/edit` (Fase 3 UI).
+   * Used by ModulesScreen / StructuresScreen / ComponentsScreen when the user
+   * clicks "Editar" on the read-only detail. Replaces the old Modal LG flow.
+   * For "Nuevo", the screen passes the NEW_ENTITY_ID sentinel.
+   */
+  const onEntityEditRequest = useCallback(
+    (section: EntitySection, id: string) => {
+      const target =
+        section === 'modules'
+          ? moduleEditPath(id)
+          : section === 'structures'
+            ? `${entityPath(section, id)}/edit`
+            : `${entityPath(section, id)}/edit`;
       if (location.pathname !== target) {
         navigate(target);
       }
@@ -2511,61 +2551,60 @@ function AppContent({
       onCommandItem={onCommandItem}
     >
       {navId === 'home' ? (
-        useProductionQueue ? (
-          <ProductionQueue
-            projects={projects}
-            customerLabelFor={(customerId) =>
-              resolveCustomerName(customerId, customers)
-            }
-            salePriceFor={(id) => projectEstimates[id] ?? null}
-            onExportOptimizer={(id) => {
-              void handleExportOptimizer(id);
-            }}
-            onExportHardware={(id) => {
-              void handleExportHardwareList(id);
-            }}
-            onExportPieceLabels={(id) => {
-              void handleExportPieceLabels(id);
-            }}
-            onExportProductionPack={(id) => {
-              void handleExportProductionPack(id);
-            }}
-            onMarkProduced={markProjectProduced}
-            exportBusy={exportBusy}
-          />
-        ) : (
-          <Dashboard
-            stats={dashboardStats}
-            recentProjects={dashboardRecent}
-            projectsCount={projects.length}
-            onOpenProject={onDashboardOpenProject}
-            onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
-            onNewModule={canMutateModules ? onDashboardNewModule : undefined}
-            onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
-            ownerBreakdown={dashboardOwnerBreakdown}
-            homeMode={dashboardHomeMode}
-            onOpenShowcase={
-              dashboardHomeMode === 'sales'
-                ? onDashboardOpenShowcase
-                : undefined
-            }
-            onOpenMaterials={
-              dashboardHomeMode === 'engineering'
-                ? onDashboardOpenMaterials
-                : undefined
-            }
-            onOpenModules={
-              dashboardHomeMode === 'engineering'
-                ? onDashboardOpenModules
-                : undefined
-            }
-            modulesWithoutPhotoCount={
-              dashboardHomeMode === 'engineering'
-                ? modulesWithoutPhotoCount
-                : undefined
-            }
-          />
-        )
+        <Dashboard
+          stats={dashboardStats}
+          recentProjects={dashboardRecent}
+          projectsCount={projects.length}
+          onOpenProject={onDashboardOpenProject}
+          onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
+          onNewModule={canMutateModules ? onDashboardNewModule : undefined}
+          onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
+          ownerBreakdown={dashboardOwnerBreakdown}
+          homeMode={dashboardHomeMode}
+          onOpenShowcase={
+            dashboardHomeMode === 'sales'
+              ? onDashboardOpenShowcase
+              : undefined
+          }
+          onOpenMaterials={
+            dashboardHomeMode === 'engineering'
+              ? onDashboardOpenMaterials
+              : undefined
+          }
+          onOpenModules={
+            dashboardHomeMode === 'engineering'
+              ? onDashboardOpenModules
+              : undefined
+          }
+          modulesWithoutPhotoCount={
+            dashboardHomeMode === 'engineering'
+              ? modulesWithoutPhotoCount
+              : undefined
+          }
+        />
+      ) : null}
+      {navId === 'production' && useProductionQueue ? (
+        <ProductionQueue
+          projects={projects}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
+          }
+          salePriceFor={(id) => projectEstimates[id] ?? null}
+          onExportOptimizer={(id) => {
+            void handleExportOptimizer(id);
+          }}
+          onExportHardware={(id) => {
+            void handleExportHardwareList(id);
+          }}
+          onExportPieceLabels={(id) => {
+            void handleExportPieceLabels(id);
+          }}
+          onExportProductionPack={(id) => {
+            void handleExportProductionPack(id);
+          }}
+          onMarkProduced={markProjectProduced}
+          exportBusy={exportBusy}
+        />
       ) : null}
       {navId === 'materials' ? (
         <MaterialsCatalog
@@ -2689,6 +2728,8 @@ function AppContent({
           onEditingChange={setEditingModuleId}
           onSelectionChange={onModuleSelectionChange}
           openModuleId={routeModuleId}
+          openModuleEditId={routeModuleEditId}
+          onRequestEdit={(id) => onEntityEditRequest('modules', id)}
           costPreview={showCosts ? modulePreview.costPreview : null}
           previewBlocked={modulePreview.previewBlocked}
           missingGroups={modulePreview.missingGroups}
@@ -2719,6 +2760,8 @@ function AppContent({
           onDeactivate={(id) => setStructureActive(id, false)}
           onReactivate={(id) => setStructureActive(id, true)}
           openStructureId={routeStructureId}
+          openStructureEditId={routeStructureEditId}
+          onRequestEdit={(id) => onEntityEditRequest('structures', id)}
           onSelectionChange={onStructureSelectionChange}
           canMutate={canMutateModules}
         />
@@ -2732,6 +2775,8 @@ function AppContent({
           onUpdate={updateComponent}
           onToggleActive={toggleComponentActive}
           openComponentId={routeComponentId}
+          openComponentEditId={routeComponentEditId}
+          onRequestEdit={(id) => onEntityEditRequest('components', id)}
           onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
         />

@@ -7,10 +7,10 @@
   display: inline-flex;
   align-items: center;
   margin-left: var(--space-2);
-  padding: 2px var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-full);
   background: var(--warning-500);
-  color: hsl(0 0% 100%);
+  color: var(--text-inverse);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
   vertical-align: middle;
@@ -31,78 +31,9 @@
   pointer-events: none;
 }
 
-.users-table-wrap {
-  overflow: auto;
-  max-height: min(70vh, calc(100vh - 14rem));
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  background-color: var(--surface-card);
-  box-shadow: var(--shadow-sm);
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  background-image:
-    linear-gradient(to right, var(--surface-card), transparent),
-    linear-gradient(to left, var(--surface-card), transparent);
-  background-position:
-    left center,
-    right center;
-  background-repeat: no-repeat;
-  background-size:
-    1.25rem 100%,
-    1.25rem 100%;
-  background-attachment: local, local;
-}
-
-.users-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--text-base);
-}
-
-@media (max-width: 639px) {
-  .users-table {
-    min-width: 36rem;
-  }
-
-  .users-table__actions .btn,
-  .users-table__actions .btn--small {
-    min-height: var(--touch-min);
-  }
-}
-
-.users-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: var(--density-table-pad-y) var(--density-table-pad-x);
-  text-align: left;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  box-shadow: 0 1px 0 var(--border-subtle);
-}
-
-.users-table td {
-  padding: var(--density-table-pad-y) var(--density-table-pad-x);
-  min-height: var(--density-row-min-height);
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  vertical-align: middle;
-}
-
-.users-table tr:last-child td {
-  border-bottom: none;
-}
-
-.users-table__row--pending td {
-  background: var(--warning-50);
-}
+/* .users-table-wrap, .users-table, th/td base, sticky header, last-row border,
+   and --pending row state moved to common/dataTable.css (F1 UI 1c). Touch
+   targets on phone are also handled there. */
 
 .users-table__name {
   font-weight: var(--weight-medium);
@@ -137,17 +68,9 @@
   color: var(--text-muted);
 }
 
-/* Status badges */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-}
-
+/* Status badges — local to users (active/pending). The shared .status-badge
+   base + project-status variants live in projects.css (design.md §5.2).
+   These are role-status-specific modifiers, kept here for co-location. */
 .status-badge--active {
   background: var(--success-50);
   color: var(--success-700);
@@ -158,62 +81,5 @@
   color: var(--warning-700);
 }
 
-/* Generic buttons (reusable btn classes) */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  border: 1px solid transparent;
-}
-
-.btn--sm {
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
-}
-
-.btn--ghost {
-  background: transparent;
-  color: var(--text-secondary);
-  border-color: var(--border-default);
-}
-
-.btn--ghost:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.btn--success {
-  background: var(--success-500);
-  color: hsl(0 0% 100%);
-  border-color: var(--success-500);
-}
-
-.btn--success:hover:not(:disabled) {
-  background: var(--success-700);
-  border-color: var(--success-700);
-}
-
-.btn--danger {
-  background: transparent;
-  color: var(--danger-500);
-  border-color: var(--danger-500);
-}
-
-.btn--danger:hover:not(:disabled) {
-  background: var(--danger-50);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
-}
+/* .btn and its modifiers live in common/buttons.css (F0 UI Fase 0).
+   Users screen uses .btn--small from the shared system; no overrides needed. */

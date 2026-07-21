@@ -50,6 +50,15 @@ export interface StructuresScreenProps {
   readonly onReactivate: (id: string) => void;
   /** URL handoff: `/structures/:id` expands that row. */
   readonly openStructureId?: string | null;
+  /**
+   * Open editor for this id (URL `/structures/:id/edit`, Fase 3 UI 3b).
+   * Sentinel `'new'` = create-new editor. null / undefined = not in edit mode.
+   */
+  readonly openStructureEditId?: string | null;
+  /**
+   * Navigate to the editor route. Pass `'new'` for the create-new editor.
+   */
+  readonly onRequestEdit?: (structureId: string) => void;
   readonly onSelectionChange?: (id: string | null) => void;
   /** Role matrix: can current user mutate structures? */
   readonly canMutate?: boolean;
@@ -65,6 +74,8 @@ export function StructuresScreen({
   onDeactivate,
   onReactivate,
   openStructureId = null,
+  openStructureEditId = null,
+  onRequestEdit,
   onSelectionChange,
   canMutate = true,
 }: StructuresScreenProps): ReactNode {
@@ -87,6 +98,12 @@ export function StructuresScreen({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<StructureDraft>(emptyStructureDraft);
+  /**
+   * Snapshot of the draft taken when the editor opened (Fase 3 UI 3b).
+   * Used to detect dirty draft and warn before discarding on close.
+   */
+  const [initialDraft, setInitialDraft] = useState<StructureDraft | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [editorTab, setEditorTab] = useState<StructureEditorTab>('general');
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -117,6 +134,35 @@ export function StructuresScreen({
       setPreviewPresetId('');
     }
   }, [draft.presets, previewPresetId]);
+
+  /**
+   * Sync edit mode from shell URL (`/structures/:id/edit` — Fase 3 UI 3b).
+   * - `'new'` sentinel: open create-new editor.
+   * - Real id: open edit on that structure.
+   * - null / '': editor closed.
+   */
+  useEffect(() => {
+    if (openStructureEditId == null || openStructureEditId === '') return;
+    if (openStructureEditId === 'new') {
+      const fresh = emptyStructureDraft();
+      setEditingId(null);
+      setDraft(fresh);
+      setInitialDraft(fresh);
+      setEditorTab('general');
+      setError(null);
+      setModalOpen(true);
+      return;
+    }
+    const structure = structures.find((s) => s.id === openStructureEditId);
+    if (!structure) return;
+    const fresh = structureToDraft(structure);
+    setEditingId(structure.id);
+    setDraft(fresh);
+    setInitialDraft(fresh);
+    setEditorTab('general');
+    setError(null);
+    setModalOpen(true);
+  }, [openStructureEditId, structures]);
 
   const addPreset = () => {
     const id = `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -167,24 +213,73 @@ export function StructuresScreen({
     [normalizedStructures, status, debouncedSearch],
   );
 
-  const closeModal = () => {
+  /**
+   * True when the user has changed the draft since opening the editor.
+   */
+  const isDraftDirty =
+    initialDraft != null &&
+    JSON.stringify(draft) !== JSON.stringify(initialDraft);
+
+  /**
+   * Hard close: clear all editor state, no warn. Called after a successful
+   * save or after the user confirms discard.
+   */
+  const forceCloseEditor = () => {
     setModalOpen(false);
     setEditingId(null);
     setDraft(emptyStructureDraft());
+    setInitialDraft(null);
     setEditorTab('general');
     setError(null);
+    setConfirmDiscard(false);
+    if (openStructureEditId && onSelectionChange) {
+      onSelectionChange(expandedId);
+    }
   };
 
+  /**
+   * Close the editor. When the draft is dirty, ask the user to confirm
+   * discarding changes via the confirm-discard modal.
+   */
+  const closeModal = () => {
+    if (isDraftDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    forceCloseEditor();
+  };
+
+  /**
+   * Open the editor (create-new). When `onRequestEdit` is wired (Fase 3 UI),
+   * the shell navigates to `/structures/new/edit`. Otherwise (legacy / tests)
+   * open the modal directly.
+   */
   const handleCreateNew = () => {
-    setDraft(emptyStructureDraft());
+    if (onRequestEdit) {
+      onRequestEdit('new');
+      return;
+    }
+    const fresh = emptyStructureDraft();
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setEditingId(null);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
   };
 
+  /**
+   * Open the editor (edit existing). When `onRequestEdit` is wired (Fase 3 UI),
+   * the shell navigates to `/structures/:id/edit`. Otherwise open the modal.
+   */
   const handleEdit = (item: Structure) => {
-    setDraft(structureToDraft(item));
+    if (onRequestEdit) {
+      onRequestEdit(item.id);
+      return;
+    }
+    const fresh = structureToDraft(item);
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setEditingId(item.id);
     setEditorTab('general');
     setError(null);
@@ -226,7 +321,8 @@ export function StructuresScreen({
     } else {
       onCreate(draft);
     }
-    closeModal();
+    // Use forceCloseEditor: just saved, no dirty-discard warn.
+    forceCloseEditor();
   };
 
   const handleDelete = () => {
@@ -235,9 +331,135 @@ export function StructuresScreen({
       if (expandedId === deleteConfirmId) {
         setSelectedId(null);
       }
-      setDeleteConfirmId(null);
+      if (editingId === deleteConfirmId) {
+        // The entity being edited is gone — close without warn.
+        forceCloseEditor();
+      } else {
+        setDeleteConfirmId(null);
+      }
     }
   };
+
+  // Fase 3 UI 3b: inline editor mode overrides the modal when the shell wires
+  // `onRequestEdit` and the URL is /structures/:id/edit. The form is rendered
+  // inline (no Modal LG); the form keeps its built-in Cancelar/Guardar footer.
+  const inlineEditMode =
+    !!openStructureEditId && !!onRequestEdit && modalOpen;
+
+  if (inlineEditMode) {
+    return (
+      <section
+        className="catalog-page structure-editor-page"
+        aria-label={editingId ? 'Editar Estructura' : 'Nueva Estructura'}
+        data-testid="structure-editor-page"
+      >
+        <header className="workspace-chrome">
+          <div className="workspace-chrome__lead">
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={closeModal}
+              aria-label="Volver a la lista"
+              data-testid="structure-editor-back"
+            >
+              ← Lista
+            </button>
+            <div className="workspace-chrome__identity">
+              <span className="workspace-chrome__code">
+                {editingId ? draft.code || '—' : 'NUEVO'}
+              </span>
+              <p className="workspace-chrome__title">
+                {editingId ? 'Editar Estructura' : 'Nueva Estructura'}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <div className="structure-editor-page__main">
+          <StructureEditorForm
+            formId={formId}
+            error={error}
+            onSubmit={onSubmit}
+            onCancel={closeModal}
+            editorTab={editorTab}
+            setEditorTab={setEditorTab}
+            draft={draft}
+            setDraft={setDraft}
+            editingId={editingId}
+            catalogComponents={catalogComponents}
+            onRequestAddComponent={() => {
+              setAddComponentOpen(true);
+              setComponentSearch('');
+              setNewCompId('');
+              setNewCompQty(1);
+            }}
+            previewPresetId={previewPresetId}
+            onPreviewPresetChange={setPreviewPresetId}
+            onAddPreset={addPreset}
+            onRemovePreset={removePreset}
+            onUpdatePreset={updatePreset}
+          />
+        </div>
+
+        <ModuleComponentAdderModal
+          open={addComponentOpen}
+          onClose={() => setAddComponentOpen(false)}
+          componentSearch={componentSearch}
+          onSearchChange={setComponentSearch}
+          filteredComponents={filteredComponents}
+          newCompId={newCompId}
+          onSelect={setNewCompId}
+          newCompQty={newCompQty}
+          onQtyChange={setNewCompQty}
+          onConfirm={() => {
+            if (!newCompId) return;
+            setDraft((prev) => ({
+              ...prev,
+              components: [
+                ...prev.components,
+                {
+                  componentId: newCompId,
+                  quantity: newCompQty,
+                },
+              ],
+            }));
+            setAddComponentOpen(false);
+          }}
+        />
+
+        <Modal
+          open={confirmDiscard}
+          onClose={() => setConfirmDiscard(false)}
+          title="Descartar cambios"
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={forceCloseEditor}
+                data-testid="structure-editor-discard-confirm"
+              >
+                Descartar y salir
+              </button>
+            </>
+          }
+        >
+          <p>
+            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+            que querés descartar?
+          </p>
+        </Modal>
+      </section>
+    );
+  }
 
   return (
     <div className="catalog-screen" data-testid="structures-screen">
@@ -345,6 +567,37 @@ export function StructuresScreen({
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="Descartar cambios"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDiscard(false)}
+            >
+              Seguir editando
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={forceCloseEditor}
+              data-testid="structure-editor-discard-confirm"
+            >
+              Descartar y salir
+            </button>
+          </>
+        }
+      >
+        <p>
+          Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+          que querés descartar?
+        </p>
       </Modal>
     </div>
   );

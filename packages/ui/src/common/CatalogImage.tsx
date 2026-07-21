@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { ImageIcon, Package } from 'lucide-react';
+import './catalogImage.css';
 
 export type CatalogImageProps = {
   readonly src?: string | null;

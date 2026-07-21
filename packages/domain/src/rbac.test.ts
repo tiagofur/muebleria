@@ -106,6 +106,20 @@ describe('rbac (F035)', () => {
     expect(roleUsesProductionQueue('ingeniero')).toBe(false);
   });
 
+  it('production nav id is exposed only for roles that use the queue (Fase 2 UI)', () => {
+    // Pre-Fase 2: ProductionQueue mounted polymorphically under `home`.
+    // Post-Fase 2: dedicated nav id `production` filtered via navIdsForRole.
+    expect(navIdsForRole('produccion').has('production')).toBe(true);
+    expect(navIdsForRole('admin').has('production')).toBe(false);
+    expect(navIdsForRole('ingeniero').has('production')).toBe(false);
+    expect(navIdsForRole('vendedor').has('production')).toBe(false);
+    expect(navIdsForRole('gerente_ventas').has('production')).toBe(false);
+    // Guest (local mode): does NOT get production nav (no plant queue locally).
+    expect(navIdsForRole(null).has('production')).toBe(false);
+    // produccion still sees `home` (Dashboard) alongside `production`.
+    expect(navIdsForRole('produccion').has('home')).toBe(true);
+  });
+
   it('vendedor cannot view costs; admin/ingeniero can (F039)', () => {
     expect(roleCanViewCosts('vendedor')).toBe(false);
     expect(roleCanViewCosts('user')).toBe(false);

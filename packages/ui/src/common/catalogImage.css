@@ -1,0 +1,49 @@
+/**
+ * CatalogImage — shared image + placeholder styles for catalog entities
+ * (materials, hardware, modules). Used by MaterialsCatalog, HardwareCatalog,
+ * ModuleShowcase, ModuleListView.
+ *
+ * Originally duplicated in catalogs.css (F040/F042) and moduleShowcase.css;
+ * consolidated to common/ in F1 UI. Feature CSS may still add scoped
+ * overrides (e.g. `.module-showcase-card .catalog-image--lg { height: ... }`).
+ */
+
+.catalog-image {
+  display: block;
+  object-fit: cover;
+  background: var(--surface-muted);
+}
+
+.catalog-image--sm {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+}
+
+.catalog-image--md {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+}
+
+.catalog-image--lg {
+  width: 100%;
+  height: 140px;
+}
+
+.catalog-image--placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-default);
+}
+
+.catalog-image__ph-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+}

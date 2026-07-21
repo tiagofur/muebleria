@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   FileText,
+  Factory,
   LayoutDashboard,
   Layers,
   Minus,
@@ -48,12 +49,14 @@ describe('AppShell nav model (F017)', () => {
       'projects',
       'customers',
       'showcase',
+      'production',
     ]);
     expect(trabajo.items.map((i) => i.label)).toEqual([
       'Inicio',
       'Cotizaciones',
       'Clientes',
       'Vitrina',
+      'Cola',
     ]);
 
     expect(ingenieria.items.map((i) => i.id)).toEqual([
@@ -92,6 +95,7 @@ describe('AppShell nav model (F017)', () => {
     expect(byId.projects).toBe(FileText);
     expect(byId.customers).toBe(Users);
     expect(byId.showcase).toBe(Store);
+    expect(byId.production).toBe(Factory);
     expect(byId.modules).toBe(Package);
     expect(byId.materials).toBe(Layers);
     expect(byId.edges).toBe(Minus);
@@ -105,6 +109,7 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('projects')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
     expect(labelForNavId('showcase')).toBe('Vitrina');
+    expect(labelForNavId('production')).toBe('Cola');
     expect(labelForNavId('modules')).toBe('Muebles');
     expect(labelForNavId('optionGroups')).toBe('Grupos');
     expect(labelForNavId('settings')).toBe('Ajustes');

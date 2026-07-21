@@ -1,9 +1,8 @@
 # Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/media-persistent-store` (basada en `main`)
-- **Otras ramas con trabajo pendiente de merge:** `wip/ui-fase-0-tokens-botones`
-  (Fase 0/1/2 UI, ya pusheada, no tocada en esta sesión).
+- **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`, actualizada con media store + docker fixes de main vía merge commit)
+- **Otras ramas merged en main:** `wip/media-persistent-store` (media store persistente + lifecycle cleanup), `wip/docker-autostart` (Postgres auto-arranque).
 
 ## Hecho en esta pasada (2026-07-19) — media store persistente + lifecycle cleanup
 
@@ -91,6 +90,279 @@ y modules (todos comparten `/api/media/<hash>`).
 
 - **Branch (sesión anterior):** `feat/project-templates-110` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
+
+## Hecho en esta pasada (2026-07-20) — UI Review Fase 3 (CIERRE)
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones` (continuación de Fase 0 + 1 + 2)
+
+Fase 3 — **Mudar modales gigantes a vista detalle inline** (la fase que más dolía).
+
+**Decisiones aprobadas:**
+- URL: `/section/:id/edit` (ruta propia, bookmarkable) + `/section/new/edit` (Nuevo inline).
+- Layout: chrome sticky + main (form con tabs existentes) + aside sticky de costo (Modules).
+- Persistencia: warn al salir con draft sucio (no sessionStorage).
+- Nuevo: también en vista inline (`/section/new/edit`).
+
+**Cambios:**
+
+- **3a — Muebles** (`/modules/:id/edit`):
+  - `routes.ts`: `moduleEditPath`/`moduleEditIdFromPath`/`isEntityEditPath`/`NEW_ENTITY_ID`.
+  - `App.tsx`: `routeModuleEditId` + `onEntityEditRequest(section, id)` + `onEntitySelectionChange` skippea navegación cuando está en `/edit`.
+  - `ModulesScreen`: props `openModuleEditId` + `onRequestEdit`. `startEdit`/`startCreate` delegan a `onRequestEdit` cuando wired (fallback a modal para tests). Effect sincroniza `openModuleEditId` con el draft. `inlineEditMode` (cuando todo OK) renderiza inline: `workspace-chrome` sticky + `.module-editor-page__body` (2-col con aside de `CostPreviewPanel` siempre visible) + sub-modales (adder, categorías, delete confirm, 3D). El Modal LG legacy se mantiene como fallback.
+  - Discard warn: `initialDraft` snapshot al abrir + `isDraftDirty` (JSON.stringify diff) + `closeModal` abre `confirmDiscard` si dirty; `forceCloseEditor` para submit/delete.
+- **3b — Estructuras** (`/structures/:id/edit`): mismo patrón. StructureEditorForm portable (mantiene footer interno). CSS `.structure-editor-page`.
+- **3c — Componentes** (`/components/:id/edit`): mismo patrón. CSS `.component-editor-page`.
+- **3d — Cintilla**: sub-form "Nueva cintilla" en Material sale del `.catalog-form__nested` inline y abre su propio Modal SM. `Modal` ganó prop `dataTestId`.
+- **3e — 3D fullscreen**: nuevo `ModalSize = 'fullscreen'`. `Module3DModal` y `Project3DModal` migrados de `size='lg'` (max 900px) a `size='fullscreen'` (100vw/100vh menos padding). CSS `.ui-modal--fullscreen` + `.ui-modal__body { flex: 1 }`.
+
+**Tests:**
+- 713 tests verdes (217 + 51 + 25 + 322 + 9 + 89).
+- Typecheck 6/6 verde.
+- Playwright smoke: rutas `/edit` mantienen URL; `Editar` desde detalle navega a `/edit`; `/new/edit` funciona; discard modal aparece solo cuando hay cambios sin guardar; cintilla abre Modal SM; 3D ocupa 1248×696 (era 900px).
+
+**Scope notes / pendientes acknowledged:**
+- Structures y Components listas siguen usando `card-expand` / `tabla-expand`. Migrar a `card-detalle` (dedicated read-only view como ModuleDetailView) requiere crear StructureDetailView y ComponentDetailView nuevos — deferred. El editor inline ya resolvió el pain point principal.
+- Draft se pierde si el usuario navega a otra sección (sin sessionStorage) — tech debt preexistente; el warn al salir mitiga el impacto.
+- Commit `e612227` (3e) incluyó por accidente 2 `.jpg` en `backend-go/data/media/` que no son del UI. Benigno (binarios media), pero digno de nota para no repetir `git add -A` descuidado.
+
+## Hecho en esta pasada (2026-07-19) — UI Review Fase 2
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones` (continuación de Fase 0 + 1)
+
+Fase 2 — **Reorganizar navegación y flujos** (P1 visible).
+
+**Decisiones aprobadas:**
+- Home polimórfico: agregar nav id `production` (Cola) propio para
+  `roleUsesProductionQueue`. `home` siempre es Dashboard para todos los roles.
+- Exports de Projects: Opción B adaptativa — primary Optimizer + menú
+  "Más exports ▾" para los 6 restantes agrupados por Producción/Comercial.
+- Crear `DropdownMenu` reusable en `common/` para menús contextuales futuros.
+- Actualizar `design.md` completo (§4.1 + §6) con las 13 pantallas reales.
+
+**Cambios:**
+
+- **`design.md §4.1`** — actualizada la tabla nav canónica: 3 secciones
+  (TRABAJO/INGENIERÍA/CONFIG) con 13 items en lugar de las 2 secciones y 8
+  items documentados. ASCII diagram actualizado con la nueva sección
+  INGENIERÍA y la nueva nav Cola (condicional por rol). Tabla de
+  vocabulario ampliada con Vitrina, Cola, Estructuras, Componentes, Ajustes.
+
+- **`design.md §4.2.1`** (nueva) — regla canónica de patrón por tipo de entidad:
+  entidad plana = tabla-expand; entidad compleja = card-detalle;
+  comercial = card-grid. Documenta que Components/Structures están
+  pendientes de migrar a card-detalle en Fase 3.
+
+- **`design.md §6`** — ampliada de 6 a 13 subsecciones (12 nav + Login/Register):
+  - §6.6 Vitrina (showcase, F040/F043)
+  - §6.7 Cola de producción (production nav — nuevo)
+  - §6.8 Estructuras (structures, F049)
+  - §6.9 Componentes (components)
+  - §6.10 Ajustes (settings, F031)
+  - §6.11 Usuarios (users, F026)
+  - §6.13 Registro (RegisterScreen)
+  - §6.1 Home: documentadas variantes `homeMode` (default/sales/engineering)
+  - §6.2 Cotizaciones: documentada la nueva agrupación de exports
+  - §6.3 Muebles: corregido de "sección TRABAJO" → "INGENIERÍA"
+
+- **`packages/domain/src/rbac.ts`** — `navIdsForRole` ahora incluye `'production'`
+  cuando `roleUsesProductionQueue(role)` (solo `produccion`). Guest no lo
+  recibe (no hay cola localmente).
+
+- **`packages/ui/src/shell/AppShell.tsx`**:
+  - `'production'` añadido al `AppNavId` (union type).
+  - Sección TRABAJO ahora tiene 5 items: Inicio, Cotizaciones, Clientes,
+    Vitrina, Cola (icono `Factory`).
+  - Filtrado normal vía `allowedNavIds`: el sidebar solo muestra Cola si el
+    rol tiene el permiso.
+
+- **`apps/web/src/routes.ts`** — `production: '/produccion'` añadido a
+  `NAV_PATHS`. Excluido de `EntitySection` (no es entidad con deep-link `:id`).
+
+- **`apps/web/src/App.tsx`** — routing simplificado:
+  - `navId === 'home'` SIEMPRE monta Dashboard (ya sin el if/else
+    polimórfico). Se eliminó el branch `useProductionQueue ? ProductionQueue :
+    Dashboard`.
+  - `navId === 'production' && useProductionQueue` monta ProductionQueue.
+
+- **`packages/ui/src/common/DropdownMenu.tsx`** (nuevo) — componente menu
+  contextual accesible: trigger button + popup con role="menu"/"menuitem",
+  secciones opcionales con labels, click-outside, Esc, flechas, Enter.
+  No depende de Radix ni libs externas.
+
+- **`packages/ui/src/common/dropdownMenu.css`** (nuevo) — estilos con tokens.
+
+- **`packages/ui/src/projects/ProjectsScreen.tsx`** — chrome reorganizado:
+  - **Exportar Optimizer** (`btn--primary`): directo, mantiene `data-testid
+    project-chrome-export`. Disabled cuando productionExportDisabled.
+  - **Más exports ▾** (`DropdownMenu` con trigger `btn`): secciones
+    Producción (Herrajes, Etiquetas, Pack) + Comercial (Cotización, PDF
+    listado, PDF resumen). Cada item disabled según sus condiciones.
+    Las secciones solo se renderizan si tienen items (props presentes).
+  - Eliminados los 6 botones de export individuales.
+  - Resto (Presentar, Editar, Duplicar, Guardar plantilla, Marcar producción,
+    Reabrir, Eliminar) sin cambios.
+
+**Verificación:**
+- `pnpm test`: 710 tests verdes (217 + 51 + 25 + 321 + 9 + 87). 8 tests
+  nuevos para DropdownMenu (a11y, click, escape, outside, disabled,
+  aria-expanded). 1 test nuevo en rbac para `production` nav id.
+- `pnpm typecheck`: 6/6 workspaces verde.
+- Smoke visual: chrome de Projects pasó de 14 botones a 6-7 visibles,
+  menú "Más exports ▾" abre con sección Producción/Comercial correctamente.
+
+**Pendiente (Fase 3, próxima):**
+- Mudar modales gigantes (Mueble/Estructura/Componente) a vista detalle
+  inline con ruta `/:id/edit`.
+- Migrar Components y Structures de tabla-expand/card-expand a card-detalle.
+
+
+
+## Hecho en esta pasada (2026-07-19) — UI Review Fase 1
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones` (continuación de Fase 0)
+
+Fase 1 — **Estandarizar CSS** (P1-P2). 6 componentes compartidos nuevos en
+`common/` que absorben ~30 definiciones duplicadas en feature CSS.
+
+**Decisiones de diseño aprobadas:**
+- Radios: split — `--radius-md` (8px) para entity-cards, `--radius-lg` (12px)
+  para cards secundarias (stats, queue, showcase).
+- Hover: unificado a `border --border-brand + shadow-md + bg --surface-hover`.
+  Quitamos `transform: translateY(-1px)` y `--brand-300` que tenía Components/
+  Structures (inconsistencia con el resto).
+- Padding entity-card: `--density-card-pad` (12px) — densidad de herramienta.
+- Títulos de pantalla: todo a `--text-xl` (22px) en `.page-header`.
+
+**Cambios:**
+- **`common/workspaceChrome.css`** (nuevo): mute de `catalogs.css`. 18 selectores
+  que no eran específicos de catalogs (los consumen Projects y Modules).
+- **`common/catalogImage.css`** (nuevo): `catalog-image*` consolidado; antes
+  duplicado en `catalogs.css` y `moduleShowcase.css`.
+- **`common/surfaceCard.css`** (nuevo): `.surface-card` + variantes (`--lg`,
+  `--flat`, `--inset`, `--empty`). Absorbe `*-editor__section`, `*-detail__section`,
+  `module-part-card`, `project-item-card`, `*-filter-empty`.
+- **`common/dataTable.css`** (nuevo): `.data-table` + `.data-table-wrap` +
+  `--uppercase`. Absorbe `catalog-table`, `users-table`, `dashboard-owners-table`
+  (estaba fuera de convención con paddings propios y sin edge-fades).
+- **`common/pageHeader.css`** (nuevo): `.page-header` + sub-bloques. Absorbe
+  `catalog-page__header`, `dashboard__header`, `prod-queue__header`,
+  `module-showcase__header`. Títulos unificados a `--text-xl`.
+- **`common/entityCard.css`** (nuevo): `.entity-card` + `--inactive`/`--expanded`.
+  Absorbe `module-card`, `project-card`, `dashboard-recent-card`, `component-card`,
+  `structure-card`. `components.css` y `structures.css` quedaron sólo con los
+  sub-bloques propios (ya no definen la card base).
+- **Cleanup hardcoded colors**:
+  - `projects.css`: `#1a1c1e` → `--surface-sidebar`; `rgba(255,255,255,X)` →
+    `color-mix(in srgb, --text-inverse X%, transparent)` (patrón oficial).
+  - `preview3d/moduleScene3d.css`: `var(--border)` (inexistente) → `--border-default`;
+    `#1a1c1e` → `--surface-sidebar`; `#9ca3af` → `--text-muted`.
+  - `users.css`: `hsl(0 0% 100%)` → `--text-inverse`.
+- **Bug latente arreglado**: `projects.css:405` `var(--warning-700, hsl(32 80% 28%))`
+  tenía un fallback que pintaba otro color (hue 32 vs token real hue 38).
+  Eliminado el fallback incorrecto.
+- **WCAG AA**: `--text-muted` subido de 58% L (~4.0:1, fail) a 52% L (~4.6:1).
+  Impacta 45+ selectores que usaban muted para texto pequeño.
+- **Font-weight numéricos** eliminados: 5 ocurrencias en `projects.css` migradas
+  a `var(--weight-*)`.
+
+**Tests actualizados:**
+- `catalogListPrimitives.test.tsx`: ahora verifica contrato en `dataTable.css`
+  (no más en `catalogs.css`).
+- `designSystem.test.ts`: assertions de density + responsive pasadas a
+  `dataTable.css`. `.btn` assertion ya en `buttons.css`.
+
+**Verificación:**
+- `pnpm test`: 409 tests verdes (216 domain + 51 storage + 25 excel + 313 ui +
+  9 desktop + 87 web).
+- `pnpm typecheck`: 6/6 workspaces verde.
+- Smoke visual (5 pantallas): modules/components con borders correctos, título
+  "Muebles" visible más grande (--text-xl), sin regresiones visibles tras
+  quitar `translateY(-1px)`.
+
+**Pendiente (Fase 2, próxima):**
+- Actualizar `design.md §6` con las 13 pantallas reales + sección INGENIERÍA
+- Unificar patrón de lista: entidad plana = tabla-expand; entidad compleja =
+  card + detalle inline
+- Agrupar los 7 exports de Projects en menú "Exportar ▾"
+- Resolver `home` polimórfico (Dashboard vs ProductionQueue)
+
+**Pendiente (Fase 3, después):**
+- Mudar modales gigantes (Mueble/Estructura/Componente) a vista detalle inline
+  con ruta `/:id/edit`
+
+**Pendiente (no crítico, backlog):**
+- Partir `projects.css` (930 → aún grande) y `catalogs.css` en sub-archivos
+  co-localizados (decidido dejarlo para iteración futura — no impacta UX).
+- Magic numbers restantes (~30): `0.65rem`, `0.85rem`, `0.45rem` en
+  projects/modules/optionGroups. No rompen nada pero理想的mente migrar a tokens.
+
+
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones`
+
+## Hecho en esta pasada (2026-07-19) — UI Review Fase 0
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones`
+
+Fase 0 — **Estabilizar** (P0, UX invisible). Cierra bugs de render y unifica `.btn`.
+
+**Cambios:**
+- **`tokens.css`**: definidos tokens auxiliares que el CSS referenciaba sin definir:
+  - `--surface-muted` (hsl 220 14% 96%), `--surface-disabled` (hsl 220 12% 94%)
+  - Escala completa `--success-100..700` (antes solo 50/500/700)
+  - Aliases de compat: `--surface-border` → `--border-default`; `--surface-base` →
+    `--surface-sidebar`; `--text-on-dark` → `--text-inverse`; `--color-text*`,
+    `--color-border`, `--success`/`--warning`/`--danger`/`--info` (sin escala) →
+    sus contrapartes canónicas. Esto resuelve el bug donde Components/Structures
+    no renderizaban bordes (var(--surface-border) era undefined).
+- **`common/buttons.css`** (nuevo): `.btn` unificado con modifiers
+  `--primary/--ghost/--danger/--success/--small/--icon`. Exportado como
+  `@muebles/ui/common/buttons.css`. Cargado en `apps/web/src/main.tsx` después
+  de reset.css.
+- **`catalogs/catalogs.css`**: borrada la definición de `.btn` (vive en
+  buttons.css ahora). Limpieza de fallbacks redundantes (`var(--surface-muted, …)`,
+  `var(--radius-sm, 4px)`). Arreglado `var(--border)` (sin sufijo) →
+  `var(--border-default)` en material-color-swatch y preview-color-picker.
+- **`users/users.css`**: borrada la segunda definición de `.btn` (incompatible
+  con la de catalogs: modifiers `--sm/--ghost/--success/--danger`, sin density).
+  Migración de TSX: `btn--sm` → `btn--small` (4 sitios en UsersScreen.tsx).
+- **`components/components.css`** y **`structures/structures.css`**: migrados
+  todos los `var(--surface-border)` → `var(--border-default)` / `--border-subtle`,
+  `var(--surface-overlay)` (incorrecto para fondo) → `var(--surface-muted)`,
+  `var(--success)` (sin escala) → `var(--success-500)` / `--success-700`.
+  Hardcoded `2px`/`4px`/`6px`/`10px` → tokens `--space-1/2/3`. Hardcoded
+  `font-weight: 600` → `var(--weight-semibold)`. Estructura idéntica en ambos
+  archivos (candidatos obvios para Fase 1: extraer `.entity-card` compartido).
+- **`projects/projects.css`**: bloque `.project-material-summary` migrado de
+  nomenclatura ajena (`--color-text*`, `--color-border` con fallbacks hardcoded)
+  a tokens canónicos (`--text-primary`, `--text-secondary`, `--border-default`).
+  Modo presentación (`.project-presentation`): `--surface-base`/`--text-on-dark`
+  con fallback → `--surface-sidebar`/`--text-inverse`.
+
+**Tests nuevos (regression guards en `designSystem.test.ts`):**
+1. `feature CSS only references tokens that exist in tokens.css`: parsea todos
+   los .css bajo `packages/ui/src` y verifica que cada `var(--x)` esté definido
+   en tokens.css o tenga fallback inline.
+2. `.btn base + modifiers live in common/buttons.css only`: garantiza que ningún
+   feature CSS vuelva a definir `.btn {` top-level.
+3. Package.json exporta `./common/buttons.css`.
+
+**Verificación:**
+- `pnpm test`: 313 (ui) + 87 (web) + 9 (desktop) = 409 tests verdes.
+- `pnpm typecheck`: 6/6 workspaces verde.
+- Smoke visual (playwright, 4 pantallas): Components ahora muestra bordes de
+  card correctos; Materials/Structures/Users sin regresión visual.
+
+**Pendiente (Fase 1, próxima):**
+- Extraer `.surface-card` / `.entity-card` / `.data-table` / `.page-header`
+- Eliminar magic numbers (`0.65rem`, `0.85rem`, etc.)
+- Ajustar `--text-muted` para WCAG AA
+- Partir `projects.css` (930 líneas) y `catalogs.css` (923 líneas)
 
 ## Hecho en esta pasada (2026-07-18) — F056 Plantillas de proyecto (#110)
 

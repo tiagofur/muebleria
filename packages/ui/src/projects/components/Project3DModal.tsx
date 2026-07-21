@@ -56,7 +56,13 @@ export function Project3DModal({
       : `Vista 3D cotización — ${project.name}`;
 
   return (
-    <Modal open={open} onClose={onClose} title={title} size="lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="fullscreen"
+      dataTestId="project-3d-modal"
+    >
       {project && preview ? (
         <div data-testid="project-3d-modal-body">
           <div

@@ -1,0 +1,135 @@
+/**
+ * Button system (BEM) — single source of truth for .btn across the app.
+ * docs/design.md §5.1.
+ *
+ * Load once globally (after tokens.css + reset.css).
+ * Per-feature CSS must NOT redefine `.btn` or its modifiers.
+ *
+ * Base (.btn) = secondary action: surface-card fill + border.
+ * Variants:
+ *   .btn--primary   primary action (brand fill, inverse text)
+ *   .btn--ghost     tertiary action (transparent, hover surface)
+ *   .btn--danger    destructive (danger border/text, danger-50 on hover)
+ *   .btn--success   confirm/success (success fill, inverse text)
+ * Sizes:
+ *   .btn--small     compact (table rows, inline actions)
+ *   .btn--icon      square icon-only button
+ *
+ * Rule: in any action group there is at most ONE .btn--primary.
+ */
+
+.btn {
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  padding: var(--density-btn-pad-y) var(--density-btn-pad-x);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* —— Variants —— */
+
+.btn--primary {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: var(--text-inverse);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+}
+
+.btn--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--danger-500);
+  border-color: var(--danger-500);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-50);
+}
+
+.btn--success {
+  background: var(--success-500);
+  color: var(--text-inverse);
+  border-color: var(--success-500);
+}
+
+.btn--success:hover:not(:disabled) {
+  background: var(--success-700);
+  border-color: var(--success-700);
+}
+
+/* —— Sizes —— */
+
+.btn--small {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  gap: var(--space-1);
+}
+
+.btn--icon {
+  padding: var(--space-1);
+  width: 1.75rem;
+  height: 1.75rem;
+  justify-content: center;
+}
+
+/* —— Touch targets on phone / tablet portrait (issue #34) —— */
+@media (max-width: 767px) {
+  .btn {
+    min-height: var(--touch-min);
+  }
+
+  .btn--small {
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+    padding-inline: var(--space-3);
+    justify-content: center;
+  }
+
+  .btn--icon {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
+  }
+}

@@ -209,6 +209,7 @@ describe('Modal sizes (F018)', () => {
     ['sm', 'ui-modal--sm'],
     ['md', 'ui-modal--md'],
     ['lg', 'ui-modal--lg'],
+    ['fullscreen', 'ui-modal--fullscreen'],
   ] as const)('applies size class for %s', (size, className) => {
     render(<Harness size={size} />);
     const panel = document.querySelector('.ui-modal');

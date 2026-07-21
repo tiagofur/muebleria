@@ -46,7 +46,13 @@ export function Module3DModal({
     : 'Vista 3D';
 
   return (
-    <Modal open={open} onClose={onClose} title={title} size="lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="fullscreen"
+      dataTestId="module-3d-modal"
+    >
       {module && preview ? (
         <div data-testid="module-3d-modal-body">
           {/* Preset selector (module-specific) */}

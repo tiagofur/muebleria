@@ -11,6 +11,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   projects: '/projects',
   customers: '/customers',
   showcase: '/showcase',
+  production: '/produccion',
   modules: '/modules',
   structures: '/structures',
   components: '/components',
@@ -25,7 +26,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
 /** Sections that support `/section/:id` deep links for entity rows. */
 export type EntitySection = Exclude<
   AppNavId,
-  'home' | 'users' | 'settings' | 'showcase'
+  'home' | 'users' | 'settings' | 'showcase' | 'production'
 >;
 
 const ENTITY_SECTIONS: readonly EntitySection[] = [
@@ -65,27 +66,110 @@ export function structurePath(structureId: string): string {
   return entityPath('structures', structureId);
 }
 
-function normalizePathname(pathname: string): string {
-  const raw = pathname.split('?')[0]?.split('#')[0] ?? '/';
-  return raw.replace(/\/+$/, '') === '' ? '/' : raw.replace(/\/+$/, '');
+/**
+ * Editor paths `/section/:id/edit` (Fase 3 UI). Used for entities whose editor
+ * is too big for a Modal LG (ModuleEditorForm, StructureEditorForm,
+ * ComponentEditorForm). The "Nuevo" flow uses sentinel id `new`
+ * (e.g. `/modules/new/edit`).
+ */
+export function moduleEditPath(moduleId: string): string {
+  return `${entityPath('modules', moduleId)}/edit`;
 }
 
-/** Detail id when path is `/section/:id` for a known entity section. */
-export function entityIdFromPath(
+export function structureEditPath(structureId: string): string {
+  return `${entityPath('structures', structureId)}/edit`;
+}
+
+export function componentEditPath(componentId: string): string {
+  return `${entityPath('components', componentId)}/edit`;
+}
+
+/**
+ * Sentinel id used in editor URLs for "create new" flow (no real id yet).
+ * `/modules/new/edit` → ModulesScreen renders an empty draft.
+ */
+export const NEW_ENTITY_ID = 'new';
+
+/** Extract detail id from a `/section/:id` OR `/section/:id/edit` path. */
+function entityRouteFromPath(
   pathname: string,
   section: EntitySection,
-): string | null {
+): { id: string; edit: boolean } | null {
   const base = NAV_PATHS[section];
   const normalized = normalizePathname(pathname);
   if (normalized === base) return null;
   if (!normalized.startsWith(`${base}/`)) return null;
   const rest = normalized.slice(base.length + 1);
-  if (!rest || rest.includes('/')) return null;
+  if (!rest) return null;
+  let decoded: string;
   try {
-    return decodeURIComponent(rest);
+    decoded = decodeURIComponent(rest);
   } catch {
-    return rest;
+    decoded = rest;
   }
+  // Strip optional /edit suffix.
+  const editMatch = decoded.match(/^(.*)\/edit$/);
+  if (editMatch) {
+    const id = editMatch[1];
+    if (!id || id.includes('/')) return null;
+    return { id, edit: true };
+  }
+  if (decoded.includes('/')) return null;
+  return { id: decoded, edit: false };
+}
+
+/** True if the path is `/section/:id/edit` for the given section. */
+export function isEntityEditPath(
+  pathname: string,
+  section: EntitySection,
+): boolean {
+  const route = entityRouteFromPath(pathname, section);
+  return route !== null && route.edit;
+}
+
+/** Detail id when path is `/section/:id/edit` for an entity section. */
+export function entityEditIdFromPath(
+  pathname: string,
+  section: EntitySection,
+): string | null {
+  const route = entityRouteFromPath(pathname, section);
+  if (!route || !route.edit) return null;
+  return route.id;
+}
+
+export function moduleEditIdFromPath(pathname: string): string | null {
+  return entityEditIdFromPath(pathname, 'modules');
+}
+
+export function structureEditIdFromPath(pathname: string): string | null {
+  return entityEditIdFromPath(pathname, 'structures');
+}
+
+export function componentEditIdFromPath(pathname: string): string | null {
+  return entityEditIdFromPath(pathname, 'components');
+}
+
+/** True if path matches `/section/new/edit` (create-new editor route). */
+export function isNewEntityEditPath(
+  pathname: string,
+  section: EntitySection,
+): boolean {
+  return entityEditIdFromPath(pathname, section) === NEW_ENTITY_ID;
+}
+
+function normalizePathname(pathname: string): string {
+  const raw = pathname.split('?')[0]?.split('#')[0] ?? '/';
+  return raw.replace(/\/+$/, '') === '' ? '/' : raw.replace(/\/+$/, '');
+}
+
+/** Detail id when path is `/section/:id` (view) for a known entity section. */
+export function entityIdFromPath(
+  pathname: string,
+  section: EntitySection,
+): string | null {
+  const route = entityRouteFromPath(pathname, section);
+  if (!route || route.edit) return null;
+  return route.id;
 }
 
 export function projectIdFromPath(pathname: string): string | null {

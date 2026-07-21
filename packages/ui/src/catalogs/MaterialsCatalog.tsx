@@ -819,73 +819,20 @@ export function MaterialsCatalog({
             </p>
           </div>
 
-          {edgeCreateOpen ? (
-            <div
-              className="catalog-form__nested"
-              role="group"
-              aria-label="Nueva cintilla"
-            >
-              <p className="catalog-form__nested-title">Nueva cintilla</p>
-              {edgeError ? (
-                <p className="catalog-form__error">{edgeError}</p>
-              ) : null}
-              <div className="catalog-form__field">
-                <label htmlFor="mat-edge-code">Código canto</label>
-                <input
-                  id="mat-edge-code"
-                  value={edgeDraft.code}
-                  onChange={(e) =>
-                    setEdgeDraft({ ...edgeDraft, code: e.target.value })
-                  }
-                  autoComplete="off"
-                />
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="mat-edge-name">Nombre canto</label>
-                <input
-                  id="mat-edge-name"
-                  value={edgeDraft.name}
-                  onChange={(e) =>
-                    setEdgeDraft({ ...edgeDraft, name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="mat-edge-thk">Espesor (mm)</label>
-                <input
-                  id="mat-edge-thk"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={edgeDraft.thicknessMm}
-                  onChange={(e) =>
-                    setEdgeDraft({
-                      ...edgeDraft,
-                      thicknessMm: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div className="catalog-form__field">
-                <label htmlFor="mat-edge-cost">Costo / ML</label>
-                <input
-                  id="mat-edge-cost"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={edgeDraft.costPerMl}
-                  onChange={(e) =>
-                    setEdgeDraft({
-                      ...edgeDraft,
-                      costPerMl: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div className="catalog-form__inline-actions">
+          <Modal
+            open={edgeCreateOpen}
+            onClose={() => {
+              setEdgeCreateOpen(false);
+              setEdgeError(null);
+            }}
+            title="Nueva cintilla"
+            size="sm"
+            dataTestId="material-edge-create-modal"
+            footer={
+              <>
                 <button
                   type="button"
-                  className="btn btn--small"
+                  className="btn"
                   onClick={() => {
                     setEdgeCreateOpen(false);
                     setEdgeError(null);
@@ -895,14 +842,72 @@ export function MaterialsCatalog({
                 </button>
                 <button
                   type="button"
-                  className="btn btn--small btn--primary"
+                  className="btn btn--primary"
                   onClick={submitCreateEdge}
+                  data-testid="material-edge-create-submit"
                 >
                   Crear y vincular
                 </button>
-              </div>
+              </>
+            }
+          >
+            {edgeError ? (
+              <p className="catalog-form__error">{edgeError}</p>
+            ) : null}
+            <div className="catalog-form__field">
+              <label htmlFor="mat-edge-code">Código canto</label>
+              <input
+                id="mat-edge-code"
+                value={edgeDraft.code}
+                onChange={(e) =>
+                  setEdgeDraft({ ...edgeDraft, code: e.target.value })
+                }
+                autoComplete="off"
+              />
             </div>
-          ) : null}
+            <div className="catalog-form__field">
+              <label htmlFor="mat-edge-name">Nombre canto</label>
+              <input
+                id="mat-edge-name"
+                value={edgeDraft.name}
+                onChange={(e) =>
+                  setEdgeDraft({ ...edgeDraft, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="mat-edge-thk">Espesor (mm)</label>
+              <input
+                id="mat-edge-thk"
+                type="number"
+                min={0}
+                step="any"
+                value={edgeDraft.thicknessMm}
+                onChange={(e) =>
+                  setEdgeDraft({
+                    ...edgeDraft,
+                    thicknessMm: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="mat-edge-cost">Costo / ML</label>
+              <input
+                id="mat-edge-cost"
+                type="number"
+                min={0}
+                step="any"
+                value={edgeDraft.costPerMl}
+                onChange={(e) =>
+                  setEdgeDraft({
+                    ...edgeDraft,
+                    costPerMl: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </Modal>
 
           <div className="catalog-form__field">
             <label htmlFor="mat-width">Ancho del tablero (mm)</label>

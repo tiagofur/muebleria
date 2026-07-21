@@ -234,13 +234,7 @@
   gap: var(--space-4);
 }
 
-.module-editor__section {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-card);
-  padding: 0.85rem var(--space-4) var(--space-4);
-  box-shadow: var(--shadow-sm);
-}
+/* .module-editor__section moved to common/surfaceCard.css (F1 UI 1b). */
 
 .module-editor__section-header {
   display: flex;
@@ -334,12 +328,7 @@
   gap: var(--space-3);
 }
 
-.module-part-card {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  background: var(--surface-input);
-}
+/* .module-part-card moved to common/surfaceCard.css (F1 UI 1b). */
 
 .module-part-card__header {
   display: flex;
@@ -482,51 +471,13 @@
   }
 }
 
+/* .module-card / __code / __name / hover / focus-visible moved to
+   common/entityCard.css (F1 UI 1e). Internal layout override stays. */
+
 .module-card {
   display: flex;
   flex-direction: column;
   gap: var(--density-card-gap);
-  width: 100%;
-  margin: 0;
-  padding: var(--density-card-pad);
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-card);
-  box-shadow: var(--shadow-sm);
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
-}
-
-.module-card:hover {
-  border-color: var(--border-brand);
-  box-shadow: var(--shadow-md);
-  background: var(--surface-hover);
-}
-
-.module-card:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.module-card__code {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  letter-spacing: 0.01em;
-}
-
-.module-card__name {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--text-primary);
-  line-height: var(--leading-tight);
 }
 
 .module-card__stats {
@@ -573,16 +524,7 @@
   color: var(--text-muted);
 }
 
-.module-filter-empty {
-  margin: 0;
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-card);
-}
+/* .module-filter-empty moved to common/surfaceCard.css (F1 UI 1b). */
 
 /* —— Detail view —— */
 
@@ -599,13 +541,7 @@
   line-height: var(--leading-normal);
 }
 
-.module-detail__section {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-card);
-  padding: var(--density-card-pad, var(--space-3));
-  box-shadow: var(--shadow-sm);
-}
+/* .module-detail__section moved to common/surfaceCard.css (F1 UI 1b). */
 
 .module-detail__section-title {
   margin: 0 0 var(--space-3);
@@ -684,4 +620,47 @@
   .module-card {
     transition: none;
   }
+}
+
+/* —— Inline editor page (Fase 3 UI 3a.2) —— */
+/* Replaces the Modal LG when /modules/:id/edit is active. Main + sticky aside
+   pattern matches ProjectsScreen detail. The form retains its tabs; the aside
+   shows the cost preview persistently so the user does not need to switch. */
+
+.module-editor-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap);
+}
+
+.module-editor-page__body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--density-page-gap);
+  align-items: start;
+}
+
+.module-editor-page__main {
+  min-width: 0;
+}
+
+.module-editor-page__aside {
+  position: sticky;
+  top: calc(var(--space-6) + 56px); /* topbar height + page gap */
+}
+
+@media (min-width: 1100px) {
+  .module-editor-page__body {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+}
+
+/* In inline mode the form should not constrain its width like the modal did. */
+.module-editor-page .module-editor.catalog-form--wide {
+  max-width: none;
+}
+
+/* Tabs in inline mode can wrap onto a second row on narrower screens. */
+.module-editor-page .module-editor__tabs {
+  flex-wrap: wrap;
 }

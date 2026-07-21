@@ -60,6 +60,7 @@ import {
 } from './moduleHelpers';
 import { ModuleCategoryModals } from './components/ModuleCategoryModals';
 import { ModuleComponentAdderModal } from './components/ModuleComponentAdderModal';
+import { CostPreviewPanel } from './components/CostPreviewPanel';
 import { ModuleDetailView } from './components/ModuleDetailView';
 import { ModuleEditorForm } from './components/ModuleEditorForm';
 import { ModuleListView } from './components/ModuleListView';
@@ -115,6 +116,16 @@ export interface ModulesScreenProps {
    * null / '' = list view.
    */
   readonly openModuleId?: string | null;
+  /**
+   * Open editor for this module id when set (URL `/modules/:id/edit`, Fase 3 UI).
+   * Sentinel `'new'` means create-new editor. null / undefined = not in edit mode.
+   */
+  readonly openModuleEditId?: string | null;
+  /**
+   * Navigate to the editor route. The shell handles the URL change.
+   * Pass `'new'` for the create-new editor.
+   */
+  readonly onRequestEdit?: (moduleId: string) => void;
   /** Notifies parent when detail selection changes (for URL sync). */
   readonly onSelectionChange?: (moduleId: string | null) => void;
   /** Catalog structures for composed module picker. */
@@ -152,6 +163,8 @@ export function ModulesScreen({
   moduleEstimates = {},
   requestCreateKey = 0,
   openModuleId = null,
+  openModuleEditId = null,
+  onRequestEdit,
   onSelectionChange,
   loading = false,
   structures: propStructures = [],
@@ -172,6 +185,12 @@ export function ModulesScreen({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ModuleDraft>(emptyModuleDraft);
+  /**
+   * Snapshot of the draft taken when the editor opened (Fase 3 UI 3a.3).
+   * Used to detect a "dirty" draft and warn before discarding on close.
+   */
+  const [initialDraft, setInitialDraft] = useState<ModuleDraft | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** MD modal: list + manage actions (not mixed into the filter sidebar). */
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
@@ -328,25 +347,72 @@ export function ModulesScreen({
   }, [modules, selectedId]);
 
   // Notify shell of detail selection (URL sync).
+  // Skip when in edit mode — the edit URL (`/modules/:id/edit`) is owned by
+  // `openModuleEditId` and we must not navigate back to the view URL.
   useEffect(() => {
+    if (openModuleEditId) return;
     onSelectionChange?.(selectedId);
-  }, [selectedId, onSelectionChange]);
+  }, [selectedId, onSelectionChange, openModuleEditId]);
 
   // Sync detail from shell URL (`/modules` vs `/modules/:id`).
+  // Note: in edit mode (`/modules/:id/edit`), `openModuleId` is null because
+  // the URL has the `/edit` suffix. We use `openModuleEditId` to keep
+  // `selectedId` pointed at the right module so the editor and the
+  // "back to detail" flow work.
   useEffect(() => {
-    if (openModuleId == null || openModuleId === '') {
-      setSelectedId(null);
+    const viewId = openModuleId;
+    const editId =
+      openModuleEditId && openModuleEditId !== 'new' ? openModuleEditId : null;
+    const target = viewId ?? editId;
+    if (target == null || target === '') {
+      // Only clear selection if we're not in edit mode at all (else we'd
+      // accidentally navigate back to the list when entering the editor).
+      if (!openModuleEditId) setSelectedId(null);
       return;
     }
-    if (!modules.some((m) => m.id === openModuleId)) return;
-    setSelectedId(openModuleId);
-  }, [openModuleId, modules]);
+    if (!modules.some((m) => m.id === target)) return;
+    setSelectedId(target);
+  }, [openModuleId, openModuleEditId, modules]);
+
+  /**
+   * Sync edit mode from shell URL (`/modules/:id/edit` — Fase 3 UI).
+   * - `'new'` sentinel: open create-new editor (still uses the existing modal
+   *   in this sub-fase; will become inline in 3a.2).
+   * - Real id: open edit on that module. For 3a.1 we still route through the
+   *   modal to preserve behavior; the inline layout lands in 3a.2.
+   * - null / '': close the editor.
+   */
+  useEffect(() => {
+    if (openModuleEditId == null || openModuleEditId === '') {
+      return;
+    }
+    if (openModuleEditId === 'new') {
+      const fresh = emptyModuleDraft();
+      setEditingId(null);
+      setDraft(fresh);
+      setInitialDraft(fresh);
+      setError(null);
+      setModalOpen(true);
+      return;
+    }
+    const module = modules.find((m) => m.id === openModuleEditId);
+    if (!module) return;
+    const fresh = moduleToDraft(module);
+    setEditingId(module.id);
+    setDraft(fresh);
+    setInitialDraft(fresh);
+    setEditorTab('general');
+    setError(null);
+    setModalOpen(true);
+  }, [openModuleEditId, modules]);
 
   // Open create modal from shell (Dashboard quick action)
   useEffect(() => {
     if (!requestCreateKey) return;
+    const fresh = emptyModuleDraft();
     setEditingId(null);
-    setDraft(emptyModuleDraft());
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setError(null);
     setModalOpen(true);
   }, [requestCreateKey]);
@@ -360,25 +426,80 @@ export function ModulesScreen({
     }
   }, [modalOpen, editingId, selectedId, onEditingChange]);
 
-  const closeModal = () => {
+  /**
+   * True when the user has changed the draft since opening the editor
+   * (Fase 3 UI 3a.3). Used to warn before discarding on close.
+   */
+  const isDraftDirty =
+    initialDraft != null &&
+    JSON.stringify(draft) !== JSON.stringify(initialDraft);
+
+  /**
+   * Hard close: clear all editor state, no warn. Called after a successful
+   * save or after the user confirms discard.
+   */
+  const forceCloseEditor = () => {
     setModalOpen(false);
     setEditingId(null);
     setDraft(emptyModuleDraft());
+    setInitialDraft(null);
     setError(null);
     setEditorTab('general');
+    setConfirmDiscard(false);
+    if (openModuleEditId && onSelectionChange) {
+      // After closing the editor, go back to the view (selectedId) or the list.
+      onSelectionChange(selectedId);
+    }
   };
 
+  /**
+   * Close the editor. When the draft is dirty, ask the user to confirm
+   * discarding changes via the confirm-discard modal. Otherwise close
+   * immediately.
+   */
+  const closeModal = () => {
+    if (isDraftDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    forceCloseEditor();
+  };
+
+  /**
+   * Open the editor (create-new). When `onRequestEdit` is wired (Fase 3 UI),
+   * the shell navigates to `/modules/new/edit` and the effect on
+   * `openModuleEditId` triggers the actual editor open. Otherwise (legacy /
+   * tests), open the modal directly.
+   */
   const startCreate = () => {
+    if (onRequestEdit) {
+      onRequestEdit('new');
+      return;
+    }
+    const fresh = emptyModuleDraft();
     setEditingId(null);
-    setDraft(emptyModuleDraft());
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setError(null);
     setEditorTab('general');
     setModalOpen(true);
   };
 
+  /**
+   * Open the editor (edit existing). When `onRequestEdit` is wired (Fase 3 UI),
+   * the shell navigates to `/modules/:id/edit` and the effect on
+   * `openModuleEditId` triggers the actual editor open. Otherwise (legacy /
+   * tests), open the modal directly.
+   */
   const startEdit = (item: Module) => {
+    if (onRequestEdit) {
+      onRequestEdit(item.id);
+      return;
+    }
+    const fresh = moduleToDraft(item);
     setEditingId(item.id);
-    setDraft(moduleToDraft(item));
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setError(null);
     setEditorTab('general');
     setModalOpen(true);
@@ -544,7 +665,8 @@ export function ModulesScreen({
     } else {
       onCreate(draft);
     }
-    closeModal();
+    // Use forceCloseEditor: we just saved, no dirty-discard warn.
+    forceCloseEditor();
   };
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -559,7 +681,9 @@ export function ModulesScreen({
       setSelectedId(null);
     }
     if (editingId === id) {
-      closeModal();
+      // The entity being edited is gone — close without warn (no point in
+      // keeping a draft for a deleted module).
+      forceCloseEditor();
     }
   };
 
@@ -649,6 +773,239 @@ export function ModulesScreen({
     return (
       <section className="catalog-page" aria-label="Muebles">
         <PageLoading label="Cargando muebles…" data-testid="modules-loading" />
+      </section>
+    );
+  }
+
+  // Fase 3 UI 3a.2: when `openModuleEditId` is active and the shell wires
+  // `onRequestEdit`, render the editor inline (no Modal LG) with a sticky
+  // chrome + main/aside layout. Otherwise fall back to the legacy modal flow
+  // (used by tests / older code paths).
+  const inlineEditMode =
+    !!openModuleEditId && !!onRequestEdit && modalOpen;
+
+  if (inlineEditMode) {
+    return (
+      <section
+        className="catalog-page module-editor-page"
+        aria-label={editingId ? 'Editar mueble' : 'Nuevo mueble'}
+        data-testid="module-editor-page"
+      >
+        <header className="workspace-chrome">
+          <div className="workspace-chrome__lead">
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={closeModal}
+              aria-label="Volver a la lista"
+              data-testid="module-editor-back"
+            >
+              ← Lista
+            </button>
+            <div className="workspace-chrome__identity">
+              <span className="workspace-chrome__code">
+                {editingId ? draft.code || '—' : 'NUEVO'}
+              </span>
+              <p className="workspace-chrome__title">
+                {editingId ? 'Editar mueble' : 'Nuevo mueble'}
+              </p>
+            </div>
+          </div>
+          <div className="workspace-chrome__actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={closeModal}
+              data-testid="module-editor-cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              form={formId}
+              data-testid="module-editor-save"
+            >
+              Guardar
+            </button>
+          </div>
+        </header>
+
+        <div className="module-editor-page__body">
+          <div className="module-editor-page__main">
+            <ModuleEditorForm
+              formId={formId}
+              error={error}
+              onSubmit={handleSubmit}
+              editorTab={editorTab}
+              setEditorTab={setEditorTab}
+              draft={draft}
+              setDraft={setDraft}
+              draftCascade={draftCascade}
+              draftCascadeOpts={draftCascadeOpts}
+              setDraftCascadeLevel={setDraftCascadeLevel}
+              resolveImageUrl={resolveImageUrl}
+              onUploadImage={onUploadImage}
+              structures={structures}
+              selectedStructure={selectedStructure ?? undefined}
+              catalogComponents={catalogComponents}
+              composedEnabled={composedEnabled}
+              onRequestAddComponent={() => {
+                setAddComponentOpen(true);
+                setComponentSearch('');
+                setNewCompId('');
+                setNewCompQty(1);
+              }}
+              canMutate={canMutate}
+              hardwareRoles={hardwareRoles}
+              activeHardware={activeHardware}
+              onAddHardware={addHardwareLine}
+              onRemoveHardware={removeHardwareLine}
+              onUpdateHardware={updateLine}
+              onHardwareGridKeyDown={onHardwareGridKeyDown}
+              editingId={editingId}
+              costPreview={costPreview}
+              previewBlocked={previewBlocked}
+              missingGroups={missingGroups}
+              groupLabels={groupLabels}
+            />
+          </div>
+          <aside
+            className="module-editor-page__aside"
+            aria-label="Vista previa de costo"
+          >
+            <CostPreviewPanel
+              costPreview={costPreview}
+              previewBlocked={previewBlocked}
+              missingGroups={missingGroups}
+              groupLabels={groupLabels}
+              allowEmptyHint
+            />
+          </aside>
+        </div>
+
+        {/* Sub-modals still attached to the editor flow. */}
+        <ModuleComponentAdderModal
+          open={addComponentOpen}
+          onClose={() => setAddComponentOpen(false)}
+          componentSearch={componentSearch}
+          onSearchChange={setComponentSearch}
+          filteredComponents={filteredCatalogComponents}
+          newCompId={newCompId}
+          onSelect={setNewCompId}
+          newCompQty={newCompQty}
+          onQtyChange={setNewCompQty}
+          onConfirm={() => {
+            if (!newCompId) return;
+            setDraft((prev) => ({
+              ...prev,
+              components: [
+                ...prev.components,
+                {
+                  componentId: newCompId,
+                  quantity: newCompQty,
+                },
+              ],
+            }));
+            setAddComponentOpen(false);
+          }}
+        />
+        <ModuleCategoryModals
+          categories={categories}
+          flatCategories={flatCategories}
+          manageOpen={manageCategoriesOpen}
+          onCloseManage={closeManageCategories}
+          onOpenCreate={openCreateCategory}
+          formOpen={categoryModalOpen}
+          onCloseForm={closeCategoryModal}
+          categoryFormId={categoryFormId}
+          editingCategoryId={editingCategoryId}
+          categoryDraft={categoryDraft}
+          setCategoryDraft={setCategoryDraft}
+          categoryError={categoryError}
+          onSubmitForm={handleCategorySubmit}
+          onEditCategory={openEditCategory}
+          onRequestDeleteCategory={setConfirmDeleteCategoryId}
+          onCreateCategory={onCreateCategory}
+          onDeleteCategory={onDeleteCategory}
+          deleteTarget={deleteCategoryTarget}
+          confirmDeleteCategoryId={confirmDeleteCategoryId}
+          onCancelDelete={() => setConfirmDeleteCategoryId(null)}
+          onConfirmDelete={() => {
+            if (confirmDeleteCategoryId) {
+              handleDeleteCategory(confirmDeleteCategoryId);
+            }
+          }}
+        />
+        <Modal
+          open={!!confirmDeleteId}
+          onClose={() => setConfirmDeleteId(null)}
+          title="Eliminar mueble"
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={() => {
+                  if (confirmDeleteId) handleDelete(confirmDeleteId);
+                }}
+              >
+                Eliminar
+              </button>
+            </>
+          }
+        >
+          <p>¿Seguro que querés eliminar este mueble? No se puede deshacer.</p>
+        </Modal>
+
+        <Modal
+          open={confirmDiscard}
+          onClose={() => setConfirmDiscard(false)}
+          title="Descartar cambios"
+          size="sm"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={forceCloseEditor}
+                data-testid="module-editor-discard-confirm"
+              >
+                Descartar y salir
+              </button>
+            </>
+          }
+        >
+          <p>
+            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+            que querés descartar?
+          </p>
+        </Modal>
+
+        <Module3DModal
+          open={show3DModal}
+          module={viewerModule}
+          catalog={module3dCatalog}
+          onClose={() => {
+            setShow3DModal(false);
+            setViewerModule(null);
+          }}
+        />
       </section>
     );
   }
@@ -837,6 +1194,37 @@ export function ModulesScreen({
               : 'este mueble'}
           </strong>
           ? Esta acción no se puede deshacer.
+        </p>
+      </Modal>
+
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="Descartar cambios"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmDiscard(false)}
+            >
+              Seguir editando
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={forceCloseEditor}
+              data-testid="module-editor-discard-confirm"
+            >
+              Descartar y salir
+            </button>
+          </>
+        }
+      >
+        <p>
+          Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
+          que querés descartar?
         </p>
       </Modal>
 

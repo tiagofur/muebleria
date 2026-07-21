@@ -7,18 +7,16 @@
   max-width: 48rem;
 }
 
+/* .prod-queue__header / __title / __title-row / __subtitle moved to
+   common/pageHeader.css (F1 UI 1d). Local overrides + title-icon stay. */
+
 .prod-queue__header {
-  display: flex;
-  flex-wrap: wrap;
+  /* Override: align icon + title to top (icon has top padding). */
   align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
 }
 
 .prod-queue__title-row {
-  display: flex;
   align-items: flex-start;
-  gap: var(--space-3);
 }
 
 .prod-queue__title-icon {
@@ -27,19 +25,7 @@
   margin-top: var(--space-1);
 }
 
-.prod-queue__title {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  color: var(--text-primary);
-  line-height: var(--leading-tight);
-}
-
 .prod-queue__subtitle {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: var(--leading-normal);
   max-width: 36rem;
 }
 

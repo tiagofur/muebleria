@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   NAV_PATHS,
+  componentEditIdFromPath,
+  componentEditPath,
   entityIdFromPath,
+  entityEditIdFromPath,
   entityPath,
+  isEntityEditPath,
   isEntitySection,
+  isNewEntityEditPath,
+  moduleEditIdFromPath,
+  moduleEditPath,
   moduleIdFromPath,
   navFromPath,
   pathForNav,
   projectIdFromPath,
   projectPath,
+  structureEditIdFromPath,
+  structureEditPath,
+  NEW_ENTITY_ID,
 } from './routes';
 
 describe('app routes', () => {
@@ -62,5 +72,30 @@ describe('app routes', () => {
   it('returns null for unknown paths', () => {
     expect(navFromPath('/nope')).toBeNull();
     expect(navFromPath('/api/projects')).toBeNull();
+  });
+
+  it('extracts entity id from /section/:id/edit paths (Fase 3 UI)', () => {
+    const id = '969f82ae-8da6-45d0-b49a-951dbfde309e';
+    expect(moduleEditPath(id)).toBe(`/modules/${id}/edit`);
+    expect(structureEditPath(id)).toBe(`/structures/${id}/edit`);
+    expect(componentEditPath('comp-1')).toBe(`/components/comp-1/edit`);
+
+    expect(moduleEditIdFromPath(`/modules/${id}/edit`)).toBe(id);
+    expect(structureEditIdFromPath(`/structures/${id}/edit`)).toBe(id);
+    expect(componentEditIdFromPath(`/components/${id}/edit`)).toBe(id);
+
+    // /edit is also a valid module nav (still resolves to 'modules')
+    expect(navFromPath(`/modules/${id}/edit`)).toBe('modules');
+
+    // Plain view path is NOT an edit path
+    expect(isEntityEditPath(`/modules/${id}`, 'modules')).toBe(false);
+    expect(isEntityEditPath(`/modules/${id}/edit`, 'modules')).toBe(true);
+    expect(entityIdFromPath(`/modules/${id}/edit`, 'modules')).toBeNull();
+  });
+
+  it('detects new-entity edit paths (/section/new/edit)', () => {
+    expect(isNewEntityEditPath('/modules/new/edit', 'modules')).toBe(true);
+    expect(isNewEntityEditPath('/modules/some-id/edit', 'modules')).toBe(false);
+    expect(moduleEditIdFromPath('/modules/new/edit')).toBe(NEW_ENTITY_ID);
   });
 });

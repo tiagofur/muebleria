@@ -58,6 +58,8 @@ import {
 } from 'lucide-react';
 import { CatalogPicker } from '../catalogs/CatalogPicker';
 import {
+  DropdownMenu,
+  type DropdownMenuSection,
   EmptyState,
   InlineLoading,
   Modal,
@@ -863,6 +865,107 @@ export function ProjectsScreen({
       selectedProject.status === 'produced');
   const productionExportDisabled = exportDisabled || !productionExportOk;
 
+  /**
+   * Build the "Más exports ▾" menu sections from available callbacks (Fase 2 UI).
+   * Items render only when their prop is defined; the shell decides which
+   * exports apply per role (production-only exports are undefined for
+   * vendedor; commercial exports are undefined for produccion).
+   */
+  const exportMenu = useMemo<{
+    readonly sections: readonly DropdownMenuSection[];
+    readonly onClose?: () => void;
+  }>(() => {
+    if (!selectedProject) return { sections: [] };
+    const itemsEmpty = selectedProject.items.length === 0;
+
+    const productionItems = [
+      onExportHardware
+        ? {
+            id: 'hardware',
+            label: 'Lista de herrajes',
+            hint: 'Para compras (.xlsx)',
+            disabled: productionExportDisabled,
+            onSelect: () => void onExportHardware(),
+          }
+        : null,
+      onExportPieceLabels
+        ? {
+            id: 'labels',
+            label: 'Etiquetas',
+            hint: 'Pieza + encintado (PDF)',
+            disabled: productionExportDisabled,
+            onSelect: () => void onExportPieceLabels(),
+          }
+        : null,
+      onExportProductionPack
+        ? {
+            id: 'pack',
+            label: 'Pack producción',
+            hint: 'ZIP (Optimizer + herrajes + etiquetas)',
+            disabled: productionExportDisabled,
+            onSelect: () => void onExportProductionPack(),
+          }
+        : null,
+    ].filter((x): x is NonNullable<typeof x> => x !== null);
+
+    const commercialItems = [
+      onExportCommercialQuote
+        ? {
+            id: 'quote',
+            label: 'Exportar cotización',
+            hint: 'Para el cliente (.xlsx)',
+            disabled: exportBusy || exportBlocked || itemsEmpty,
+            onSelect: () => void onExportCommercialQuote(),
+          }
+        : null,
+      onExportCommercialQuotePdf
+        ? {
+            id: 'pdf-list',
+            label: 'PDF listado',
+            hint: 'Muebles + total de venta',
+            disabled: exportBusy || exportBlocked || itemsEmpty,
+            onSelect: () => void onExportCommercialQuotePdf('detailed'),
+          }
+        : null,
+      onExportCommercialQuotePdf
+        ? {
+            id: 'pdf-summary',
+            label: 'PDF resumen',
+            hint: 'Datos + total, sin listado',
+            disabled: exportBusy || exportBlocked || itemsEmpty,
+            onSelect: () => void onExportCommercialQuotePdf('summary'),
+          }
+        : null,
+    ].filter((x): x is NonNullable<typeof x> => x !== null);
+
+    const sections: DropdownMenuSection[] = [];
+    if (productionItems.length > 0) {
+      sections.push({
+        id: 'production',
+        label: 'Producción',
+        items: productionItems,
+      });
+    }
+    if (commercialItems.length > 0) {
+      sections.push({
+        id: 'commercial',
+        label: 'Comercial',
+        items: commercialItems,
+      });
+    }
+    return { sections };
+  }, [
+    selectedProject,
+    onExportHardware,
+    onExportPieceLabels,
+    onExportProductionPack,
+    onExportCommercialQuote,
+    onExportCommercialQuotePdf,
+    productionExportDisabled,
+    exportBusy,
+    exportBlocked,
+  ]);
+
   const exportBlockMessage = previewBlocked
     ? 'Exportación bloqueada: completá las opciones obligatorias de los muebles.'
     : exportBlocked
@@ -1444,144 +1547,47 @@ export function ProjectsScreen({
           </span>
         </div>
         <div className="workspace-chrome__actions">
+          {/*
+            Chrome — agrupación Fase 2 UI (design.md §6.2):
+              1) Exportar Optimizer (primary): el más usado en planta. Visible
+                 solo si el callback está presente y la acción está habilitada
+                 (rol + status + no bloqueado). En otro caso se va al menú.
+              2) Más exports ▾ (DropdownMenu): los 6 exports restantes, agrupados
+                 por Producción / Comercial. Cada ítem con su propio disabled.
+              3) Presentar, Editar/Duplicar/Guardar plantilla, Marcar en
+                 producción, Reabrir, Eliminar — directos (estados/CRUD).
+          */}
           {onExport ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            disabled={productionExportDisabled}
-            title={
-              !productionExportOk
-                ? 'Export de producción solo en Aceptado o En producción'
-                : 'Exportar cut-list Optimizer (.xlsx)'
-            }
-            onClick={() => {
-              void onExport?.();
-            }}
-            data-testid="project-chrome-export"
-          >
-            {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
-          </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={productionExportDisabled}
+              title={
+                !productionExportOk
+                  ? 'Export de producción solo en Aceptado o En producción'
+                  : 'Exportar cut-list Optimizer (.xlsx)'
+              }
+              onClick={() => {
+                void onExport?.();
+              }}
+              data-testid="project-chrome-export"
+            >
+              {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
+            </button>
           ) : null}
-          {onExportHardware ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={productionExportDisabled}
-            title={
-              !productionExportOk
-                ? 'Export de producción solo en Aceptado o En producción'
-                : 'Exportar lista de herrajes para compras (.xlsx)'
-            }
-            onClick={() => {
-              void onExportHardware?.();
-            }}
-            data-testid="project-chrome-export-hw"
-          >
-            {exportBusy ? 'Exportando…' : 'Lista de herrajes'}
-          </button>
-          ) : null}
-          {onExportPieceLabels ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={productionExportDisabled}
-            title={
-              !productionExportOk
-                ? 'Export de producción solo en Aceptado o En producción'
-                : 'Etiquetas de pieza con instrucción de encintado (PDF)'
-            }
-            onClick={() => {
-              void onExportPieceLabels?.();
-            }}
-            data-testid="project-chrome-export-labels"
-          >
-            {exportBusy ? 'Exportando…' : 'Etiquetas'}
-          </button>
-          ) : null}
-          {onExportProductionPack ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            disabled={productionExportDisabled}
-            title={
-              !productionExportOk
-                ? 'Export de producción solo en Aceptado o En producción'
-                : 'Descargar ZIP con Optimizer, herrajes y etiquetas'
-            }
-            onClick={() => {
-              void onExportProductionPack?.();
-            }}
-            data-testid="project-chrome-export-pack"
-          >
-            {exportBusy ? 'Exportando…' : 'Pack producción'}
-          </button>
+          {exportMenu.sections.length > 0 ? (
+            <DropdownMenu
+              ariaLabel="Más exports"
+              triggerLabel={exportBusy ? 'Exportando…' : 'Más exports'}
+              triggerClassName="btn"
+              disabled={exportBusy}
+              sections={exportMenu.sections}
+              onClose={exportMenu.onClose}
+            />
           ) : null}
           <button
             type="button"
             className="btn"
-            disabled={
-              !onExportCommercialQuote ||
-              exportBusy ||
-              exportBlocked ||
-              project.items.length === 0
-            }
-            title={
-              onExportCommercialQuote
-                ? 'Exportar cotización comercial para el cliente (.xlsx)'
-                : 'Export cotización no disponible en este shell'
-            }
-            onClick={() => {
-              void onExportCommercialQuote?.();
-            }}
-            data-testid="project-chrome-export-quote"
-          >
-            {exportBusy ? 'Exportando…' : 'Exportar cotización'}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={
-              !onExportCommercialQuotePdf ||
-              exportBusy ||
-              exportBlocked ||
-              project.items.length === 0
-            }
-            title={
-              onExportCommercialQuotePdf
-                ? 'PDF con listado de muebles y total de venta (cliente)'
-                : 'PDF no disponible en este shell'
-            }
-            onClick={() => {
-              void onExportCommercialQuotePdf?.('detailed');
-            }}
-            data-testid="project-chrome-export-quote-pdf-list"
-          >
-            {exportBusy ? 'Exportando…' : 'PDF listado'}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={
-              !onExportCommercialQuotePdf ||
-              exportBusy ||
-              exportBlocked ||
-              project.items.length === 0
-            }
-            title={
-              onExportCommercialQuotePdf
-                ? 'PDF resumen: datos del proyecto y total, sin listado de muebles'
-                : 'PDF no disponible en este shell'
-            }
-            onClick={() => {
-              void onExportCommercialQuotePdf?.('summary');
-            }}
-            data-testid="project-chrome-export-quote-pdf-summary"
-          >
-            {exportBusy ? 'Exportando…' : 'PDF resumen'}
-          </button>
-          <button
-            type="button"
-            className="btn btn--primary"
             onClick={() => setShowPresentation(true)}
             data-testid="project-chrome-present"
             title="Modo presentación para el cliente (sin costos ni exports de planta)"

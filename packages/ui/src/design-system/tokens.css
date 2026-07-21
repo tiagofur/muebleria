@@ -49,18 +49,32 @@
   --surface-hover: hsl(220 14% 95%);
   --surface-selected: hsl(245 100% 97%);
   --surface-overlay: hsla(230 20% 10% / 0.55);
+  /*
+   * Auxiliary surface tokens (F0 UI Fase 0):
+   * - --surface-muted: subtle background between app and card (stat headers,
+   *   inline code chips, panel accents).
+   * - --surface-disabled: true disabled surface (cards of inactive items).
+   */
+  --surface-muted: hsl(220 14% 96%);
+  --surface-disabled: hsl(220 12% 94%);
 
   /* —— Text —— */
   --text-primary: hsl(230 18% 12%);
   --text-secondary: hsl(230 12% 40%);
-  --text-muted: hsl(230 10% 58%);
+  /* WCAG AA: 52% L on white surfaces ~4.6:1 (was 58% L ~4.0:1, F1 UI 1f). */
+  --text-muted: hsl(230 10% 52%);
   --text-disabled: hsl(230 10% 74%);
   --text-inverse: hsl(0 0% 100%);
   --text-brand: var(--brand-600);
 
   /* —— Semantic —— */
   --success-50: hsl(145 60% 96%);
+  --success-100: hsl(145 60% 92%);
+  --success-200: hsl(145 58% 85%);
+  --success-300: hsl(145 58% 70%);
+  --success-400: hsl(145 60% 55%);
   --success-500: hsl(145 58% 38%);
+  --success-600: hsl(145 60% 32%);
   --success-700: hsl(145 55% 28%);
 
   --warning-50: hsl(38 100% 96%);
@@ -80,6 +94,23 @@
   --border-default: hsl(220 14% 86%);
   --border-strong: hsl(220 12% 74%);
   --border-brand: var(--brand-400);
+
+  /*
+   * —— Aliases (F0 UI Fase 0) ——
+   * Compat aliases for tokens referenced by feature CSS that pre-date this
+   * pass. Keep them here so legacy references resolve; prefer the canonical
+   * names above in new code.
+   */
+  --surface-border: var(--border-default);
+  --surface-base: var(--surface-sidebar);
+  --text-on-dark: var(--text-inverse);
+  --color-text: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-border: var(--border-default);
+  --success: var(--success-500);
+  --warning: var(--warning-500);
+  --danger: var(--danger-500);
+  --info: var(--info-500);
 
   /* —— Shadows (§3.3) —— */
   --shadow-xs: 0 1px 2px hsla(230 20% 12% / 0.05);

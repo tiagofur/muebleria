@@ -1,0 +1,119 @@
+/**
+ * Entity card — list item card for entities with rich metadata
+ * (modules, projects, structures, components, recent projects in dashboard,
+ * showcase). docs/design.md §5.3, §6.2, §6.3.
+ *
+ * This is the "clickable list item" card. For neutral containers use
+ * .surface-card (common/surfaceCard.css).
+ *
+ * Equivalent class names are aliased to the same definitions; feature CSS no
+ * longer redefines the entity-card block. New code should prefer .entity-card.
+ *
+ *   .entity-card                .module-card
+ *                               .project-card
+ *                               .dashboard-recent-card
+ *                               .component-card
+ *                               .structure-card
+ *
+ * Variants:
+ *   .entity-card--inactive      dimmed + surface-disabled bg
+ *   .entity-card--expanded      grid-column: 1 / -1; not clickable; brand border
+ *
+ * Decisions (F1 UI 1e, approved):
+ *   - radius: --radius-md (8px) for entity cards; --radius-lg reserved for
+ *     secondary cards (stats, queue, showcase wrapper).
+ *   - padding: --density-card-pad (12px) — denser for tool usage.
+ *   - hover: border --border-brand + box-shadow --shadow-md + bg --surface-hover.
+ *     No transform translateY (removed the previous --brand-300 / translateY
+ *     hover from components/structures for cross-screen consistency).
+ */
+
+.entity-card,
+.module-card,
+.project-card,
+.dashboard-recent-card,
+.component-card,
+.structure-card {
+  width: 100%;
+  margin: 0;
+  padding: var(--density-card-pad);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.entity-card:hover,
+.module-card:hover,
+.project-card:hover,
+.dashboard-recent-card:hover,
+.component-card:hover,
+.structure-card:hover {
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-md);
+  background: var(--surface-hover);
+}
+
+.entity-card:focus-visible,
+.module-card:focus-visible,
+.project-card:focus-visible,
+.dashboard-recent-card:focus-visible,
+.component-card:focus-visible,
+.structure-card:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* —— Inactive (soft-deleted / disabled entity) —— */
+.entity-card--inactive,
+.component-card--inactive,
+.structure-card--inactive {
+  opacity: 0.7;
+  background-color: var(--surface-disabled);
+}
+
+/* —— Expanded (takes full grid width; not clickable) —— */
+.entity-card--expanded,
+.component-card--expanded,
+.structure-card--expanded {
+  grid-column: 1 / -1;
+  cursor: default;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-md);
+}
+
+.entity-card--expanded:hover,
+.component-card--expanded:hover,
+.structure-card--expanded:hover {
+  /* Hover lift removed for expanded (not interactive). */
+  background: var(--surface-card);
+}
+
+/* —— Shared sub-blocks (code/name/stats) —— */
+.entity-card__code,
+.module-card__code,
+.project-card__code,
+.dashboard-recent-card__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.entity-card__name,
+.module-card__name,
+.project-card__name {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+}

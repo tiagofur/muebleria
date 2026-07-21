@@ -1,4 +1,10 @@
-/* Card grid and style for engineering bodies (cuerpos) */
+/* Card grid + entity-card styles for engineering bodies (estructuras).
+ *
+ * The .structure-card base, hover, focus-visible, --inactive and --expanded
+ * variants live in common/entityCard.css (F1 UI 1e). Only the grid + the
+ * feature-scoped sub-blocks stay here.
+ */
+
 .structure-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -6,39 +12,11 @@
   margin-top: var(--space-4);
 }
 
+/* Internal layout (entity-card base already sets cursor/border/bg). */
 .structure-card {
-  background-color: var(--surface-card);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  transition: all var(--duration-normal) var(--ease-out);
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   position: relative;
-}
-
-.structure-card:hover {
-  border-color: var(--brand-300);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.structure-card--inactive {
-  opacity: 0.7;
-  border-color: var(--surface-border);
-  background-color: var(--surface-disabled);
-}
-
-.structure-card--expanded {
-  grid-column: 1 / -1;
-  cursor: default;
-  border-color: var(--brand-400);
-  box-shadow: var(--shadow-md);
-}
-
-.structure-card--expanded:hover {
-  transform: none;
 }
 
 .structure-card__summary {
@@ -56,15 +34,15 @@
 .structure-card__code {
   font-size: var(--text-xs);
   color: var(--text-muted);
-  background-color: var(--surface-overlay);
-  padding: 2px 6px;
+  background-color: var(--surface-muted);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--surface-border);
+  border: 1px solid var(--border-subtle);
 }
 
 .structure-card__name {
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   margin: 0;
 }
@@ -74,7 +52,7 @@
   gap: var(--space-4);
   font-size: var(--text-sm);
   color: var(--text-secondary);
-  border-top: 1px solid var(--surface-border);
+  border-top: 1px solid var(--border-subtle);
   padding-top: var(--space-2);
   margin-top: var(--space-1);
 }
@@ -92,14 +70,14 @@
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
-  border-top: 1px dashed var(--surface-border);
+  border-top: 1px dashed var(--border-subtle);
   padding-top: var(--space-2);
   margin-top: var(--space-2);
 }
 
 .structure-card__expanded-content {
   margin-top: var(--space-4);
-  border-top: 1px solid var(--surface-border);
+  border-top: 1px solid var(--border-subtle);
   padding-top: var(--space-4);
   display: flex;
   flex-direction: column;
@@ -108,7 +86,7 @@
 
 .structure-expanded-title {
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-secondary);
@@ -142,4 +120,24 @@
   background: var(--surface-hover);
   color: var(--text-muted);
   border-color: var(--border-default);
+}
+
+/* —— Inline editor page (Fase 3 UI 3b) —— */
+/* Replaces the Modal LG when /structures/:id/edit is active. The
+   StructureEditorForm retains its built-in Cancelar/Guardar footer; we only
+   add a sticky chrome with identity + back button on top. */
+
+.structure-editor-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap);
+}
+
+.structure-editor-page__main {
+  min-width: 0;
+}
+
+/* The form was styled assuming a modal body; allow it to fill the page width. */
+.structure-editor-page .catalog-form {
+  max-width: none;
 }
