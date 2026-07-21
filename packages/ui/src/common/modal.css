@@ -57,6 +57,26 @@
   max-width: 900px;
 }
 
+/*
+ * Fullscreen modal variant (Fase 3 UI 3e).
+ * Used by 3D viewers (Module3DModal, Project3DModal) and presentation mode
+ * where a centered lg modal fights the canvas for space. The panel fills the
+ * viewport edge-to-edge with a small inset so the close button stays usable.
+ */
+.ui-modal--fullscreen {
+  max-width: none;
+  max-height: none;
+  width: calc(100vw - var(--space-6));
+  height: calc(100vh - var(--space-6));
+  border-radius: var(--radius-lg);
+}
+
+.ui-modal--fullscreen .ui-modal__body {
+  /* 3D canvas should fill the available height. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* Open / close motion (design.md §3.6) */
 @media (prefers-reduced-motion: no-preference) {
   .ui-modal__overlay {

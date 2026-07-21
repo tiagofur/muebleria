@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import './modal.css';
 
-export type ModalSize = 'sm' | 'md' | 'lg';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'fullscreen';
 
 export type ModalProps = {
   readonly open: boolean;
