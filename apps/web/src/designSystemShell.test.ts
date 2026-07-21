@@ -222,12 +222,18 @@ describe('web shell Toast wiring (F019)', () => {
     expect(app).toContain('const { toast } = useToast()');
   });
 
-  it('fires success toast on material create and Optimizer export success', () => {
+  it('catalog toast copy lives in catalogStore; export toast stays in App.tsx (F062)', () => {
+    // F062 moved catalog handlers (and their toasts) to catalogStore.ts.
+    // Export handlers (and their toasts) stay in App.tsx.
     const app = readFileSync(appTsxPath, 'utf8');
-    // design.md §4.4: create material → success with code; similar to "Creado correctamente"
-    expect(app).toMatch(/toast\(\{\s*type:\s*'success',\s*message:\s*`✓ "\$\{code\}" creado`/);
-    expect(app).toContain("message: '✓ Cambios guardados'");
-    // Export success toast (browser download or Electron save); validation stays inline
+    const catalogStoreSrc = readFileSync(
+      join(here, 'stores/catalogStore.ts'),
+      'utf8',
+    );
+    // design.md §4.4: create material → success with code; in catalogStore now.
+    expect(catalogStoreSrc).toMatch(/type:\s*'success',\s*message:\s*`✓ "\$\{code\}" creado`/);
+    expect(catalogStoreSrc).toContain("message: '✓ Cambios guardados'");
+    // Export success toast (browser download or Electron save) still in App.tsx.
     expect(app).toContain('deliverExcelFile');
     expect(app).toMatch(/\$\{result\.fileName\} descargado/);
     expect(app).toMatch(/\$\{result\.fileName\} guardado/);

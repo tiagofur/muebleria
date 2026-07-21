@@ -1069,7 +1069,7 @@
         "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.1 (sub-slice 2)",
         "apps/web/src/App.tsx (handlers create/update/delete de catálogo)"
       ],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "F063",

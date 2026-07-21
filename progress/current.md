@@ -1,31 +1,39 @@
-# Sesión actual
+# Sesión actual — F062 catalogStore
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0` (F057 commiteada y pushed; PR pendiente de merge)
+- **Branch activa:** `wip/perfect-app-fase-0-catalog` (basada en `wip/perfect-app-fase-0`)
 - **META issue:** #156 Perfect App roadmap
-- **Última feature cerrada:** F057 — phase0_workspace_store → `progress/close_F057.md`
+- **Feature:** F062 — phase0_catalog_store (sub-slice 2 de 4 de Fase 0)
+- **Iniciada:** 2026-07-21
 
-## Estado Fase 0 (Perfect App Roadmap §5)
+## Plan F062 (slice aprobado)
 
-| ID | Feature | Estado |
-|---|---|---|
-| F057 | workspaceStore Zustand | ✅ done (sub-slice 1/4) |
-| F062 | catalogStore (catálogos + módulos + estructuras + componentes + customers) | ⏳ pending (próximo) |
-| F063 | projectStore (proyectos + items + templates + breakdown) | ⏳ pending |
-| F064 | uiStore + ToastProvider migration | ⏳ pending |
-| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending |
-| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
-| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
-| F061 | Command pattern + undo/redo | ⏳ pending |
+1. ✅ Branch + marcar F062 in_progress.
+2. Crear `catalogStore.ts` con 28 actions.
+3. Modificar `workspaceStore.ts`: dropear `catalog` del state, poblar catalogStore en `loadWorkspace()`.
+4. Migrar `App.tsx`: eliminar `patchCatalog` + 28 handlers.
+5. Tests: `catalogStore.test.ts` behavior + actualizar `App.test.ts`.
+6. Verificar: `pnpm test`, `pnpm typecheck`, `./init.sh`, `pnpm visual`.
+7. Reviewer + push.
 
-## Próximo slice recomendado
+## Decisión clave
 
-**F062 catalogStore**: mueve ~30 handlers de mutación de catálogo desde App.tsx
-al store, elimina `patchCatalog` wrapper y reduce el uso de `workspaceRef` para
-catálogo. Sienta la base para que F063 migre los handlers de proyecto.
+**catalogStore POSEE su catálogo** (state `{ catalog: Catalog | null }`), no coordina con workspaceStore. `Workspace` pasa a ser view model ensamblado al cargar. Más limpio arquitectónicamente.
 
-## Notas
+## Cross-store coupling
 
-- App.tsx está en 2810 L (de 2880 pre-F057). Bajará fuerte en F062/F063/F064.
-- Los snapshots de Playwright (`tests/visual/baseline.spec.ts-snapshots/`)
-  están untracked en main (issue preexistente, no de F057).
+- `createProject`/`updateProject`/`createFromTemplate` llaman `catalogStore.upsertCustomers(customers)` (acción pública).
+- `updateMaterial` (#138) lee `workspaceStore.getState().workspace?.projects` para contar drafts.
+- `deleteModule` acepta callback opcional `onModuleDeleted(id)` para que App resetee `editingModuleId`.
+- catalogStore lee `authToken` via `useWorkspaceStore.getState().getAuthToken()` (unidireccional).
+
+## Objetivos
+
+- App.tsx 2810 → ~1900 L.
+- 28 handlers migrados, `patchCatalog` eliminado.
+- `workspaceRef` ya no se usa para catálogo (solo para projects hasta F063).
+
+## Fuera de alcance F062
+
+- projectStore (F063): handlers de proyecto quedan en App.tsx, leen catalogStore via getState().
+- uiStore + ToastProvider (F064): toast se inyecta como dep callable al store.
