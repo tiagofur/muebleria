@@ -156,6 +156,7 @@ import {
   writeSessionMode,
   type SessionMode,
 } from './session';
+import { useWorkspaceStore } from './stores';
 
 
 function newId(): string {
@@ -462,77 +463,31 @@ export function App(): ReactNode {
 
 /**
  * Login gate: session null → LoginScreen | RegisterScreen;
- * guest|auth → workspace app. Separated from AppContent so hooks always run.
+ * guest|auth → workspace app. Reads session/auth state from workspaceStore
+ * (F057). No local state — just wiring.
  */
 function SessionGate(): ReactNode {
-  const [session, setSession] = useState<SessionMode | null>(() =>
-    readSessionMode(),
-  );
-  const [authGate, setAuthGate] = useState<'login' | 'register'>('login');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [registerLoading, setRegisterLoading] = useState(false);
-  const [registerError, setRegisterError] = useState<string | null>(null);
-
-  const handleGuestAccess = useCallback(() => {
-    writeSessionMode('guest');
-    setLoginError(null);
-    setRegisterError(null);
-    setSession('guest');
-  }, []);
-
-  const handleLogin = useCallback(async (email: string, password: string) => {
-    setLoginLoading(true);
-    setLoginError(null);
-    try {
-      const { token, user } = await loginRequest(email, password);
-      storeAuthToken(token);
-      storeAuthUser(user);
-      writeSessionMode('auth');
-      setSession('auth');
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'No se pudo iniciar sesión';
-      setLoginError(message);
-    } finally {
-      setLoginLoading(false);
-    }
-  }, []);
-
-  const handleRegister = useCallback(
-    async (name: string, email: string, password: string) => {
-      setRegisterLoading(true);
-      setRegisterError(null);
-      try {
-        await registerRequest(name, email, password);
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'No se pudo registrar';
-        setRegisterError(message);
-        throw err instanceof Error ? err : new Error(message);
-      } finally {
-        setRegisterLoading(false);
-      }
-    },
-    [],
-  );
-
-  const handleLogout = useCallback(() => {
-    clearSession();
-    setLoginError(null);
-    setRegisterError(null);
-    setAuthGate('login');
-    setSession(null);
-  }, []);
+  const session = useWorkspaceStore((s) => s.session);
+  const authGate = useWorkspaceStore((s) => s.authGate);
+  const loginLoading = useWorkspaceStore((s) => s.loginLoading);
+  const loginError = useWorkspaceStore((s) => s.loginError);
+  const registerLoading = useWorkspaceStore((s) => s.registerLoading);
+  const registerError = useWorkspaceStore((s) => s.registerError);
+  const setAuthGate = useWorkspaceStore((s) => s.setAuthGate);
+  const clearAuthErrors = useWorkspaceStore((s) => s.clearAuthErrors);
+  const enterAsGuest = useWorkspaceStore((s) => s.enterAsGuest);
+  const login = useWorkspaceStore((s) => s.login);
+  const register = useWorkspaceStore((s) => s.register);
+  const logout = useWorkspaceStore((s) => s.logout);
 
   if (session === null) {
     if (authGate === 'register') {
       return (
         <RegisterScreen
-          onRegister={handleRegister}
+          onRegister={register}
           onBack={() => {
             setAuthGate('login');
-            setRegisterError(null);
+            clearAuthErrors();
           }}
           loading={registerLoading}
           error={registerError}
@@ -541,10 +496,10 @@ function SessionGate(): ReactNode {
     }
     return (
       <LoginScreen
-        onLogin={handleLogin}
-        onGuestAccess={handleGuestAccess}
+        onLogin={login}
+        onGuestAccess={enterAsGuest}
         onRegister={() => {
-          setLoginError(null);
+          clearAuthErrors();
           setAuthGate('register');
         }}
         loading={loginLoading}
@@ -553,7 +508,7 @@ function SessionGate(): ReactNode {
     );
   }
 
-  return <AppContent session={session} onLogout={handleLogout} />;
+  return <AppContent session={session} onLogout={logout} />;
 }
 
 function AppContent({
@@ -564,13 +519,65 @@ function AppContent({
   readonly onLogout: () => void;
 }): ReactNode {
   const { toast } = useToast();
+  // F057: workspace lifecycle state lives in workspaceStore.
+  const workspace = useWorkspaceStore((s) => s.workspace);
+  const workspaceLoadError = useWorkspaceStore((s) => s.workspaceLoadError);
+  const assignableOwners = useWorkspaceStore((s) => s.assignableOwners);
+  // Latest workspace for patches — avoids stale closures (#15).
+  // Still maintained locally until F062/F063 move catalog/projects to their
+  // own stores; keep in sync with the store.
+  const workspaceRef = useRef<Workspace | null>(workspace);
+  workspaceRef.current = workspace;
+  const setWorkspaceFromStore = useWorkspaceStore((s) => s.setWorkspace);
+  const setWorkspaceLoadError = useWorkspaceStore(
+    (s) => s.setWorkspaceLoadError,
+  );
+  const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace);
+  const loadAssignableOwners = useWorkspaceStore(
+    (s) => s.loadAssignableOwners,
+  );
+  /**
+   * Wrapper that accepts both a direct value and an updater function — many
+   * catalog/project handlers use the `setWorkspace((prev) => ...)` pattern.
+   * The store action only accepts direct values; we read latest state via
+   * `getState()` to avoid stale closures. (F062/F063 will deprecate this
+   * pattern entirely when catalog/project mutations move to their own stores.)
+   */
+  const setWorkspace = useCallback(
+    (
+      next:
+        | Workspace
+        | null
+        | ((prev: Workspace | null) => Workspace | null),
+    ) => {
+      const resolved =
+        typeof next === 'function'
+          ? (next as (prev: Workspace | null) => Workspace | null)(
+              useWorkspaceStore.getState().workspace,
+            )
+          : next;
+      setWorkspaceFromStore(resolved);
+      workspaceRef.current = resolved;
+    },
+    [setWorkspaceFromStore],
+  );
+  const getAuthToken = useWorkspaceStore((s) => s.getAuthToken);
+  const getAuthUser = useWorkspaceStore((s) => s.getAuthUser);
+  const getRepository = useWorkspaceStore((s) => s.getRepository);
+  const saveWorkshopSettingsAction = useWorkspaceStore(
+    (s) => s.saveWorkshopSettings,
+  );
+  const resolveMediaUrlFromStore = useWorkspaceStore((s) => s.resolveMediaUrl);
+  const uploadCatalogImageFromStore = useWorkspaceStore(
+    (s) => s.uploadCatalogImage,
+  );
   const authUser = useMemo(
-    () => (session === 'auth' ? readAuthUser() : null),
-    [session],
+    () => (session === 'auth' ? getAuthUser() : null),
+    [session, getAuthUser],
   );
   const authToken = useMemo(
-    () => (session === 'auth' ? readAuthToken() : null),
-    [session],
+    () => (session === 'auth' ? getAuthToken() : null),
+    [session, getAuthToken],
   );
   const showAdminUsers = session === 'auth' && isAdminRole(authUser?.role);
   const canAssignOwner = roleCanAssignOwner(authUser?.role);
@@ -598,65 +605,20 @@ function AppContent({
     session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
   const useProductionQueue =
     session === 'auth' && roleUsesProductionQueue(actorRole);
-  const repository = useMemo(() => {
-    return session === 'auth'
-      ? new APIWorkspaceRepository(DEFAULT_API_BASE)
-      : new LocalStorageWorkspaceRepository();
-  }, [session]);
-
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(
-    null,
+  const repository = useMemo(
+    () => getRepository(),
+    [getRepository],
   );
-  const [assignableOwners, setAssignableOwners] = useState<
-    readonly { id: string; name: string; role?: string }[]
-  >([]);
 
   useEffect(() => {
     if (!canAssignOwner || !authToken) {
-      setAssignableOwners([]);
+      // Store keeps last value; we don't auto-clear here to avoid races —
+      // loadAssignableOwners short-circuits when not authed.
       return;
     }
-    let cancelled = false;
-    fetch(`${DEFAULT_API_BASE}/assignable-owners`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`owners ${res.status}`);
-        return res.json() as Promise<
-          { id: string; name: string; role?: string; active?: boolean }[]
-        >;
-      })
-      .then((users) => {
-        if (cancelled) return;
-        const active = users.filter((u) => u.active !== false);
-        setAssignableOwners(
-          active.map((u) => ({
-            id: u.id,
-            name: u.name || u.id,
-            role: u.role,
-          })),
-        );
-      })
-      .catch((err) => {
-        console.error('Failed to load assignable owners:', err);
-        if (!cancelled && authUser) {
-          setAssignableOwners([
-            {
-              id: authUser.id,
-              name: authUser.name || authUser.email,
-              role: authUser.role,
-            },
-          ]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canAssignOwner, authToken, authUser]);
+    // loadAssignableOwners handles fetch + fallback + filtering.
+    void loadAssignableOwners();
+  }, [canAssignOwner, authToken, authUser, loadAssignableOwners]);
 
   const ownerLabels = useMemo(() => {
     const map: Record<string, string> = {};
@@ -669,24 +631,16 @@ function AppContent({
     return map;
   }, [assignableOwners, authUser]);
 
+  // Load workspace from repository on session change.
+  // Note: catalog/projects mutations still go through local `workspace` state
+  // below (until F062/F063 move them to their own stores). We sync via
+  // setWorkspace from the store after load.
   useEffect(() => {
+    if (session === null) return;
     setWorkspace(null);
     setWorkspaceLoadError(null);
-    repository
-      .load()
-      .then((ws) => {
-        setWorkspace(ws);
-      })
-      .catch((err) => {
-        // Do not silently seed — surface failure and offer explicit recover (#13).
-        console.error('Failed to load workspace:', err);
-        setWorkspaceLoadError(
-          err instanceof Error
-            ? err.message
-            : 'No se pudo cargar el espacio de trabajo',
-        );
-      });
-  }, [repository]);
+    void loadWorkspace();
+  }, [session, loadWorkspace, setWorkspace, setWorkspaceLoadError]);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -830,10 +784,6 @@ function AppContent({
     roleCanViewCosts(actorRole, {
       vendedorCanViewCosts: workshopSettings.vendedorCanViewCosts,
     });
-
-  // Latest workspace for patches — avoids stale closures (#15).
-  const workspaceRef = useRef(workspace);
-  workspaceRef.current = workspace;
 
   /**
    * Catalog updater (reducer style). Computes next from ref, then setState +
@@ -1609,23 +1559,20 @@ function AppContent({
   };
 
   const saveWorkshopSettings = useCallback(
-    (settings: WorkshopSettings) => {
-      const resolved = resolveWorkshopSettings(settings);
-      const prev = workspaceRef.current;
-      if (!prev) return;
-      const next: Workspace = { ...prev, settings: resolved };
-      workspaceRef.current = next;
-      setWorkspace(next);
-      repository.save(next).catch((err) => {
-        console.error('Error al guardar ajustes:', err);
+    async (settings: WorkshopSettings) => {
+      try {
+        await saveWorkshopSettingsAction(settings);
+        // Sync local workspaceRef with the new state from the store.
+        workspaceRef.current = useWorkspaceStore.getState().workspace ?? null;
+        toast({ type: 'success', message: '✓ Preferencias del taller guardadas' });
+      } catch {
         toast({
           type: 'error',
           message: 'No se pudieron guardar los ajustes',
         });
-      });
-      toast({ type: 'success', message: '✓ Preferencias del taller guardadas' });
+      }
     },
-    [repository, toast],
+    [saveWorkshopSettingsAction, toast],
   );
 
   const createProject = (draft: ProjectDraft) => {
@@ -2093,40 +2040,23 @@ function AppContent({
 
 
   const resolveMediaUrl = useCallback(
-    (url: string | undefined): string | undefined => {
-      if (!url) return undefined;
-      if (url.startsWith('http') || url.startsWith('blob:')) return url;
-      const token = authToken ?? '';
-      const abs = url.startsWith('/api/')
-        ? `${DEFAULT_API_BASE.replace(/\/api\/?$/, '')}${url}`
-        : url;
-      return token
-        ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
-        : abs;
-    },
-    [authToken],
+    (url: string | undefined): string | undefined =>
+      resolveMediaUrlFromStore(url),
+    [resolveMediaUrlFromStore],
   );
 
   const uploadCatalogImage = useCallback(
     async (file: File): Promise<string> => {
-      if (!authToken) throw new Error('no auth');
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch(`${DEFAULT_API_BASE}/media`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}` },
-        body: form,
-      });
-      if (!res.ok) {
+      try {
+        const url = await uploadCatalogImageFromStore(file);
+        toast({ type: 'success', message: '✓ Imagen subida' });
+        return url;
+      } catch (err) {
         toast({ type: 'error', message: 'No se pudo subir la imagen' });
-        throw new Error(`upload ${res.status}`);
+        throw err;
       }
-      const data = (await res.json()) as { url?: string };
-      if (!data.url) throw new Error('no url');
-      toast({ type: 'success', message: '✓ Imagen subida' });
-      return data.url;
     },
-    [authToken, toast],
+    [uploadCatalogImageFromStore, toast],
   );
 
   const handleExportOptimizer = useCallback(

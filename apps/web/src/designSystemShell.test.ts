@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
@@ -9,6 +9,41 @@ const appCssPath = join(here, 'app.css');
 const appTsxPath = join(here, 'App.tsx');
 const mainTsxPath = join(here, 'main.tsx');
 const indexHtmlPath = join(webRoot, 'index.html');
+
+function memoryStorage(initial: Record<string, string> = {}): Storage {
+  const map = new Map<string, string>(Object.entries(initial));
+  return {
+    get length() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
+    getItem(key: string) {
+      return map.has(key) ? map.get(key)! : null;
+    },
+    key(index: number) {
+      return [...map.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      map.delete(key);
+    },
+    setItem(key: string, value: string) {
+      map.set(key, String(value));
+    },
+  };
+}
+
+// F057 behavior tests touch globalThis storage; provide inert defaults.
+beforeEach(() => {
+  (globalThis as { sessionStorage: Storage }).sessionStorage = memoryStorage();
+  (globalThis as { localStorage: Storage }).localStorage = memoryStorage();
+});
+
+afterEach(() => {
+  delete (globalThis as { sessionStorage?: Storage }).sessionStorage;
+  delete (globalThis as { localStorage?: Storage }).localStorage;
+});
 
 describe('web shell design system wiring (F016)', () => {
   it('index.html loads Inter from Google Fonts', () => {
@@ -103,21 +138,27 @@ describe('web shell AppShell wiring (F017)', () => {
 });
 
 describe('web shell login gate (Slice E)', () => {
-  it('App.tsx imports LoginScreen and gates session before AppShell', () => {
+  it('App.tsx imports LoginScreen and gates session before AppShell (F057 behavior)', async () => {
+    // F057: session/auth state moved to workspaceStore. Verify:
+    // 1) App.tsx still imports LoginScreen + uses SessionGate (structure).
+    // 2) workspaceStore exposes the auth lifecycle (login/enterAsGuest/etc).
     const app = readFileSync(appTsxPath, 'utf8');
     expect(app).toContain('LoginScreen');
     expect(app).toContain('SessionGate');
-    expect(app).toContain('readSessionMode');
-    expect(app).toContain('loginRequest');
-    expect(app).toContain('writeSessionMode');
-    expect(app).toContain('storeAuthToken');
     expect(app).toContain('session === null');
-    expect(app).toContain('onGuestAccess={handleGuestAccess}');
-    expect(app).toContain('onLogin={handleLogin}');
-    expect(app).toContain("writeSessionMode('guest')");
-    expect(app).toContain("writeSessionMode('auth')");
-    // Seed workspace still used for guest AND auth (API workspace sync later)
-    expect(app).toContain('createSeedWorkspace()');
+    // App.tsx delegates auth actions to workspaceStore (not local handlers).
+    expect(app).toContain('useWorkspaceStore');
+    expect(app).toContain('enterAsGuest');
+    expect(app).toContain('onGuestAccess={enterAsGuest}');
+    expect(app).toContain('onLogin={login}');
+
+    // Behavior: the store exposes the full auth lifecycle.
+    const { createWorkspaceStore } = await import('./stores/workspaceStore');
+    const store = createWorkspaceStore();
+    expect(typeof store.getState().login).toBe('function');
+    expect(typeof store.getState().enterAsGuest).toBe('function');
+    expect(typeof store.getState().logout).toBe('function');
+    expect(typeof store.getState().setAuthGate).toBe('function');
   });
 
   it('App.tsx wires RegisterScreen and admin UsersScreen', () => {
@@ -144,13 +185,31 @@ describe('web shell login gate (Slice E)', () => {
 });
 
 describe('web shell logout (Slice F)', () => {
-  it('App.tsx wires onLogout from SessionGate through AppShell and clearSession', () => {
+  it('App.tsx wires onLogout from workspaceStore + clearSession behavior (F057)', async () => {
+    // F057: logout moved to workspaceStore.logout(). App.tsx reads `logout`
+    // from the store and passes it as onLogout to AppContent.
     const app = readFileSync(appTsxPath, 'utf8');
-    expect(app).toContain('clearSession');
-    expect(app).toContain('handleLogout');
-    expect(app).toContain('onLogout={onLogout}');
-    expect(app).toContain('onLogout={handleLogout}');
-    expect(app).toContain('setSession(null)');
+    expect(app).toContain('onLogout={logout}');
+
+    // Behavior: workspaceStore.logout clears session + storage + workspace.
+    const { createWorkspaceStore } = await import('./stores/workspaceStore');
+    const store = createWorkspaceStore();
+    // Seed an auth session + token, then logout.
+    globalThis.localStorage.setItem('muebles_token', 'jwt');
+    globalThis.sessionStorage.setItem('muebles_session', 'auth');
+    store.setState({
+      session: 'auth',
+      workspace: { schemaVersion: 0, catalog: { materials: [], edges: [], hardware: [], optionGroups: [], categories: [], customers: [], modules: [], structures: [], components: [] }, projects: [] },
+      loginError: 'stale',
+    });
+
+    store.getState().logout();
+
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().workspace).toBeNull();
+    expect(store.getState().loginError).toBeNull();
+    expect(globalThis.localStorage.getItem('muebles_token')).toBeNull();
+    expect(globalThis.sessionStorage.getItem('muebles_session')).toBeNull();
   });
 });
 
