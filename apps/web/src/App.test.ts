@@ -41,21 +41,23 @@ import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('@muebles/web #15 setState side effects / stale patches', () => {
-  it('patchCatalog/patchProjects use reducer updaters (no array-literal-only API)', () => {
+  it('patchProjects uses reducer updater; catalog mutations live in catalogStore (F062)', () => {
+    // F062 moved catalog mutations (including the old `patchCatalog` wrapper
+    // and `updater: (catalog: Catalog) => Catalog` signature) out of App.tsx
+    // into `catalogStore.ts`. Projects still use `patchProjects` until F063.
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appSrc).toContain(
-      'updater: (catalog: Catalog) => Catalog',
-    );
-    expect(appSrc).toContain(
-      'updater: (projects: readonly Project[]) => readonly Project[]',
-    );
-    // Must not save inside setWorkspace callback (StrictMode double-fire).
-    expect(appSrc).not.toMatch(
-      /setWorkspace\(\(prev\)[\s\S]{0,200}repository\.save/,
-    );
-    // Project item mutations must use functional patchProjects.
+    // Project patching still uses functional updater in App.tsx.
     expect(appSrc).toContain('patchProjects((ps) =>');
-    expect(appSrc).toContain('patchCatalog((c) =>');
+    // Catalog patching is gone from App.tsx (moved to catalogStore).
+    expect(appSrc).not.toContain('patchCatalog');
+    expect(appSrc).not.toContain('updater: (catalog: Catalog) => Catalog');
+
+    // Behavior: catalogStore exposes patch-style semantics via setState.
+    const catalogStoreSrc = readFileSync(
+      join(here, 'stores/catalogStore.ts'),
+      'utf8',
+    );
+    expect(catalogStoreSrc).toMatch(/updater:\s*\(catalog: Catalog\)/);
   });
 
   it('createProject builds id outside setWorkspace (StrictMode single write)', () => {

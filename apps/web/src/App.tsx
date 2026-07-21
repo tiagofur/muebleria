@@ -156,7 +156,12 @@ import {
   writeSessionMode,
   type SessionMode,
 } from './session';
-import { useWorkspaceStore } from './stores';
+import {
+  useCatalogStore,
+  useWorkspaceStore,
+  ensureCatalogStore,
+  getCatalogStoreState,
+} from './stores';
 
 
 function newId(): string {
@@ -169,122 +174,6 @@ function newId(): string {
 function optionalNotes(notes: string): string | undefined {
   const trimmed = notes.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function draftToModule(id: string, draft: ModuleDraft): Module {
-  const width = parseOptionalNumber(draft.externalWidth);
-  const height = parseOptionalNumber(draft.externalHeight);
-  const depth = parseOptionalNumber(draft.externalDepth);
-  const hasDims =
-    width !== undefined || height !== undefined || depth !== undefined;
-
-  return {
-    id,
-    code: draft.code.trim(),
-    name: draft.name.trim(),
-    notes: optionalNotes(draft.notes),
-    categoryId: draft.categoryId.trim() || undefined,
-    furnitureType: draft.furnitureType,
-    baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
-    imageUrl: draft.imageUrl.trim() || undefined,
-    externalDims: hasDims
-      ? {
-          width: width ?? 0,
-          height: height ?? 0,
-          depth: depth ?? 0,
-        }
-      : undefined,
-    hardwareLines: draft.hardwareLines.map((l) => ({
-      id: l.id,
-      quantity: l.quantity,
-      descriptionOverride: optionalNotes(l.descriptionOverride),
-      optionRole:
-        l.mode === 'fixed'
-          ? l.optionRole.trim() || 'FIXED'
-          : l.optionRole.trim(),
-      hardwareId:
-        l.mode === 'fixed' && l.hardwareId.trim()
-          ? l.hardwareId.trim()
-          : undefined,
-    })),
-    structureId: draft.structureId.trim() || undefined,
-    components: draft.components.map((c) => ({
-      componentId: c.componentId,
-      quantity: c.quantity,
-      placementOverride: c.placementOverride
-        ? (c.placementOverride as ComponentPlacement)
-        : undefined,
-    })),
-    presets:
-      draft.presets.length > 0
-        ? draft.presets.map((p) => ({
-            id: p.id,
-            name: p.name.trim() || undefined,
-            width: p.width,
-            height: p.height,
-            depth: p.depth,
-          }))
-        : undefined,
-  };
-}
-
-function draftToStructure(id: string, draft: StructureDraft): Structure {
-  const w = draft.widthMm;
-  const h = draft.heightMm;
-  const d = draft.depthMm;
-  const hasDims = w > 0 || h > 0 || d > 0;
-  return {
-    id,
-    code: draft.code.trim(),
-    name: draft.name.trim(),
-    notes: optionalNotes(draft.notes),
-    active: draft.active !== false,
-    externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
-    presets: draft.presets && draft.presets.length > 0 ? draft.presets.map((pr) => ({
-      id: pr.id,
-      name: pr.name?.trim() || undefined,
-      width: pr.width,
-      height: pr.height,
-      depth: pr.depth,
-    })) : undefined,
-    components: draft.components.length > 0
-      ? draft.components.map((c) => ({
-          componentId: c.componentId,
-          quantity: c.quantity,
-          placementOverride: c.placementOverride
-            ? (c.placementOverride as ComponentPlacement)
-            : undefined,
-        }))
-      : undefined,
-  };
-}
-
-function draftToComponent(id: string, draft: ComponentDraft): Component {
-  return {
-    id,
-    code: draft.code.trim(),
-    name: draft.name.trim(),
-    placement: draft.placement as Component['placement'],
-    geometry: {
-      kind: 'rectangular_board',
-      lengthMm: draft.lengthMm,
-      widthMm: draft.widthMm,
-      thicknessMm: draft.thicknessMm,
-      lengthFormula: draft.lengthFormula.trim() || undefined,
-      widthFormula: draft.widthFormula.trim() || undefined,
-    },
-    defaultEdges: edgesFromFlags(draft.edgeL1, draft.edgeL2, draft.edgeW1, draft.edgeW2),
-    optionRoles: draft.optionRoles.split(',').map((s) => s.trim()).filter(Boolean),
-    notes: optionalNotes(draft.notes),
-    active: draft.active !== false,
-    xFormula: draft.xFormula.trim() || undefined,
-    yFormula: draft.yFormula.trim() || undefined,
-    zFormula: draft.zFormula.trim() || undefined,
-    // null = placement default; 0 is a valid explicit rotation
-    rotateX: draft.rotateX ?? undefined,
-    rotateY: draft.rotateY ?? undefined,
-    rotateZ: draft.rotateZ ?? undefined,
-  };
 }
 
 /**
@@ -571,6 +460,31 @@ function AppContent({
   const uploadCatalogImageFromStore = useWorkspaceStore(
     (s) => s.uploadCatalogImage,
   );
+
+  // --- F062: catalogStore init + sync ---
+  // catalogStore owns the catalog slice; workspaceStore drops it.
+  // Init runs in the component body (NOT a useEffect) so the store exists
+  // before any `useCatalogStore()` hook reads from it on first render.
+  // `ensureCatalogStore` is idempotent — safe to call every render.
+  ensureCatalogStore({
+    newId,
+    saveCatalog: (c) => getRepository().saveCatalog(c) as Promise<void>,
+    toast,
+    getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
+    getSession: () => useWorkspaceStore.getState().session,
+    getDraftProjectsCount: () =>
+      (useWorkspaceStore.getState().workspace?.projects ?? []).filter(
+        (p) => p.status === 'draft',
+      ).length,
+    baseUrl: DEFAULT_API_BASE,
+  });
+  const catalog = useCatalogStore((s) => s.catalog);
+  const catalogActions = useCatalogStore();
+  // Keep catalogStore in sync with workspace load (one-way: workspace → catalog).
+  useEffect(() => {
+    getCatalogStoreState().setCatalog(workspace?.catalog ?? null);
+  }, [workspace]);
+
   const authUser = useMemo(
     () => (session === 'auth' ? getAuthUser() : null),
     [session, getAuthUser],
@@ -760,7 +674,7 @@ function AppContent({
 
   // Derive catalog slices safely so hooks below always run (Rules of Hooks).
   // Early return for loading MUST stay after every useCallback/useMemo.
-  const catalog = workspace?.catalog;
+  // F062: catalog now lives in catalogStore; workspace still owns projects.
   const materials = catalog?.materials ?? [];
   const edges = catalog?.edges ?? [];
   const hardware = catalog?.hardware ?? [];
@@ -784,29 +698,6 @@ function AppContent({
     roleCanViewCosts(actorRole, {
       vendedorCanViewCosts: workshopSettings.vendedorCanViewCosts,
     });
-
-  /**
-   * Catalog updater (reducer style). Computes next from ref, then setState +
-   * save outside any React updater (StrictMode-safe, no double POST).
-   */
-  const patchCatalog = useCallback(
-    (updater: (catalog: Catalog) => Catalog) => {
-      const prev = workspaceRef.current;
-      if (!prev) return;
-      const nextCatalog = updater(prev.catalog);
-      const next: Workspace = { ...prev, catalog: nextCatalog };
-      workspaceRef.current = next;
-      setWorkspace(next);
-      repository.saveCatalog(nextCatalog).catch((err) => {
-        console.error('Error al guardar catálogo:', err);
-        toast({
-          type: 'error',
-          message: 'Error de conexión al sincronizar cambios',
-        });
-      });
-    },
-    [repository, toast],
-  );
 
   /**
    * Projects updater (reducer style). Saves only projects whose reference
@@ -1066,497 +957,60 @@ function AppContent({
     [],
   );
 
-  const createMaterial = (draft: MaterialDraft) => {
-    const code = draft.code.trim();
-    // Domain formula in the shell only (issue #14 — UI must not import calc).
-    const costPerM2 = calcMaterialCostPerM2(
-      draft.widthMm,
-      draft.lengthMm,
-      draft.boardPrice,
-      draft.wastePercent,
-    );
-    const item: MaterialBoard = {
-      id: newId(),
-      code,
-      name: draft.name.trim(),
-      widthMm: draft.widthMm,
-      lengthMm: draft.lengthMm,
-      thicknessMm: draft.thicknessMm,
-      grainDefault: draft.grainDefault,
-      boardPrice: draft.boardPrice,
-      costPerM2,
-      wastePercent: draft.wastePercent,
-      defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
-      imageUrl: draft.imageUrl?.trim() || undefined,
-      previewColor: draft.previewColor?.trim() || undefined,
-      previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
-      notes: optionalNotes(draft.notes),
-      active: true,
-    };
-    patchCatalog((c) => ({ ...c, materials: [...c.materials, item] }));
-    toast({ type: 'success', message: `✓ "${code}" creado` });
-  };
-
-  const updateMaterial = (id: string, draft: MaterialDraft) => {
-    const prev = materials.find((m) => m.id === id);
-    const costPerM2 = calcMaterialCostPerM2(
-      draft.widthMm,
-      draft.lengthMm,
-      draft.boardPrice,
-      draft.wastePercent,
-    );
-    const priceChanged =
-      prev != null &&
-      (prev.boardPrice !== draft.boardPrice ||
-        prev.wastePercent !== draft.wastePercent ||
-        Math.abs(prev.costPerM2 - costPerM2) > 1e-9);
-
-    patchCatalog((c) => ({
-      ...c,
-      materials: c.materials.map((m) =>
-        m.id === id
-          ? {
-              ...m,
-              code: draft.code.trim(),
-              name: draft.name.trim(),
-              widthMm: draft.widthMm,
-              lengthMm: draft.lengthMm,
-              thicknessMm: draft.thicknessMm,
-              grainDefault: draft.grainDefault,
-              boardPrice: draft.boardPrice,
-              costPerM2,
-              wastePercent: draft.wastePercent,
-              defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
-              imageUrl: draft.imageUrl?.trim() || undefined,
-              previewColor: draft.previewColor?.trim() || undefined,
-              previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
-              notes: optionalNotes(draft.notes),
-            }
-          : m,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-
-    // #138: warn about draft quotes that may still use previous catalog prices
-    if (priceChanged) {
-      const draftCount = projects.filter((p) => p.status === 'draft').length;
-      if (draftCount > 0) {
-        toast({
-          type: 'info',
-          message: `Precio de material actualizado. ${draftCount} cotización${draftCount === 1 ? '' : 'es'} en borrador usarán el nuevo catálogo al recalcular.`,
-        });
-      }
-    }
-  };
-
-  const setMaterialActive = (id: string, active: boolean) => {
-    const target = materials.find((m) => m.id === id);
-    patchCatalog((c) => ({
-      ...c,
-      materials: c.materials.map((m) => (m.id === id ? { ...m, active } : m)),
-    }));
-    if (target) {
-      toast({
-        type: 'info',
-        message: active
-          ? `↑ "${target.name}" reactivado`
-          : `↓ "${target.name}" desactivado`,
+  // F062: catalog handlers delegate to catalogStore. App.tsx no longer owns
+  // the catalog reducer wrapper, draftToModule/Structure/Component mappers, or
+  // workspaceRef reads for catalog — they live in the store + catalogMappers.
+  const createMaterial = catalogActions.createMaterial;
+  const updateMaterial = catalogActions.updateMaterial;
+  const setMaterialActive = catalogActions.setMaterialActive;
+  const createEdge = catalogActions.createEdge;
+  const updateEdge = catalogActions.updateEdge;
+  const setEdgeActive = catalogActions.setEdgeActive;
+  const createHardware = catalogActions.createHardware;
+  const updateHardware = catalogActions.updateHardware;
+  const setHardwareActive = catalogActions.setHardwareActive;
+  const createOptionGroup = catalogActions.createOptionGroup;
+  const updateOptionGroup = catalogActions.updateOptionGroup;
+  const deleteOptionGroup = catalogActions.deleteOptionGroup;
+  const createCategory = catalogActions.createCategory;
+  const updateCategory = catalogActions.updateCategory;
+  const deleteCategory = catalogActions.deleteCategory;
+  const createModule = catalogActions.createModule;
+  const updateModule = catalogActions.updateModule;
+  const deleteModule = useCallback(
+    (id: string) => {
+      catalogActions.deleteModule(id, (deletedId) => {
+        if (editingModuleId === deletedId) {
+          setEditingModuleId(null);
+        }
       });
-    }
-  };
-
-  const createEdge = (draft: EdgeDraft): string => {
-    const code = draft.code.trim();
-    const id = newId();
-    const item: EdgeBand = {
-      id,
-      code,
-      name: draft.name.trim(),
-      thicknessMm: draft.thicknessMm,
-      costPerMl: draft.costPerMl,
-      notes: optionalNotes(draft.notes),
-      active: true,
-    };
-    patchCatalog((c) => ({ ...c, edges: [...c.edges, item] }));
-    toast({ type: 'success', message: `✓ "${code}" creado` });
-    return id;
-  };
-
-  const updateEdge = (id: string, draft: EdgeDraft) => {
-    patchCatalog((c) => ({
-      ...c,
-      edges: c.edges.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              code: draft.code.trim(),
-              name: draft.name.trim(),
-              thicknessMm: draft.thicknessMm,
-              costPerMl: draft.costPerMl,
-              notes: optionalNotes(draft.notes),
-            }
-          : e,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const setEdgeActive = (id: string, active: boolean) => {
-    const target = edges.find((e) => e.id === id);
-    patchCatalog((c) => ({
-      ...c,
-      edges: c.edges.map((e) => (e.id === id ? { ...e, active } : e)),
-    }));
-    if (target) {
-      toast({
-        type: 'info',
-        message: active
-          ? `↑ "${target.name}" reactivado`
-          : `↓ "${target.name}" desactivado`,
+    },
+    [catalogActions, editingModuleId],
+  );
+  const duplicateModuleById = catalogActions.duplicateModuleById;
+  const createStructure = catalogActions.createStructure;
+  const updateStructure = catalogActions.updateStructure;
+  const deleteStructure = catalogActions.deleteStructure;
+  const setStructureActive = catalogActions.setStructureActive;
+  const createComponent = catalogActions.createComponent;
+  const updateComponent = catalogActions.updateComponent;
+  const toggleComponentActive = catalogActions.toggleComponentActive;
+  const createCustomer = useCallback(
+    (draft: CustomerDraft) => {
+      catalogActions.createCustomer(draft, {
+        id: authUser?.id,
+        role: authUser?.role,
       });
-    }
-  };
-
-  const createHardware = (draft: HardwareDraft) => {
-    const code = draft.code.trim();
-    const item: Hardware = {
-      id: newId(),
-      code,
-      name: draft.name.trim(),
-      unit: draft.unit,
-      costPerUnit: draft.costPerUnit,
-      imageUrl: draft.imageUrl?.trim() || undefined,
-      notes: optionalNotes(draft.notes),
-      active: true,
-    };
-    patchCatalog((c) => ({ ...c, hardware: [...c.hardware, item] }));
-    toast({ type: 'success', message: `✓ "${code}" creado` });
-  };
-
-  const updateHardware = (id: string, draft: HardwareDraft) => {
-    patchCatalog((c) => ({
-      ...c,
-      hardware: c.hardware.map((h) =>
-        h.id === id
-          ? {
-              ...h,
-              code: draft.code.trim(),
-              name: draft.name.trim(),
-              unit: draft.unit,
-              costPerUnit: draft.costPerUnit,
-              imageUrl: draft.imageUrl?.trim() || undefined,
-              notes: optionalNotes(draft.notes),
-            }
-          : h,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const setHardwareActive = (id: string, active: boolean) => {
-    const target = hardware.find((h) => h.id === id);
-    patchCatalog((c) => ({
-      ...c,
-      hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),
-    }));
-    if (target) {
-      toast({
-        type: 'info',
-        message: active
-          ? `↑ "${target.name}" reactivado`
-          : `↓ "${target.name}" desactivado`,
-      });
-    }
-  };
-
-  const createOptionGroup = (draft: OptionGroupDraft) => {
-    const code = draft.code.trim();
-    const item: OptionGroup = {
-      id: newId(),
-      code,
-      name: draft.name.trim(),
-      kind: draft.kind,
-      required: draft.required,
-      optionIds: [...draft.optionIds],
-    };
-    patchCatalog((c) => ({ ...c, optionGroups: [...c.optionGroups, item] }));
-    toast({ type: 'success', message: `✓ "${code}" creado` });
-  };
-
-  const updateOptionGroup = (id: string, draft: OptionGroupDraft) => {
-    patchCatalog((c) => ({
-      ...c,
-      optionGroups: c.optionGroups.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              code: draft.code.trim(),
-              name: draft.name.trim(),
-              kind: draft.kind,
-              required: draft.required,
-              optionIds: [...draft.optionIds],
-            }
-          : g,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const deleteOptionGroup = (id: string) => {
-    patchCatalog((c) => ({
-      ...c,
-      optionGroups: c.optionGroups.filter((g) => g.id !== id),
-    }));
-    toast({ type: 'info', message: 'Grupo de opciones eliminado' });
-  };
-
-  const createCategory = (draft: CategoryDraft) => {
-    const item: ModuleCategory = {
-      id: newId(),
-      name: draft.name.trim(),
-      parentId: draft.parentId.trim() || undefined,
-      sortOrder: Number(draft.sortOrder) || 0,
-    };
-    patchCatalog((c) => ({
-      ...c,
-      categories: [...(c.categories ?? []), item],
-    }));
-    toast({ type: 'success', message: `✓ Categoría "${item.name}" creada` });
-  };
-
-  const updateCategory = (id: string, draft: CategoryDraft) => {
-    patchCatalog((cat) => ({
-      ...cat,
-      categories: (cat.categories ?? []).map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              name: draft.name.trim(),
-              parentId: draft.parentId.trim() || undefined,
-              sortOrder: Number(draft.sortOrder) || 0,
-            }
-          : c,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Categoría actualizada' });
-  };
-
-  const deleteCategory = (id: string) => {
-    const cats = workspaceRef.current?.catalog.categories ?? [];
-    const hasChildren = cats.some((c) => c.parentId === id);
-    if (hasChildren) {
-      toast({
-        type: 'warning',
-        message: 'No se puede eliminar: tiene subcategorías',
-      });
-      return;
-    }
-    patchCatalog((c) => ({
-      ...c,
-      categories: (c.categories ?? []).filter((cat) => cat.id !== id),
-      modules: c.modules.map((m) =>
-        m.categoryId === id ? { ...m, categoryId: undefined } : m,
-      ),
-    }));
-    toast({ type: 'info', message: 'Categoría eliminada' });
-  };
-
-  const createModule = (draft: ModuleDraft) => {
-    const item = draftToModule(newId(), draft);
-    patchCatalog((c) => ({ ...c, modules: [...c.modules, item] }));
-    toast({ type: 'success', message: `✓ "${item.code}" creado` });
-  };
-
-  const updateModule = (id: string, draft: ModuleDraft) => {
-    patchCatalog((c) => ({
-      ...c,
-      modules: c.modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const deleteModule = (id: string) => {
-    patchCatalog((c) => ({
-      ...c,
-      modules: c.modules.filter((m) => m.id !== id),
-    }));
-    if (editingModuleId === id) {
-      setEditingModuleId(null);
-    }
-    toast({ type: 'info', message: 'Módulo eliminado' });
-  };
-
-  const duplicateModuleById = (id: string) => {
-    const source = modules.find((m) => m.id === id);
-    if (!source) return;
-    const newCode = suggestDuplicateCode(
-      source.code,
-      modules.map((m) => m.code),
-    );
-    const copy = deepCopyModule(source, {
-      newId: newId(),
-      newCode,
-      nextNestedId: newId,
-    });
-    patchCatalog((c) => ({ ...c, modules: [...c.modules, copy] }));
-    toast({ type: 'success', message: `✓ Duplicado como ${newCode}` });
-  };
-
-  const createStructure = (draft: StructureDraft) => {
-    const item = draftToStructure(newId(), draft);
-    patchCatalog((c) => ({
-      ...c,
-      structures: [...(c.structures ?? []), item],
-    }));
-    toast({ type: 'success', message: `✓ "${item.code}" creado` });
-  };
-
-  const updateStructure = (id: string, draft: StructureDraft) => {
-    patchCatalog((c) => ({
-      ...c,
-      structures: (c.structures ?? []).map((s) => {
-        if (s.id !== id) return s;
-        // #108: editing a structure bumps its revision and pushes an immutable
-        // snapshot of the previous revision into history. Quotes that already
-        // pinned a prior revision keep resolving to the frozen snapshot.
-        const { structure } = bumpStructureRevision(
-          s,
-          draftToStructure(id, draft),
-        );
-        return structure;
-      }),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const deleteStructure = async (id: string) => {
-    patchCatalog((c) => ({
-      ...c,
-      structures: (c.structures ?? []).filter((s) => s.id !== id),
-    }));
-    if (session === 'auth' && authToken) {
-      try {
-        await fetch(`${DEFAULT_API_BASE}/catalog/structures/${id}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-      } catch (err) {
-        console.error('Error deleting structure from backend:', err);
-      }
-    }
-    toast({ type: 'info', message: 'Estructura eliminada' });
-  };
-
-  const setStructureActive = (id: string, active: boolean) => {
-    patchCatalog((c) => ({
-      ...c,
-      structures: (c.structures ?? []).map((s) =>
-        s.id === id ? { ...s, active } : s,
-      ),
-    }));
-    toast({
-      type: 'info',
-      message: active ? 'Estructura activada' : 'Estructura desactivada',
-    });
-  };
-
-  const createComponent = (draft: ComponentDraft) => {
-    const item = draftToComponent(newId(), draft);
-    patchCatalog((c) => ({
-      ...c,
-      components: [...(c.components ?? []), item],
-    }));
-    toast({ type: 'success', message: `✓ "${item.code}" creado` });
-  };
-
-  const updateComponent = (id: string, draft: ComponentDraft) => {
-    patchCatalog((c) => ({
-      ...c,
-      components: (c.components ?? []).map((comp) =>
-        comp.id === id ? draftToComponent(id, draft) : comp,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const toggleComponentActive = (id: string) => {
-    patchCatalog((c) => ({
-      ...c,
-      components: (c.components ?? []).map((comp) =>
-        comp.id === id ? { ...comp, active: !comp.active } : comp,
-      ),
-    }));
-  };
-
-  const createCustomer = (draft: CustomerDraft) => {
-    const ownerUserId = resolveOwnerOnCreate(
-      authUser?.id,
-      authUser?.role,
-      draft.ownerUserId,
-    );
-    const item: Customer = {
-      id: newId(),
-      name: draft.name.trim(),
-      email: draft.email.trim() || undefined,
-      phone: draft.phone.trim() || undefined,
-      address: draft.address.trim() || undefined,
-      notes: draft.notes.trim() || undefined,
-      active: true,
-      ownerUserId,
-    };
-    patchCatalog((c) => ({
-      ...c,
-      customers: [...(c.customers ?? []), item],
-    }));
-    toast({ type: 'success', message: `✓ Cliente "${item.name}" creado` });
-  };
-
-  const updateCustomer = (id: string, draft: CustomerDraft) => {
-    const existing = customers.find((c) => c.id === id);
-    const ownerUserId = resolveOwnerOnUpdate(
-      authUser?.role,
-      existing?.ownerUserId,
-      draft.ownerUserId,
-    );
-    patchCatalog((cat) => ({
-      ...cat,
-      customers: (cat.customers ?? []).map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              name: draft.name.trim(),
-              email: draft.email.trim() || undefined,
-              phone: draft.phone.trim() || undefined,
-              address: draft.address.trim() || undefined,
-              notes: draft.notes.trim() || undefined,
-              ownerUserId,
-            }
-          : c,
-      ),
-    }));
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const setCustomerActive = (id: string, active: boolean) => {
-    const target = customers.find((c) => c.id === id);
-    patchCatalog((cat) => ({
-      ...cat,
-      customers: (cat.customers ?? []).map((c) =>
-        c.id === id ? { ...c, active } : c,
-      ),
-    }));
-    if (target) {
-      toast({
-        type: 'info',
-        message: active
-          ? `↑ "${target.name}" reactivado`
-          : `↓ "${target.name}" desactivado`,
-      });
-    }
-  };
+    },
+    [catalogActions, authUser?.id, authUser?.role],
+  );
+  const updateCustomer = useCallback(
+    (id: string, draft: CustomerDraft) => {
+      catalogActions.updateCustomer(id, draft, { role: authUser?.role });
+    },
+    [catalogActions, authUser?.role],
+  );
+  const setCustomerActive = catalogActions.setCustomerActive;
 
   const saveWorkshopSettings = useCallback(
     async (settings: WorkshopSettings) => {
@@ -2039,16 +1493,13 @@ function AppContent({
   };
 
 
-  const resolveMediaUrl = useCallback(
-    (url: string | undefined): string | undefined =>
-      resolveMediaUrlFromStore(url),
-    [resolveMediaUrlFromStore],
-  );
-
+  // F062: media helpers now delegate to catalogStore (which reads authToken
+  // from workspaceStore). Toast on upload success/error stays here.
+  const resolveMediaUrl = catalogActions.resolveMediaUrl;
   const uploadCatalogImage = useCallback(
     async (file: File): Promise<string> => {
       try {
-        const url = await uploadCatalogImageFromStore(file);
+        const url = await catalogActions.uploadCatalogImage(file);
         toast({ type: 'success', message: '✓ Imagen subida' });
         return url;
       } catch (err) {
@@ -2056,7 +1507,7 @@ function AppContent({
         throw err;
       }
     },
-    [uploadCatalogImageFromStore, toast],
+    [catalogActions, toast],
   );
 
   const handleExportOptimizer = useCallback(
