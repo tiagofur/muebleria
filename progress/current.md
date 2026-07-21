@@ -4,6 +4,41 @@
 - **Branch:** `wip/ui-fase-0-tokens-botones` (basada en `main`)
 - **No usar:** `muebles-orig` para features nuevas
 
+## Hecho en esta pasada (2026-07-20) — UI Review Fase 3 (CIERRE)
+
+**Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
+**Branch:** `wip/ui-fase-0-tokens-botones` (continuación de Fase 0 + 1 + 2)
+
+Fase 3 — **Mudar modales gigantes a vista detalle inline** (la fase que más dolía).
+
+**Decisiones aprobadas:**
+- URL: `/section/:id/edit` (ruta propia, bookmarkable) + `/section/new/edit` (Nuevo inline).
+- Layout: chrome sticky + main (form con tabs existentes) + aside sticky de costo (Modules).
+- Persistencia: warn al salir con draft sucio (no sessionStorage).
+- Nuevo: también en vista inline (`/section/new/edit`).
+
+**Cambios:**
+
+- **3a — Muebles** (`/modules/:id/edit`):
+  - `routes.ts`: `moduleEditPath`/`moduleEditIdFromPath`/`isEntityEditPath`/`NEW_ENTITY_ID`.
+  - `App.tsx`: `routeModuleEditId` + `onEntityEditRequest(section, id)` + `onEntitySelectionChange` skippea navegación cuando está en `/edit`.
+  - `ModulesScreen`: props `openModuleEditId` + `onRequestEdit`. `startEdit`/`startCreate` delegan a `onRequestEdit` cuando wired (fallback a modal para tests). Effect sincroniza `openModuleEditId` con el draft. `inlineEditMode` (cuando todo OK) renderiza inline: `workspace-chrome` sticky + `.module-editor-page__body` (2-col con aside de `CostPreviewPanel` siempre visible) + sub-modales (adder, categorías, delete confirm, 3D). El Modal LG legacy se mantiene como fallback.
+  - Discard warn: `initialDraft` snapshot al abrir + `isDraftDirty` (JSON.stringify diff) + `closeModal` abre `confirmDiscard` si dirty; `forceCloseEditor` para submit/delete.
+- **3b — Estructuras** (`/structures/:id/edit`): mismo patrón. StructureEditorForm portable (mantiene footer interno). CSS `.structure-editor-page`.
+- **3c — Componentes** (`/components/:id/edit`): mismo patrón. CSS `.component-editor-page`.
+- **3d — Cintilla**: sub-form "Nueva cintilla" en Material sale del `.catalog-form__nested` inline y abre su propio Modal SM. `Modal` ganó prop `dataTestId`.
+- **3e — 3D fullscreen**: nuevo `ModalSize = 'fullscreen'`. `Module3DModal` y `Project3DModal` migrados de `size='lg'` (max 900px) a `size='fullscreen'` (100vw/100vh menos padding). CSS `.ui-modal--fullscreen` + `.ui-modal__body { flex: 1 }`.
+
+**Tests:**
+- 713 tests verdes (217 + 51 + 25 + 322 + 9 + 89).
+- Typecheck 6/6 verde.
+- Playwright smoke: rutas `/edit` mantienen URL; `Editar` desde detalle navega a `/edit`; `/new/edit` funciona; discard modal aparece solo cuando hay cambios sin guardar; cintilla abre Modal SM; 3D ocupa 1248×696 (era 900px).
+
+**Scope notes / pendientes acknowledged:**
+- Structures y Components listas siguen usando `card-expand` / `tabla-expand`. Migrar a `card-detalle` (dedicated read-only view como ModuleDetailView) requiere crear StructureDetailView y ComponentDetailView nuevos — deferred. El editor inline ya resolvió el pain point principal.
+- Draft se pierde si el usuario navega a otra sección (sin sessionStorage) — tech debt preexistente; el warn al salir mitiga el impacto.
+- Commit `e612227` (3e) incluyó por accidente 2 `.jpg` en `backend-go/data/media/` que no son del UI. Benigno (binarios media), pero digno de nota para no repetir `git add -A` descuidado.
+
 ## Hecho en esta pasada (2026-07-19) — UI Review Fase 2
 
 **Iniciativa:** Review completo UX/UI (plan aprobado por usuario en 4 fases).
