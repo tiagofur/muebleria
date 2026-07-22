@@ -1117,9 +1117,10 @@
       ],
       "references": [
         "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.1 (sub-slice 4), §3 D5 no más Modales LG",
-        "packages/ui/src/common/Toast.tsx (archivo a migrar)"
+        "packages/ui/src/common/Toast.tsx (archivo a migrar)",
+        "META issue #156 (Perfect App roadmap)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F058",

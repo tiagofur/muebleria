@@ -81,7 +81,6 @@ import {
   RegisterScreen,
   SettingsScreen,
   UsersScreen,
-  ToastProvider,
   canShowPricePreview,
   canShowProjectPricePreview,
   aggregatePortfolioByOwner,
@@ -95,7 +94,6 @@ import {
   resolveCustomerName,
   selectRecentProjects,
   sumMonthlyQuotedTotal,
-  useToast,
   type AppNavId,
   type EdgeDraft,
   type HardwareDraft,
@@ -165,7 +163,9 @@ import {
   ensureProjectStore,
   getProjectStoreState,
   useBackendBreakdownEffect,
+  useUiStore,
 } from './stores';
+import { ToastViewport } from './components/ToastViewport';
 
 
 function newId(): string {
@@ -294,10 +294,13 @@ function computeSelectedProjectBreakdown(
 
 /** Thin web shell — wiring only; cost formulas only via domain engine. */
 export function App(): ReactNode {
+  // F064: ToastViewport reads from uiStore and portals toasts to document.body.
+  // No ToastProvider wrapper — uiStore is the single source of truth.
   return (
-    <ToastProvider>
+    <>
       <SessionGate />
-    </ToastProvider>
+      <ToastViewport />
+    </>
   );
 }
 
@@ -358,7 +361,8 @@ function AppContent({
   readonly session: SessionMode;
   readonly onLogout: () => void;
 }): ReactNode {
-  const { toast } = useToast();
+  // F064: toast comes from uiStore (no more Provider/context).
+  const toast = useUiStore((s) => s.toast);
   // F057: workspace lifecycle state lives in workspaceStore.
   const workspace = useWorkspaceStore((s) => s.workspace);
   const workspaceLoadError = useWorkspaceStore((s) => s.workspaceLoadError);
@@ -420,7 +424,6 @@ function AppContent({
   ensureCatalogStore({
     newId,
     saveCatalog: (c) => getRepository().saveCatalog(c) as Promise<void>,
-    toast,
     getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
     getSession: () => useWorkspaceStore.getState().session,
     getDraftProjectsCount: () =>
@@ -453,7 +456,6 @@ function AppContent({
       getRepository().createProjectTemplate(t) as Promise<void>,
     deleteProjectTemplate: (id) =>
       getRepository().deleteProjectTemplate(id) as Promise<void>,
-    toast,
     getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
     baseUrl: DEFAULT_API_BASE,
   });
@@ -586,11 +588,17 @@ function AppContent({
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   // Calculate / export target follows URL detail when present.
   const selectedProjectId = routeProjectId;
-  const [exportErrors, setExportErrors] = useState<readonly ExportIssue[]>([]);
-  const [exportBusy, setExportBusy] = useState(false);
-  const [projectsCreateKey, setProjectsCreateKey] = useState(0);
-  const [modulesCreateKey, setModulesCreateKey] = useState(0);
-  const [materialsCreateKey, setMaterialsCreateKey] = useState(0);
+  // F064: export UI + create keys live in uiStore.
+  const exportErrors = useUiStore((s) => s.exportErrors);
+  const exportBusy = useUiStore((s) => s.exportBusy);
+  const setExportErrors = useUiStore((s) => s.setExportErrors);
+  const setExportBusy = useUiStore((s) => s.setExportBusy);
+  const projectsCreateKey = useUiStore((s) => s.projectsCreateKey);
+  const bumpProjectsCreateKey = useUiStore((s) => s.bumpProjectsCreateKey);
+  const modulesCreateKey = useUiStore((s) => s.modulesCreateKey);
+  const bumpModulesCreateKey = useUiStore((s) => s.bumpModulesCreateKey);
+  const materialsCreateKey = useUiStore((s) => s.materialsCreateKey);
+  const bumpMaterialsCreateKey = useUiStore((s) => s.bumpMaterialsCreateKey);
 
   // F063: backend breakdown state lives in projectStore; hook drives fetch.
   const backendBreakdown = useProjectStore((s) => s.backendBreakdown);
@@ -602,7 +610,7 @@ function AppContent({
     return projects.find((p) => p.id === selectedProjectId);
   }, [projects, selectedProjectId]);
 
-  useBackendBreakdownEffect(selectedProjectId, selectedProject, session, toast);
+  useBackendBreakdownEffect(selectedProjectId, selectedProject, session);
 
   // Derive catalog slices safely so hooks below always run (Rules of Hooks).
   // Early return for loading MUST stay after every useCallback/useMemo.
@@ -750,17 +758,17 @@ function AppContent({
   );
 
   const onDashboardNewProject = useCallback(() => {
-    setProjectsCreateKey((k) => k + 1);
+    bumpProjectsCreateKey();
     navigate(pathForNav('projects'));
   }, [navigate]);
 
   const onDashboardNewModule = useCallback(() => {
-    setModulesCreateKey((k) => k + 1);
+    bumpModulesCreateKey();
     navigate(pathForNav('modules'));
   }, [navigate]);
 
   const onDashboardNewMaterial = useCallback(() => {
-    setMaterialsCreateKey((k) => k + 1);
+    bumpMaterialsCreateKey();
     navigate(pathForNav('materials'));
   }, [navigate]);
 
@@ -779,7 +787,7 @@ function AppContent({
   const onShowcaseUseInQuote = useCallback(
     (moduleId: string) => {
       const mod = modules.find((m) => m.id === moduleId);
-      setProjectsCreateKey((k) => k + 1);
+      bumpProjectsCreateKey();
       navigate(pathForNav('projects'));
       toast({
         type: 'info',

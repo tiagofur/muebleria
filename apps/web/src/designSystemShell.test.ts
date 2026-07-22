@@ -214,12 +214,15 @@ describe('web shell logout (Slice F)', () => {
 });
 
 describe('web shell Toast wiring (F019)', () => {
-  it('App root wraps content with ToastProvider and useToast', () => {
+  it('App root mounts ToastViewport and reads toast from uiStore (F064)', () => {
+    // F064: ToastProvider/useToast eliminated. App.tsx mounts <ToastViewport />
+    // (reads from uiStore) and reads `toast` via useUiStore.
     const app = readFileSync(appTsxPath, 'utf8');
-    expect(app).toContain('ToastProvider');
-    expect(app).toContain('useToast');
-    expect(app).toContain('<ToastProvider>');
-    expect(app).toContain('const { toast } = useToast()');
+    expect(app).toContain('ToastViewport');
+    expect(app).toContain('<ToastViewport');
+    expect(app).toContain('useUiStore');
+    expect(app).not.toContain('useToast');
+    expect(app).not.toContain('<ToastProvider>');
   });
 
   it('catalog toast copy lives in catalogStore; export toast stays in App.tsx (F062)', () => {

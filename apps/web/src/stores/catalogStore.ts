@@ -49,8 +49,13 @@ import {
 } from '@muebles/ui';
 
 import { draftToComponent, draftToModule, draftToStructure } from './catalogMappers';
+import { getUiStoreState } from './uiStore';
 
-/** Toast callback injected from App.tsx (until F064 migrates ToastProvider). */
+/**
+ * Toast callback signature. catalogStore no longer accepts toast as a dep
+ * (F064) — it reads it from uiStore via getUiStoreState(). Kept exported for
+ * projectStore + App.tsx wiring compatibility.
+ */
 export type ToastFn = (input: {
   readonly type: 'success' | 'info' | 'warning' | 'error';
   readonly message: string;
@@ -61,8 +66,6 @@ export interface CatalogStoreDeps {
   readonly newId?: () => string;
   /** Persists catalog changes (fire-and-forget OK). */
   readonly saveCatalog: (catalog: Catalog) => Promise<void>;
-  /** Toast sink (until F064 uiStore migration). */
-  readonly toast: ToastFn;
   /** Reads auth token for media helpers. */
   readonly getAuthToken: () => string | null;
   /** Reads session for deleteStructure backend call gate. */
@@ -162,7 +165,9 @@ function optionalNotes(notes: string): string | undefined {
 export function createCatalogStore(options: InternalOptions) {
   const newId = options.deps.newId ?? defaultNewId;
   const saveCatalog = options.deps.saveCatalog;
-  const toast = options.deps.toast;
+  // F064: toast comes from uiStore (single source of truth). Reading fresh
+  // each call avoids stale closures across re-renders.
+  const toast: ToastFn = (input) => getUiStoreState().toast(input);
   const getAuthToken = options.deps.getAuthToken;
   const getSession = options.deps.getSession;
   const getDraftProjectsCount = options.deps.getDraftProjectsCount;
@@ -757,7 +762,6 @@ function depsKey(deps: CatalogStoreDeps): string {
   return [
     deps.baseUrl,
     String(deps.saveCatalog),
-    String(deps.toast),
     String(deps.getAuthToken),
     String(deps.getSession),
     String(deps.getDraftProjectsCount),
