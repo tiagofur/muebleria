@@ -1,41 +1,32 @@
-# Sesión actual — F063 projectStore
+# Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0-project` (basada en `main` post-F062)
+- **Branch activa:** `wip/perfect-app-fase-0-project` (F063 commiteada y pushed; PR pendiente)
 - **META issue:** #156 Perfect App roadmap
-- **Feature:** F063 — phase0_project_store (sub-slice 3 de 4 de Fase 0)
-- **Iniciada:** 2026-07-21
 
-## Plan F063 (slice aprobado)
+## Estado Fase 0 (Perfect App Roadmap §5)
 
-1. ✅ Branch + marcar F063 in_progress.
-2. Crear `projectStore.ts` con 19 actions + `useBackendBreakdownEffect` hook.
-3. Modificar `workspaceStore.ts`: dropear `projects`/`projectTemplates`, poblar projectStore en `loadWorkspace`.
-4. Migrar App.tsx: eliminar `patchProjects` + 19 handlers + useEffect del calculate.
-5. Tests: `projectStore.test.ts` behavior + actualizar `App.test.ts` (4 tests).
-6. Verificar: `pnpm test`, `pnpm typecheck`, `./init.sh`, `pnpm visual`.
-7. Reviewer + push.
+| ID | Feature | Estado |
+|---|---|---|
+| F057 | workspaceStore Zustand | ✅ done (sub-slice 1/4) — merged #157 |
+| F062 | catalogStore | ✅ done (sub-slice 2/4) — merged #158 |
+| F063 | projectStore (proyectos + items + templates + breakdown) | ✅ done (sub-slice 3/4) |
+| F064 | uiStore + ToastProvider migration | ⏳ pending (próximo) |
+| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending |
+| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
+| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
+| F061 | Command pattern + undo/redo | ⏳ pending |
 
-## Decisiones clave
+## Próximo slice recomendado
 
-- **projectStore POSEE** `{ projects, projectTemplates, backendBreakdown, breakdownLoading, breakdownError }`. workspaceStore dropea `projects` y `projectTemplates`.
-- **Bug fix F062 aprovechado**: `createProject`/`updateProject`/`createFromTemplate` ahora llaman `catalogStore.getState().upsertCustomers(resolved.customers)` (antes mutaban workspace.catalog que ya no existe).
-- **useBackendBreakdownEffect hook en store**: con debounce interno 300ms + fallback + toast.
-- **workspaceRef eliminado totalmente** de App.tsx (verificación final con grep).
+**F064 uiStore**: mueve toasts (migración de ToastProvider), exportBusy/errors,
+createKeys, command palette. Después de F064, App.tsx debería quedar < 1000 L
+y `workspaceRef` desaparece totalmente.
 
-## Cross-store coupling
+## Notas
 
-- `createProject`/`updateProject`/`createFromTemplate` → `catalogStore.getState().upsertCustomers(customers)` + persist projects.
-- `markProjectProduced`/`reopenProject`/`applyScenarioB` reciben `catalog: Catalog` como parámetro (lo lee App.tsx desde catalogStore).
-- projectStore lee `authToken` y `session` via `useWorkspaceStore.getState()`.
-
-## Objetivos
-
-- App.tsx 2261 → ~1400 L.
-- 19 handlers migrados, `patchProjects` eliminado.
-- `workspaceRef` desaparece totalmente.
-
-## Fuera de alcance F063
-
-- uiStore + ToastProvider (F064): toast se inyecta como dep callable.
-- Partir ProjectsScreen (F058).
+- App.tsx en 1788 L (de 2880 original). Faltan ~800 L por migrar (F064).
+- `workspaceRef` sigue existiendo (lo usa setWorkspace wrapper + 'Usar datos
+  demo' + saveWorkshopSettings). Se elimina en F064.
+- catalogStore + projectStore ya migrados; workspaceStore mantiene `workspace`
+  pero solo para settings/schemaVersion (#13 recover).
