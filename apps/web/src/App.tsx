@@ -161,6 +161,10 @@ import {
   useWorkspaceStore,
   ensureCatalogStore,
   getCatalogStoreState,
+  useProjectStore,
+  ensureProjectStore,
+  getProjectStoreState,
+  useBackendBreakdownEffect,
 } from './stores';
 
 
@@ -242,61 +246,8 @@ function computeModuleCostPreview(
  * "Nuevo cliente" path sends a name without a selected id.
  * Stores Project.customerId, never free-text on Project.
  */
-function resolveCustomerFromDraft(
-  draft: ProjectDraft,
-  customers: readonly Customer[],
-): { customerId: string; customers: Customer[] } {
-  const selectedId = draft.customerId.trim();
-  if (selectedId) {
-    // Keep id as-is (including orphan ids not in catalog) — never invent.
-    return { customerId: selectedId, customers: [...customers] };
-  }
+// F063: resolveCustomerFromDraft + draftToProjectMeta moved to projectStore.
 
-  const trimmed = (draft.customerName ?? '').trim();
-  if (!trimmed) {
-    // Validation should prevent this; keep a stable empty path.
-    return { customerId: '', customers: [...customers] };
-  }
-
-  const key = trimmed.toLocaleLowerCase('es-UY');
-  const existing = customers.find(
-    (c) => c.name.trim().toLocaleLowerCase('es-UY') === key,
-  );
-  if (existing) {
-    return { customerId: existing.id, customers: [...customers] };
-  }
-  const created: Customer = {
-    id: newId(),
-    name: trimmed,
-    active: true,
-    ownerUserId: draft.ownerUserId?.trim() || undefined,
-  };
-  return { customerId: created.id, customers: [...customers, created] };
-}
-
-function draftToProjectMeta(
-  draft: ProjectDraft,
-  customerId: string,
-): Pick<
-  Project,
-  | 'name'
-  | 'customerId'
-  | 'currency'
-  | 'marginFactor'
-  | 'laborFixedCost'
-  | 'status'
-  | 'notes'
-> {
-  return {
-    name: draft.name.trim(),
-    customerId,
-    currency: draft.currency.trim(),
-    marginFactor: Number(draft.marginFactor),
-    laborFixedCost: Number(draft.laborFixedCost),
-    status: draft.status,
-    notes: optionalNotes(draft.notes),
-  };
-}
 
 /**
  * PRJ-06 / UX-03: domain breakdown for the selected project when option gate is open.
@@ -473,16 +424,55 @@ function AppContent({
     getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
     getSession: () => useWorkspaceStore.getState().session,
     getDraftProjectsCount: () =>
-      (useWorkspaceStore.getState().workspace?.projects ?? []).filter(
-        (p) => p.status === 'draft',
-      ).length,
+      // F063: projectStore owns projects now; read via getState().
+      (
+        getProjectStoreState().projects ?? []
+      ).filter((p) => p.status === 'draft').length,
     baseUrl: DEFAULT_API_BASE,
   });
   const catalog = useCatalogStore((s) => s.catalog);
   const catalogActions = useCatalogStore();
   // Keep catalogStore in sync with workspace load (one-way: workspace → catalog).
   useEffect(() => {
-    getCatalogStoreState().setCatalog(workspace?.catalog ?? null);
+    if (workspace?.catalog) {
+      getCatalogStoreState().setCatalog(workspace.catalog);
+    } else {
+      getCatalogStoreState().setCatalog(null);
+    }
+  }, [workspace]);
+
+  // --- F063: projectStore init + sync ---
+  // projectStore owns projects + projectTemplates + backend breakdown.
+  // Init in body (idempotent) so hooks read a populated store on first paint.
+  ensureProjectStore({
+    newId,
+    createProject: (p) => getRepository().createProject(p) as Promise<void>,
+    saveProject: (p) => getRepository().saveProject(p) as Promise<void>,
+    deleteProject: (id) => getRepository().deleteProject(id) as Promise<void>,
+    createProjectTemplate: (t) =>
+      getRepository().createProjectTemplate(t) as Promise<void>,
+    deleteProjectTemplate: (id) =>
+      getRepository().deleteProjectTemplate(id) as Promise<void>,
+    toast,
+    getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
+    baseUrl: DEFAULT_API_BASE,
+  });
+  const projects = useProjectStore((s) => s.projects);
+  const projectTemplates = useProjectStore((s) => s.projectTemplates);
+  const projectActions = useProjectStore();
+  // Keep projectStore in sync with workspace load (one-way: workspace → projectStore).
+  // Project mutations go through projectStore only; workspace.projects becomes
+  // stale after first mutation (intentional — F064 will fully decouple workspace).
+  useEffect(() => {
+    if (workspace?.projects) {
+      getProjectStoreState().setProjects(workspace.projects);
+      getProjectStoreState().setProjectTemplates(
+        workspace.projectTemplates ?? [],
+      );
+    } else {
+      getProjectStoreState().setProjects([]);
+      getProjectStoreState().setProjectTemplates([]);
+    }
   }, [workspace]);
 
   const authUser = useMemo(
@@ -602,75 +592,17 @@ function AppContent({
   const [modulesCreateKey, setModulesCreateKey] = useState(0);
   const [materialsCreateKey, setMaterialsCreateKey] = useState(0);
 
-  const [backendBreakdown, setBackendBreakdown] =
-    useState<QuoteBreakdown | null>(null);
-  const [breakdownLoading, setBreakdownLoading] = useState(false);
-  const [breakdownError, setBreakdownError] = useState<string | null>(null);
+  // F063: backend breakdown state lives in projectStore; hook drives fetch.
+  const backendBreakdown = useProjectStore((s) => s.backendBreakdown);
+  const breakdownLoading = useProjectStore((s) => s.breakdownLoading);
+  const breakdownError = useProjectStore((s) => s.breakdownError);
 
   const selectedProject = useMemo(() => {
-    if (!workspace?.projects) return undefined;
-    return workspace.projects.find((p) => p.id === selectedProjectId);
-  }, [workspace, selectedProjectId]);
+    if (!projects) return undefined;
+    return projects.find((p) => p.id === selectedProjectId);
+  }, [projects, selectedProjectId]);
 
-  useEffect(() => {
-    if (session !== 'auth' || !selectedProjectId || !selectedProject) {
-      setBackendBreakdown(null);
-      setBreakdownError(null);
-      setBreakdownLoading(false);
-      return;
-    }
-
-    let active = true;
-    setBreakdownLoading(true);
-    setBreakdownError(null);
-
-    const fetchBreakdown = async () => {
-      try {
-        const token = readAuthToken();
-        const res = await fetch(
-          `${DEFAULT_API_BASE}/projects/${selectedProjectId}/calculate`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-          },
-        );
-        if (!res.ok) {
-          throw new Error(`No se pudo recalcular (${res.status})`);
-        }
-        const data = breakdownFromApi((await res.json()) as Record<string, unknown>);
-        if (active) {
-          setBackendBreakdown(data);
-          setBreakdownError(null);
-        }
-      } catch (err) {
-        console.error('Backend calculation error:', err);
-        if (active) {
-          // Fall back to local domain breakdown; surface error in panel + toast.
-          setBackendBreakdown(null);
-          const message =
-            'No se pudo recalcular en el servidor; mostrando valores locales';
-          setBreakdownError(message);
-          toast({ type: 'error', message });
-        }
-      } finally {
-        if (active) {
-          setBreakdownLoading(false);
-        }
-      }
-    };
-
-    const timeoutId = setTimeout(() => {
-      void fetchBreakdown();
-    }, 300);
-
-    return () => {
-      active = false;
-      clearTimeout(timeoutId);
-    };
-  }, [selectedProjectId, selectedProject, session, toast]);
+  useBackendBreakdownEffect(selectedProjectId, selectedProject, session, toast);
 
   // Derive catalog slices safely so hooks below always run (Rules of Hooks).
   // Early return for loading MUST stay after every useCallback/useMemo.
@@ -684,7 +616,7 @@ function AppContent({
   const components = catalog?.components ?? [];
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
-  const projects = workspace?.projects ?? [];
+  // F063: `projects` and `projectTemplates` come from projectStore (line above).
   /** F038: producción only works accepted/produced quotes. */
   const projectsForRole = useMemo(
     () =>
@@ -698,30 +630,6 @@ function AppContent({
     roleCanViewCosts(actorRole, {
       vendedorCanViewCosts: workshopSettings.vendedorCanViewCosts,
     });
-
-  /**
-   * Projects updater (reducer style). Saves only projects whose reference
-   * changed vs previous list (#15).
-   */
-  const patchProjects = useCallback(
-    (updater: (projects: readonly Project[]) => readonly Project[]) => {
-      const prev = workspaceRef.current;
-      if (!prev) return;
-      const nextProjects = updater(prev.projects);
-      const next: Workspace = { ...prev, projects: nextProjects };
-      workspaceRef.current = next;
-      setWorkspace(next);
-      const prevById = new Map(prev.projects.map((p) => [p.id, p]));
-      for (const p of nextProjects) {
-        if (prevById.get(p.id) !== p) {
-          repository.saveProject(p).catch((err) => {
-            console.error('Error al guardar proyecto:', err);
-          });
-        }
-      }
-    },
-    [repository],
-  );
 
   const modulePreview = useMemo(() => {
     if (!editingModuleId || !catalog) {
@@ -1029,468 +937,87 @@ function AppContent({
     [saveWorkshopSettingsAction, toast],
   );
 
-  const createProject = (draft: ProjectDraft) => {
-    if (!workspace) return;
-    const now = new Date().toISOString();
-    // Build id + payload OUTSIDE setState — React Strict Mode re-runs updaters
-    // in dev; newId()/save inside the updater created two different projects.
-    const resolved = resolveCustomerFromDraft(
-      draft,
-      workspace.catalog.customers ?? [],
-    );
-    const catalog = { ...workspace.catalog, customers: resolved.customers };
-    const meta = draftToProjectMeta(draft, resolved.customerId);
-    const ownerUserId = resolveOwnerOnCreate(
-      authUser?.id,
-      authUser?.role,
-      draft.ownerUserId,
-    );
-    const base: Project = {
-      id: newId(),
-      ...meta,
-      ownerUserId,
-      createdBy: authUser?.id,
-      status: 'draft',
-      items: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    // Capture snapshot if created already as quoted/accepted (PRD §7.4).
-    const project = transitionProjectStatus(base, meta.status, catalog, now);
-
-    setWorkspace((prev) => {
-      if (!prev) return prev;
-      const next: Workspace = {
-        ...prev,
-        catalog: { ...prev.catalog, customers: resolved.customers },
-        projects: [...prev.projects, project],
-      };
-      workspaceRef.current = next;
-      return next;
-    });
-
-    repository.saveCatalog(catalog).catch((err) => {
-      console.error('Error al guardar catálogo:', err);
-    });
-    // POST-only create — no PUT 404 probe in the console.
-    repository.createProject(project).catch((err) => {
-      console.error('Error al crear proyecto:', err);
-      toast({
-        type: 'error',
-        message: 'No se pudo guardar la cotización en el servidor',
+  // F063: project handlers delegate to projectStore. App.tsx no longer owns
+  // project reducer wrapper, draftToProjectMeta/resolveCustomerFromDraft helpers,
+  // or workspaceRef reads for projects — they live in the store.
+  // Cross-store handlers (createProject/updateProject/createFromTemplate) need
+  // `catalog` + `authUser`; App.tsx wraps them in useCallback to inject those.
+  const createProject = useCallback(
+    (draft: ProjectDraft) => {
+      if (!catalog) return;
+      projectActions.createProject(draft, catalog, {
+        id: authUser?.id,
+        role: authUser?.role,
       });
-    });
-    toast({ type: 'success', message: `✓ "${meta.name}" creado` });
-  };
-
-  const updateProject = (id: string, draft: ProjectDraft) => {
-    if (!workspace) return;
-    const now = new Date().toISOString();
-    const resolved = resolveCustomerFromDraft(
-      draft,
-      workspace.catalog.customers ?? [],
-    );
-    const catalog = { ...workspace.catalog, customers: resolved.customers };
-    const meta = draftToProjectMeta(draft, resolved.customerId);
-
-    const existing = workspace.projects.find((p) => p.id === id);
-    if (!existing) return;
-
-    const withMeta: Project = {
-      ...existing,
-      name: meta.name,
-      customerId: meta.customerId,
-      currency: meta.currency,
-      marginFactor: meta.marginFactor,
-      laborFixedCost: meta.laborFixedCost,
-      notes: meta.notes,
-      ownerUserId: resolveOwnerOnUpdate(
-        authUser?.role,
-        existing.ownerUserId,
-        draft.ownerUserId,
-      ),
-      updatedAt: now,
-    };
-    // Status change captures or clears priceSnapshot (PRD §7.4).
-    const updatedProject = transitionProjectStatus(
-      withMeta,
-      meta.status,
-      catalog,
-      now,
-    );
-
-    setWorkspace((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        catalog: { ...prev.catalog, customers: resolved.customers },
-        projects: prev.projects.map((p) =>
-          p.id === id ? updatedProject : p,
-        ),
-      };
-    });
-
-    repository.saveCatalog(catalog).catch((err) => {
-      console.error('Error al guardar catálogo:', err);
-    });
-    repository.saveProject(updatedProject).catch((err) => {
-      console.error('Error al guardar proyecto:', err);
-    });
-    toast({ type: 'success', message: '✓ Cambios guardados' });
-  };
-
-  const deleteProject = (id: string) => {
-    repository.deleteProject(id).catch((err) => {
-      console.error('Error al eliminar proyecto:', err);
-    });
-    patchProjects((ps) => ps.filter((p) => p.id !== id));
-    if (selectedProjectId === id) {
-      navigate(pathForNav('projects'));
-    }
-    toast({ type: 'info', message: 'Cotización eliminada' });
-  };
-
-  /** F036: accepted → produced (click-only; no export gate). */
-  const markProjectProduced = (id: string) => {
-    if (!catalog) return;
-    const project = projects.find((p) => p.id === id);
-    if (!project || project.status !== 'accepted') return;
-    const now = new Date().toISOString();
-    const updated = transitionProjectStatus(project, 'produced', catalog, now);
-    // patchProjects persists changed projects (no save inside setState).
-    patchProjects((ps) => ps.map((p) => (p.id === id ? updated : p)));
-    toast({ type: 'success', message: '✓ Marcada en producción' });
-  };
-
-  /** F036: closed → draft; clears price snapshot. */
-  const reopenProject = (id: string) => {
-    if (!catalog) return;
-    const project = projects.find((p) => p.id === id);
-    if (!project || project.status === 'draft') return;
-    const now = new Date().toISOString();
-    const updated = transitionProjectStatus(project, 'draft', catalog, now);
-    patchProjects((ps) => ps.map((p) => (p.id === id ? updated : p)));
-    toast({
-      type: 'info',
-      message: 'Cotización reabierta a borrador (precios descongelados)',
-    });
-  };
-
-  const duplicateProjectById = (id: string) => {
-    const source = projects.find((p) => p.id === id);
-    if (!source) return;
-    const copy = deepCopyProject(source, {
-      newId: newId(),
-      itemIdFactory: newId,
-      nowIso: new Date().toISOString(),
-    });
-    setWorkspace((prev) =>
-      prev ? { ...prev, projects: [...prev.projects, copy] } : prev,
-    );
-    repository.createProject(copy).catch((err) => {
-      console.error('Error al duplicar proyecto:', err);
-      toast({
-        type: 'error',
-        message: 'No se pudo guardar el duplicado en el servidor',
-      });
-    });
-    toast({ type: 'success', message: `✓ Duplicado como ${copy.name}` });
-  };
-
-  // --- Project templates (#110 / H15) ---
-
-  const saveAsTemplate = (projectId: string, name: string) => {
-    const source = projects.find((p) => p.id === projectId);
-    if (!source) return;
-    const now = new Date().toISOString();
-    const template: ProjectTemplate = projectToTemplate(source, {
-      newId: newId(),
-      name,
-      nowIso: now,
-    });
-    setWorkspace((prev) =>
-      prev
-        ? {
-            ...prev,
-            projectTemplates: [...(prev.projectTemplates ?? []), template],
-          }
-        : prev,
-    );
-    repository.createProjectTemplate(template).catch((err) => {
-      console.error('Error al guardar plantilla:', err);
-      toast({
-        type: 'error',
-        message: 'No se pudo guardar la plantilla en el servidor',
-      });
-    });
-    toast({ type: 'success', message: `✓ Plantilla "${name}" guardada` });
-  };
-
-  const createFromTemplate = (
-    templateId: string,
-    draft: ProjectDraft,
-  ) => {
-    const template = (workspace?.projectTemplates ?? []).find(
-      (t) => t.id === templateId,
-    );
-    if (!template) return;
-    const now = new Date().toISOString();
-    const resolved = resolveCustomerFromDraft(
-      draft,
-      workspace?.catalog.customers ?? [],
-    );
-    const ownerUserId = resolveOwnerOnCreate(
-      authUser?.id,
-      authUser?.role,
-      draft.ownerUserId,
-    );
-    const project = createProjectFromTemplate(template, {
-      newId: newId(),
-      itemIdFactory: newId,
-      nowIso: now,
-      customerId: resolved.customerId,
-      name: draft.name,
-      ownerUserId,
-      createdBy: authUser?.id,
-    });
-    setWorkspace((prev) =>
-      prev
-        ? {
-            ...prev,
-            catalog: { ...prev.catalog, customers: resolved.customers },
-            projects: [...prev.projects, project],
-          }
-        : prev,
-    );
-    repository.saveCatalog({ ...workspace!.catalog, customers: resolved.customers }).catch((err) => {
-      console.error('Error al guardar catálogo:', err);
-    });
-    repository.createProject(project).catch((err) => {
-      console.error('Error al crear proyecto desde plantilla:', err);
-      toast({
-        type: 'error',
-        message: 'No se pudo crear la cotización en el servidor',
-      });
-    });
-    toast({
-      type: 'success',
-      message: `✓ Cotización "${draft.name}" creada desde plantilla`,
-    });
-  };
-
-  const deleteTemplate = (templateId: string) => {
-    setWorkspace((prev) =>
-      prev
-        ? {
-            ...prev,
-            projectTemplates: (prev.projectTemplates ?? []).filter(
-              (t) => t.id !== templateId,
-            ),
-          }
-        : prev,
-    );
-    repository.deleteProjectTemplate(templateId).catch((err) => {
-      console.error('Error al borrar plantilla:', err);
-    });
-    toast({ type: 'info', message: '↓ Plantilla eliminada' });
-  };
-
-  const addProjectItem = (
-    projectId: string,
-    input: {
-      moduleId: string;
-      quantity: number;
-      optionChoices: OptionChoices;
-      measurePresetId?: string;
     },
-  ) => {
-    const now = new Date().toISOString();
-    const item: ProjectItem = {
-      id: newId(),
-      moduleId: input.moduleId,
-      quantity: input.quantity,
-      optionChoices: input.optionChoices,
-      measurePresetId: input.measurePresetId,
-    };
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? { ...p, items: [...p.items, item], updatedAt: now }
-          : p,
-      ),
-    );
-  };
-
-  const updateProjectItem = (projectId: string, item: ProjectItem) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              items: p.items.map((i) => (i.id === item.id ? item : i)),
-              updatedAt: now,
-            }
-          : p,
-      ),
-    );
-  };
-
-  const updateProjectLevelChoices = (
-    projectId: string,
-    choices: OptionChoices,
-  ) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              projectLevelChoices:
-                Object.keys(choices).length > 0 ? choices : undefined,
-              updatedAt: now,
-            }
-          : p,
-      ),
-    );
-  };
-
-  const updateMeasureDefaults = (
-    projectId: string,
-    defaults: Project['measureDefaults'],
-  ) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              measureDefaults: defaults,
-              updatedAt: now,
-            }
-          : p,
-      ),
-    );
-  };
-
-
-
-  const updateInstallationChecklist = (
-    projectId: string,
-    installationChecklist: readonly import('@muebles/domain').InstallationChecklistItem[],
-  ) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? { ...p, installationChecklist: [...installationChecklist], updatedAt: now }
-          : p,
-      ),
-    );
-  };
-
-  const duplicateWithScenarioB = (
-    projectId: string,
-    role: string,
-    choiceId: string,
-  ) => {
-    const source = projects.find((p) => p.id === projectId);
-    if (!source) return;
-    const now = new Date().toISOString();
-    const copy = deepCopyProject(source, {
-      newId: newId(),
-      itemIdFactory: newId,
-      nowIso: now,
-    });
-    const withB = applyRoleChoiceToProject(copy, role, choiceId, now);
-    setWorkspace((prev) =>
-      prev ? { ...prev, projects: [...prev.projects, withB] } : prev,
-    );
-    repository.createProject(withB).catch((err) => {
-      console.error('Error al duplicar con escenario B:', err);
-      toast({
-        type: 'error',
-        message: 'No se pudo guardar el duplicado en el servidor',
+    [projectActions, catalog, authUser?.id, authUser?.role],
+  );
+  const updateProject = useCallback(
+    (id: string, draft: ProjectDraft) => {
+      if (!catalog) return;
+      projectActions.updateProject(id, draft, catalog, {
+        role: authUser?.role,
       });
-    });
-    toast({
-      type: 'success',
-      message: '✓ Cotización duplicada con escenario B',
-    });
-    navigate(entityPath('projects', withB.id));
-  };
-
-
-  const importNestingResult = (
-    projectId: string,
-    nestingImport: NonNullable<import('@muebles/domain').Project['nestingImport']>,
-  ) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? { ...p, nestingImport, updatedAt: now }
-          : p,
-      ),
-    );
-    toast({ type: 'success', message: '✓ Nesting importado' });
-  };
-
-  const applyScenarioB = (
-    projectId: string,
-    role: string,
-    choiceId: string,
-  ) => {
-    const now = new Date().toISOString();
-    const project = projects.find((p) => p.id === projectId);
-    if (!project || project.status !== 'draft') {
-      toast({
-        type: 'error',
-        message: 'Solo se puede aplicar el escenario B en borrador',
+    },
+    [projectActions, catalog, authUser?.role],
+  );
+  const deleteProject = useCallback(
+    (id: string) => {
+      projectActions.deleteProject(id, (deletedId) => {
+        if (selectedProjectId === deletedId) {
+          navigate(pathForNav('projects'));
+        }
       });
-      return;
-    }
-    const updated = applyRoleChoiceToProject(project, role, choiceId, now);
-    patchProjects((ps) => ps.map((p) => (p.id === projectId ? updated : p)));
-    toast({ type: 'success', message: '✓ Escenario B aplicado a la cotización' });
-  };
-
-  const updateKitchenLayout = (
-    projectId: string,
-    kitchenLayout: import('@muebles/domain').ProjectKitchenLayout,
-  ) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              kitchenLayout:
-                kitchenLayout.walls.length === 0 &&
-                kitchenLayout.placements.length === 0
-                  ? undefined
-                  : kitchenLayout,
-              updatedAt: now,
-            }
-          : p,
-      ),
-    );
-  };
-
-    const removeProjectItem = (projectId: string, itemId: string) => {
-    const now = new Date().toISOString();
-    patchProjects((ps) =>
-      ps.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              items: p.items.filter((i) => i.id !== itemId),
-              updatedAt: now,
-            }
-          : p,
-      ),
-    );
-  };
+    },
+    [projectActions, selectedProjectId, navigate],
+  );
+  const markProjectProduced = useCallback(
+    (id: string) => {
+      if (!catalog) return;
+      projectActions.markProjectProduced(id, catalog);
+    },
+    [projectActions, catalog],
+  );
+  const reopenProject = useCallback(
+    (id: string) => {
+      if (!catalog) return;
+      projectActions.reopenProject(id, catalog);
+    },
+    [projectActions, catalog],
+  );
+  const duplicateProjectById = projectActions.duplicateProjectById;
+  const saveAsTemplate = projectActions.saveAsTemplate;
+  const createFromTemplate = useCallback(
+    (templateId: string, draft: ProjectDraft) => {
+      if (!catalog) return;
+      projectActions.createFromTemplate(templateId, draft, catalog, {
+        id: authUser?.id,
+        role: authUser?.role,
+      });
+    },
+    [projectActions, catalog, authUser?.id, authUser?.role],
+  );
+  const deleteTemplate = projectActions.deleteTemplate;
+  const addProjectItem = projectActions.addProjectItem;
+  const updateProjectItem = projectActions.updateProjectItem;
+  const removeProjectItem = projectActions.removeProjectItem;
+  const updateProjectLevelChoices = projectActions.updateProjectLevelChoices;
+  const updateMeasureDefaults = projectActions.updateMeasureDefaults;
+  const updateInstallationChecklist = projectActions.updateInstallationChecklist;
+  const updateKitchenLayout = projectActions.updateKitchenLayout;
+  const applyScenarioB = projectActions.applyScenarioB;
+  const importNestingResult = projectActions.importNestingResult;
+  const duplicateWithScenarioB = useCallback(
+    (projectId: string, role: string, choiceId: string) => {
+      projectActions.duplicateWithScenarioB(
+        projectId,
+        role,
+        choiceId,
+        (newId) => navigate(entityPath('projects', newId)),
+      );
+    },
+    [projectActions, navigate],
+  );
 
 
   // F062: media helpers now delegate to catalogStore (which reads authToken
@@ -2181,7 +1708,7 @@ function AppContent({
           onUpdate={updateProject}
           onDelete={deleteProject}
           onDuplicate={duplicateProjectById}
-          projectTemplates={workspace?.projectTemplates ?? []}
+          projectTemplates={projectTemplates}
           onSaveAsTemplate={saveAsTemplate}
           onCreateFromTemplate={createFromTemplate}
           onDeleteTemplate={deleteTemplate}
