@@ -564,7 +564,12 @@ describe('ProjectsScreen F022', () => {
   });
 
   it('keeps project options inside main column so totals stay sidebar (layout)', () => {
-    const src = readFileSync(join(here, 'ProjectsScreen.tsx'), 'utf8');
+    // F058b: the detail layout lives in ProjectDetailView (extracted from
+    // ProjectsScreen.renderDetail). Assert against the new location.
+    const src = readFileSync(
+      join(here, 'components/ProjectDetailView.tsx'),
+      'utf8',
+    );
     const main = src.indexOf('project-detail__main');
     const opts = src.indexOf('project-level-options');
     const items = src.indexOf('project-detail__items');
