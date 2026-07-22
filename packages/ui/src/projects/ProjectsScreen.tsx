@@ -5,10 +5,8 @@
 
 import {
   useEffect,
-  useId,
   useMemo,
   useState,
-  type FormEvent,
   type ReactNode,
 } from 'react';
 import type {
@@ -32,16 +30,10 @@ import type {
   WorkshopSettings,
 } from '@muebles/domain';
 import {
-  cascadeOptions,
-  cascadeSelectedCategoryId,
-  effectiveOptionChoices,
   estimateBoardSheets,
   parseNestingImportCsv,
   nestingImportFromRows,
-  filterModulesByCategory,
   isProjectClosed,
-  pickPresetByMeasureDefaults,
-  type CategoryFilterId,
 } from '@muebles/domain';
 import {
   AlertCircle,
@@ -56,13 +48,11 @@ import {
   Trash2,
   Box,
 } from 'lucide-react';
-import { CatalogPicker } from '../catalogs/CatalogPicker';
 import {
   DropdownMenu,
   type DropdownMenuSection,
   EmptyState,
   InlineLoading,
-  Modal,
   PageLoading,
   SearchInput,
   useDebouncedValue,
@@ -77,14 +67,14 @@ import { QuoteScenarioCompare } from './components/QuoteScenarioCompare';
 import { InstallationChecklistPanel } from './components/InstallationChecklistPanel';
 import { ProjectItemStructureRevisionIndicator } from './components/ProjectItemStructureRevisionIndicator';
 import { StatusBadge } from './components/StatusBadge';
+import { ProjectAddItemModal } from './components/ProjectAddItemModal';
 import { ProjectConfirmDeleteModal } from './components/ProjectConfirmDeleteModal';
 import { ProjectConfirmReopenModal } from './components/ProjectConfirmReopenModal';
+import { ProjectMetaModal } from './components/ProjectMetaModal';
 import { ProjectSaveAsTemplateModal } from './components/ProjectSaveAsTemplateModal';
+import { ProjectTemplatePickerModal } from './components/ProjectTemplatePickerModal';
 import { ProjectTemplatesManagementModal } from './components/ProjectTemplatesManagementModal';
 import {
-  customersForProjectPicker,
-  defaultChoicesForNewItem,
-  emptyAddItemDraft,
   emptyProjectDraft,
   filterProjectsByQuery,
   formatIsoDate,
@@ -92,15 +82,12 @@ import {
   groupsForModuleItem,
   optionLabelForId,
   optionsForGroup,
-  projectStatusLabel,
-  statusOptionsForRole,
   projectToDraft,
   resolveCustomerName,
   setItemOptionChoice,
   setProjectLevelChoice,
   furnitureTypeLabel,
   validateItemQuantity,
-  validateProjectDraft,
   type AddItemDraft,
   type ProjectDraft,
 } from './projectHelpers';
@@ -348,26 +335,19 @@ export function ProjectsScreen({
   onReopen,
   showCosts = true,
 }: ProjectsScreenProps): ReactNode {
-  const metaFormId = useId();
-  const addItemFormId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [addCategoryL1, setAddCategoryL1] = useState('');
-  const [addCategoryL2, setAddCategoryL2] = useState('');
-  const [addCategoryL3, setAddCategoryL3] = useState('');
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ProjectDraft>(() =>
+  /** Seed draft for the meta modal — computed by startCreate/startEditMeta and
+   * consumed by ProjectMetaModal on its closed→open transition (F058a). */
+  const [metaDraft, setMetaDraft] = useState<ProjectDraft>(() =>
     emptyProjectDraft(workshopSettings),
   );
-  /** When true, meta form uses free-text name to create a customer on submit. */
-  const [newCustomerMode, setNewCustomerMode] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [addItemModalOpen, setAddItemModalOpen] = useState(false);
-  const [addItem, setAddItem] = useState<AddItemDraft>(() =>
-    emptyAddItemDraft(modules, optionGroups),
-  );
+  // itemError now only surfaces detail-side quantity/measure errors (the
+  // add-item modal owns its own internal error state — F058a).
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
@@ -383,10 +363,9 @@ export function ProjectsScreen({
     null,
   );
   // --- Project templates (#110 / H15) ---
+  // F058a: picker draft state (selected template / name / customer / error)
+  // now lives inside ProjectTemplatePickerModal.
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
-  const [fromTemplateDraft, setFromTemplateDraft] = useState<ProjectTemplate | null>(null);
-  const [fromTemplateName, setFromTemplateName] = useState('');
-  const [fromTemplateCustomer, setFromTemplateCustomer] = useState('');
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
   // F058a: saveAsTemplateName moved into ProjectSaveAsTemplateModal component.
   const [templatesManagementOpen, setTemplatesManagementOpen] = useState(false);
@@ -457,11 +436,9 @@ export function ProjectsScreen({
   useEffect(() => {
     if (!requestCreateKey) return;
     setMetaEditingId(null);
-    setDraft(emptyProjectDraft(workshopSettings));
-    setNewCustomerMode(false);
-    setError(null);
+    setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
-  }, [requestCreateKey]);
+  }, [requestCreateKey, workshopSettings]);
 
   // If selected project disappears (delete), return to list
   useEffect(() => {
@@ -471,111 +448,40 @@ export function ProjectsScreen({
     }
   }, [projects, selectedId]);
 
-  useEffect(() => {
-    setAddItem((prev) => {
-      if (prev.moduleId && modules.some((m) => m.id === prev.moduleId)) {
-        return prev;
-      }
-      return emptyAddItemDraft(modules, optionGroups);
-    });
-  }, [modules, optionGroups]);
-
   const closeMetaModal = () => {
     setMetaModalOpen(false);
     setMetaEditingId(null);
-    setDraft(emptyProjectDraft(workshopSettings));
-    setNewCustomerMode(false);
-    setError(null);
   };
 
+  // closeAddItemModal just toggles open=false; ProjectAddItemModal resets its
+  // own draft/error/cascade on the next closed→open transition (F058a).
   const closeAddItemModal = () => {
     setAddItemModalOpen(false);
-    setAddItem(emptyAddItemDraft(modules, optionGroups));
-    setAddCategoryL1('');
-    setAddCategoryL2('');
-    setAddCategoryL3('');
-    setItemError(null);
   };
-
-  const addItemCategoryFilter: CategoryFilterId = useMemo(() => {
-    const id = cascadeSelectedCategoryId({
-      level1Id: addCategoryL1 || undefined,
-      level2Id: addCategoryL2 || undefined,
-      level3Id: addCategoryL3 || undefined,
-    });
-    return id ?? null;
-  }, [addCategoryL1, addCategoryL2, addCategoryL3]);
-
-  const addCascadeOpts = useMemo(
-    () =>
-      cascadeOptions(categories, {
-        level1Id: addCategoryL1 || undefined,
-        level2Id: addCategoryL2 || undefined,
-        level3Id: addCategoryL3 || undefined,
-      }),
-    [categories, addCategoryL1, addCategoryL2, addCategoryL3],
-  );
-
-  const modulesForAdd = useMemo(
-    () =>
-      filterModulesByCategory(modules, addItemCategoryFilter, categories),
-    [modules, addItemCategoryFilter, categories],
-  );
 
   const startCreate = () => {
     setMetaEditingId(null);
-    setDraft(emptyProjectDraft(workshopSettings));
-    setNewCustomerMode(false);
-    setError(null);
+    setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
   };
 
   // --- Project templates (#110 / H15) ---
+  // F058a: the picker owns the template/name/customer draft + validation.
+  // startFromTemplate just opens it; confirmFromTemplate routes the validated
+  // payload to onCreateFromTemplate and closes.
 
   const startFromTemplate = () => {
     if (!projectTemplates || projectTemplates.length === 0) return;
-    setFromTemplateDraft(null);
-    setFromTemplateName('');
-    setFromTemplateCustomer('');
-    setError(null);
     setTemplatePickerOpen(true);
   };
 
-  const pickTemplate = (template: ProjectTemplate) => {
-    setFromTemplateDraft(template);
-    setFromTemplateName(`${template.name}`);
-    setFromTemplateCustomer('');
-  };
-
-  const confirmFromTemplate = (e: FormEvent) => {
-    e.preventDefault();
-    if (!fromTemplateDraft || !onCreateFromTemplate) return;
-    const name = fromTemplateName.trim();
-    if (!name) {
-      setError('Elegí un nombre para la cotización.');
-      return;
-    }
-    const customerId = fromTemplateCustomer.trim();
-    if (!customerId) {
-      setError('Elegí un cliente.');
-      return;
-    }
-    // Reuse ProjectDraft shape so the shell handles currency/margin/labor via
-    // the same path as createProject. Name + customerId are the template picks.
-    const payload: ProjectDraft = {
-      ...emptyProjectDraft(workshopSettings),
-      name,
-      customerId,
-      currency: fromTemplateDraft.currency,
-      marginFactor: String(fromTemplateDraft.marginFactor),
-      laborFixedCost: String(fromTemplateDraft.laborFixedCost),
-      notes: fromTemplateDraft.notes ?? '',
-      status: 'draft',
-    };
-    setError(null);
-    onCreateFromTemplate(fromTemplateDraft.id, payload);
+  const confirmFromTemplate = (payload: {
+    templateId: string;
+    draft: ProjectDraft;
+  }) => {
+    if (!onCreateFromTemplate) return;
+    onCreateFromTemplate(payload.templateId, payload.draft);
     setTemplatePickerOpen(false);
-    setFromTemplateDraft(null);
   };
 
   const startSaveAsTemplate = () => {
@@ -590,9 +496,7 @@ export function ProjectsScreen({
 
   const startEditMeta = (project: Project) => {
     setMetaEditingId(project.id);
-    setDraft(projectToDraft(project, customers));
-    setNewCustomerMode(false);
-    setError(null);
+    setMetaDraft(projectToDraft(project, customers));
     setMetaModalOpen(true);
   };
 
@@ -612,25 +516,10 @@ export function ProjectsScreen({
     setMetaModalOpen(false);
   };
 
-  const handleSubmitMeta = (e: FormEvent) => {
-    e.preventDefault();
-    const payload: ProjectDraft = newCustomerMode
-      ? {
-          ...draft,
-          customerId: '',
-          customerName: (draft.customerName ?? '').trim(),
-        }
-      : {
-          ...draft,
-          customerId: draft.customerId.trim(),
-          customerName: '',
-        };
-    const err = validateProjectDraft(payload);
-    if (err) {
-      setError(err);
-      return;
-    }
-    setError(null);
+  // F058a: validation + new-customer normalization now live inside
+  // ProjectMetaModal. We only route the validated payload to the right shell
+  // callback and close.
+  const handleSubmitMeta = (payload: ProjectDraft) => {
     if (metaEditingId) {
       onUpdate(metaEditingId, payload);
     } else {
@@ -639,84 +528,22 @@ export function ProjectsScreen({
     closeMetaModal();
   };
 
-  const pickerCustomers = customersForProjectPicker(
-    customers,
-    draft.customerId,
-  );
-
   const openAddItemModal = () => {
-    setAddItem(emptyAddItemDraft(modules, optionGroups));
     setItemError(null);
     setAddItemModalOpen(true);
   };
 
-  const selectModuleForAdd = (moduleId: string) => {
-    const mod = modules.find((m) => m.id === moduleId);
-    // Prefill only groups without a project-level default (F029 inherit).
-    const seeded = mod ? defaultChoicesForNewItem(mod, optionGroups) : {};
-    const projectLevel = selectedProject?.projectLevelChoices ?? {};
-    const optionChoices: Record<string, string> = {};
-    for (const [code, id] of Object.entries(seeded)) {
-      if (!projectLevel[code]?.trim()) {
-        optionChoices[code] = id;
-      }
-    }
-    setAddItem({
-      moduleId,
-      quantity: addItem.quantity || 1,
-      optionChoices,
-      measurePresetId: mod
-        ? pickPresetByMeasureDefaults(mod, selectedProject?.measureDefaults)
-        : undefined,
-    });
-  };
-
-  const handleAddItem = (e: FormEvent) => {
-    e.preventDefault();
-    if (!selectedId || !selectedProject) return;
-
-    const qtyErr = validateItemQuantity(addItem.quantity);
-    if (qtyErr) {
-      setItemError(qtyErr);
-      return;
-    }
-    if (!addItem.moduleId) {
-      setItemError('Elegí un mueble del catálogo.');
-      return;
-    }
-    const mod = modules.find((m) => m.id === addItem.moduleId);
-    if (!mod) {
-      setItemError('El mueble seleccionado no existe en el catálogo.');
-      return;
-    }
-
-    const groups = groupsForModuleItem(mod, optionGroups);
-    const effective = effectiveOptionChoices(
-      addItem.optionChoices,
-      selectedProject.projectLevelChoices,
-    );
-    for (const group of groups) {
-      if (!effective[group.code]) {
-        setItemError(`Falta elegir: ${group.name} (${group.code}).`);
-        return;
-      }
-    }
-
-    if ((mod.presets?.length ?? 0) > 0) {
-      const presetOk = mod.presets!.some((p) => p.id === addItem.measurePresetId);
-      if (!presetOk) {
-        setItemError('Elegí un preset de medida válido para este mueble.');
-        return;
-      }
-    }
-
-    setItemError(null);
-    onAddItem(selectedId, {
-      moduleId: addItem.moduleId,
-      quantity: addItem.quantity,
-      optionChoices: addItem.optionChoices,
-      measurePresetId: addItem.measurePresetId,
-    });
+  // F058a: draft/validation/preset-preselect now live inside
+  // ProjectAddItemModal. We only route the validated payload to onAddItem and
+  // close. selectedId is guaranteed set (modal opens from the detail view).
+  const handleAddItemSubmit = (payload: {
+    moduleId: string;
+    quantity: number;
+    optionChoices: OptionChoices;
+    measurePresetId?: string;
+  }) => {
+    if (!selectedId) return;
+    onAddItem(selectedId, payload);
     closeAddItemModal();
   };
 
@@ -956,381 +783,6 @@ export function ProjectsScreen({
       : exportErrors.length > 0
         ? 'Hay errores de validación en el último intento. Corregí los ítems e intentá de nuevo.'
         : null;
-
-  const addModule = modules.find((m) => m.id === addItem.moduleId);
-  const addGroups = groupsForModuleItem(addModule, optionGroups);
-
-  const renderMetaForm = (): ReactNode => (
-    <form
-      id={metaFormId}
-      className="catalog-form catalog-form--wide project-meta-form"
-      onSubmit={handleSubmitMeta}
-    >
-      {error ? <p className="catalog-form__error">{error}</p> : null}
-      <div className="project-editor__grid">
-        <div className="catalog-form__field">
-          <label htmlFor="prj-name">Nombre</label>
-          <input
-            id="prj-name"
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            required
-            autoComplete="off"
-          />
-        </div>
-        <div className="catalog-form__field">
-          {newCustomerMode ? (
-            <>
-              <label htmlFor="prj-client">Cliente</label>
-              <input
-                id="prj-client"
-                value={draft.customerName ?? ''}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    customerId: '',
-                    customerName: e.target.value,
-                  })
-                }
-                placeholder="Nombre del nuevo cliente"
-                autoComplete="organization"
-              />
-            </>
-          ) : (
-            <CatalogPicker
-              id="prj-client"
-              label="Cliente"
-              placeholder="Seleccionar cliente…"
-              searchPlaceholder="Buscar cliente…"
-              value={draft.customerId}
-              onChange={(customerId) =>
-                setDraft({
-                  ...draft,
-                  customerId,
-                  customerName: '',
-                })
-              }
-              items={pickerCustomers.map((c) => ({
-                id: c.id,
-                code: '',
-                name: c.name,
-                active: c.active,
-                subtitle: c.email || undefined,
-              }))}
-              data-testid="project-customer-picker"
-            />
-          )}
-          <div className="catalog-form__field catalog-form__row-check">
-            <input
-              id="prj-new-client"
-              type="checkbox"
-              checked={newCustomerMode}
-              onChange={(e) => {
-                const next = e.target.checked;
-                setNewCustomerMode(next);
-                setDraft({
-                  ...draft,
-                  customerId: next ? '' : draft.customerId,
-                  customerName: next ? (draft.customerName ?? '') : '',
-                });
-              }}
-            />
-            <label htmlFor="prj-new-client">Nuevo cliente</label>
-          </div>
-        </div>
-        <div className="catalog-form__field">
-          <label htmlFor="prj-currency">Moneda</label>
-          <input
-            id="prj-currency"
-            value={draft.currency}
-            onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
-            required
-          />
-        </div>
-        {showCosts ? (
-          <>
-            <div className="catalog-form__field">
-              <label htmlFor="prj-margin">Factor de margen</label>
-              <input
-                id="prj-margin"
-                type="number"
-                min={0.01}
-                step="any"
-                value={draft.marginFactor}
-                onChange={(e) =>
-                  setDraft({ ...draft, marginFactor: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="prj-labor">Mano de obra fija</label>
-              <input
-                id="prj-labor"
-                type="number"
-                min={0}
-                step="any"
-                value={draft.laborFixedCost}
-                onChange={(e) =>
-                  setDraft({ ...draft, laborFixedCost: e.target.value })
-                }
-                required
-              />
-            </div>
-          </>
-        ) : null}
-        <div className="catalog-form__field">
-          <label htmlFor="prj-status">Estado</label>
-          <select
-            id="prj-status"
-            value={draft.status}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                status: e.target.value as ProjectDraft['status'],
-              })
-            }
-          >
-            {statusOptionsForRole({
-              current: draft.status,
-              canMutate,
-              canReopen,
-              canMarkProduced,
-            }).map((s) => (
-              <option key={s} value={s}>
-                {projectStatusLabel(s)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      {canAssignOwner && assignableOwners.length > 0 ? (
-        <div
-          className="catalog-form__field"
-          style={{ marginTop: 'var(--space-3)' }}
-        >
-          <label htmlFor="prj-owner">Responsable</label>
-          <select
-            id="prj-owner"
-            value={draft.ownerUserId}
-            onChange={(e) =>
-              setDraft({ ...draft, ownerUserId: e.target.value })
-            }
-            data-testid="project-owner-select"
-          >
-            {assignableOwners.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-                {u.role ? ` (${u.role})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-      <div className="catalog-form__field" style={{ marginTop: 'var(--space-3)' }}>
-        <label htmlFor="prj-notes">Notas</label>
-        <input
-          id="prj-notes"
-          value={draft.notes}
-          onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-        />
-      </div>
-    </form>
-  );
-
-  const renderAddItemForm = (): ReactNode => (
-    <form
-      id={addItemFormId}
-      className="catalog-form catalog-form--wide project-add-item-form"
-      onSubmit={handleAddItem}
-    >
-      {itemError ? <p className="catalog-form__error">{itemError}</p> : null}
-      {categories.length > 0 ? (
-        <div
-          className="project-editor__grid"
-          data-testid="add-item-category-cascade"
-          style={{ marginBottom: 'var(--space-3)' }}
-        >
-          <div className="catalog-form__field">
-            <label htmlFor="add-cat-l1">Categoría</label>
-            <select
-              id="add-cat-l1"
-              value={addCategoryL1}
-              onChange={(e) => {
-                setAddCategoryL1(e.target.value);
-                setAddCategoryL2('');
-                setAddCategoryL3('');
-              }}
-            >
-              <option value="">Todas</option>
-              {addCascadeOpts.level1.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {addCascadeOpts.level2.length > 0 ? (
-            <div className="catalog-form__field">
-              <label htmlFor="add-cat-l2">Subcategoría</label>
-              <select
-                id="add-cat-l2"
-                value={addCategoryL2}
-                onChange={(e) => {
-                  setAddCategoryL2(e.target.value);
-                  setAddCategoryL3('');
-                }}
-              >
-                <option value="">Todas en nivel 1</option>
-                {addCascadeOpts.level2.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-          {addCascadeOpts.level3.length > 0 ? (
-            <div className="catalog-form__field">
-              <label htmlFor="add-cat-l3">Nivel 3</label>
-              <select
-                id="add-cat-l3"
-                value={addCategoryL3}
-                onChange={(e) => setAddCategoryL3(e.target.value)}
-              >
-                <option value="">Todas en nivel 2</option>
-                {addCascadeOpts.level3.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="project-editor__grid">
-        <div className="catalog-form__field">
-          <CatalogPicker
-            id="add-module"
-            label="Mueble"
-            placeholder={
-              modulesForAdd.length === 0
-                ? 'Sin muebles en este filtro'
-                : 'Seleccionar mueble…'
-            }
-            searchPlaceholder="Buscar mueble…"
-            value={
-              modulesForAdd.some((m) => m.id === addItem.moduleId)
-                ? addItem.moduleId
-                : ''
-            }
-            onChange={(moduleId) => {
-              if (moduleId) selectModuleForAdd(moduleId);
-            }}
-            items={modulesForAdd.map((m) => ({
-              id: m.id,
-              code: m.code,
-              name: m.name,
-              active: true,
-            }))}
-            disabled={modulesForAdd.length === 0}
-            data-testid="add-item-module-picker"
-          />
-        </div>
-        <div className="catalog-form__field">
-          <label htmlFor="add-qty">Cantidad</label>
-          <input
-            id="add-qty"
-            type="number"
-            min={1}
-            step={1}
-            value={addItem.quantity}
-            onChange={(e) =>
-              setAddItem({
-                ...addItem,
-                quantity: Number(e.target.value),
-              })
-            }
-          />
-        </div>
-        {addModule && (addModule.presets?.length ?? 0) > 0 ? (
-          <div className="catalog-form__field">
-            <label htmlFor="add-measure-preset">Medida</label>
-            <select
-              id="add-measure-preset"
-              value={addItem.measurePresetId ?? ''}
-              onChange={(e) =>
-                setAddItem({
-                  ...addItem,
-                  measurePresetId: e.target.value || undefined,
-                })
-              }
-              data-testid="add-item-measure-preset"
-            >
-              <option value="">Elegí medida…</option>
-              {addModule.presets!.map((pr) => (
-                <option key={pr.id} value={pr.id}>
-                  {pr.name?.trim()
-                    ? `${pr.name} (${pr.width}×${pr.height}×${pr.depth} mm)`
-                    : `${pr.width}×${pr.height}×${pr.depth} mm`}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-      </div>
-
-      {addGroups.length === 0 ? (
-        <p className="catalog-empty" style={{ marginTop: 'var(--space-3)' }}>
-          Este mueble no tiene grupos de opción requeridos.
-        </p>
-      ) : (
-        <div className="project-item-choices" style={{ marginTop: 'var(--space-3)' }}>
-          {addGroups.map((group) => {
-            const options = optionsForGroup(group, catalogs);
-            const projectDefault =
-              selectedProject?.projectLevelChoices?.[group.code]?.trim() ?? '';
-            const inheritLabel = projectDefault
-              ? `Usar default del proyecto (${optionLabelForId(projectDefault, group, catalogs)})`
-              : 'Usar default del proyecto';
-            return (
-              <div key={group.id} className="catalog-form__field">
-                <label htmlFor={`add-choice-${group.code}`}>
-                  {group.name} ({group.code})
-                </label>
-                <select
-                  id={`add-choice-${group.code}`}
-                  value={addItem.optionChoices[group.code] ?? ''}
-                  onChange={(e) =>
-                    setAddItem({
-                      ...addItem,
-                      optionChoices: setItemOptionChoice(
-                        addItem.optionChoices,
-                        group.code,
-                        e.target.value,
-                      ),
-                    })
-                  }
-                >
-                  <option value="">{inheritLabel}</option>
-                  {options.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.name} — {opt.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <p className="project-editor__hint">
-        Vacío = hereda el default del proyecto. Podés agregar el mismo mueble
-        más de una vez con distintas opciones.
-      </p>
-    </form>
-  );
 
   const renderList = (): ReactNode => (
     <>
@@ -2430,52 +1882,32 @@ export function ProjectsScreen({
     <section className="catalog-page" aria-label="Cotizaciones">
       {selectedProject ? renderDetail(selectedProject) : renderList()}
 
-      <Modal
+      <ProjectMetaModal
         open={metaModalOpen}
+        editingId={metaEditingId}
+        initialDraft={metaDraft}
         onClose={closeMetaModal}
-        title={metaEditingId ? 'Editar cotización' : 'Nueva cotización'}
-        size="md"
-        footer={
-          <>
-            <button type="button" className="btn" onClick={closeMetaModal}>
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn btn--primary"
-              form={metaFormId}
-            >
-              Guardar
-            </button>
-          </>
-        }
-      >
-        {renderMetaForm()}
-      </Modal>
+        onSubmit={handleSubmitMeta}
+        customers={customers}
+        canAssignOwner={canAssignOwner}
+        assignableOwners={assignableOwners}
+        showCosts={showCosts}
+        canMutate={canMutate}
+        canReopen={canReopen}
+        canMarkProduced={canMarkProduced}
+      />
 
-      <Modal
+      <ProjectAddItemModal
         open={addItemModalOpen}
         onClose={closeAddItemModal}
-        title="Agregar mueble"
-        size="md"
-        footer={
-          <>
-            <button type="button" className="btn" onClick={closeAddItemModal}>
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn btn--primary"
-              form={addItemFormId}
-              disabled={modulesForAdd.length === 0}
-            >
-              Agregar
-            </button>
-          </>
-        }
-      >
-        {renderAddItemForm()}
-      </Modal>
+        onSubmit={handleAddItemSubmit}
+        modules={modules}
+        categories={categories}
+        optionGroups={optionGroups}
+        catalogs={catalogs}
+        projectLevelChoices={selectedProject?.projectLevelChoices ?? {}}
+        measureDefaults={selectedProject?.measureDefaults}
+      />
 
       <ProjectConfirmDeleteModal
         open={confirmDelete && selectedProject != null}
@@ -2540,106 +1972,14 @@ export function ProjectsScreen({
       />
 
       {/* Project templates (#110 / H15) */}
-      <Modal
+      <ProjectTemplatePickerModal
         open={templatePickerOpen}
-        onClose={() => {
-          setTemplatePickerOpen(false);
-          setFromTemplateDraft(null);
-        }}
-        title="Crear cotización desde plantilla"
-        size="md"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setTemplatePickerOpen(false);
-                setFromTemplateDraft(null);
-              }}
-            >
-              Cancelar
-            </button>
-            {fromTemplateDraft ? (
-              <button
-                type="submit"
-                form="from-template-form"
-                className="btn btn--primary"
-              >
-                Crear cotización
-              </button>
-            ) : null}
-          </>
-        }
-      >
-        {!fromTemplateDraft ? (
-          <ul
-            className="template-picker-list"
-            data-testid="template-picker-list"
-          >
-            {(projectTemplates ?? []).map((t) => (
-              <li key={t.id}>
-                <button
-                  type="button"
-                  className="template-picker-item"
-                  onClick={() => pickTemplate(t)}
-                  data-testid={`template-pick-${t.id}`}
-                >
-                  <LayoutTemplate
-                    size={18}
-                    strokeWidth={1.5}
-                    aria-hidden
-                  />
-                  <span className="template-picker-item__name">{t.name}</span>
-                  <span className="template-picker-item__meta">
-                    {t.items.length} mueble{t.items.length === 1 ? '' : 's'}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <form id="from-template-form" onSubmit={confirmFromTemplate}>
-            <p className="project-editor__hint" style={{ marginBottom: 'var(--space-3)' }}>
-              Plantilla: <strong>{fromTemplateDraft.name}</strong> ·{' '}
-              {fromTemplateDraft.items.length} mueble
-              {fromTemplateDraft.items.length === 1 ? '' : 's'}
-            </p>
-            <div className="catalog-form__field">
-              <label htmlFor="from-template-name">Nombre de la cotización</label>
-              <input
-                id="from-template-name"
-                value={fromTemplateName}
-                onChange={(e) => setFromTemplateName(e.target.value)}
-                required
-                data-testid="from-template-name"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="from-template-customer">Cliente</label>
-              <select
-                id="from-template-customer"
-                value={fromTemplateCustomer}
-                onChange={(e) => setFromTemplateCustomer(e.target.value)}
-                required
-                data-testid="from-template-customer"
-              >
-                <option value="">Elegí un cliente…</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {error ? (
-              <p className="project-editor__error" role="alert">
-                {error}
-              </p>
-            ) : null}
-          </form>
-        )}
-      </Modal>
+        templates={projectTemplates ?? []}
+        customers={customers}
+        workshopSettings={workshopSettings}
+        onClose={() => setTemplatePickerOpen(false)}
+        onConfirm={confirmFromTemplate}
+      />
 
       <ProjectSaveAsTemplateModal
         open={saveAsTemplateOpen}
