@@ -30,17 +30,8 @@ import type {
   WorkshopSettings,
 } from '@muebles/domain';
 import {
-  FileText,
-  LayoutTemplate,
-  Package,
-  Plus,
-  SearchX,
-} from 'lucide-react';
-import {
   type DropdownMenuSection,
-  EmptyState,
   PageLoading,
-  SearchInput,
   useDebouncedValue,
 } from '../common';
 import '../catalogs/catalogs.css';
@@ -48,7 +39,6 @@ import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
 import { ProjectPresentationMode } from './components/ProjectPresentationMode';
 import { ProjectDetailView } from './components/ProjectDetailView';
-import { StatusBadge } from './components/StatusBadge';
 import { ProjectAddItemModal } from './components/ProjectAddItemModal';
 import { ProjectConfirmDeleteModal } from './components/ProjectConfirmDeleteModal';
 import { ProjectConfirmReopenModal } from './components/ProjectConfirmReopenModal';
@@ -56,13 +46,12 @@ import { ProjectMetaModal } from './components/ProjectMetaModal';
 import { ProjectSaveAsTemplateModal } from './components/ProjectSaveAsTemplateModal';
 import { ProjectTemplatePickerModal } from './components/ProjectTemplatePickerModal';
 import { ProjectTemplatesManagementModal } from './components/ProjectTemplatesManagementModal';
+import { ProjectsListView } from './components/ProjectsListView';
 import {
   emptyProjectDraft,
   filterProjectsByQuery,
-  formatIsoDate,
   formatProjectMoney,
   projectToDraft,
-  resolveCustomerName,
   setItemOptionChoice,
   setProjectLevelChoice,
   validateItemQuantity,
@@ -725,137 +714,24 @@ export function ProjectsScreen({
         : null;
 
   const renderList = (): ReactNode => (
-    <>
-      <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Cotizaciones</h2>
-        <div className="catalog-page__toolbar">
-          {canMutate ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={startCreate}
-          >
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nueva cotización
-          </button>
-          ) : null}
-          {canMutate &&
-          projectTemplates &&
-          projectTemplates.length > 0 &&
-          onCreateFromTemplate ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={startFromTemplate}
-              data-testid="new-from-template-btn"
-            >
-              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
-              Desde plantilla
-            </button>
-          ) : null}
-          {canMutate &&
-          projectTemplates &&
-          projectTemplates.length > 0 &&
-          onDeleteTemplate ? (
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => setTemplatesManagementOpen(true)}
-              data-testid="manage-templates-btn"
-              title="Gestionar plantillas"
-            >
-              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
-              Plantillas
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {!isTrulyEmpty ? (
-        <div className="catalog-page__filters">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Buscar cotizaciones o clientes…"
-            aria-label="Buscar cotizaciones"
-          />
-        </div>
-      ) : null}
-
-      {isTrulyEmpty ? (
-        <div>
-          <EmptyState
-            icon={FileText}
-            title="No hay cotizaciones"
-            description="Creá la primera cotización para un cliente y agregá muebles del catálogo."
-            actionLabel="Nueva cotización"
-            onAction={startCreate}
-          />
-          {canMutate &&
-          projectTemplates &&
-          projectTemplates.length > 0 &&
-          onCreateFromTemplate ? (
-            <div style={{ textAlign: 'center', marginTop: 'var(--space-3)' }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={startFromTemplate}
-                data-testid="empty-from-template-btn"
-              >
-                <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
-                Crear desde plantilla
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : isFilterEmpty ? (
-        <EmptyState
-          variant="no-results"
-          icon={SearchX}
-          title="Sin resultados"
-          description="No hay cotizaciones que coincidan con la búsqueda."
-          actionLabel="Limpiar filtros"
-          onAction={() => setSearch('')}
-        />
-      ) : (
-        <ul className="project-card-grid" aria-label="Lista de cotizaciones">
-          {filtered.map((project) => (
-            <li key={project.id}>
-              <button
-                type="button"
-                className="project-card"
-                onClick={() => openDetail(project)}
-                data-testid={`project-card-${project.id}`}
-              >
-                <div className="project-card__top">
-                  <h3 className="project-card__name">{project.name}</h3>
-                  <StatusBadge status={project.status} />
-                </div>
-                <p className="project-card__client">
-                  {resolveCustomerName(project.customerId, customers)}
-                </p>
-                <div className="project-card__stats">
-                  <span className="project-card__stat">
-                    <Package size={14} strokeWidth={1.5} aria-hidden />
-                    {project.items.length} mueble
-                    {project.items.length === 1 ? '' : 's'}
-                  </span>
-                  <span className="project-card__stat">
-                    Act. {formatIsoDate(project.updatedAt)}
-                  </span>
-                </div>
-                <div className="project-card__price">
-                  <span className="project-card__price-label">
-                    Precio total
-                  </span>
-                  {estimateLabel(project.id)}
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
+    <ProjectsListView
+      projects={projects}
+      filtered={filtered}
+      customers={customers}
+      projectTemplates={projectTemplates}
+      search={search}
+      isTrulyEmpty={isTrulyEmpty}
+      isFilterEmpty={isFilterEmpty}
+      canMutate={canMutate}
+      hasCreateFromTemplate={!!onCreateFromTemplate}
+      hasDeleteTemplate={!!onDeleteTemplate}
+      estimateLabel={estimateLabel}
+      onSearchChange={setSearch}
+      onNewProject={startCreate}
+      onFromTemplate={startFromTemplate}
+      onManageTemplates={() => setTemplatesManagementOpen(true)}
+      onOpenProject={openDetail}
+    />
   );
 
   if (loading) {
