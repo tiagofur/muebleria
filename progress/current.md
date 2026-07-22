@@ -1,39 +1,38 @@
-# Sesión actual — F064 uiStore + ToastProvider migration
+# Sesión actual
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0-ui` (basada en `main` post-F063)
+- **Branch activa:** `wip/perfect-app-fase-0-ui` (F064 commiteada y pushed; PR pendiente)
 - **META issue:** #156 Perfect App roadmap
-- **Feature:** F064 — phase0_ui_store_toasts (sub-slice 4 de 4 de Fase 0)
-- **Iniciada:** 2026-07-21
 
-## Plan F064 (slice aprobado)
+## Estado Fase 0 (Perfect App Roadmap §5)
 
-1. ✅ Branch + marcar F064 in_progress.
-2. Crear `apps/web/src/stores/uiStore.ts` (toasts + exportBusy/errors + createKeys).
-3. Mover `Toast.tsx` → `apps/web/src/components/ToastViewport.tsx` + `toast.css`.
-4. Modificar `catalogStore` + `projectStore`: eliminar `toast` de deps, leer de uiStore.
-5. Migrar App.tsx (eliminar ToastProvider/useToast, leer de uiStore).
-6. Mover behavioral tests Toast.test.tsx → uiStore.test.ts + actualizar index.test.
-7. Actualizar tests catalogStore/projectStore/designSystemShell.
-8. Eliminar Toast.tsx/toast.css de packages/ui + limpiar index.
-9. Verificar.
-10. Reviewer + push.
+### Sub-slice 0.1 (4 stores Zustand) — ✅ COMPLETO
 
-## Decisiones clave
+| ID | Feature | Estado |
+|---|---|---|
+| F057 | workspaceStore | ✅ merged #157 |
+| F062 | catalogStore | ✅ merged #158 |
+| F063 | projectStore | ✅ merged #159 |
+| F064 | uiStore + ToastProvider | ✅ done (PR pendiente) |
 
-- **Opción limpia (invasiva)**: catalogStore/projectStore eliminan `toast` de Deps, leen `getUiStoreState().toast()`.
-- **Opción eliminar + mover tests**: ToastProvider/useToast se borran de packages/ui; behavioral tests migran a uiStore.test.
-- **uiStore NO importa de otros stores** (es el más bajo en jerarquía).
-- **`editingModuleId` queda en App.tsx** (va a moduleStore futuro).
-- **`commandItems` queda como useMemo** (derivado, no state).
+### Resto de Fase 0
 
-## Objetivos
+| ID | Feature | Estado |
+|---|---|---|
+| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending (próximo) |
+| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
+| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
+| F061 | Command pattern + undo/redo | ⏳ pending |
 
-- App.tsx 1788 → ~1200 L.
-- `ToastProvider` eliminado, reemplazado por `ToastViewport` que lee de uiStore.
-- catalogStore/projectStore sin dep `toast`.
+## Próximo slice recomendado
 
-## Fuera de alcance F064
+**F058 — Partir ProjectsScreen**: separa la screen más grande (2793 L) en
+lista + detalle + exports panel. Lleva App.tsx finalmente < 1000 L. `workspaceRef`
+desaparece totalmente.
 
-- editingModuleId (moduleStore futuro).
-- Partir ProjectsScreen (F058).
+## Notas
+
+- App.tsx en 1796 L (de 2880 original). F058 reduce más.
+- 4 stores Zustand completos: workspaceStore, catalogStore, projectStore, uiStore.
+- ToastProvider eliminado de packages/ui; renderer en apps/web.
+- Snapshots Playwright ahora tracked en main.
