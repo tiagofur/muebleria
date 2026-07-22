@@ -1,38 +1,30 @@
-# Sesión actual
+# Sesión actual — F058a Extracción de modales de ProjectsScreen (PARCIAL)
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0-ui` (F064 commiteada y pushed; PR pendiente)
+- **Branch activa:** `wip/perfect-app-fase-0-projects-a` (basada en `main` post-F064)
 - **META issue:** #156 Perfect App roadmap
+- **Feature:** F058 — phase0_split_projects_screen (sub-slice a de 3)
 
-## Estado Fase 0 (Perfect App Roadmap §5)
+## Progreso F058a
 
-### Sub-slice 0.1 (4 stores Zustand) — ✅ COMPLETO
+### Hecho (commit pushed)
+- ✅ StatusBadge extraído
+- ✅ 4 modales simples extraídos: ConfirmDelete, ConfirmReopen, SaveAsTemplate, TemplatesManagement
+- ✅ Verification: typecheck 6/6, tests 320/320, Playwright 6/6
 
-| ID | Feature | Estado |
-|---|---|---|
-| F057 | workspaceStore | ✅ merged #157 |
-| F062 | catalogStore | ✅ merged #158 |
-| F063 | projectStore | ✅ merged #159 |
-| F064 | uiStore + ToastProvider | ✅ done (PR pendiente) |
+### Pendiente (próxima sesión, MISMA branch)
+- [ ] MetaModal — absorber `renderMetaForm` (líneas 963-1139, ~177 L). Recibe draft, customers, options, handlers. State interno del form.
+- [ ] AddItemModal — absorber `renderAddItemForm` (líneas 1141-1330, ~190 L). State interno del cascade.
+- [ ] TemplatePickerModal — absorber bloque 2596-2693. Recibe templates, handlers.
 
-### Resto de Fase 0
+### Después de F058a completo
+- F058b: partir el detalle (chrome + body)
+- F058c: separar la lista
 
-| ID | Feature | Estado |
-|---|---|---|
-| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending (próximo) |
-| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
-| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
-| F061 | Command pattern + undo/redo | ⏳ pending |
+## Notas para la próxima sesión
 
-## Próximo slice recomendado
-
-**F058 — Partir ProjectsScreen**: separa la screen más grande (2793 L) en
-lista + detalle + exports panel. Lleva App.tsx finalmente < 1000 L. `workspaceRef`
-desaparece totalmente.
-
-## Notas
-
-- App.tsx en 1796 L (de 2880 original). F058 reduce más.
-- 4 stores Zustand completos: workspaceStore, catalogStore, projectStore, uiStore.
-- ToastProvider eliminado de packages/ui; renderer en apps/web.
-- Snapshots Playwright ahora tracked en main.
+- ProjectsScreen está en 2664 L (de 2793 original).
+- Los 320 tests existentes son la red de seguridad (testean por testid/role/texto).
+- `renderMetaForm` y `renderAddItemForm` son closures que capturan state de ProjectsScreen — al extraerlas, hay que pasar el state necesario como props.
+- El patrón ya está calibrado con los 5 componentes extraídos: import en ProjectsScreen + JSX controlado + state de apertura queda en el orquestador.
+- Branch ya pushed: `wip/perfect-app-fase-0-projects-a`. HEAD == origin.
