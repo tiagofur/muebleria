@@ -42,6 +42,7 @@ import type { ProjectDraft } from '@muebles/ui';
 
 import type { ToastFn } from './catalogStore';
 import { getCatalogStoreState } from './catalogStore';
+import { getUiStoreState } from './uiStore';
 
 // ---------------------------------------------------------------------------
 // Helpers (migrated from App.tsx)
@@ -129,8 +130,6 @@ export interface ProjectStoreDeps {
   readonly createProjectTemplate: (template: ProjectTemplate) => Promise<void>;
   /** Deletes a project template by id. */
   readonly deleteProjectTemplate: (templateId: string) => Promise<void>;
-  /** Toast sink (until F064 uiStore migration). */
-  readonly toast: ToastFn;
   /** Reads auth token for backend breakdown fetch. */
   readonly getAuthToken: () => string | null;
   /** Backend API base URL. */
@@ -251,7 +250,9 @@ export function createProjectStore(options: InternalOptions) {
   const persistDeleteProject = options.deps.deleteProject;
   const persistCreateTemplate = options.deps.createProjectTemplate;
   const persistDeleteTemplate = options.deps.deleteProjectTemplate;
-  const toast = options.deps.toast;
+  // F064: toast comes from uiStore (single source of truth). Reading fresh
+  // each call avoids stale closures across re-renders.
+  const toast: ToastFn = (input) => getUiStoreState().toast(input);
 
   /**
    * Projects updater (reducer style). Saves only projects whose reference
@@ -710,7 +711,6 @@ function depsKey(deps: ProjectStoreDeps): string {
     String(deps.deleteProject),
     String(deps.createProjectTemplate),
     String(deps.deleteProjectTemplate),
-    String(deps.toast),
     String(deps.getAuthToken),
   ].join('|');
 }
@@ -763,15 +763,15 @@ const BACKEND_BREAKDOWN_DEBOUNCE_MS = 300;
  *   App.tsx falls back to local `projectQuote.breakdown`.
  * - When session !== 'auth' or no project selected: clears all breakdown state.
  *
- * Hook form: lives in the store module because the deps (toast, fetch, baseUrl,
- * authToken) are already in the store. App.tsx wires it with the router-derived
- * `selectedProjectId` + `selectedProject` + `session`.
+ * Hook form: lives in the store module because the deps (fetch, baseUrl,
+ * authToken) are already in the store, and toast is read from uiStore.
+ * App.tsx wires it with the router-derived `selectedProjectId` +
+ * `selectedProject` + `session`.
  */
 export function useBackendBreakdownEffect(
   projectId: string | null,
   project: Project | undefined,
   session: 'guest' | 'auth' | null,
-  toast: ToastFn,
 ): void {
   useEffect(() => {
     if (!_singleton || !_lastDeps) return;
@@ -779,6 +779,8 @@ export function useBackendBreakdownEffect(
     const fetchImpl = _lastDeps.fetchImpl ?? globalThis.fetch;
     const baseUrl = _lastDeps.baseUrl;
     const getAuthToken = _lastDeps.getAuthToken;
+    // F064: toast read from uiStore inside the effect.
+    const toast: ToastFn = (input) => getUiStoreState().toast(input);
 
     if (session !== 'auth' || !projectId || !project) {
       store.setState({
@@ -847,5 +849,5 @@ export function useBackendBreakdownEffect(
       clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, project, session, toast]);
+  }, [projectId, project, session]);
 }

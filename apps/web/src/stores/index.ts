@@ -3,7 +3,7 @@
  *   - workspaceStore: sesión + load workspace + RBAC + workshopSettings (F057)
  *   - catalogStore:   catálogos + módulos + estructuras + ... (F062)
  *   - projectStore:   proyectos + items + templates + breakdown (F063)
- *   - uiStore:        toasts + exportBusy/errors + createKeys (F064, futuro)
+ *   - uiStore:        toasts + exportBusy/errors + createKeys (F064)
  */
 
 export {
@@ -35,3 +35,17 @@ export {
   type ProjectStoreDeps,
   type ProjectActor,
 } from './projectStore';
+
+export {
+  useUiStore,
+  getUiStoreState,
+  type UiState,
+  type ToastType,
+  type ToastInput,
+  type ToastItem,
+  type InternalToast,
+  type ToastPhase,
+  TOAST_DURATION_MS,
+  TOAST_EXIT_MS,
+  TOAST_MAX,
+} from './uiStore';

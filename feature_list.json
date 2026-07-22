@@ -1119,7 +1119,7 @@
         "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.1 (sub-slice 4), §3 D5 no más Modales LG",
         "packages/ui/src/common/Toast.tsx (archivo a migrar)"
       ],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "F058",

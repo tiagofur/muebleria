@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSeedWorkspace } from '@muebles/storage';
 import type { Catalog } from '@muebles/domain';
 
 import { createCatalogStore, type CatalogStoreDeps } from './catalogStore';
+import { useUiStore } from './uiStore';
+
+afterEach(() => {
+  useUiStore.getState().disposeUi();
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,12 +21,19 @@ function makeDeps(overrides: Partial<CatalogStoreDeps> = {}): {
 } {
   const saved: Catalog[] = [];
   const toasts: Array<{ type: string; message: string }> = [];
+  // F064: catalogStore reads toast from uiStore. Replace the action with a
+  // capture mock for the duration of this test run. Restored by afterEach
+  // calling disposeUi() (which resets state) — we restore manually here too.
+  useUiStore.setState({
+    toast: (input) => {
+      toasts.push(input);
+    },
+  });
   const deps: CatalogStoreDeps = {
     newId: () => `id-${Math.random().toString(36).slice(2, 8)}`,
     saveCatalog: async (c) => {
       saved.push(c);
     },
-    toast: (input) => toasts.push(input),
     getAuthToken: () => null,
     getSession: () => 'guest',
     getDraftProjectsCount: () => 0,

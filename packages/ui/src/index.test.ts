@@ -79,15 +79,6 @@ describe('@muebles/ui package surface', () => {
     expect(typeof Modal).toBe('function');
   });
 
-  it('exports ToastProvider and useToast (F019)', async () => {
-    const { ToastProvider, useToast, TOAST_DURATION_MS, TOAST_MAX } =
-      await import('./index');
-    expect(typeof ToastProvider).toBe('function');
-    expect(typeof useToast).toBe('function');
-    expect(TOAST_DURATION_MS).toBe(4000);
-    expect(TOAST_MAX).toBe(3);
-  });
-
   it('exports loading primitives (issue #30)', async () => {
     const {
       Spinner,

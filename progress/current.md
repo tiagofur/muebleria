@@ -1,32 +1,39 @@
-# Sesión actual
+# Sesión actual — F064 uiStore + ToastProvider migration
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0-project` (F063 commiteada y pushed; PR pendiente)
+- **Branch activa:** `wip/perfect-app-fase-0-ui` (basada en `main` post-F063)
 - **META issue:** #156 Perfect App roadmap
+- **Feature:** F064 — phase0_ui_store_toasts (sub-slice 4 de 4 de Fase 0)
+- **Iniciada:** 2026-07-21
 
-## Estado Fase 0 (Perfect App Roadmap §5)
+## Plan F064 (slice aprobado)
 
-| ID | Feature | Estado |
-|---|---|---|
-| F057 | workspaceStore Zustand | ✅ done (sub-slice 1/4) — merged #157 |
-| F062 | catalogStore | ✅ done (sub-slice 2/4) — merged #158 |
-| F063 | projectStore (proyectos + items + templates + breakdown) | ✅ done (sub-slice 3/4) |
-| F064 | uiStore + ToastProvider migration | ⏳ pending (próximo) |
-| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending |
-| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
-| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
-| F061 | Command pattern + undo/redo | ⏳ pending |
+1. ✅ Branch + marcar F064 in_progress.
+2. Crear `apps/web/src/stores/uiStore.ts` (toasts + exportBusy/errors + createKeys).
+3. Mover `Toast.tsx` → `apps/web/src/components/ToastViewport.tsx` + `toast.css`.
+4. Modificar `catalogStore` + `projectStore`: eliminar `toast` de deps, leer de uiStore.
+5. Migrar App.tsx (eliminar ToastProvider/useToast, leer de uiStore).
+6. Mover behavioral tests Toast.test.tsx → uiStore.test.ts + actualizar index.test.
+7. Actualizar tests catalogStore/projectStore/designSystemShell.
+8. Eliminar Toast.tsx/toast.css de packages/ui + limpiar index.
+9. Verificar.
+10. Reviewer + push.
 
-## Próximo slice recomendado
+## Decisiones clave
 
-**F064 uiStore**: mueve toasts (migración de ToastProvider), exportBusy/errors,
-createKeys, command palette. Después de F064, App.tsx debería quedar < 1000 L
-y `workspaceRef` desaparece totalmente.
+- **Opción limpia (invasiva)**: catalogStore/projectStore eliminan `toast` de Deps, leen `getUiStoreState().toast()`.
+- **Opción eliminar + mover tests**: ToastProvider/useToast se borran de packages/ui; behavioral tests migran a uiStore.test.
+- **uiStore NO importa de otros stores** (es el más bajo en jerarquía).
+- **`editingModuleId` queda en App.tsx** (va a moduleStore futuro).
+- **`commandItems` queda como useMemo** (derivado, no state).
 
-## Notas
+## Objetivos
 
-- App.tsx en 1788 L (de 2880 original). Faltan ~800 L por migrar (F064).
-- `workspaceRef` sigue existiendo (lo usa setWorkspace wrapper + 'Usar datos
-  demo' + saveWorkshopSettings). Se elimina en F064.
-- catalogStore + projectStore ya migrados; workspaceStore mantiene `workspace`
-  pero solo para settings/schemaVersion (#13 recover).
+- App.tsx 1788 → ~1200 L.
+- `ToastProvider` eliminado, reemplazado por `ToastViewport` que lee de uiStore.
+- catalogStore/projectStore sin dep `toast`.
+
+## Fuera de alcance F064
+
+- editingModuleId (moduleStore futuro).
+- Partir ProjectsScreen (F058).

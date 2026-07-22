@@ -20,6 +20,7 @@ import {
   ensureCatalogStore,
   getCatalogStoreState,
 } from './catalogStore';
+import { useUiStore } from './uiStore';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,12 +58,18 @@ function makeDeps(overrides: Partial<ProjectStoreDeps> = {}): {
     deleteProjectTemplate: async (id) => {
       deletedTemplateIds.push(id);
     },
-    toast: (input) => toasts.push(input),
     getAuthToken: () => null,
     baseUrl: 'http://test/api',
     fetchImpl: vi.fn() as unknown as typeof fetch,
     ...overrides,
   };
+  // F064: projectStore reads toast from uiStore. Replace the action with a
+  // capture mock for the duration of this test run.
+  useUiStore.setState({
+    toast: (input) => {
+      toasts.push(input);
+    },
+  });
   return {
     deps,
     createdProjects,
@@ -128,7 +135,6 @@ beforeEach(() => {
   ensureCatalogStore({
     newId: () => 'cat-id',
     saveCatalog: async () => {},
-    toast: () => {},
     getAuthToken: () => null,
     getSession: () => 'guest',
     getDraftProjectsCount: () => 0,
@@ -138,6 +144,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useUiStore.getState().disposeUi();
   vi.restoreAllMocks();
 });
 
