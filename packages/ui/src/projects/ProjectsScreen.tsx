@@ -76,6 +76,11 @@ import { ProjectPresentationMode } from './components/ProjectPresentationMode';
 import { QuoteScenarioCompare } from './components/QuoteScenarioCompare';
 import { InstallationChecklistPanel } from './components/InstallationChecklistPanel';
 import { ProjectItemStructureRevisionIndicator } from './components/ProjectItemStructureRevisionIndicator';
+import { StatusBadge } from './components/StatusBadge';
+import { ProjectConfirmDeleteModal } from './components/ProjectConfirmDeleteModal';
+import { ProjectConfirmReopenModal } from './components/ProjectConfirmReopenModal';
+import { ProjectSaveAsTemplateModal } from './components/ProjectSaveAsTemplateModal';
+import { ProjectTemplatesManagementModal } from './components/ProjectTemplatesManagementModal';
 import {
   customersForProjectPicker,
   defaultChoicesForNewItem,
@@ -87,7 +92,6 @@ import {
   groupsForModuleItem,
   optionLabelForId,
   optionsForGroup,
-  projectStatusBadgeClass,
   projectStatusLabel,
   statusOptionsForRole,
   projectToDraft,
@@ -282,17 +286,6 @@ export interface ProjectsScreenProps {
   readonly showCosts?: boolean;
 }
 
-function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
-  return (
-    <span className={`status-badge ${projectStatusBadgeClass(status)}`}>
-      <span className="status-badge__dot" aria-hidden>
-        ●
-      </span>
-      {projectStatusLabel(status)}
-    </span>
-  );
-}
-
 export function ProjectsScreen({
   projects,
   modules,
@@ -395,7 +388,7 @@ export function ProjectsScreen({
   const [fromTemplateName, setFromTemplateName] = useState('');
   const [fromTemplateCustomer, setFromTemplateCustomer] = useState('');
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
-  const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
+  // F058a: saveAsTemplateName moved into ProjectSaveAsTemplateModal component.
   const [templatesManagementOpen, setTemplatesManagementOpen] = useState(false);
 
   const catalogs = useMemo(
@@ -587,17 +580,7 @@ export function ProjectsScreen({
 
   const startSaveAsTemplate = () => {
     if (!selectedProject) return;
-    setSaveAsTemplateName(selectedProject.name);
     setSaveAsTemplateOpen(true);
-  };
-
-  const confirmSaveAsTemplate = (e: FormEvent) => {
-    e.preventDefault();
-    if (!selectedProject || !onSaveAsTemplate) return;
-    const name = saveAsTemplateName.trim();
-    if (!name) return;
-    onSaveAsTemplate(selectedProject.id, name);
-    setSaveAsTemplateOpen(false);
   };
 
   const requestDeleteTemplate = (templateId: string) => {
@@ -2494,76 +2477,26 @@ export function ProjectsScreen({
         {renderAddItemForm()}
       </Modal>
 
-      <Modal
+      <ProjectConfirmDeleteModal
         open={confirmDelete && selectedProject != null}
-        onClose={() => setConfirmDelete(false)}
-        title="Eliminar cotización"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmDelete(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={() => {
-                if (selectedProject) handleDelete(selectedProject.id);
-              }}
-            >
-              Eliminar
-            </button>
-          </>
-        }
-      >
-        <p className="project-confirm-modal__text">
-          ¿Seguro que querés eliminar{' '}
-          <strong>{selectedProject?.name ?? 'esta cotización'}</strong>? Esta
-          acción no se puede deshacer.
-        </p>
-      </Modal>
+        projectName={selectedProject?.name ?? ''}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          if (selectedProject) handleDelete(selectedProject.id);
+        }}
+      />
 
-      <Modal
+      <ProjectConfirmReopenModal
         open={confirmReopen && selectedProject != null}
-        onClose={() => setConfirmReopen(false)}
-        title="Reabrir cotización"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmReopen(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => {
-                if (selectedProject && onReopen) {
-                  onReopen(selectedProject.id);
-                  setConfirmReopen(false);
-                }
-              }}
-              data-testid="project-reopen-confirm"
-            >
-              Reabrir
-            </button>
-          </>
-        }
-      >
-        <p className="project-confirm-modal__text">
-          ¿Reabrir{' '}
-          <strong>{selectedProject?.name ?? 'esta cotización'}</strong> a
-          borrador? Se borra el snapshot de precios congelados y vuelve a
-          recalcular con el catálogo actual.
-        </p>
-      </Modal>
+        projectName={selectedProject?.name ?? ''}
+        onCancel={() => setConfirmReopen(false)}
+        onConfirm={() => {
+          if (selectedProject && onReopen) {
+            onReopen(selectedProject.id);
+            setConfirmReopen(false);
+          }
+        }}
+      />
 
       {selectedProject ? (
         <ProjectPresentationMode
@@ -2708,86 +2641,24 @@ export function ProjectsScreen({
         )}
       </Modal>
 
-      <Modal
+      <ProjectSaveAsTemplateModal
         open={saveAsTemplateOpen}
+        initialName={selectedProject?.name ?? ''}
         onClose={() => setSaveAsTemplateOpen(false)}
-        title="Guardar como plantilla"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setSaveAsTemplateOpen(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              form="save-as-template-form"
-              className="btn btn--primary"
-            >
-              Guardar plantilla
-            </button>
-          </>
-        }
-      >
-        <form id="save-as-template-form" onSubmit={confirmSaveAsTemplate}>
-          <div className="catalog-form__field">
-            <label htmlFor="save-as-template-name">Nombre de la plantilla</label>
-            <input
-              id="save-as-template-name"
-              value={saveAsTemplateName}
-              onChange={(e) => setSaveAsTemplateName(e.target.value)}
-              required
-              data-testid="save-as-template-name"
-            />
-          </div>
-          <p className="project-editor__hint">
-            La plantilla guardará los muebles, opciones, defaults de medida y
-            plano de disposición. No incluye cliente ni estado.
-          </p>
-        </form>
-      </Modal>
+        onConfirm={(name) => {
+          if (selectedProject) {
+            onSaveAsTemplate?.(selectedProject.id, name);
+            setSaveAsTemplateOpen(false);
+          }
+        }}
+      />
 
-      <Modal
+      <ProjectTemplatesManagementModal
         open={templatesManagementOpen}
+        templates={projectTemplates ?? []}
         onClose={() => setTemplatesManagementOpen(false)}
-        title="Plantillas de proyecto"
-        size="md"
-        footer={
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setTemplatesManagementOpen(false)}
-          >
-            Cerrar
-          </button>
-        }
-      >
-        <ul
-          className="template-picker-list"
-          data-testid="template-management-list"
-        >
-          {(projectTemplates ?? []).map((t) => (
-            <li key={t.id} className="template-management-row">
-              <span className="template-management-row__name">{t.name}</span>
-              <span className="template-management-row__meta">
-                {t.items.length} mueble{t.items.length === 1 ? '' : 's'}
-              </span>
-              <button
-                type="button"
-                className="btn btn--small btn--danger"
-                onClick={() => requestDeleteTemplate(t.id)}
-                data-testid={`delete-template-${t.id}`}
-              >
-                <Trash2 size={14} strokeWidth={1.5} aria-hidden />
-                Borrar
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Modal>
+        onDeleteTemplate={requestDeleteTemplate}
+      />
     </section>
   );
 }

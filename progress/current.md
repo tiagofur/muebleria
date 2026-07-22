@@ -1,38 +1,35 @@
-# Sesión actual
+# Sesión actual — F058a Extracción de modales de ProjectsScreen
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0-ui` (F064 commiteada y pushed; PR pendiente)
+- **Branch activa:** `wip/perfect-app-fase-0-projects-a` (basada en `main` post-F064)
 - **META issue:** #156 Perfect App roadmap
+- **Feature:** F058 — phase0_split_projects_screen (sub-slice a de 3)
+- **Iniciada:** 2026-07-22
 
-## Estado Fase 0 (Perfect App Roadmap §5)
+## Plan F058a (slice aprobado)
 
-### Sub-slice 0.1 (4 stores Zustand) — ✅ COMPLETO
+1. ✅ Branch + marcar F058 in_progress.
+2. Extraer StatusBadge.
+3. Extraer 4 modales simples (Delete, Reopen, SaveAsTemplate, TemplatesManagement).
+4. Extraer MetaModal + AddItemModal (los grandes con form).
+5. Extraer TemplatePickerModal.
+6. Verificar.
+7. Reviewer + push.
 
-| ID | Feature | Estado |
-|---|---|---|
-| F057 | workspaceStore | ✅ merged #157 |
-| F062 | catalogStore | ✅ merged #158 |
-| F063 | projectStore | ✅ merged #159 |
-| F064 | uiStore + ToastProvider | ✅ done (PR pendiente) |
+## Sub-slicing F058
 
-### Resto de Fase 0
+- **F058a** (este): extrae los 7 modales + StatusBadge.
+- F058b: parte el detalle (chrome + body).
+- F058c: separa la lista.
 
-| ID | Feature | Estado |
-|---|---|---|
-| F058 | Partir ProjectsScreen (2793 L) en lista + detalle + exports | ⏳ pending (próximo) |
-| F059 | Abstraer EntityEditorLayout<Tab,Draft> común | ⏳ pending |
-| F060 | Partir engine.ts (2108 L) por responsabilidad | ⏳ pending |
-| F061 | Command pattern + undo/redo | ⏳ pending |
+## Objetivos
 
-## Próximo slice recomendado
-
-**F058 — Partir ProjectsScreen**: separa la screen más grande (2793 L) en
-lista + detalle + exports panel. Lleva App.tsx finalmente < 1000 L. `workspaceRef`
-desaparece totalmente.
+- ProjectsScreen.tsx 2793 → ~2000 L.
+- 7 modales extraídos + StatusBadge.
+- 35 tests existentes pasan sin cambios.
 
 ## Notas
 
-- App.tsx en 1796 L (de 2880 original). F058 reduce más.
-- 4 stores Zustand completos: workspaceStore, catalogStore, projectStore, uiStore.
-- ToastProvider eliminado de packages/ui; renderer en apps/web.
-- Snapshots Playwright ahora tracked en main.
+- Refactor de presentación pura — sin cambios de comportamiento.
+- packages/ui no toca stores (todo por props).
+- Tests existentes testean por testid/role/texto — red de seguridad.
