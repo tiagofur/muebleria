@@ -1,35 +1,30 @@
-# Sesión actual — F058a Extracción de modales de ProjectsScreen
+# Sesión actual — F058a Extracción de modales de ProjectsScreen (PARCIAL)
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
 - **Branch activa:** `wip/perfect-app-fase-0-projects-a` (basada en `main` post-F064)
 - **META issue:** #156 Perfect App roadmap
 - **Feature:** F058 — phase0_split_projects_screen (sub-slice a de 3)
-- **Iniciada:** 2026-07-22
 
-## Plan F058a (slice aprobado)
+## Progreso F058a
 
-1. ✅ Branch + marcar F058 in_progress.
-2. Extraer StatusBadge.
-3. Extraer 4 modales simples (Delete, Reopen, SaveAsTemplate, TemplatesManagement).
-4. Extraer MetaModal + AddItemModal (los grandes con form).
-5. Extraer TemplatePickerModal.
-6. Verificar.
-7. Reviewer + push.
+### Hecho (commit pushed)
+- ✅ StatusBadge extraído
+- ✅ 4 modales simples extraídos: ConfirmDelete, ConfirmReopen, SaveAsTemplate, TemplatesManagement
+- ✅ Verification: typecheck 6/6, tests 320/320, Playwright 6/6
 
-## Sub-slicing F058
+### Pendiente (próxima sesión, MISMA branch)
+- [ ] MetaModal — absorber `renderMetaForm` (líneas 963-1139, ~177 L). Recibe draft, customers, options, handlers. State interno del form.
+- [ ] AddItemModal — absorber `renderAddItemForm` (líneas 1141-1330, ~190 L). State interno del cascade.
+- [ ] TemplatePickerModal — absorber bloque 2596-2693. Recibe templates, handlers.
 
-- **F058a** (este): extrae los 7 modales + StatusBadge.
-- F058b: parte el detalle (chrome + body).
-- F058c: separa la lista.
+### Después de F058a completo
+- F058b: partir el detalle (chrome + body)
+- F058c: separar la lista
 
-## Objetivos
+## Notas para la próxima sesión
 
-- ProjectsScreen.tsx 2793 → ~2000 L.
-- 7 modales extraídos + StatusBadge.
-- 35 tests existentes pasan sin cambios.
-
-## Notas
-
-- Refactor de presentación pura — sin cambios de comportamiento.
-- packages/ui no toca stores (todo por props).
-- Tests existentes testean por testid/role/texto — red de seguridad.
+- ProjectsScreen está en 2664 L (de 2793 original).
+- Los 320 tests existentes son la red de seguridad (testean por testid/role/texto).
+- `renderMetaForm` y `renderAddItemForm` son closures que capturan state de ProjectsScreen — al extraerlas, hay que pasar el state necesario como props.
+- El patrón ya está calibrado con los 5 componentes extraídos: import en ProjectsScreen + JSX controlado + state de apertura queda en el orquestador.
+- Branch ya pushed: `wip/perfect-app-fase-0-projects-a`. HEAD == origin.
