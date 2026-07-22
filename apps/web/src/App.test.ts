@@ -41,65 +41,84 @@ import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('@muebles/web #15 setState side effects / stale patches', () => {
-  it('patchProjects uses reducer updater; catalog mutations live in catalogStore (F062)', () => {
-    // F062 moved catalog mutations (including the old `patchCatalog` wrapper
-    // and `updater: (catalog: Catalog) => Catalog` signature) out of App.tsx
-    // into `catalogStore.ts`. Projects still use `patchProjects` until F063.
+  it('project mutations live in projectStore; catalog mutations in catalogStore (F063)', () => {
+    // F062 moved catalog mutations to catalogStore. F063 moved project mutations
+    // (including the old `patchProjects` wrapper) to projectStore. App.tsx no
+    // longer owns either wrapper or any of the 19+28 handlers.
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    // Project patching still uses functional updater in App.tsx.
-    expect(appSrc).toContain('patchProjects((ps) =>');
-    // Catalog patching is gone from App.tsx (moved to catalogStore).
+    expect(appSrc).not.toContain('patchProjects');
     expect(appSrc).not.toContain('patchCatalog');
-    expect(appSrc).not.toContain('updater: (catalog: Catalog) => Catalog');
 
-    // Behavior: catalogStore exposes patch-style semantics via setState.
+    // Behavior: catalogStore + projectStore expose patch-style semantics.
     const catalogStoreSrc = readFileSync(
       join(here, 'stores/catalogStore.ts'),
       'utf8',
     );
     expect(catalogStoreSrc).toMatch(/updater:\s*\(catalog: Catalog\)/);
+    const projectStoreSrc = readFileSync(
+      join(here, 'stores/projectStore.ts'),
+      'utf8',
+    );
+    expect(projectStoreSrc).toMatch(/projects: readonly Project\[\]/);
   });
 
-  it('createProject builds id outside setWorkspace (StrictMode single write)', () => {
-    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appSrc).toContain('repository.createProject(project)');
-    // newId for project must not appear only inside setWorkspace updater.
-    const createBlock = appSrc.slice(
-      appSrc.indexOf('const createProject'),
-      appSrc.indexOf('const updateProject'),
+  it('createProject in projectStore builds id outside state updater (StrictMode safe)', () => {
+    // F063: createProject migrated to projectStore. newId() is computed before
+    // set(); the store's patch helper does not re-run the newId call.
+    const projectStoreSrc = readFileSync(
+      join(here, 'stores/projectStore.ts'),
+      'utf8',
+    );
+    const createBlock = projectStoreSrc.slice(
+      projectStoreSrc.indexOf('createProject: (draft, catalog, actor)'),
+      projectStoreSrc.indexOf('updateProject: (id, draft, catalog, actor)'),
     );
     expect(createBlock).toContain('id: newId()');
-    expect(createBlock).toMatch(/setWorkspace\(\(prev\)[\s\S]*projects:/);
-    expect(createBlock).not.toMatch(
-      /setWorkspace\(\(prev\)[\s\S]*newId\(\)/,
-    );
+    expect(createBlock).toContain('persistCreateProject(project)');
   });
 });
 
 describe('@muebles/web reliability (issues #11–#13)', () => {
-  it('#11: App calculate path uses DEFAULT_API_BASE + readAuthToken (no hardcode)', () => {
-    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appSrc).not.toMatch(/localhost:8080\/api\/projects/);
-    expect(appSrc).not.toMatch(/localStorage\.getItem\(['"]muebles_token['"]\)/);
-    expect(appSrc).toContain('DEFAULT_API_BASE');
-    expect(appSrc).toContain('readAuthToken()');
-    expect(appSrc).toContain(
-      '`${DEFAULT_API_BASE}/projects/${selectedProjectId}/calculate`',
+  it('#11: calculate path uses DEFAULT_API_BASE + getAuthToken (no hardcode) — F063 hook moved', () => {
+    // F063: the backend breakdown useEffect migrated from App.tsx to the
+    // `useBackendBreakdownEffect` hook in projectStore. URL + token logic
+    // now live there.
+    const projectStoreSrc = readFileSync(
+      join(here, 'stores/projectStore.ts'),
+      'utf8',
     );
+    expect(projectStoreSrc).not.toMatch(/localhost:8080\/api\/projects/);
+    expect(projectStoreSrc).not.toMatch(
+      /localStorage\.getItem\(['"]muebles_token['"]\)/,
+    );
+    expect(projectStoreSrc).toContain('baseUrl');
+    expect(projectStoreSrc).toMatch(/\/projects\/\$\{projectId\}\/calculate/);
+    expect(projectStoreSrc).toContain('getAuthToken');
   });
 
   it('#11: apps/web src has no hardcoded calculate host', () => {
-    // DEFAULT_API_BASE may still mention localhost as env fallback in session.ts.
+    // No file in apps/web/src should hardcode localhost:8080 for the calculate endpoint.
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    const projectStoreSrc = readFileSync(
+      join(here, 'stores/projectStore.ts'),
+      'utf8',
+    );
     expect(appSrc.includes('http://localhost:8080')).toBe(false);
+    expect(projectStoreSrc.includes('http://localhost:8080')).toBe(false);
   });
 
-  it('#12: breakdown loading/error props wired to ProjectsScreen', () => {
+  it('#12: breakdown loading/error props wired to ProjectsScreen (F063 hook)', () => {
+    // The props still come from projectStore (hook sets the state).
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
     expect(appSrc).toContain('breakdownLoading={breakdownLoading}');
     expect(appSrc).toContain('breakdownError={breakdownError}');
-    expect(appSrc).toContain("type: 'error'");
-    expect(appSrc).toMatch(/mostrando valores locales/);
+    // Fallback copy + error toast moved to projectStore hook.
+    const projectStoreSrc = readFileSync(
+      join(here, 'stores/projectStore.ts'),
+      'utf8',
+    );
+    expect(projectStoreSrc).toContain("type: 'error'");
+    expect(projectStoreSrc).toMatch(/mostrando valores locales/);
   });
 
   it('#13: root ErrorBoundary wraps App in main.tsx', () => {
