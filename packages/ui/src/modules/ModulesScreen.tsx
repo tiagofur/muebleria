@@ -142,6 +142,12 @@ export interface ModulesScreenProps {
   readonly onUploadImage?: (file: File) => Promise<string>;
   /** Resolve media path for preview. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /**
+   * F072: Board-first editor slot. When provided, the Components tab shows
+   * the BoardEditor instead of the legacy components panel. The shell
+   * constructs this from BoardEditor (apps/web).
+   */
+  readonly boardEditorSlot?: ReactNode;
 }
 
 export function ModulesScreen({
@@ -175,6 +181,7 @@ export function ModulesScreen({
   canMutate = true,
   onUploadImage,
   resolveImageUrl = (u) => u,
+  boardEditorSlot,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -876,6 +883,7 @@ export function ModulesScreen({
               previewBlocked={previewBlocked}
               missingGroups={missingGroups}
               groupLabels={groupLabels}
+              boardEditorSlot={boardEditorSlot}
             />
           </div>
           <aside

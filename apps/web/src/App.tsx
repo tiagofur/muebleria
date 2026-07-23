@@ -166,6 +166,7 @@ import {
   useUiStore,
 } from './stores';
 import { ToastViewport } from './components/ToastViewport';
+import { BoardEditor } from './components/BoardEditor';
 
 
 function newId(): string {
@@ -1661,6 +1662,23 @@ function AppContent({
           onUploadImage={
             canMutateModules && session === 'auth' && authToken
               ? uploadCatalogImage
+              : undefined
+          }
+          boardEditorSlot={
+            editingModuleId && catalog
+              ? (() => {
+                  const mod = modules.find((m) => m.id === editingModuleId);
+                  if (!mod) return undefined;
+                  return (
+                    <BoardEditor
+                      module={mod}
+                      catalog={catalog}
+                      moduleWidth={mod.externalDims?.width}
+                      moduleHeight={mod.externalDims?.height}
+                      moduleDepth={mod.externalDims?.depth}
+                    />
+                  );
+                })()
               : undefined
           }
         />
