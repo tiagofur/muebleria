@@ -11,3 +11,10 @@ export {
   type Point3D,
   type IsoFace,
 } from './isoProjection';
+export {
+  snapToGrid,
+  snapPositionToGrid,
+  snapToPeer,
+  snapPosition,
+  screenDeltaToWorkshop,
+} from './snapping';
