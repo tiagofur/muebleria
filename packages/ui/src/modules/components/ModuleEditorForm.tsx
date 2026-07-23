@@ -69,6 +69,12 @@ export type ModuleEditorFormProps = {
   readonly previewBlocked: boolean;
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
+  /**
+   * F072: Board-first editor slot. When provided, replaces the Components tab
+   * content with the BoardEditor (canvas + properties panel). The shell
+   * (apps/web) constructs this from BoardEditor which has access to editorStore.
+   */
+  readonly boardEditorSlot?: ReactNode;
 };
 
 export function ModuleEditorForm({
@@ -101,6 +107,7 @@ export function ModuleEditorForm({
   previewBlocked,
   missingGroups,
   groupLabels,
+  boardEditorSlot,
 }: ModuleEditorFormProps): ReactNode {
   return (
     <form
@@ -170,14 +177,21 @@ export function ModuleEditorForm({
         hidden={editorTab !== 'structure'}
       />
 
-      <ModuleEditorComponentsPanel
-        draft={draft}
-        setDraft={setDraft}
-        catalogComponents={catalogComponents}
-        composedEnabled={composedEnabled}
-        onRequestAdd={onRequestAddComponent}
-        hidden={editorTab !== 'components'}
-      />
+      {/* F072: Board-first editor replaces Components tab when slot is provided. */}
+      {boardEditorSlot && editorTab === 'components' ? (
+        <div className="module-editor__board-slot" data-testid="module-editor-board-slot">
+          {boardEditorSlot}
+        </div>
+      ) : (
+        <ModuleEditorComponentsPanel
+          draft={draft}
+          setDraft={setDraft}
+          catalogComponents={catalogComponents}
+          composedEnabled={composedEnabled}
+          onRequestAdd={onRequestAddComponent}
+          hidden={editorTab !== 'components'}
+        />
+      )}
 
       <ModuleEditorMeasuresPanel
         draft={draft}
