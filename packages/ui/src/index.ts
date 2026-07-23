@@ -244,6 +244,10 @@ export {
 export {
   BoardCanvas,
   type BoardCanvasProps,
+  BoardPropertiesPanel,
+  type BoardPropertiesPanelProps,
+  type PartPose,
+  type PartDimensions,
   isoProject,
   isoBox,
   boxCorners,
