@@ -49,3 +49,13 @@ export {
   TOAST_EXIT_MS,
   TOAST_MAX,
 } from './uiStore';
+
+export {
+  useEditorStore,
+  getEditorStoreState,
+  type EditorState,
+  type EditorTool,
+  type EditorViewMode,
+  type PartPose,
+  type PartDimensions,
+} from './editorStore';
