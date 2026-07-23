@@ -239,3 +239,17 @@ export {
   type BoardColorMode,
   type Project3DPreviewResult,
 } from './preview3d';
+
+// --- Board-first editor (Fase 1) ---
+export {
+  BoardCanvas,
+  type BoardCanvasProps,
+  isoProject,
+  isoBox,
+  boxCorners,
+  projectedBounds,
+  viewBoxFromBounds,
+  type Point2D,
+  type Point3D,
+  type IsoFace,
+} from './editor';

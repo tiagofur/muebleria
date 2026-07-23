@@ -200,4 +200,14 @@
   --transition-shadow: box-shadow var(--duration-fast) var(--ease-out);
   --transition-transform: transform var(--duration-normal) var(--ease-out);
   --transition-opacity: opacity var(--duration-fast) var(--ease-out);
+
+  /* --- Canvas tokens (F068 board-first editor) --- */
+  --canvas-bg: hsl(220 20% 92%);
+  --canvas-grid: hsl(220 14% 80%);
+  --canvas-grid-major: hsl(220 12% 65%);
+  --canvas-selection: var(--brand-500);
+  --canvas-snap: var(--accent-500);
+  --canvas-ghost: hsl(220 10% 70% / 0.25);
+  --canvas-part-stroke: hsl(230 18% 25%);
+  --canvas-part-stroke-selected: var(--brand-500);
 }
