@@ -249,3 +249,13 @@ export type {
   NestingImportRow,
   NestingImportResult,
 } from './nestingImport';
+
+// --- Command pattern + undo/redo (PRD §4.3, F061) ---
+export { CommandManager, type Command } from './commandManager';
+export {
+  addProjectItemCommand,
+  removeProjectItemWithSnapshotCommand,
+  changeOptionChoiceWithSnapshotCommand,
+  updateProjectItemCommand,
+  changeQuantityCommand,
+} from './projectCommands';
