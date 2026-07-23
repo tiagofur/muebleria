@@ -14,7 +14,7 @@ import type { Component, OptionGroup, MaterialBoard } from '@muebles/domain';
 import {
   Modal,
   useDebouncedValue,
-  useDraftSession,
+  useEntityEditorState,
   useRoutableEntitySelection,
 } from '../common';
 import {
@@ -90,21 +90,37 @@ export function ComponentsScreen({
       knownIds: componentIds,
     });
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const draftKey = `component-draft:${openComponentEditId ?? 'idle'}`;
-  const [draft, setDraft, clearDraft] = useDraftSession<ComponentDraft>(
+  const {
+    modalOpen,
+    setModalOpen,
+    editingId,
+    setEditingId,
+    draft,
+    setDraft,
+    initialDraft,
+    setInitialDraft,
+    confirmDiscard,
+    editorTab,
+    error,
+    isDraftDirty,
+    setEditorTab,
+    setError,
+    setConfirmDiscard,
+    forceCloseEditor,
+    closeModal,
+    clearDraft,
+  } = useEntityEditorState<ComponentDraft, ComponentEditorTab>({
     draftKey,
-    emptyComponentDraft(),
-  );
-  /**
-   * Snapshot of the draft taken when the editor opened (Fase 3 UI 3c).
-   * Used to detect dirty draft and warn before discarding on close.
-   */
-  const [initialDraft, setInitialDraft] = useState<ComponentDraft | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [editorTab, setEditorTab] = useState<ComponentEditorTab>('general');
-  const [error, setError] = useState<string | null>(null);
+    emptyDraft: emptyComponentDraft,
+    defaultTab: 'general',
+    onEditorClose: (restoreId) => {
+      if (openComponentEditId && onSelectionChange) {
+        onSelectionChange(restoreId);
+      }
+    },
+    currentSelectionId: expandedId,
+  });
 
   const materialColors = useMemo(
     () => materialColorMap(materials),
@@ -216,42 +232,7 @@ export function ComponentsScreen({
     [normalizedComponents, status, debouncedSearch],
   );
 
-  /**
-   * True when the user has changed the draft since opening the editor.
-   */
-  const isDraftDirty =
-    initialDraft != null &&
-    JSON.stringify(draft) !== JSON.stringify(initialDraft);
-
-  /**
-   * Hard close: clear all editor state, no warn. Called after a successful
-   * save or after the user confirms discard.
-   */
-  const forceCloseEditor = () => {
-    setModalOpen(false);
-    setEditingId(null);
-    setDraft(emptyComponentDraft());
-    setInitialDraft(null);
-    setEditorTab('general');
-    setError(null);
-    setConfirmDiscard(false);
-    clearDraft();
-    if (openComponentEditId && onSelectionChange) {
-      onSelectionChange(expandedId);
-    }
-  };
-
-  /**
-   * Close the editor. When the draft is dirty, ask the user to confirm
-   * discarding changes via the confirm-discard modal.
-   */
-  const closeModal = () => {
-    if (isDraftDirty) {
-      setConfirmDiscard(true);
-      return;
-    }
-    forceCloseEditor();
-  };
+  // F059: isDraftDirty, forceCloseEditor, closeModal come from useEntityEditorState.
 
   /**
    * Open the editor (create-new). When `onRequestEdit` is wired (Fase 3 UI),

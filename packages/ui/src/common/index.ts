@@ -33,6 +33,11 @@ export {
   type UseRoutableEntitySelectionResult,
 } from './useRoutableEntitySelection';
 export { useDraftSession } from './useDraftSession';
+export {
+  useEntityEditorState,
+  type EntityEditorState,
+  type UseEntityEditorStateOptions,
+} from './useEntityEditorState';
 export { EMPTY_PLACEHOLDER, formatEmpty } from './formatEmpty';
 export {
   formatMoneyDisplay,

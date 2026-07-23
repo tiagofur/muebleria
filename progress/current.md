@@ -1,30 +1,38 @@
-# Sesión actual — F058a Extracción de modales de ProjectsScreen (PARCIAL)
+# Sesión actual — F059 EntityEditorLayout (último slice de Fase 0)
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch activa:** `wip/perfect-app-fase-0-projects-a` (basada en `main` post-F064)
+- **Branch:** `wip/perfect-app-fase-0-editor-layout` (basada en `main`, sin cambios)
 - **META issue:** #156 Perfect App roadmap
-- **Feature:** F058 — phase0_split_projects_screen (sub-slice a de 3)
+- **Feature:** F059 — phase0_entity_editor_layout (última feature de Fase 0)
 
-## Progreso F058a
+## Contexto
 
-### Hecho (commit pushed)
-- ✅ StatusBadge extraído
-- ✅ 4 modales simples extraídos: ConfirmDelete, ConfirmReopen, SaveAsTemplate, TemplatesManagement
-- ✅ Verification: typecheck 6/6, tests 320/320, Playwright 6/6
+F059 abstrae el patrón común de edición de ModulesScreen (1273 L), StructuresScreen (780 L) y ComponentsScreen (569 L) en un componente `EntityEditorLayout<Tab, Draft>` genérico.
 
-### Pendiente (próxima sesión, MISMA branch)
-- [ ] MetaModal — absorber `renderMetaForm` (líneas 963-1139, ~177 L). Recibe draft, customers, options, handlers. State interno del form.
-- [ ] AddItemModal — absorber `renderAddItemForm` (líneas 1141-1330, ~190 L). State interno del cascade.
-- [ ] TemplatePickerModal — absorber bloque 2596-2693. Recibe templates, handlers.
+Los 3 comparten: state (modalOpen, editingId, initialDraft, confirmDiscard, editorTab, error, search, status), hooks (useDraftSession, useRoutableEntitySelection), y flujo (lista → detalle → editor con tabs).
 
-### Después de F058a completo
-- F058b: partir el detalle (chrome + body)
-- F058c: separar la lista
+El agente de extracción timed out (timeout 10min). Working tree limpio — sin cambios.
 
-## Notas para la próxima sesión
+## Plan para próxima sesión
 
-- ProjectsScreen está en 2664 L (de 2793 original).
-- Los 320 tests existentes son la red de seguridad (testean por testid/role/texto).
-- `renderMetaForm` y `renderAddItemForm` son closures que capturan state de ProjectsScreen — al extraerlas, hay que pasar el state necesario como props.
-- El patrón ya está calibrado con los 5 componentes extraídos: import en ProjectsScreen + JSX controlado + state de apertura queda en el orquestador.
-- Branch ya pushed: `wip/perfect-app-fase-0-projects-a`. HEAD == origin.
+1. Leer los 3 screens para mapear el patrón exacto (state + handlers + JSX structure).
+2. Crear `packages/ui/src/common/EntityEditorLayout.tsx` genérico.
+3. Aplicar al screen más simple primero (ComponentsScreen 569 L), verificar tests.
+4. Aplicar a StructuresScreen, verificar.
+5. Aplicar a ModulesScreen (el más complejo), verificar.
+6. Objetivos: Modules < 600, Structures < 500, Components < 400.
+
+## Estado Fase 0 — solo F059 pendiente
+
+| ID | Feature | Estado |
+|---|---|---|
+| F057-F064 | 4 stores Zustand | ✅ merged |
+| F058 (a+b+c) | Partir ProjectsScreen | ✅ merged |
+| F060 | Partir engine.ts | ✅ merged |
+| F061 | Command pattern + undo/redo | ✅ merged |
+| **F059** | **EntityEditorLayout común** | **⏳ pendiente (este)** |
+
+## Después de F059 → Fase 1: Board-first editor
+
+Fase 0 cierra con F059. Fase 1 es el corazón del roadmap Perfect App:
+canvas con tablas manipulables, panel props contextual, snapping, costo en vivo.

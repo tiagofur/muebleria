@@ -39,7 +39,7 @@ import {
   Modal,
   PageLoading,
   useDebouncedValue,
-  useDraftSession,
+  useEntityEditorState,
 } from '../common';
 import '../catalogs/catalogs.css';
 import {
@@ -183,25 +183,43 @@ export function ModulesScreen({
   const [categoryFilter, setCategoryFilter] =
     useState<CategoryFilterId>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   /**
    * Fase 3 follow-up: draft persisted to sessionStorage so it survives F5 /
    * navigation to other sections and back. Key is derived from
    * `openModuleEditId` so each entity has its own slot.
    */
   const draftKey = `module-draft:${openModuleEditId ?? 'idle'}`;
-  const [draft, setDraft, clearDraft] = useDraftSession<ModuleDraft>(
+  // F059: shared entity editor state extracted to useEntityEditorState.
+  const {
+    modalOpen,
+    setModalOpen,
+    editingId,
+    setEditingId,
+    draft,
+    setDraft,
+    initialDraft,
+    setInitialDraft,
+    confirmDiscard,
+    editorTab,
+    error,
+    isDraftDirty,
+    setEditorTab,
+    setError,
+    setConfirmDiscard,
+    forceCloseEditor,
+    closeModal,
+    clearDraft,
+  } = useEntityEditorState<ModuleDraft, ModuleEditorTab>({
     draftKey,
-    emptyModuleDraft(),
-  );
-  /**
-   * Snapshot of the draft taken when the editor opened (Fase 3 UI 3a.3).
-   * Used to detect a "dirty" draft and warn before discarding on close.
-   */
-  const [initialDraft, setInitialDraft] = useState<ModuleDraft | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+    emptyDraft: emptyModuleDraft,
+    defaultTab: 'general',
+    onEditorClose: (restoreId) => {
+      if (openModuleEditId && onSelectionChange) {
+        onSelectionChange(restoreId);
+      }
+    },
+    currentSelectionId: selectedId,
+  });
   /** MD modal: list + manage actions (not mixed into the filter sidebar). */
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
   /** SM modal: create/edit single category form. */
@@ -212,8 +230,6 @@ export function ModulesScreen({
   const [categoryDraft, setCategoryDraft] =
     useState<CategoryDraft>(emptyCategoryDraft);
   const [categoryError, setCategoryError] = useState<string | null>(null);
-  const [editorTab, setEditorTab] =
-    useState<ModuleEditorTab>('general');
   const [addComponentOpen, setAddComponentOpen] = useState(false);
   const [componentSearch, setComponentSearch] = useState('');
   const debouncedCompSearch = useDebouncedValue(componentSearch);
@@ -455,46 +471,7 @@ export function ModulesScreen({
     }
   }, [modalOpen, editingId, selectedId, onEditingChange]);
 
-  /**
-   * True when the user has changed the draft since opening the editor
-   * (Fase 3 UI 3a.3). Used to warn before discarding on close.
-   */
-  const isDraftDirty =
-    initialDraft != null &&
-    JSON.stringify(draft) !== JSON.stringify(initialDraft);
-
-  /**
-   * Hard close: clear all editor state, no warn. Called after a successful
-   * save or after the user confirms discard.
-   */
-  const forceCloseEditor = () => {
-    setModalOpen(false);
-    setEditingId(null);
-    setDraft(emptyModuleDraft());
-    setInitialDraft(null);
-    setError(null);
-    setEditorTab('general');
-    setConfirmDiscard(false);
-    // Fase 3 follow-up: clear persisted draft so next session starts fresh.
-    clearDraft();
-    if (openModuleEditId && onSelectionChange) {
-      // After closing the editor, go back to the view (selectedId) or the list.
-      onSelectionChange(selectedId);
-    }
-  };
-
-  /**
-   * Close the editor. When the draft is dirty, ask the user to confirm
-   * discarding changes via the confirm-discard modal. Otherwise close
-   * immediately.
-   */
-  const closeModal = () => {
-    if (isDraftDirty) {
-      setConfirmDiscard(true);
-      return;
-    }
-    forceCloseEditor();
-  };
+  // F059: isDraftDirty, forceCloseEditor, closeModal come from useEntityEditorState.
 
   /**
    * Open the editor (create-new). When `onRequestEdit` is wired (Fase 3 UI),
