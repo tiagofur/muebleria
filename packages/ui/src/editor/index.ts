@@ -1,5 +1,6 @@
 export { BoardCanvas, type BoardCanvasProps } from './BoardCanvas';
 export { BoardPropertiesPanel, type BoardPropertiesPanelProps } from './BoardPropertiesPanel';
+export { BoardCostSummary, type BoardCostSummaryProps } from './BoardCostSummary';
 export { type PartPose, type PartDimensions } from './types';
 export {
   isoProject,

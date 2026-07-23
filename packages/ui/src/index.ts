@@ -246,6 +246,8 @@ export {
   type BoardCanvasProps,
   BoardPropertiesPanel,
   type BoardPropertiesPanelProps,
+  BoardCostSummary,
+  type BoardCostSummaryProps,
   type PartPose,
   type PartDimensions,
   isoProject,
