@@ -86,6 +86,7 @@ export function BoardEditor({
           parts={visuals}
           selectedPartId={selectedPartId}
           onSelectPart={selectPart}
+          onDragPart={(id, pose) => updatePartPose(id, pose)}
           moduleWidth={moduleWidth}
           moduleHeight={moduleHeight}
           moduleDepth={moduleDepth}
