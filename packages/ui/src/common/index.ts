@@ -26,6 +26,7 @@ export {
   useDebouncedValue,
   SEARCH_DEBOUNCE_MS,
 } from './useDebouncedValue';
+export { useUndoRedo, type UndoRedoApi } from './useUndoRedo';
 export {
   useRoutableEntitySelection,
   type UseRoutableEntitySelectionOptions,
