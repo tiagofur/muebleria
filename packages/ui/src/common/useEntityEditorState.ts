@@ -19,7 +19,9 @@ import { useDraftSession } from './useDraftSession';
 export interface EntityEditorState<Draft, Tab extends string> {
   // --- State ---
   readonly modalOpen: boolean;
+  readonly setModalOpen: Dispatch<SetStateAction<boolean>>;
   readonly editingId: string | null;
+  readonly setEditingId: Dispatch<SetStateAction<string | null>>;
   readonly draft: Draft;
   readonly setDraft: Dispatch<SetStateAction<Draft>>;
   readonly initialDraft: Draft | null;
@@ -141,6 +143,8 @@ export function useEntityEditorState<Draft, Tab extends string>(
     setError,
     setConfirmDiscard,
     setInitialDraft,
+    setModalOpen,
+    setEditingId,
     forceCloseEditor,
     closeModal,
     openCreateEditor,

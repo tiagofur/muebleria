@@ -183,8 +183,6 @@ export function ModulesScreen({
   const [categoryFilter, setCategoryFilter] =
     useState<CategoryFilterId>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   /**
    * Fase 3 follow-up: draft persisted to sessionStorage so it survives F5 /
    * navigation to other sections and back. Key is derived from
@@ -193,6 +191,10 @@ export function ModulesScreen({
   const draftKey = `module-draft:${openModuleEditId ?? 'idle'}`;
   // F059: shared entity editor state extracted to useEntityEditorState.
   const {
+    modalOpen,
+    setModalOpen,
+    editingId,
+    setEditingId,
     draft,
     setDraft,
     initialDraft,

@@ -90,11 +90,12 @@ export function ComponentsScreen({
       knownIds: componentIds,
     });
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const draftKey = `component-draft:${openComponentEditId ?? 'idle'}`;
-  // F059: shared entity editor state extracted to useEntityEditorState.
   const {
+    modalOpen,
+    setModalOpen,
+    editingId,
+    setEditingId,
     draft,
     setDraft,
     initialDraft,

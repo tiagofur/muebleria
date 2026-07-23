@@ -97,11 +97,13 @@ export function StructuresScreen({
     knownIds: structureIds,
   });
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const draftKey = `structure-draft:${openStructureEditId ?? 'idle'}`;
   // F059: shared entity editor state extracted to useEntityEditorState.
   const {
+    modalOpen,
+    setModalOpen,
+    editingId,
+    setEditingId,
     draft,
     setDraft,
     initialDraft,
