@@ -22,6 +22,7 @@ import {
 import {
   useEditorStore,
 } from '../stores';
+import { useBoardShortcuts } from './useBoardShortcuts';
 import './boardEditor.css';
 
 export interface BoardEditorProps {
@@ -52,6 +53,9 @@ export function BoardEditor({
   const updatePartDimensions = useEditorStore((s) => s.updatePartDimensions);
   const duplicatePart = useEditorStore((s) => s.duplicatePart);
   const removePart = useEditorStore((s) => s.removePart);
+
+  // F074: keyboard shortcuts (d=duplicate, r=rotate, del=remove, v=toggle).
+  useBoardShortcuts(true);
 
   // Resolve BOM on mount or when module/catalog/preset changes.
   useEffect(() => {
