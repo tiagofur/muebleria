@@ -16,6 +16,7 @@ import { resolveBom } from '@muebles/domain';
 import {
   BoardCanvas,
   BoardPropertiesPanel,
+  BoardCostSummary,
   boardPartsToVisuals,
 } from '@muebles/ui';
 import {
@@ -91,6 +92,7 @@ export function BoardEditor({
           moduleHeight={moduleHeight}
           moduleDepth={moduleDepth}
         />
+        <BoardCostSummary parts={resolvedParts} catalog={catalog} />
       </div>
       <BoardPropertiesPanel
         part={selectedVisual}
