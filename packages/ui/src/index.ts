@@ -163,6 +163,8 @@ export {
   type ModalSize,
   type SearchInputProps,
   type StatusChipsProps,
+  Furniture3DViewer,
+  type Furniture3DViewerProps,
 } from './common';
 
 export {

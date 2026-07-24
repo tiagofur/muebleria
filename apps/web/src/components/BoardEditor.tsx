@@ -11,13 +11,16 @@
  */
 
 import { useEffect, useMemo, type ReactNode } from 'react';
+import { Box } from 'lucide-react';
 import type { Catalog, Module } from '@muebles/domain';
 import { resolveBom } from '@muebles/domain';
 import {
   BoardCanvas,
   BoardPropertiesPanel,
   BoardCostSummary,
+  Furniture3DViewer,
   boardPartsToVisuals,
+  materialColorMap,
 } from '@muebles/ui';
 import {
   useEditorStore,
@@ -53,9 +56,17 @@ export function BoardEditor({
   const updatePartDimensions = useEditorStore((s) => s.updatePartDimensions);
   const duplicatePart = useEditorStore((s) => s.duplicatePart);
   const removePart = useEditorStore((s) => s.removePart);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
 
   // F074: keyboard shortcuts (d=duplicate, r=rotate, del=remove, v=toggle).
   useBoardShortcuts(true);
+
+  // Material color lookup for 3D viewer.
+  const materialColors = useMemo(
+    () => materialColorMap(catalog.materials),
+    [catalog.materials],
+  );
 
   // Resolve BOM on mount or when module/catalog/preset changes.
   useEffect(() => {
@@ -87,15 +98,45 @@ export function BoardEditor({
   return (
     <div className="board-editor" data-testid="board-editor">
       <div className="board-editor__canvas">
-        <BoardCanvas
-          parts={visuals}
-          selectedPartId={selectedPartId}
-          onSelectPart={selectPart}
-          onDragPart={(id, pose) => updatePartPose(id, pose)}
-          moduleWidth={moduleWidth}
-          moduleHeight={moduleHeight}
-          moduleDepth={moduleDepth}
-        />
+        <div className="board-editor__toolbar">
+          <button
+            type="button"
+            className={viewMode === '2d-iso' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+            onClick={() => setViewMode('2d-iso')}
+            data-testid="board-view-2d"
+          >
+            2D Iso
+          </button>
+          <button
+            type="button"
+            className={viewMode === '3d' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+            onClick={() => setViewMode('3d')}
+            data-testid="board-view-3d"
+          >
+            <Box size={14} strokeWidth={1.5} aria-hidden />
+            3D
+          </button>
+        </div>
+        {viewMode === '3d' ? (
+          <Furniture3DViewer
+            parts={resolvedParts}
+            width={moduleWidth ?? 600}
+            height={moduleHeight ?? 720}
+            depth={moduleDepth ?? 580}
+            materialColors={materialColors}
+            className="board-editor__3d"
+          />
+        ) : (
+          <BoardCanvas
+            parts={visuals}
+            selectedPartId={selectedPartId}
+            onSelectPart={selectPart}
+            onDragPart={(id, pose) => updatePartPose(id, pose)}
+            moduleWidth={moduleWidth}
+            moduleHeight={moduleHeight}
+            moduleDepth={moduleDepth}
+          />
+        )}
         <BoardCostSummary parts={resolvedParts} catalog={catalog} />
       </div>
       <BoardPropertiesPanel
