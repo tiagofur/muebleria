@@ -14,7 +14,7 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Palette, X } from 'lucide-react';
+import { Camera, Palette, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   FurnitureScene3D,
@@ -130,6 +130,23 @@ export function ProjectPresentationMode({
     () => materialColorMap(catalog.materials),
     [catalog.materials],
   );
+
+  const handleCapturePng = () => {
+    const container = document.querySelector('[data-testid="project-presentation-mode"]');
+    if (!container) return;
+    const canvas = container.querySelector('canvas');
+    if (!canvas) return;
+    // Force a render before capture to ensure framebuffer is ready.
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_3d.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch {
+      // WebGL canvas may need preserveDrawingBuffer — fallback silently.
+    }
+  };
 
   if (!open) return null;
 
@@ -250,6 +267,16 @@ export function ProjectPresentationMode({
                   data-testid="presentation-color-role"
                 >
                   Por función
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={handleCapturePng}
+                  data-testid="presentation-capture-png"
+                  title="Guardar imagen 3D"
+                >
+                  <Camera size={14} strokeWidth={1.5} aria-hidden />
+                  Captura
                 </button>
               </div>
             </div>
