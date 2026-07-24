@@ -2,7 +2,13 @@
  * Simple kitchen plan editor (#133): walls + place/reorder quote modules.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import type {
   Module,
   Project,
@@ -275,6 +281,86 @@ export function KitchenPlanPanel({
   const svgW = Math.max(320, maxX * scale + pad * 2);
   const svgH = Math.max(220, maxY * scale + pad * 2);
 
+  // --- Drag state for placements (Fase 2) ---
+  const dragRef = useRef<{
+    itemId: string;
+    instanceIndex: number;
+    wallId: string;
+    startPx: number;
+    startPy: number;
+    origOffset: number;
+    isVertical: boolean;
+    wallLength: number;
+    itemWidth: number;
+  } | null>(null);
+
+  const handlePlacementPointerDown = useCallback(
+    (
+      e: ReactPointerEvent<SVGRectElement>,
+      p: ProjectItemPlacement,
+    ) => {
+      if (!canEdit) return;
+      e.stopPropagation();
+      const wall = frames.find((f) => f.id === p.wallId);
+      if (!wall) return;
+      const w = moduleWidth(
+        project.items.find((i) => i.id === p.itemId) ?? {
+          id: p.itemId,
+          moduleId: '',
+          quantity: 1,
+          optionChoices: {},
+        },
+        modules,
+      );
+      const angle = ((wall.angleDeg % 360) + 360) % 360;
+      const isVertical = angle > 45 && angle < 135;
+      dragRef.current = {
+        itemId: p.itemId,
+        instanceIndex: p.instanceIndex,
+        wallId: p.wallId,
+        startPx: e.clientX,
+        startPy: e.clientY,
+        origOffset: p.offsetMm,
+        isVertical,
+        wallLength: wall.lengthMm,
+        itemWidth: w,
+      };
+      (e.target as SVGRectElement).setPointerCapture(e.pointerId);
+    },
+    [canEdit, frames, project.items, modules],
+  );
+
+  const handlePlacementPointerMove = useCallback(
+    (e: ReactPointerEvent<SVGRectElement>) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const deltaPx = drag.isVertical
+        ? e.clientY - drag.startPy
+        : e.clientX - drag.startPx;
+      const deltaMm = deltaPx / scale;
+      let newOffset = drag.origOffset + deltaMm;
+      // Clamp: 0 ≤ offset ≤ wallLength - itemWidth.
+      newOffset = Math.max(0, Math.min(newOffset, drag.wallLength - drag.itemWidth));
+      newOffset = Math.round(newOffset);
+      updatePlacement(drag.itemId, drag.instanceIndex, { offsetMm: newOffset });
+    },
+    // updatePlacement is stable enough (closure over layout/onChange).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const handlePlacementPointerUp = useCallback(
+    (e: ReactPointerEvent<SVGRectElement>) => {
+      dragRef.current = null;
+      try {
+        (e.target as SVGRectElement).releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    },
+    [],
+  );
+
   return (
     <div
       className="project-detail__section"
@@ -325,9 +411,9 @@ export function KitchenPlanPanel({
             data-testid="kitchen-plan-svg"
             style={{
               maxWidth: '100%',
-              background: 'var(--surface-2, #f4f4f5)',
-              borderRadius: 8,
-              border: '1px solid var(--border, #e4e4e7)',
+              background: 'var(--surface-muted)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-default)',
             }}
           >
             {frames.map((f) => {
@@ -342,7 +428,7 @@ export function KitchenPlanPanel({
                     y1={y1}
                     x2={x2}
                     y2={y2}
-                    stroke="var(--text, #18181b)"
+                    stroke="var(--text-primary)"
                     strokeWidth={4}
                     strokeLinecap="square"
                   />
@@ -350,7 +436,7 @@ export function KitchenPlanPanel({
                     x={(x1 + x2) / 2}
                     y={(y1 + y2) / 2 - 8}
                     fontSize={11}
-                    fill="var(--text-muted, #71717a)"
+                    fill="var(--text-muted)"
                     textAnchor="middle"
                   >
                     {f.name} ({f.lengthMm} mm)
@@ -393,11 +479,19 @@ export function KitchenPlanPanel({
                   height={rh}
                   fill={
                     p.elevation === 'wall'
-                      ? 'var(--accent, #2563eb)'
-                      : 'var(--success, #16a34a)'
+                      ? 'var(--accent-500)'
+                      : 'var(--success-500)'
                   }
                   opacity={0.75}
                   data-testid={`kitchen-plan-box-${p.itemId}-${p.instanceIndex}`}
+                  onPointerDown={
+                    canEdit
+                      ? (e) => handlePlacementPointerDown(e, p)
+                      : undefined
+                  }
+                  onPointerMove={handlePlacementPointerMove}
+                  onPointerUp={handlePlacementPointerUp}
+                  style={{ cursor: canEdit ? 'grab' : 'default' }}
                 />
               );
             })}
