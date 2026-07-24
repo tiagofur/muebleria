@@ -74,10 +74,12 @@ export function ProjectPresentationMode({
   onClose,
 }: ProjectPresentationModeProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
+  const [explodeFactor, setExplodeFactor] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     setUseR3f(canUseWebGL());
+    setExplodeFactor(0); // Reset on open.
   }, [open]);
 
   useEffect(() => {
@@ -96,6 +98,30 @@ export function ProjectPresentationMode({
     () => resolveProject3DPreview(project, catalog),
     [project, catalog],
   );
+
+  // Apply explode factor: scale each part's position away from module center.
+  const explodedModules = useMemo(() => {
+    if (explodeFactor <= 0) return preview.modules;
+    return preview.modules.map((mod) => {
+      const cx = mod.width / 2;
+      const cy = mod.height / 2;
+      const cz = mod.depth / 2;
+      return {
+        ...mod,
+        parts: mod.parts.map((part) => {
+          const dx = (part.x ?? 0) - cx;
+          const dy = (part.y ?? 0) - cy;
+          const dz = (part.z ?? 0) - cz;
+          return {
+            ...part,
+            x: (part.x ?? 0) + dx * explodeFactor,
+            y: (part.y ?? 0) + dy * explodeFactor,
+            z: (part.z ?? 0) + dz * explodeFactor,
+          };
+        }),
+      };
+    });
+  }, [preview.modules, explodeFactor]);
 
   const materialColors = useMemo(
     () => materialColorMap(catalog.materials),
@@ -185,11 +211,30 @@ export function ProjectPresentationMode({
           className="project-presentation__viewer"
           aria-label="Vista 3D"
         >
+          {useR3f && !preview.empty ? (
+            <div className="project-presentation__explode-control">
+              <label htmlFor="explode-slider" className="project-presentation__explode-label">
+                Vista explosionada
+              </label>
+              <input
+                id="explode-slider"
+                type="range"
+                min={0}
+                max={3}
+                step={0.1}
+                value={explodeFactor}
+                onChange={(e) => setExplodeFactor(Number(e.target.value))}
+                className="project-presentation__explode-slider"
+                data-testid="presentation-explode-slider"
+                aria-label="Factor de explosión"
+              />
+            </div>
+          ) : null}
           {preview.empty ? (
             <p className="catalog-empty">Sin vista 3D disponible.</p>
           ) : useR3f ? (
             <FurnitureScene3D
-              modules={preview.modules.map((m) => ({
+              modules={explodedModules.map((m) => ({
                 key: m.instanceKey,
                 parts: m.parts,
                 width: m.width,
