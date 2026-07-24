@@ -342,11 +342,44 @@ export function KitchenPlanPanel({
       // Clamp: 0 ≤ offset ≤ wallLength - itemWidth.
       newOffset = Math.max(0, Math.min(newOffset, drag.wallLength - drag.itemWidth));
       newOffset = Math.round(newOffset);
+
+      // Snap to peer placement edges (other items on the same wall).
+      const SNAP_THRESHOLD_MM = 15;
+      const peerEdges: number[] = [0, drag.wallLength]; // wall start + end
+      for (const p of layout.placements) {
+        if (p.wallId !== drag.wallId) continue;
+        if (p.itemId === drag.itemId && p.instanceIndex === drag.instanceIndex) continue;
+        const peerW = moduleWidth(
+          project.items.find((i) => i.id === p.itemId) ?? {
+            id: p.itemId,
+            moduleId: '',
+            quantity: 1,
+            optionChoices: {},
+          },
+          modules,
+        );
+        peerEdges.push(p.offsetMm);            // left edge of peer
+        peerEdges.push(p.offsetMm + peerW);    // right edge of peer
+      }
+      // Check left edge of dragged item.
+      for (const edge of peerEdges) {
+        if (Math.abs(newOffset - edge) <= SNAP_THRESHOLD_MM) {
+          newOffset = edge;
+          break;
+        }
+        // Check right edge of dragged item aligning to peer edge.
+        if (Math.abs(newOffset + drag.itemWidth - edge) <= SNAP_THRESHOLD_MM) {
+          newOffset = edge - drag.itemWidth;
+          break;
+        }
+      }
+      // Re-clamp after snap.
+      newOffset = Math.max(0, Math.min(newOffset, drag.wallLength - drag.itemWidth));
+
       updatePlacement(drag.itemId, drag.instanceIndex, { offsetMm: newOffset });
     },
-    // updatePlacement is stable enough (closure over layout/onChange).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [layout.placements, project.items, modules],
   );
 
   const handlePlacementPointerUp = useCallback(
