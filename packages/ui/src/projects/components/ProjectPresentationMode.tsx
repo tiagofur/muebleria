@@ -14,12 +14,13 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { X } from 'lucide-react';
+import { Palette, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   FurnitureScene3D,
   canUseWebGL,
   materialColorMap,
+  type BoardColorMode,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
@@ -75,11 +76,13 @@ export function ProjectPresentationMode({
 }: ProjectPresentationModeProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [explodeFactor, setExplodeFactor] = useState(0);
+  const [colorMode, setColorMode] = useState<BoardColorMode>('material');
 
   useEffect(() => {
     if (!open) return;
     setUseR3f(canUseWebGL());
-    setExplodeFactor(0); // Reset on open.
+    setExplodeFactor(0);
+    setColorMode('material');
   }, [open]);
 
   useEffect(() => {
@@ -212,22 +215,43 @@ export function ProjectPresentationMode({
           aria-label="Vista 3D"
         >
           {useR3f && !preview.empty ? (
-            <div className="project-presentation__explode-control">
-              <label htmlFor="explode-slider" className="project-presentation__explode-label">
-                Vista explosionada
-              </label>
-              <input
-                id="explode-slider"
-                type="range"
-                min={0}
-                max={3}
-                step={0.1}
-                value={explodeFactor}
-                onChange={(e) => setExplodeFactor(Number(e.target.value))}
-                className="project-presentation__explode-slider"
-                data-testid="presentation-explode-slider"
-                aria-label="Factor de explosión"
-              />
+            <div className="project-presentation__controls">
+              <div className="project-presentation__control-group">
+                <label htmlFor="explode-slider" className="project-presentation__control-label">
+                  Vista explosionada
+                </label>
+                <input
+                  id="explode-slider"
+                  type="range"
+                  min={0}
+                  max={3}
+                  step={0.1}
+                  value={explodeFactor}
+                  onChange={(e) => setExplodeFactor(Number(e.target.value))}
+                  className="project-presentation__slider"
+                  data-testid="presentation-explode-slider"
+                  aria-label="Factor de explosión"
+                />
+              </div>
+              <div className="project-presentation__control-group">
+                <Palette size={16} strokeWidth={1.5} aria-hidden />
+                <button
+                  type="button"
+                  className={colorMode === 'material' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+                  onClick={() => setColorMode('material')}
+                  data-testid="presentation-color-material"
+                >
+                  Por material
+                </button>
+                <button
+                  type="button"
+                  className={colorMode === 'role' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+                  onClick={() => setColorMode('role')}
+                  data-testid="presentation-color-role"
+                >
+                  Por función
+                </button>
+              </div>
             </div>
           ) : null}
           {preview.empty ? (
@@ -250,7 +274,7 @@ export function ProjectPresentationMode({
               totalDepth={preview.totalDepth}
               showFloor
               testId="presentation-scene-3d"
-              colorMode="material"
+              colorMode={colorMode}
               materialColors={materialColors}
             />
           ) : (
