@@ -551,6 +551,12 @@ function AppContent({
 
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Fase 3 slice 3.5: detect ?present=projectId for shared presentation links.
+  const presentId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('present') ?? null;
+  }, [location.search]);
   const navId: AppNavId = navFromPath(location.pathname) ?? 'home';
   const routeEntityId =
     isEntitySection(navId)
@@ -1807,6 +1813,7 @@ function AppContent({
           onMarkProduced={markProjectProduced}
           onReopen={reopenProject}
           showCosts={showCosts}
+          autoPresentId={presentId}
         />
       ) : null}
     </AppShell>
