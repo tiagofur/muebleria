@@ -238,6 +238,11 @@ export interface ProjectsScreenProps {
   readonly onReopen?: (projectId: string) => void;
   /** F039: hide margin and cost breakdown. */
   readonly showCosts?: boolean;
+  /**
+   * Fase 3 slice 3.5: when set, auto-open the presentation mode for this
+   * project id (used by ?present=projectId URL sharing).
+   */
+  readonly autoPresentId?: string | null;
 }
 
 export function ProjectsScreen({
@@ -301,6 +306,7 @@ export function ProjectsScreen({
   onMarkProduced,
   onReopen,
   showCosts = true,
+  autoPresentId = null,
 }: ProjectsScreenProps): ReactNode {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -319,6 +325,13 @@ export function ProjectsScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
+
+  // Fase 3 slice 3.5: auto-open presentation when autoPresentId matches.
+  useEffect(() => {
+    if (autoPresentId && selectedId === autoPresentId && !showPresentation) {
+      setShowPresentation(true);
+    }
+  }, [autoPresentId, selectedId, showPresentation]);
   const [show3DModal, setShow3DModal] = useState(false);
   const [viewerItem, setViewerItem] = useState<{
     item: ProjectItem;

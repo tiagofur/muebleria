@@ -14,7 +14,7 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Camera, Palette, X } from 'lucide-react';
+import { Camera, Link2, Palette, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   FurnitureScene3D,
@@ -136,7 +136,6 @@ export function ProjectPresentationMode({
     if (!container) return;
     const canvas = container.querySelector('canvas');
     if (!canvas) return;
-    // Force a render before capture to ensure framebuffer is ready.
     try {
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
@@ -145,6 +144,20 @@ export function ProjectPresentationMode({
       link.click();
     } catch {
       // WebGL canvas may need preserveDrawingBuffer — fallback silently.
+    }
+  };
+
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleShareLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?present=${project.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Fallback: select prompt.
+      window.prompt('Copiá este link:', url);
     }
   };
 
@@ -277,6 +290,16 @@ export function ProjectPresentationMode({
                 >
                   <Camera size={14} strokeWidth={1.5} aria-hidden />
                   Captura
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={handleShareLink}
+                  data-testid="presentation-share-link"
+                  title="Copiar link de presentación"
+                >
+                  <Link2 size={14} strokeWidth={1.5} aria-hidden />
+                  {linkCopied ? '¡Copiado!' : 'Compartir'}
                 </button>
               </div>
             </div>
