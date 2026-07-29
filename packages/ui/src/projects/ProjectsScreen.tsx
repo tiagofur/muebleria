@@ -241,6 +241,8 @@ export interface ProjectsScreenProps {
   /** Shell applies status transition (snapshot rules). */
   readonly onMarkProduced?: (projectId: string) => void;
   readonly onReopen?: (projectId: string) => void;
+  /** #200: restore a project to a previous version snapshot. */
+  readonly onRestoreVersion?: (projectId: string, version: number) => void;
   /** F039: hide margin and cost breakdown. */
   readonly showCosts?: boolean;
   /**
@@ -311,6 +313,7 @@ export function ProjectsScreen({
   canMarkProduced = false,
   onMarkProduced,
   onReopen,
+  onRestoreVersion,
   showCosts = true,
   autoPresentId = null,
 }: ProjectsScreenProps): ReactNode {
@@ -841,6 +844,7 @@ export function ProjectsScreen({
           onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
           canMutate={canMutate}
           canDelete={canDelete}
+          onRestoreVersion={onRestoreVersion ? (version) => onRestoreVersion(selectedProject.id, version) : undefined}
           canReopen={canReopen}
           canMarkProduced={canMarkProduced}
           projectTemplates={projectTemplates}

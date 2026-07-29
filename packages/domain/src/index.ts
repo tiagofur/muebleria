@@ -35,6 +35,7 @@ export type {
   ModuleComponentInstance,
   ProjectItem,
   Project,
+  ProjectVersion,
   ProjectTemplate,
   PlacementElevation,
   KitchenWall,
@@ -270,3 +271,12 @@ export {
   suggestHardwareForModule,
   type WorkshopSuggestion,
 } from './workshopRules';
+
+// --- Project versioning / history (#200) ---
+export {
+  currentVersion,
+  snapshotProjectVersion,
+  restoreProjectVersion,
+  snapshotOnStatusChange,
+  diffVersions,
+} from './projectVersioning';

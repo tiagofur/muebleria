@@ -468,6 +468,39 @@ export interface Project {
   readonly updatedAt: string;
   /** Present when closed (quoted/accepted/produced); ignored while draft. */
   readonly priceSnapshot?: QuotePriceSnapshot;
+  /**
+   * Monotonic version number (#200). Defaults to 1 when absent (legacy data).
+   * Incremented on each snapshot (status change or manual save).
+   */
+  readonly version?: number;
+  /**
+   * Immutable snapshots of previous versions (#200), newest first.
+   * `history[0]` is always the most recently superseded version.
+   */
+  readonly history?: readonly ProjectVersion[];
+}
+
+/**
+ * Immutable snapshot of a superseded Project version (#200).
+ * Captures the full project state at a point in time so it can be restored.
+ */
+export interface ProjectVersion {
+  readonly version: number;
+  readonly name: string;
+  readonly status: ProjectStatus;
+  readonly items: readonly ProjectItem[];
+  readonly projectLevelChoices?: OptionChoices;
+  readonly measureDefaults?: {
+    readonly [type in FurnitureType]?: {
+      readonly depth?: number;
+      readonly height?: number;
+    };
+  };
+  readonly kitchenLayout?: ProjectKitchenLayout;
+  readonly notes?: string;
+  readonly priceSnapshot?: QuotePriceSnapshot;
+  readonly snapshotAt: string;
+  readonly label?: string;
 }
 
 /**

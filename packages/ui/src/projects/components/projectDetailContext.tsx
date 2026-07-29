@@ -174,6 +174,9 @@ export interface ProjectDetailContextValue {
     choices: OptionChoices,
   ) => void;
 
+  // --- Version history (#200) ---
+  readonly onRestoreVersion?: (version: number) => void;
+
   // --- Permissions ---
   readonly canMutate: boolean;
   readonly canDelete: boolean;

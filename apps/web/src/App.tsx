@@ -1001,6 +1001,12 @@ function AppContent({
     },
     [projectActions, catalog],
   );
+  const restoreProjectVersion = useCallback(
+    (id: string, version: number) => {
+      projectActions.restoreProjectVersion(id, version);
+    },
+    [projectActions],
+  );
   const duplicateProjectById = projectActions.duplicateProjectById;
   const saveAsTemplate = projectActions.saveAsTemplate;
   const createFromTemplate = useCallback(
@@ -1837,6 +1843,7 @@ function AppContent({
           canMarkProduced={canMarkProduced}
           onMarkProduced={markProjectProduced}
           onReopen={reopenProject}
+          onRestoreVersion={restoreProjectVersion}
           showCosts={showCosts}
           autoPresentId={presentId}
         />

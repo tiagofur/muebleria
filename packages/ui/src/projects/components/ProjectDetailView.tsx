@@ -54,6 +54,7 @@ import { ExportIssueList } from '../ExportIssueList';
 import { KitchenPlanPanel } from './KitchenPlanPanel';
 import { QuoteScenarioCompare } from './QuoteScenarioCompare';
 import { InstallationChecklistPanel } from './InstallationChecklistPanel';
+import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { ProjectItemStructureRevisionIndicator } from './ProjectItemStructureRevisionIndicator';
 import { StatusBadge } from './StatusBadge';
 import {
@@ -189,6 +190,9 @@ export interface ProjectDetailViewProps {
     choices: OptionChoices,
   ) => void;
 
+  // --- Version history (#200) ---
+  readonly onRestoreVersion?: (version: number) => void;
+
   // --- Permission flags ---
   readonly canMutate: boolean;
   readonly canDelete: boolean;
@@ -249,6 +253,7 @@ function ProjectDetailViewInner(): ReactNode {
     canDelete,
     canReopen,
     canMarkProduced,
+    onRestoreVersion,
   } = ctx;
 
   const chromeSale =
@@ -775,6 +780,14 @@ function ProjectDetailViewInner(): ReactNode {
             </section>
           ) : null}
 
+          {/* Version history panel (#200) */}
+          {onRestoreVersion ? (
+            <VersionHistoryPanel
+              project={project}
+              onRestore={onRestoreVersion}
+            />
+          ) : null}
+
           {exportBlockMessage ? (
             <p className="project-totals__export-msg" role="status">{exportBlockMessage}</p>
           ) : null}
@@ -842,6 +855,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     canDelete: props.canDelete,
     canReopen: props.canReopen,
     canMarkProduced: props.canMarkProduced,
+    onRestoreVersion: props.onRestoreVersion,
     projectTemplates: props.projectTemplates,
   };
 

@@ -36,6 +36,8 @@ import {
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   transitionProjectStatus,
+  snapshotOnStatusChange,
+  restoreProjectVersion,
 } from '@muebles/domain';
 import { breakdownFromApi } from '@muebles/storage';
 import type { ProjectDraft } from '@muebles/ui';
@@ -176,6 +178,7 @@ export interface ProjectState {
   readonly duplicateProjectById: (id: string) => void;
   readonly markProjectProduced: (id: string, catalog: Catalog) => void;
   readonly reopenProject: (id: string, catalog: Catalog) => void;
+  readonly restoreProjectVersion: (id: string, version: number) => void;
 
   // --- Templates ---
   readonly saveAsTemplate: (projectId: string, name: string) => void;
@@ -373,12 +376,14 @@ export function createProjectStore(options: InternalOptions) {
         updatedAt: now,
       };
       // Status change captures or clears priceSnapshot (PRD §7.4).
-      const updatedProject = transitionProjectStatus(
+      const withTransition = transitionProjectStatus(
         withMeta,
         meta.status,
         updatedCatalog,
         now,
       );
+      // Auto-snapshot on status change (#200).
+      const updatedProject = snapshotOnStatusChange(withTransition, meta.status);
 
       // F062 bug fix: persist customers via catalogStore.
       getCatalogStoreState().upsertCustomers(resolved.customers);
@@ -428,7 +433,8 @@ export function createProjectStore(options: InternalOptions) {
       const project = get().projects.find((p) => p.id === id);
       if (!project || project.status !== 'accepted') return;
       const now = new Date().toISOString();
-      const updated = transitionProjectStatus(project, 'produced', catalog, now);
+      const withTransition = transitionProjectStatus(project, 'produced', catalog, now);
+      const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({ type: 'success', message: '✓ Marcada en producción' });
     },
@@ -438,11 +444,24 @@ export function createProjectStore(options: InternalOptions) {
       const project = get().projects.find((p) => p.id === id);
       if (!project || project.status === 'draft') return;
       const now = new Date().toISOString();
-      const updated = transitionProjectStatus(project, 'draft', catalog, now);
+      const withTransition = transitionProjectStatus(project, 'draft', catalog, now);
+      const updated = snapshotOnStatusChange(withTransition, 'draft');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({
         type: 'info',
         message: 'Cotización reabierta a borrador (precios descongelados)',
+      });
+    },
+
+    /** Restore a project to a previous version (#200). */
+    restoreProjectVersion: (id, version) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project) return;
+      const updated = restoreProjectVersion(project, version);
+      patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
+      toast({
+        type: 'success',
+        message: `✓ Versión ${version} restaurada`,
       });
     },
 
