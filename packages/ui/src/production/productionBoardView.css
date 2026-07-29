@@ -1,0 +1,43 @@
+/**
+ * ProductionBoardView styles (Fase 4 slice 4.2).
+ */
+
+.production-board {
+  background: var(--surface-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.production-board__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--text-sm);
+}
+
+.production-board__label {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.production-board__count {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.production-board__svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.production-board__empty {
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  text-align: center;
+  padding: var(--space-6);
+}

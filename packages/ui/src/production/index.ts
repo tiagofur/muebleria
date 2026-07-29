@@ -9,6 +9,11 @@ export {
 } from './ProductionQueue';
 
 export {
+  ProductionBoardView,
+  type ProductionBoardViewProps,
+} from './ProductionBoardView';
+
+export {
   filterProductionQueue,
   filterProductionVisible,
   isProductionQueueStatus,
