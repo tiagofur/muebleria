@@ -19,6 +19,7 @@ export function resolveWorkshopSettings(
   const margin = settings.defaultMarginFactor;
   const labor = settings.defaultLaborFixedCost;
   const currency = settings.defaultCurrency?.trim();
+  const name = settings.workshopName?.trim();
   return {
     defaultMarginFactor:
       typeof margin === 'number' && Number.isFinite(margin) && margin > 0
@@ -35,6 +36,7 @@ export function resolveWorkshopSettings(
       typeof settings.vendedorCanViewCosts === 'boolean'
         ? settings.vendedorCanViewCosts
         : DEFAULT_WORKSHOP_SETTINGS.vendedorCanViewCosts,
+    workshopName: name || undefined,
   };
 }
 

@@ -27,6 +27,9 @@ export function SettingsScreen({
   const [vendedorCanViewCosts, setVendedorCanViewCosts] = useState(
     settings.vendedorCanViewCosts,
   );
+  const [workshopName, setWorkshopName] = useState(
+    settings.workshopName ?? '',
+  );
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -35,6 +38,7 @@ export function SettingsScreen({
     setLabor(String(settings.defaultLaborFixedCost));
     setCurrency(settings.defaultCurrency);
     setVendedorCanViewCosts(settings.vendedorCanViewCosts);
+    setWorkshopName(settings.workshopName ?? '');
   }, [settings]);
 
   const onSubmit = (event: FormEvent) => {
@@ -60,6 +64,7 @@ export function SettingsScreen({
       defaultLaborFixedCost: laborFixedCost,
       defaultCurrency: cur,
       vendedorCanViewCosts,
+      workshopName: workshopName.trim() || undefined,
     });
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 2000);
@@ -143,6 +148,23 @@ export function SettingsScreen({
             autoComplete="off"
           />
           <span className="settings-hint">Código de moneda (ej. MXN).</span>
+        </div>
+
+        <div className="catalog-form__field">
+          <label htmlFor="settings-workshop-name">Nombre del taller</label>
+          <input
+            id="settings-workshop-name"
+            type="text"
+            value={workshopName}
+            onChange={(e) => setWorkshopName(e.target.value)}
+            maxLength={80}
+            autoComplete="off"
+            placeholder="Ej. Carpintería Los Pinos"
+            data-testid="settings-workshop-name"
+          />
+          <span className="settings-hint">
+            Aparece en el pie de página de los PDFs exportados.
+          </span>
         </div>
 
         <div className="catalog-form__field settings-form__checkbox">

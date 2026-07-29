@@ -13,6 +13,7 @@ import {
   type Customer,
   type ExportIssue,
   type Project,
+  type WorkshopSettings,
 } from '@muebles/domain';
 import {
   commercialQuotePdfExport,
@@ -106,6 +107,7 @@ export async function buildCommercialQuotePdfExport(
   catalog: Catalog,
   customers: readonly Customer[] = [],
   variant: CommercialQuotePdfVariant = 'detailed',
+  workshopSettings?: WorkshopSettings,
 ): Promise<ExportCommercialQuotePdfResult> {
   if (project.items.length === 0) {
     return {
@@ -151,6 +153,7 @@ export async function buildCommercialQuotePdfExport(
       salePrice: breakdown.salePrice,
       pricesFrozen,
       variant,
+      workshopName: workshopSettings?.workshopName,
     });
 
     return {

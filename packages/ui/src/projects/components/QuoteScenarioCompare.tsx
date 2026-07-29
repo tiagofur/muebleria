@@ -96,7 +96,7 @@ export function QuoteScenarioCompare({
       <div className="project-detail__section-header">
         <h3 className="project-detail__section-title">Comparar escenario B</h3>
       </div>
-      <p className="catalog-form__hint" style={{ marginTop: 0 }}>
+      <p className="catalog-form__hint scenario-compare__hint--no-top">
         Probá otro material o herraje sin alterar la cotización actual. Podés comparar
         costos, descargar el PDF para el cliente o aplicar B.
       </p>
@@ -147,52 +147,43 @@ export function QuoteScenarioCompare({
       {result && result.ok ? (
         <>
           <div
-            className="project-scenario-compare__results"
+            className="project-scenario-compare__results scenario-compare__results"
             data-testid="scenario-results"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-              gap: '0.75rem',
-              marginTop: '0.75rem',
-            }}
           >
             <div>
-              <p className="catalog-form__hint" style={{ margin: 0 }}>
+              <p className="catalog-form__hint scenario-compare__label">
                 Escenario A (actual)
               </p>
               <p
-                style={{ margin: '0.25rem 0 0', fontWeight: 600 }}
+                className="scenario-compare__price"
                 data-testid="scenario-sale-a"
               >
                 {formatMoneyDisplay(result.saleA, { currency })}
               </p>
             </div>
             <div>
-              <p className="catalog-form__hint" style={{ margin: 0 }}>
+              <p className="catalog-form__hint scenario-compare__label">
                 Escenario B
               </p>
               <p
-                style={{ margin: '0.25rem 0 0', fontWeight: 600 }}
+                className="scenario-compare__price"
                 data-testid="scenario-sale-b"
               >
                 {formatMoneyDisplay(result.saleB, { currency })}
               </p>
             </div>
             <div>
-              <p className="catalog-form__hint" style={{ margin: 0 }}>
+              <p className="catalog-form__hint scenario-compare__label">
                 Diferencia (B − A)
               </p>
               <p
-                style={{
-                  margin: '0.25rem 0 0',
-                  fontWeight: 700,
-                  color:
-                    result.delta > 0
-                      ? 'var(--danger, #b91c1c)'
-                      : result.delta < 0
-                        ? 'var(--success, #15803d)'
-                        : undefined,
-                }}
+                className={`scenario-compare__delta${
+                  result.delta > 0
+                    ? ' scenario-compare__delta--positive'
+                    : result.delta < 0
+                      ? ' scenario-compare__delta--negative'
+                      : ''
+                }`}
                 data-testid="scenario-delta"
               >
                 {result.delta > 0 ? '+' : ''}
@@ -201,7 +192,7 @@ export function QuoteScenarioCompare({
             </div>
           </div>
 
-          <div style={{ marginTop: '0.5rem' }}>
+          <div className="scenario-compare__toggle">
             <button
               type="button"
               className="btn btn--ghost btn--sm"
@@ -214,55 +205,48 @@ export function QuoteScenarioCompare({
 
           {showBreakdown && result.breakdownA && result.breakdownB ? (
             <div
-              style={{
-                marginTop: '0.5rem',
-                padding: '0.75rem',
-                backgroundColor: 'var(--surface-subtle, #f8fafc)',
-                borderRadius: '6px',
-                border: '1px solid var(--border-subtle, #e2e8f0)',
-                fontSize: '0.85rem',
-              }}
+              className="scenario-compare__breakdown"
               data-testid="scenario-breakdown-table"
             >
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table className="scenario-compare__table">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #cbd5e1', textAlign: 'left' }}>
-                    <th style={{ padding: '4px' }}>Componente</th>
-                    <th style={{ padding: '4px', textAlign: 'right' }}>A (Actual)</th>
-                    <th style={{ padding: '4px', textAlign: 'right' }}>B (Propuesto)</th>
-                    <th style={{ padding: '4px', textAlign: 'right' }}>Diferencia</th>
+                  <tr className="scenario-compare__th-row">
+                    <th className="scenario-compare__cell">Componente</th>
+                    <th className="scenario-compare__cell--right">A (Actual)</th>
+                    <th className="scenario-compare__cell--right">B (Propuesto)</th>
+                    <th className="scenario-compare__cell--right">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td style={{ padding: '4px' }}>Tableros / Placas</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.materialsCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.materialsCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.materialsCost - result.breakdownA.materialsCost, { currency })}</td>
+                    <td className="scenario-compare__cell">Tableros / Placas</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownA.materialsCost, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.materialsCost, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.materialsCost - result.breakdownA.materialsCost, { currency })}</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '4px' }}>Tapacantos</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.edgeTotal, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.edgeTotal, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.edgeTotal - result.breakdownA.edgeTotal, { currency })}</td>
+                    <td className="scenario-compare__cell">Tapacantos</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownA.edgeTotal, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.edgeTotal, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.edgeTotal - result.breakdownA.edgeTotal, { currency })}</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '4px' }}>Herrajes</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.hardwareTotal, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.hardwareTotal, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.hardwareTotal - result.breakdownA.hardwareTotal, { currency })}</td>
+                    <td className="scenario-compare__cell">Herrajes</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownA.hardwareTotal, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.hardwareTotal, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.hardwareTotal - result.breakdownA.hardwareTotal, { currency })}</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '4px' }}>Mano de obra</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.laborModular, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.laborModular, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.laborModular - result.breakdownA.laborModular, { currency })}</td>
+                    <td className="scenario-compare__cell">Mano de obra</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownA.laborModular, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.laborModular, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.laborModular - result.breakdownA.laborModular, { currency })}</td>
                   </tr>
-                  <tr style={{ fontWeight: 600, borderTop: '1px dashed #cbd5e1' }}>
-                    <td style={{ padding: '4px' }}>Total Venta</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.salePrice, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.salePrice, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.salePrice - result.breakdownA.salePrice, { currency })}</td>
+                  <tr className="scenario-compare__total-row">
+                    <td className="scenario-compare__cell">Total Venta</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownA.salePrice, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.salePrice, { currency })}</td>
+                    <td className="scenario-compare__cell--right">{formatMoneyDisplay(result.breakdownB.salePrice - result.breakdownA.salePrice, { currency })}</td>
                   </tr>
                 </tbody>
               </table>
@@ -272,14 +256,7 @@ export function QuoteScenarioCompare({
       ) : null}
 
       {result && result.ok && choiceB ? (
-        <div
-          style={{
-            display: 'flex',
-            gap: '0.5rem',
-            marginTop: '0.75rem',
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="scenario-compare__actions">
           {canApply ? (
             <button
               type="button"

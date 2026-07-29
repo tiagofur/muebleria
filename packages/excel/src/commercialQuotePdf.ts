@@ -24,12 +24,96 @@ export type CommercialQuotePdfInput = {
   readonly salePrice: number;
   readonly pricesFrozen: boolean;
   readonly variant: CommercialQuotePdfVariant;
+  /** Workshop name shown in footer branding. */
+  readonly workshopName?: string;
 };
 
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
 const MARGIN = 48;
 const CONTENT_W = PAGE_W - MARGIN * 2;
+
+// Brand colors (design system tokens as RGB)
+const BRAND_PRIMARY = rgb(0.08, 0.18, 0.38); // --brand-800 equivalent
+const BRAND_LIGHT = rgb(0.85, 0.9, 0.98); // light text on dark bg
+const BANNER_TOP_PAD = 10;
+
+/**
+ * Draw the geometric brand mark (tile + 3 panel strokes)
+ * matching BrandMark.tsx SVG at the given position.
+ */
+function drawBrandMark(
+  page: PDFPage,
+  x: number,
+  y: number,
+  size: number,
+  color: ReturnType<typeof rgb>,
+): void {
+  const s = size / 32; // scale factor from 32x32 viewBox
+  // Tile (BrandMark.tsx uses rx=8; pdf-lib lacks borderRadius so we draw a plain rect)
+  page.drawRectangle({
+    x,
+    y,
+    width: 30 * s,
+    height: 30 * s,
+    borderColor: color,
+    borderWidth: 1.5 * s,
+  });
+  // Panel strokes (3 horizontal lines)
+  const lineY1 = y + 20.5 * s;
+  const lineY2 = y + 16 * s;
+  const lineY3 = y + 11.5 * s;
+  const lx = x + 8 * s;
+  const lw1 = 16 * s;
+  const lw2 = 11 * s;
+  const strokes: [number, number][] = [
+    [lineY1, lw2],
+    [lineY2, lw1],
+    [lineY3, lw1],
+  ];
+  for (const [ly, w] of strokes) {
+    page.drawLine({
+      start: { x: lx, y: ly },
+      end: { x: lx + w, y: ly },
+      thickness: 2 * s,
+      color,
+    });
+  }
+}
+
+function drawFooter(
+  page: PDFPage,
+  font: PDFFont,
+  pageIndex: number,
+  pageCount: number,
+  workshopName?: string,
+): void {
+  // Footer line
+  page.drawLine({
+    start: { x: MARGIN, y: MARGIN + 22 },
+    end: { x: PAGE_W - MARGIN, y: MARGIN + 22 },
+    thickness: 0.5,
+    color: rgb(0.75, 0.76, 0.78),
+  });
+  // Workshop name (left)
+  if (workshopName) {
+    page.drawText(workshopName, {
+      x: MARGIN,
+      y: MARGIN + 10,
+      size: 7,
+      font,
+      color: rgb(0.5, 0.5, 0.52),
+    });
+  }
+  // Page number (right)
+  page.drawText(`Página ${pageIndex + 1} de ${pageCount}`, {
+    x: PAGE_W - MARGIN - 80,
+    y: MARGIN + 10,
+    size: 7,
+    font,
+    color: rgb(0.5, 0.5, 0.52),
+  });
+}
 
 function money(n: number, currency: string): string {
   const abs = Math.abs(n);
@@ -173,13 +257,43 @@ export async function commercialQuotePdfExport(
     doc,
   };
 
+  // --- Branded Header Banner ---
+  const bannerH = 56;
+  page.drawRectangle({
+    x: 0,
+    y: PAGE_H - MARGIN - bannerH + BANNER_TOP_PAD,
+    width: PAGE_W,
+    height: bannerH,
+    color: BRAND_PRIMARY,
+  });
+
+  // Brand mark (geometric tile + panel strokes)
+  drawBrandMark(page, MARGIN, PAGE_H - MARGIN - bannerH + 18, 24, BRAND_LIGHT);
+
+  // Title
   const title =
     input.variant === 'summary'
       ? 'Cotización comercial — Resumen'
       : 'Cotización comercial — Listado';
+  page.drawText(title, {
+    x: MARGIN + 34,
+    y: PAGE_H - MARGIN - 18,
+    size: 16,
+    font: fontBold,
+    color: BRAND_LIGHT,
+  });
 
-  drawLine(ctx, title, { size: 18, bold: true, color: rgb(0.12, 0.1, 0.35) });
-  ctx.y -= 8;
+  // Subtitle: project + customer
+  const subtitle = `${input.projectName}  ·  ${input.customerName || 'Cliente'}`;
+  page.drawText(subtitle, {
+    x: MARGIN + 34,
+    y: PAGE_H - MARGIN - 34,
+    size: 9,
+    font,
+    color: BRAND_LIGHT,
+  });
+
+  ctx.y = PAGE_H - MARGIN - bannerH - 16;
 
   drawKeyValue(ctx, 'Proyecto', input.projectName);
   drawKeyValue(ctx, 'Cliente', input.customerName);
@@ -340,6 +454,13 @@ export async function commercialQuotePdfExport(
     'Documento comercial para el cliente. No incluye costos internos del taller.',
     { size: 8, color: rgb(0.45, 0.47, 0.5) },
   );
+
+  // --- Footer with branding (all pages) ---
+  const pageCount = doc.getPageCount();
+  for (let i = 0; i < pageCount; i++) {
+    const p = doc.getPage(i);
+    drawFooter(p, font, i, pageCount, input.workshopName);
+  }
 
   const bytes = await doc.save();
   return bytes;

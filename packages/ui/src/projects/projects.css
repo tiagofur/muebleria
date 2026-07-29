@@ -866,6 +866,166 @@
   background: var(--surface-sidebar);
 }
 
+/* —— Presentation responsive (#191) —— */
+
+.project-presentation__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--surface-sidebar) 85%, transparent);
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: var(--space-2);
+}
+
+.project-presentation__control-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.project-presentation__control-label {
+  font-size: var(--text-sm, 0.875rem);
+  opacity: 0.75;
+  min-width: 8rem;
+}
+
+.project-presentation__slider {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--brand-500);
+}
+
+@media (max-width: 900px) {
+  .project-presentation {
+    padding: var(--space-3);
+  }
+
+  .project-presentation__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .project-presentation__total-block {
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .project-presentation__close {
+    align-self: flex-end;
+    min-height: var(--touch-min, 44px);
+    min-width: var(--touch-min, 44px);
+  }
+
+  .project-presentation__viewer {
+    min-height: 260px;
+  }
+
+  .project-presentation__control-label {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .project-presentation__control-group .btn {
+    min-height: var(--touch-min, 44px);
+  }
+}
+
+@media (max-width: 480px) {
+  .project-presentation {
+    padding: var(--space-2);
+  }
+
+  .project-presentation__controls {
+    padding: var(--space-2);
+  }
+
+  .project-presentation__viewer {
+    min-height: 200px;
+  }
+}
+
+/* —— Quote scenario compare (#194 — inline styles → CSS) —— */
+
+.scenario-compare__hint--no-top {
+  margin-top: 0;
+}
+
+.scenario-compare__results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.scenario-compare__label {
+  margin: 0;
+}
+
+.scenario-compare__price {
+  margin: 0.25rem 0 0;
+  font-weight: var(--weight-semibold);
+}
+
+.scenario-compare__delta {
+  margin: 0.25rem 0 0;
+  font-weight: var(--weight-bold);
+}
+
+.scenario-compare__delta--positive {
+  color: var(--danger-500);
+}
+
+.scenario-compare__delta--negative {
+  color: var(--success-500);
+}
+
+.scenario-compare__toggle {
+  margin-top: 0.5rem;
+}
+
+.scenario-compare__breakdown {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background-color: var(--surface-hover);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.scenario-compare__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scenario-compare__th-row {
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.scenario-compare__cell {
+  padding: var(--space-1);
+}
+
+.scenario-compare__cell--right {
+  padding: var(--space-1);
+  text-align: right;
+}
+
+.scenario-compare__total-row {
+  font-weight: var(--weight-semibold);
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.scenario-compare__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
 /* Project templates picker / management (#110 / H15) */
 .template-picker-list {
   list-style: none;

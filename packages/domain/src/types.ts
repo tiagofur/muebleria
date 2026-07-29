@@ -533,6 +533,8 @@ export interface WorkshopSettings {
    * (COST-02 / F044). Default false — COST-01 parity (F039).
    */
   readonly vendedorCanViewCosts: boolean;
+  /** Workshop / business name shown in PDF exports branding. */
+  readonly workshopName?: string;
 }
 
 export interface Workspace {
