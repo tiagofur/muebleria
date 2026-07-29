@@ -36,6 +36,7 @@ import {
 } from '@muebles/domain';
 import { validateNonNegativeNumber, validateRequiredName } from '../catalogs/catalogHelpers';
 import {
+  EntityEditorLayout,
   Modal,
   PageLoading,
   useDebouncedValue,
@@ -799,256 +800,47 @@ export function ModulesScreen({
   const inlineEditMode =
     !!openModuleEditId && !!onRequestEdit && modalOpen;
 
-  if (inlineEditMode) {
-    return (
-      <section
-        className="catalog-page module-editor-page"
-        aria-label={editingId ? 'Editar mueble' : 'Nuevo mueble'}
-        data-testid="module-editor-page"
-      >
-        <header className="workspace-chrome">
-          <div className="workspace-chrome__lead">
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              onClick={closeModal}
-              aria-label="Volver a la lista"
-              data-testid="module-editor-back"
-            >
-              ← Lista
-            </button>
-            <div className="workspace-chrome__identity">
-              <span className="workspace-chrome__code">
-                {editingId ? draft.code || '—' : 'NUEVO'}
-              </span>
-              <p className="workspace-chrome__title">
-                {editingId ? 'Editar mueble' : 'Nuevo mueble'}
-              </p>
-            </div>
-          </div>
-          <div className="workspace-chrome__actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={closeModal}
-              data-testid="module-editor-cancel"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn btn--primary"
-              form={formId}
-              data-testid="module-editor-save"
-            >
-              Guardar
-            </button>
-          </div>
-        </header>
-
-        <div className="module-editor-page__body">
-          <div className="module-editor-page__main">
-            <ModuleEditorForm
-              formId={formId}
-              error={error}
-              onSubmit={handleSubmit}
-              editorTab={editorTab}
-              setEditorTab={setEditorTab}
-              draft={draft}
-              setDraft={setDraft}
-              draftCascade={draftCascade}
-              draftCascadeOpts={draftCascadeOpts}
-              setDraftCascadeLevel={setDraftCascadeLevel}
-              resolveImageUrl={resolveImageUrl}
-              onUploadImage={onUploadImage}
-              structures={structures}
-              selectedStructure={selectedStructure ?? undefined}
-              catalogComponents={catalogComponents}
-              composedEnabled={composedEnabled}
-              onRequestAddComponent={() => {
-                setAddComponentOpen(true);
-                setComponentSearch('');
-                setNewCompId('');
-                setNewCompQty(1);
-              }}
-              canMutate={canMutate}
-              hardwareRoles={hardwareRoles}
-              activeHardware={activeHardware}
-              onAddHardware={addHardwareLine}
-              onRemoveHardware={removeHardwareLine}
-              onUpdateHardware={updateLine}
-              onHardwareGridKeyDown={onHardwareGridKeyDown}
-              editingId={editingId}
-              costPreview={costPreview}
-              previewBlocked={previewBlocked}
-              missingGroups={missingGroups}
-              groupLabels={groupLabels}
-              boardEditorSlot={boardEditorSlot}
-            />
-          </div>
-          <aside
-            className="module-editor-page__aside"
-            aria-label="Vista previa de costo"
-          >
-            <CostPreviewPanel
-              costPreview={costPreview}
-              previewBlocked={previewBlocked}
-              missingGroups={missingGroups}
-              groupLabels={groupLabels}
-              allowEmptyHint
-            />
-          </aside>
-        </div>
-
-        {/* Sub-modals still attached to the editor flow. */}
-        <ModuleComponentAdderModal
-          open={addComponentOpen}
-          onClose={() => setAddComponentOpen(false)}
-          componentSearch={componentSearch}
-          onSearchChange={setComponentSearch}
-          filteredComponents={filteredCatalogComponents}
-          newCompId={newCompId}
-          onSelect={setNewCompId}
-          newCompQty={newCompQty}
-          onQtyChange={setNewCompQty}
-          onConfirm={() => {
-            if (!newCompId) return;
-            setDraft((prev) => ({
-              ...prev,
-              components: [
-                ...prev.components,
-                {
-                  componentId: newCompId,
-                  quantity: newCompQty,
-                },
-              ],
-            }));
-            setAddComponentOpen(false);
-          }}
-        />
-        <ModuleCategoryModals
-          categories={categories}
-          flatCategories={flatCategories}
-          manageOpen={manageCategoriesOpen}
-          onCloseManage={closeManageCategories}
-          onOpenCreate={openCreateCategory}
-          formOpen={categoryModalOpen}
-          onCloseForm={closeCategoryModal}
-          categoryFormId={categoryFormId}
-          editingCategoryId={editingCategoryId}
-          categoryDraft={categoryDraft}
-          setCategoryDraft={setCategoryDraft}
-          categoryError={categoryError}
-          onSubmitForm={handleCategorySubmit}
-          onEditCategory={openEditCategory}
-          onRequestDeleteCategory={setConfirmDeleteCategoryId}
-          onCreateCategory={onCreateCategory}
-          onDeleteCategory={onDeleteCategory}
-          deleteTarget={deleteCategoryTarget}
-          confirmDeleteCategoryId={confirmDeleteCategoryId}
-          onCancelDelete={() => setConfirmDeleteCategoryId(null)}
-          onConfirmDelete={() => {
-            if (confirmDeleteCategoryId) {
-              handleDeleteCategory(confirmDeleteCategoryId);
-            }
-          }}
-        />
-        <Modal
-          open={!!confirmDeleteId}
-          onClose={() => setConfirmDeleteId(null)}
-          title="Eliminar mueble"
-          size="sm"
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setConfirmDeleteId(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => {
-                  if (confirmDeleteId) handleDelete(confirmDeleteId);
-                }}
-              >
-                Eliminar
-              </button>
-            </>
-          }
-        >
-          <p>¿Seguro que querés eliminar este mueble? No se puede deshacer.</p>
-        </Modal>
-
-        <Modal
-          open={confirmDiscard}
-          onClose={() => setConfirmDiscard(false)}
-          title="Descartar cambios"
-          size="sm"
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setConfirmDiscard(false)}
-              >
-                Seguir editando
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={forceCloseEditor}
-                data-testid="module-editor-discard-confirm"
-              >
-                Descartar y salir
-              </button>
-            </>
-          }
-        >
-          <p>
-            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
-            que querés descartar?
-          </p>
-        </Modal>
-
-        <Module3DModal
-          open={show3DModal}
-          module={viewerModule}
-          catalog={module3dCatalog}
-          onClose={() => {
-            setShow3DModal(false);
-            setViewerModule(null);
-          }}
-        />
-      </section>
-    );
-  }
-
   return (
-    <section className="catalog-page" aria-label="Muebles (módulos)">
-      {selected ? (
-        <ModuleDetailView
-          module={selected}
-          categories={categories}
-          catalogComponents={catalogComponents}
-          hardwareById={hardwareById}
-          costPreview={costPreview}
-          previewBlocked={previewBlocked}
-          missingGroups={missingGroups}
-          groupLabels={groupLabels}
-          moduleEstimates={moduleEstimates}
-          onBack={backToList}
-          onEdit={startEdit}
-          onDuplicate={onDuplicate}
-          onDelete={(id) => setConfirmDeleteId(id)}
-          onView3D={(mod) => {
-            setViewerModule(mod);
-            setShow3DModal(true);
-          }}
-        />
-      ) : (
+    <EntityEditorLayout
+      dataTestId="modules-screen"
+      editorPageTestId="module-editor-page"
+      editorBackTestId="module-editor-back"
+      discardConfirmTestId="module-editor-discard-confirm"
+      modalTestId="module-modal"
+      modalSize="lg" /* size="lg" */
+      createTitle="Nuevo mueble"
+      editTitle="Editar mueble"
+      draftCode={draft.code}
+      formId={formId}
+      modalOpen={modalOpen}
+      confirmDiscard={confirmDiscard}
+      editingId={editingId}
+      inlineEditMode={inlineEditMode}
+      isSelected={!!selected}
+      closeModal={closeModal}
+      setConfirmDiscard={setConfirmDiscard}
+      forceCloseEditor={forceCloseEditor}
+      headerActions={
+        <>
+          <button
+            type="button"
+            className="btn"
+            onClick={closeModal}
+            data-testid="module-editor-cancel"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            data-testid="module-editor-save"
+          >
+            Guardar
+          </button>
+        </>
+      }
+      renderListView={() => (
         <ModuleListView
           filtered={filtered}
           categories={categories}
@@ -1067,192 +859,198 @@ export function ModulesScreen({
           onCreateCategory={onCreateCategory}
         />
       )}
+      renderDetailView={
+        selected
+          ? () => (
+              <ModuleDetailView
+                module={selected}
+                categories={categories}
+                catalogComponents={catalogComponents}
+                hardwareById={hardwareById}
+                costPreview={costPreview}
+                previewBlocked={previewBlocked}
+                missingGroups={missingGroups}
+                groupLabels={groupLabels}
+                moduleEstimates={moduleEstimates}
+                onBack={backToList}
+                onEdit={startEdit}
+                onDuplicate={onDuplicate}
+                onDelete={(id) => setConfirmDeleteId(id)}
+                onView3D={(mod) => {
+                  setViewerModule(mod);
+                  setShow3DModal(true);
+                }}
+              />
+            )
+          : undefined
+      }
+      renderEditorForm={() => {
+        const form = (
+          <ModuleEditorForm
+            formId={formId}
+            error={error}
+            onSubmit={handleSubmit}
+            editorTab={editorTab}
+            setEditorTab={setEditorTab}
+            draft={draft}
+            setDraft={setDraft}
+            draftCascade={draftCascade}
+            draftCascadeOpts={draftCascadeOpts}
+            setDraftCascadeLevel={setDraftCascadeLevel}
+            resolveImageUrl={resolveImageUrl}
+            onUploadImage={onUploadImage}
+            structures={structures}
+            selectedStructure={selectedStructure ?? undefined}
+            catalogComponents={catalogComponents}
+            composedEnabled={composedEnabled}
+            onRequestAddComponent={() => {
+              setAddComponentOpen(true);
+              setComponentSearch('');
+              setNewCompId('');
+              setNewCompQty(1);
+            }}
+            canMutate={canMutate}
+            hardwareRoles={hardwareRoles}
+            activeHardware={activeHardware}
+            onAddHardware={addHardwareLine}
+            onRemoveHardware={removeHardwareLine}
+            onUpdateHardware={updateLine}
+            onHardwareGridKeyDown={onHardwareGridKeyDown}
+            editingId={editingId}
+            costPreview={costPreview}
+            previewBlocked={previewBlocked}
+            missingGroups={missingGroups}
+            groupLabels={groupLabels}
+            boardEditorSlot={boardEditorSlot}
+          />
+        );
 
-      <Modal
-        open={modalOpen}
-        onClose={closeModal}
-        title={editingId ? 'Editar mueble' : 'Nuevo mueble'}
-        size="lg"
-        footer={
-          <>
-            <button type="button" className="btn" onClick={closeModal}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn--primary" form={formId}>
-              Guardar
-            </button>
-          </>
+        if (inlineEditMode) {
+          return (
+            <div className="module-editor-page__body">
+              <div className="module-editor-page__main">{form}</div>
+              <aside
+                className="module-editor-page__aside"
+                aria-label="Vista previa de costo"
+              >
+                <CostPreviewPanel
+                  costPreview={costPreview}
+                  previewBlocked={previewBlocked}
+                  missingGroups={missingGroups}
+                  groupLabels={groupLabels}
+                  allowEmptyHint
+                />
+              </aside>
+            </div>
+          );
         }
-      >
-        <ModuleEditorForm
-          formId={formId}
-          error={error}
-          onSubmit={handleSubmit}
-          editorTab={editorTab}
-          setEditorTab={setEditorTab}
-          draft={draft}
-          setDraft={setDraft}
-          draftCascade={draftCascade}
-          draftCascadeOpts={draftCascadeOpts}
-          setDraftCascadeLevel={setDraftCascadeLevel}
-          resolveImageUrl={resolveImageUrl}
-          onUploadImage={onUploadImage}
-          structures={structures}
-          selectedStructure={selectedStructure ?? undefined}
-          catalogComponents={catalogComponents}
-          composedEnabled={composedEnabled}
-          onRequestAddComponent={() => {
-            setAddComponentOpen(true);
-            setComponentSearch('');
-            setNewCompId('');
-            setNewCompQty(1);
-          }}
-          canMutate={canMutate}
-          hardwareRoles={hardwareRoles}
-          activeHardware={activeHardware}
-          onAddHardware={addHardwareLine}
-          onRemoveHardware={removeHardwareLine}
-          onUpdateHardware={updateLine}
-          onHardwareGridKeyDown={onHardwareGridKeyDown}
-          editingId={editingId}
-          costPreview={costPreview}
-          previewBlocked={previewBlocked}
-          missingGroups={missingGroups}
-          groupLabels={groupLabels}
-        />
-      </Modal>
 
-      <ModuleComponentAdderModal
-        open={addComponentOpen}
-        onClose={() => setAddComponentOpen(false)}
-        componentSearch={componentSearch}
-        onSearchChange={setComponentSearch}
-        filteredComponents={filteredCatalogComponents}
-        newCompId={newCompId}
-        onSelect={setNewCompId}
-        newCompQty={newCompQty}
-        onQtyChange={setNewCompQty}
-        onConfirm={() => {
-          if (!newCompId) return;
-          setDraft((prev) => ({
-            ...prev,
-            components: [
-              ...prev.components,
-              {
-                componentId: newCompId,
-                quantity: newCompQty,
-              },
-            ],
-          }));
-          setAddComponentOpen(false);
-        }}
-      />
+        return form;
+      }}
+      extraModals={
+        <>
+          <ModuleComponentAdderModal
+            open={addComponentOpen}
+            onClose={() => setAddComponentOpen(false)}
+            componentSearch={componentSearch}
+            onSearchChange={setComponentSearch}
+            filteredComponents={filteredCatalogComponents}
+            newCompId={newCompId}
+            onSelect={setNewCompId}
+            newCompQty={newCompQty}
+            onQtyChange={setNewCompQty}
+            onConfirm={() => {
+              if (!newCompId) return;
+              setDraft((prev) => ({
+                ...prev,
+                components: [
+                  ...prev.components,
+                  {
+                    componentId: newCompId,
+                    quantity: newCompQty,
+                  },
+                ],
+              }));
+              setAddComponentOpen(false);
+            }}
+          />
 
-      <ModuleCategoryModals
-        categories={categories}
-        flatCategories={flatCategories}
-        manageOpen={manageCategoriesOpen}
-        onCloseManage={closeManageCategories}
-        onOpenCreate={openCreateCategory}
-        formOpen={categoryModalOpen}
-        onCloseForm={closeCategoryModal}
-        categoryFormId={categoryFormId}
-        editingCategoryId={editingCategoryId}
-        categoryDraft={categoryDraft}
-        setCategoryDraft={setCategoryDraft}
-        categoryError={categoryError}
-        onSubmitForm={handleCategorySubmit}
-        onEditCategory={openEditCategory}
-        onRequestDeleteCategory={setConfirmDeleteCategoryId}
-        onCreateCategory={onCreateCategory}
-        onDeleteCategory={onDeleteCategory}
-        deleteTarget={deleteCategoryTarget}
-        confirmDeleteCategoryId={confirmDeleteCategoryId}
-        onCancelDelete={() => setConfirmDeleteCategoryId(null)}
-        onConfirmDelete={() => {
-          if (confirmDeleteCategoryId) {
-            handleDeleteCategory(confirmDeleteCategoryId);
-          }
-        }}
-      />
+          <ModuleCategoryModals
+            categories={categories}
+            flatCategories={flatCategories}
+            manageOpen={manageCategoriesOpen}
+            onCloseManage={closeManageCategories}
+            onOpenCreate={openCreateCategory}
+            formOpen={categoryModalOpen}
+            onCloseForm={closeCategoryModal}
+            categoryFormId={categoryFormId}
+            editingCategoryId={editingCategoryId}
+            categoryDraft={categoryDraft}
+            setCategoryDraft={setCategoryDraft}
+            categoryError={categoryError}
+            onSubmitForm={handleCategorySubmit}
+            onEditCategory={openEditCategory}
+            onRequestDeleteCategory={setConfirmDeleteCategoryId}
+            onCreateCategory={onCreateCategory}
+            onDeleteCategory={onDeleteCategory}
+            deleteTarget={deleteCategoryTarget}
+            confirmDeleteCategoryId={confirmDeleteCategoryId}
+            onCancelDelete={() => setConfirmDeleteCategoryId(null)}
+            onConfirmDelete={() => {
+              if (confirmDeleteCategoryId) {
+                handleDeleteCategory(confirmDeleteCategoryId);
+              }
+            }}
+          />
 
-      <Modal
-        open={deleteTarget != null}
-        onClose={() => setConfirmDeleteId(null)}
-        title="Eliminar mueble"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmDeleteId(null)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={() => {
-                if (confirmDeleteId) handleDelete(confirmDeleteId);
-              }}
-            >
-              Eliminar
-            </button>
-          </>
-        }
-      >
-        <p className="project-confirm-modal__text">
-          ¿Seguro que querés eliminar{' '}
-          <strong>
-            {deleteTarget
-              ? `${deleteTarget.code} — ${deleteTarget.name}`
-              : 'este mueble'}
-          </strong>
-          ? Esta acción no se puede deshacer.
-        </p>
-      </Modal>
+          <Modal
+            open={deleteTarget != null}
+            onClose={() => setConfirmDeleteId(null)}
+            title="Eliminar mueble"
+            size="sm"
+            footer={
+              <>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setConfirmDeleteId(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={() => {
+                    if (confirmDeleteId) handleDelete(confirmDeleteId);
+                  }}
+                >
+                  Eliminar
+                </button>
+              </>
+            }
+          >
+            <p className="project-confirm-modal__text">
+              ¿Seguro que querés eliminar{' '}
+              <strong>
+                {deleteTarget
+                  ? `${deleteTarget.code} — ${deleteTarget.name}`
+                  : 'este mueble'}
+              </strong>
+              ? Esta acción no se puede deshacer.
+            </p>
+          </Modal>
 
-      <Modal
-        open={confirmDiscard}
-        onClose={() => setConfirmDiscard(false)}
-        title="Descartar cambios"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmDiscard(false)}
-            >
-              Seguir editando
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={forceCloseEditor}
-              data-testid="module-editor-discard-confirm"
-            >
-              Descartar y salir
-            </button>
-          </>
-        }
-      >
-        <p>
-          Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
-          que querés descartar?
-        </p>
-      </Modal>
-
-      <Module3DModal
-        open={show3DModal}
-        module={viewerModule}
-        catalog={module3dCatalog}
-        onClose={() => {
-          setShow3DModal(false);
-          setViewerModule(null);
-        }}
-      />
-    </section>
+          <Module3DModal
+            open={show3DModal}
+            module={viewerModule}
+            catalog={module3dCatalog}
+            onClose={() => {
+              setShow3DModal(false);
+              setViewerModule(null);
+            }}
+          />
+        </>
+      }
+    />
   );
 }

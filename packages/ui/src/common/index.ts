@@ -38,6 +38,10 @@ export {
   type EntityEditorState,
   type UseEntityEditorStateOptions,
 } from './useEntityEditorState';
+export {
+  EntityEditorLayout,
+  type EntityEditorLayoutProps,
+} from './EntityEditorLayout';
 export { EMPTY_PLACEHOLDER, formatEmpty } from './formatEmpty';
 export {
   formatMoneyDisplay,
