@@ -1330,6 +1330,7 @@ function AppContent({
           catalog,
           customers,
           variant,
+          workspace?.settings,
         );
         if (!result.ok) {
           setExportErrors(result.issues);
