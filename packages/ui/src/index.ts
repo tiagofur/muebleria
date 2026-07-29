@@ -193,6 +193,8 @@ export {
   filterProductionVisible,
   isProductionQueueStatus,
   type ProductionQueueProps,
+  ProductionBoardView,
+  type ProductionBoardViewProps,
 } from './production';
 
 export {
