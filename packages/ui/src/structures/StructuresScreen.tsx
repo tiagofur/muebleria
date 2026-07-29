@@ -17,6 +17,7 @@ import type {
   Structure,
 } from '@muebles/domain';
 import {
+  EntityEditorLayout,
   Modal,
   useDebouncedValue,
   useEntityEditorState,
@@ -352,298 +353,66 @@ export function StructuresScreen({
   const inlineEditMode =
     !!openStructureEditId && !!onRequestEdit && modalOpen;
 
-  if (inlineEditMode) {
-    return (
-      <section
-        className="catalog-page structure-editor-page"
-        aria-label={editingId ? 'Editar Estructura' : 'Nueva Estructura'}
-        data-testid="structure-editor-page"
-      >
-        <header className="workspace-chrome">
-          <div className="workspace-chrome__lead">
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              onClick={closeModal}
-              aria-label="Volver a la lista"
-              data-testid="structure-editor-back"
-            >
-              ← Lista
-            </button>
-            <div className="workspace-chrome__identity">
-              <span className="workspace-chrome__code">
-                {editingId ? draft.code || '—' : 'NUEVO'}
-              </span>
-              <p className="workspace-chrome__title">
-                {editingId ? 'Editar Estructura' : 'Nueva Estructura'}
-              </p>
-            </div>
-          </div>
-        </header>
-
-        <div className="structure-editor-page__main">
-          <StructureEditorForm
-            formId={formId}
-            error={error}
-            onSubmit={onSubmit}
-            onCancel={closeModal}
-            editorTab={editorTab}
-            setEditorTab={setEditorTab}
-            draft={draft}
-            setDraft={setDraft}
-            editingId={editingId}
-            catalogComponents={catalogComponents}
-            onRequestAddComponent={() => {
-              setAddComponentOpen(true);
-              setComponentSearch('');
-              setNewCompId('');
-              setNewCompQty(1);
-            }}
-            previewPresetId={previewPresetId}
-            onPreviewPresetChange={setPreviewPresetId}
-            onAddPreset={addPreset}
-            onRemovePreset={removePreset}
-            onUpdatePreset={updatePreset}
-          />
-        </div>
-
-        <ModuleComponentAdderModal
-          open={addComponentOpen}
-          onClose={() => setAddComponentOpen(false)}
-          componentSearch={componentSearch}
-          onSearchChange={setComponentSearch}
-          filteredComponents={filteredComponents}
-          newCompId={newCompId}
-          onSelect={setNewCompId}
-          newCompQty={newCompQty}
-          onQtyChange={setNewCompQty}
-          onConfirm={() => {
-            if (!newCompId) return;
-            setDraft((prev) => ({
-              ...prev,
-              components: [
-                ...prev.components,
-                {
-                  componentId: newCompId,
-                  quantity: newCompQty,
-                },
-              ],
-            }));
-            setAddComponentOpen(false);
-          }}
-        />
-
-        <Modal
-          open={confirmDiscard}
-          onClose={() => setConfirmDiscard(false)}
-          title="Descartar cambios"
-          size="sm"
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setConfirmDiscard(false)}
-              >
-                Seguir editando
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={forceCloseEditor}
-                data-testid="structure-editor-discard-confirm"
-              >
-                Descartar y salir
-              </button>
-            </>
-          }
-        >
-          <p>
-            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
-            que querés descartar?
-          </p>
-        </Modal>
-      </section>
-    );
-  }
-
-  // Fase 3 follow-up: card-detalle. When a row is expanded (selected), render
-  // the dedicated read-only StructureDetailView instead of the card grid. The
-  // detail view's Editar button reuses handleEdit (which navigates to /edit).
   const selectedStructure = expandedId
     ? (normalizedStructures.find((s) => s.id === expandedId) ?? null)
     : null;
 
-  if (selectedStructure) {
-    return (
-      <div className="catalog-page" data-testid="structures-screen">
-        <StructureDetailView
-          structure={selectedStructure}
-          catalogComponents={catalogComponents}
-          onBack={() => setSelectedId(null)}
-          onEdit={handleEdit}
-          onDeactivate={canMutate ? onDeactivate : undefined}
-          onReactivate={canMutate ? onReactivate : undefined}
-          onDelete={
-            canMutate
-              ? (id) => setDeleteConfirmId(id)
-              : undefined
-          }
-          canMutate={canMutate}
-        />
-
-        {/* Legacy editor modal (used when onRequestEdit is not wired, e.g.
-            tests). When the shell wires onRequestEdit, the editor opens
-            inline via the inlineEditMode branch above. */}
-        <Modal
-          open={modalOpen}
-          title={editingId ? 'Editar Estructura' : 'Nueva Estructura'}
-          onClose={closeModal}
-          size="lg"
-          data-testid="structure-modal"
-        >
-          <StructureEditorForm
-            formId={formId}
-            error={error}
-            onSubmit={onSubmit}
-            onCancel={closeModal}
-            editorTab={editorTab}
-            setEditorTab={setEditorTab}
-            draft={draft}
-            setDraft={setDraft}
-            editingId={editingId}
-            catalogComponents={catalogComponents}
-            onRequestAddComponent={() => {
-              setAddComponentOpen(true);
-              setComponentSearch('');
-              setNewCompId('');
-              setNewCompQty(1);
-            }}
-            previewPresetId={previewPresetId}
-            onPreviewPresetChange={setPreviewPresetId}
-            onAddPreset={addPreset}
-            onRemovePreset={removePreset}
-            onUpdatePreset={updatePreset}
-          />
-        </Modal>
-
-        <ModuleComponentAdderModal
-          open={addComponentOpen}
-          onClose={() => setAddComponentOpen(false)}
-          componentSearch={componentSearch}
-          onSearchChange={setComponentSearch}
-          filteredComponents={filteredComponents}
-          newCompId={newCompId}
-          onSelect={setNewCompId}
-          newCompQty={newCompQty}
-          onQtyChange={setNewCompQty}
-          onConfirm={() => {
-            if (!newCompId) return;
-            setDraft((prev) => ({
-              ...prev,
-              components: [
-                ...prev.components,
-                {
-                  componentId: newCompId,
-                  quantity: newCompQty,
-                },
-              ],
-            }));
-            setAddComponentOpen(false);
-          }}
-        />
-
-        <Modal
-          open={confirmDiscard}
-          onClose={() => setConfirmDiscard(false)}
-          title="Descartar cambios"
-          size="sm"
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setConfirmDiscard(false)}
-              >
-                Seguir editando
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={forceCloseEditor}
-                data-testid="structure-editor-discard-confirm"
-              >
-                Descartar y salir
-              </button>
-            </>
-          }
-        >
-          <p>
-            Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
-            que querés descartar?
-          </p>
-        </Modal>
-
-        <Modal
-          open={!!deleteConfirmId}
-          title="¿Eliminar estructura?"
-          onClose={() => setDeleteConfirmId(null)}
-          size="sm"
-          data-testid="delete-confirm-modal"
-        >
-          <div className="p-4">
-            <p className="mb-4">
-              ¿Estás seguro de que deseas eliminar esta estructura? Esta acción
-              no se puede deshacer.
-            </p>
-            <div className="modal__footer">
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={() => setDeleteConfirmId(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={handleDelete}
-                data-testid="confirm-delete-btn"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </Modal>
-      </div>
-    );
-  }
-
   return (
-    <div className="catalog-screen" data-testid="structures-screen">
-      <StructureListView
-        rows={rows}
-        search={search}
-        setSearch={setSearch}
-        status={status}
-        setStatus={setStatus}
-        expandedId={expandedId}
-        onToggleExpand={toggleSelectedId}
-        canMutate={canMutate}
-        onCreate={handleCreateNew}
-        onEdit={handleEdit}
-        onDeactivate={onDeactivate}
-        onReactivate={onReactivate}
-        onRequestDelete={setDeleteConfirmId}
-      />
-
-      <Modal
-        open={modalOpen}
-        title={editingId ? 'Editar Estructura' : 'Nueva Estructura'}
-        onClose={closeModal}
-        size="lg"
-        data-testid="structure-modal"
-      >
+    <EntityEditorLayout
+      dataTestId="structures-screen"
+      editorPageTestId="structure-editor-page"
+      editorBackTestId="structure-editor-back"
+      discardConfirmTestId="structure-editor-discard-confirm"
+      modalTestId="structure-modal"
+      entityTitle="Estructura"
+      draftCode={draft.code}
+      formId={formId}
+      modalOpen={modalOpen}
+      confirmDiscard={confirmDiscard}
+      editingId={editingId}
+      inlineEditMode={inlineEditMode}
+      isSelected={!!selectedStructure}
+      closeModal={closeModal}
+      setConfirmDiscard={setConfirmDiscard}
+      forceCloseEditor={forceCloseEditor}
+      renderListView={() => (
+        <StructureListView
+          rows={rows}
+          search={search}
+          setSearch={setSearch}
+          status={status}
+          setStatus={setStatus}
+          expandedId={expandedId}
+          onToggleExpand={toggleSelectedId}
+          canMutate={canMutate}
+          onCreate={handleCreateNew}
+          onEdit={handleEdit}
+          onDeactivate={onDeactivate}
+          onReactivate={onReactivate}
+          onRequestDelete={setDeleteConfirmId}
+        />
+      )}
+      renderDetailView={
+        selectedStructure
+          ? () => (
+              <StructureDetailView
+                structure={selectedStructure}
+                catalogComponents={catalogComponents}
+                onBack={() => setSelectedId(null)}
+                onEdit={handleEdit}
+                onDeactivate={canMutate ? onDeactivate : undefined}
+                onReactivate={canMutate ? onReactivate : undefined}
+                onDelete={
+                  canMutate
+                    ? (id) => setDeleteConfirmId(id)
+                    : undefined
+                }
+                canMutate={canMutate}
+              />
+            )
+          : undefined
+      }
+      renderEditorForm={() => (
         <StructureEditorForm
           formId={formId}
           error={error}
@@ -667,96 +436,68 @@ export function StructuresScreen({
           onRemovePreset={removePreset}
           onUpdatePreset={updatePreset}
         />
-      </Modal>
+      )}
+      extraModals={
+        <>
+          <ModuleComponentAdderModal
+            open={addComponentOpen}
+            onClose={() => setAddComponentOpen(false)}
+            componentSearch={componentSearch}
+            onSearchChange={setComponentSearch}
+            filteredComponents={filteredComponents}
+            newCompId={newCompId}
+            onSelect={setNewCompId}
+            newCompQty={newCompQty}
+            onQtyChange={setNewCompQty}
+            onConfirm={() => {
+              if (!newCompId) return;
+              setDraft((prev) => ({
+                ...prev,
+                components: [
+                  ...prev.components,
+                  {
+                    componentId: newCompId,
+                    quantity: newCompQty,
+                  },
+                ],
+              }));
+              setAddComponentOpen(false);
+            }}
+          />
 
-      <ModuleComponentAdderModal
-        open={addComponentOpen}
-        onClose={() => setAddComponentOpen(false)}
-        componentSearch={componentSearch}
-        onSearchChange={setComponentSearch}
-        filteredComponents={filteredComponents}
-        newCompId={newCompId}
-        onSelect={setNewCompId}
-        newCompQty={newCompQty}
-        onQtyChange={setNewCompQty}
-        onConfirm={() => {
-          if (!newCompId) return;
-          setDraft((prev) => ({
-            ...prev,
-            components: [
-              ...prev.components,
-              {
-                componentId: newCompId,
-                quantity: newCompQty,
-              },
-            ],
-          }));
-          setAddComponentOpen(false);
-        }}
-      />
-
-      <Modal
-        open={!!deleteConfirmId}
-        title="¿Eliminar estructura?"
-        onClose={() => setDeleteConfirmId(null)}
-        size="sm"
-        data-testid="delete-confirm-modal"
-      >
-        <div className="p-4">
-          <p className="mb-4">
-            ¿Estás seguro de que deseas eliminar esta estructura? Esta acción no
-            se puede deshacer.
-          </p>
-          <div className="modal__footer">
-            <button
-              type="button"
-              className="btn btn--secondary"
-              onClick={() => setDeleteConfirmId(null)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={handleDelete}
-              data-testid="confirm-delete-btn"
-            >
-              Eliminar
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={confirmDiscard}
-        onClose={() => setConfirmDiscard(false)}
-        title="Descartar cambios"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmDiscard(false)}
-            >
-              Seguir editando
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={forceCloseEditor}
-              data-testid="structure-editor-discard-confirm"
-            >
-              Descartar y salir
-            </button>
-          </>
-        }
-      >
-        <p>
-          Tenés cambios sin guardar. Si salís ahora vas a perderlos. ¿Seguro
-          que querés descartar?
-        </p>
-      </Modal>
-    </div>
+          <Modal
+            open={!!deleteConfirmId}
+            title="¿Eliminar estructura?"
+            onClose={() => setDeleteConfirmId(null)}
+            size="sm"
+            data-testid="delete-confirm-modal"
+          >
+            <div className="p-4">
+              <p className="mb-4">
+                ¿Estás seguro de que deseas eliminar esta estructura? Esta acción
+                no se puede deshacer.
+              </p>
+              <div className="modal__footer">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => setDeleteConfirmId(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={handleDelete}
+                  data-testid="confirm-delete-btn"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </Modal>
+        </>
+      }
+    />
   );
 }

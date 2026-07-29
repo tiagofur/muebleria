@@ -1,28 +1,27 @@
-# Sesión actual — F059 EntityEditorLayout (último slice de Fase 0)
+# Sesión actual — F059 EntityEditorLayout (Fase 0 completada 🎉)
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
-- **Branch:** `wip/perfect-app-fase-0-editor-layout` (basada en `main`, sin cambios)
 - **META issue:** #156 Perfect App roadmap
-- **Feature:** F059 — phase0_entity_editor_layout (última feature de Fase 0)
+- **Feature:** F059 — phase0_entity_editor_layout (completada)
 
-## Contexto
+## Logros de la sesión
 
-F059 abstrae el patrón común de edición de ModulesScreen (1273 L), StructuresScreen (780 L) y ComponentsScreen (569 L) en un componente `EntityEditorLayout<Tab, Draft>` genérico.
+1. **EntityEditorLayout.tsx**:
+   - Creado `packages/ui/src/common/EntityEditorLayout.tsx`.
+   - Soporta render slots para `renderListView`, `renderDetailView`, `renderEditorForm` y `extraModals`.
+   - Soporta títulos de creación y edición personalizables, `formId` para submit automático desde footer, y `headerActions` para modo inline `/edit`.
 
-Los 3 comparten: state (modalOpen, editingId, initialDraft, confirmDiscard, editorTab, error, search, status), hooks (useDraftSession, useRoutableEntitySelection), y flujo (lista → detalle → editor con tabs).
+2. **Refactorización de Screens**:
+   - `ComponentsScreen.tsx`: Reducido de 551 L a 388 L (< 400 L).
+   - `StructuresScreen.tsx`: Reducido de 763 L a 503 L.
+   - `ModulesScreen.tsx`: Reducido de 1260 L a 1057 L (~200 L menos de boilerplate).
 
-El agente de extracción timed out (timeout 10min). Working tree limpio — sin cambios.
+3. **Verificación**:
+   - `pnpm typecheck`: 6/6 verde.
+   - `pnpm test`: 341/341 tests verdes.
+   - `./init.sh`: Gate de entorno verde `[OK] Entorno listo. Puedes empezar a trabajar.`.
 
-## Plan para próxima sesión
-
-1. Leer los 3 screens para mapear el patrón exacto (state + handlers + JSX structure).
-2. Crear `packages/ui/src/common/EntityEditorLayout.tsx` genérico.
-3. Aplicar al screen más simple primero (ComponentsScreen 569 L), verificar tests.
-4. Aplicar a StructuresScreen, verificar.
-5. Aplicar a ModulesScreen (el más complejo), verificar.
-6. Objetivos: Modules < 600, Structures < 500, Components < 400.
-
-## Estado Fase 0 — solo F059 pendiente
+## Estado Fase 0 — COMPLETADA 100%
 
 | ID | Feature | Estado |
 |---|---|---|
@@ -30,9 +29,9 @@ El agente de extracción timed out (timeout 10min). Working tree limpio — sin 
 | F058 (a+b+c) | Partir ProjectsScreen | ✅ merged |
 | F060 | Partir engine.ts | ✅ merged |
 | F061 | Command pattern + undo/redo | ✅ merged |
-| **F059** | **EntityEditorLayout común** | **⏳ pendiente (este)** |
+| **F059** | **EntityEditorLayout común** | **✅ completado** |
 
-## Después de F059 → Fase 1: Board-first editor
+## Siguiente paso → Fase 1: Board-first editor
 
-Fase 0 cierra con F059. Fase 1 es el corazón del roadmap Perfect App:
-canvas con tablas manipulables, panel props contextual, snapping, costo en vivo.
+Fase 0 (preparación de arquitectura) ha finalizado exitosamente.
+Fase 1 iniciará el desarrollo del nuevo editor visual board-first (canvas interactivo 2D/3D con tablas manipulables, panel props contextual y snapping).

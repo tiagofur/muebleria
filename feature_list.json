@@ -1142,7 +1142,7 @@
         "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.2, §1.2 (causa #2 de officinesca)",
         "packages/ui/src/projects/ProjectsScreen.tsx (archivo a partir)"
       ],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "F059",
@@ -1165,7 +1165,7 @@
         "packages/ui/src/structures/StructuresScreen.tsx",
         "packages/ui/src/components/ComponentsScreen.tsx"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F060",
@@ -1185,7 +1185,7 @@
         "docs/prd.md §13 (reglas de cálculo)",
         "packages/domain/src/engine.ts (archivo a partir)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F061",
@@ -1206,7 +1206,7 @@
         "docs/perfect-app-roadmap.md §5 Fase 0 slice 0.5, §4.3 (Command + undo/redo)",
         "docs/IDEAS/PRD.md §4.3 (patrón Command original)"
       ],
-      "status": "pending"
+      "status": "done"
     }
   ]
 }
