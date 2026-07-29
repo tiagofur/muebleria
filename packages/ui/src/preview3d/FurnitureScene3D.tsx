@@ -20,6 +20,7 @@ import {
   type BoardPartVisual,
   type MaterialColorLookup,
 } from './boardPartVisual';
+import { MeasurementTool } from './MeasurementTool';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
@@ -53,6 +54,8 @@ export type FurnitureScene3DProps = {
   readonly materialColors?: MaterialColorLookup;
   readonly cameraType?: 'perspective' | 'orthographic';
   readonly showWireframe?: boolean;
+  /** Enable measurement tool mode (click two points to measure distance). */
+  readonly measurementMode?: boolean;
 };
 
 function BoardMesh({
@@ -222,6 +225,7 @@ function SceneContent({
   materialColors,
   cameraView,
   showWireframe,
+  measurementMode,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
@@ -232,6 +236,7 @@ function SceneContent({
   readonly materialColors?: MaterialColorLookup;
   readonly cameraView?: CameraViewType | null;
   readonly showWireframe?: boolean;
+  readonly measurementMode?: boolean;
 }): ReactNode {
   const controlsRef = useRef<any>(null);
   const framing = useMemo(
@@ -297,9 +302,7 @@ function SceneContent({
         scale={framing.maxDim * 2.2}
         blur={2.2}
         far={framing.maxDim}
-      />
-
-      <OrbitControls
+      />      <OrbitControls
         ref={controlsRef}
         makeDefault
         enableDamping
@@ -307,9 +310,11 @@ function SceneContent({
         minDistance={framing.maxDim * 0.3}
         maxDistance={framing.maxDim * 5}
         target={framing.center as any}
+        enabled={!measurementMode}
       />
-    </>
-  );
+
+      <MeasurementTool active={measurementMode ?? false} />
+    </>);
 }
 
 export function FurnitureScene3D({
@@ -326,6 +331,7 @@ export function FurnitureScene3D({
   cameraView,
   cameraType = 'perspective',
   showWireframe,
+  measurementMode,
 }: FurnitureScene3DProps): ReactNode {
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
@@ -425,6 +431,7 @@ export function FurnitureScene3D({
               materialColors={materialColors}
               cameraView={cameraView}
               showWireframe={showWireframe}
+              measurementMode={measurementMode}
             />
           </Suspense>          </Canvas>
         </Suspense>

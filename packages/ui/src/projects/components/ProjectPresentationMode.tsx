@@ -14,7 +14,7 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Camera, Link2, Palette, X } from 'lucide-react';
+import { Camera, Link2, Palette, Ruler, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   FurnitureScene3D,
@@ -77,12 +77,14 @@ export function ProjectPresentationMode({
   const [useR3f, setUseR3f] = useState(false);
   const [explodeFactor, setExplodeFactor] = useState(0);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
+  const [measureMode, setMeasureMode] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setUseR3f(canUseWebGL());
     setExplodeFactor(0);
     setColorMode('material');
+    setMeasureMode(false);
   }, [open]);
 
   useEffect(() => {
@@ -290,6 +292,17 @@ export function ProjectPresentationMode({
                 </button>
                 <button
                   type="button"
+                  className={`btn btn--small${measureMode ? ' btn--primary' : ''}`}
+                  onClick={() => setMeasureMode((v) => !v)}
+                  data-testid="presentation-toggle-measure"
+                  aria-pressed={measureMode}
+                  aria-label={measureMode ? 'Desactivar herramienta de medición' : 'Activar herramienta de medición'}
+                >
+                  <Ruler size={14} strokeWidth={1.5} aria-hidden />
+                  Medir
+                </button>
+                <button
+                  type="button"
                   className="btn btn--small"
                   onClick={handleCapturePng}
                   data-testid="presentation-capture-png"
@@ -334,6 +347,7 @@ export function ProjectPresentationMode({
               testId="presentation-scene-3d"
               colorMode={colorMode}
               materialColors={materialColors}
+              measurementMode={measureMode}
             />
           ) : (
             <div

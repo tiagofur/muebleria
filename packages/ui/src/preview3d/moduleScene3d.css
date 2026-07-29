@@ -90,3 +90,25 @@
     transform: rotate(360deg);
   }
 }
+
+/* Measurement tool label (#198) */
+.measurement-label {
+  background: var(--surface-card, #0f172a);
+  color: #f59e0b;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-bold, 700);
+  font-variant-numeric: tabular-nums;
+  padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid #f59e0b;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .measurement-label {
+    transition: none;
+  }
+}
