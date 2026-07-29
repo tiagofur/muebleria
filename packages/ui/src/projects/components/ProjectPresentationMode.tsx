@@ -331,12 +331,12 @@ export function ProjectPresentationMode({
             <div
               className="catalog-empty"
               style={{
-                padding: '2rem',
+                padding: 'var(--space-6)',
                 textAlign: 'center',
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--error-500)',
+                backgroundColor: 'var(--surface-card)',
+                border: '1px solid var(--danger-500)',
                 borderRadius: 'var(--radius-md)',
-                color: 'var(--error-700)',
+                color: 'var(--danger-700)',
               }}
               data-testid="presentation-webgl-required"
             >

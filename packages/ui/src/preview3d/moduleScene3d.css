@@ -31,3 +31,62 @@
   width: 100% !important;
   height: 100% !important;
 }
+
+.module-scene-3d__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  background-color: var(--surface-card);
+  border-radius: var(--radius-md);
+}
+
+.module-scene-3d__loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--brand-500);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.module-scene-3d__loading-text {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.r3f-error-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  min-height: 200px;
+  background-color: var(--surface-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--danger-500);
+  text-align: center;
+}
+
+.r3f-error-fallback__icon {
+  color: var(--danger-500);
+  margin-bottom: var(--space-3);
+}
+
+.r3f-error-fallback__message {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

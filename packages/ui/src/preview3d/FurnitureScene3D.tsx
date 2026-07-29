@@ -20,6 +20,8 @@ import {
   type BoardPartVisual,
   type MaterialColorLookup,
 } from './boardPartVisual';
+import { AlertTriangle } from 'lucide-react';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
 
 export type FurnitureSceneModule = {
@@ -351,10 +353,41 @@ export function FurnitureScene3D({
         Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para desplazar (pan)
       </p>
       <div className="module-scene-3d__canvas-wrap">
+        <ErrorBoundary
+          fallback={(error, reset) => (
+            <div className="r3f-error-fallback" role="alert" aria-label="Error en la vista 3D">
+              <AlertTriangle
+                size={32}
+                strokeWidth={1.5}
+                className="r3f-error-fallback__icon"
+                aria-hidden
+              />
+              <p className="r3f-error-fallback__message">
+                Error al renderizar la vista 3D.
+              </p>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={reset}
+                data-testid="r3f-error-retry"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+        >
+        <Suspense fallback={
+          <div className="module-scene-3d__loading" role="status" aria-label="Cargando vista 3D">
+            <div className="module-scene-3d__loading-spinner" />
+            <p className="module-scene-3d__loading-text">
+              Cargando escena 3D…
+            </p>
+          </div>
+        }>
         <Canvas
           shadows
           dpr={[1, 2]}
-          gl={{ antialias: true, alpha: false }}
+          gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
         >
           {cameraType === 'orthographic' ? (
             <OrthographicCamera
@@ -393,8 +426,9 @@ export function FurnitureScene3D({
               cameraView={cameraView}
               showWireframe={showWireframe}
             />
-          </Suspense>
-        </Canvas>
+          </Suspense>          </Canvas>
+        </Suspense>
+        </ErrorBoundary>
       </div>
     </div>
   );

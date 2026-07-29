@@ -67,4 +67,35 @@ describe('scenarioCompare', () => {
     );
     expect(r.ok).toBe(false);
   });
+
+  it('returns descriptive error when role is missing', () => {
+    const r = compareRoleScenario(
+      plantillaProject,
+      plantillaCatalogWithModules,
+      '',
+      'x',
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toContain('Elegí un grupo');
+    }
+  });
+
+  it('propagates domain errors with descriptive prefix', () => {
+    // Force a calc error by passing a broken catalog
+    const brokenCatalog = {
+      ...plantillaCatalogWithModules,
+      materials: [],
+    };
+    const r = compareRoleScenario(
+      plantillaProject,
+      brokenCatalog,
+      'FRENTE',
+      'nonexistent-id',
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toMatch(/^No se pudo calcular el escenario B/);
+    }
+  });
 });
