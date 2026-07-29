@@ -3,7 +3,7 @@
  * Fullscreen: name, commercial list, sale total, 3D — no costs/exports.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   Customer,
   Module,
@@ -14,16 +14,19 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Camera, Link2, Palette, X } from 'lucide-react';
+import { Camera, Download, Link2, Palette, Ruler, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   FurnitureScene3D,
   canUseWebGL,
   materialColorMap,
   type BoardColorMode,
+  type ModelFormat,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
+
+const TOTAL_SLIDES = 2;
 
 export type ProjectPresentationModeProps = {
   readonly open: boolean;
@@ -74,25 +77,52 @@ export function ProjectPresentationMode({
   salePrice,
   onClose,
 }: ProjectPresentationModeProps): ReactNode {
+  const [currentSlide, setCurrentSlide] = useState(0);
   const [useR3f, setUseR3f] = useState(false);
   const [explodeFactor, setExplodeFactor] = useState(0);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
+  const [measureMode, setMeasureMode] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ModelFormat | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
+  const goNext = useCallback(() => {
+    setCurrentSlide((s) => Math.min(s + 1, TOTAL_SLIDES - 1));
+  }, []);
+
+  const goPrev = useCallback(() => {
+    setCurrentSlide((s) => Math.max(s - 1, 0));
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     setUseR3f(canUseWebGL());
     setExplodeFactor(0);
     setColorMode('material');
+    setMeasureMode(false);
+    setExportFormat(null);
+    setExportMenuOpen(false);
+    setCurrentSlide(0);
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        goNext();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        goPrev();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, goNext, goPrev]);
 
   const customerName =
     customers.find((c) => c.id === project.customerId)?.name ?? '';
@@ -161,7 +191,44 @@ export function ProjectPresentationMode({
     }
   };
 
+  // Touch handlers for swipe navigation (skip if originated from 3D viewer)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartX.current = touch.clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const touch = e.changedTouches[0];
+    if (!touch) { touchStartX.current = null; return; }
+    // Skip swipe if touch started inside the 3D viewer canvas
+    const target = e.target as HTMLElement;
+    if (target?.closest?.('.project-presentation__viewer canvas')) {
+      touchStartX.current = null;
+      return;
+    }
+    const dx = touch.clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 50) return; // threshold
+    if (dx < 0) goNext();
+    else goPrev();
+  }, [goNext, goPrev]);
+
+  // Dispatch resize event when switching to 3D slide so R3F canvas recalculates
+  useEffect(() => {
+    if (currentSlide === 1 && useR3f) {
+      // Small delay to let the slide become visible before resize
+      const id = requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [currentSlide, useR3f]);
+
   if (!open) return null;
+
+  const slideLabels = ['Resumen', 'Vista 3D'];
 
   return (
     <div
@@ -170,6 +237,8 @@ export function ProjectPresentationMode({
       role="dialog"
       aria-modal="true"
       aria-label={`Presentación: ${project.name}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <header className="project-presentation__header">
         <div>
@@ -202,161 +271,264 @@ export function ProjectPresentationMode({
         </button>
       </header>
 
-      <div className="project-presentation__body">
-        <section
-          className="project-presentation__list"
-          aria-label="Muebles"
+      <div className="project-presentation__slides" data-testid="presentation-slides">
+        {/* Slide 0: Resumen */}
+        <div
+          className={`project-presentation__slide${currentSlide === 0 ? ' project-presentation__slide--active' : ''}`}
+          aria-hidden={currentSlide !== 0}
+          data-testid="presentation-slide-0"
         >
-          <h2 className="project-presentation__section-title">Muebles</h2>
-          <ul className="project-presentation__items">
-            {project.items.map((item) => {
-              const { title, measures } = lineLabel(item, modules);
-              return (
-                <li key={item.id} className="project-presentation__item">
-                  <span className="project-presentation__item-qty">
-                    {item.quantity}×
-                  </span>
-                  <span>
-                    <span className="project-presentation__item-title">
-                      {title}
+          <section
+            className="project-presentation__list"
+            aria-label="Muebles"
+          >
+            <h2 className="project-presentation__section-title">Muebles</h2>
+            <ul className="project-presentation__items">
+              {project.items.map((item) => {
+                const { title, measures } = lineLabel(item, modules);
+                return (
+                  <li key={item.id} className="project-presentation__item">
+                    <span className="project-presentation__item-qty">
+                      {item.quantity}×
                     </span>
-                    {measures ? (
-                      <span className="project-presentation__item-measures">
-                        {measures}
+                    <span>
+                      <span className="project-presentation__item-title">
+                        {title}
                       </span>
-                    ) : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          {project.kitchenLayout && project.kitchenLayout.walls.length > 0 ? (
-            <p className="project-presentation__hint">
-              Plano de cocina: {project.kitchenLayout.walls.length} muro
-              {project.kitchenLayout.walls.length === 1 ? '' : 's'} ·{' '}
-              {project.kitchenLayout.placements.length} colocación
-              {project.kitchenLayout.placements.length === 1 ? '' : 'es'}
-            </p>
-          ) : null}
-        </section>
-
-        <section
-          className="project-presentation__viewer"
-          aria-label="Vista 3D"
-        >
-          {useR3f && !preview.empty ? (
-            <div className="project-presentation__controls" role="toolbar" aria-label="Controles de vista 3D">
-              <div className="project-presentation__control-group">
-                <label htmlFor="explode-slider" className="project-presentation__control-label">
-                  Vista explosionada
-                </label>
-                <input
-                  id="explode-slider"
-                  type="range"
-                  min={0}
-                  max={3}
-                  step={0.1}
-                  value={explodeFactor}
-                  onChange={(e) => setExplodeFactor(Number(e.target.value))}
-                  className="project-presentation__slider"
-                  data-testid="presentation-explode-slider"
-                  aria-valuemin={0}
-                  aria-valuemax={3}
-                  aria-valuenow={explodeFactor}
-                  aria-valuetext={`${explodeFactor.toFixed(1)} de factor de explosión`}
-                />
-              </div>
-              <div className="project-presentation__control-group" role="group" aria-label="Modo de color">
-                <Palette size={16} strokeWidth={1.5} aria-hidden />
-                <button
-                  type="button"
-                  className={colorMode === 'material' ? 'btn btn--small btn--primary' : 'btn btn--small'}
-                  onClick={() => setColorMode('material')}
-                  data-testid="presentation-color-material"
-                  aria-pressed={colorMode === 'material'}
-                  aria-label="Colorear por material"
-                >
-                  Por material
-                </button>
-                <button
-                  type="button"
-                  className={colorMode === 'role' ? 'btn btn--small btn--primary' : 'btn btn--small'}
-                  onClick={() => setColorMode('role')}
-                  data-testid="presentation-color-role"
-                  aria-pressed={colorMode === 'role'}
-                  aria-label="Colorear por función"
-                >
-                  Por función
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  onClick={handleCapturePng}
-                  data-testid="presentation-capture-png"
-                  aria-label="Guardar captura PNG de la vista 3D"
-                >
-                  <Camera size={14} strokeWidth={1.5} aria-hidden />
-                  Captura
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  onClick={handleShareLink}
-                  data-testid="presentation-share-link"
-                  aria-label={linkCopied ? 'Link copiado al portapapeles' : 'Copiar link de presentación'}
-                  aria-live="polite"
-                >
-                  <Link2 size={14} strokeWidth={1.5} aria-hidden />
-                  {linkCopied ? '¡Copiado!' : 'Compartir'}
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {preview.empty ? (
-            <p className="catalog-empty">Sin vista 3D disponible.</p>
-          ) : useR3f ? (
-            <FurnitureScene3D
-              modules={explodedModules.map((m) => ({
-                key: m.instanceKey,
-                parts: m.parts,
-                width: m.width,
-                height: m.height,
-                depth: m.depth,
-                originX: m.originX,
-                originY: m.originY,
-                originZ: m.originZ,
-                showOuterGhost: true,
-              }))}
-              totalWidth={preview.totalWidth}
-              totalHeight={preview.totalHeight}
-              totalDepth={preview.totalDepth}
-              showFloor
-              testId="presentation-scene-3d"
-              colorMode={colorMode}
-              materialColors={materialColors}
-            />
-          ) : (
-            <div
-              className="catalog-empty"
-              style={{
-                padding: 'var(--space-6)',
-                textAlign: 'center',
-                backgroundColor: 'var(--surface-card)',
-                border: '1px solid var(--danger-500)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--danger-700)',
-              }}
-              data-testid="presentation-webgl-required"
-            >
-              <h4>⚠️ WebGL requerido</h4>
-              <p>
-                La vista 3D necesita WebGL (Three.js / React Three Fiber).
-                Verificá que tu navegador lo soporte y no esté bloqueado.
+                      {measures ? (
+                        <span className="project-presentation__item-measures">
+                          {measures}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {project.kitchenLayout && project.kitchenLayout.walls.length > 0 ? (
+              <p className="project-presentation__hint">
+                Plano de cocina: {project.kitchenLayout.walls.length} muro
+                {project.kitchenLayout.walls.length === 1 ? '' : 's'} ·{' '}
+                {project.kitchenLayout.placements.length} colocación
+                {project.kitchenLayout.placements.length === 1 ? '' : 'es'}
               </p>
-            </div>
-          )}
-        </section>
+            ) : null}
+          </section>
+        </div>
+
+        {/* Slide 1: Vista 3D */}
+        <div
+          className={`project-presentation__slide project-presentation__slide--viewer${currentSlide === 1 ? ' project-presentation__slide--active' : ''}`}
+          aria-hidden={currentSlide !== 1}
+          data-testid="presentation-slide-1"
+        >
+          <section
+            className="project-presentation__viewer"
+            aria-label="Vista 3D"
+          >
+            {useR3f && !preview.empty ? (
+              <div className="project-presentation__controls" role="toolbar" aria-label="Controles de vista 3D">
+                <div className="project-presentation__control-group">
+                  <label htmlFor="explode-slider" className="project-presentation__control-label">
+                    Vista explosionada
+                  </label>
+                  <input
+                    id="explode-slider"
+                    type="range"
+                    min={0}
+                    max={3}
+                    step={0.1}
+                    value={explodeFactor}
+                    onChange={(e) => setExplodeFactor(Number(e.target.value))}
+                    className="project-presentation__slider"
+                    data-testid="presentation-explode-slider"
+                    aria-valuemin={0}
+                    aria-valuemax={3}
+                    aria-valuenow={explodeFactor}
+                    aria-valuetext={`${explodeFactor.toFixed(1)} de factor de explosión`}
+                  />
+                </div>
+                <div className="project-presentation__control-group" role="group" aria-label="Modo de color">
+                  <Palette size={16} strokeWidth={1.5} aria-hidden />
+                  <button
+                    type="button"
+                    className={colorMode === 'material' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+                    onClick={() => setColorMode('material')}
+                    data-testid="presentation-color-material"
+                    aria-pressed={colorMode === 'material'}
+                    aria-label="Colorear por material"
+                  >
+                    Por material
+                  </button>
+                  <button
+                    type="button"
+                    className={colorMode === 'role' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+                    onClick={() => setColorMode('role')}
+                    data-testid="presentation-color-role"
+                    aria-pressed={colorMode === 'role'}
+                    aria-label="Colorear por función"
+                  >
+                    Por función
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn--small${measureMode ? ' btn--primary' : ''}`}
+                    onClick={() => setMeasureMode((v) => !v)}
+                    data-testid="presentation-toggle-measure"
+                    aria-pressed={measureMode}
+                    aria-label={measureMode ? 'Desactivar herramienta de medición' : 'Activar herramienta de medición'}
+                  >
+                    <Ruler size={14} strokeWidth={1.5} aria-hidden />
+                    Medir
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={handleCapturePng}
+                    data-testid="presentation-capture-png"
+                    aria-label="Guardar captura PNG de la vista 3D"
+                  >
+                    <Camera size={14} strokeWidth={1.5} aria-hidden />
+                    Captura
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={handleShareLink}
+                    data-testid="presentation-share-link"
+                    aria-label={linkCopied ? 'Link copiado al portapapeles' : 'Copiar link de presentación'}
+                    aria-live="polite"
+                  >
+                    <Link2 size={14} strokeWidth={1.5} aria-hidden />
+                    {linkCopied ? '¡Copiado!' : 'Compartir'}
+                  </button>
+                  <div className="project-presentation__export-wrap">
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() => setExportMenuOpen((v) => !v)}
+                      data-testid="presentation-export-toggle"
+                      aria-expanded={exportMenuOpen}
+                      aria-haspopup="menu"
+                      aria-label="Exportar modelo 3D"
+                    >
+                      <Download size={14} strokeWidth={1.5} aria-hidden />
+                      Exportar
+                    </button>
+                    {exportMenuOpen ? (
+                      <div className="project-presentation__export-menu" role="menu" aria-label="Formatos de exportación">
+                        {(['glb', 'obj', 'stl'] as const).map((fmt) => (
+                          <button
+                            key={fmt}
+                            type="button"
+                            className="project-presentation__export-menu-item"
+                            role="menuitem"
+                            data-testid={`presentation-export-${fmt}`}
+                            onClick={() => {
+                              setExportFormat(fmt);
+                              setExportMenuOpen(false);
+                            }}
+                          >
+                            {fmt.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {preview.empty ? (
+              <p className="catalog-empty">Sin vista 3D disponible.</p>
+            ) : useR3f ? (
+              <FurnitureScene3D
+                modules={explodedModules.map((m) => ({
+                  key: m.instanceKey,
+                  parts: m.parts,
+                  width: m.width,
+                  height: m.height,
+                  depth: m.depth,
+                  originX: m.originX,
+                  originY: m.originY,
+                  originZ: m.originZ,
+                  showOuterGhost: true,
+                }))}
+                totalWidth={preview.totalWidth}
+                totalHeight={preview.totalHeight}
+                totalDepth={preview.totalDepth}
+                showFloor
+                testId="presentation-scene-3d"
+                colorMode={colorMode}
+                materialColors={materialColors}
+                measurementMode={measureMode}
+                exportFormat={exportFormat}
+                onExportComplete={() => setExportFormat(null)}
+                exportProjectName={project.name}
+              />
+            ) : (
+              <div
+                className="catalog-empty"
+                style={{
+                  padding: 'var(--space-6)',
+                  textAlign: 'center',
+                  backgroundColor: 'var(--surface-card)',
+                  border: '1px solid var(--danger-500)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--danger-700)',
+                }}
+                data-testid="presentation-webgl-required"
+              >
+                <h4>⚠️ WebGL requerido</h4>
+                <p>
+                  La vista 3D necesita WebGL (Three.js / React Three Fiber).
+                  Verificá que tu navegador lo soporte y no esté bloqueado.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
+
+      {/* Slide navigation footer */}
+      <footer className="project-presentation__nav" role="navigation" aria-label="Navegación de diapositivas">
+        <button
+          type="button"
+          className="btn btn--ghost project-presentation__nav-btn"
+          onClick={goPrev}
+          disabled={currentSlide === 0}
+          aria-label="Diapositiva anterior"
+          data-testid="presentation-prev-slide"
+        >
+          ← Anterior
+        </button>
+        <div className="project-presentation__nav-dots" role="tablist" aria-label="Diapositivas">
+          {slideLabels.map((label, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`project-presentation__nav-dot${currentSlide === i ? ' project-presentation__nav-dot--active' : ''}`}
+              onClick={() => setCurrentSlide(i)}
+              role="tab"
+              aria-selected={currentSlide === i}
+              aria-label={`${label} (diapositiva ${i + 1} de ${TOTAL_SLIDES})`}
+              data-testid={`presentation-slide-tab-${i}`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          className="btn btn--ghost project-presentation__nav-btn"
+          onClick={goNext}
+          disabled={currentSlide === TOTAL_SLIDES - 1}
+          aria-label="Siguiente diapositiva"
+          data-testid="presentation-next-slide"
+        >
+          Siguiente →
+        </button>
+        <span className="project-presentation__nav-counter" aria-live="polite">
+          {currentSlide + 1} / {TOTAL_SLIDES}
+        </span>
+      </footer>
     </div>
   );
 }

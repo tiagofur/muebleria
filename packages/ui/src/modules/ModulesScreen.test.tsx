@@ -130,6 +130,8 @@ const sampleBreakdown: QuoteBreakdown = {
   directCost: 150,
   salePrice: 202.5,
   marginFactor: 1.35,
+  discountPercent: 0,
+  discountAmount: 0,
 };
 
 function renderScreen(

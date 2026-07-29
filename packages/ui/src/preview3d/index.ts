@@ -34,3 +34,5 @@ export {
   type ProjectModule3DInstance,
   type ResolveProject3DOptions,
 } from './project3dPreview';
+export { type ModelFormat } from './ModelExporter';
+export { downloadBlob, sanitizeFilename } from './exportModel';

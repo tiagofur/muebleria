@@ -411,6 +411,23 @@ export const DEFAULT_INSTALLATION_CHECKLIST: readonly Omit<
   { label: 'Entrega y conformidad cliente', done: false },
 ] as const;
 
+/**
+ * Volume discount tier (#202). Each tier defines a minimum quantity threshold
+ * and the discount percentage applied when the project's total item quantity
+ * reaches or exceeds that threshold. Tiers are evaluated highest-first: the
+ * most generous applicable tier wins.
+ */
+export interface DiscountTier {
+  /** Unique id (crypto.randomUUID or similar). */
+  readonly id: string;
+  /** Human-readable label shown in the UI (e.g. "10+ unidades"). */
+  readonly label: string;
+  /** Minimum total item quantity to activate this tier (>= 1). */
+  readonly minQuantity: number;
+  /** Discount percentage (0–100) applied to the sale price. */
+  readonly discountPercent: number;
+}
+
 export interface Project {
   readonly id: string;
   readonly name: string;
@@ -425,6 +442,11 @@ export interface Project {
   readonly laborFixedCost: number;
   readonly status: ProjectStatus;
   readonly items: readonly ProjectItem[];
+  /**
+   * Optional volume discount tiers (#202). Sorted descending by minQuantity.
+   * The first tier whose minQuantity <= totalItemQuantity applies.
+   */
+  readonly discountTiers?: readonly DiscountTier[];
   /**
    * Default option choices for all line items (F029 / #35).
    * Effective per item: item.optionChoices[role] || projectLevelChoices[role].
@@ -468,6 +490,39 @@ export interface Project {
   readonly updatedAt: string;
   /** Present when closed (quoted/accepted/produced); ignored while draft. */
   readonly priceSnapshot?: QuotePriceSnapshot;
+  /**
+   * Monotonic version number (#200). Defaults to 1 when absent (legacy data).
+   * Incremented on each snapshot (status change or manual save).
+   */
+  readonly version?: number;
+  /**
+   * Immutable snapshots of previous versions (#200), newest first.
+   * `history[0]` is always the most recently superseded version.
+   */
+  readonly history?: readonly ProjectVersion[];
+}
+
+/**
+ * Immutable snapshot of a superseded Project version (#200).
+ * Captures the full project state at a point in time so it can be restored.
+ */
+export interface ProjectVersion {
+  readonly version: number;
+  readonly name: string;
+  readonly status: ProjectStatus;
+  readonly items: readonly ProjectItem[];
+  readonly projectLevelChoices?: OptionChoices;
+  readonly measureDefaults?: {
+    readonly [type in FurnitureType]?: {
+      readonly depth?: number;
+      readonly height?: number;
+    };
+  };
+  readonly kitchenLayout?: ProjectKitchenLayout;
+  readonly notes?: string;
+  readonly priceSnapshot?: QuotePriceSnapshot;
+  readonly snapshotAt: string;
+  readonly label?: string;
 }
 
 /**
@@ -599,6 +654,10 @@ export interface QuoteBreakdown {
   readonly laborModular: number;
   readonly laborFixedCost: number;
   readonly marginFactor: number;
+  /** Percentage discount applied by tiered pricing (0 = no discount). */
+  readonly discountPercent?: number;
+  /** Absolute discount amount subtracted from salePrice. */
+  readonly discountAmount?: number;
   readonly salePrice: number;
 }
 

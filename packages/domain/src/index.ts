@@ -35,6 +35,7 @@ export type {
   ModuleComponentInstance,
   ProjectItem,
   Project,
+  ProjectVersion,
   ProjectTemplate,
   PlacementElevation,
   KitchenWall,
@@ -270,3 +271,21 @@ export {
   suggestHardwareForModule,
   type WorkshopSuggestion,
 } from './workshopRules';
+
+// --- Tiered pricing / volume discounts (#202) ---
+export type { DiscountTier } from './types';
+export {
+  resolveDiscountTier,
+  applyTieredDiscount,
+  totalItemQuantity,
+} from './tieredPricing';
+export type { ResolvedDiscount } from './tieredPricing';
+
+// --- Project versioning / history (#200) ---
+export {
+  currentVersion,
+  snapshotProjectVersion,
+  restoreProjectVersion,
+  snapshotOnStatusChange,
+  diffVersions,
+} from './projectVersioning';

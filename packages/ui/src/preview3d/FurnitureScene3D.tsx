@@ -20,6 +20,9 @@ import {
   type BoardPartVisual,
   type MaterialColorLookup,
 } from './boardPartVisual';
+import { MeasurementTool } from './MeasurementTool';
+import { KeyboardNav } from './KeyboardNav';
+import { ModelExporter, type ModelFormat } from './ModelExporter';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
@@ -53,6 +56,14 @@ export type FurnitureScene3DProps = {
   readonly materialColors?: MaterialColorLookup;
   readonly cameraType?: 'perspective' | 'orthographic';
   readonly showWireframe?: boolean;
+  /** Enable measurement tool mode (click two points to measure distance). */
+  readonly measurementMode?: boolean;
+  /** Trigger 3D model export. Set to a format to export; parent should reset to null. */
+  readonly exportFormat?: ModelFormat | null;
+  /** Callback after export completes (success or failure). */
+  readonly onExportComplete?: () => void;
+  /** Project name used as base filename for exports. */
+  readonly exportProjectName?: string;
 };
 
 function BoardMesh({
@@ -222,6 +233,11 @@ function SceneContent({
   materialColors,
   cameraView,
   showWireframe,
+  measurementMode,
+  controlsRef,
+  exportFormat,
+  onExportComplete,
+  exportProjectName,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
@@ -232,8 +248,12 @@ function SceneContent({
   readonly materialColors?: MaterialColorLookup;
   readonly cameraView?: CameraViewType | null;
   readonly showWireframe?: boolean;
+  readonly measurementMode?: boolean;
+  readonly controlsRef: React.RefObject<any>;
+  readonly exportFormat?: ModelFormat | null;
+  readonly onExportComplete?: () => void;
+  readonly exportProjectName?: string;
 }): ReactNode {
-  const controlsRef = useRef<any>(null);
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
@@ -297,9 +317,7 @@ function SceneContent({
         scale={framing.maxDim * 2.2}
         blur={2.2}
         far={framing.maxDim}
-      />
-
-      <OrbitControls
+      />      <OrbitControls
         ref={controlsRef}
         makeDefault
         enableDamping
@@ -307,9 +325,23 @@ function SceneContent({
         minDistance={framing.maxDim * 0.3}
         maxDistance={framing.maxDim * 5}
         target={framing.center as any}
+        enabled={!measurementMode}
       />
-    </>
-  );
+
+      <MeasurementTool active={measurementMode ?? false} />
+      <KeyboardNav
+        active={true}
+        controlsRef={controlsRef}
+        center={framing.center}
+        maxDim={framing.maxDim}
+      />
+
+      <ModelExporter
+        exportFormat={exportFormat ?? null}
+        onExportComplete={onExportComplete ?? (() => {})}
+        projectName={exportProjectName ?? 'scene'}
+      />
+    </>);
 }
 
 export function FurnitureScene3D({
@@ -326,7 +358,12 @@ export function FurnitureScene3D({
   cameraView,
   cameraType = 'perspective',
   showWireframe,
+  measurementMode,
+  exportFormat = null,
+  onExportComplete,
+  exportProjectName = 'scene',
 }: FurnitureScene3DProps): ReactNode {
+  const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
   const sceneModules = modules;
@@ -351,8 +388,13 @@ export function FurnitureScene3D({
     >
       <p className="module-scene-3d__hint">
         Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para desplazar (pan)
+        · ← → ↑ ↓ para navegar con teclado · + − para zoom
       </p>
-      <div className="module-scene-3d__canvas-wrap">
+      <div
+        className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
+        tabIndex={0}
+        aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
+      >
         <ErrorBoundary
           fallback={(error, reset) => (
             <div className="r3f-error-fallback" role="alert" aria-label="Error en la vista 3D">
@@ -425,6 +467,11 @@ export function FurnitureScene3D({
               materialColors={materialColors}
               cameraView={cameraView}
               showWireframe={showWireframe}
+              measurementMode={measurementMode}
+              controlsRef={controlsRef}
+              exportFormat={exportFormat}
+              onExportComplete={onExportComplete}
+              exportProjectName={exportProjectName}
             />
           </Suspense>          </Canvas>
         </Suspense>

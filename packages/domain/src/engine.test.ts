@@ -853,6 +853,8 @@ describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
           laborModular: 0,
           laborFixedCost: 0,
           marginFactor: 1,
+          discountPercent: 0,
+          discountAmount: 0,
           salePrice: 3,
         },
       },

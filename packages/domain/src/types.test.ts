@@ -193,6 +193,8 @@ describe('domain entity types', () => {
       laborModular: 0,
       laborFixedCost: 500,
       marginFactor: 1.35,
+      discountPercent: 0,
+      discountAmount: 0,
       salePrice: 702.5,
     };
     const project: Project = {
@@ -271,6 +273,8 @@ describe('domain entity types', () => {
       laborModular: 150,
       laborFixedCost: 500,
       marginFactor: 1.35,
+      discountPercent: 0,
+      discountAmount: 0,
       salePrice: 874.1,
     };
 

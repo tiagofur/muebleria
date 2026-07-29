@@ -11,6 +11,7 @@ import { effectiveOptionChoices } from '../optionChoices';
 import {
   captureProjectItemStructurePins,
 } from '../structures/versioning';
+import { applyTieredDiscount, totalItemQuantity } from '../tieredPricing';
 import type {
   Catalog,
   Project,
@@ -274,10 +275,18 @@ function calcLiveProjectBreakdown(
   }
 
   const directCost = materialsCost + edgeTotal + hardwareTotal;
-  const salePrice =
+  const preDiscountSalePrice =
     directCost * project.marginFactor +
     laborModular +
     project.laborFixedCost;
+
+  // Apply tiered volume discount (#202)
+  const tiers = project.discountTiers ?? [];
+  const totalQty = totalItemQuantity(project.items);
+  const { discountPercent, discountAmount } =
+    applyTieredDiscount(tiers, totalQty, preDiscountSalePrice);
+
+  const salePrice = Math.max(preDiscountSalePrice - discountAmount, 0);
 
   return {
     materialsCost,
@@ -287,6 +296,8 @@ function calcLiveProjectBreakdown(
     laborModular,
     laborFixedCost: project.laborFixedCost,
     marginFactor: project.marginFactor,
+    discountPercent,
+    discountAmount,
     salePrice,
   };
 }
