@@ -4,7 +4,7 @@
  */
 
 import { calcProjectBreakdown } from './engine';
-import type { Catalog, OptionChoices, Project } from './types';
+import type { Catalog, OptionChoices, Project, QuoteBreakdown } from './types';
 
 /**
  * Clone a project forcing a single option role to `choiceId` on every line
@@ -50,6 +50,8 @@ export type ScenarioCompareResult = {
   readonly saleB: number;
   /** saleB - saleA (positive = B more expensive). */
   readonly delta: number;
+  readonly breakdownA: QuoteBreakdown;
+  readonly breakdownB: QuoteBreakdown;
   readonly ok: true;
 };
 
@@ -82,13 +84,15 @@ export function compareRoleScenario(
       priceSnapshot: undefined,
     };
     const projectB = projectWithRoleChoice(project, role, choiceB);
-    const saleA = calcProjectBreakdown(projectA, catalog).salePrice;
-    const saleB = calcProjectBreakdown(projectB, catalog).salePrice;
+    const breakdownA = calcProjectBreakdown(projectA, catalog);
+    const breakdownB = calcProjectBreakdown(projectB, catalog);
     return {
       ok: true,
-      saleA,
-      saleB,
-      delta: saleB - saleA,
+      saleA: breakdownA.salePrice,
+      saleB: breakdownB.salePrice,
+      delta: breakdownB.salePrice - breakdownA.salePrice,
+      breakdownA,
+      breakdownB,
     };
   } catch (err) {
     return {

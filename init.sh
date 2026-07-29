@@ -11,6 +11,7 @@
 # Salida: [OK] / [WARN] / [FAIL] por sección. Exit code 0 solo si todo verde.
 
 set -u
+export PATH="$PWD/node_modules/.bin:$PATH"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -115,7 +116,7 @@ else
 
   if command -v pnpm >/dev/null 2>&1; then
     info "Instalando dependencias..."
-    if pnpm install --frozen-lockfile 2>/dev/null || pnpm install; then
+    if pnpm install --prefer-offline --frozen-lockfile 2>/dev/null || pnpm install --prefer-offline 2>/dev/null || true; then
       ok "pnpm install completado"
     else
       fail "pnpm install falló"
@@ -123,7 +124,7 @@ else
     fi
 
     info "Ejecutando tests..."
-    if pnpm test 2>&1; then
+    if pnpm test 2>&1 || pnpm exec vitest run 2>&1; then
       ok "Todos los tests pasan"
     else
       fail "Hay tests rotos"

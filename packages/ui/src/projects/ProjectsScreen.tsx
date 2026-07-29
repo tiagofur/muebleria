@@ -131,6 +131,11 @@ export interface ProjectsScreenProps {
     role: string,
     choiceId: string,
   ) => void;
+  readonly onExportScenarioPdf?: (
+    projectId: string,
+    role: string,
+    choiceId: string,
+  ) => void;
   readonly onUpdateInstallationChecklist?: (
     projectId: string,
     items: readonly import('@muebles/domain').InstallationChecklistItem[],
@@ -273,6 +278,7 @@ export function ProjectsScreen({
   onUpdateKitchenLayout,
   onApplyScenarioB,
   onDuplicateWithScenarioB,
+  onExportScenarioPdf,
   onUpdateInstallationChecklist,
   onImportNesting,
   onUpdateProjectLevelChoices,
@@ -653,7 +659,7 @@ export function ProjectsScreen({
         ? {
             id: 'pack',
             label: 'Pack producción',
-            hint: 'ZIP (Optimizer + herrajes + etiquetas)',
+            hint: 'ZIP (Optimizer + herrajes + etiquetas + resumen)',
             disabled: productionExportDisabled,
             onSelect: () => void onExportProductionPack(),
           }
@@ -829,6 +835,7 @@ export function ProjectsScreen({
           onUpdateKitchenLayout={onUpdateKitchenLayout}
           onApplyScenarioB={onApplyScenarioB}
           onDuplicateWithScenarioB={onDuplicateWithScenarioB}
+          onExportScenarioPdf={onExportScenarioPdf}
           onUpdateInstallationChecklist={onUpdateInstallationChecklist}
           onImportNesting={onImportNesting}
           onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}

@@ -198,6 +198,11 @@ export interface ProjectDetailViewProps {
     role: string,
     choiceId: string,
   ) => void;
+  readonly onExportScenarioPdf?: (
+    projectId: string,
+    role: string,
+    choiceId: string,
+  ) => void;
   readonly onUpdateInstallationChecklist?: (
     projectId: string,
     items: readonly import('@muebles/domain').InstallationChecklistItem[],
@@ -262,6 +267,7 @@ export function ProjectDetailView({
   onUpdateKitchenLayout,
   onApplyScenarioB,
   onDuplicateWithScenarioB,
+  onExportScenarioPdf,
   onUpdateInstallationChecklist,
   onImportNesting,
   onUpdateProjectLevelChoices,
@@ -687,6 +693,9 @@ export function ProjectDetailView({
           }}
           onDuplicateWithB={(role, choiceId) => {
             onDuplicateWithScenarioB?.(project.id, role, choiceId);
+          }}
+          onExportScenarioPdf={(role, choiceId) => {
+            onExportScenarioPdf?.(project.id, role, choiceId);
           }}
         />
 

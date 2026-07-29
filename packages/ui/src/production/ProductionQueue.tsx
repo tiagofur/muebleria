@@ -235,7 +235,7 @@ export function ProductionQueue({
                       type="button"
                       className="btn btn--primary"
                       disabled={exportBusy}
-                      title="ZIP con Optimizer, herrajes y etiquetas"
+                      title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
                       onClick={() => {
                         void onExportProductionPack(project.id);
                       }}
