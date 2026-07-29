@@ -48,6 +48,7 @@ import {
   type DropdownMenuSection,
   InlineLoading,
 } from '../../common';
+import { TotalsSkeleton } from './TotalsSkeleton';
 import { PricePreviewGate } from '../../optionGroups/PricePreviewGate';
 import { ExportIssueList } from '../ExportIssueList';
 import { KitchenPlanPanel } from './KitchenPlanPanel';
@@ -993,7 +994,9 @@ export function ProjectDetailView({
             groupLabels={groupLabels}
             blockedMessage="Totales bloqueados: faltan opciones obligatorias en uno o más ítems."
           >
-            {breakdown ? (
+            {breakdownLoading && !breakdown ? (
+              <TotalsSkeleton />
+            ) : breakdown ? (
               <dl className="project-totals__grid">
                 {showCosts ? (
                   <>
@@ -1068,9 +1071,7 @@ export function ProjectDetailView({
               <p className="project-totals__empty">
                 {project.items.length === 0
                   ? 'Agregá muebles para ver totales.'
-                  : breakdownLoading
-                    ? 'Calculando desglose…'
-                    : 'No se pudo calcular el desglose con las opciones actuales.'}
+                  : 'No se pudo calcular el desglose con las opciones actuales.'}
               </p>
             )}
           </PricePreviewGate>

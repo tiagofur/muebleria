@@ -95,12 +95,13 @@ export function compareRoleScenario(
       breakdownB,
     };
   } catch (err) {
+    const baseMessage = 'No se pudo calcular el escenario B';
+    if (err instanceof Error) {
+      return { ok: false, message: `${baseMessage}: ${err.message}` };
+    }
     return {
       ok: false,
-      message:
-        err instanceof Error
-          ? err.message
-          : 'No se pudo calcular el escenario B.',
+      message: `${baseMessage}: error desconocido`,
     };
   }
 }
