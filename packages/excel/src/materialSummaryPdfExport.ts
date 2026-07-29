@@ -63,7 +63,7 @@ export async function materialSummaryPdfExport(
   cursorY -= 14;
   drawText(
     page,
-    `Fecha: ${new Date().toLocaleDateString('es-AR')} · Total Área: ${summary.totalAreaM2.toFixed(2)} m² · Herrajes: ${summary.totalHardwareCount} un.`,
+    `Fecha: ${new Date().toLocaleDateString('es-AR')} · Total Área: ${summary.totalAreaM2.toFixed(2)} m² · Herrajes: ${summary.hardware.length} un.`,
     MARGIN,
     cursorY,
     font,

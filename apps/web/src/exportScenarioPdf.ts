@@ -49,7 +49,7 @@ export async function buildCommercialScenarioPdfExport(
   const hwB = catalog.hardware?.find((h) => h.id === choiceB);
   const edgeB = catalog.edges?.find((e) => e.id === choiceB);
   if (matB) optionBName = `${matB.name} (${matB.code})`;
-  else if (hwB) optionBName = `${hwB.description || hwB.code}`;
+  else if (hwB) optionBName = `${hwB.name || hwB.code}`;
   else if (edgeB) optionBName = `${edgeB.name} (${edgeB.code})`;
 
   try {

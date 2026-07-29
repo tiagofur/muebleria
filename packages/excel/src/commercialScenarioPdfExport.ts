@@ -175,11 +175,11 @@ export async function commercialScenarioPdfExport(
     y -= 22;
 
     const rows = [
-      { label: 'Tableros / Placas (Materia prima)', valA: input.optionA.breakdown.boardCost, valB: input.optionB.breakdown.boardCost },
-      { label: 'Tapacantos (Metros lineales)', valA: input.optionA.breakdown.edgeCost, valB: input.optionB.breakdown.edgeCost },
-      { label: 'Herrajes (Unidades)', valA: input.optionA.breakdown.hardwareCost, valB: input.optionB.breakdown.hardwareCost },
-      { label: 'Mano de obra y taller', valA: input.optionA.breakdown.laborCost, valB: input.optionB.breakdown.laborCost },
-      { label: 'Total Costos de Producción', valA: input.optionA.breakdown.totalCost, valB: input.optionB.breakdown.totalCost, bold: true },
+      { label: 'Tableros / Placas (Materia prima)', valA: input.optionA.breakdown.materialsCost, valB: input.optionB.breakdown.materialsCost },
+      { label: 'Tapacantos (Metros lineales)', valA: input.optionA.breakdown.edgeTotal, valB: input.optionB.breakdown.edgeTotal },
+      { label: 'Herrajes (Unidades)', valA: input.optionA.breakdown.hardwareTotal, valB: input.optionB.breakdown.hardwareTotal },
+      { label: 'Mano de obra y taller', valA: input.optionA.breakdown.laborModular, valB: input.optionB.breakdown.laborModular },
+      { label: 'Total Costos de Producción', valA: input.optionA.breakdown.directCost, valB: input.optionB.breakdown.directCost, bold: true },
       { label: 'Precio Final de Venta', valA: input.optionA.breakdown.salePrice, valB: input.optionB.breakdown.salePrice, bold: true, highlight: true },
     ];
 

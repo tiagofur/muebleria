@@ -1039,10 +1039,10 @@ function AppContent({
     async (projectId: string, role: string, choiceId: string) => {
       const project = projects.find((p) => p.id === projectId);
       if (!project) return;
-      const customerName = resolveCustomerName(customers, project.customerId);
+      const customerName = resolveCustomerName(project.customerId, customers);
       const res = await buildCommercialScenarioPdfExport(
         project,
-        catalog,
+        catalog!,
         role,
         choiceId,
         customerName,
@@ -1257,8 +1257,8 @@ function AppContent({
       try {
         const result = await buildProductionPackExport(
           project,
-          catalog,
-          customers,
+          catalog!,
+          resolveCustomerName(project.customerId, customers),
         );
         if (!result.ok) {
           setExportErrors(result.issues);

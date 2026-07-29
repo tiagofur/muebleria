@@ -236,27 +236,27 @@ export function QuoteScenarioCompare({
                 <tbody>
                   <tr>
                     <td style={{ padding: '4px' }}>Tableros / Placas</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.boardCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.boardCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.boardCost - result.breakdownA.boardCost, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.materialsCost, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.materialsCost, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.materialsCost - result.breakdownA.materialsCost, { currency })}</td>
                   </tr>
                   <tr>
                     <td style={{ padding: '4px' }}>Tapacantos</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.edgeCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.edgeCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.edgeCost - result.breakdownA.edgeCost, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.edgeTotal, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.edgeTotal, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.edgeTotal - result.breakdownA.edgeTotal, { currency })}</td>
                   </tr>
                   <tr>
                     <td style={{ padding: '4px' }}>Herrajes</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.hardwareCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.hardwareCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.hardwareCost - result.breakdownA.hardwareCost, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.hardwareTotal, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.hardwareTotal, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.hardwareTotal - result.breakdownA.hardwareTotal, { currency })}</td>
                   </tr>
                   <tr>
                     <td style={{ padding: '4px' }}>Mano de obra</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.laborCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.laborCost, { currency })}</td>
-                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.laborCost - result.breakdownA.laborCost, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownA.laborModular, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.laborModular, { currency })}</td>
+                    <td style={{ padding: '4px', textAlign: 'right' }}>{formatMoneyDisplay(result.breakdownB.laborModular - result.breakdownA.laborModular, { currency })}</td>
                   </tr>
                   <tr style={{ fontWeight: 600, borderTop: '1px dashed #cbd5e1' }}>
                     <td style={{ padding: '4px' }}>Total Venta</td>

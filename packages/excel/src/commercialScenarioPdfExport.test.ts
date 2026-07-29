@@ -23,7 +23,7 @@ describe('commercialScenarioPdfExport (Issue #137)', () => {
         salePrice: bdA.salePrice * 1.15,
         breakdown: {
           ...bdA,
-          boardCost: bdA.boardCost * 1.2,
+          materialsCost: bdA.materialsCost * 1.2,
           salePrice: bdA.salePrice * 1.15,
         },
       },
