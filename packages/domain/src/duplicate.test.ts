@@ -66,6 +66,8 @@ function sampleProject(overrides: Partial<Project> = {}): Project {
       laborModular: 0,
       laborFixedCost: 0,
       marginFactor: 1.35,
+      discountPercent: 0,
+      discountAmount: 0,
       salePrice: 17.55,
     },
   };

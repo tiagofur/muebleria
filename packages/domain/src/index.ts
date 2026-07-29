@@ -272,6 +272,15 @@ export {
   type WorkshopSuggestion,
 } from './workshopRules';
 
+// --- Tiered pricing / volume discounts (#202) ---
+export type { DiscountTier } from './types';
+export {
+  resolveDiscountTier,
+  applyTieredDiscount,
+  totalItemQuantity,
+} from './tieredPricing';
+export type { ResolvedDiscount } from './tieredPricing';
+
 // --- Project versioning / history (#200) ---
 export {
   currentVersion,
