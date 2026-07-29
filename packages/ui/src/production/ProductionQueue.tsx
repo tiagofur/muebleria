@@ -10,10 +10,12 @@ import {
   ClipboardList,
   Factory,
   FileSpreadsheet,
+  LayoutGrid,
   Tags,
   Wrench,
 } from 'lucide-react';
 import { EmptyState, InlineLoading } from '../common';
+import { ProductionBoardView } from './ProductionBoardView';
 import {
   formatIsoDate,
   projectStatusBadgeClass,
@@ -45,6 +47,13 @@ export type ProductionQueueProps = {
   readonly onMarkProduced: (projectId: string) => void;
   readonly exportBusy?: boolean;
   readonly loading?: boolean;
+  /**
+   * Fase 4 slice 4.1: cut rows for the board view. When provided for a
+   * project, the card shows an expand toggle to view the board plan.
+   */
+  readonly cutRowsFor?: (
+    projectId: string,
+  ) => readonly import('@muebles/domain').ProductionCutRow[] | undefined;
 };
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -69,8 +78,10 @@ export function ProductionQueue({
   onMarkProduced,
   exportBusy = false,
   loading = false,
+  cutRowsFor,
 }: ProductionQueueProps): ReactNode {
   const [tab, setTab] = useState<ProductionQueueTab>('accepted');
+  const [expandedBoard, setExpandedBoard] = useState<string | null>(null);
 
   const rows = useMemo(
     () => filterProductionQueue(projects, tab),
@@ -257,6 +268,30 @@ export function ProductionQueue({
                     </button>
                   ) : null}
                 </div>
+                {cutRowsFor ? (
+                  <div className="prod-queue-card__board-toggle">
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      onClick={() =>
+                        setExpandedBoard(
+                          expandedBoard === project.id ? null : project.id,
+                        )
+                      }
+                      data-testid={`prod-board-toggle-${project.id}`}
+                    >
+                      <LayoutGrid size={14} strokeWidth={1.5} aria-hidden />
+                      {expandedBoard === project.id
+                        ? 'Ocultar tablero'
+                        : 'Ver tablero'}
+                    </button>
+                  </div>
+                ) : null}
+                {expandedBoard === project.id && cutRowsFor ? (
+                  <div className="prod-queue-card__board">
+                    <ProductionBoardView rows={cutRowsFor(project.id) ?? []} />
+                  </div>
+                ) : null}
               </li>
             );
           })}
