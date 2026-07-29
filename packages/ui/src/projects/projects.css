@@ -947,6 +947,85 @@
   }
 }
 
+/* —— Quote scenario compare (#194 — inline styles → CSS) —— */
+
+.scenario-compare__hint--no-top {
+  margin-top: 0;
+}
+
+.scenario-compare__results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.scenario-compare__label {
+  margin: 0;
+}
+
+.scenario-compare__price {
+  margin: 0.25rem 0 0;
+  font-weight: var(--weight-semibold);
+}
+
+.scenario-compare__delta {
+  margin: 0.25rem 0 0;
+  font-weight: var(--weight-bold);
+}
+
+.scenario-compare__delta--positive {
+  color: var(--danger-500);
+}
+
+.scenario-compare__delta--negative {
+  color: var(--success-500);
+}
+
+.scenario-compare__toggle {
+  margin-top: 0.5rem;
+}
+
+.scenario-compare__breakdown {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background-color: var(--surface-hover);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.scenario-compare__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scenario-compare__th-row {
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.scenario-compare__cell {
+  padding: var(--space-1);
+}
+
+.scenario-compare__cell--right {
+  padding: var(--space-1);
+  text-align: right;
+}
+
+.scenario-compare__total-row {
+  font-weight: var(--weight-semibold);
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.scenario-compare__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
 /* Project templates picker / management (#110 / H15) */
 .template-picker-list {
   list-style: none;
