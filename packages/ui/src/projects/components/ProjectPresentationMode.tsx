@@ -14,13 +14,14 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Camera, Link2, Palette, Ruler, X } from 'lucide-react';
+import { Camera, Download, Link2, Palette, Ruler, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   FurnitureScene3D,
   canUseWebGL,
   materialColorMap,
   type BoardColorMode,
+  type ModelFormat,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
@@ -78,6 +79,8 @@ export function ProjectPresentationMode({
   const [explodeFactor, setExplodeFactor] = useState(0);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
   const [measureMode, setMeasureMode] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ModelFormat | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +88,8 @@ export function ProjectPresentationMode({
     setExplodeFactor(0);
     setColorMode('material');
     setMeasureMode(false);
+    setExportFormat(null);
+    setExportMenuOpen(false);
   }, [open]);
 
   useEffect(() => {
@@ -322,6 +327,39 @@ export function ProjectPresentationMode({
                   <Link2 size={14} strokeWidth={1.5} aria-hidden />
                   {linkCopied ? '¡Copiado!' : 'Compartir'}
                 </button>
+                <div className="project-presentation__export-wrap">
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={() => setExportMenuOpen((v) => !v)}
+                    data-testid="presentation-export-toggle"
+                    aria-expanded={exportMenuOpen}
+                    aria-haspopup="menu"
+                    aria-label="Exportar modelo 3D"
+                  >
+                    <Download size={14} strokeWidth={1.5} aria-hidden />
+                    Exportar
+                  </button>
+                  {exportMenuOpen ? (
+                    <div className="project-presentation__export-menu" role="menu" aria-label="Formatos de exportación">
+                      {(['glb', 'obj', 'stl'] as const).map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          className="project-presentation__export-menu-item"
+                          role="menuitem"
+                          data-testid={`presentation-export-${fmt}`}
+                          onClick={() => {
+                            setExportFormat(fmt);
+                            setExportMenuOpen(false);
+                          }}
+                        >
+                          {fmt.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
@@ -348,6 +386,9 @@ export function ProjectPresentationMode({
               colorMode={colorMode}
               materialColors={materialColors}
               measurementMode={measureMode}
+              exportFormat={exportFormat}
+              onExportComplete={() => setExportFormat(null)}
+              exportProjectName={project.name}
             />
           ) : (
             <div

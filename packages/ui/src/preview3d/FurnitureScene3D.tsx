@@ -22,6 +22,7 @@ import {
 } from './boardPartVisual';
 import { MeasurementTool } from './MeasurementTool';
 import { KeyboardNav } from './KeyboardNav';
+import { ModelExporter, type ModelFormat } from './ModelExporter';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
@@ -57,6 +58,12 @@ export type FurnitureScene3DProps = {
   readonly showWireframe?: boolean;
   /** Enable measurement tool mode (click two points to measure distance). */
   readonly measurementMode?: boolean;
+  /** Trigger 3D model export. Set to a format to export; parent should reset to null. */
+  readonly exportFormat?: ModelFormat | null;
+  /** Callback after export completes (success or failure). */
+  readonly onExportComplete?: () => void;
+  /** Project name used as base filename for exports. */
+  readonly exportProjectName?: string;
 };
 
 function BoardMesh({
@@ -228,6 +235,9 @@ function SceneContent({
   showWireframe,
   measurementMode,
   controlsRef,
+  exportFormat,
+  onExportComplete,
+  exportProjectName,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
@@ -240,6 +250,9 @@ function SceneContent({
   readonly showWireframe?: boolean;
   readonly measurementMode?: boolean;
   readonly controlsRef: React.RefObject<any>;
+  readonly exportFormat?: ModelFormat | null;
+  readonly onExportComplete?: () => void;
+  readonly exportProjectName?: string;
 }): ReactNode {
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
@@ -322,6 +335,12 @@ function SceneContent({
         center={framing.center}
         maxDim={framing.maxDim}
       />
+
+      <ModelExporter
+        exportFormat={exportFormat ?? null}
+        onExportComplete={onExportComplete ?? (() => {})}
+        projectName={exportProjectName ?? 'scene'}
+      />
     </>);
 }
 
@@ -340,6 +359,9 @@ export function FurnitureScene3D({
   cameraType = 'perspective',
   showWireframe,
   measurementMode,
+  exportFormat = null,
+  onExportComplete,
+  exportProjectName = 'scene',
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -447,6 +469,9 @@ export function FurnitureScene3D({
               showWireframe={showWireframe}
               measurementMode={measurementMode}
               controlsRef={controlsRef}
+              exportFormat={exportFormat}
+              onExportComplete={onExportComplete}
+              exportProjectName={exportProjectName}
             />
           </Suspense>          </Canvas>
         </Suspense>

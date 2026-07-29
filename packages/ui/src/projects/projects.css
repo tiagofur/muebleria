@@ -947,6 +947,47 @@
   }
 }
 
+/* Model export dropdown (#199) */
+.project-presentation__export-wrap {
+  position: relative;
+}
+
+.project-presentation__export-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  margin-top: var(--space-1, 0.25rem);
+  min-width: 80px;
+  background: var(--surface-card, #0f172a);
+  border: 1px solid var(--border-default, #334155);
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: var(--space-1, 0.25rem) 0;
+}
+
+.project-presentation__export-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  border: none;
+  background: transparent;
+  color: var(--text-primary, #e2e8f0);
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-medium, 500);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-colors, 150ms ease);
+}
+
+.project-presentation__export-menu-item:hover,
+.project-presentation__export-menu-item:focus-visible {
+  background: var(--brand-50, #eff6ff);
+  color: var(--brand-700, #1d4ed8);
+  outline: none;
+}
+
 /* —— Quote scenario compare (#194 — inline styles → CSS) —— */
 
 .scenario-compare__hint--no-top {
