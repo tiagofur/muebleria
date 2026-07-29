@@ -245,7 +245,7 @@ export function ProjectPresentationMode({
           aria-label="Vista 3D"
         >
           {useR3f && !preview.empty ? (
-            <div className="project-presentation__controls">
+            <div className="project-presentation__controls" role="toolbar" aria-label="Controles de vista 3D">
               <div className="project-presentation__control-group">
                 <label htmlFor="explode-slider" className="project-presentation__control-label">
                   Vista explosionada
@@ -260,16 +260,21 @@ export function ProjectPresentationMode({
                   onChange={(e) => setExplodeFactor(Number(e.target.value))}
                   className="project-presentation__slider"
                   data-testid="presentation-explode-slider"
-                  aria-label="Factor de explosión"
+                  aria-valuemin={0}
+                  aria-valuemax={3}
+                  aria-valuenow={explodeFactor}
+                  aria-valuetext={`${explodeFactor.toFixed(1)} de factor de explosión`}
                 />
               </div>
-              <div className="project-presentation__control-group">
+              <div className="project-presentation__control-group" role="group" aria-label="Modo de color">
                 <Palette size={16} strokeWidth={1.5} aria-hidden />
                 <button
                   type="button"
                   className={colorMode === 'material' ? 'btn btn--small btn--primary' : 'btn btn--small'}
                   onClick={() => setColorMode('material')}
                   data-testid="presentation-color-material"
+                  aria-pressed={colorMode === 'material'}
+                  aria-label="Colorear por material"
                 >
                   Por material
                 </button>
@@ -278,6 +283,8 @@ export function ProjectPresentationMode({
                   className={colorMode === 'role' ? 'btn btn--small btn--primary' : 'btn btn--small'}
                   onClick={() => setColorMode('role')}
                   data-testid="presentation-color-role"
+                  aria-pressed={colorMode === 'role'}
+                  aria-label="Colorear por función"
                 >
                   Por función
                 </button>
@@ -286,7 +293,7 @@ export function ProjectPresentationMode({
                   className="btn btn--small"
                   onClick={handleCapturePng}
                   data-testid="presentation-capture-png"
-                  title="Guardar imagen 3D"
+                  aria-label="Guardar captura PNG de la vista 3D"
                 >
                   <Camera size={14} strokeWidth={1.5} aria-hidden />
                   Captura
@@ -296,7 +303,8 @@ export function ProjectPresentationMode({
                   className="btn btn--small"
                   onClick={handleShareLink}
                   data-testid="presentation-share-link"
-                  title="Copiar link de presentación"
+                  aria-label={linkCopied ? 'Link copiado al portapapeles' : 'Copiar link de presentación'}
+                  aria-live="polite"
                 >
                   <Link2 size={14} strokeWidth={1.5} aria-hidden />
                   {linkCopied ? '¡Copiado!' : 'Compartir'}
