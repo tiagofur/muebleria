@@ -605,4 +605,20 @@ describe('ProjectPresentationMode', () => {
     const slide0 = screen.getByTestId('presentation-slide-0');
     expect(slide0.className).toContain('project-presentation__slide--active');
   });
+
+  it('toggles keyboard shortcuts overlay with the ? key', () => {
+    renderPresentation();
+    // Overlay starts hidden (auto-show happens after a 500ms timer; not asserted
+    // here to keep the test deterministic and free of fake-timer coupling).
+    expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
+    // Pressing ? reveals the overlay.
+    fireEvent.keyDown(window, { key: '?' });
+    const overlay = screen.getByTestId('presentation-shortcuts-overlay');
+    expect(overlay.getAttribute('role')).toBe('dialog');
+    expect(overlay.getAttribute('aria-label')).toBe('Atajos de teclado');
+    expect(screen.getByText('Atajos de teclado')).toBeTruthy();
+    // Pressing ? again hides it.
+    fireEvent.keyDown(window, { key: '?' });
+    expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
+  });
 });

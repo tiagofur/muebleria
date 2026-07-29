@@ -17,7 +17,7 @@ import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Camera, Download, Link2, Palette, Ruler, X } from 'lucide-react';
+import { Camera, Download, Keyboard, Link2, Palette, Ruler, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   canUseWebGL,
@@ -98,6 +98,7 @@ export function ProjectPresentationMode({
   const [measureMode, setMeasureMode] = useState(false);
   const [exportFormat, setExportFormat] = useState<ModelFormat | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
   const goNext = useCallback(() => {
@@ -116,16 +117,34 @@ export function ProjectPresentationMode({
     setMeasureMode(false);
     setExportFormat(null);
     setExportMenuOpen(false);
+    setShowShortcuts(false);
     setCurrentSlide(0);
+    // Show shortcuts overlay briefly on first open
+    const timer = setTimeout(() => setShowShortcuts(true), 500);
+    const hide = setTimeout(() => setShowShortcuts(false), 4000);
+    return () => { clearTimeout(timer); clearTimeout(hide); };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
+      // ? toggles shortcuts overlay
+      if (e.key === '?' || e.key === '¿') {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
         return;
       }
+      // Escape closes overlay first, then presentation
+      if (e.key === 'Escape') {
+        if (showShortcuts) {
+          setShowShortcuts(false);
+        } else {
+          onClose();
+        }
+        return;
+      }
+      // Suppress navigation while overlay is open
+      if (showShortcuts) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
         goNext();
@@ -136,7 +155,7 @@ export function ProjectPresentationMode({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, goNext, goPrev]);
+  }, [open, onClose, goNext, goPrev, showShortcuts]);
 
   const customerName =
     customers.find((c) => c.id === project.customerId)?.name ?? '';
@@ -662,6 +681,38 @@ export function ProjectPresentationMode({
           {currentSlide + 1} / {TOTAL_SLIDES}
         </span>
       </footer>
+      {/* Keyboard shortcuts overlay */}
+      {showShortcuts ? (
+        <div
+          className="project-presentation__shortcuts-overlay"
+          role="dialog"
+          aria-label="Atajos de teclado"
+          data-testid="presentation-shortcuts-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowShortcuts(false); }}
+        >
+          <div className="project-presentation__shortcuts-card">
+            <div className="project-presentation__shortcuts-header">
+              <Keyboard size={18} strokeWidth={1.5} aria-hidden />
+              <span>Atajos de teclado</span>
+              <button
+                type="button"
+                className="btn btn--ghost project-presentation__shortcuts-close"
+                onClick={() => setShowShortcuts(false)}
+                aria-label="Cerrar ayuda"
+              >
+                <X size={16} strokeWidth={1.5} aria-hidden />
+              </button>
+            </div>
+            <ul className="project-presentation__shortcuts-list">
+              <li><kbd>→</kbd> <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Navegar diapositivas</li>
+              <li><kbd>+</kbd> <kbd>−</kbd> Zoom en vista 3D</li>
+              <li><kbd>?</kbd> Mostrar / ocultar esta ayuda</li>
+              <li><kbd>Esc</kbd> Salir de la presentación</li>
+              <li>Deslizá izquierda / derecha para cambiar diapositiva</li>
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
