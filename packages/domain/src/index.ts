@@ -259,3 +259,14 @@ export {
   updateProjectItemCommand,
   changeQuantityCommand,
 } from './projectCommands';
+
+// --- Workshop rules (Fase 5 slice 5.1) ---
+export {
+  suggestHingeCount,
+  suggestSlideLength,
+  suggestShelfCount,
+  suggestHandleCount,
+  suggestLegCount,
+  suggestHardwareForModule,
+  type WorkshopSuggestion,
+} from './workshopRules';
