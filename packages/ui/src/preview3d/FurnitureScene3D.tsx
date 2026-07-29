@@ -21,6 +21,7 @@ import {
   type MaterialColorLookup,
 } from './boardPartVisual';
 import { MeasurementTool } from './MeasurementTool';
+import { KeyboardNav } from './KeyboardNav';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
@@ -226,6 +227,7 @@ function SceneContent({
   cameraView,
   showWireframe,
   measurementMode,
+  controlsRef,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
@@ -237,8 +239,8 @@ function SceneContent({
   readonly cameraView?: CameraViewType | null;
   readonly showWireframe?: boolean;
   readonly measurementMode?: boolean;
+  readonly controlsRef: React.RefObject<any>;
 }): ReactNode {
-  const controlsRef = useRef<any>(null);
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
@@ -314,6 +316,12 @@ function SceneContent({
       />
 
       <MeasurementTool active={measurementMode ?? false} />
+      <KeyboardNav
+        active={true}
+        controlsRef={controlsRef}
+        center={framing.center}
+        maxDim={framing.maxDim}
+      />
     </>);
 }
 
@@ -333,6 +341,7 @@ export function FurnitureScene3D({
   showWireframe,
   measurementMode,
 }: FurnitureScene3DProps): ReactNode {
+  const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
   const sceneModules = modules;
@@ -357,8 +366,13 @@ export function FurnitureScene3D({
     >
       <p className="module-scene-3d__hint">
         Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para desplazar (pan)
+        · ← → ↑ ↓ para navegar con teclado · + − para zoom
       </p>
-      <div className="module-scene-3d__canvas-wrap">
+      <div
+        className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
+        tabIndex={0}
+        aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
+      >
         <ErrorBoundary
           fallback={(error, reset) => (
             <div className="r3f-error-fallback" role="alert" aria-label="Error en la vista 3D">
@@ -432,6 +446,7 @@ export function FurnitureScene3D({
               cameraView={cameraView}
               showWireframe={showWireframe}
               measurementMode={measurementMode}
+              controlsRef={controlsRef}
             />
           </Suspense>          </Canvas>
         </Suspense>
