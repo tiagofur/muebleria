@@ -122,6 +122,7 @@ import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import { buildPieceLabelsExport } from './exportPieceLabels';
 import { buildProductionPackExport } from './exportProductionPack';
+import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
 import {
   buildOptimizerExport,
   deliverExcelFile,
@@ -1034,6 +1035,28 @@ function AppContent({
     [projectActions, navigate],
   );
 
+  const exportCommercialScenarioPdf = useCallback(
+    async (projectId: string, role: string, choiceId: string) => {
+      const project = projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const customerName = resolveCustomerName(project.customerId, customers);
+      const res = await buildCommercialScenarioPdfExport(
+        project,
+        catalog!,
+        role,
+        choiceId,
+        customerName,
+      );
+      if (res.ok) {
+        deliverExcelFile(res.bytes, res.fileName);
+        toast({ type: 'success', message: '✓ PDF Comparativo A/B descargado' });
+      } else {
+        toast({ type: 'error', message: res.message });
+      }
+    },
+    [projects, customers, catalog, toast],
+  );
+
 
   // F062: media helpers now delegate to catalogStore (which reads authToken
   // from workspaceStore). Toast on upload success/error stays here.
@@ -1234,8 +1257,8 @@ function AppContent({
       try {
         const result = await buildProductionPackExport(
           project,
-          catalog,
-          customers,
+          catalog!,
+          resolveCustomerName(project.customerId, customers),
         );
         if (!result.ok) {
           setExportErrors(result.issues);
@@ -1752,6 +1775,7 @@ function AppContent({
           onUpdateKitchenLayout={updateKitchenLayout}
           onApplyScenarioB={applyScenarioB}
           onDuplicateWithScenarioB={duplicateWithScenarioB}
+          onExportScenarioPdf={exportCommercialScenarioPdf}
           onUpdateInstallationChecklist={updateInstallationChecklist}
           onImportNesting={importNestingResult}
           onSelectionChange={onProjectSelectionChange}

@@ -1,50 +1,45 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
-import {
-  plantillaCatalogWithModules,
-  plantillaProject,
-} from '@muebles/domain/fixtures';
-import {
-  buildProductionPackExport,
-  productionPackFileName,
-} from './exportProductionPack';
+import { createSeedWorkspace } from '@muebles/storage/seed';
+import { buildProductionPackExport, productionPackFileName } from './exportProductionPack';
 
-describe('productionPackFileName', () => {
-  it('sanitizes project name', () => {
-    expect(productionPackFileName('Cocina / Norte')).toBe(
-      'pack-produccion-Cocina-Norte.zip',
-    );
-  });
-});
+describe('buildProductionPackExport (Issue #134)', () => {
+  it('builds a valid ZIP with 4 production files', async () => {
+    const seed = createSeedWorkspace();
+    const project = seed.projects.find((p) => p.name === 'Demo plantilla')!;
 
-describe('buildProductionPackExport', () => {
-  it('fails when project has no exportable cut list', async () => {
     const result = await buildProductionPackExport(
-      { ...plantillaProject, items: [] },
-      plantillaCatalogWithModules,
+      project,
+      seed.catalog,
+      'Cliente Test',
     );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.fileName).toBe(productionPackFileName(project.name));
+    expect(result.bytes.byteLength).toBeGreaterThan(1000);
+
+    const zip = await JSZip.loadAsync(result.bytes);
+    const filenames = Object.keys(zip.files);
+
+    expect(filenames).toContain('optimizer_Demo_plantilla.xlsx');
+    expect(filenames).toContain('herrajes_Demo_plantilla.xlsx');
+    expect(filenames).toContain('etiquetas_Demo_plantilla.pdf');
+    expect(filenames).toContain('resumen_materiales_Demo_plantilla.pdf');
+  });
+
+  it('fails with validation issues when project has missing choices', async () => {
+    const seed = createSeedWorkspace();
+    const invalidProject = {
+      ...seed.projects[0]!,
+      items: [],
+    };
+    const result = await buildProductionPackExport(invalidProject, seed.catalog);
+
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.issues.length).toBeGreaterThan(0);
     }
-  });
-
-  it('builds a zip containing optimizer and optional production files', async () => {
-    const result = await buildProductionPackExport(
-      { ...plantillaProject, status: 'accepted' },
-      plantillaCatalogWithModules,
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.fileName).toMatch(/^pack-produccion-.*\.zip$/);
-    expect(result.bytes.byteLength).toBeGreaterThan(500);
-
-    const zip = await JSZip.loadAsync(result.bytes);
-    const names = Object.keys(zip.files);
-    expect(names.some((n) => n.startsWith('optimizer-') && n.endsWith('.xlsx'))).toBe(
-      true,
-    );
-    // Herrajes and labels when the plantilla BOM supports them
-    expect(names.length).toBeGreaterThanOrEqual(1);
   });
 });

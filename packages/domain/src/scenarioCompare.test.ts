@@ -39,6 +39,10 @@ describe('scenarioCompare', () => {
     if (same.ok) {
       expect(same.delta).toBe(0);
       expect(same.saleA).toBeGreaterThan(0);
+      expect(same.breakdownA).toBeDefined();
+      expect(same.breakdownB).toBeDefined();
+      expect(same.breakdownA.salePrice).toBe(same.saleA);
+      expect(same.breakdownB.salePrice).toBe(same.saleB);
     }
   });
 
