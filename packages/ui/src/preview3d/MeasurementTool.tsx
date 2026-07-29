@@ -100,15 +100,16 @@ export function MeasurementTool({ active }: MeasurementToolProps): ReactNode {
 
   return (
     <>
-      {/* Invisible capture plane — only captures clicks when measurement is active */}
+      {/* Invisible capture plane — captures clicks when measurement is active.
+          visible must stay true (opacity=0 handles visual invisibility)
+          otherwise R3F raycaster skips the mesh entirely. */}
       <mesh
         onClick={handleClick}
-        visible={false}
         position={[0, -2, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         <planeGeometry args={[50000, 50000]} />
-        <meshBasicMaterial transparent opacity={0} side={2} />
+        <meshBasicMaterial transparent opacity={0} side={2} depthWrite={false} />
       </mesh>
 
       {/* Point markers */}
