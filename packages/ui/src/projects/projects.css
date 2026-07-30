@@ -284,6 +284,65 @@
   font-weight: var(--weight-semibold);
 }
 
+/* —— Drag & drop reorder (F052) —— */
+
+.project-item-card[draggable='true'] {
+  cursor: grab;
+}
+
+.project-item-card[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.project-item-card--dragging {
+  opacity: 0.35;
+  transform: scale(0.98);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.project-item-card--drop-above {
+  box-shadow: 0 -3px 0 0 var(--brand-500);
+}
+
+.project-item-card--drop-below {
+  box-shadow: 0 3px 0 0 var(--brand-500);
+}
+
+.project-item-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.project-item-card__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: grab;
+  flex-shrink: 0;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-colors), background var(--transition-colors);
+}
+
+.project-item-card__drag-handle:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.project-item-card__drag-handle:active {
+  cursor: grabbing;
+}
+
+.project-item-card__index {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 /* —— Item cards —— */
 
 .project-item-list {

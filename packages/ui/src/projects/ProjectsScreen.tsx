@@ -115,6 +115,8 @@ export interface ProjectsScreenProps {
   ) => void;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
+  /** Reorder items by moving from one index to another (F052 / drag & drop). */
+  readonly onReorderItems?: (projectId: string, fromIndex: number, toIndex: number) => void;
   /** Kitchen plan walls + placements (#133). */
   readonly onUpdateKitchenLayout?: (
     projectId: string,
@@ -277,6 +279,7 @@ export function ProjectsScreen({
   onAddItem,
   onUpdateItem,
   onRemoveItem,
+  onReorderItems,
   onUpdateKitchenLayout,
   onApplyScenarioB,
   onDuplicateWithScenarioB,
@@ -796,6 +799,12 @@ export function ProjectsScreen({
             onUpdateItemMeasurePreset: updateItemMeasurePreset,
             onUpdateItemChoice: updateItemChoice,
             onRemoveItem,
+            onReorderItems: onReorderItems
+              ? (fromIndex, toIndex) => {
+                  if (!selectedId) return;
+                  onReorderItems(selectedId, fromIndex, toIndex);
+                }
+              : undefined,
           }}
           removeConfirm={{
             confirmRemoveItemId,

@@ -259,6 +259,7 @@ export {
   changeOptionChoiceWithSnapshotCommand,
   updateProjectItemCommand,
   changeQuantityCommand,
+  reorderProjectItemsCommand,
 } from './projectCommands';
 
 // --- Workshop rules (Fase 5 slice 5.1) ---

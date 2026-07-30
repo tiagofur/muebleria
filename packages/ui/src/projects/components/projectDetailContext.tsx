@@ -47,6 +47,8 @@ export interface ProjectDetailItemHandlers {
     optionId: string,
   ) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
+  /** When provided, enables drag & drop reordering of items. */
+  readonly onReorderItems?: (fromIndex: number, toIndex: number) => void;
 }
 
 // ─── Remove confirm ─────────────────────────────────────────────────

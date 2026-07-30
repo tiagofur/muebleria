@@ -220,6 +220,48 @@ export function updateProjectItemCommand(
 // Change quantity
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Reorder project items
+// ---------------------------------------------------------------------------
+
+/**
+ * Move a project item from one position to another (F052 / drag & drop).
+ * Both `fromIndex` and `toIndex` are clamped to valid bounds.
+ */
+export function reorderProjectItemsCommand(
+  fromIndex: number,
+  toIndex: number,
+): Command<Project> {
+  return {
+    execute: (project) => {
+      const items = [...project.items];
+      const from = Math.max(0, Math.min(fromIndex, items.length - 1));
+      const to = Math.max(0, Math.min(toIndex, items.length - 1));
+      if (from === to) return project;
+      const [moved] = items.splice(from, 1);
+      if (moved === undefined) return project;
+      items.splice(to, 0, moved);
+      return { ...project, items, updatedAt: now() };
+    },
+    undo: (project) => {
+      // Undo reverses the move: from the new position back to the original.
+      const items = [...project.items];
+      const from = Math.max(0, Math.min(toIndex, items.length - 1));
+      const to = Math.max(0, Math.min(fromIndex, items.length - 1));
+      if (from === to) return project;
+      const [moved] = items.splice(from, 1);
+      if (moved === undefined) return project;
+      items.splice(to, 0, moved);
+      return { ...project, items, updatedAt: now() };
+    },
+    describe: () => 'Reordenar mueble',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Change quantity
+// ---------------------------------------------------------------------------
+
 export function changeQuantityCommand(
   itemId: string,
   newQty: number,
