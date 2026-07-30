@@ -1,12 +1,15 @@
 /**
  * Client-facing presentation mode for a quote (#136).
+ * Enhanced: 4 slides (Resumen → Plano 2D → Opciones → Vista 3D).
  * Fullscreen: name, commercial list, sale total, 3D — no costs/exports.
+ * Branding: workshop name in header.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   Customer,
   Module,
+  OptionGroup,
   Project,
   ProjectItem,
 } from '@muebles/domain';
@@ -17,25 +20,34 @@ import {
 import { Camera, Download, Link2, Palette, Ruler, X } from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
-  FurnitureScene3D,
   canUseWebGL,
   materialColorMap,
   type BoardColorMode,
   type ModelFormat,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
+import { PresentationKitchenPlanSlide } from './PresentationKitchenPlanSlide';
+import { PresentationOptionsSlide } from './PresentationOptionsSlide';
+
+// Lazy-load the heavy R3F scene
+const FurnitureScene3D = lazy(() =>
+  import('../../preview3d').then((m) => ({ default: m.FurnitureScene3D })),
+);
+
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
 
-const TOTAL_SLIDES = 2;
+const TOTAL_SLIDES = 4;
 
 export type ProjectPresentationModeProps = {
   readonly open: boolean;
   readonly project: Project;
   readonly modules: readonly Module[];
   readonly customers: readonly Customer[];
+  readonly optionGroups: readonly OptionGroup[];
   readonly catalog: Module3DCatalogInput;
   /** Sale total only — never costs. */
   readonly salePrice: number | null;
+  readonly workshopName?: string;
   readonly onClose: () => void;
 };
 
@@ -73,8 +85,10 @@ export function ProjectPresentationMode({
   project,
   modules,
   customers,
+  optionGroups,
   catalog,
   salePrice,
+  workshopName,
   onClose,
 }: ProjectPresentationModeProps): ReactNode {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -162,7 +176,9 @@ export function ProjectPresentationMode({
   );
 
   const handleCapturePng = () => {
-    const container = document.querySelector('[data-testid="project-presentation-mode"]');
+    const container = document.querySelector(
+      '[data-testid="project-presentation-mode"]',
+    );
     if (!container) return;
     const canvas = container.querySelector('canvas');
     if (!canvas) return;
@@ -198,26 +214,32 @@ export function ProjectPresentationMode({
     touchStartX.current = touch.clientX;
   }, []);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const touch = e.changedTouches[0];
-    if (!touch) { touchStartX.current = null; return; }
-    // Skip swipe if touch started inside the 3D viewer canvas
-    const target = e.target as HTMLElement;
-    if (target?.closest?.('.project-presentation__viewer canvas')) {
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartX.current === null) return;
+      const touch = e.changedTouches[0];
+      if (!touch) {
+        touchStartX.current = null;
+        return;
+      }
+      // Skip swipe if touch started inside the 3D viewer canvas
+      const target = e.target as HTMLElement;
+      if (target?.closest?.('.project-presentation__viewer canvas')) {
+        touchStartX.current = null;
+        return;
+      }
+      const dx = touch.clientX - touchStartX.current;
       touchStartX.current = null;
-      return;
-    }
-    const dx = touch.clientX - touchStartX.current;
-    touchStartX.current = null;
-    if (Math.abs(dx) < 50) return; // threshold
-    if (dx < 0) goNext();
-    else goPrev();
-  }, [goNext, goPrev]);
+      if (Math.abs(dx) < 50) return; // threshold
+      if (dx < 0) goNext();
+      else goPrev();
+    },
+    [goNext, goPrev],
+  );
 
   // Dispatch resize event when switching to 3D slide so R3F canvas recalculates
   useEffect(() => {
-    if (currentSlide === 1 && useR3f) {
+    if (currentSlide === 3 && useR3f) {
       // Small delay to let the slide become visible before resize
       const id = requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
@@ -228,7 +250,8 @@ export function ProjectPresentationMode({
 
   if (!open) return null;
 
-  const slideLabels = ['Resumen', 'Vista 3D'];
+  const slideLabels = ['Resumen', 'Plano', 'Opciones', 'Vista 3D'];
+
 
   return (
     <div
@@ -242,6 +265,11 @@ export function ProjectPresentationMode({
     >
       <header className="project-presentation__header">
         <div>
+          {workshopName ? (
+            <p className="project-presentation__workshop-name">
+              {workshopName}
+            </p>
+          ) : null}
           <p className="project-presentation__kicker">Cotización</p>
           <h1 className="project-presentation__title">{project.name}</h1>
           {customerName ? (
@@ -271,10 +299,15 @@ export function ProjectPresentationMode({
         </button>
       </header>
 
-      <div className="project-presentation__slides" data-testid="presentation-slides">
+      <div
+        className="project-presentation__slides"
+        data-testid="presentation-slides"
+      >
         {/* Slide 0: Resumen */}
         <div
-          className={`project-presentation__slide${currentSlide === 0 ? ' project-presentation__slide--active' : ''}`}
+          className={`project-presentation__slide${
+            currentSlide === 0 ? ' project-presentation__slide--active' : ''
+          }`}
           aria-hidden={currentSlide !== 0}
           data-testid="presentation-slide-0"
         >
@@ -305,31 +338,79 @@ export function ProjectPresentationMode({
                 );
               })}
             </ul>
-            {project.kitchenLayout && project.kitchenLayout.walls.length > 0 ? (
-              <p className="project-presentation__hint">
-                Plano de cocina: {project.kitchenLayout.walls.length} muro
-                {project.kitchenLayout.walls.length === 1 ? '' : 's'} ·{' '}
-                {project.kitchenLayout.placements.length} colocación
-                {project.kitchenLayout.placements.length === 1 ? '' : 'es'}
-              </p>
-            ) : null}
           </section>
         </div>
 
-        {/* Slide 1: Vista 3D */}
+        {/* Slide 1: Plano 2D */}
         <div
-          className={`project-presentation__slide project-presentation__slide--viewer${currentSlide === 1 ? ' project-presentation__slide--active' : ''}`}
+          className={`project-presentation__slide${
+            currentSlide === 1 ? ' project-presentation__slide--active' : ''
+          }`}
           aria-hidden={currentSlide !== 1}
           data-testid="presentation-slide-1"
+        >
+          <section
+            className="project-presentation__plan"
+            aria-label="Plano de cocina"
+          >
+            <h2 className="project-presentation__section-title">
+              Plano de cocina
+            </h2>
+            <PresentationKitchenPlanSlide
+              project={project}
+              modules={modules}
+            />
+          </section>
+        </div>
+
+        {/* Slide 2: Opciones */}
+        <div
+          className={`project-presentation__slide${
+            currentSlide === 2 ? ' project-presentation__slide--active' : ''
+          }`}
+          aria-hidden={currentSlide !== 2}
+          data-testid="presentation-slide-2"
+        >
+          <section
+            className="project-presentation__options"
+            aria-label="Opciones seleccionadas"
+          >
+            <PresentationOptionsSlide
+              project={project}
+              modules={modules}
+              optionGroups={optionGroups}
+              catalog={{
+                materials: catalog.materials,
+                edges: catalog.edges,
+                hardware: catalog.hardware,
+              }}
+            />
+          </section>
+        </div>
+
+        {/* Slide 3: Vista 3D */}
+        <div
+          className={`project-presentation__slide project-presentation__slide--viewer${
+            currentSlide === 3 ? ' project-presentation__slide--active' : ''
+          }`}
+          aria-hidden={currentSlide !== 3}
+          data-testid="presentation-slide-3"
         >
           <section
             className="project-presentation__viewer"
             aria-label="Vista 3D"
           >
             {useR3f && !preview.empty ? (
-              <div className="project-presentation__controls" role="toolbar" aria-label="Controles de vista 3D">
+              <div
+                className="project-presentation__controls"
+                role="toolbar"
+                aria-label="Controles de vista 3D"
+              >
                 <div className="project-presentation__control-group">
-                  <label htmlFor="explode-slider" className="project-presentation__control-label">
+                  <label
+                    htmlFor="explode-slider"
+                    className="project-presentation__control-label"
+                  >
                     Vista explosionada
                   </label>
                   <input
@@ -339,7 +420,9 @@ export function ProjectPresentationMode({
                     max={3}
                     step={0.1}
                     value={explodeFactor}
-                    onChange={(e) => setExplodeFactor(Number(e.target.value))}
+                    onChange={(e) =>
+                      setExplodeFactor(Number(e.target.value))
+                    }
                     className="project-presentation__slider"
                     data-testid="presentation-explode-slider"
                     aria-valuemin={0}
@@ -348,11 +431,19 @@ export function ProjectPresentationMode({
                     aria-valuetext={`${explodeFactor.toFixed(1)} de factor de explosión`}
                   />
                 </div>
-                <div className="project-presentation__control-group" role="group" aria-label="Modo de color">
+                <div
+                  className="project-presentation__control-group"
+                  role="group"
+                  aria-label="Modo de color"
+                >
                   <Palette size={16} strokeWidth={1.5} aria-hidden />
                   <button
                     type="button"
-                    className={colorMode === 'material' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+                    className={
+                      colorMode === 'material'
+                        ? 'btn btn--small btn--primary'
+                        : 'btn btn--small'
+                    }
                     onClick={() => setColorMode('material')}
                     data-testid="presentation-color-material"
                     aria-pressed={colorMode === 'material'}
@@ -362,7 +453,11 @@ export function ProjectPresentationMode({
                   </button>
                   <button
                     type="button"
-                    className={colorMode === 'role' ? 'btn btn--small btn--primary' : 'btn btn--small'}
+                    className={
+                      colorMode === 'role'
+                        ? 'btn btn--small btn--primary'
+                        : 'btn btn--small'
+                    }
                     onClick={() => setColorMode('role')}
                     data-testid="presentation-color-role"
                     aria-pressed={colorMode === 'role'}
@@ -376,7 +471,11 @@ export function ProjectPresentationMode({
                     onClick={() => setMeasureMode((v) => !v)}
                     data-testid="presentation-toggle-measure"
                     aria-pressed={measureMode}
-                    aria-label={measureMode ? 'Desactivar herramienta de medición' : 'Activar herramienta de medición'}
+                    aria-label={
+                      measureMode
+                        ? 'Desactivar herramienta de medición'
+                        : 'Activar herramienta de medición'
+                    }
                   >
                     <Ruler size={14} strokeWidth={1.5} aria-hidden />
                     Medir
@@ -396,7 +495,11 @@ export function ProjectPresentationMode({
                     className="btn btn--small"
                     onClick={handleShareLink}
                     data-testid="presentation-share-link"
-                    aria-label={linkCopied ? 'Link copiado al portapapeles' : 'Copiar link de presentación'}
+                    aria-label={
+                      linkCopied
+                        ? 'Link copiado al portapapeles'
+                        : 'Copiar link de presentación'
+                    }
                     aria-live="polite"
                   >
                     <Link2 size={14} strokeWidth={1.5} aria-hidden />
@@ -416,7 +519,11 @@ export function ProjectPresentationMode({
                       Exportar
                     </button>
                     {exportMenuOpen ? (
-                      <div className="project-presentation__export-menu" role="menu" aria-label="Formatos de exportación">
+                      <div
+                        className="project-presentation__export-menu"
+                        role="menu"
+                        aria-label="Formatos de exportación"
+                      >
                         {(['glb', 'obj', 'stl'] as const).map((fmt) => (
                           <button
                             key={fmt}
@@ -441,30 +548,41 @@ export function ProjectPresentationMode({
             {preview.empty ? (
               <p className="catalog-empty">Sin vista 3D disponible.</p>
             ) : useR3f ? (
-              <FurnitureScene3D
-                modules={explodedModules.map((m) => ({
-                  key: m.instanceKey,
-                  parts: m.parts,
-                  width: m.width,
-                  height: m.height,
-                  depth: m.depth,
-                  originX: m.originX,
-                  originY: m.originY,
-                  originZ: m.originZ,
-                  showOuterGhost: true,
-                }))}
-                totalWidth={preview.totalWidth}
-                totalHeight={preview.totalHeight}
-                totalDepth={preview.totalDepth}
-                showFloor
-                testId="presentation-scene-3d"
-                colorMode={colorMode}
-                materialColors={materialColors}
-                measurementMode={measureMode}
-                exportFormat={exportFormat}
-                onExportComplete={() => setExportFormat(null)}
-                exportProjectName={project.name}
-              />
+              <Suspense
+                fallback={
+                  <div className="module-scene-3d__loading" role="status">
+                    <div className="module-scene-3d__loading-spinner" />
+                    <p className="module-scene-3d__loading-text">
+                      Cargando escena 3D…
+                    </p>
+                  </div>
+                }
+              >
+                <FurnitureScene3D
+                  modules={explodedModules.map((m) => ({
+                    key: m.instanceKey,
+                    parts: m.parts,
+                    width: m.width,
+                    height: m.height,
+                    depth: m.depth,
+                    originX: m.originX,
+                    originY: m.originY,
+                    originZ: m.originZ,
+                    showOuterGhost: true,
+                  }))}
+                  totalWidth={preview.totalWidth}
+                  totalHeight={preview.totalHeight}
+                  totalDepth={preview.totalDepth}
+                  showFloor
+                  testId="presentation-scene-3d"
+                  colorMode={colorMode}
+                  materialColors={materialColors}
+                  measurementMode={measureMode}
+                  exportFormat={exportFormat}
+                  onExportComplete={() => setExportFormat(null)}
+                  exportProjectName={project.name}
+                />
+              </Suspense>
             ) : (
               <div
                 className="catalog-empty"
@@ -490,7 +608,11 @@ export function ProjectPresentationMode({
       </div>
 
       {/* Slide navigation footer */}
-      <footer className="project-presentation__nav" role="navigation" aria-label="Navegación de diapositivas">
+      <footer
+        className="project-presentation__nav"
+        role="navigation"
+        aria-label="Navegación de diapositivas"
+      >
         <button
           type="button"
           className="btn btn--ghost project-presentation__nav-btn"
@@ -501,12 +623,20 @@ export function ProjectPresentationMode({
         >
           ← Anterior
         </button>
-        <div className="project-presentation__nav-dots" role="tablist" aria-label="Diapositivas">
+        <div
+          className="project-presentation__nav-dots"
+          role="tablist"
+          aria-label="Diapositivas"
+        >
           {slideLabels.map((label, i) => (
             <button
               key={i}
               type="button"
-              className={`project-presentation__nav-dot${currentSlide === i ? ' project-presentation__nav-dot--active' : ''}`}
+              className={`project-presentation__nav-dot${
+                currentSlide === i
+                  ? ' project-presentation__nav-dot--active'
+                  : ''
+              }`}
               onClick={() => setCurrentSlide(i)}
               role="tab"
               aria-selected={currentSlide === i}
@@ -525,7 +655,10 @@ export function ProjectPresentationMode({
         >
           Siguiente →
         </button>
-        <span className="project-presentation__nav-counter" aria-live="polite">
+        <span
+          className="project-presentation__nav-counter"
+          aria-live="polite"
+        >
           {currentSlide + 1} / {TOTAL_SLIDES}
         </span>
       </footer>

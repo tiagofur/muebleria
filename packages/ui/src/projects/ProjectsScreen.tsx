@@ -916,6 +916,7 @@ export function ProjectsScreen({
           project={selectedProject}
           modules={modules}
           customers={customers}
+          optionGroups={optionGroups}
           catalog={{
             modules,
             structures: catalogStructures,
@@ -931,6 +932,7 @@ export function ProjectsScreen({
               ? (projectEstimates[selectedProject.id] as number)
               : null)
           }
+          workshopName={workshopSettings?.workshopName}
           onClose={() => setShowPresentation(false)}
         />
       ) : null}
