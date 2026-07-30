@@ -32,23 +32,32 @@ de layout que rompió el refactor.
      Opciones / Vista 3D) con navegación, transiciones y header counter
    - `ProjectsScreen` pasa `optionGroups` + `workshopName` al modo presentación
 
+3. **`feat(ui): keyboard shortcuts overlay in presentation mode`**
+   - Rescatado vía cherry-pick del commit huérfano `708a158` de
+     `wip/perfect-app-fase-5-nesting` (único rescitable de esa branch).
+   - Overlay de atajos con tecla `?`/`¿`, ícono `Keyboard`, auto-show 500ms.
+   - Conflicto resuelto en `ProjectPresentationMode.tsx`: se eliminó
+     `setSlideDirection('next')` (ese state pertenece al commit padre
+     `a70b999`, no rescitable por redundante con el commit 2 de esta branch).
+   - Test nuevo: toggle del overlay con `?` en `presentationSlides.test.tsx`.
+
 ## Verificación
 
 - `pnpm typecheck`: 6/6 verde.
-- `pnpm test`: 951/951 verde (domain 278, storage 51, excel 27, ui 384,
+- `pnpm test`: 952/952 verde (domain 278, storage 51, excel 27, ui 385,
   desktop 9, web 202).
 - Archivos `.freebuff/desktop.db*` **no commiteados** (datos runtime locales;
   trackeados de antes del `.gitignore` pero ignorados ahora — sin cambios en
   esta sesión).
 
-## Pendiente en la branch
+## Commits huérfanos de `wip/perfect-app-fase-5-nesting` — RESUELTOS
 
-- [ ] `git push -u origin wip/project-detail-extract-and-slides`
-- [ ] Abrir PR (base `main`)
-- [ ] `wip/perfect-app-fase-5-nesting` tiene 2 commits huérfanos pushed sin PR:
-  - `708a158` keyboard shortcuts overlay en presentación
-  - `a70b999` enhance #201 — slide transitions + header counter
-  → decidir: PR aparte o descartar (posible solapamiento con commit 2 de esta branch).
+- `708a158` (keyboard overlay) → ✅ rescatado en commit 3 de esta branch.
+- `a70b999` (slide transitions + header counter) → ⛔ descartado: redundante,
+  ya cubierto por el commit 2 (mismo enhancement #201).
+- Esa branch también contenía basura destructiva (`EntityEditorLayout.tsx`
+  borrado, screens reescritas) — artefacto de divergencia histórica; **no se
+  mergea**. Se puede borrar la branch remota una vez revisado.
 
 ## Siguiente paso → definir próxima feature
 
