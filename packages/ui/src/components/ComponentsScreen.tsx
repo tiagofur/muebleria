@@ -115,7 +115,9 @@ export function ComponentsScreen({
     emptyDraft: emptyComponentDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
-      if (openComponentEditId && onSelectionChange) {
+      if (onRequestEdit) {
+        onRequestEdit(null as any);
+      } else if (onSelectionChange) {
         onSelectionChange(restoreId);
       }
     },
@@ -184,23 +186,15 @@ export function ComponentsScreen({
    * - null / '': editor closed.
    */
   useEffect(() => {
-    if (openComponentEditId == null || openComponentEditId === '') return;
-    // Fase 3 follow-up: respect persisted draft if it exists (survives nav/F5).
-    const hasPersisted = (() => {
-      try {
-        return sessionStorage.getItem(draftKey) !== null;
-      } catch {
-        return false;
-      }
-    })();
+    if (openComponentEditId == null || openComponentEditId === '') {
+      setModalOpen(false);
+      setEditingId(null);
+      return;
+    }
     if (openComponentEditId === 'new') {
-      if (!hasPersisted) {
-        const fresh = emptyComponentDraft();
-        setDraft(fresh);
-        setInitialDraft(fresh);
-      } else {
-        setInitialDraft(draft);
-      }
+      const fresh = emptyComponentDraft();
+      setDraft(fresh);
+      setInitialDraft(fresh);
       setEditingId(null);
       setEditorTab('general');
       setError(null);
@@ -209,13 +203,9 @@ export function ComponentsScreen({
     }
     const component = components.find((c) => c.id === openComponentEditId);
     if (!component) return;
-    if (!hasPersisted) {
-      const fresh = componentToDraft(component);
-      setDraft(fresh);
-      setInitialDraft(fresh);
-    } else {
-      setInitialDraft(draft);
-    }
+    const fresh = componentToDraft(component);
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setEditingId(component.id);
     setEditorTab('general');
     setError(null);
@@ -314,8 +304,7 @@ export function ComponentsScreen({
     forceCloseEditor();
   };
 
-  const inlineEditMode =
-    !!openComponentEditId && !!onRequestEdit && modalOpen;
+  const inlineEditMode = !!openComponentEditId && !!onRequestEdit;
 
   const selectedComponent = expandedId
     ? (normalizedComponents.find((c) => c.id === expandedId) ?? null)

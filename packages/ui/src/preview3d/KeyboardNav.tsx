@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 
 export type KeyboardNavProps = {
@@ -149,14 +150,16 @@ export function KeyboardNav({
     <>
       <KeyboardNavInner controlsRef={controlsRef} center={center} onAction={handleKeyAction} />
       {/* Screen reader announcement region */}
-      <div
-        className="sr-only"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {announcement}
-      </div>
+      <Html>
+        <div
+          className="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {announcement}
+        </div>
+      </Html>
     </>
   );
 }

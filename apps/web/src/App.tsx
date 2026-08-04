@@ -1388,7 +1388,11 @@ function AppContent({
    * For "Nuevo", the screen passes the NEW_ENTITY_ID sentinel.
    */
   const onEntityEditRequest = useCallback(
-    (section: EntitySection, id: string) => {
+    (section: EntitySection, id: string | null) => {
+      if (!id) {
+        navigate(pathForNav(section));
+        return;
+      }
       const target =
         section === 'modules'
           ? moduleEditPath(id)
