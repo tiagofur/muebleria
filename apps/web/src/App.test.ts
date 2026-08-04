@@ -111,7 +111,7 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
     // The props still come from projectStore (hook sets the state).
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
     expect(appSrc).toContain('breakdownLoading={breakdownLoading}');
-    expect(appSrc).toContain('breakdownError={breakdownError}');
+    expect(appSrc).toContain('breakdownError={breakdownError ?? projectQuote.breakdownError}');
     // Fallback copy + error toast moved to projectStore hook.
     const projectStoreSrc = readFileSync(
       join(here, 'stores/projectStore.ts'),

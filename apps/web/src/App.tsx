@@ -39,6 +39,7 @@ import {
   bumpStructureRevision,
   calcMaterialCostPerM2,
   calcProjectBreakdown,
+  generateCutRows,
   generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
@@ -261,12 +262,14 @@ function computeSelectedProjectBreakdown(
   breakdown: QuoteBreakdown | null;
   previewBlocked: boolean;
   missingGroups: readonly string[];
+  /** Human-readable reason when the breakdown threw (missing ref, bad dims, …). */
+  breakdownError: string | null;
 } {
   if (!project) {
-    return { breakdown: null, previewBlocked: false, missingGroups: [] };
+    return { breakdown: null, previewBlocked: false, missingGroups: [], breakdownError: null };
   }
   if (project.items.length === 0) {
-    return { breakdown: null, previewBlocked: false, missingGroups: [] };
+    return { breakdown: null, previewBlocked: false, missingGroups: [], breakdownError: null };
   }
 
   const gate = canShowProjectPricePreview(
@@ -279,17 +282,25 @@ function computeSelectedProjectBreakdown(
       breakdown: null,
       previewBlocked: true,
       missingGroups: gate.missingGroups,
+      breakdownError: null,
     };
   }
 
   try {
     const breakdown = calcProjectBreakdown(project, catalog);
-    return { breakdown, previewBlocked: false, missingGroups: [] };
-  } catch {
+    return { breakdown, previewBlocked: false, missingGroups: [], breakdownError: null };
+  } catch (e) {
+    // Preserve the engine's message so the user sees *why* the quote is
+    // blocked (missing material, invalid dims, …) instead of a generic wall.
+    const reason =
+      e instanceof Error
+        ? e.message
+        : 'No se pudo calcular el presupuesto.';
     return {
       breakdown: null,
       previewBlocked: true,
       missingGroups: [],
+      breakdownError: reason,
     };
   }
 }
@@ -685,6 +696,7 @@ function AppContent({
             breakdown: null as QuoteBreakdown | null,
             previewBlocked: false,
             missingGroups: [] as readonly string[],
+            breakdownError: null as string | null,
           },
     [selectedProject, catalog],
   );
@@ -1561,6 +1573,22 @@ function AppContent({
           }}
           onMarkProduced={markProjectProduced}
           exportBusy={exportBusy}
+          cutRowsFor={
+            catalog
+              ? (projectId) => {
+                  // Resolve cut rows for the board view. generateCutRows throws
+                  // when the project has no board parts or a missing catalog
+                  // ref — return undefined so the toggle simply doesn't show.
+                  const project = projects.find((p) => p.id === projectId);
+                  if (!project) return undefined;
+                  try {
+                    return generateCutRows(project, catalog);
+                  } catch {
+                    return undefined;
+                  }
+                }
+              : undefined
+          }
         />
       ) : null}
       {navId === 'materials' ? (
@@ -1793,7 +1821,7 @@ function AppContent({
           breakdown={backendBreakdown ?? projectQuote.breakdown}
           materialSummary={materialSummary}
           breakdownLoading={breakdownLoading}
-          breakdownError={breakdownError}
+          breakdownError={breakdownError ?? projectQuote.breakdownError}
           previewBlocked={projectQuote.previewBlocked}
           missingGroups={projectQuote.missingGroups}
           groupLabels={groupLabels}
