@@ -25,6 +25,7 @@ import type {
   Project,
   ProjectItem,
   ProjectKitchenLayout,
+  ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
 } from '@muebles/domain';
@@ -177,6 +178,12 @@ export interface ProjectState {
   ) => void;
   readonly duplicateProjectById: (id: string) => void;
   readonly markProjectProduced: (id: string, catalog: Catalog) => void;
+  /** Generic status transition: draft→quoted, quoted→accepted (gap #3). */
+  readonly changeProjectStatus: (
+    id: string,
+    status: ProjectStatus,
+    catalog: Catalog,
+  ) => void;
   readonly reopenProject: (id: string, catalog: Catalog) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;
 
@@ -445,6 +452,24 @@ export function createProjectStore(options: InternalOptions) {
       const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({ type: 'success', message: '✓ Marcada en producción' });
+    },
+
+    /** Gap #3: draft→quoted, quoted→accepted. Reuses the same transition +
+     *  snapshot machinery as markProduced/reopen. */
+    changeProjectStatus: (id, status, catalog) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project || project.status === status) return;
+      const now = new Date().toISOString();
+      const withTransition = transitionProjectStatus(project, status, catalog, now);
+      const updated = snapshotOnStatusChange(withTransition, status);
+      patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
+      const label =
+        status === 'quoted'
+          ? '✓ Cotización enviada (precios congelados)'
+          : status === 'accepted'
+            ? '✓ Cotización aceptada'
+            : `✓ Estado: ${status}`;
+      toast({ type: 'success', message: label });
     },
 
     /** F036: closed → draft; clears price snapshot. */

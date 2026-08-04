@@ -29,15 +29,18 @@ import type {
   OptionGroup,
   Project,
   ProjectMaterialSummary,
+  ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
 } from '@muebles/domain';
 
 import {
+  Check,
   ChevronLeft,
   Copy,
   LayoutTemplate,
   Pencil,
+  Send,
   Trash2,
 } from 'lucide-react';
 import { DropdownMenu, type DropdownMenuSection } from '../../common';
@@ -142,6 +145,8 @@ export interface ProjectDetailViewProps {
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
   readonly onMarkProduced?: (projectId: string) => void;
+  /** Transition status: draft→quoted, quoted→accepted (gap #3). */
+  readonly onChangeStatus?: (projectId: string, status: ProjectStatus) => void;
   readonly onRequestReopen: () => void;
   readonly onRequestDelete: () => void;
 
@@ -212,6 +217,7 @@ function ProjectDetailViewInner(): ReactNode {
     onDuplicate,
     onSaveAsTemplate,
     onMarkProduced,
+    onChangeStatus,
     onRequestReopen,
     onRequestDelete,
     onUpdateKitchenLayout,
@@ -299,6 +305,28 @@ function ProjectDetailViewInner(): ReactNode {
             <button type="button" className="btn" onClick={() => onSaveAsTemplate(project.id)}
               data-testid={`save-as-template-btn-${project.id}`}>
               <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden /> Guardar como plantilla
+            </button>
+          ) : null}
+          {canMutate && project.status === 'draft' && onChangeStatus ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onChangeStatus(project.id, 'quoted')}
+              data-testid="project-send-quote"
+              title="Cambia el estado a Enviada y congela los precios"
+            >
+              <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
+            </button>
+          ) : null}
+          {canMutate && project.status === 'quoted' && onChangeStatus ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onChangeStatus(project.id, 'accepted')}
+              data-testid="project-accept-quote"
+              title="Marca la cotización como aceptada por el cliente"
+            >
+              <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar cotización
             </button>
           ) : null}
           {canMarkProduced && project.status === 'accepted' && onMarkProduced ? (
@@ -410,6 +438,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onDuplicate: props.onDuplicate,
     onSaveAsTemplate: props.onSaveAsTemplate,
     onMarkProduced: props.onMarkProduced,
+    onChangeStatus: props.onChangeStatus,
     onRequestReopen: props.onRequestReopen,
     onRequestDelete: props.onRequestDelete,
     onUpdateKitchenLayout: props.onUpdateKitchenLayout,

@@ -253,6 +253,19 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Frozen-state badge for kitchen plan (gap #8) — explains why editing is off. */
+.kitchen-plan__frozen-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--warning-50);
+  color: var(--warning-700);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
 .project-detail__empty {
   margin: 0;
   font-size: var(--text-base);

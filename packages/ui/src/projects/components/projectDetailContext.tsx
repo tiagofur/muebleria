@@ -141,6 +141,10 @@ export interface ProjectDetailContextValue {
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
   readonly onMarkProduced?: (projectId: string) => void;
+  readonly onChangeStatus?: (
+    projectId: string,
+    status: import('@muebles/domain').ProjectStatus,
+  ) => void;
   readonly onRequestReopen: () => void;
   readonly onRequestDelete: () => void;
 

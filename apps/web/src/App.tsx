@@ -28,6 +28,7 @@ import type {
   Project,
   ProjectItem,
   ProjectMaterialSummary,
+  ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
@@ -1006,6 +1007,13 @@ function AppContent({
     },
     [projectActions, catalog],
   );
+  const changeProjectStatus = useCallback(
+    (id: string, status: ProjectStatus) => {
+      if (!catalog) return;
+      projectActions.changeProjectStatus(id, status, catalog);
+    },
+    [projectActions, catalog],
+  );
   const reopenProject = useCallback(
     (id: string) => {
       if (!catalog) return;
@@ -1876,6 +1884,7 @@ function AppContent({
           canReopen={canReopenProjects}
           canMarkProduced={canMarkProduced}
           onMarkProduced={markProjectProduced}
+          onChangeStatus={changeProjectStatus}
           onReopen={reopenProject}
           onRestoreVersion={restoreProjectVersion}
           showCosts={showCosts}
