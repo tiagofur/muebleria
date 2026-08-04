@@ -4,13 +4,17 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type {
+  Catalog,
+  Component,
   EdgeBand,
   Hardware,
   MaterialBoard,
   Module,
   OptionGroup,
   OptionGroupKind,
+  Structure,
 } from '@muebles/domain';
+import { collectModuleOptionRoles } from '@muebles/domain';
 import { Pencil, Plus, SearchX, ToggleLeft, Trash2 } from 'lucide-react';
 import {
   EmptyState,
@@ -75,6 +79,10 @@ export interface OptionGroupsScreenProps {
   readonly hardware: readonly Hardware[];
   /** Used to warn how many modules reference a group before delete. */
   readonly modules?: readonly Module[];
+  /** Component catalog — needed to resolve option roles for delete warnings (#5). */
+  readonly catalogComponents?: readonly Component[];
+  /** Structure catalog — needed to resolve option roles for delete warnings (#5). */
+  readonly catalogStructures?: readonly Structure[];
   readonly onCreate: (draft: OptionGroupDraft) => void;
   readonly onUpdate: (id: string, draft: OptionGroupDraft) => void;
   readonly onDelete: (id: string) => void;
@@ -87,14 +95,16 @@ export interface OptionGroupsScreenProps {
 function countModulesUsingGroup(
   modules: readonly Module[],
   groupCode: string,
+  catalog: Pick<Catalog, 'components' | 'structures'>,
 ): number {
-  // Modules no longer carry board parts directly — they are composed from
-  // structure + components now. Count usage by hardware lines only; option
-  // roles declared by composed components aren't resolvable here without the
-  // component catalog, so the delete warning is intentionally conservative.
-  return modules.filter((m) =>
-    m.hardwareLines.some((h) => h.optionRole === groupCode),
-  ).length;
+  // Resolve option roles the way the BOM engine does: module component
+  // instances + referenced structure's components + hardware lines. Previously
+  // this only checked hardware lines, which silently under-reported usage for
+  // board/edge groups (gap #5).
+  return modules.filter((m) => {
+    const roles = collectModuleOptionRoles(m, catalog);
+    return roles.has(groupCode);
+  }).length;
 }
 
 export function OptionGroupsScreen({
@@ -103,6 +113,8 @@ export function OptionGroupsScreen({
   edges,
   hardware,
   modules = [],
+  catalogComponents = [],
+  catalogStructures = [],
   onCreate,
   onUpdate,
   onDelete,
@@ -263,7 +275,10 @@ export function OptionGroupsScreen({
     [confirmDeleteId, optionGroups],
   );
   const deleteTargetModuleCount = deleteTarget
-    ? countModulesUsingGroup(modules, deleteTarget.code)
+    ? countModulesUsingGroup(modules, deleteTarget.code, {
+        components: catalogComponents,
+        structures: catalogStructures,
+      })
     : 0;
 
   const requestDelete = (id: string) => {

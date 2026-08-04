@@ -1653,6 +1653,8 @@ function AppContent({
           edges={edges}
           hardware={hardware}
           modules={modules}
+          catalogComponents={components}
+          catalogStructures={structures}
           onCreate={createOptionGroup}
           onUpdate={updateOptionGroup}
           onDelete={deleteOptionGroup}

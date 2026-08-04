@@ -178,6 +178,7 @@ export {
 export type { ExportIssue } from './exportIssues';
 export {
   collectExportIssues,
+  collectModuleOptionRoles,
   domainErrorToExportIssue,
 } from './exportIssues';
 

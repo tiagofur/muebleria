@@ -5,7 +5,7 @@ import {
   plantillaChoices,
   plantillaProject,
 } from './__fixtures__/plantillaDemo';
-import { collectExportIssues, domainErrorToExportIssue } from './exportIssues';
+import { collectExportIssues, collectModuleOptionRoles, domainErrorToExportIssue } from './exportIssues';
 import { ValidationError } from './errors';
 import type { Catalog, Component, Module, Project, Structure } from './types';
 import { generateCutRows } from './engine';
@@ -236,5 +236,72 @@ describe('domainErrorToExportIssue', () => {
       projectItemId: undefined,
       optionGroupCode: undefined,
     });
+  });
+});
+
+describe('collectModuleOptionRoles (gap #5 — accurate delete warnings)', () => {
+  // Regression: countModulesUsingGroup used to only check hardwareLines, so a
+  // board/edge group used via a composed component (INTERIOR role on a lateral
+  // component) was invisible. collectModuleOptionRoles resolves all three
+  // sources: module components, structure components, and hardware lines.
+  it('resolves option roles from composed components + structure + hardware', () => {
+    const lateralComp: Component = {
+      id: 'comp-lateral',
+      code: 'LAT',
+      name: 'Lateral',
+      optionRoles: ['INTERIOR'],
+      geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+      active: true,
+    };
+    const doorComp: Component = {
+      id: 'comp-door',
+      code: 'PTA',
+      name: 'Puerta',
+      optionRoles: ['FRENTE'],
+      geometry: { kind: 'rectangular_board', lengthMm: 600, widthMm: 400, thicknessMm: 18 },
+      active: true,
+    };
+    const structure: Structure = {
+      id: 'struct-base',
+      code: 'BASE',
+      name: 'Cuerpo base',
+      components: [{ componentId: 'comp-lateral', quantity: 2 }],
+      presets: [],
+    };
+    const moduleWithStructureAndHardware: Module = {
+      id: 'mod-1',
+      code: 'MOD-1',
+      name: 'Test module',
+      structureId: 'struct-base',
+      components: [{ componentId: 'comp-door', quantity: 1 }],
+      hardwareLines: [{ optionRole: 'BISAGRA', quantity: 4 }],
+    };
+    const catalog: Pick<Catalog, 'components' | 'structures'> = {
+      components: [lateralComp, doorComp],
+      structures: [structure],
+    };
+
+    const roles = collectModuleOptionRoles(moduleWithStructureAndHardware, catalog);
+
+    // INTERIOR comes from the structure's lateral component.
+    expect(roles.has('INTERIOR')).toBe(true);
+    // FRENTE comes from the module's own door component.
+    expect(roles.has('FRENTE')).toBe(true);
+    // BISAGRA comes from the hardware line.
+    expect(roles.has('BISAGRA')).toBe(true);
+    // No phantom roles.
+    expect(roles.size).toBe(3);
+  });
+
+  it('returns only hardware roles when module has no components or structure', () => {
+    const module: Module = {
+      id: 'mod-2',
+      code: 'MOD-2',
+      name: 'Hardware only',
+      hardwareLines: [{ optionRole: 'CORREDERA', quantity: 2 }],
+    };
+    const roles = collectModuleOptionRoles(module, { components: [], structures: [] });
+    expect(roles.has('CORREDERA')).toBe(true);
+    expect(roles.size).toBe(1);
   });
 });

@@ -396,6 +396,10 @@ export function createProjectStore(options: InternalOptions) {
 
       persistSaveProject(updatedProject).catch((err) => {
         console.error('Error al guardar proyecto:', err);
+        toast({
+          type: 'error',
+          message: 'No se pudo guardar el proyecto. Reintentá en unos segundos.',
+        });
       });
       toast({ type: 'success', message: '✓ Cambios guardados' });
     },
@@ -403,6 +407,10 @@ export function createProjectStore(options: InternalOptions) {
     deleteProject: (id, onProjectDeleted) => {
       persistDeleteProject(id).catch((err) => {
         console.error('Error al eliminar proyecto:', err);
+        toast({
+          type: 'error',
+          message: 'No se pudo eliminar el proyecto. Reintentá en unos segundos.',
+        });
       });
       patch(set, get, (ps) => ps.filter((p) => p.id !== id));
       onProjectDeleted?.(id);

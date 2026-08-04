@@ -4,7 +4,7 @@
 
 import { useMemo, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { Component } from '@muebles/domain';
-import { Plus } from 'lucide-react';
+import { AlertTriangle, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { Furniture3DViewer } from '../../common';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
@@ -97,9 +97,18 @@ export function StructureEditorComponentsPanel({
                   >
                     <div className="module-part-card__header">
                       <h5 className="module-part-card__title">
-                        {catComp
-                          ? `${catComp.code} — ${catComp.name}`
-                          : comp.componentId}
+                        {catComp ? (
+                          `${catComp.code} — ${catComp.name}`
+                        ) : (
+                          <span
+                            className="catalog-form__warning"
+                            title={`El componente ${comp.componentId} fue eliminado del catálogo. Quitá esta instancia o reactivá el componente.`}
+                            data-testid={`orphan-component-${idx}`}
+                          >
+                            <AlertTriangle size={14} strokeWidth={1.5} aria-hidden />
+                            Componente eliminado
+                          </span>
+                        )}
                       </h5>
                       <button
                         type="button"
