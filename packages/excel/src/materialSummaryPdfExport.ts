@@ -34,6 +34,27 @@ function drawText(
   page.drawText(str, { x, y, size, font, color });
 }
 
+/**
+ * Build the section header label for board sheets, deriving the sheet size
+ * from the catalog instead of hardcoding a standard size. Handles three cases:
+ * - one shared sheet size → "1830 × 2440 mm"
+ * - multiple distinct sizes → "tamaños por material" (no single claim)
+ * - no board materials / unknown sizes → generic label
+ */
+export function boardSheetsSectionLabel(sheets: readonly {
+  readonly sheetWidthMm: number;
+  readonly sheetLengthMm: number;
+}[]): string {
+  const known = sheets.filter((s) => s.sheetWidthMm > 0 && s.sheetLengthMm > 0);
+  if (known.length === 0) return '1. Tableros y Pliegos Estimados';
+  const distinct = new Set(known.map((s) => `${s.sheetWidthMm}×${s.sheetLengthMm}`));
+  if (distinct.size === 1) {
+    const { sheetWidthMm, sheetLengthMm } = known[0]!;
+    return `1. Tableros y Pliegos Estimados (${sheetWidthMm} × ${sheetLengthMm} mm)`;
+  }
+  return '1. Tableros y Pliegos Estimados (tamaños por material)';
+}
+
 export async function materialSummaryPdfExport(
   input: MaterialSummaryPdfInput,
 ): Promise<Uint8Array> {
@@ -80,7 +101,7 @@ export async function materialSummaryPdfExport(
     height: 16,
     color: rgb(0.92, 0.94, 0.96),
   });
-  drawText(page, '1. Tableros y Pliegos Estimados (2440 × 1220 mm std)', MARGIN + 6, cursorY + 2, fontBold, 9, rgb(0.1, 0.25, 0.45));
+  drawText(page, boardSheetsSectionLabel(sheets), MARGIN + 6, cursorY + 2, fontBold, 9, rgb(0.1, 0.25, 0.45));
   cursorY -= 22;
 
   // Table header
