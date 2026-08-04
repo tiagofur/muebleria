@@ -60,7 +60,6 @@ export function useDraftSession<T>(
   const [state, setState] = useState<T>(() => {
     const persisted = readSession<T>(key);
     if (persisted !== null) return persisted;
-    writeSession(key, initialDraft);
     return initialDraft;
   });
 
@@ -80,7 +79,6 @@ export function useDraftSession<T>(
     if (persisted !== null) {
       setState(persisted);
     } else {
-      writeSession(key, initialDraft);
       setState(initialDraft);
     }
     // We intentionally only depend on `key`. initialDraft is captured at the

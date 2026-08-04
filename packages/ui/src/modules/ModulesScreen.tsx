@@ -222,7 +222,9 @@ export function ModulesScreen({
     emptyDraft: emptyModuleDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
-      if (openModuleEditId && onSelectionChange) {
+      if (onRequestEdit) {
+        onRequestEdit(null as any);
+      } else if (onSelectionChange) {
         onSelectionChange(restoreId);
       }
     },
@@ -418,26 +420,14 @@ export function ModulesScreen({
    */
   useEffect(() => {
     if (openModuleEditId == null || openModuleEditId === '') {
+      setModalOpen(false);
+      setEditingId(null);
       return;
     }
-    // Fase 3 follow-up: if useDraftSession already loaded a persisted draft on
-    // mount, do NOT overwrite it — the user has unsaved work that survived
-    // navigation/F5. Only set editor modal open + editingId.
-    const hasPersisted = (() => {
-      try {
-        return sessionStorage.getItem(draftKey) !== null;
-      } catch {
-        return false;
-      }
-    })();
     if (openModuleEditId === 'new') {
-      if (!hasPersisted) {
-        const fresh = emptyModuleDraft();
-        setDraft(fresh);
-        setInitialDraft(fresh);
-      } else {
-        setInitialDraft(draft);
-      }
+      const fresh = emptyModuleDraft();
+      setDraft(fresh);
+      setInitialDraft(fresh);
       setEditingId(null);
       setError(null);
       setModalOpen(true);
@@ -445,13 +435,9 @@ export function ModulesScreen({
     }
     const module = modules.find((m) => m.id === openModuleEditId);
     if (!module) return;
-    if (!hasPersisted) {
-      const fresh = moduleToDraft(module);
-      setDraft(fresh);
-      setInitialDraft(fresh);
-    } else {
-      setInitialDraft(draft);
-    }
+    const fresh = moduleToDraft(module);
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setEditingId(module.id);
     setEditorTab('general');
     setError(null);
@@ -797,8 +783,7 @@ export function ModulesScreen({
   // `onRequestEdit`, render the editor inline (no Modal LG) with a sticky
   // chrome + main/aside layout. Otherwise fall back to the legacy modal flow
   // (used by tests / older code paths).
-  const inlineEditMode =
-    !!openModuleEditId && !!onRequestEdit && modalOpen;
+  const inlineEditMode = !!openModuleEditId && !!onRequestEdit;
 
   return (
     <EntityEditorLayout

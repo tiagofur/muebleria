@@ -17,8 +17,8 @@ describe('useDraftSession', () => {
       useDraftSession('test-key', { name: 'init' }),
     );
     expect(result.current[0]).toEqual({ name: 'init' });
-    // And seeds sessionStorage for next time.
-    expect(sessionStorage.getItem('test-key')).toContain('"name":"init"');
+    // sessionStorage remains null until setDraft is called
+    expect(sessionStorage.getItem('test-key')).toBeNull();
   });
 
   it('restores from sessionStorage on next mount', () => {

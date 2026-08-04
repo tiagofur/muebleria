@@ -14,6 +14,8 @@ import {
   type StructureDraft,
   type StructureEditorTab,
 } from '../structureDraft';
+import type { Module3DCatalogInput } from '../../modules/module3dPreview';
+import { StructureEditor3DPanel } from './StructureEditor3DPanel';
 import { StructureEditorComponentsPanel } from './StructureEditorComponentsPanel';
 import { StructureEditorGeneralPanel } from './StructureEditorGeneralPanel';
 import { StructureEditorPresetsPanel } from './StructureEditorPresetsPanel';
@@ -29,6 +31,7 @@ export type StructureEditorFormProps = {
   readonly setDraft: Dispatch<SetStateAction<StructureDraft>>;
   readonly editingId: string | null;
   readonly catalogComponents: readonly Component[];
+  readonly catalogInput?: Module3DCatalogInput;
   readonly onRequestAddComponent: () => void;
   readonly previewPresetId: string;
   readonly onPreviewPresetChange: (id: string) => void;
@@ -48,6 +51,15 @@ export function StructureEditorForm({
   setDraft,
   editingId,
   catalogComponents,
+  catalogInput = {
+    modules: [],
+    structures: [],
+    components: catalogComponents,
+    materials: [],
+    edges: [],
+    hardware: [],
+    optionGroups: [],
+  },
   onRequestAddComponent,
   previewPresetId,
   onPreviewPresetChange,
@@ -139,6 +151,17 @@ export function StructureEditorForm({
         catalogComponents={catalogComponents}
         onRequestAdd={onRequestAddComponent}
         hidden={editorTab !== 'components'}
+        catalogInput={catalogInput}
+        previewPresetId={previewPresetId}
+        onPreviewPresetChange={onPreviewPresetChange}
+      />
+
+      <StructureEditor3DPanel
+        draft={draft}
+        catalogInput={catalogInput}
+        previewPresetId={previewPresetId}
+        onPreviewPresetChange={onPreviewPresetChange}
+        hidden={editorTab !== 'preview3d'}
       />
 
       <div className="modal__footer mt-6">

@@ -26,9 +26,26 @@ export function ComponentEditorGeometryPanel({
       hidden={hidden}
       data-testid="component-editor-panel-geometry"
     >
-      <p className="text-small text-muted mb-4">
-        Dimensiones de la pieza de tablero rectangular.
-      </p>
+      <div
+        className="p-3 mb-4 rounded"
+        style={{
+          backgroundColor: 'var(--bg-secondary, #f8f9fa)',
+          border: '1px solid var(--border)',
+          fontSize: 'var(--text-xs, 0.75rem)',
+        }}
+        data-testid="formula-vars-guide"
+      >
+        <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>
+          💡 Variables disponibles para fórmulas (matemática estándar +, -, *, /, ()):
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+          <span className="badge" title="Ancho total del contenedor/mueble"><code>PW</code>: Ancho Mueble</span>
+          <span className="badge" title="Alto total del contenedor/mueble"><code>PH</code>: Alto Mueble</span>
+          <span className="badge" title="Profundidad del contenedor/mueble"><code>PD</code>: Profundidad</span>
+          <span className="badge" title="Espesor del tablero"><code>T</code>: Espesor</span>
+          <span className="badge" title="Índice de la copia (0, 1, 2...)"><code>i</code>: Índice Copia</span>
+        </div>
+      </div>
       <div className="module-editor__grid mb-4">
         <div className="catalog-form__field">
           <label htmlFor={`${formId}-length`}>Largo Base (mm)</label>

@@ -103,6 +103,7 @@ export interface ProjectDetailContextValue {
   readonly productionExportDisabled: boolean;
   readonly productionExportOk: boolean;
   readonly onExport?: () => void | Promise<void>;
+  readonly onExportProductionPack?: () => void | Promise<void>;
 
   // --- Item handlers ---
   readonly itemHandlers: ProjectDetailItemHandlers;

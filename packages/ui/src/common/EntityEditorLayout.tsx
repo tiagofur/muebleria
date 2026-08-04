@@ -140,18 +140,19 @@ export function EntityEditorLayout({
     </>
   ) : undefined;
 
-  const editorModal = (
-    <Modal
-      open={modalOpen}
-      title={editorModalTitle}
-      onClose={closeModal}
-      size={modalSize}
-      data-testid={modalTestId}
-      footer={modalFooter ?? defaultModalFooter}
-    >
-      {renderEditorForm()}
-    </Modal>
-  );
+  const editorModal =
+    modalOpen && !inlineEditMode ? (
+      <Modal
+        open={modalOpen}
+        title={editorModalTitle}
+        onClose={closeModal}
+        size={modalSize}
+        data-testid={modalTestId}
+        footer={modalFooter ?? defaultModalFooter}
+      >
+        {renderEditorForm()}
+      </Modal>
+    ) : null;
 
   if (inlineEditMode) {
     return (

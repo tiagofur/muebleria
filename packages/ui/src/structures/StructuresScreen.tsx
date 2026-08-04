@@ -13,6 +13,9 @@ import {
 import type {
   Component,
   DimensionPreset,
+  EdgeBand,
+  Hardware,
+  MaterialBoard,
   OptionGroup,
   Structure,
 } from '@muebles/domain';
@@ -46,6 +49,9 @@ export interface StructuresScreenProps {
   readonly structures: readonly Structure[];
   readonly optionGroups: readonly OptionGroup[];
   readonly catalogComponents?: readonly Component[];
+  readonly catalogMaterials?: readonly MaterialBoard[];
+  readonly catalogEdges?: readonly EdgeBand[];
+  readonly catalogHardware?: readonly Hardware[];
   readonly onCreate: (draft: StructureDraft) => void;
   readonly onUpdate: (id: string, draft: StructureDraft) => void;
   readonly onDelete: (id: string) => void;
@@ -69,8 +75,11 @@ export interface StructuresScreenProps {
 
 export function StructuresScreen({
   structures,
-  optionGroups: _optionGroups,
+  optionGroups,
   catalogComponents = [],
+  catalogMaterials = [],
+  catalogEdges = [],
+  catalogHardware = [],
   onCreate,
   onUpdate,
   onDelete,
@@ -124,7 +133,9 @@ export function StructuresScreen({
     emptyDraft: emptyStructureDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
-      if (openStructureEditId && onSelectionChange) {
+      if (onRequestEdit) {
+        onRequestEdit(null as any);
+      } else if (onSelectionChange) {
         onSelectionChange(restoreId);
       }
     },
@@ -137,6 +148,26 @@ export function StructuresScreen({
   const debouncedCompSearch = useDebouncedValue(componentSearch);
   const [newCompId, setNewCompId] = useState('');
   const [newCompQty, setNewCompQty] = useState(1);
+
+  const catalogInput = useMemo(
+    () => ({
+      modules: [],
+      structures,
+      components: catalogComponents,
+      materials: catalogMaterials,
+      edges: catalogEdges,
+      hardware: catalogHardware,
+      optionGroups,
+    }),
+    [
+      structures,
+      catalogComponents,
+      catalogMaterials,
+      catalogEdges,
+      catalogHardware,
+      optionGroups,
+    ],
+  );
 
   const filteredComponents = useMemo(() => {
     const q = debouncedCompSearch.trim().toLocaleLowerCase('es-UY');
@@ -166,23 +197,15 @@ export function StructuresScreen({
    * - null / '': editor closed.
    */
   useEffect(() => {
-    if (openStructureEditId == null || openStructureEditId === '') return;
-    // Fase 3 follow-up: respect persisted draft if it exists (survives nav/F5).
-    const hasPersisted = (() => {
-      try {
-        return sessionStorage.getItem(draftKey) !== null;
-      } catch {
-        return false;
-      }
-    })();
+    if (openStructureEditId == null || openStructureEditId === '') {
+      setModalOpen(false);
+      setEditingId(null);
+      return;
+    }
     if (openStructureEditId === 'new') {
-      if (!hasPersisted) {
-        const fresh = emptyStructureDraft();
-        setDraft(fresh);
-        setInitialDraft(fresh);
-      } else {
-        setInitialDraft(draft);
-      }
+      const fresh = emptyStructureDraft();
+      setDraft(fresh);
+      setInitialDraft(fresh);
       setEditingId(null);
       setEditorTab('general');
       setError(null);
@@ -191,13 +214,9 @@ export function StructuresScreen({
     }
     const structure = structures.find((s) => s.id === openStructureEditId);
     if (!structure) return;
-    if (!hasPersisted) {
-      const fresh = structureToDraft(structure);
-      setDraft(fresh);
-      setInitialDraft(fresh);
-    } else {
-      setInitialDraft(draft);
-    }
+    const fresh = structureToDraft(structure);
+    setDraft(fresh);
+    setInitialDraft(fresh);
     setEditingId(structure.id);
     setEditorTab('general');
     setError(null);
@@ -350,8 +369,7 @@ export function StructuresScreen({
   // Fase 3 UI 3b: inline editor mode overrides the modal when the shell wires
   // `onRequestEdit` and the URL is /structures/:id/edit. The form is rendered
   // inline (no Modal LG); the form keeps its built-in Cancelar/Guardar footer.
-  const inlineEditMode =
-    !!openStructureEditId && !!onRequestEdit && modalOpen;
+  const inlineEditMode = !!openStructureEditId && !!onRequestEdit;
 
   const selectedStructure = expandedId
     ? (normalizedStructures.find((s) => s.id === expandedId) ?? null)
@@ -424,6 +442,7 @@ export function StructuresScreen({
           setDraft={setDraft}
           editingId={editingId}
           catalogComponents={catalogComponents}
+          catalogInput={catalogInput}
           onRequestAddComponent={() => {
             setAddComponentOpen(true);
             setComponentSearch('');

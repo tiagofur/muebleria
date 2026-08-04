@@ -142,9 +142,14 @@ interface ResolvedDeps {
 }
 
 export function createWorkspaceStore(options?: InternalOptions) {
+  const rawFetch = options?.deps?.fetchImpl ?? globalThis.fetch;
+  const safeFetch: typeof fetch =
+    typeof rawFetch === 'function' && typeof rawFetch.bind === 'function'
+      ? rawFetch.bind(globalThis)
+      : rawFetch;
   const deps: ResolvedDeps = {
     baseUrl: options?.deps?.baseUrl ?? DEFAULT_API_BASE,
-    fetchImpl: options?.deps?.fetchImpl ?? globalThis.fetch,
+    fetchImpl: safeFetch,
     repositoryFactory: options?.deps?.repositoryFactory ?? defaultRepositoryFactory,
   };
 
@@ -293,7 +298,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
             return;
           }
           try {
-            const res = await deps.fetchImpl(
+            const fetchFn = deps.fetchImpl;
+            const res = await fetchFn(
               `${deps.baseUrl}/assignable-owners`,
               {
                 headers: {
