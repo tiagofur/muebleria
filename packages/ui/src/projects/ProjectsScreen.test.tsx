@@ -565,27 +565,29 @@ describe('ProjectsScreen F022', () => {
     );
   });
 
-  it('keeps project options inside main column so totals stay sidebar (layout)', () => {
-    // F058b: the detail layout lives in ProjectDetailView (extracted from
-    // ProjectsScreen.renderDetail). Assert against the new location.
-    const src = readFileSync(
-      join(here, 'components/ProjectDetailView.tsx'),
-      'utf8',
-    );
-    const main = src.indexOf('project-detail__main');
-    const opts = src.indexOf('project-level-options');
-    const items = src.indexOf('project-detail__items');
-    const totals = src.indexOf('aria-label="Totales de cotización"');
-    expect(main).toBeGreaterThan(-1);
-    expect(main).toBeLessThan(opts);
-    expect(opts).toBeLessThan(items);
-    expect(items).toBeLessThan(totals);
-    // main column closes before totals aside
-    const between = src.slice(items, totals);
-    expect(between).toContain('</div>');
-    expect(between.lastIndexOf('</section>')).toBeLessThan(
-      between.lastIndexOf('</div>'),
-    );
+  it('keeps project options inside main column so totals stay sidebar (layout)', async () => {
+    // F058b: the detail layout lives in ProjectDetailView. After the section
+    // extraction (ProjectOptionsSection / ProjectItemsSection /
+    // ProjectTotalsAside) the markers live in different files, so we assert
+    // against the rendered DOM order instead of source strings.
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    const detail = document.body;
+    const opts = screen.getByTestId('project-level-options');
+    const items = screen.getByLabelText('Ítems de cotización');
+    const totals = screen.getByLabelText('Totales de cotización');
+    const main = detail.querySelector('.project-detail__main');
+
+    // options + items live inside the main column; totals is rendered after it.
+    expect(main).not.toBeNull();
+    expect(main!.contains(opts)).toBe(true);
+    expect(main!.contains(items)).toBe(true);
+    expect(main!.contains(totals)).toBe(false);
+    // DOM order: options before items before totals.
+    expect(opts.compareDocumentPosition(items)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(items.compareDocumentPosition(totals)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('opens create modal from requestCreateKey prop', () => {

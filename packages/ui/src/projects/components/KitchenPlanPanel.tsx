@@ -12,7 +12,6 @@ import {
 import type {
   Module,
   Project,
-  ProjectItem,
   ProjectKitchenLayout,
   ProjectItemPlacement,
   KitchenWall,
@@ -25,10 +24,7 @@ import {
   pruneKitchenLayout,
   resolveWallFrames,
 } from '@muebles/domain';
-import {
-  defaultMeasurePresetId,
-  resolveModuleMeasurePreset,
-} from '@muebles/domain';
+import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
 
 export type KitchenPlanPanelProps = {
   readonly project: Project;
@@ -36,79 +32,6 @@ export type KitchenPlanPanelProps = {
   readonly canEdit: boolean;
   readonly onChange: (layout: ProjectKitchenLayout) => void;
 };
-
-function moduleWidth(
-  item: ProjectItem,
-  modules: readonly Module[],
-): number {
-  const mod = modules.find((m) => m.id === item.moduleId);
-  if (!mod) return 600;
-  try {
-    const preset = resolveModuleMeasurePreset(
-      mod,
-      item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
-    );
-    if (preset) return preset.width;
-  } catch {
-    /* fall through */
-  }
-  return mod.externalDims?.width ?? 600;
-}
-
-function allFootprints(
-  project: Project,
-  modules: readonly Module[],
-): {
-  itemId: string;
-  instanceIndex: number;
-  width: number;
-  height: number;
-  depth: number;
-}[] {
-  const out: {
-    itemId: string;
-    instanceIndex: number;
-    width: number;
-    height: number;
-    depth: number;
-  }[] = [];
-  for (const item of project.items) {
-    const mod = modules.find((m) => m.id === item.moduleId);
-    let w = 600;
-    let h = 720;
-    let d = 560;
-    if (mod) {
-      try {
-        const preset = resolveModuleMeasurePreset(
-          mod,
-          item.measurePresetId?.trim() ||
-            defaultMeasurePresetId(mod) ||
-            undefined,
-        );
-        if (preset) {
-          w = preset.width;
-          h = preset.height;
-          d = preset.depth;
-        } else if (mod.externalDims) {
-          w = mod.externalDims.width;
-          h = mod.externalDims.height;
-          d = mod.externalDims.depth;
-        }
-      } catch {
-        if (mod.externalDims) {
-          w = mod.externalDims.width;
-          h = mod.externalDims.height;
-          d = mod.externalDims.depth;
-        }
-      }
-    }
-    const qty = Math.max(1, item.quantity);
-    for (let i = 0; i < qty; i++) {
-      out.push({ itemId: item.id, instanceIndex: i, width: w, height: h, depth: d });
-    }
-  }
-  return out;
-}
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -261,13 +184,7 @@ export function KitchenPlanPanel({
     });
   };
 
-  const itemLabel = (itemId: string, instanceIndex: number): string => {
-    const item = project.items.find((i) => i.id === itemId);
-    const mod = modules.find((m) => m.id === item?.moduleId);
-    const base = mod ? `${mod.code} — ${mod.name}` : itemId;
-    const qty = item?.quantity ?? 1;
-    return qty > 1 ? `${base} (copia ${instanceIndex + 1})` : base;
-  };
+
 
   // SVG plan scale
   const pad = 40;
@@ -609,7 +526,7 @@ export function KitchenPlanPanel({
                         data-testid={`kitchen-placed-${p.itemId}-${p.instanceIndex}`}
                       >
                         <span style={{ flex: '1 1 140px' }}>
-                          {itemLabel(p.itemId, p.instanceIndex)}
+                          {itemLabel(p.itemId, p.instanceIndex, project, modules)}
                         </span>
                         {canEdit ? (
                           <>
@@ -696,7 +613,7 @@ export function KitchenPlanPanel({
                     }}
                   >
                     <span style={{ flex: 1 }}>
-                      {itemLabel(f.itemId, f.instanceIndex)}
+                      {itemLabel(f.itemId, f.instanceIndex, project, modules)}
                     </span>
                     {layout.walls.map((w) => (
                       <button

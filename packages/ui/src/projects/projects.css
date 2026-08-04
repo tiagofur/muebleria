@@ -284,6 +284,65 @@
   font-weight: var(--weight-semibold);
 }
 
+/* —— Drag & drop reorder (F052) —— */
+
+.project-item-card[draggable='true'] {
+  cursor: grab;
+}
+
+.project-item-card[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.project-item-card--dragging {
+  opacity: 0.35;
+  transform: scale(0.98);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.project-item-card--drop-above {
+  box-shadow: 0 -3px 0 0 var(--brand-500);
+}
+
+.project-item-card--drop-below {
+  box-shadow: 0 3px 0 0 var(--brand-500);
+}
+
+.project-item-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.project-item-card__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: grab;
+  flex-shrink: 0;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-colors), background var(--transition-colors);
+}
+
+.project-item-card__drag-handle:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.project-item-card__drag-handle:active {
+  cursor: grabbing;
+}
+
+.project-item-card__index {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 /* —— Item cards —— */
 
 .project-item-list {
@@ -1394,5 +1453,95 @@
 .version-card__restore {
   align-self: flex-start;
   margin-top: var(--space-1);
+}
+
+/* Keyboard shortcuts overlay */
+
+.project-presentation__shortcuts-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  animation: shortcuts-fade-in 0.2s ease-out;
+}
+
+@keyframes shortcuts-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.project-presentation__shortcuts-card {
+  background: var(--surface-card, #0f172a);
+  border: 1px solid var(--border-default, #334155);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: var(--space-5, 1.25rem);
+  min-width: 280px;
+  max-width: 360px;
+  animation: shortcuts-slide-up 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes shortcuts-slide-up {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.project-presentation__shortcuts-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.project-presentation__shortcuts-close {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.project-presentation__shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.project-presentation__shortcuts-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.project-presentation__shortcuts-list kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--border-default, #475569);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface-hover, #1e293b);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85em;
+  font-weight: var(--weight-medium);
+  text-align: center;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-presentation__shortcuts-overlay {
+    animation: none;
+  }
+  .project-presentation__shortcuts-card {
+    animation: none;
+  }
 }
 
