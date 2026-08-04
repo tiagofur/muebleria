@@ -102,6 +102,7 @@ export interface ProjectDetailViewProps {
   readonly productionExportDisabled: boolean;
   readonly productionExportOk: boolean;
   readonly onExport?: () => void | Promise<void>;
+  readonly onExportProductionPack?: () => void | Promise<void>;
 
   // --- Item handlers + inline-remove confirm ---
   readonly itemHandlers: ProjectDetailItemHandlers;
@@ -269,6 +270,13 @@ function ProjectDetailViewInner(): ReactNode {
               {ctx.exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
             </button>
           ) : null}
+          {ctx.onExportProductionPack ? (
+            <button type="button" className="btn btn--primary" disabled={productionExportDisabled}
+              title={!productionExportOk ? 'Pack de producción solo en Aceptado o En producción' : 'Descargar paquete completo ZIP (Optimizer + Herrajes + Etiquetas + Resumen)'}
+              onClick={() => { void ctx.onExportProductionPack?.(); }} data-testid="project-chrome-export-pack">
+              {ctx.exportBusy ? 'Generando Pack…' : '📦 Pack Producción'}
+            </button>
+          ) : null}
           {exportMenu.sections.length > 0 ? (
             <DropdownMenu ariaLabel="Más exports" triggerLabel={exportBusy ? 'Exportando…' : 'Más exports'}
               triggerClassName="btn" disabled={exportBusy} sections={exportMenu.sections} onClose={exportMenu.onClose} />
@@ -387,6 +395,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     productionExportDisabled: props.productionExportDisabled,
     productionExportOk: props.productionExportOk,
     onExport: props.onExport,
+    onExportProductionPack: props.onExportProductionPack,
     itemHandlers: props.itemHandlers,
     removeConfirm: props.removeConfirm,
     updateProjectLevelChoice: props.updateProjectLevelChoice,

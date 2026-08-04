@@ -287,5 +287,31 @@ describe('StructuresScreen', () => {
     const badge = screen.getByTestId('structure-revision-EST-GAB-720');
     expect(badge.textContent).toBe('Rev 1');
   });
+
+  it('renders 3D preview tab in structure editor', () => {
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />
+    );
+
+    // Click on create structure button
+    fireEvent.click(screen.getByTestId('create-structure-btn'));
+
+    // Verify Tab Vista 3D exists
+    const previewTab = screen.getByTestId('structure-editor-tab-preview3d');
+    expect(previewTab).toBeTruthy();
+
+    // Switch to Vista 3D
+    fireEvent.click(previewTab);
+    expect(screen.getByTestId('structure-editor-panel-preview3d')).toBeTruthy();
+  });
 });
 

@@ -794,6 +794,7 @@ export function ProjectsScreen({
           productionExportDisabled={productionExportDisabled}
           productionExportOk={productionExportOk}
           onExport={onExport}
+          onExportProductionPack={onExportProductionPack}
           itemHandlers={{
             onUpdateItemQuantity: updateItemQuantity,
             onUpdateItemMeasurePreset: updateItemMeasurePreset,

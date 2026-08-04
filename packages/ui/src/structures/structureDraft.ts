@@ -5,7 +5,11 @@
 import type { DimensionPreset, Structure } from '@muebles/domain';
 import type { ComponentInstanceDraft } from '../modules';
 
-export type StructureEditorTab = 'general' | 'presets' | 'components';
+export type StructureEditorTab =
+  | 'general'
+  | 'presets'
+  | 'components'
+  | 'preview3d';
 
 export const STRUCTURE_EDITOR_TABS: readonly {
   readonly id: StructureEditorTab;
@@ -14,6 +18,7 @@ export const STRUCTURE_EDITOR_TABS: readonly {
   { id: 'general', label: 'Datos Generales' },
   { id: 'presets', label: 'Presets de Medida' },
   { id: 'components', label: 'Componentes' },
+  { id: 'preview3d', label: 'Vista 3D' },
 ] as const;
 
 export interface StructureDraft {
