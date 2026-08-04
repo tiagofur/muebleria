@@ -606,6 +606,19 @@ function AppContent({
   }, [location.pathname, navigate, session, actorRole, toast]);
 
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  // Gap #1: BoardEditor overrides bridge — the editor reports pose/dim edits,
+  // merged into the module draft on save.
+  const [boardOverrides, setBoardOverrides] = useState<Readonly<Record<string, unknown>>>({});
+  const handleOverridesChange = useCallback(
+    (overrides: Readonly<Record<string, unknown>>) => {
+      setBoardOverrides(overrides);
+    },
+    [],
+  );
+  // Reset overrides when switching/closing the module editor.
+  useEffect(() => {
+    if (!editingModuleId) setBoardOverrides({});
+  }, [editingModuleId]);
   // Calculate / export target follows URL detail when present.
   const selectedProjectId = routeProjectId;
   // F064: export UI + create keys live in uiStore.
@@ -1754,11 +1767,13 @@ function AppContent({
                       moduleWidth={mod.externalDims?.width}
                       moduleHeight={mod.externalDims?.height}
                       moduleDepth={mod.externalDims?.depth}
+                      onOverridesChange={handleOverridesChange}
                     />
                   );
                 })()
               : undefined
           }
+          boardOverrides={boardOverrides}
         />
       ) : null}
       {navId === 'structures' ? (

@@ -149,6 +149,11 @@ export interface ModulesScreenProps {
    * constructs this from BoardEditor (apps/web).
    */
   readonly boardEditorSlot?: ReactNode;
+  /**
+   * Gap #1: overrides derived from the BoardEditor, keyed by componentId.
+   * Merged into the module draft on save so board edits persist.
+   */
+  readonly boardOverrides?: Readonly<Record<string, unknown>>;
 }
 
 export function ModulesScreen({
@@ -183,6 +188,7 @@ export function ModulesScreen({
   onUploadImage,
   resolveImageUrl = (u) => u,
   boardEditorSlot,
+  boardOverrides,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
   const categoryFormId = useId();
@@ -663,7 +669,18 @@ export function ModulesScreen({
     }
     setError(null);
     if (editingId) {
-      onUpdate(editingId, draft);
+      // Gap #1: merge BoardEditor overrides into the draft's components.
+      const draftWithOverrides: ModuleDraft = boardOverrides
+        ? {
+            ...draft,
+            components: draft.components.map((c) =>
+              boardOverrides[c.componentId]
+                ? { ...c, overrides: boardOverrides[c.componentId] as ModuleDraft['components'][number]['overrides'] }
+                : c,
+            ),
+          }
+        : draft;
+      onUpdate(editingId, draftWithOverrides);
     } else {
       onCreate(draft);
     }

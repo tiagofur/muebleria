@@ -68,6 +68,8 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
       placementOverride: c.placementOverride
         ? (c.placementOverride as ComponentPlacement)
         : undefined,
+      // Preserve BoardEditor overrides (gap #1) — poses + dimensions.
+      overrides: c.overrides,
     })),
     presets:
       draft.presets.length > 0

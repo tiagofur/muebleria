@@ -52,6 +52,21 @@ export interface ComponentInstanceDraft {
   componentId: string;
   quantity: number;
   placementOverride?: string;
+  /**
+   * Board-editor overrides (gap #1): poses + dimensions edited in the
+   * BoardEditor are persisted here so they survive save. The structure matches
+   * ModuleComponentInstance.overrides (formulas are stored as literal strings).
+   */
+  readonly overrides?: {
+    readonly lengthFormula?: string;
+    readonly widthFormula?: string;
+    readonly xFormula?: string;
+    readonly yFormula?: string;
+    readonly zFormula?: string;
+    readonly rotateX?: number;
+    readonly rotateY?: number;
+    readonly rotateZ?: number;
+  };
 }
 
 export type MeasurePresetDraft = {

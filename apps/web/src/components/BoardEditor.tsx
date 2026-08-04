@@ -10,9 +10,9 @@
  * en el slice 1.5.
  */
 
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Box } from 'lucide-react';
-import type { Catalog, Module } from '@muebles/domain';
+import type { Catalog, Module, ResolvedBoardPart } from '@muebles/domain';
 import { resolveBom } from '@muebles/domain';
 import {
   BoardCanvas,
@@ -26,6 +26,7 @@ import {
   useEditorStore,
 } from '../stores';
 import { useBoardShortcuts } from './useBoardShortcuts';
+import { deriveOverridesFromParts } from './deriveOverridesFromParts';
 import './boardEditor.css';
 
 export interface BoardEditorProps {
@@ -36,6 +37,14 @@ export interface BoardEditorProps {
   readonly moduleWidth?: number;
   readonly moduleHeight?: number;
   readonly moduleDepth?: number;
+  /**
+   * Gap #1: called whenever the user edits part poses/dimensions, with the
+   * derived overrides keyed by componentId. The shell merges these into the
+   * module draft so they persist on save.
+   */
+  readonly onOverridesChange?: (
+    overrides: ReturnType<typeof deriveOverridesFromParts>,
+  ) => void;
 }
 
 export function BoardEditor({
@@ -46,6 +55,7 @@ export function BoardEditor({
   moduleWidth,
   moduleHeight,
   moduleDepth,
+  onOverridesChange,
 }: BoardEditorProps): ReactNode {
   const resolvedParts = useEditorStore((s) => s.resolvedParts);
   const selectedPartId = useEditorStore((s) => s.selectedPartId);
@@ -58,6 +68,9 @@ export function BoardEditor({
   const removePart = useEditorStore((s) => s.removePart);
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
+
+  // Gap #1: snapshot the originally-resolved parts so we can diff on change.
+  const originalPartsRef = useRef<readonly ResolvedBoardPart[]>([]);
 
   // F074: keyboard shortcuts (d=duplicate, r=rotate, del=remove, v=toggle).
   useBoardShortcuts(true);
@@ -72,9 +85,11 @@ export function BoardEditor({
   useEffect(() => {
     try {
       const bom = resolveBom(module, optionChoices, catalog, measurePresetId);
+      originalPartsRef.current = bom.boardParts;
       loadModule(module.id, bom.boardParts);
     } catch {
       // Resolution may fail if options are incomplete — load empty.
+      originalPartsRef.current = [];
       loadModule(module.id, []);
     }
     return () => {
@@ -82,6 +97,17 @@ export function BoardEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [module.id, measurePresetId]);
+
+  // Gap #1: when parts change, derive overrides and notify the shell.
+  useEffect(() => {
+    if (!onOverridesChange) return;
+    if (originalPartsRef.current.length === 0) return;
+    const overrides = deriveOverridesFromParts(
+      resolvedParts,
+      originalPartsRef.current,
+    );
+    onOverridesChange(overrides);
+  }, [resolvedParts, onOverridesChange]);
 
   // Project resolved parts to BoardPartVisual[] for the canvas.
   const visuals = useMemo(
