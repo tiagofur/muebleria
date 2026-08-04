@@ -166,6 +166,18 @@
   align-self: flex-start;
 }
 
+/* Inline warning for orphaned references (deleted catalog entry). Gap #4. */
+.catalog-form__warning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--warning-50);
+  color: var(--warning-700);
+  font-size: var(--text-sm);
+}
+
 /* Domain-derived preview (shell injects formula; tokens only — issue #14). */
 .catalog-form__calculated-value {
   padding: var(--space-2);

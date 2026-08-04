@@ -72,16 +72,17 @@ function pushDomainError(
   });
 }
 
-function collectMissingChoiceIssues(
+/**
+ * Collect every option-role code a module references — resolved from its own
+ * component instances, its referenced structure's components, and its hardware
+ * lines. Used by export validation AND by UI warnings (e.g. counting how many
+ * modules use an option group before deleting it — #5).
+ */
+export function collectModuleOptionRoles(
   module: Module,
-  optionChoices: OptionChoices,
-  catalog: Catalog,
-  projectItemId: string,
-  issues: ExportIssue[],
-): void {
+  catalog: Pick<Catalog, 'components' | 'structures'>,
+): Set<string> {
   const roles = new Set<string>();
-  // Roles come from module-level component instances (resolved to their
-  // optionRoles), the referenced structure's components, and hardware lines.
   for (const instance of module.components ?? []) {
     const comp = catalog.components?.find((c) => c.id === instance.componentId);
     if (comp) {
@@ -106,6 +107,17 @@ function collectMissingChoiceIssues(
       roles.add(line.optionRole);
     }
   }
+  return roles;
+}
+
+function collectMissingChoiceIssues(
+  module: Module,
+  optionChoices: OptionChoices,
+  catalog: Catalog,
+  projectItemId: string,
+  issues: ExportIssue[],
+): void {
+  const roles = collectModuleOptionRoles(module, catalog);
 
   for (const role of roles) {
     const choiceId = optionChoices[role];
