@@ -24,6 +24,7 @@ import {
   pruneKitchenLayout,
   resolveWallFrames,
 } from '@muebles/domain';
+import { Lock } from 'lucide-react';
 import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
 
 export type KitchenPlanPanelProps = {
@@ -318,6 +319,16 @@ export function KitchenPlanPanel({
     >
       <div className="project-detail__section-header">
         <h3 className="project-detail__section-title">Plano de cocina</h3>
+        {!canEdit && project.status !== 'draft' ? (
+          <span
+            className="kitchen-plan__frozen-note"
+            title="El plano se congela al enviar la cotización para preservar el diseño aprobado. Reabrí a borrador si necesitás editarlo."
+            data-testid="kitchen-plan-frozen-note"
+          >
+            <Lock size={13} strokeWidth={1.5} aria-hidden />
+            Plano congelado
+          </span>
+        ) : null}
         {canEdit ? (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {layout.walls.length === 0 ? (

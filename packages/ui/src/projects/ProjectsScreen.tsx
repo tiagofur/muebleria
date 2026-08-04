@@ -24,6 +24,7 @@ import type {
   Project,
   ProjectItem,
   ProjectMaterialSummary,
+  ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
@@ -242,6 +243,8 @@ export interface ProjectsScreenProps {
   readonly canMarkProduced?: boolean;
   /** Shell applies status transition (snapshot rules). */
   readonly onMarkProduced?: (projectId: string) => void;
+  /** Transition status: draft→quoted, quoted→accepted (gap #3). */
+  readonly onChangeStatus?: (projectId: string, status: ProjectStatus) => void;
   readonly onReopen?: (projectId: string) => void;
   /** #200: restore a project to a previous version snapshot. */
   readonly onRestoreVersion?: (projectId: string, version: number) => void;
@@ -315,6 +318,7 @@ export function ProjectsScreen({
   canReopen = false,
   canMarkProduced = false,
   onMarkProduced,
+  onChangeStatus,
   onReopen,
   onRestoreVersion,
   showCosts = true,
@@ -843,6 +847,7 @@ export function ProjectsScreen({
               : undefined
           }
           onMarkProduced={onMarkProduced}
+          onChangeStatus={onChangeStatus}
           onRequestReopen={() => setConfirmReopen(true)}
           onRequestDelete={() => setConfirmDelete(true)}
           onUpdateKitchenLayout={onUpdateKitchenLayout}

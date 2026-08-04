@@ -249,16 +249,20 @@ describe('collectModuleOptionRoles (gap #5 — accurate delete warnings)', () =>
       id: 'comp-lateral',
       code: 'LAT',
       name: 'Lateral',
+      placement: 'lateral_izquierdo',
       optionRoles: ['INTERIOR'],
       geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+      defaultEdges: [],
       active: true,
     };
     const doorComp: Component = {
       id: 'comp-door',
       code: 'PTA',
       name: 'Puerta',
+      placement: 'frontal',
       optionRoles: ['FRENTE'],
       geometry: { kind: 'rectangular_board', lengthMm: 600, widthMm: 400, thicknessMm: 18 },
+      defaultEdges: [],
       active: true,
     };
     const structure: Structure = {
@@ -274,7 +278,7 @@ describe('collectModuleOptionRoles (gap #5 — accurate delete warnings)', () =>
       name: 'Test module',
       structureId: 'struct-base',
       components: [{ componentId: 'comp-door', quantity: 1 }],
-      hardwareLines: [{ optionRole: 'BISAGRA', quantity: 4 }],
+      hardwareLines: [{ id: 'hw-1', optionRole: 'BISAGRA', quantity: 4 }],
     };
     const catalog: Pick<Catalog, 'components' | 'structures'> = {
       components: [lateralComp, doorComp],
@@ -298,7 +302,7 @@ describe('collectModuleOptionRoles (gap #5 — accurate delete warnings)', () =>
       id: 'mod-2',
       code: 'MOD-2',
       name: 'Hardware only',
-      hardwareLines: [{ optionRole: 'CORREDERA', quantity: 2 }],
+      hardwareLines: [{ id: 'hw-2', optionRole: 'CORREDERA', quantity: 2 }],
     };
     const roles = collectModuleOptionRoles(module, { components: [], structures: [] });
     expect(roles.has('CORREDERA')).toBe(true);
