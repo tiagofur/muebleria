@@ -7,7 +7,8 @@
  * (PW×PH×PD) so position formulas (X/Y/Z) become visible in context.
  */
 
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { ChevronDown, ChevronRight, Lightbulb, RotateCcw } from 'lucide-react';
 import type { PlacementDims, ResolvedBoardPart } from '@muebles/domain';
 import type { MaterialColorLookup } from '../../preview3d';
 import { FurnitureScene3D } from '../../preview3d';
@@ -46,6 +47,25 @@ function FieldGroup({
   );
 }
 
+/** Live summary of the position + rotation state, shown in the disclosure header. */
+function advancedSummary(draft: ComponentDraft): string {
+  // Position: list non-empty formulas, else "automática".
+  const posParts: string[] = [];
+  if (draft.xFormula.trim()) posParts.push(`X=${draft.xFormula.trim()}`);
+  if (draft.yFormula.trim()) posParts.push(`Y=${draft.yFormula.trim()}`);
+  if (draft.zFormula.trim()) posParts.push(`Z=${draft.zFormula.trim()}`);
+  const posText = posParts.length ? posParts.join(', ') : 'automática';
+
+  // Rotation: list non-null rotates, else "automática".
+  const rotParts: string[] = [];
+  if (draft.rotateX !== null) rotParts.push(`X=${draft.rotateX}°`);
+  if (draft.rotateY !== null) rotParts.push(`Y=${draft.rotateY}°`);
+  if (draft.rotateZ !== null) rotParts.push(`Z=${draft.rotateZ}°`);
+  const rotText = rotParts.length ? rotParts.join(', ') : 'automática';
+
+  return `Posición: ${posText} · Rotación: ${rotText}`;
+}
+
 export function ComponentEditorGeometryPanel({
   formId,
   draft,
@@ -58,6 +78,10 @@ export function ComponentEditorGeometryPanel({
   showInContext,
   onShowInContextChange,
 }: ComponentEditorGeometryPanelProps): ReactNode {
+  // Position + Rotation are advanced; collapsed by default so a first-time
+  // carpenter sees only the base dimensions, size formulas, and the 3D preview.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   return (
     <div
       role="tabpanel"
@@ -68,7 +92,8 @@ export function ComponentEditorGeometryPanel({
     >
       <div className="component-geometry__formula-guide" data-testid="formula-vars-guide">
         <p className="component-geometry__formula-guide-title">
-          💡 Variables disponibles para fórmulas (matemática estándar +, -, *, /, ())
+          <Lightbulb size={14} strokeWidth={1.5} aria-hidden />
+          Variables disponibles para fórmulas (matemática estándar +, -, *, /, ())
         </p>
         <div className="component-geometry__formula-vars">
           <span className="badge" title="Ancho total del contenedor/mueble"><code>PW</code>: Ancho Mueble</span>
@@ -176,116 +201,168 @@ export function ComponentEditorGeometryPanel({
         </div>
       </FieldGroup>
 
-      <FieldGroup title="Posición en el mueble" hint="dónde va la pieza dentro del contenedor">
-        <div className="module-editor__grid">
-          <div className="catalog-form__field">
-            <label htmlFor={`${formId}-x-formula`}>
-              Fórmula Posición X (e.g. i * (PW - T))
-            </label>
-            <input
-              id={`${formId}-x-formula`}
-              type="text"
-              value={draft.xFormula}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  xFormula: e.target.value,
-                }))
-              }
-              placeholder="auto"
-              data-testid="input-x-formula"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor={`${formId}-y-formula`}>Fórmula Posición Y</label>
-            <input
-              id={`${formId}-y-formula`}
-              type="text"
-              value={draft.yFormula}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  yFormula: e.target.value,
-                }))
-              }
-              placeholder="auto"
-              data-testid="input-y-formula"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor={`${formId}-z-formula`}>Fórmula Posición Z</label>
-            <input
-              id={`${formId}-z-formula`}
-              type="text"
-              value={draft.zFormula}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  zFormula: e.target.value,
-                }))
-              }
-              placeholder="auto"
-              data-testid="input-z-formula"
-            />
-          </div>
-        </div>
-      </FieldGroup>
+      <div className="component-geometry__advanced">
+        <button
+          type="button"
+          className="component-geometry__advanced-header"
+          aria-expanded={advancedOpen}
+          aria-controls="component-geometry-advanced-content"
+          data-testid="component-geometry-advanced-toggle"
+          onClick={() => setAdvancedOpen((v) => !v)}
+        >
+          {advancedOpen ? (
+            <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
+          ) : (
+            <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
+          )}
+          <span className="component-geometry__advanced-title">
+            Avanzado: posición y rotación
+          </span>
+          <span className="component-geometry__advanced-summary">
+            {advancedSummary(draft)}
+          </span>
+        </button>
 
-      <FieldGroup title="Rotación" hint="vacío = automática según la ubicación; 0 es válido">
-        <div className="module-editor__grid">
-          <div className="catalog-form__field">
-            <label htmlFor={`${formId}-rotate-x`}>Rotación X (grados)</label>
-            <input
-              id={`${formId}-rotate-x`}
-              type="number"
-              value={draft.rotateX ?? ''}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  rotateX:
-                    e.target.value === '' ? null : Number(e.target.value),
-                }))
-              }
-              placeholder="auto"
-              data-testid="input-rotate-x"
-            />
+        {advancedOpen ? (
+          <div
+            id="component-geometry-advanced-content"
+            className="component-geometry__advanced-content"
+          >
+            <div className="component-geometry__advanced-actions">
+              <button
+                type="button"
+                className="btn btn--small btn--ghost"
+                onClick={() =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    xFormula: '',
+                    yFormula: '',
+                    zFormula: '',
+                    rotateX: null,
+                    rotateY: null,
+                    rotateZ: null,
+                  }))
+                }
+                data-testid="component-geometry-advanced-reset"
+              >
+                <RotateCcw size={14} strokeWidth={1.5} aria-hidden />
+                Restablecer a automático
+              </button>
+            </div>
+
+            <FieldGroup title="Posición en el mueble" hint="dónde va la pieza dentro del contenedor">
+              <div className="module-editor__grid">
+                <div className="catalog-form__field">
+                  <label htmlFor={`${formId}-x-formula`}>
+                    Fórmula Posición X (e.g. i * (PW - T))
+                  </label>
+                  <input
+                    id={`${formId}-x-formula`}
+                    type="text"
+                    value={draft.xFormula}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        xFormula: e.target.value,
+                      }))
+                    }
+                    placeholder="auto"
+                    data-testid="input-x-formula"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor={`${formId}-y-formula`}>Fórmula Posición Y</label>
+                  <input
+                    id={`${formId}-y-formula`}
+                    type="text"
+                    value={draft.yFormula}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        yFormula: e.target.value,
+                      }))
+                    }
+                    placeholder="auto"
+                    data-testid="input-y-formula"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor={`${formId}-z-formula`}>Fórmula Posición Z</label>
+                  <input
+                    id={`${formId}-z-formula`}
+                    type="text"
+                    value={draft.zFormula}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        zFormula: e.target.value,
+                      }))
+                    }
+                    placeholder="auto"
+                    data-testid="input-z-formula"
+                  />
+                </div>
+              </div>
+            </FieldGroup>
+
+            <FieldGroup title="Rotación" hint="vacío = automática según la ubicación; 0 es válido">
+              <div className="module-editor__grid">
+                <div className="catalog-form__field">
+                  <label htmlFor={`${formId}-rotate-x`}>Rotación X (grados)</label>
+                  <input
+                    id={`${formId}-rotate-x`}
+                    type="number"
+                    value={draft.rotateX ?? ''}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        rotateX:
+                          e.target.value === '' ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="auto"
+                    data-testid="input-rotate-x"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor={`${formId}-rotate-y`}>Rotación Y (grados)</label>
+                  <input
+                    id={`${formId}-rotate-y`}
+                    type="number"
+                    value={draft.rotateY ?? ''}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        rotateY:
+                          e.target.value === '' ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="auto"
+                    data-testid="input-rotate-y"
+                  />
+                </div>
+                <div className="catalog-form__field">
+                  <label htmlFor={`${formId}-rotate-z`}>Rotación Z (grados)</label>
+                  <input
+                    id={`${formId}-rotate-z`}
+                    type="number"
+                    value={draft.rotateZ ?? ''}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        rotateZ:
+                          e.target.value === '' ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="auto"
+                    data-testid="input-rotate-z"
+                  />
+                </div>
+              </div>
+            </FieldGroup>
           </div>
-          <div className="catalog-form__field">
-            <label htmlFor={`${formId}-rotate-y`}>Rotación Y (grados)</label>
-            <input
-              id={`${formId}-rotate-y`}
-              type="number"
-              value={draft.rotateY ?? ''}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  rotateY:
-                    e.target.value === '' ? null : Number(e.target.value),
-                }))
-              }
-              placeholder="auto"
-              data-testid="input-rotate-y"
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor={`${formId}-rotate-z`}>Rotación Z (grados)</label>
-            <input
-              id={`${formId}-rotate-z`}
-              type="number"
-              value={draft.rotateZ ?? ''}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  rotateZ:
-                    e.target.value === '' ? null : Number(e.target.value),
-                }))
-              }
-              placeholder="auto"
-              data-testid="input-rotate-z"
-            />
-          </div>
-        </div>
-      </FieldGroup>
+        ) : null}
+      </div>
 
       <div className="component-geometry__preview">
         <div className="component-geometry__preview-bar">

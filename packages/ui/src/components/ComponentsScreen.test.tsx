@@ -323,4 +323,45 @@ describe('ComponentsScreen', () => {
     fireEvent.click(toggle);
     expect(toggle.checked).toBe(false);
   });
+
+  it('collapses position + rotation behind an "Avanzado" disclosure (P0 cognitive load)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    // Open editor on an existing component.
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    // The advanced disclosure is collapsed by default: position/rotation inputs are hidden.
+    const toggleBtn = screen.getByTestId('component-geometry-advanced-toggle');
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('input-rotate-x')).toBeNull();
+    expect(screen.queryByTestId('input-x-formula')).toBeNull();
+
+    // Opening the disclosure reveals the six advanced inputs.
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('input-rotate-x')).toBeTruthy();
+    expect(screen.getByTestId('input-rotate-y')).toBeTruthy();
+    expect(screen.getByTestId('input-rotate-z')).toBeTruthy();
+    expect(screen.getByTestId('input-x-formula')).toBeTruthy();
+    expect(screen.getByTestId('input-y-formula')).toBeTruthy();
+    expect(screen.getByTestId('input-z-formula')).toBeTruthy();
+
+    // "Restablecer a automático" clears all six fields in one click.
+    fireEvent.change(screen.getByTestId('input-rotate-x'), { target: { value: '45' } });
+    fireEvent.change(screen.getByTestId('input-x-formula'), { target: { value: 'T' } });
+    fireEvent.click(screen.getByTestId('component-geometry-advanced-reset'));
+    expect((screen.getByTestId('input-rotate-x') as HTMLInputElement).value).toBe('');
+    expect((screen.getByTestId('input-x-formula') as HTMLInputElement).value).toBe('');
+  });
 });
