@@ -9,6 +9,14 @@ export {
   type FurnitureSceneModule,
 } from './FurnitureScene3D';
 export {
+  PartInspector,
+  type PartInspectorProps,
+} from './PartInspector';
+export {
+  PartList,
+  type PartListProps,
+} from './PartList';
+export {
   boardPartToVisual,
   boardPartsToVisuals,
   colorForMaterialId,

@@ -64,38 +64,84 @@ export type FurnitureScene3DProps = {
   readonly onExportComplete?: () => void;
   /** Project name used as base filename for exports. */
   readonly exportProjectName?: string;
+  /** Currently selected board part id (highlight). */
+  readonly selectedPartId?: string | null;
+  /** Click mesh / empty space → select or clear. Disabled while measuring. */
+  readonly onSelectPart?: (partId: string | null) => void;
+  /** When true and a part is selected, dim other meshes. */
+  readonly isolateSelected?: boolean;
 };
 
 function BoardMesh({
   visual,
   showWireframe = false,
+  selected = false,
+  dimmed = false,
+  onSelect,
 }: {
   readonly visual: BoardPartVisual;
   readonly showWireframe?: boolean;
+  readonly selected?: boolean;
+  readonly dimmed?: boolean;
+  readonly onSelect?: (partId: string) => void;
 }): ReactNode {
   const [w, t, l] = visual.size;
+  const transparent = showWireframe || dimmed;
+  const opacity = dimmed ? 0.12 : showWireframe ? 0.3 : 1;
   return (
     <group position={visual.position} rotation={visual.rotation}>
       <mesh
         position={[w / 2, t / 2, l / 2]}
-        castShadow={!showWireframe}
-        receiveShadow={!showWireframe}
+        castShadow={!showWireframe && !dimmed}
+        receiveShadow={!showWireframe && !dimmed}
         userData={{
           partId: visual.id,
           description: visual.description,
           optionRole: visual.optionRole,
         }}
+        onClick={(e) => {
+          if (!onSelect) return;
+          e.stopPropagation();
+          onSelect(visual.id);
+        }}
+        onPointerOver={
+          onSelect
+            ? (e) => {
+                e.stopPropagation();
+                if (typeof document !== 'undefined') {
+                  document.body.style.cursor = 'pointer';
+                }
+              }
+            : undefined
+        }
+        onPointerOut={
+          onSelect
+            ? () => {
+                if (typeof document !== 'undefined') {
+                  document.body.style.cursor = 'auto';
+                }
+              }
+            : undefined
+        }
       >
         <boxGeometry args={[w, t, l]} />
         <meshStandardMaterial
           color={visual.color}
-          transparent={showWireframe}
-          opacity={showWireframe ? 0.3 : 1}
-          depthWrite={!showWireframe}
+          emissive={selected ? '#f5c542' : '#000000'}
+          emissiveIntensity={selected ? 0.4 : 0}
+          transparent={transparent}
+          opacity={opacity}
+          depthWrite={!transparent}
           roughness={0.72}
           metalness={0.04}
         />
-        {showWireframe && <Edges scale={1} threshold={15} color={visual.color} />}
+        {(showWireframe || selected) && (
+          <Edges
+            scale={1}
+            threshold={15}
+            color={selected ? '#f5c542' : visual.color}
+          />
+        )}
       </mesh>
     </group>
   );
@@ -131,11 +177,17 @@ function ModuleGroup({
   colorMode,
   materialColors,
   showWireframe,
+  selectedPartId,
+  isolateSelected,
+  onSelectPart,
 }: {
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
   readonly showWireframe?: boolean;
+  readonly selectedPartId?: string | null;
+  readonly isolateSelected?: boolean;
+  readonly onSelectPart?: (partId: string) => void;
 }): ReactNode {
   const visuals = useMemo(
     () =>
@@ -151,6 +203,7 @@ function ModuleGroup({
     mod.originZ,
     mod.originY,
   ];
+  const hasSelection = Boolean(selectedPartId);
 
   return (
     <group position={groupPos}>
@@ -161,9 +214,21 @@ function ModuleGroup({
           depth={mod.depth}
         />
       ) : null}
-      {visuals.map((v) => (
-        <BoardMesh key={`${mod.key}-${v.id}`} visual={v} showWireframe={showWireframe} />
-      ))}
+      {visuals.map((v) => {
+        const selected = selectedPartId === v.id;
+        const dimmed =
+          Boolean(isolateSelected) && hasSelection && !selected;
+        return (
+          <BoardMesh
+            key={`${mod.key}-${v.id}`}
+            visual={v}
+            showWireframe={showWireframe}
+            selected={selected}
+            dimmed={dimmed}
+            onSelect={onSelectPart}
+          />
+        );
+      })}
     </group>
   );
 }
@@ -238,6 +303,9 @@ function SceneContent({
   exportFormat,
   onExportComplete,
   exportProjectName,
+  selectedPartId,
+  isolateSelected,
+  onSelectPart,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
@@ -253,6 +321,9 @@ function SceneContent({
   readonly exportFormat?: ModelFormat | null;
   readonly onExportComplete?: () => void;
   readonly exportProjectName?: string;
+  readonly selectedPartId?: string | null;
+  readonly isolateSelected?: boolean;
+  readonly onSelectPart?: (partId: string) => void;
 }): ReactNode {
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
@@ -300,6 +371,9 @@ function SceneContent({
               colorMode={colorMode}
               materialColors={materialColors}
               showWireframe={showWireframe}
+              selectedPartId={selectedPartId}
+              isolateSelected={isolateSelected}
+              onSelectPart={onSelectPart}
             />
           ))}
         </group>
@@ -362,11 +436,15 @@ export function FurnitureScene3D({
   exportFormat = null,
   onExportComplete,
   exportProjectName = 'scene',
+  selectedPartId = null,
+  onSelectPart,
+  isolateSelected = false,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
   const sceneModules = modules;
+  const selectionEnabled = Boolean(onSelectPart) && !measurementMode;
 
   if (sceneModules.length === 0 || (!hasAnyParts && sceneModules.every((m) => m.showOuterGhost === false))) {
     return (
@@ -389,6 +467,7 @@ export function FurnitureScene3D({
       <p className="module-scene-3d__hint">
         Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para desplazar (pan)
         · ← → ↑ ↓ para navegar con teclado · + − para zoom
+        {selectionEnabled ? ' · click en una pieza para inspeccionar' : ''}
       </p>
       <div
         className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
@@ -430,6 +509,9 @@ export function FurnitureScene3D({
           shadows
           dpr={[1, 2]}
           gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
+          onPointerMissed={() => {
+            if (selectionEnabled) onSelectPart?.(null);
+          }}
         >
           {cameraType === 'orthographic' ? (
             <OrthographicCamera
@@ -472,6 +554,9 @@ export function FurnitureScene3D({
               exportFormat={exportFormat}
               onExportComplete={onExportComplete}
               exportProjectName={exportProjectName}
+              selectedPartId={selectedPartId}
+              isolateSelected={isolateSelected}
+              onSelectPart={selectionEnabled ? onSelectPart : undefined}
             />
           </Suspense>          </Canvas>
         </Suspense>

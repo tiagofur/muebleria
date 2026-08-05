@@ -20,6 +20,9 @@ export type ModuleScene3DProps = {
   readonly cameraView?: { readonly type: 'front' | 'top' | 'side' | 'isometric'; readonly ts: number } | null;
   readonly cameraType?: 'perspective' | 'orthographic';
   readonly showWireframe?: boolean;
+  readonly selectedPartId?: string | null;
+  readonly onSelectPart?: (partId: string | null) => void;
+  readonly isolateSelected?: boolean;
 };
 
 /** Detect WebGL so tests/jsdom can skip Canvas. */
@@ -47,6 +50,9 @@ export function ModuleScene3D({
   cameraView,
   cameraType,
   showWireframe,
+  selectedPartId,
+  onSelectPart,
+  isolateSelected,
 }: ModuleScene3DProps): ReactNode {
   return (
     <FurnitureScene3D
@@ -75,6 +81,9 @@ export function ModuleScene3D({
       cameraView={cameraView}
       cameraType={cameraType}
       showWireframe={showWireframe}
+      selectedPartId={selectedPartId}
+      onSelectPart={onSelectPart}
+      isolateSelected={isolateSelected}
     />
   );
 }

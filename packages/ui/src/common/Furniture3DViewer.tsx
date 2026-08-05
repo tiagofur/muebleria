@@ -1,10 +1,11 @@
 /**
- * Unified furniture 3D viewer with camera controls, projection toggle, wireframe, and color mode.
- * Replaces duplicated control bars in ComponentEditorPreviewPanel and Module3DModal.
+ * Unified furniture 3D viewer with camera controls, projection toggle, wireframe,
+ * color mode, and part inspector (click mesh / list → highlight + dims).
  * Requires WebGL (Three.js / React Three Fiber). No CSS fallback.
  */
 
 import {
+  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -12,12 +13,15 @@ import {
 } from 'react';
 import {
   ModuleScene3D,
+  PartInspector,
+  PartList,
   canUseWebGL,
   materialColorMap,
   type BoardColorMode,
   type MaterialColorLookup,
 } from '../preview3d';
 import type { ResolvedBoardPart } from '@muebles/domain';
+import '../preview3d/partInspector.css';
 
 export type Furniture3DViewerProps = {
   /** Board parts to render (from domain preview resolution). */
@@ -44,6 +48,11 @@ export type Furniture3DViewerProps = {
   readonly testId?: string;
   /** Hide the control bar entirely. Default: false. */
   readonly hideControls?: boolean;
+  /**
+   * Show part list + inspector chrome (click mesh or row).
+   * Default true. Set false for compact embeds that only need the canvas.
+   */
+  readonly showPartInspector?: boolean;
 };
 
 export function Furniture3DViewer({
@@ -59,6 +68,7 @@ export function Furniture3DViewer({
   style,
   testId = 'furniture-3d-viewer',
   hideControls = false,
+  showPartInspector = true,
 }: Furniture3DViewerProps): ReactNode {
   const webglAvailable = useMemo(() => canUseWebGL(), []);
   const [colorMode, setColorMode] = useState<BoardColorMode>(initialColorMode);
@@ -68,11 +78,25 @@ export function Furniture3DViewer({
     readonly type: 'front' | 'top' | 'side' | 'isometric';
     readonly ts: number;
   } | null>(null);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [isolateSelected, setIsolateSelected] = useState(false);
 
   const materialColorsMemo = useMemo(
     () => materialColors ?? materialColorMap([]),
     [materialColors],
   );
+
+  const selectedPart = useMemo(
+    () => parts.find((p) => p.id === selectedPartId) ?? null,
+    [parts, selectedPartId],
+  );
+
+  // Drop selection if the part disappears (draft/BOM change).
+  useEffect(() => {
+    if (selectedPartId && !parts.some((p) => p.id === selectedPartId)) {
+      setSelectedPartId(null);
+    }
+  }, [parts, selectedPartId]);
 
   const showControls = !hideControls;
 
@@ -279,20 +303,54 @@ Common causes:
         </div>
       )}
 
-      {/* 3D Canvas viewport */}
-      <div className="mt-4 mb-4" data-testid={`${testId}-viewport`}>
-        <ModuleScene3D
-          parts={parts}
-          width={width}
-          height={height}
-          depth={depth}
-          colorMode={colorMode}
-          materialColors={materialColorsMemo}
-          cameraView={cameraView}
-          cameraType={projection}
-          showWireframe={showWireframe}
-          data-testid={`${testId}-canvas`}
-        />
+      {/* 3D canvas + optional part list / inspector */}
+      <div
+        className={
+          showPartInspector
+            ? 'furniture-3d-viewer__body furniture-3d-viewer__body--with-inspector'
+            : 'furniture-3d-viewer__body'
+        }
+        data-testid={`${testId}-viewport`}
+      >
+        <div className="furniture-3d-viewer__scene">
+          <ModuleScene3D
+            parts={parts}
+            width={width}
+            height={height}
+            depth={depth}
+            colorMode={colorMode}
+            materialColors={materialColorsMemo}
+            cameraView={cameraView}
+            cameraType={projection}
+            showWireframe={showWireframe}
+            selectedPartId={showPartInspector ? selectedPartId : null}
+            onSelectPart={
+              showPartInspector ? setSelectedPartId : undefined
+            }
+            isolateSelected={showPartInspector && isolateSelected}
+          />
+        </div>
+        {showPartInspector ? (
+          <aside
+            className="furniture-3d-viewer__aside"
+            aria-label="Inspector de piezas"
+            data-testid={`${testId}-inspector-aside`}
+          >
+            <PartList
+              parts={parts}
+              selectedPartId={selectedPartId}
+              onSelectPart={setSelectedPartId}
+              testId={`${testId}-part-list`}
+            />
+            <PartInspector
+              part={selectedPart}
+              onClear={() => setSelectedPartId(null)}
+              isolateSelected={isolateSelected}
+              onIsolateChange={setIsolateSelected}
+              testId={`${testId}-part-inspector`}
+            />
+          </aside>
+        ) : null}
       </div>
     </div>
   );
