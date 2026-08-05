@@ -1755,22 +1755,19 @@ function AppContent({
               ? uploadCatalogImage
               : undefined
           }
-          boardEditorSlot={
-            editingModuleId && catalog
-              ? (() => {
-                  const mod = modules.find((m) => m.id === editingModuleId);
-                  if (!mod) return undefined;
-                  return (
-                    <BoardEditor
-                      module={mod}
-                      catalog={catalog}
-                      moduleWidth={mod.externalDims?.width}
-                      moduleHeight={mod.externalDims?.height}
-                      moduleDepth={mod.externalDims?.depth}
-                      onOverridesChange={handleOverridesChange}
-                    />
-                  );
-                })()
+          renderBoardEditor={
+            catalog
+              ? ({ module, compositionKey }) => (
+                  <BoardEditor
+                    module={module}
+                    catalog={catalog}
+                    moduleWidth={module.externalDims?.width}
+                    moduleHeight={module.externalDims?.height}
+                    moduleDepth={module.externalDims?.depth}
+                    compositionKey={compositionKey}
+                    onOverridesChange={handleOverridesChange}
+                  />
+                )
               : undefined
           }
           boardOverrides={boardOverrides}

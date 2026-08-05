@@ -44,11 +44,14 @@ import {
 } from '../common';
 import '../catalogs/catalogs.css';
 import {
+  draftToModule,
   emptyCategoryDraft,
   emptyHardwareLineDraft,
   emptyModuleDraft,
   filterModulesByQuery,
   flattenCategoriesForSelect,
+  mergeBoardOverridesIntoDraft,
+  moduleCompositionKey,
   moduleHardwareGridInputId,
   moduleToDraft,
   nextGridEnterTarget,
@@ -144,11 +147,19 @@ export interface ModulesScreenProps {
   /** Resolve media path for preview. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
   /**
-   * F072: Board-first editor slot. When provided, the Components tab shows
-   * the BoardEditor instead of the legacy components panel. The shell
-   * constructs this from BoardEditor (apps/web).
+   * Static board slot (tests / legacy). Prefer `renderBoardEditor` so the
+   * canvas follows the live draft (structure + components before save).
    */
   readonly boardEditorSlot?: ReactNode;
+  /**
+   * Board-first editor for the **current draft** Module. Called on each
+   * Components-tab render with a live module + draft-only composition key
+   * (so formula edits re-resolve without remounting on BoardEditor drags).
+   */
+  readonly renderBoardEditor?: (args: {
+    readonly module: Module;
+    readonly compositionKey: string;
+  }) => ReactNode;
   /**
    * Gap #1: overrides derived from the BoardEditor, keyed by componentId.
    * Merged into the module draft on save so board edits persist.
@@ -188,6 +199,7 @@ export function ModulesScreen({
   onUploadImage,
   resolveImageUrl = (u) => u,
   boardEditorSlot,
+  renderBoardEditor,
   boardOverrides,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
@@ -598,6 +610,42 @@ export function ModulesScreen({
     }));
   };
 
+  /** Draft-only module (no transient boardOverrides) — composition fingerprint. */
+  const draftBoardModule = useMemo(
+    () => draftToModule(editingId ?? 'module-draft', draft),
+    [editingId, draft],
+  );
+
+  /** Live Module for resolveBom: draft + BoardEditor pose overrides. */
+  const liveBoardModule = useMemo(
+    () =>
+      draftToModule(
+        editingId ?? 'module-draft',
+        mergeBoardOverridesIntoDraft(draft, boardOverrides),
+      ),
+    [editingId, draft, boardOverrides],
+  );
+
+  const boardCompositionKey = useMemo(
+    () => moduleCompositionKey(draftBoardModule),
+    [draftBoardModule],
+  );
+
+  const resolvedBoardEditorSlot = useMemo(() => {
+    if (renderBoardEditor) {
+      return renderBoardEditor({
+        module: liveBoardModule,
+        compositionKey: boardCompositionKey,
+      });
+    }
+    return boardEditorSlot;
+  }, [
+    renderBoardEditor,
+    liveBoardModule,
+    boardCompositionKey,
+    boardEditorSlot,
+  ]);
+
   const validate = (): string | null => {
     const codeErr = validateModuleCode(
       draft.code,
@@ -668,21 +716,14 @@ export function ModulesScreen({
       return;
     }
     setError(null);
+    const draftWithOverrides = mergeBoardOverridesIntoDraft(
+      draft,
+      boardOverrides,
+    );
     if (editingId) {
-      // Gap #1: merge BoardEditor overrides into the draft's components.
-      const draftWithOverrides: ModuleDraft = boardOverrides
-        ? {
-            ...draft,
-            components: draft.components.map((c) =>
-              boardOverrides[c.componentId]
-                ? { ...c, overrides: boardOverrides[c.componentId] as ModuleDraft['components'][number]['overrides'] }
-                : c,
-            ),
-          }
-        : draft;
       onUpdate(editingId, draftWithOverrides);
     } else {
-      onCreate(draft);
+      onCreate(draftWithOverrides);
     }
     // Use forceCloseEditor: we just saved, no dirty-discard warn.
     forceCloseEditor();
@@ -923,7 +964,7 @@ export function ModulesScreen({
             previewBlocked={previewBlocked}
             missingGroups={missingGroups}
             groupLabels={groupLabels}
-            boardEditorSlot={boardEditorSlot}
+            boardEditorSlot={resolvedBoardEditorSlot}
           />
         );
 

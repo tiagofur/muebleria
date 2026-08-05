@@ -70,9 +70,9 @@ export type ModuleEditorFormProps = {
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   /**
-   * F072: Board-first editor slot. When provided, replaces the Components tab
-   * content with the BoardEditor (canvas + properties panel). The shell
-   * (apps/web) constructs this from BoardEditor which has access to editorStore.
+   * Board-first editor slot (canvas + properties). When provided, it is shown
+   * **below** the Components instance list — never replaces “Agregar componente”.
+   * The shell (apps/web) constructs this from BoardEditor + editorStore.
    */
   readonly boardEditorSlot?: ReactNode;
 };
@@ -177,21 +177,24 @@ export function ModuleEditorForm({
         hidden={editorTab !== 'structure'}
       />
 
-      {/* F072: Board-first editor replaces Components tab when slot is provided. */}
+      {/* List + “Agregar” always; BoardEditor coexists below (never replaces). */}
+      <ModuleEditorComponentsPanel
+        draft={draft}
+        setDraft={setDraft}
+        catalogComponents={catalogComponents}
+        composedEnabled={composedEnabled}
+        onRequestAdd={onRequestAddComponent}
+        hidden={editorTab !== 'components'}
+      />
       {boardEditorSlot && editorTab === 'components' ? (
-        <div className="module-editor__board-slot" data-testid="module-editor-board-slot">
+        <div
+          className="module-editor__board-slot"
+          data-testid="module-editor-board-slot"
+          data-hybrid="true"
+        >
           {boardEditorSlot}
         </div>
-      ) : (
-        <ModuleEditorComponentsPanel
-          draft={draft}
-          setDraft={setDraft}
-          catalogComponents={catalogComponents}
-          composedEnabled={composedEnabled}
-          onRequestAdd={onRequestAddComponent}
-          hidden={editorTab !== 'components'}
-        />
-      )}
+      ) : null}
 
       <ModuleEditorMeasuresPanel
         draft={draft}

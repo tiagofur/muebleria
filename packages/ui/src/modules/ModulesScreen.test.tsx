@@ -321,6 +321,83 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.queryByTestId('module-editor-tab-composition')).toBeNull();
   });
 
+  it('hybrid Components tab: keeps Agregar componente when boardEditorSlot is set', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      boardEditorSlot: (
+        <div data-testid="fake-board-editor">Board canvas</div>
+      ),
+    });
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/ }));
+    await screen.findByRole('dialog');
+
+    await user.click(screen.getByTestId('module-editor-tab-components'));
+
+    const componentsPanel = screen.getByTestId(
+      'module-editor-panel-components',
+    );
+    expect(componentsPanel.hidden).toBe(false);
+    // BoardEditor must not replace the instance chrome (P0 hybrid).
+    expect(screen.getByTestId('add-component-btn')).toBeTruthy();
+    expect(
+      within(componentsPanel).getByText(/Puertas, entrepaños/i),
+    ).toBeTruthy();
+    expect(screen.getByTestId('module-editor-board-slot')).toBeTruthy();
+    expect(screen.getByTestId('fake-board-editor')).toBeTruthy();
+
+    // Leaving the tab unmounts the board slot (avoids idle WebGL).
+    await user.click(screen.getByTestId('module-editor-tab-general'));
+    expect(screen.queryByTestId('module-editor-board-slot')).toBeNull();
+  });
+
+  it('renderBoardEditor receives a live Module from the current draft', async () => {
+    const user = userEvent.setup();
+    const seen: Module[] = [];
+    const compositionKeys: string[] = [];
+    renderScreen({
+      structures: [
+        {
+          id: 'struct-1',
+          code: 'STR-1',
+          name: 'Cuerpo base',
+          components: [{ componentId: 'comp-lat', quantity: 2 }],
+        },
+      ],
+      renderBoardEditor: ({ module: mod, compositionKey }) => {
+        seen.push(mod);
+        compositionKeys.push(compositionKey);
+        return (
+          <div data-testid="live-board-editor" data-structure={mod.structureId ?? ''}>
+            live:{mod.structureId}:{mod.components?.length ?? 0}
+          </div>
+        );
+      },
+    });
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/ }));
+    await screen.findByRole('dialog');
+
+    // Pick a structure so composed mode is enabled, then open Components.
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
+    const structurePicker = screen.getByTestId('structure-picker') as HTMLSelectElement;
+    await user.selectOptions(structurePicker, 'struct-1');
+
+    await user.click(screen.getByTestId('module-editor-tab-components'));
+    expect(screen.getByTestId('live-board-editor')).toBeTruthy();
+    expect(screen.getByTestId('add-component-btn')).toBeTruthy();
+
+    const last = seen[seen.length - 1];
+    expect(last).toBeTruthy();
+    expect(last!.id).toBe('mod-1');
+    expect(last!.structureId).toBe('struct-1');
+    // Fixture module has 2 catalog components in draft after open-from-edit.
+    expect(last!.components?.length).toBe(2);
+    expect(compositionKeys[compositionKeys.length - 1]).toContain('struct-1');
+  });
+
   it('general panel exposes furnitureType select (default inferior) and persists on save (#109)', async () => {
     const user = userEvent.setup();
     const { onCreate } = renderScreen();

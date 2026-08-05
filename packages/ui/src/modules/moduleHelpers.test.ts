@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Module, OptionGroup } from '@muebles/domain';
 import {
   defaultOptionChoicesForModule,
+  draftToModule,
   edgesFromFlags,
   emptyModuleDraft,
   filterModulesByQuery,
@@ -9,9 +10,13 @@ import {
   flagsFromEdges,
   findModuleCodeConflict,
   formatModuleMoney,
+  instanceOverridesSummary,
+  mergeBoardOverridesIntoDraft,
+  moduleCompositionKey,
   nextGridEnterTarget,
   modulePartGridInputId,
   moduleToDraft,
+  patchInstanceOverrides,
   optionGroupsForBoardParts,
   optionGroupsForHardware,
   SEED_MODULE_CODES,
@@ -133,6 +138,94 @@ describe('edges / draft mapping', () => {
     expect(d.components).toEqual([]);
     expect(d.code).toBe('');
     expect(d.categoryId).toBe('');
+  });
+
+  it('draftToModule maps structure + component instances (live board path)', () => {
+    const draft = {
+      ...emptyModuleDraft(),
+      code: 'MOD-X',
+      name: 'Test',
+      structureId: 'struct-1',
+      externalWidth: '600',
+      externalHeight: '720',
+      externalDepth: '560',
+      components: [
+        {
+          componentId: 'comp-door',
+          quantity: 2,
+          placementOverride: 'puerta',
+        },
+      ],
+    };
+    const mod = draftToModule('mod-1', draft);
+    expect(mod.structureId).toBe('struct-1');
+    expect(mod.components).toEqual([
+      {
+        componentId: 'comp-door',
+        quantity: 2,
+        placementOverride: 'puerta',
+        overrides: undefined,
+      },
+    ]);
+    expect(mod.externalDims).toEqual({ width: 600, height: 720, depth: 560 });
+
+    const withOv = mergeBoardOverridesIntoDraft(draft, {
+      'comp-door': { xFormula: '10', rotateY: 90 },
+    });
+    expect(withOv.components[0]?.overrides).toEqual({
+      xFormula: '10',
+      rotateY: 90,
+    });
+    const modOv = draftToModule('mod-1', withOv);
+    expect(modOv.components?.[0]?.overrides).toEqual({
+      xFormula: '10',
+      rotateY: 90,
+    });
+
+    // Formula overrides change composition key (list editor re-resolve).
+    expect(moduleCompositionKey(mod)).not.toBe(moduleCompositionKey(modOv));
+    expect(moduleCompositionKey(mod)).toContain('struct-1');
+    expect(moduleCompositionKey(mod)).toContain('comp-door:2:puerta');
+
+    const moreComps = draftToModule('mod-1', {
+      ...draft,
+      components: [
+        ...draft.components,
+        { componentId: 'comp-shelf', quantity: 1 },
+      ],
+    });
+    expect(moduleCompositionKey(moreComps)).not.toBe(moduleCompositionKey(mod));
+  });
+
+  it('patchInstanceOverrides clears empty fields and summarizes', () => {
+    const withX = patchInstanceOverrides(undefined, { xFormula: 'PW - T' });
+    expect(withX).toEqual({ xFormula: 'PW - T' });
+    expect(instanceOverridesSummary(withX)).toContain('X=PW - T');
+
+    const cleared = patchInstanceOverrides(withX, { xFormula: '' });
+    expect(cleared).toBeUndefined();
+    expect(instanceOverridesSummary(undefined)).toBe('automático');
+
+    const withRot = patchInstanceOverrides(undefined, { rotateY: 90 });
+    expect(withRot).toEqual({ rotateY: 90 });
+    expect(patchInstanceOverrides(withRot, { rotateY: null })).toBeUndefined();
+  });
+
+  it('moduleToDraft preserves instance overrides', () => {
+    const draft = moduleToDraft({
+      id: 'm1',
+      code: 'M',
+      name: 'N',
+      components: [
+        {
+          componentId: 'c1',
+          quantity: 1,
+          overrides: { yFormula: '50' },
+        },
+      ],
+      hardwareLines: [],
+    });
+    expect(draft.components[0]?.overrides).toEqual({ yFormula: '50' });
   });
 
   it('flattens category tree for selects', () => {
