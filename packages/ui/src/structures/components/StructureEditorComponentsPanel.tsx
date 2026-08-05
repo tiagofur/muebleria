@@ -7,6 +7,7 @@ import type { Component } from '@muebles/domain';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { Furniture3DViewer } from '../../common';
+import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveStructure3DPreview } from '../structure3dPreview';
 import type { StructureDraft } from '../structureDraft';
@@ -172,6 +173,18 @@ export function StructureEditorComponentsPanel({
                         </select>
                       </div>
                     </div>
+                    <InstanceOverridesEditor
+                      overrides={comp.overrides}
+                      testIdSuffix={String(idx)}
+                      onChange={(next) => {
+                        setDraft((prev) => ({
+                          ...prev,
+                          components: prev.components.map((c, i) =>
+                            i === idx ? { ...c, overrides: next } : c,
+                          ),
+                        }));
+                      }}
+                    />
                   </div>
                 );
               })}
@@ -235,7 +248,13 @@ export function StructureEditorComponentsPanel({
             ) : null}
 
             {!preview.empty ? (
-              <div style={{ height: '320px', width: '100%', position: 'relative' }}>
+              <div
+                style={{
+                  minHeight: '20rem',
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
                 <Furniture3DViewer
                   parts={preview.parts}
                   width={preview.width}
