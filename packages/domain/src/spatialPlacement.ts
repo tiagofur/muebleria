@@ -71,18 +71,21 @@ export function defaultPoseForPlacement(
       };
     }
     case 'trasera':
-      return { ...zero, x: T, y: 0, z: T, rotateX: 90 };
+      // rotateX:270 (not 90) so the length grows +Y (up) from the pose instead
+      // of -Y (down through the floor). Same axis mapping as 90 (thick→Z, length→Y)
+      // but the box corner (0,0,0) local maps above the pose. JD-W3 follow-up.
+      return { ...zero, x: T, y: 0, z: T, rotateX: 270 };
     case 'frontal':
       return {
         ...zero,
         x: T,
         y: Math.max(0, PD - T),
         z: T,
-        rotateX: 90,
+        rotateX: 270,
       };
     case 'puerta':
     case 'frente_cajon':
-      return { ...zero, x: 2, y: PD, z: 2, rotateX: 90 };
+      return { ...zero, x: 2, y: PD, z: 2, rotateX: 270 };
     case 'interno':
       return { ...zero, x: T, y: T, z: 150 + i * 200 };
     case 'custom':

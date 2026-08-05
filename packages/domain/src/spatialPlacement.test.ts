@@ -41,9 +41,12 @@ describe('defaultPoseForPlacement', () => {
     expect(right.x).toBe(582);
   });
 
-  it('puts door at front face', () => {
+  it('puts door at front face and grows upward (rotateX 270, not 90)', () => {
     const door = defaultPoseForPlacement('puerta', dims, 0, 1);
     expect(door.y).toBe(560);
-    expect(door.rotateX).toBe(90);
+    // rotateX:270 (not 90) keeps the axis mapping (thick→Z, length→Y) but makes
+    // the box grow +Y from the pose. With 90 the door grew downward through the
+    // floor (JD-W3 follow-up). Verified against the real Three.js matrix.
+    expect(door.rotateX).toBe(270);
   });
 });

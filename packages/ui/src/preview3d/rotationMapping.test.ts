@@ -76,7 +76,7 @@ describe('placement rotation → Three.js axis mapping (JD-W3)', () => {
     expect(dominantAxis(m.widthAxis)).toBe('Z');
   });
 
-  it('trasera stays as a vertical BACK panel (thick→Z, length→Y, width→X)', () => {
+  it('trasera stays as a vertical BACK panel (thick→Z, length→Y, width→X) and grows upward', () => {
     const pose = defaultPoseForPlacement('trasera', dims, 0, 1);
     const m = axisMapping(pose.rotateX, pose.rotateY, pose.rotateZ);
 
@@ -84,6 +84,22 @@ describe('placement rotation → Three.js axis mapping (JD-W3)', () => {
     expect(dominantAxis(m.thicknessAxis)).toBe('Z');
     expect(dominantAxis(m.lengthAxis)).toBe('Y');
     expect(dominantAxis(m.widthAxis)).toBe('X');
+    // The box corner (0,0,0) local must grow +Y from the pose, not -Y through
+    // the floor. lengthAxis.y > 0 is the JD-W3 follow-up regression guard.
+    expect(m.lengthAxis.y).toBeGreaterThan(0);
+  });
+
+  it('puerta stands vertical at the FRONT and grows upward (not through the floor)', () => {
+    const pose = defaultPoseForPlacement('puerta', dims, 0, 1);
+    const m = axisMapping(pose.rotateX, pose.rotateY, pose.rotateZ);
+
+    expect(dominantAxis(m.thicknessAxis)).toBe('Z');
+    expect(dominantAxis(m.lengthAxis)).toBe('Y');
+    expect(dominantAxis(m.widthAxis)).toBe('X');
+    // Regression: rotateX must be 270, not 90 — with 90 the door grew downward
+    // (Y from -718 to 2), piercing the floor. Verified against the Three matrix.
+    expect(pose.rotateX).toBe(270);
+    expect(m.lengthAxis.y).toBeGreaterThan(0);
   });
 
   it('base stays horizontal as a BOTTOM panel (thick→Y, width→X, length→Z)', () => {
