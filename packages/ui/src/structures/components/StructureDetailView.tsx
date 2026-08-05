@@ -8,7 +8,7 @@
 
 import type { ReactNode } from 'react';
 import type { Component, Structure } from '@muebles/domain';
-import { ChevronLeft, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
+import { Box, ChevronLeft, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
 import { StructureRevisionBadge } from './StructureRevisionBadge';
 
 export type StructureDetailViewProps = {
@@ -16,6 +16,7 @@ export type StructureDetailViewProps = {
   readonly catalogComponents: readonly Component[];
   readonly onBack: () => void;
   readonly onEdit: (s: Structure) => void;
+  readonly onView3D?: (s: Structure) => void;
   readonly onDeactivate?: (id: string) => void;
   readonly onReactivate?: (id: string) => void;
   readonly onDelete?: (id: string) => void;
@@ -31,6 +32,7 @@ export function StructureDetailView({
   catalogComponents,
   onBack,
   onEdit,
+  onView3D,
   onDeactivate,
   onReactivate,
   onDelete,
@@ -96,6 +98,17 @@ export function StructureDetailView({
           </div>
         </div>
         <div className="workspace-chrome__actions">
+          {onView3D ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => onView3D(s)}
+              data-testid="structure-detail-view-3d"
+            >
+              <Box size={16} strokeWidth={1.5} aria-hidden />
+              Vista 3D
+            </button>
+          ) : null}
           {canMutate ? (
             <>
               <button

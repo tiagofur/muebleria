@@ -313,5 +313,34 @@ describe('StructuresScreen', () => {
     fireEvent.click(previewTab);
     expect(screen.getByTestId('structure-editor-panel-preview3d')).toBeTruthy();
   });
+
+  it('shows a Vista 3D button in the detail that opens the 3D modal', () => {
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        catalogMaterials={[]}
+        catalogEdges={[]}
+        catalogHardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    // Click on the structure card summary to open the detail view.
+    fireEvent.click(screen.getByText('EST-GAB-720'));
+
+    // The detail chrome exposes a "Vista 3D" button (read-only, no edit needed).
+    const view3DBtn = screen.getByTestId('structure-detail-view-3d');
+    expect(view3DBtn).toBeTruthy();
+
+    // Clicking it opens the 3D modal.
+    fireEvent.click(view3DBtn);
+    expect(screen.getByTestId('structure-3d-modal')).toBeTruthy();
+  });
 });
 

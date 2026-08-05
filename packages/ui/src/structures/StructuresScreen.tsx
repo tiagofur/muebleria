@@ -32,6 +32,7 @@ import {
   validateUniqueCode,
 } from '../catalogs';
 import { ModuleComponentAdderModal } from '../modules/components/ModuleComponentAdderModal';
+import { Structure3DModal } from './components/Structure3DModal';
 import { StructureDetailView } from './components/StructureDetailView';
 import { StructureEditorForm } from './components/StructureEditorForm';
 import { StructureListView } from './components/StructureListView';
@@ -142,6 +143,8 @@ export function StructuresScreen({
     currentSelectionId: expandedId,
   });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [viewerStructure, setViewerStructure] = useState<Structure | null>(null);
+  const [show3DModal, setShow3DModal] = useState(false);
   const [previewPresetId, setPreviewPresetId] = useState('');
   const [addComponentOpen, setAddComponentOpen] = useState(false);
   const [componentSearch, setComponentSearch] = useState('');
@@ -418,6 +421,10 @@ export function StructuresScreen({
                 catalogComponents={catalogComponents}
                 onBack={() => setSelectedId(null)}
                 onEdit={handleEdit}
+                onView3D={(s) => {
+                  setViewerStructure(s);
+                  setShow3DModal(true);
+                }}
                 onDeactivate={canMutate ? onDeactivate : undefined}
                 onReactivate={canMutate ? onReactivate : undefined}
                 onDelete={
@@ -515,6 +522,16 @@ export function StructuresScreen({
               </div>
             </div>
           </Modal>
+
+          <Structure3DModal
+            open={show3DModal}
+            structure={viewerStructure}
+            catalog={catalogInput}
+            onClose={() => {
+              setShow3DModal(false);
+              setViewerStructure(null);
+            }}
+          />
         </>
       }
     />
