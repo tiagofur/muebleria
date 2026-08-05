@@ -2,7 +2,12 @@
  * Structure editor — component instances tab.
  */
 
-import { useMemo, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import {
+  useMemo,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import type { Component } from '@muebles/domain';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
@@ -41,6 +46,7 @@ export function StructureEditorComponentsPanel({
       previewPresetId || undefined,
     );
   }, [draft, catalogInput, previewPresetId]);
+
   return (
     <div
       role="tabpanel"
@@ -49,23 +55,15 @@ export function StructureEditorComponentsPanel({
       hidden={hidden}
     >
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: preview ? 'repeat(auto-fit, minmax(300px, 1fr))' : '1fr',
-          gap: '1.5rem',
-          alignItems: 'start',
-        }}
+        className={
+          preview
+            ? 'structure-components-layout structure-components-layout--with-preview'
+            : 'structure-components-layout'
+        }
       >
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '0.75rem',
-            }}
-          >
-            <h4 className="module-editor__section-title" style={{ margin: 0 }}>
+        <div className="structure-components-list">
+          <div className="structure-editor-panel-header">
+            <h4 className="module-editor__section-title">
               Componentes ({draft.components.length})
             </h4>
             <button
@@ -74,14 +72,15 @@ export function StructureEditorComponentsPanel({
               onClick={onRequestAdd}
               data-testid="add-component-btn"
             >
-              <Plus size={14} /> Agregar componente
+              <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar
+              componente
             </button>
           </div>
 
           {draft.components.length === 0 ? (
-            <p className="catalog-empty" style={{ fontSize: 'var(--text-sm)' }}>
-              Sin componentes. Agregá componentes reutilizables a esta estructura
-              compuesta.
+            <p className="catalog-empty">
+              Sin componentes. Agregá componentes reutilizables a esta
+              estructura compuesta.
             </p>
           ) : (
             <div data-testid="component-instance-list">
@@ -93,7 +92,6 @@ export function StructureEditorComponentsPanel({
                   <div
                     key={`${comp.componentId}-${idx}`}
                     className="module-part-card"
-                    style={{ marginBottom: '0.5rem' }}
                     data-testid={`component-instance-${idx}`}
                   >
                     <div className="module-part-card__header">
@@ -106,7 +104,11 @@ export function StructureEditorComponentsPanel({
                             title={`El componente ${comp.componentId} fue eliminado del catálogo. Quitá esta instancia o reactivá el componente.`}
                             data-testid={`orphan-component-${idx}`}
                           >
-                            <AlertTriangle size={14} strokeWidth={1.5} aria-hidden />
+                            <AlertTriangle
+                              size={14}
+                              strokeWidth={1.5}
+                              aria-hidden
+                            />
                             Componente eliminado
                           </span>
                         )}
@@ -117,7 +119,9 @@ export function StructureEditorComponentsPanel({
                         onClick={() => {
                           setDraft((prev) => ({
                             ...prev,
-                            components: prev.components.filter((_, i) => i !== idx),
+                            components: prev.components.filter(
+                              (_, i) => i !== idx,
+                            ),
                           }));
                         }}
                         data-testid={`remove-component-${idx}`}
@@ -156,7 +160,8 @@ export function StructureEditorComponentsPanel({
                                 i === idx
                                   ? {
                                       ...c,
-                                      placementOverride: e.target.value || undefined,
+                                      placementOverride:
+                                        e.target.value || undefined,
                                     }
                                   : c,
                               ),
@@ -194,36 +199,16 @@ export function StructureEditorComponentsPanel({
 
         {preview ? (
           <div
-            className="module-part-card"
-            style={{
-              padding: '1rem',
-              backgroundColor: 'var(--bg-surface-elevated, var(--bg-surface))',
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-            }}
+            className="module-part-card structure-components-3d"
             data-testid="structure-components-3d-preview"
           >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '0.75rem',
-              }}
-            >
-              <h4 className="module-editor__section-title" style={{ margin: 0 }}>
-                Vista 3D en vivo
-              </h4>
+            <div className="structure-editor-panel-header">
+              <h4 className="module-editor__section-title">Vista 3D en vivo</h4>
               {preview.presets.length > 0 && onPreviewPresetChange ? (
                 <select
+                  className="structure-components-3d__preset"
                   value={previewPresetId || preview.presetId || ''}
                   onChange={(e) => onPreviewPresetChange(e.target.value)}
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    fontSize: 'var(--text-xs)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-default)',
-                  }}
                   data-testid="structure-components-preset-select"
                 >
                   {preview.presets.map((pr) => (
@@ -242,19 +227,13 @@ export function StructureEditorComponentsPanel({
             ) : null}
 
             {preview.empty && !preview.error ? (
-              <p className="catalog-empty" style={{ fontSize: 'var(--text-xs)' }}>
+              <p className="catalog-empty">
                 Vista previa 3D vacía. Agregá componentes para visualizar.
               </p>
             ) : null}
 
             {!preview.empty ? (
-              <div
-                style={{
-                  minHeight: '20rem',
-                  width: '100%',
-                  position: 'relative',
-                }}
-              >
+              <div className="structure-components-3d__viewport">
                 <Furniture3DViewer
                   parts={preview.parts}
                   width={preview.width}

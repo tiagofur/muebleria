@@ -150,6 +150,8 @@ moduleHelpers, InstanceOverridesEditor, ModulesScreen, StructuresScreen, typeche
 - Tools: `role=group` + `aria-pressed` (no tablist inválido).
 - Módulo: tab ids = panel labels; Costo tab oculto si hay aside sticky.
 - BoardFinishPickers: CSS + tokens canónicos.
+- C1: Estructuras/Componentes list title `h2` (no dual h1).
+- C2: Structure editor panels sin layout inline (CSS en structures.css).
 
 
 

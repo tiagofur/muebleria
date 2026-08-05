@@ -42,7 +42,7 @@ export function ComponentListView({
     <>
       <header className="catalog-page__header">
         <div>
-          <h1 className="catalog-page__title">Componentes</h1>
+          <h2 className="catalog-page__title">Componentes</h2>
           <p className="page-header__subtitle">
             Piezas reutilizables de ingeniería para composición de muebles
           </p>

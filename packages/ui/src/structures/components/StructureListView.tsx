@@ -41,7 +41,7 @@ export function StructureListView({
     <>
       <header className="catalog-page__header">
         <div>
-          <h1 className="catalog-page__title">Estructuras</h1>
+          <h2 className="catalog-page__title">Estructuras</h2>
           <p className="page-header__subtitle">
             Cuerpos de ingeniería reutilizables para el taller
           </p>
