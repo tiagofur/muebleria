@@ -10,7 +10,10 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { ChevronDown, ChevronRight, Lightbulb, RotateCcw } from 'lucide-react';
 import type { PlacementDims, ResolvedBoardPart } from '@muebles/domain';
-import type { MaterialColorLookup } from '../../preview3d';
+import type {
+  MaterialColorLookup,
+  MaterialTextureLookup,
+} from '../../preview3d';
 import { FurnitureScene3D } from '../../preview3d';
 import type { ComponentDraft } from '../componentDraft';
 
@@ -21,6 +24,7 @@ export type ComponentEditorGeometryPanelProps = {
   readonly hidden: boolean;
   readonly previewParts: readonly ResolvedBoardPart[];
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
   readonly containerDims: PlacementDims;
   readonly onContainerDimsChange: (dims: PlacementDims) => void;
   readonly showInContext: boolean;
@@ -73,6 +77,7 @@ export function ComponentEditorGeometryPanel({
   hidden,
   previewParts,
   materialColors,
+  materialTextures,
   containerDims,
   onContainerDimsChange,
   showInContext,
@@ -81,6 +86,7 @@ export function ComponentEditorGeometryPanel({
   // Position + Rotation are advanced; collapsed by default so a first-time
   // carpenter sees only the base dimensions, size formulas, and the 3D preview.
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showOutlines, setShowOutlines] = useState(true);
 
   // Inline dimension validation (P1): validate on blur, never coerce silently.
   // A wrong mm is the workshop's most expensive mistake — surface it at the
@@ -110,11 +116,11 @@ export function ComponentEditorGeometryPanel({
           Variables disponibles para fórmulas (matemática estándar +, -, *, /, ())
         </p>
         <div className="component-geometry__formula-vars">
-          <span className="badge" title="Ancho total del contenedor/mueble"><code>PW</code>: Ancho Mueble</span>
-          <span className="badge" title="Alto total del contenedor/mueble"><code>PH</code>: Alto Mueble</span>
-          <span className="badge" title="Profundidad del contenedor/mueble"><code>PD</code>: Profundidad</span>
-          <span className="badge" title="Espesor del tablero"><code>T</code>: Espesor</span>
-          <span className="badge" title="Índice de la copia (0, 1, 2...)"><code>i</code>: Índice Copia</span>
+          <span title="Ancho total del contenedor/mueble"><code>PW</code>: Ancho Mueble</span>
+          <span title="Alto total del contenedor/mueble"><code>PH</code>: Alto Mueble</span>
+          <span title="Profundidad del contenedor/mueble"><code>PD</code>: Profundidad</span>
+          <span title="Espesor del tablero"><code>T</code>: Espesor</span>
+          <span title="Índice de la copia (0, 1, 2...)"><code>i</code>: Índice Copia</span>
         </div>
       </div>
 
@@ -460,6 +466,15 @@ export function ComponentEditorGeometryPanel({
             />
             <span>Mostrar en el mueble</span>
           </label>
+          <label className="component-geometry__toggle">
+            <input
+              type="checkbox"
+              checked={showOutlines}
+              onChange={(e) => setShowOutlines(e.target.checked)}
+              data-testid="component-geometry-outlines-toggle"
+            />
+            <span>Contornos</span>
+          </label>
         </div>
 
         <FurnitureScene3D
@@ -482,6 +497,8 @@ export function ComponentEditorGeometryPanel({
           showFloor={false}
           colorMode="material"
           materialColors={materialColors}
+          materialTextures={materialTextures}
+          showOutlines={showOutlines}
           testId="component-geometry-3d"
         />
       </div>

@@ -85,10 +85,11 @@ export function evaluatePartFormula(
     });
   }
 
-  // Validate allowed characters: numbers, W, H, D, P, T, L, i, +, -, *, /, (, ), and whitespace.
+  // Validate allowed characters: digits, decimal point, W/H/D/P/T/L/i, operators, whitespace.
+  // Decimal point is required for literals like "1.5" or "W * 1.5" (half-thickness, margins, etc.).
   const clean = trimmed.replace(/\s+/g, '');
-  if (!/^[0-9WHDTPLi+\-*/()]+$/.test(clean)) {
-    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números, W, H, D, P, T, L, i y operadores (+, -, *, /, paréntesis).`, {
+  if (!/^[0-9.WHDTPLi+\-*/()]+$/.test(clean)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, L, i y operadores (+, -, *, /, paréntesis).`, {
       ...contextInfo,
       field: contextInfo?.field,
     });

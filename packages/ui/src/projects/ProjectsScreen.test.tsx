@@ -307,6 +307,27 @@ describe('ProjectsScreen F022', () => {
     expect(onSelectionChange).toHaveBeenCalledWith(null);
   });
 
+  it('draft chrome has a single primary (Enviar) and advanced tools collapsed', async () => {
+    const user = userEvent.setup();
+    renderScreen({ onChangeStatus: vi.fn() });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    const chrome = screen.getByTestId('project-detail-chrome');
+    const primaries = chrome.querySelectorAll('.btn--primary');
+    expect(primaries.length).toBe(1);
+    expect(screen.getByTestId('project-send-quote')).toBeTruthy();
+    // Export stays secondary on draft (disabled until accepted).
+    expect(screen.getByTestId('project-chrome-export').className).not.toMatch(
+      /btn--primary/,
+    );
+    // Advanced tools start closed — kitchen plan not in DOM until tab click.
+    expect(screen.getByTestId('project-quote-tools')).toBeTruthy();
+    expect(screen.queryByTestId('project-tools-panel-kitchen')).toBeNull();
+    await user.click(screen.getByTestId('project-tools-kitchen'));
+    expect(screen.getByTestId('project-tools-panel-kitchen')).toBeTruthy();
+  });
+
   it('opens Modal MD for new project metadata with customer picker', async () => {
     const user = userEvent.setup();
     const { onCreate } = renderScreen();
@@ -510,6 +531,27 @@ describe('ProjectsScreen F022', () => {
     expect(
       screen.getAllByRole('button', { name: /Nueva cotización/i }).length,
     ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filters the list by status chips (Fase 2 UI)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    expect(screen.getByTestId('project-status-chips')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /^Borrador$/i }));
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /^Cotizado$/i }));
+    expect(screen.queryByTestId('project-card-prj-1')).toBeNull();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /^Todos$/i }));
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
   });
 
   it('opens detail from openProjectId prop (Dashboard handoff)', () => {
@@ -856,23 +898,31 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(draft.customerId).toBe('cust-ana');
   });
 
-  it('empty state shows "Crear desde plantilla" when templates exist', () => {
+  it('empty state shows "Crear desde plantilla" as secondary inside EmptyState', () => {
     renderScreen({
       projects: [],
       projectTemplates: [sampleTemplate],
     });
-    expect(screen.getByTestId('empty-from-template-btn')).toBeTruthy();
+    const empty = screen.getByTestId('empty-state');
+    const secondary = screen.getByTestId('empty-from-template-btn');
+    expect(empty.contains(secondary)).toBe(true);
+    expect(secondary.className).not.toMatch(/btn--primary/);
+    // Header primary only — EmptyState primary + secondary without dual primary.
+    const emptyPrimaries = empty.querySelectorAll('.btn--primary');
+    expect(emptyPrimaries.length).toBe(1);
   });
 
-  it('chrome shows "Guardar como plantilla" on draft projects and saves', async () => {
+  it('chrome shows "Guardar como plantilla" under Más and saves', async () => {
     const user = userEvent.setup();
     const { onSaveAsTemplate } = renderScreen({
       projectTemplates: [sampleTemplate],
     });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    const saveBtn = screen.getByTestId('save-as-template-btn-prj-1');
-    await user.click(saveBtn);
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(
+      screen.getByRole('menuitem', { name: /Guardar como plantilla/i }),
+    );
 
     const nameInput = screen.getByTestId(
       'save-as-template-name',

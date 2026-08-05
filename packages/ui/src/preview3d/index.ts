@@ -22,12 +22,32 @@ export {
   colorForMaterialId,
   colorForOptionRole,
   materialColorMap,
+  materialTextureMap,
+  resolveMaterialSurface,
   resolvePartColor,
   sceneFraming,
+  DEFAULT_MATERIAL_SURFACE_MODE,
+  DEFAULT_TEXTURE_TILE_MM,
   type BoardColorMode,
   type BoardPartVisual,
   type MaterialColorLookup,
+  type MaterialSurfaceMode,
+  type MaterialTextureEntry,
+  type MaterialTextureLookup,
 } from './boardPartVisual';
+export {
+  grainUvRepeat,
+  parseHexColor,
+  GRAIN_TILE_MM,
+} from './grainTexture';
+export {
+  PaintModeField,
+  type PaintModeFieldProps,
+} from './PaintModeField';
+export {
+  MaterialSurfaceModeField,
+  type MaterialSurfaceModeFieldProps,
+} from './MaterialSurfaceModeField';
 export {
   layoutProjectRun,
   PROJECT_RUN_GAP_MM,

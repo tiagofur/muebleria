@@ -1,6 +1,7 @@
 /**
- * Materials (MaterialBoard) catalog ABM — list + search + chips + modal SM (F020).
+ * Materials (MaterialBoard) catalog ABM — list + search + chips + modal MD.
  * F027: material links default edge band by id; create-edge shortcut from form.
+ * Fase 3 UI: grouped form (Identidad / Tablero y precio / Vista 3D collapsible).
  */
 
 import {
@@ -16,7 +17,16 @@ import {
   isValidPreviewColor,
   normalizePreviewColor,
 } from '@muebles/domain';
-import { Eye, EyeOff, Layers, Pencil, Plus, SearchX } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Layers,
+  Pencil,
+  Plus,
+  SearchX,
+} from 'lucide-react';
 import {
   CatalogImage,
   EmptyState,
@@ -38,6 +48,10 @@ import { ActiveBadge, CatalogTable, type CatalogColumn } from './CatalogTable';
 import { CatalogPicker } from './CatalogPicker';
 import type { EdgeDraft } from './EdgesCatalog';
 import { extractDominantColorFromImageFile } from './extractDominantColor';
+import {
+  loadImageNaturalSize,
+  suggestTextureTileMmFromImage,
+} from './materialTextureTileSuggest';
 
 import './catalogs.css';
 
@@ -59,6 +73,16 @@ export type MaterialDraft = {
   previewColor: string;
   /** Optional texture media URL for 3D. Empty = none. */
   previewTextureUrl: string;
+  /**
+   * Real-world mm covered by one texture image across width (X / U).
+   * 0 = default client tile.
+   */
+  previewTextureTileWidthMm: number;
+  /**
+   * Real-world mm covered by one texture image along length/veta (Y / V).
+   * 0 = default client tile.
+   */
+  previewTextureTileLengthMm: number;
   notes: string;
 };
 
@@ -84,6 +108,8 @@ const emptyDraft = (): MaterialDraft => ({
   imageUrl: '',
   previewColor: '',
   previewTextureUrl: '',
+  previewTextureTileWidthMm: 0,
+  previewTextureTileLengthMm: 0,
   notes: '',
 });
 
@@ -102,6 +128,8 @@ function toDraft(item: MaterialBoard): MaterialDraft {
     imageUrl: item.imageUrl ?? '',
     previewColor: item.previewColor ?? '',
     previewTextureUrl: item.previewTextureUrl ?? '',
+    previewTextureTileWidthMm: item.previewTextureTileWidthMm ?? 0,
+    previewTextureTileLengthMm: item.previewTextureTileLengthMm ?? 0,
     notes: item.notes ?? '',
   };
 }
@@ -113,6 +141,16 @@ const emptyEdgeDraft = (): EdgeDraft => ({
   costPerMl: 0,
   notes: '',
 });
+
+/** True when the draft already has 3D preview overrides (open advanced on edit). */
+function hasPreview3dConfig(d: MaterialDraft): boolean {
+  return Boolean(
+    d.previewColor.trim() ||
+      d.previewTextureUrl.trim() ||
+      d.previewTextureTileWidthMm > 0 ||
+      d.previewTextureTileLengthMm > 0,
+  );
+}
 
 export interface MaterialsCatalogProps {
   readonly materials: readonly MaterialBoard[];
@@ -180,6 +218,10 @@ export function MaterialsCatalog({
   const [edgeCreateOpen, setEdgeCreateOpen] = useState(false);
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraft>(emptyEdgeDraft);
   const [edgeError, setEdgeError] = useState<string | null>(null);
+  const [tileSuggestBusy, setTileSuggestBusy] = useState(false);
+  const [tileSuggestMsg, setTileSuggestMsg] = useState<string | null>(null);
+  /** Progressive disclosure: color / texture / tile mm (Fase 3 UI). */
+  const [preview3dOpen, setPreview3dOpen] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -203,10 +245,61 @@ export function MaterialsCatalog({
     return map;
   }, [edges]);
 
+  const textureImagePath =
+    draft.previewTextureUrl.trim() || draft.imageUrl.trim() || '';
+
+  const suggestTilesFromImage = async () => {
+    setTileSuggestMsg(null);
+    if (!textureImagePath) {
+      setTileSuggestMsg(
+        'Cargá una foto del material (o activá “Usar foto como textura 3D”) antes de sugerir medidas.',
+      );
+      return;
+    }
+    const url = resolveImageUrl(textureImagePath);
+    if (!url) {
+      setTileSuggestMsg('No se pudo resolver la URL de la imagen.');
+      return;
+    }
+    setTileSuggestBusy(true);
+    try {
+      const { widthPx, heightPx } = await loadImageNaturalSize(url);
+      const suggested = suggestTextureTileMmFromImage({
+        imageWidthPx: widthPx,
+        imageHeightPx: heightPx,
+        boardWidthMm: draft.widthMm,
+        boardLengthMm: draft.lengthMm,
+        baseWidthMm:
+          draft.previewTextureTileWidthMm > 0
+            ? draft.previewTextureTileWidthMm
+            : undefined,
+      });
+      setDraft((prev) => ({
+        ...prev,
+        previewTextureTileWidthMm: suggested.tileWidthMm,
+        previewTextureTileLengthMm: suggested.tileLengthMm,
+      }));
+      setTileSuggestMsg(
+        suggested.mode === 'board'
+          ? `Base desde el tablero: ${suggested.tileWidthMm} × ${suggested.tileLengthMm} mm (foto ≈ cara completa). Ajustá si es un recorte.`
+          : `Base por proporción de la imagen (${widthPx}×${heightPx} px): ${suggested.tileWidthMm} × ${suggested.tileLengthMm} mm. Ajustá si no calza en 3D.`,
+      );
+    } catch {
+      setTileSuggestMsg(
+        'No se pudo leer la imagen. Verificá que la foto cargue bien en el catálogo.',
+      );
+    } finally {
+      setTileSuggestBusy(false);
+    }
+  };
+
   const closeModal = () => {
     setModalOpen(false);
     setEditingId(null);
     setDraft(emptyDraft());
+    setTileSuggestMsg(null);
+    setTileSuggestBusy(false);
+    setPreview3dOpen(false);
     setError(null);
     setEdgeCreateOpen(false);
     setEdgeDraft(emptyEdgeDraft());
@@ -217,6 +310,8 @@ export function MaterialsCatalog({
     setEditingId(null);
     setDraft(emptyDraft());
     setError(null);
+    setPreview3dOpen(false);
+    setTileSuggestMsg(null);
     setEdgeCreateOpen(false);
     setEdgeDraft(emptyEdgeDraft());
     setEdgeError(null);
@@ -231,9 +326,12 @@ export function MaterialsCatalog({
   }, [requestCreateKey]);
 
   const startEdit = (item: MaterialBoard) => {
+    const next = toDraft(item);
     setEditingId(item.id);
-    setDraft(toDraft(item));
+    setDraft(next);
     setError(null);
+    setPreview3dOpen(hasPreview3dConfig(next));
+    setTileSuggestMsg(null);
     setEdgeCreateOpen(false);
     setEdgeDraft(emptyEdgeDraft());
     setEdgeError(null);
@@ -325,6 +423,15 @@ export function MaterialsCatalog({
       ...draft,
       costPerM2: calculatedCost,
       previewColor: normalizedColor ?? '',
+      previewTextureUrl: draft.previewTextureUrl.trim(),
+      previewTextureTileWidthMm:
+        draft.previewTextureTileWidthMm > 0
+          ? draft.previewTextureTileWidthMm
+          : 0,
+      previewTextureTileLengthMm:
+        draft.previewTextureTileLengthMm > 0
+          ? draft.previewTextureTileLengthMm
+          : 0,
     };
 
     if (editingId) {
@@ -431,13 +538,22 @@ export function MaterialsCatalog({
   return (
     <section className="catalog-page" aria-label="Catálogo de materiales">
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Materiales (tableros)</h2>
+        <div>
+          <h2 className="catalog-page__title">Materiales</h2>
+          <p className="page-header__subtitle">
+            Tableros del catálogo (melamina, MDF, etc.)
+          </p>
+        </div>
         <div className="catalog-page__toolbar">
           {canMutate ? (
-          <button type="button" className="btn btn--primary" onClick={startCreate}>
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo material
-          </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={startCreate}
+            >
+              <Plus size={16} strokeWidth={1.5} aria-hidden />
+              Nuevo material
+            </button>
           ) : null}
         </div>
       </div>
@@ -632,7 +748,8 @@ export function MaterialsCatalog({
         open={modalOpen}
         onClose={closeModal}
         title={editingId ? 'Editar material' : 'Nuevo material'}
-        size="sm"
+        size="md"
+        dataTestId="material-form-modal"
         footer={
           <>
             <button type="button" className="btn" onClick={closeModal}>
@@ -647,343 +764,494 @@ export function MaterialsCatalog({
         <form id={formId} className="catalog-form" onSubmit={handleSubmit}>
           {error ? <p className="catalog-form__error">{error}</p> : null}
 
-          <div className="catalog-form__field">
-            <label htmlFor="mat-code">Código</label>
-            <input
-              id="mat-code"
-              value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              autoComplete="off"
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="mat-name">Nombre</label>
-            <input
-              id="mat-name"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="catalog-form__field" data-testid="material-image-field">
-            <label htmlFor="mat-image">Foto</label>
-            <div className="catalog-form__image-row">
-              <CatalogImage
-                src={resolveImageUrl(draft.imageUrl || undefined)}
-                alt={draft.name || 'Material'}
-                size="md"
+          <fieldset className="catalog-form__section">
+            <legend className="catalog-form__section-title">Identidad</legend>
+            <div className="catalog-form__field">
+              <label htmlFor="mat-code">Código</label>
+              <input
+                id="mat-code"
+                value={draft.code}
+                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                autoComplete="off"
+                required
               />
-              {canMutate && onUploadImage ? (
-                <input
-                  id="mat-image"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void (async () => {
-                      try {
-                        const url = await onUploadImage(file);
-                        let previewColor: string | undefined;
-                        try {
-                          previewColor =
-                            await extractDominantColorFromImageFile(file);
-                        } catch {
-                          /* color is optional */
-                        }
-                        setDraft((prev) => ({
-                          ...prev,
-                          imageUrl: url,
-                          // Only auto-fill color when the user left it empty.
-                          ...(previewColor && !prev.previewColor.trim()
-                            ? { previewColor }
-                            : {}),
-                        }));
-                      } catch {
-                        /* shell toasts */
-                      }
-                    })();
-                    e.target.value = '';
-                  }}
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="mat-name">Nombre</label>
+              <input
+                id="mat-name"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                required
+              />
+            </div>
+            <div
+              className="catalog-form__field"
+              data-testid="material-image-field"
+            >
+              <label htmlFor="mat-image">Foto</label>
+              <div className="catalog-form__image-row">
+                <CatalogImage
+                  src={resolveImageUrl(draft.imageUrl || undefined)}
+                  alt={draft.name || 'Material'}
+                  size="md"
                 />
+                {canMutate && onUploadImage ? (
+                  <input
+                    id="mat-image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      void (async () => {
+                        try {
+                          const url = await onUploadImage(file);
+                          let previewColor: string | undefined;
+                          try {
+                            previewColor =
+                              await extractDominantColorFromImageFile(file);
+                          } catch {
+                            /* color is optional */
+                          }
+                          setDraft((prev) => ({
+                            ...prev,
+                            imageUrl: url,
+                            ...(previewColor && !prev.previewColor.trim()
+                              ? { previewColor }
+                              : {}),
+                          }));
+                          if (previewColor) setPreview3dOpen(true);
+                        } catch {
+                          /* shell toasts */
+                        }
+                      })();
+                      e.target.value = '';
+                    }}
+                  />
+                ) : (
+                  <p className="catalog-form__hint">
+                    {draft.imageUrl ? 'Foto cargada' : 'Sin foto'}
+                  </p>
+                )}
+              </div>
+              <p className="catalog-form__hint">
+                Opcional. El color y la textura 3D se ajustan en «Vista 3D y
+                textura».
+              </p>
+            </div>
+          </fieldset>
+
+          <fieldset className="catalog-form__section">
+            <legend className="catalog-form__section-title">
+              Tablero y precio
+            </legend>
+            <div className="catalog-form__field-row">
+              <div className="catalog-form__field catalog-form__field--grow">
+                <label htmlFor="mat-thickness">Espesor (mm)</label>
+                <input
+                  id="mat-thickness"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.thicknessMm}
+                  onChange={(e) =>
+                    setDraft({ ...draft, thicknessMm: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+              <div className="catalog-form__field catalog-form__row-check catalog-form__field--grow">
+                <input
+                  id="mat-grain"
+                  type="checkbox"
+                  checked={draft.grainDefault}
+                  onChange={(e) =>
+                    setDraft({ ...draft, grainDefault: e.target.checked })
+                  }
+                />
+                <label htmlFor="mat-grain">Veta por defecto</label>
+              </div>
+            </div>
+            <div className="catalog-form__field-row">
+              <div className="catalog-form__field catalog-form__field--grow">
+                <label htmlFor="mat-width">Ancho del tablero (mm)</label>
+                <input
+                  id="mat-width"
+                  type="number"
+                  min={1}
+                  value={draft.widthMm}
+                  onChange={(e) =>
+                    setDraft({ ...draft, widthMm: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+              <div className="catalog-form__field catalog-form__field--grow">
+                <label htmlFor="mat-length">Largo del tablero (mm)</label>
+                <input
+                  id="mat-length"
+                  type="number"
+                  min={1}
+                  value={draft.lengthMm}
+                  onChange={(e) =>
+                    setDraft({ ...draft, lengthMm: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+            </div>
+            <div className="catalog-form__field-row">
+              <div className="catalog-form__field catalog-form__field--grow">
+                <label htmlFor="mat-price">Precio del tablero ($)</label>
+                <input
+                  id="mat-price"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.boardPrice}
+                  onChange={(e) =>
+                    setDraft({ ...draft, boardPrice: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+              <div className="catalog-form__field catalog-form__field--grow">
+                <label htmlFor="mat-waste">Merma (%)</label>
+                <input
+                  id="mat-waste"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draft.wastePercent}
+                  onChange={(e) =>
+                    setDraft({ ...draft, wastePercent: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+            <div className="catalog-form__field">
+              <label>Costo / m² calculado (con merma)</label>
+              <div className="catalog-form__calculated-value">
+                {formatMoneyDisplay(
+                  getCostPerM2({
+                    widthMm: draft.widthMm,
+                    lengthMm: draft.lengthMm,
+                    boardPrice: draft.boardPrice,
+                    wastePercent: draft.wastePercent,
+                  }),
+                )}
+              </div>
+            </div>
+            <div className="catalog-form__field">
+              <div className="catalog-form__inline-actions">
+                <CatalogPicker
+                  id="mat-default-edge"
+                  className="catalog-picker--grow"
+                  label="Cintilla por defecto"
+                  placeholder="— Sin cintilla —"
+                  searchPlaceholder="Buscar cintilla…"
+                  value={draft.defaultEdgeBandId}
+                  onChange={(defaultEdgeBandId) =>
+                    setDraft({ ...draft, defaultEdgeBandId })
+                  }
+                  items={activeEdges.map((e) => ({
+                    id: e.id,
+                    code: e.code,
+                    name: e.name,
+                    active: e.active,
+                    subtitle: `${e.thicknessMm} mm`,
+                  }))}
+                  data-testid="material-edge-picker"
+                />
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={openCreateEdge}
+                >
+                  <Plus size={14} strokeWidth={1.5} aria-hidden />
+                  Crear cintilla
+                </button>
+              </div>
+              <p className="catalog-form__hint">
+                Link por id. Se usa cuando la pieza tiene cantos y la cotización
+                no elige un grupo EDGE.
+              </p>
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="mat-notes">Notas</label>
+              <textarea
+                id="mat-notes"
+                value={draft.notes}
+                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+              />
+            </div>
+          </fieldset>
+
+          <div className="catalog-form__disclosure" data-testid="material-preview-3d">
+            <button
+              type="button"
+              className="catalog-form__disclosure-header"
+              aria-expanded={preview3dOpen}
+              onClick={() => setPreview3dOpen((o) => !o)}
+              data-testid="material-preview-3d-toggle"
+            >
+              {preview3dOpen ? (
+                <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
               ) : (
-                <p className="catalog-form__hint">
-                  {draft.imageUrl ? 'Foto cargada' : 'Sin foto'}
-                </p>
+                <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
               )}
-            </div>
-            <p className="catalog-form__hint">
-              Al cargar una foto se sugiere el color sólido dominante para el
-              3D (podés ajustarlo abajo).
-            </p>
-          </div>
-
-          <div
-            className="catalog-form__field"
-            data-testid="material-preview-color-field"
-          >
-            <label htmlFor="mat-preview-color">Color de vista previa</label>
-            <div className="material-preview-color-row">
-              <input
-                id="mat-preview-color-picker"
-                type="color"
-                className="material-preview-color-picker"
-                value={
-                  /^#([0-9a-fA-F]{6})$/.test(draft.previewColor)
-                    ? draft.previewColor
-                    : '#D4C4A8'
-                }
-                onChange={(e) =>
-                  setDraft({ ...draft, previewColor: e.target.value })
-                }
-                aria-label="Selector de color"
-                data-testid="material-preview-color-picker"
-              />
-              <input
-                id="mat-preview-color"
-                className="material-preview-color-hex"
-                value={draft.previewColor}
-                onChange={(e) =>
-                  setDraft({ ...draft, previewColor: e.target.value })
-                }
-                placeholder="#F5F5F0"
-                autoComplete="off"
-                data-testid="material-preview-color-input"
-              />
-            </div>
-            <p className="catalog-form__hint">
-              Color sólido para el 3D y la vista rápida (melaminas lisas, lacas).
-              Formato #RRGGBB. Vacío = color genérico en 3D.
-            </p>
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="mat-thickness">Espesor (mm)</label>
-            <input
-              id="mat-thickness"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.thicknessMm}
-              onChange={(e) =>
-                setDraft({ ...draft, thicknessMm: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field catalog-form__row-check">
-            <input
-              id="mat-grain"
-              type="checkbox"
-              checked={draft.grainDefault}
-              onChange={(e) =>
-                setDraft({ ...draft, grainDefault: e.target.checked })
-              }
-            />
-            <label htmlFor="mat-grain">Veta por defecto</label>
-          </div>
-
-          <div className="catalog-form__field">
-            <div className="catalog-form__inline-actions">
-              <CatalogPicker
-                id="mat-default-edge"
-                className="catalog-picker--grow"
-                label="Cintilla por defecto"
-                placeholder="— Sin cintilla —"
-                searchPlaceholder="Buscar cintilla…"
-                value={draft.defaultEdgeBandId}
-                onChange={(defaultEdgeBandId) =>
-                  setDraft({ ...draft, defaultEdgeBandId })
-                }
-                items={activeEdges.map((e) => ({
-                  id: e.id,
-                  code: e.code,
-                  name: e.name,
-                  active: e.active,
-                  subtitle: `${e.thicknessMm} mm`,
-                }))}
-                data-testid="material-edge-picker"
-              />
-              <button
-                type="button"
-                className="btn btn--small"
-                onClick={openCreateEdge}
+              <span className="catalog-form__disclosure-title">
+                Vista 3D y textura
+              </span>
+              <span className="catalog-form__disclosure-summary">
+                {hasPreview3dConfig(draft)
+                  ? 'Configurado'
+                  : 'Opcional — color, foto y escala'}
+              </span>
+            </button>
+            {preview3dOpen ? (
+              <div
+                className="catalog-form__disclosure-body"
+                data-testid="material-preview-3d-body"
               >
-                <Plus size={14} strokeWidth={1.5} aria-hidden />
-                Crear cintilla
-              </button>
-            </div>
-            <p className="catalog-form__hint">
-              Link por id (no por nombre). Se usa cuando la pieza tiene cantos y
-              la cotización no elige un grupo EDGE.
-            </p>
-          </div>
-
-          <Modal
-            open={edgeCreateOpen}
-            onClose={() => {
-              setEdgeCreateOpen(false);
-              setEdgeError(null);
-            }}
-            title="Nueva cintilla"
-            size="sm"
-            dataTestId="material-edge-create-modal"
-            footer={
-              <>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    setEdgeCreateOpen(false);
-                    setEdgeError(null);
-                  }}
+                <div
+                  className="catalog-form__field"
+                  data-testid="material-preview-color-field"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  onClick={submitCreateEdge}
-                  data-testid="material-edge-create-submit"
-                >
-                  Crear y vincular
-                </button>
-              </>
-            }
-          >
-            {edgeError ? (
-              <p className="catalog-form__error">{edgeError}</p>
+                  <label htmlFor="mat-preview-color">Color de vista previa</label>
+                  <div className="material-preview-color-row">
+                    <input
+                      id="mat-preview-color-picker"
+                      type="color"
+                      className="material-preview-color-picker"
+                      value={
+                        /^#([0-9a-fA-F]{6})$/.test(draft.previewColor)
+                          ? draft.previewColor
+                          : '#D4C4A8'
+                      }
+                      onChange={(e) =>
+                        setDraft({ ...draft, previewColor: e.target.value })
+                      }
+                      aria-label="Selector de color"
+                      data-testid="material-preview-color-picker"
+                    />
+                    <input
+                      id="mat-preview-color"
+                      className="material-preview-color-hex"
+                      value={draft.previewColor}
+                      onChange={(e) =>
+                        setDraft({ ...draft, previewColor: e.target.value })
+                      }
+                      placeholder="#F5F5F0"
+                      autoComplete="off"
+                      data-testid="material-preview-color-input"
+                    />
+                  </div>
+                  <p className="catalog-form__hint">
+                    Color sólido para el 3D (#RRGGBB). Vacío = color genérico.
+                  </p>
+                </div>
+                <div className="catalog-form__field catalog-form__row-check">
+                  <input
+                    id="mat-use-photo-texture"
+                    type="checkbox"
+                    checked={Boolean(
+                      draft.previewTextureUrl &&
+                        draft.imageUrl &&
+                        draft.previewTextureUrl === draft.imageUrl,
+                    )}
+                    disabled={!draft.imageUrl}
+                    onChange={(e) => {
+                      if (e.target.checked && draft.imageUrl) {
+                        setDraft({
+                          ...draft,
+                          previewTextureUrl: draft.imageUrl,
+                        });
+                      } else {
+                        setDraft({ ...draft, previewTextureUrl: '' });
+                      }
+                    }}
+                    data-testid="material-use-photo-texture"
+                  />
+                  <label htmlFor="mat-use-photo-texture">
+                    Usar foto como textura 3D
+                  </label>
+                </div>
+                <p className="catalog-form__hint">
+                  Con textura se muestra la foto en las caras. Sin textura, si hay
+                  veta se dibuja veta procedural sobre el color.
+                </p>
+                <div className="catalog-form__field-row">
+                  <div className="catalog-form__field catalog-form__field--grow">
+                    <label htmlFor="mat-tex-tile-w">
+                      Muestra textura X — ancho (mm)
+                    </label>
+                    <input
+                      id="mat-tex-tile-w"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={draft.previewTextureTileWidthMm || ''}
+                      placeholder="280"
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          previewTextureTileWidthMm:
+                            Number(e.target.value) || 0,
+                        })
+                      }
+                      data-testid="material-texture-tile-width"
+                    />
+                  </div>
+                  <div className="catalog-form__field catalog-form__field--grow">
+                    <label htmlFor="mat-tex-tile-l">
+                      Muestra textura Y — largo/veta (mm)
+                    </label>
+                    <input
+                      id="mat-tex-tile-l"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={draft.previewTextureTileLengthMm || ''}
+                      placeholder="280"
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          previewTextureTileLengthMm:
+                            Number(e.target.value) || 0,
+                        })
+                      }
+                      data-testid="material-texture-tile-length"
+                    />
+                  </div>
+                </div>
+                <div className="catalog-form__inline-actions">
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    disabled={
+                      tileSuggestBusy || !textureImagePath || !canMutate
+                    }
+                    onClick={() => {
+                      void suggestTilesFromImage();
+                    }}
+                    data-testid="material-texture-tile-suggest"
+                  >
+                    {tileSuggestBusy
+                      ? 'Leyendo imagen…'
+                      : 'Sugerir medidas desde la imagen'}
+                  </button>
+                </div>
+                {tileSuggestMsg ? (
+                  <p
+                    className="catalog-form__hint"
+                    data-testid="material-texture-tile-suggest-msg"
+                  >
+                    {tileSuggestMsg}
+                  </p>
+                ) : null}
+                <p className="catalog-form__hint">
+                  Tamaño real de una imagen completa de textura (mm). Vacío =
+                  280 mm. Más mm = textura más grande en la pieza.
+                </p>
+              </div>
             ) : null}
-            <div className="catalog-form__field">
-              <label htmlFor="mat-edge-code">Código canto</label>
-              <input
-                id="mat-edge-code"
-                value={edgeDraft.code}
-                onChange={(e) =>
-                  setEdgeDraft({ ...edgeDraft, code: e.target.value })
-                }
-                autoComplete="off"
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="mat-edge-name">Nombre canto</label>
-              <input
-                id="mat-edge-name"
-                value={edgeDraft.name}
-                onChange={(e) =>
-                  setEdgeDraft({ ...edgeDraft, name: e.target.value })
-                }
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="mat-edge-thk">Espesor (mm)</label>
-              <input
-                id="mat-edge-thk"
-                type="number"
-                min={0}
-                step="any"
-                value={edgeDraft.thicknessMm}
-                onChange={(e) =>
-                  setEdgeDraft({
-                    ...edgeDraft,
-                    thicknessMm: Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-            <div className="catalog-form__field">
-              <label htmlFor="mat-edge-cost">Costo / ML</label>
-              <input
-                id="mat-edge-cost"
-                type="number"
-                min={0}
-                step="any"
-                value={edgeDraft.costPerMl}
-                onChange={(e) =>
-                  setEdgeDraft({
-                    ...edgeDraft,
-                    costPerMl: Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-          </Modal>
-
-          <div className="catalog-form__field">
-            <label htmlFor="mat-width">Ancho del tablero (mm)</label>
-            <input
-              id="mat-width"
-              type="number"
-              min={1}
-              value={draft.widthMm}
-              onChange={(e) =>
-                setDraft({ ...draft, widthMm: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="mat-length">Largo del tablero (mm)</label>
-            <input
-              id="mat-length"
-              type="number"
-              min={1}
-              value={draft.lengthMm}
-              onChange={(e) =>
-                setDraft({ ...draft, lengthMm: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="mat-price">Precio del tablero ($)</label>
-            <input
-              id="mat-price"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.boardPrice}
-              onChange={(e) =>
-                setDraft({ ...draft, boardPrice: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label>Costo / m² calculado (con merma)</label>
-            <div className="catalog-form__calculated-value">
-              {formatMoneyDisplay(
-                getCostPerM2({
-                  widthMm: draft.widthMm,
-                  lengthMm: draft.lengthMm,
-                  boardPrice: draft.boardPrice,
-                  wastePercent: draft.wastePercent,
-                }),
-              )}
-            </div>
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="mat-waste">Merma (%)</label>
-            <input
-              id="mat-waste"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.wastePercent}
-              onChange={(e) =>
-                setDraft({ ...draft, wastePercent: Number(e.target.value) })
-              }
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="mat-notes">Notas</label>
-            <textarea
-              id="mat-notes"
-              value={draft.notes}
-              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-            />
           </div>
         </form>
+      </Modal>
+
+      {/* Sibling modal (not nested inside the material form) */}
+      <Modal
+        open={edgeCreateOpen}
+        onClose={() => {
+          setEdgeCreateOpen(false);
+          setEdgeError(null);
+        }}
+        title="Nueva cintilla"
+        size="sm"
+        dataTestId="material-edge-create-modal"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setEdgeCreateOpen(false);
+                setEdgeError(null);
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={submitCreateEdge}
+              data-testid="material-edge-create-submit"
+            >
+              Crear y vincular
+            </button>
+          </>
+        }
+      >
+        {edgeError ? (
+          <p className="catalog-form__error">{edgeError}</p>
+        ) : null}
+        <div className="catalog-form">
+          <div className="catalog-form__field">
+            <label htmlFor="mat-edge-code">Código canto</label>
+            <input
+              id="mat-edge-code"
+              value={edgeDraft.code}
+              onChange={(e) =>
+                setEdgeDraft({ ...edgeDraft, code: e.target.value })
+              }
+              autoComplete="off"
+            />
+          </div>
+          <div className="catalog-form__field">
+            <label htmlFor="mat-edge-name">Nombre canto</label>
+            <input
+              id="mat-edge-name"
+              value={edgeDraft.name}
+              onChange={(e) =>
+                setEdgeDraft({ ...edgeDraft, name: e.target.value })
+              }
+            />
+          </div>
+          <div className="catalog-form__field">
+            <label htmlFor="mat-edge-thk">Espesor (mm)</label>
+            <input
+              id="mat-edge-thk"
+              type="number"
+              min={0}
+              step="any"
+              value={edgeDraft.thicknessMm}
+              onChange={(e) =>
+                setEdgeDraft({
+                  ...edgeDraft,
+                  thicknessMm: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div className="catalog-form__field">
+            <label htmlFor="mat-edge-cost">Costo / ML</label>
+            <input
+              id="mat-edge-cost"
+              type="number"
+              min={0}
+              step="any"
+              value={edgeDraft.costPerMl}
+              onChange={(e) =>
+                setEdgeDraft({
+                  ...edgeDraft,
+                  costPerMl: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
       </Modal>
     </section>
   );

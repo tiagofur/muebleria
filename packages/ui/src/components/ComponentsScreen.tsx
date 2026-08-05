@@ -32,7 +32,7 @@ import {
 import { ComponentDetailView } from './editor/ComponentDetailView';
 import { ComponentEditorForm } from './editor/ComponentEditorForm';
 import { ComponentListView } from './editor/ComponentListView';
-import { materialColorMap } from '../preview3d';
+import { materialColorMap, materialTextureMap } from '../preview3d';
 import './components.css';
 
 export type { ComponentDraft };
@@ -84,7 +84,7 @@ export function ComponentsScreen({
     () => components.map((c) => c.id),
     [components],
   );
-  const { selectedId: expandedId, setSelectedId, toggleSelectedId } =
+  const { selectedId: expandedId, setSelectedId } =
     useRoutableEntitySelection({
       openEntityId: openComponentId,
       onSelectionChange,
@@ -127,6 +127,10 @@ export function ComponentsScreen({
 
   const materialColors = useMemo(
     () => materialColorMap(materials),
+    [materials],
+  );
+  const materialTextures = useMemo(
+    () => materialTextureMap(materials),
     [materials],
   );
 
@@ -336,7 +340,8 @@ export function ComponentsScreen({
     forceCloseEditor();
   };
 
-  const inlineEditMode = !!openComponentEditId && !!onRequestEdit;
+  // Fase 5 UI: always full-page workspace editor (same pattern as modules).
+  const inlineEditMode = modalOpen;
 
   const selectedComponent = expandedId
     ? (normalizedComponents.find((c) => c.id === expandedId) ?? null)
@@ -349,7 +354,9 @@ export function ComponentsScreen({
       editorBackTestId="component-editor-back"
       discardConfirmTestId="component-editor-discard-confirm"
       modalTestId="component-modal"
-      entityTitle="Componente"
+      entityTitle="componente"
+      createTitle="Nuevo componente"
+      editTitle="Editar componente"
       draftCode={draft.code}
       formId={formId}
       modalOpen={modalOpen}
@@ -360,6 +367,26 @@ export function ComponentsScreen({
       closeModal={closeModal}
       setConfirmDiscard={setConfirmDiscard}
       forceCloseEditor={forceCloseEditor}
+      headerActions={
+        <>
+          <button
+            type="button"
+            className="btn"
+            onClick={closeModal}
+            data-testid="component-editor-cancel"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            data-testid="save-btn"
+          >
+            Guardar
+          </button>
+        </>
+      }
       renderListView={() => (
         <ComponentListView
           rows={rows}
@@ -367,12 +394,9 @@ export function ComponentsScreen({
           setSearch={setSearch}
           status={status}
           setStatus={setStatus}
-          expandedId={expandedId}
-          onToggleExpand={toggleSelectedId}
           canMutate={canMutate}
           onCreate={handleCreateNew}
-          onEdit={handleEdit}
-          onToggleActive={handleToggleActive}
+          onOpenDetail={(item) => setSelectedId(item.id)}
         />
       )}
       renderDetailView={
@@ -393,7 +417,6 @@ export function ComponentsScreen({
           formId={formId}
           error={error}
           onSubmit={onSubmit}
-          onCancel={closeModal}
           editorTab={editorTab}
           setEditorTab={setEditorTab}
           draft={draft}
@@ -402,6 +425,7 @@ export function ComponentsScreen({
           optionGroups={optionGroups}
           previewParts={previewParts}
           materialColors={materialColors}
+          materialTextures={materialTextures}
           containerDims={containerDims}
           onContainerDimsChange={setContainerDims}
           showInContext={showInContext}

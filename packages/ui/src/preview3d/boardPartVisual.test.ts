@@ -5,6 +5,7 @@ import {
   colorForMaterialId,
   colorForOptionRole,
   materialColorMap,
+  materialTextureMap,
   resolvePartColor,
   sceneFraming,
 } from './boardPartVisual';
@@ -27,16 +28,31 @@ const basePart: ResolvedBoardPart = {
 };
 
 describe('boardPartVisual', () => {
-  it('maps workshop axes to Three Y-up', () => {
-    const v = boardPartToVisual({
+  it('maps workshop min-corner to Three group position (with rotation offset)', () => {
+    // Identity: min corner == local origin → simple remap (x,z,y).
+    const id = boardPartToVisual({
       ...basePart,
       x: 10,
       y: 20,
       z: 30,
+      rotateY: 0,
     });
-    expect(v.position).toEqual([10, 30, 20]);
-    expect(v.size).toEqual([560, 18, 720]);
-    expect(v.rotation[1]).toBeCloseTo(Math.PI / 2, 5);
+    expect(id.position).toEqual([10, 30, 20]);
+
+    // rotateY 90: width grows −Z; group Z is shifted by +width so min depth stays at y.
+    const rotated = boardPartToVisual({
+      ...basePart,
+      x: 10,
+      y: 20,
+      z: 30,
+      rotateY: 90,
+    });
+    // size [560, 18, 720]; offset min render (0,0,-560) → group (10, 30, 20-(-560))
+    expect(rotated.position[0]).toBeCloseTo(10, 5);
+    expect(rotated.position[1]).toBeCloseTo(30, 5);
+    expect(rotated.position[2]).toBeCloseTo(580, 5);
+    expect(rotated.size).toEqual([560, 18, 720]);
+    expect(rotated.rotation[1]).toBeCloseTo(Math.PI / 2, 5);
   });
 
   it('uses material color by default', () => {
@@ -74,5 +90,88 @@ describe('boardPartVisual', () => {
     expect(f.center).toEqual([300, 360, 280]);
     expect(f.maxDim).toBe(720);
     expect(f.cameraDistance).toBeGreaterThan(f.maxDim);
+  });
+
+  it('exposes grain and texture only in material color mode', () => {
+    const textures = materialTextureMap([
+      {
+        id: 'mat-white',
+        previewTextureUrl: '/api/media/wood.webp',
+        previewTextureTileWidthMm: 400,
+        previewTextureTileLengthMm: 600,
+      },
+    ]);
+    const withGrain: ResolvedBoardPart = { ...basePart, grain: 1 };
+    // Default surface is grain: grain on, no photo
+    const mat = boardPartToVisual(withGrain, {
+      colorMode: 'material',
+      materialTextures: textures,
+    });
+    expect(mat.grain).toBe(1);
+    expect(mat.textureUrl).toBeUndefined();
+
+    const textured = boardPartToVisual(withGrain, {
+      colorMode: 'material',
+      materialTextures: textures,
+      surfaceMode: 'texture',
+    });
+    expect(textured.textureUrl).toBe('/api/media/wood.webp');
+    expect(textured.textureTileWidthMm).toBe(400);
+    expect(textured.textureTileLengthMm).toBe(600);
+    expect(textured.grain).toBe(0);
+
+    const solid = boardPartToVisual(withGrain, {
+      colorMode: 'material',
+      materialTextures: textures,
+      surfaceMode: 'color',
+    });
+    expect(solid.grain).toBe(0);
+    expect(solid.textureUrl).toBeUndefined();
+
+    const role = boardPartToVisual(withGrain, {
+      colorMode: 'role',
+      materialTextures: textures,
+      surfaceMode: 'texture',
+    });
+    expect(role.grain).toBe(0);
+    expect(role.textureUrl).toBeUndefined();
+  });
+
+  it('skips empty texture URLs in materialTextureMap', () => {
+    const map = materialTextureMap([
+      { id: 'a', previewTextureUrl: '  ' },
+      { id: 'b', previewTextureUrl: '/api/media/x.webp' },
+    ]);
+    expect(map.a).toBeUndefined();
+    expect(map.b?.url).toBe('/api/media/x.webp');
+  });
+
+  it('falls back to imageUrl and resolveUrl for textures', () => {
+    const map = materialTextureMap(
+      [
+        { id: 'a', previewTextureUrl: '', imageUrl: '/api/media/foto.webp' },
+        { id: 'b', previewTextureUrl: '/api/media/tex.webp', imageUrl: '/other' },
+      ],
+      (u) => (u ? `https://cdn${u}?t=1` : undefined),
+    );
+    expect(map.a?.url).toBe('https://cdn/api/media/foto.webp?t=1');
+    expect(map.b?.url).toBe('https://cdn/api/media/tex.webp?t=1');
+  });
+
+  it('grain surface mode only marks materials that have veta', () => {
+    const noGrain: ResolvedBoardPart = { ...basePart, grain: 0 };
+    const withGrain: ResolvedBoardPart = { ...basePart, grain: 1 };
+    expect(
+      boardPartToVisual(noGrain, {
+        colorMode: 'material',
+        surfaceMode: 'grain',
+      }).grain,
+    ).toBe(0);
+    expect(
+      boardPartToVisual(withGrain, {
+        colorMode: 'material',
+        surfaceMode: 'grain',
+      }).grain,
+    ).toBe(1);
   });
 });

@@ -56,6 +56,8 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
     default_edge_band_id: m.defaultEdgeBandId ?? '',
     preview_color: m.previewColor ?? '',
     preview_texture_url: m.previewTextureUrl ?? '',
+    preview_texture_tile_width_mm: m.previewTextureTileWidthMm ?? 0,
+    preview_texture_tile_length_mm: m.previewTextureTileLengthMm ?? 0,
     notes: m.notes ?? '',
     active: m.active,
   };
@@ -68,6 +70,14 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     str(raw.preview_color ?? raw.previewColor) || undefined;
   const previewTextureUrl =
     str(raw.preview_texture_url ?? raw.previewTextureUrl) || undefined;
+  const tileW = num(
+    raw.preview_texture_tile_width_mm ?? raw.previewTextureTileWidthMm,
+    0,
+  );
+  const tileL = num(
+    raw.preview_texture_tile_length_mm ?? raw.previewTextureTileLengthMm,
+    0,
+  );
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -83,6 +93,8 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     defaultEdgeBandId: defaultEdge,
     previewColor,
     previewTextureUrl,
+    previewTextureTileWidthMm: tileW > 0 ? tileW : undefined,
+    previewTextureTileLengthMm: tileL > 0 ? tileL : undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
   };

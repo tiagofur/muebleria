@@ -1,6 +1,11 @@
 /**
  * Default 3D pose from component placement when no x/y/z formulas are set.
  * Workshop frame: X = width (PW), Y = depth (PD), Z = height (PH).
+ *
+ * Convention: (x,y,z) is the **min corner** of the part AABB in workshop space
+ * (left / back / bottom). Rotation may send local growth negative; boardPartToVisual
+ * + spatialAnchor offset the mesh so formulas never need right-edge / front-edge
+ * compensations (no more y=PD for base, x=PW-2 for door).
  */
 
 export type SpatialPose = {
@@ -41,15 +46,20 @@ export function defaultPoseForPlacement(
   };
 
   switch (placement) {
+    // Horizontal panels (piso / techo): L along PW (grain L→R), W along PD.
+    // rotateY 90; min corner at back-left (y=0), not front — anchor handles −Z.
     case 'base':
-      return { ...zero, x: T, y: 0, z: 0 };
+      return { ...zero, x: T, y: 0, z: 0, rotateY: 90 };
     case 'superior':
-      return { ...zero, x: T, y: 0, z: Math.max(0, PH - T) };
+      return {
+        ...zero,
+        x: T,
+        y: 0,
+        z: Math.max(0, PH - T),
+        rotateY: 90,
+      };
     case 'lateral_izquierdo':
-      // Stand vertical panel: rotX+rotY+rotZ so thickness faces cabinet width (X),
-      // length (PH) faces up (Z workshop / Y Three) and width (PD) faces depth (Y workshop / Z Three).
-      // [90,180,90] is the validated mapping (see rotationMapping.test.ts); the previous
-      // [90,90,0] left the panel lying like a back panel (length on X, thickness on Z). JD-W3.
+      // Vertical side: [90,180,90] → thick +X, length +Y, width +Z (min = local origin).
       return {
         ...zero,
         x: quantity > 1 ? i * Math.max(0, PW - T) : 0,
@@ -58,10 +68,9 @@ export function defaultPoseForPlacement(
         rotateZ: 90,
       };
     case 'lateral_derecho': {
-      // Right-anchored: qty=1 at PW-T; multi-qty spreads from right toward left.
+      // Min corner of the right panel sits at x = PW − T.
       const span = Math.max(0, PW - T);
-      const x =
-        quantity > 1 ? span - i * span : span;
+      const x = quantity > 1 ? span - i * span : span;
       return {
         ...zero,
         x,
@@ -70,22 +79,38 @@ export function defaultPoseForPlacement(
         rotateZ: 90,
       };
     }
+    // Depth-facing vertical panels: [90,180,0] → thick +Z, length +Y, width −X.
+    // Min-corner X is the LEFT edge (anchor offsets the −X growth).
     case 'trasera':
-      // rotateX:270 (not 90) so the length grows +Y (up) from the pose instead
-      // of -Y (down through the floor). Same axis mapping as 90 (thick→Z, length→Y)
-      // but the box corner (0,0,0) local maps above the pose. JD-W3 follow-up.
-      return { ...zero, x: T, y: 0, z: T, rotateX: 270 };
+      return {
+        ...zero,
+        x: T,
+        y: 0,
+        z: T,
+        rotateX: 90,
+        rotateY: 180,
+      };
     case 'frontal':
+      // Inside front: min depth at PD − T (thickness fills to PD).
       return {
         ...zero,
         x: T,
         y: Math.max(0, PD - T),
         z: T,
-        rotateX: 270,
+        rotateX: 90,
+        rotateY: 180,
       };
     case 'puerta':
     case 'frente_cajon':
-      return { ...zero, x: 2, y: PD, z: 2, rotateX: 270 };
+      // Overlay: min depth at PD (thickness grows outside to PD+T).
+      return {
+        ...zero,
+        x: 2,
+        y: PD,
+        z: 2,
+        rotateX: 90,
+        rotateY: 180,
+      };
     case 'interno':
       return { ...zero, x: T, y: T, z: 150 + i * 200 };
     case 'custom':

@@ -1,5 +1,5 @@
 /**
- * Structures ABM — list + LG editor modal (components-only body).
+ * Structures ABM — card-detalle + full-page editor (Fase 5 UI).
  */
 
 import {
@@ -58,7 +58,7 @@ export interface StructuresScreenProps {
   readonly onDelete: (id: string) => void;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
-  /** URL handoff: `/structures/:id` expands that row. */
+  /** URL handoff: `/structures/:id` opens card-detalle. */
   readonly openStructureId?: string | null;
   /**
    * Open editor for this id (URL `/structures/:id/edit`, Fase 3 UI 3b).
@@ -72,6 +72,8 @@ export interface StructuresScreenProps {
   readonly onSelectionChange?: (id: string | null) => void;
   /** Role matrix: can current user mutate structures? */
   readonly canMutate?: boolean;
+  /** Resolve media path for 3D texture loading. */
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
 export function StructuresScreen({
@@ -91,6 +93,7 @@ export function StructuresScreen({
   onRequestEdit,
   onSelectionChange,
   canMutate = true,
+  resolveImageUrl = (u) => u,
 }: StructuresScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -101,7 +104,6 @@ export function StructuresScreen({
   const {
     selectedId: expandedId,
     setSelectedId,
-    toggleSelectedId,
   } = useRoutableEntitySelection({
     openEntityId: openStructureId,
     onSelectionChange,
@@ -369,10 +371,8 @@ export function StructuresScreen({
     }
   };
 
-  // Fase 3 UI 3b: inline editor mode overrides the modal when the shell wires
-  // `onRequestEdit` and the URL is /structures/:id/edit. The form is rendered
-  // inline (no Modal LG); the form keeps its built-in Cancelar/Guardar footer.
-  const inlineEditMode = !!openStructureEditId && !!onRequestEdit;
+  // Fase 5 UI: always full-page workspace editor (same pattern as modules).
+  const inlineEditMode = modalOpen;
 
   const selectedStructure = expandedId
     ? (normalizedStructures.find((s) => s.id === expandedId) ?? null)
@@ -385,7 +385,9 @@ export function StructuresScreen({
       editorBackTestId="structure-editor-back"
       discardConfirmTestId="structure-editor-discard-confirm"
       modalTestId="structure-modal"
-      entityTitle="Estructura"
+      entityTitle="estructura"
+      createTitle="Nueva estructura"
+      editTitle="Editar estructura"
       draftCode={draft.code}
       formId={formId}
       modalOpen={modalOpen}
@@ -396,6 +398,26 @@ export function StructuresScreen({
       closeModal={closeModal}
       setConfirmDiscard={setConfirmDiscard}
       forceCloseEditor={forceCloseEditor}
+      headerActions={
+        <>
+          <button
+            type="button"
+            className="btn"
+            onClick={closeModal}
+            data-testid="structure-editor-cancel"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            data-testid="save-btn"
+          >
+            Guardar
+          </button>
+        </>
+      }
       renderListView={() => (
         <StructureListView
           rows={rows}
@@ -403,14 +425,9 @@ export function StructuresScreen({
           setSearch={setSearch}
           status={status}
           setStatus={setStatus}
-          expandedId={expandedId}
-          onToggleExpand={toggleSelectedId}
           canMutate={canMutate}
           onCreate={handleCreateNew}
-          onEdit={handleEdit}
-          onDeactivate={onDeactivate}
-          onReactivate={onReactivate}
-          onRequestDelete={setDeleteConfirmId}
+          onOpenDetail={(item) => setSelectedId(item.id)}
         />
       )}
       renderDetailView={
@@ -442,7 +459,6 @@ export function StructuresScreen({
           formId={formId}
           error={error}
           onSubmit={onSubmit}
-          onCancel={closeModal}
           editorTab={editorTab}
           setEditorTab={setEditorTab}
           draft={draft}
@@ -498,15 +514,15 @@ export function StructuresScreen({
             size="sm"
             data-testid="delete-confirm-modal"
           >
-            <div className="p-4">
-              <p className="mb-4">
+            <div>
+              <p>
                 ¿Estás seguro de que deseas eliminar esta estructura? Esta acción
                 no se puede deshacer.
               </p>
               <div className="modal__footer">
                 <button
                   type="button"
-                  className="btn btn--secondary"
+                  className="btn"
                   onClick={() => setDeleteConfirmId(null)}
                 >
                   Cancelar
@@ -527,6 +543,7 @@ export function StructuresScreen({
             open={show3DModal}
             structure={viewerStructure}
             catalog={catalogInput}
+            resolveMediaUrl={resolveImageUrl}
             onClose={() => {
               setShow3DModal(false);
               setViewerStructure(null);

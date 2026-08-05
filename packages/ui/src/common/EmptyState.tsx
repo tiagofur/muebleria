@@ -17,6 +17,13 @@ export type EmptyStateProps = {
   readonly actionLabel?: string;
   readonly onAction?: () => void;
   /**
+   * Optional secondary CTA (never primary). Use for alternate paths that must
+   * not compete with the main action (e.g. "Desde plantilla" under Nueva cotización).
+   */
+  readonly secondaryActionLabel?: string;
+  readonly onSecondaryAction?: () => void;
+  readonly secondaryActionTestId?: string;
+  /**
    * `empty` — no data in workspace (primary CTA with +).
    * `no-results` — data exists but filters/search match nothing (clear filters).
    */
@@ -29,12 +36,17 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+  secondaryActionTestId,
   variant = 'empty',
 }: EmptyStateProps): ReactNode {
   const isNoResults = variant === 'no-results';
   const Icon = icon ?? (isNoResults ? SearchX : Plus);
   const rootClass = isNoResults ? 'ui-empty ui-empty--no-results' : 'ui-empty';
   const buttonClass = isNoResults ? 'btn' : 'btn btn--primary';
+  const hasPrimary = Boolean(actionLabel && onAction);
+  const hasSecondary = Boolean(secondaryActionLabel && onSecondaryAction);
 
   return (
     <div
@@ -50,13 +62,27 @@ export function EmptyState({
       {description ? (
         <p className="ui-empty__description">{description}</p>
       ) : null}
-      {actionLabel && onAction ? (
-        <button type="button" className={buttonClass} onClick={onAction}>
-          {!isNoResults ? (
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
+      {hasPrimary || hasSecondary ? (
+        <div className="ui-empty__actions">
+          {hasPrimary ? (
+            <button type="button" className={buttonClass} onClick={onAction}>
+              {!isNoResults ? (
+                <Plus size={16} strokeWidth={1.5} aria-hidden />
+              ) : null}
+              {actionLabel}
+            </button>
           ) : null}
-          {actionLabel}
-        </button>
+          {hasSecondary ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={onSecondaryAction}
+              data-testid={secondaryActionTestId}
+            >
+              {secondaryActionLabel}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

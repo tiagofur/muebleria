@@ -73,7 +73,13 @@ describe('ProductionQueue (F038)', () => {
         onMarkProduced={vi.fn()}
       />,
     );
+    expect(screen.getByTestId('prod-queue-title').textContent).toBe(
+      'Para fabricar',
+    );
     await user.click(screen.getByTestId('prod-tab-produced'));
+    expect(screen.getByTestId('prod-queue-title').textContent).toBe(
+      'Ya en planta',
+    );
     expect(screen.getByText('Living hecho')).toBeTruthy();
     expect(screen.queryByTestId('prod-mark-p3')).toBeNull();
     expect(screen.getByTestId('prod-export-opt-p3')).toBeTruthy();

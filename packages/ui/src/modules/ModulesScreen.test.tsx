@@ -180,7 +180,8 @@ describe('ModulesScreen structure (F021)', () => {
     expect(listSrc).not.toMatch(/CatalogTable/);
     expect(listSrc).toMatch(/module-card-grid/);
     expect(listSrc).toMatch(/EmptyState/);
-    expect(screenSrc).toMatch(/size="lg"/);
+    // Fase 4: full-page editor (inlineEditMode when modalOpen).
+    expect(screenSrc).toMatch(/inlineEditMode = modalOpen/);
   });
 
   it('renders a card per module with code, name, counts, and estimate', () => {
@@ -248,7 +249,7 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(onEditingChange).toHaveBeenCalledWith('mod-1');
   });
 
-  it('opens Modal LG editor from detail Editar', async () => {
+  it('opens full-page editor from detail Editar', async () => {
     const user = userEvent.setup();
     renderScreen({
       costPreview: sampleBreakdown,
@@ -258,40 +259,45 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     await user.click(screen.getByTestId('module-card-mod-1'));
     await user.click(screen.getByRole('button', { name: /^Editar$/ }));
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.className).toMatch(/ui-modal--lg/);
-    expect(within(dialog).getByText('Editar mueble')).toBeTruthy();
-    expect(within(dialog).getByLabelText('Código')).toHaveProperty(
+    const page = await screen.findByTestId('module-editor-page');
+    expect(within(page).getByText('Editar mueble')).toBeTruthy();
+    expect(within(page).getByLabelText('Código')).toHaveProperty(
       'value',
       'MOD-GAB-01',
     );
+    // Sticky cost aside (Fase 4 workspace) — may also appear in Costo tab.
     expect(
-      within(dialog).getByText(/Precio de venta: \$202\.50 MXN/),
-    ).toBeTruthy();
+      within(page).getAllByText(/Precio de venta: \$202\.50 MXN/).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('opens Modal LG empty form from + Nuevo mueble', async () => {
+  it('opens full-page empty form from + Nuevo mueble', async () => {
     const user = userEvent.setup();
     renderScreen();
 
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.className).toMatch(/ui-modal--lg/);
-    expect(within(dialog).getByText('Nuevo mueble')).toBeTruthy();
-    expect(within(dialog).getByLabelText('Código')).toHaveProperty('value', '');
-    expect(within(dialog).getByLabelText('Nombre')).toHaveProperty('value', '');
+    const page = await screen.findByTestId('module-editor-page');
+    expect(within(page).getByText('Nuevo mueble')).toBeTruthy();
+    expect(within(page).getByLabelText('Código')).toHaveProperty('value', '');
+    expect(within(page).getByLabelText('Nombre')).toHaveProperty('value', '');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-
-  it('shows editor tabs General/Estructura/Componentes/Medidas/Herrajes/Costo', async () => {
+  it('shows primary tabs General/Composición/Costo and composition subtabs', async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    expect(screen.getByTestId('module-editor-page')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-tab-general')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-tab-composition')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-tab-cost')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
 
-    await user.click(screen.getByTestId('module-editor-tab-structure'));
+    await user.click(screen.getByTestId('module-editor-tab-composition'));
+    expect(screen.getByTestId('module-editor-composition-tabs')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-structure').hidden).toBe(
       false,
     );
@@ -318,7 +324,6 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     // No board-parts editor — modules compose structure + components only.
     expect(screen.queryByTestId('module-editor-tab-parts')).toBeNull();
     expect(screen.queryByTestId('module-editor-panel-parts')).toBeNull();
-    expect(screen.queryByTestId('module-editor-tab-composition')).toBeNull();
   });
 
   it('hybrid Components tab: keeps Agregar componente when boardEditorSlot is set', async () => {
@@ -331,8 +336,9 @@ describe('ModulesScreen navigation + modals (F021)', () => {
 
     await user.click(screen.getByTestId('module-card-mod-1'));
     await user.click(screen.getByRole('button', { name: /^Editar$/ }));
-    await screen.findByRole('dialog');
+    await screen.findByTestId('module-editor-page');
 
+    await user.click(screen.getByTestId('module-editor-tab-composition'));
     await user.click(screen.getByTestId('module-editor-tab-components'));
 
     const componentsPanel = screen.getByTestId(
@@ -378,9 +384,10 @@ describe('ModulesScreen navigation + modals (F021)', () => {
 
     await user.click(screen.getByTestId('module-card-mod-1'));
     await user.click(screen.getByRole('button', { name: /^Editar$/ }));
-    await screen.findByRole('dialog');
+    await screen.findByTestId('module-editor-page');
 
     // Pick a structure so composed mode is enabled, then open Components.
+    await user.click(screen.getByTestId('module-editor-tab-composition'));
     await user.click(screen.getByTestId('module-editor-tab-structure'));
     const structurePicker = screen.getByTestId('structure-picker') as HTMLSelectElement;
     await user.selectOptions(structurePicker, 'struct-1');
@@ -403,7 +410,7 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     const { onCreate } = renderScreen();
 
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
-    await screen.findByRole('dialog');
+    await screen.findByTestId('module-editor-page');
 
     const select = screen.getByTestId('module-furniture-type') as HTMLSelectElement;
     expect(select.value).toBe('inferior');
@@ -424,11 +431,11 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(draft.furnitureType).toBe('superior');
   });
 
-  it('opens create modal from requestCreateKey prop (Dashboard handoff)', () => {
+  it('opens full-page create from requestCreateKey prop (Dashboard handoff)', () => {
     renderScreen({ requestCreateKey: 1 });
-    const dialog = screen.getByRole('dialog');
-    expect(dialog.className).toMatch(/ui-modal--lg/);
-    expect(within(dialog).getByText('Nuevo mueble')).toBeTruthy();
+    const page = screen.getByTestId('module-editor-page');
+    expect(within(page).getByText('Nuevo mueble')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('returns to list from sticky chrome and shows total', async () => {

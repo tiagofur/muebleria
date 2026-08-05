@@ -218,13 +218,22 @@ export function HardwareCatalog({
   return (
     <section className="catalog-page" aria-label="Catálogo de herrajes">
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Herrajes</h2>
+        <div>
+          <h2 className="catalog-page__title">Herrajes</h2>
+          <p className="page-header__subtitle">
+            Bisagras, correderas y demás del catálogo
+          </p>
+        </div>
         <div className="catalog-page__toolbar">
           {canMutate ? (
-          <button type="button" className="btn btn--primary" onClick={startCreate}>
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo herraje
-          </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={startCreate}
+            >
+              <Plus size={16} strokeWidth={1.5} aria-hidden />
+              Nuevo herraje
+            </button>
           ) : null}
         </div>
       </div>

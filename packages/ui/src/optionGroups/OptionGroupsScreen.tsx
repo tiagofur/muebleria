@@ -295,15 +295,24 @@ export function OptionGroupsScreen({
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
 
   return (
-    <section className="catalog-page" aria-label="Grupos de opciones">
+    <section className="catalog-page" aria-label="Grupos">
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Grupos de opciones</h2>
+        <div>
+          <h2 className="catalog-page__title">Grupos</h2>
+          <p className="page-header__subtitle">
+            Opciones de material, canto o herraje que eligen los muebles
+          </p>
+        </div>
         <div className="catalog-page__toolbar">
           {canMutate ? (
-          <button type="button" className="btn btn--primary" onClick={startCreate}>
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo grupo
-          </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={startCreate}
+            >
+              <Plus size={16} strokeWidth={1.5} aria-hidden />
+              Nuevo grupo
+            </button>
           ) : null}
         </div>
       </div>
@@ -323,9 +332,9 @@ export function OptionGroupsScreen({
         {isTrulyEmpty ? (
           <EmptyState
             icon={ToggleLeft}
-            title="No hay grupos de opciones"
+            title="No hay grupos"
             description="Definí grupos para que los muebles puedan elegir materiales, cantos o herrajes."
-            actionLabel="Agregar grupo"
+            actionLabel="Nuevo grupo"
             onAction={startCreate}
           />
         ) : isFilterEmpty ? (

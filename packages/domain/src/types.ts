@@ -46,6 +46,17 @@ export interface MaterialBoard {
    * Optional texture map for 3D (relative media URL). Color-only mode ignores this.
    */
   readonly previewTextureUrl?: string;
+  /**
+   * Physical size (mm) of one full texture image across the board **width**
+   * (local X / U). Used to UV-scale photo textures so pattern density matches
+   * the real melamine sample. Omit/0 → default tile (~280 mm).
+   */
+  readonly previewTextureTileWidthMm?: number;
+  /**
+   * Physical size (mm) of one full texture image along board **length** / veta
+   * (local Z / V). Omit/0 → default tile (~280 mm).
+   */
+  readonly previewTextureTileLengthMm?: number;
   readonly notes?: string;
   readonly active: boolean;
 }

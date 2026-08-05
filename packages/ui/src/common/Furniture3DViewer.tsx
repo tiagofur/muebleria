@@ -1,7 +1,7 @@
 /**
- * Unified furniture 3D viewer with camera controls, projection toggle, wireframe,
- * color mode, and part inspector (click mesh / list → highlight + dims).
+ * Unified furniture 3D viewer with compact toolbar + advanced disclosure.
  * Requires WebGL (Three.js / React Three Fiber). No CSS fallback.
+ * Fase 7 UI: primary chrome = projection · contornos · cámara; paint/X-ray advanced.
  */
 
 import {
@@ -11,17 +11,25 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
   ModuleScene3D,
   PartInspector,
   PartList,
+  PaintModeField,
+  MaterialSurfaceModeField,
   canUseWebGL,
   materialColorMap,
+  materialTextureMap,
+  DEFAULT_MATERIAL_SURFACE_MODE,
   type BoardColorMode,
   type MaterialColorLookup,
+  type MaterialSurfaceMode,
+  type MaterialTextureLookup,
 } from '../preview3d';
 import type { ResolvedBoardPart } from '@muebles/domain';
 import '../preview3d/partInspector.css';
+import './furniture3dViewer.css';
 
 export type Furniture3DViewerProps = {
   /** Board parts to render (from domain preview resolution). */
@@ -34,12 +42,26 @@ export type Furniture3DViewerProps = {
   readonly depth: number;
   /** Optional material color lookup (catalog materialId -> hex). */
   readonly materialColors?: MaterialColorLookup;
+  /** Optional material texture lookup (catalog materialId -> media URL). */
+  readonly materialTextures?: MaterialTextureLookup;
+  /**
+   * Resolve relative media URLs for TextureLoader (auth token / absolute origin).
+   * Used when materialTextures is not pre-built.
+   */
+  readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
+  /** Catalog materials — used with resolveMediaUrl to build texture map. */
+  readonly materialsForTextures?: readonly Pick<
+    import('@muebles/domain').MaterialBoard,
+    'id' | 'previewTextureUrl' | 'imageUrl'
+  >[];
   /** Initial color mode. Default: 'material'. */
   readonly initialColorMode?: BoardColorMode;
   /** Initial projection mode. Default: 'perspective'. */
   readonly initialProjection?: 'perspective' | 'orthographic';
   /** Initial wireframe state. Default: false. */
   readonly initialWireframe?: boolean;
+  /** Initial outline edges on all boards. Default: true. */
+  readonly initialShowOutlines?: boolean;
   /** Optional CSS class. */
   readonly className?: string;
   /** Optional inline style. */
@@ -53,6 +75,15 @@ export type Furniture3DViewerProps = {
    * Default true. Set false for compact embeds that only need the canvas.
    */
   readonly showPartInspector?: boolean;
+  /** Optional hint under the paint-mode control. */
+  readonly paintModeHint?: string;
+  /** Initial surface look (color / grain / texture). Default: grain. */
+  readonly initialSurfaceMode?: MaterialSurfaceMode;
+  /**
+   * Start with advanced (paint / wireframe) open. Default false.
+   * Open automatically when initial wireframe is on.
+   */
+  readonly initialAdvancedOpen?: boolean;
 };
 
 export function Furniture3DViewer({
@@ -61,19 +92,34 @@ export function Furniture3DViewer({
   height,
   depth,
   materialColors,
+  materialTextures,
+  resolveMediaUrl,
+  materialsForTextures,
   initialColorMode = 'material',
   initialProjection = 'perspective',
   initialWireframe = false,
+  initialShowOutlines = true,
   className,
   style,
   testId = 'furniture-3d-viewer',
   hideControls = false,
   showPartInspector = true,
+  paintModeHint,
+  initialSurfaceMode = DEFAULT_MATERIAL_SURFACE_MODE,
+  initialAdvancedOpen,
 }: Furniture3DViewerProps): ReactNode {
   const webglAvailable = useMemo(() => canUseWebGL(), []);
   const [colorMode, setColorMode] = useState<BoardColorMode>(initialColorMode);
-  const [projection, setProjection] = useState<'perspective' | 'orthographic'>(initialProjection);
+  const [surfaceMode, setSurfaceMode] =
+    useState<MaterialSurfaceMode>(initialSurfaceMode);
+  const [projection, setProjection] = useState<'perspective' | 'orthographic'>(
+    initialProjection,
+  );
   const [showWireframe, setShowWireframe] = useState(initialWireframe);
+  const [showOutlines, setShowOutlines] = useState(initialShowOutlines);
+  const [advancedOpen, setAdvancedOpen] = useState(
+    initialAdvancedOpen ?? initialWireframe,
+  );
   const [cameraView, setCameraView] = useState<{
     readonly type: 'front' | 'top' | 'side' | 'isometric';
     readonly ts: number;
@@ -85,13 +131,19 @@ export function Furniture3DViewer({
     () => materialColors ?? materialColorMap([]),
     [materialColors],
   );
+  const materialTexturesMemo = useMemo(() => {
+    if (materialTextures) return materialTextures;
+    if (materialsForTextures) {
+      return materialTextureMap(materialsForTextures, resolveMediaUrl);
+    }
+    return materialTextureMap([]);
+  }, [materialTextures, materialsForTextures, resolveMediaUrl]);
 
   const selectedPart = useMemo(
     () => parts.find((p) => p.id === selectedPartId) ?? null,
     [parts, selectedPartId],
   );
 
-  // Drop selection if the part disappears (draft/BOM change).
   useEffect(() => {
     if (selectedPartId && !parts.some((p) => p.id === selectedPartId)) {
       setSelectedPartId(null);
@@ -99,31 +151,33 @@ export function Furniture3DViewer({
   }, [parts, selectedPartId]);
 
   const showControls = !hideControls;
+  const rootClass = ['furniture-3d-viewer', className].filter(Boolean).join(' ');
+
+  const advancedSummary = [
+    colorMode === 'material' ? 'Acabados' : 'Roles taller',
+    showWireframe ? 'Rayos X' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   if (!webglAvailable) {
     return (
       <div
-        className={className}
+        className={`${rootClass} furniture-3d-viewer--no-webgl`}
         data-testid={`${testId}-no-webgl`}
-        style={{
-          ...style,
-          padding: '2rem',
-          textAlign: 'center',
-          background: 'var(--error-50)',
-          border: '1px solid var(--error-500)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--error-700)',
-        }}
+        style={style}
       >
-        <h4 style={{ margin: '0 0 0.5rem' }}>⚠️ WebGL no disponible</h4>
-        <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-          El visor 3D requiere WebGL (Three.js / React Three Fiber).<br />
-          Verificá que tu navegador lo soporte y no esté bloqueado por extensiones/CSP.
+        <h4>WebGL no disponible</h4>
+        <p>
+          El visor 3D requiere WebGL (Three.js / React Three Fiber).
+          <br />
+          Verificá que tu navegador lo soporte y no esté bloqueado por
+          extensiones/CSP.
         </p>
-        <details style={{ marginTop: '1rem', textAlign: 'left', fontSize: 'var(--text-xs)' }}>
+        <details>
           <summary>Detalles técnicos</summary>
-          <pre style={{ marginTop: '0.5rem', overflow: 'auto' }}>
-{`canUseWebGL() returned: ${webglAvailable}
+          <pre>
+            {`canUseWebGL() returned: ${webglAvailable}
 Common causes:
 - WebGL disabled in browser settings
 - Browser extension blocking canvas.getContext('webgl')
@@ -137,173 +191,150 @@ Common causes:
   }
 
   return (
-    <div
-      className={className}
-      style={style}
-      data-testid={testId}
-    >
-      {showControls && (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.75rem',
-            marginBottom: '1rem',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-          data-testid={`${testId}-controls`}
-        >
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Projection selector */}
-            <div className="catalog-form__field" style={{ marginBottom: 0 }}>
-              <label
-                htmlFor={`${testId}-projection`}
-                style={{ marginRight: '0.5rem', fontWeight: '500' }}
-              >
-                Proyección:
-              </label>
-              <select
-                id={`${testId}-projection`}
-                value={projection}
-                onChange={(e) => setProjection(e.target.value as 'perspective' | 'orthographic')}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-input, #fff)',
-                  color: 'var(--text)',
-                  cursor: 'pointer',
-                }}
-                data-testid={`${testId}-projection-select`}
-              >
-                <option value="perspective">Perspectiva (3D)</option>
-                <option value="orthographic">Ortogonal (2D Plano)</option>
-              </select>
-            </div>
-
-            {/* Wireframe toggle */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                userSelect: 'none',
-              }}
-            >
-              <input
-                type="checkbox"
-                id={`${testId}-wireframe`}
-                checked={showWireframe}
-                onChange={(e) => setShowWireframe(e.target.checked)}
-                style={{
-                  cursor: 'pointer',
-                  width: '1.1rem',
-                  height: '1.1rem',
-                }}
-                data-testid={`${testId}-wireframe-checkbox`}
-              />
-              <label
-                htmlFor={`${testId}-wireframe`}
-                style={{
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: 'var(--text-sm, 0.875rem)',
-                }}
-              >
-                Rayos X (Ver interior)
-              </label>
-            </div>
-          </div>
-
-          {/* Camera view buttons */}
-          <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
-            <span
-              style={{
-                fontSize: 'var(--text-xs, 0.75rem)',
-                color: 'var(--text-muted)',
-                marginRight: '0.25rem',
-              }}
-            >
-              Cámara:
-            </span>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              style={{
-                padding: '0.375rem 0.75rem',
-                fontSize: 'var(--text-xs, 0.75rem)',
-                minWidth: 'unset',
-              }}
-              onClick={() => setCameraView({ type: 'front', ts: Date.now() })}
-              data-testid={`${testId}-camera-front`}
-            >
-              Frente
-            </button>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              style={{
-                padding: '0.375rem 0.75rem',
-                fontSize: 'var(--text-xs, 0.75rem)',
-                minWidth: 'unset',
-              }}
-              onClick={() => setCameraView({ type: 'top', ts: Date.now() })}
-              data-testid={`${testId}-camera-top`}
-            >
-              Planta
-            </button>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              style={{
-                padding: '0.375rem 0.75rem',
-                fontSize: 'var(--text-xs, 0.75rem)',
-                minWidth: 'unset',
-              }}
-              onClick={() => setCameraView({ type: 'side', ts: Date.now() })}
-              data-testid={`${testId}-camera-side`}
-            >
-              Lateral
-            </button>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              style={{
-                padding: '0.375rem 0.75rem',
-                fontSize: 'var(--text-xs, 0.75rem)',
-                minWidth: 'unset',
-              }}
-              onClick={() => setCameraView({ type: 'isometric', ts: Date.now() })}
-              data-testid={`${testId}-camera-isometric`}
-            >
-              Perspectiva
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Color mode selector */}
-      {!hideControls && (
-        <div
-          className="catalog-form__field"
-          style={{ marginBottom: '1rem' }}
-          data-testid={`${testId}-color-mode-field`}
-        >
-          <label htmlFor={`${testId}-color-mode`}>Colores</label>
-          <select
-            id={`${testId}-color-mode`}
-            value={colorMode}
-            onChange={(e) => setColorMode(e.target.value as BoardColorMode)}
-            data-testid={`${testId}-color-mode-select`}
+    <div className={rootClass} style={style} data-testid={testId}>
+      {showControls ? (
+        <>
+          <div
+            className="furniture-3d-viewer__toolbar"
+            data-testid={`${testId}-controls`}
           >
-            <option value="material">Material (color/veta)</option>
-            <option value="role">Por rol (taller)</option>
-          </select>
-        </div>
-      )}
+            <div className="furniture-3d-viewer__toolbar-cluster">
+              <div className="furniture-3d-viewer__field">
+                <label
+                  className="furniture-3d-viewer__field-label"
+                  htmlFor={`${testId}-projection`}
+                >
+                  Proyección
+                </label>
+                <select
+                  id={`${testId}-projection`}
+                  className="furniture-3d-viewer__select"
+                  value={projection}
+                  onChange={(e) =>
+                    setProjection(
+                      e.target.value as 'perspective' | 'orthographic',
+                    )
+                  }
+                  data-testid={`${testId}-projection-select`}
+                >
+                  <option value="perspective">Perspectiva</option>
+                  <option value="orthographic">Ortogonal</option>
+                </select>
+              </div>
 
-      {/* 3D canvas + optional part list / inspector */}
+              <label className="furniture-3d-viewer__check">
+                <input
+                  type="checkbox"
+                  id={`${testId}-outlines`}
+                  checked={showOutlines}
+                  onChange={(e) => setShowOutlines(e.target.checked)}
+                  data-testid={`${testId}-outlines-checkbox`}
+                />
+                Contornos
+              </label>
+            </div>
+
+            <div
+              className="furniture-3d-viewer__camera"
+              role="group"
+              aria-label="Vista de cámara"
+            >
+              <span className="furniture-3d-viewer__camera-label">Cámara</span>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() =>
+                  setCameraView({ type: 'front', ts: Date.now() })
+                }
+                data-testid={`${testId}-camera-front`}
+              >
+                Frente
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => setCameraView({ type: 'top', ts: Date.now() })}
+                data-testid={`${testId}-camera-top`}
+              >
+                Planta
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => setCameraView({ type: 'side', ts: Date.now() })}
+                data-testid={`${testId}-camera-side`}
+              >
+                Lateral
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() =>
+                  setCameraView({ type: 'isometric', ts: Date.now() })
+                }
+                data-testid={`${testId}-camera-isometric`}
+              >
+                3/4
+              </button>
+            </div>
+          </div>
+
+          <div
+            className="furniture-3d-viewer__advanced"
+            data-testid={`${testId}-advanced`}
+          >
+            <button
+              type="button"
+              className="furniture-3d-viewer__advanced-toggle"
+              aria-expanded={advancedOpen}
+              onClick={() => setAdvancedOpen((o) => !o)}
+              data-testid={`${testId}-advanced-toggle`}
+            >
+              {advancedOpen ? (
+                <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
+              ) : (
+                <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
+              )}
+              Acabados y vista avanzada
+              <span className="furniture-3d-viewer__advanced-summary">
+                {advancedSummary}
+              </span>
+            </button>
+            {advancedOpen ? (
+              <div
+                className="furniture-3d-viewer__advanced-body"
+                data-testid={`${testId}-advanced-body`}
+              >
+                <label className="furniture-3d-viewer__check">
+                  <input
+                    type="checkbox"
+                    id={`${testId}-wireframe`}
+                    checked={showWireframe}
+                    onChange={(e) => setShowWireframe(e.target.checked)}
+                    data-testid={`${testId}-wireframe-checkbox`}
+                  />
+                  Rayos X (ver interior)
+                </label>
+                <PaintModeField
+                  id={`${testId}-color-mode`}
+                  value={colorMode}
+                  onChange={setColorMode}
+                  testId={`${testId}-color-mode`}
+                  hint={paintModeHint}
+                />
+                <MaterialSurfaceModeField
+                  id={`${testId}-surface-mode`}
+                  value={surfaceMode}
+                  onChange={setSurfaceMode}
+                  testId={`${testId}-surface-mode`}
+                  visible={colorMode === 'material'}
+                />
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
       <div
         className={
           showPartInspector
@@ -320,9 +351,12 @@ Common causes:
             depth={depth}
             colorMode={colorMode}
             materialColors={materialColorsMemo}
+            materialTextures={materialTexturesMemo}
+            surfaceMode={surfaceMode}
             cameraView={cameraView}
             cameraType={projection}
             showWireframe={showWireframe}
+            showOutlines={showOutlines}
             selectedPartId={showPartInspector ? selectedPartId : null}
             onSelectPart={
               showPartInspector ? setSelectedPartId : undefined
@@ -356,7 +390,7 @@ Common causes:
   );
 }
 
-/** Export materialColorMap for consumers that need to build their own lookup. */
-export { materialColorMap } from '../preview3d';
+/** Export material maps for consumers that need to build their own lookup. */
+export { materialColorMap, materialTextureMap } from '../preview3d';
 export type { BoardColorMode, MaterialColorLookup } from '../preview3d';
 export type { ResolvedBoardPart } from '@muebles/domain';

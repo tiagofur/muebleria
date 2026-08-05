@@ -50,7 +50,8 @@ import { ProjectTemplatesManagementModal } from './components/ProjectTemplatesMa
 import { ProjectsListView } from './components/ProjectsListView';
 import {
   emptyProjectDraft,
-  filterProjectsByQuery,
+  filterProjectsList,
+  type ProjectStatusFilter,
   formatProjectMoney,
   projectToDraft,
   setItemOptionChoice,
@@ -255,6 +256,8 @@ export interface ProjectsScreenProps {
    * project id (used by ?present=projectId URL sharing).
    */
   readonly autoPresentId?: string | null;
+  /** Auth-aware media URL resolver for 3D textures. */
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
 export function ProjectsScreen({
@@ -323,9 +326,12 @@ export function ProjectsScreen({
   onRestoreVersion,
   showCosts = true,
   autoPresentId = null,
+  resolveImageUrl = (u) => u,
 }: ProjectsScreenProps): ReactNode {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
+  const [statusFilter, setStatusFilter] =
+    useState<ProjectStatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
@@ -393,8 +399,9 @@ export function ProjectsScreen({
   );
 
   const filtered = useMemo(
-    () => filterProjectsByQuery(projects, debouncedSearch, customers),
-    [projects, debouncedSearch, customers],
+    () =>
+      filterProjectsList(projects, debouncedSearch, statusFilter, customers),
+    [projects, debouncedSearch, statusFilter, customers],
   );
 
   const selectedProject =
@@ -749,6 +756,7 @@ export function ProjectsScreen({
       customers={customers}
       projectTemplates={projectTemplates}
       search={search}
+      statusFilter={statusFilter}
       isTrulyEmpty={isTrulyEmpty}
       isFilterEmpty={isFilterEmpty}
       canMutate={canMutate}
@@ -756,6 +764,11 @@ export function ProjectsScreen({
       hasDeleteTemplate={!!onDeleteTemplate}
       estimateLabel={estimateLabel}
       onSearchChange={setSearch}
+      onStatusFilterChange={setStatusFilter}
+      onClearFilters={() => {
+        setSearch('');
+        setStatusFilter('all');
+      }}
       onNewProject={startCreate}
       onFromTemplate={startFromTemplate}
       onManageTemplates={() => setTemplatesManagementOpen(true)}
@@ -939,6 +952,7 @@ export function ProjectsScreen({
               : null)
           }
           workshopName={workshopSettings?.workshopName}
+          resolveMediaUrl={resolveImageUrl}
           onClose={() => setShowPresentation(false)}
         />
       ) : null}
@@ -947,6 +961,7 @@ export function ProjectsScreen({
         open={show3DModal}
         project={selectedProject}
         catalog={project3dCatalog}
+        resolveMediaUrl={resolveImageUrl}
         focus={
           viewerQuoteRun || !viewerItem
             ? null

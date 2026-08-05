@@ -15,8 +15,8 @@ export const STRUCTURE_EDITOR_TABS: readonly {
   readonly id: StructureEditorTab;
   readonly label: string;
 }[] = [
-  { id: 'general', label: 'Datos Generales' },
-  { id: 'presets', label: 'Presets de Medida' },
+  { id: 'general', label: 'General' },
+  { id: 'presets', label: 'Presets' },
   { id: 'components', label: 'Componentes' },
   { id: 'preview3d', label: 'Vista 3D' },
 ] as const;

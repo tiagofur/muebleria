@@ -6,6 +6,7 @@
 import type { MaterialBoard, ResolvedBoardPart } from '@muebles/domain';
 import {
   DEFAULT_MATERIAL_PREVIEW_COLOR,
+  groupPositionFromMinCorner,
   normalizePreviewColor,
 } from '@muebles/domain';
 
@@ -23,10 +24,34 @@ export type BoardPartVisual = {
   readonly position: readonly [number, number, number];
   readonly rotation: readonly [number, number, number];
   readonly color: string;
+  /**
+   * Grain flag from resolved BOM (material.grainDefault). When 1 and colorMode
+   * is material, the mesh applies procedural veta (or a photo texture if set).
+   */
+  readonly grain: 0 | 1;
+  /**
+   * Optional catalog texture URL (material.previewTextureUrl). Only set in
+   * material color mode. Relative media paths are fine (same-origin).
+   */
+  readonly textureUrl?: string;
+  /** Physical mm of one texture image on part width (U). Default applied in mesh. */
+  readonly textureTileWidthMm?: number;
+  /** Physical mm of one texture image on part length / veta (V). */
+  readonly textureTileLengthMm?: number;
 };
 
 /** How to pick mesh colors in the 3D viewer. */
 export type BoardColorMode = 'material' | 'role';
+
+/**
+ * How to render material surfaces when colorMode is `material`.
+ * - color: solid previewColor only
+ * - grain: solid + procedural veta (when part.grain === 1)
+ * - texture: catalog photo map when available; else grain; else color
+ */
+export type MaterialSurfaceMode = 'color' | 'grain' | 'texture';
+
+export const DEFAULT_MATERIAL_SURFACE_MODE: MaterialSurfaceMode = 'grain';
 
 const ROLE_COLORS: Record<string, string> = {
   FRENTE: '#c4a574',
@@ -48,6 +73,25 @@ export function colorForOptionRole(role: string): string {
 
 export type MaterialColorLookup = Readonly<Record<string, string | undefined>>;
 
+/** Default physical tile when material has no tile size set (~sample patch). */
+export const DEFAULT_TEXTURE_TILE_MM = 280;
+
+/** One material's 3D texture binding (URL + physical tile size). */
+export type MaterialTextureEntry = {
+  readonly url: string;
+  readonly tileWidthMm: number;
+  readonly tileLengthMm: number;
+};
+
+/** materialId → optional texture entry for 3D maps. */
+export type MaterialTextureLookup = Readonly<
+  Record<string, MaterialTextureEntry | undefined>
+>;
+
+function positiveTileMm(v: number | undefined, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 /** Build materialId → normalized #RRGGBB from catalog materials. */
 export function materialColorMap(
   materials: readonly Pick<MaterialBoard, 'id' | 'previewColor'>[],
@@ -55,6 +99,44 @@ export function materialColorMap(
   const map: Record<string, string | undefined> = {};
   for (const m of materials) {
     map[m.id] = normalizePreviewColor(m.previewColor);
+  }
+  return map;
+}
+
+/**
+ * Build materialId → texture entry for 3D maps.
+ * Prefers previewTextureUrl, then catalog imageUrl (foto del material).
+ * Optional resolveUrl appends auth tokens / absolute origin for TextureLoader.
+ * Tile sizes come from material; 0/omit → DEFAULT_TEXTURE_TILE_MM.
+ */
+export function materialTextureMap(
+  materials: readonly Pick<
+    MaterialBoard,
+    | 'id'
+    | 'previewTextureUrl'
+    | 'imageUrl'
+    | 'previewTextureTileWidthMm'
+    | 'previewTextureTileLengthMm'
+  >[],
+  resolveUrl?: (url: string | undefined) => string | undefined,
+): MaterialTextureLookup {
+  const map: Record<string, MaterialTextureEntry | undefined> = {};
+  for (const m of materials) {
+    const raw = m.previewTextureUrl?.trim() || m.imageUrl?.trim();
+    if (!raw) continue;
+    const resolved = resolveUrl ? resolveUrl(raw) : raw;
+    if (!resolved?.trim()) continue;
+    map[m.id] = {
+      url: resolved.trim(),
+      tileWidthMm: positiveTileMm(
+        m.previewTextureTileWidthMm,
+        DEFAULT_TEXTURE_TILE_MM,
+      ),
+      tileLengthMm: positiveTileMm(
+        m.previewTextureTileLengthMm,
+        DEFAULT_TEXTURE_TILE_MM,
+      ),
+    };
   }
   return map;
 }
@@ -86,11 +168,63 @@ function degToRad(deg: number): number {
 export type BoardPartToVisualOptions = {
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
+  /** Surface look when painting by material. Ignored in role mode. */
+  readonly surfaceMode?: MaterialSurfaceMode;
 };
 
 /**
+ * Resolve grain + texture flags for a part under the chosen surface mode.
+ * Pure — used by boardPartToVisual and tests.
+ *
+ * Grain mode only draws procedural marks when the part inherits veta from the
+ * material (part.grain === 1). Materials without veta stay solid color.
+ * Texture mode uses the catalog photo when present; otherwise falls back to
+ * grain (if any) or solid color.
+ */
+export type MaterialSurfaceResolve = {
+  readonly grain: 0 | 1;
+  readonly textureUrl?: string;
+  readonly textureTileWidthMm?: number;
+  readonly textureTileLengthMm?: number;
+};
+
+export function resolveMaterialSurface(
+  part: Pick<ResolvedBoardPart, 'grain' | 'materialId'>,
+  surfaceMode: MaterialSurfaceMode,
+  materialTextures?: MaterialTextureLookup,
+): MaterialSurfaceResolve {
+  const entry = materialTextures?.[part.materialId];
+  const hasGrain: 0 | 1 = part.grain === 1 ? 1 : 0;
+
+  switch (surfaceMode) {
+    case 'color':
+      return { grain: 0 };
+    case 'grain':
+      return { grain: hasGrain };
+    case 'texture':
+      if (entry?.url) {
+        return {
+          grain: 0,
+          textureUrl: entry.url,
+          textureTileWidthMm: entry.tileWidthMm,
+          textureTileLengthMm: entry.tileLengthMm,
+        };
+      }
+      // No photo → same as grain mode (veta only if material has it).
+      return { grain: hasGrain };
+    default:
+      return { grain: hasGrain };
+  }
+}
+
+/**
  * Map a resolved board part to mesh visual props.
- * Local box sits in +X/+Y/+Z from the part origin after rotation (corner placement).
+ *
+ * (x,y,z) on the part is the workshop **min corner** of the AABB
+ * (left / back / bottom). Local box still grows +X/+Y/+Z from its local
+ * origin after rotation; groupPositionFromMinCorner offsets the group so
+ * that min corner lands on (x,y,z) regardless of Euler growth signs.
  */
 export function boardPartToVisual(
   part: ResolvedBoardPart,
@@ -102,7 +236,18 @@ export function boardPartToVisual(
   const x = part.x ?? 0;
   const y = part.y ?? 0;
   const z = part.z ?? 0;
+  const rot = {
+    rotateX: part.rotateX ?? 0,
+    rotateY: part.rotateY ?? 0,
+    rotateZ: part.rotateZ ?? 0,
+  };
   const colorMode = options.colorMode ?? 'material';
+  const useMaterialLook = colorMode === 'material';
+  const surfaceMode =
+    options.surfaceMode ?? DEFAULT_MATERIAL_SURFACE_MODE;
+  const surface = useMaterialLook
+    ? resolveMaterialSurface(part, surfaceMode, options.materialTextures)
+    : { grain: 0 as const };
 
   return {
     id: part.id,
@@ -110,14 +255,22 @@ export function boardPartToVisual(
     optionRole: part.optionRole,
     materialId: part.materialId,
     size: [w, t, l],
-    // Three Y-up: workshop X→x, Z(height)→y, Y(depth)→z
-    position: [x, z, y],
+    // Min-corner anchor → render group position (Three Y-up).
+    position: groupPositionFromMinCorner(
+      { x, y, z },
+      { widthMm: w, thicknessMm: t, lengthMm: l },
+      rot,
+    ),
     rotation: [
-      degToRad(part.rotateX ?? 0),
-      degToRad(part.rotateY ?? 0),
-      degToRad(part.rotateZ ?? 0),
+      degToRad(rot.rotateX),
+      degToRad(rot.rotateY),
+      degToRad(rot.rotateZ),
     ],
     color: resolvePartColor(part, colorMode, options.materialColors),
+    grain: surface.grain,
+    textureUrl: surface.textureUrl,
+    textureTileWidthMm: surface.textureTileWidthMm,
+    textureTileLengthMm: surface.textureTileLengthMm,
   };
 }
 

@@ -58,9 +58,10 @@ export function StructureEditor3DPanel({
           </select>
         </div>
       ) : (
-        <p className="text-small text-muted mb-3">
-          Mostrando dimensiones de la estructura: {preview.width}×{preview.height}×{preview.depth} mm.
-          (Podés definir presets en la pestaña &quot;Presets de Medida&quot;).
+        <p className="catalog-empty">
+          Mostrando dimensiones de la estructura: {preview.width}×{preview.height}×
+          {preview.depth} mm. (Podés definir presets en la pestaña &quot;Presets de
+          Medida&quot;).
         </p>
       )}
 

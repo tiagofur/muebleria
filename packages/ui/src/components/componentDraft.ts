@@ -51,8 +51,18 @@ export const COMPONENT_PLACEMENT_GROUPS: readonly {
   {
     label: 'Horizontales',
     options: [
-      { value: 'base', label: 'Base', description: 'Piso del mueble (pieza horizontal inferior).' },
-      { value: 'superior', label: 'Superior', description: 'Tapa o techo del mueble (pieza horizontal superior).' },
+      {
+        value: 'base',
+        label: 'Base',
+        description:
+          'Piso del mueble (horizontal). Largo = ancho del mueble (PW, veta izq→der); Ancho = profundidad (PD).',
+      },
+      {
+        value: 'superior',
+        label: 'Superior',
+        description:
+          'Tapa o techo (horizontal). Largo = ancho del mueble (PW, veta izq→der); Ancho = profundidad (PD).',
+      },
     ],
   },
   {

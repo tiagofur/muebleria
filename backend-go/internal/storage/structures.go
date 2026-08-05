@@ -308,6 +308,14 @@ func nullIfEmpty(s string) interface{} {
 	return s
 }
 
+// nullIfZeroFloat stores NULL when value is 0 so "unset" tile size uses client default.
+func nullIfZeroFloat(v float64) interface{} {
+	if v == 0 {
+		return nil
+	}
+	return v
+}
+
 func placementOverrideArg(p *domain.ComponentPlacement) interface{} {
 	if p == nil {
 		return nil

@@ -96,6 +96,13 @@ export function ProductionQueue({
     );
   }
 
+  const title =
+    tab === 'accepted' ? 'Para fabricar' : 'Ya en planta';
+  const subtitle =
+    tab === 'accepted'
+      ? 'Cotizaciones aceptadas: exportá el corte y los herrajes, y marcá cuando salga a planta.'
+      : 'Pedidos ya marcados en producción. Podés reexportar el corte o el pack.';
+
   return (
     <section className="prod-queue" aria-label="Cola de producción">
       <header className="prod-queue__header">
@@ -107,11 +114,10 @@ export function ProductionQueue({
             aria-hidden
           />
           <div>
-            <h2 className="prod-queue__title">Listos para fabricar</h2>
-            <p className="prod-queue__subtitle">
-              Cotizaciones aceptadas: exportá el corte y los herrajes, y marcá
-              cuando salga a planta.
-            </p>
+            <h2 className="prod-queue__title" data-testid="prod-queue-title">
+              {title}
+            </h2>
+            <p className="prod-queue__subtitle">{subtitle}</p>
           </div>
         </div>
       </header>

@@ -227,6 +227,15 @@ export function createCatalogStore(options: InternalOptions) {
         imageUrl: draft.imageUrl?.trim() || undefined,
         previewColor: draft.previewColor?.trim() || undefined,
         previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
+        previewTextureTileWidthMm:
+          draft.previewTextureTileWidthMm && draft.previewTextureTileWidthMm > 0
+            ? draft.previewTextureTileWidthMm
+            : undefined,
+        previewTextureTileLengthMm:
+          draft.previewTextureTileLengthMm &&
+          draft.previewTextureTileLengthMm > 0
+            ? draft.previewTextureTileLengthMm
+            : undefined,
         notes: optionalNotes(draft.notes),
         active: true,
       };
@@ -268,6 +277,16 @@ export function createCatalogStore(options: InternalOptions) {
                 imageUrl: draft.imageUrl?.trim() || undefined,
                 previewColor: draft.previewColor?.trim() || undefined,
                 previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
+                previewTextureTileWidthMm:
+                  draft.previewTextureTileWidthMm &&
+                  draft.previewTextureTileWidthMm > 0
+                    ? draft.previewTextureTileWidthMm
+                    : undefined,
+                previewTextureTileLengthMm:
+                  draft.previewTextureTileLengthMm &&
+                  draft.previewTextureTileLengthMm > 0
+                    ? draft.previewTextureTileLengthMm
+                    : undefined,
                 notes: optionalNotes(draft.notes),
               }
             : m,

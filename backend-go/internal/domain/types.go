@@ -90,11 +90,17 @@ type MaterialBoard struct {
 	// PreviewColor is #RRGGBB for 3D / color-only client preview.
 	PreviewColor string `json:"preview_color,omitempty"`
 	// PreviewTextureURL optional relative media path for textured 3D (color mode ignores it).
-	PreviewTextureURL string    `json:"preview_texture_url,omitempty"`
-	Notes             string    `json:"notes,omitempty"`
-	Active            bool      `json:"active"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	PreviewTextureURL string `json:"preview_texture_url,omitempty"`
+	// PreviewTextureTileWidthMm is the real-world mm of one texture image across
+	// board width (U). 0 = use client default tile.
+	PreviewTextureTileWidthMm float64 `json:"preview_texture_tile_width_mm,omitempty"`
+	// PreviewTextureTileLengthMm is the real-world mm of one texture image along
+	// grain / board length (V). 0 = use client default tile.
+	PreviewTextureTileLengthMm float64   `json:"preview_texture_tile_length_mm,omitempty"`
+	Notes                      string    `json:"notes,omitempty"`
+	Active                     bool      `json:"active"`
+	CreatedAt                  time.Time `json:"created_at"`
+	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
 type EdgeBand struct {

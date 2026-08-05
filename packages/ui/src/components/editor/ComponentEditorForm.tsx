@@ -9,7 +9,10 @@ import type {
   SetStateAction,
 } from 'react';
 import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
-import type { MaterialColorLookup } from '../../preview3d';
+import type {
+  MaterialColorLookup,
+  MaterialTextureLookup,
+} from '../../preview3d';
 import {
   COMPONENT_EDITOR_TABS,
   type ComponentDraft,
@@ -24,7 +27,8 @@ export type ComponentEditorFormProps = {
   readonly formId: string;
   readonly error: string | null;
   readonly onSubmit: (e: FormEvent) => void;
-  readonly onCancel: () => void;
+  /** @deprecated Footer moved to EntityEditorLayout chrome (Fase 5). */
+  readonly onCancel?: () => void;
   readonly editorTab: ComponentEditorTab;
   readonly setEditorTab: Dispatch<SetStateAction<ComponentEditorTab>>;
   readonly draft: ComponentDraft;
@@ -33,6 +37,7 @@ export type ComponentEditorFormProps = {
   readonly optionGroups: readonly OptionGroup[];
   readonly previewParts: readonly ResolvedBoardPart[];
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
   readonly containerDims: PlacementDims;
   readonly onContainerDimsChange: (dims: PlacementDims) => void;
   readonly showInContext: boolean;
@@ -43,7 +48,6 @@ export function ComponentEditorForm({
   formId,
   error,
   onSubmit,
-  onCancel,
   editorTab,
   setEditorTab,
   draft,
@@ -52,6 +56,7 @@ export function ComponentEditorForm({
   optionGroups,
   previewParts,
   materialColors,
+  materialTextures,
   containerDims,
   onContainerDimsChange,
   showInContext,
@@ -60,9 +65,9 @@ export function ComponentEditorForm({
   return (
     <form id={formId} onSubmit={onSubmit} className="catalog-form">
       {error ? (
-        <div className="alert alert--danger mb-4" data-testid="form-error">
+        <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
-        </div>
+        </p>
       ) : null}
 
       <div
@@ -111,6 +116,7 @@ export function ComponentEditorForm({
         hidden={editorTab !== 'geometry'}
         previewParts={previewParts}
         materialColors={materialColors}
+        materialTextures={materialTextures}
         containerDims={containerDims}
         onContainerDimsChange={onContainerDimsChange}
         showInContext={showInContext}
@@ -130,19 +136,6 @@ export function ComponentEditorForm({
         optionGroups={optionGroups}
         hidden={editorTab !== 'options'}
       />
-
-      <div className="modal__footer mt-6">
-        <button
-          type="button"
-          className="btn btn--secondary"
-          onClick={onCancel}
-        >
-          Cancelar
-        </button>
-        <button type="submit" className="btn btn--primary" data-testid="save-btn">
-          Guardar
-        </button>
-      </div>
     </form>
   );
 }

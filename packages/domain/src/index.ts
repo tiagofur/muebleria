@@ -146,6 +146,16 @@ export {
 } from './spatialPlacement';
 
 export {
+  eulerXyzMatrix,
+  localBoxMinCornerRenderOffset,
+  localOriginWorkshopFromMinCorner,
+  groupPositionFromMinCorner,
+  type BoardLocalSize,
+  type SpatialRotation,
+  type Vec3,
+} from './spatialAnchor';
+
+export {
   previewPartForComponent,
   type ComponentPreviewInput,
   type ComponentPreviewOptions,

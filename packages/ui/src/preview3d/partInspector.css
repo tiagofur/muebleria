@@ -47,9 +47,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-surface, var(--color-surface));
+  background: var(--surface-card);
   max-height: 12rem;
   overflow: auto;
 }
@@ -62,7 +62,7 @@
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border: none;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--border-default);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -76,12 +76,12 @@
 }
 
 .part-list__item:hover {
-  background: var(--bg-surface-elevated, var(--color-surface-elevated, #f5f5f4));
+  background: var(--surface-hover);
 }
 
 .part-list__item--selected {
-  background: color-mix(in srgb, var(--color-primary, #c4a574) 18%, transparent);
-  box-shadow: inset 3px 0 0 var(--color-primary, #c4a574);
+  background: color-mix(in srgb, var(--brand-500) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--brand-500);
 }
 
 .part-list__name {
@@ -92,15 +92,15 @@
 
 .part-list__meta {
   font-size: var(--text-xs);
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 /* --- Part inspector --- */
 
 .part-inspector {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-surface, var(--color-surface));
+  background: var(--surface-card);
   padding: var(--space-3);
 }
 
@@ -111,7 +111,7 @@
 .part-inspector__hint {
   margin: 0;
   font-size: var(--text-sm);
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 .part-inspector__header {
@@ -128,8 +128,8 @@
 
 .part-inspector__title {
   margin: 0;
-  font-size: var(--text-md, 1rem);
-  font-weight: var(--weight-semibold, 600);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
   line-height: 1.3;
 }
 
@@ -137,8 +137,8 @@
   display: inline-block;
   margin-top: var(--space-1);
   font-size: var(--text-xs);
-  color: var(--text-muted, #6b7280);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 .part-inspector__grid {
@@ -156,8 +156,8 @@
 .part-inspector__grid dt {
   margin: 0;
   font-size: var(--text-xs);
-  color: var(--text-muted, #6b7280);
-  font-weight: var(--weight-medium, 500);
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .part-inspector__grid dd {
@@ -166,7 +166,7 @@
 }
 
 .part-inspector__mono {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   word-break: break-all;
 }
 

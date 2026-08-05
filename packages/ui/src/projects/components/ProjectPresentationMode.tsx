@@ -22,7 +22,10 @@ import { formatMoneyDisplay } from '../../common';
 import {
   canUseWebGL,
   materialColorMap,
+  materialTextureMap,
+  DEFAULT_MATERIAL_SURFACE_MODE,
   type BoardColorMode,
+  type MaterialSurfaceMode,
   type ModelFormat,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
@@ -49,6 +52,7 @@ export type ProjectPresentationModeProps = {
   readonly salePrice: number | null;
   readonly workshopName?: string;
   readonly onClose: () => void;
+  readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
 };
 
 function lineLabel(
@@ -90,11 +94,16 @@ export function ProjectPresentationMode({
   salePrice,
   workshopName,
   onClose,
+  resolveMediaUrl,
 }: ProjectPresentationModeProps): ReactNode {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [useR3f, setUseR3f] = useState(false);
   const [explodeFactor, setExplodeFactor] = useState(0);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
+  const [surfaceMode, setSurfaceMode] = useState<MaterialSurfaceMode>(
+    DEFAULT_MATERIAL_SURFACE_MODE,
+  );
+  const [showOutlines, setShowOutlines] = useState(true);
   const [measureMode, setMeasureMode] = useState(false);
   const [exportFormat, setExportFormat] = useState<ModelFormat | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -114,6 +123,8 @@ export function ProjectPresentationMode({
     setUseR3f(canUseWebGL());
     setExplodeFactor(0);
     setColorMode('material');
+    setSurfaceMode(DEFAULT_MATERIAL_SURFACE_MODE);
+    setShowOutlines(true);
     setMeasureMode(false);
     setExportFormat(null);
     setExportMenuOpen(false);
@@ -192,6 +203,10 @@ export function ProjectPresentationMode({
   const materialColors = useMemo(
     () => materialColorMap(catalog.materials),
     [catalog.materials],
+  );
+  const materialTextures = useMemo(
+    () => materialTextureMap(catalog.materials, resolveMediaUrl),
+    [catalog.materials, resolveMediaUrl],
   );
 
   const handleCapturePng = () => {
@@ -453,7 +468,7 @@ export function ProjectPresentationMode({
                 <div
                   className="project-presentation__control-group"
                   role="group"
-                  aria-label="Modo de color"
+                  aria-label="Cómo se pinta la vista 3D"
                 >
                   <Palette size={16} strokeWidth={1.5} aria-hidden />
                   <button
@@ -466,9 +481,10 @@ export function ProjectPresentationMode({
                     onClick={() => setColorMode('material')}
                     data-testid="presentation-color-material"
                     aria-pressed={colorMode === 'material'}
-                    aria-label="Colorear por material"
+                    aria-label="Pintar con acabados del material"
+                    title="Color, veta y textura del material de cada pieza"
                   >
-                    Por material
+                    Acabados
                   </button>
                   <button
                     type="button"
@@ -480,10 +496,45 @@ export function ProjectPresentationMode({
                     onClick={() => setColorMode('role')}
                     data-testid="presentation-color-role"
                     aria-pressed={colorMode === 'role'}
-                    aria-label="Colorear por función"
+                    aria-label="Pintar solo por rol de pieza (taller)"
+                    title="Tintes fijos por INTERIOR/FRENTE — no muestra el material real"
                   >
-                    Por función
+                    Roles taller
                   </button>
+                  {colorMode === 'material' ? (
+                    <select
+                      value={surfaceMode}
+                      onChange={(e) =>
+                        setSurfaceMode(e.target.value as MaterialSurfaceMode)
+                      }
+                      data-testid="presentation-surface-mode"
+                      aria-label="Vista del acabado"
+                      title="Solo color, color con veta, o textura foto"
+                      style={{
+                        padding: '0.25rem 0.5rem',
+                        fontSize: 'var(--text-xs)',
+                        borderRadius: 'var(--radius-sm, 4px)',
+                        border: '1px solid var(--border, #ccc)',
+                        background: 'var(--surface-input)',
+                      }}
+                    >
+                      <option value="color">Solo color</option>
+                      <option value="grain">Color + veta</option>
+                      <option value="texture">Textura</option>
+                    </select>
+                  ) : null}
+                  <label
+                    className="catalog-form__row-check"
+                    style={{ margin: 0, gap: '0.35rem' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showOutlines}
+                      onChange={(e) => setShowOutlines(e.target.checked)}
+                      data-testid="presentation-outlines-checkbox"
+                    />
+                    <span>Contornos</span>
+                  </label>
                   <button
                     type="button"
                     className={`btn btn--small${measureMode ? ' btn--primary' : ''}`}
@@ -596,6 +647,9 @@ export function ProjectPresentationMode({
                   testId="presentation-scene-3d"
                   colorMode={colorMode}
                   materialColors={materialColors}
+                  materialTextures={materialTextures}
+                  surfaceMode={surfaceMode}
+                  showOutlines={showOutlines}
                   measurementMode={measureMode}
                   exportFormat={exportFormat}
                   onExportComplete={() => setExportFormat(null)}

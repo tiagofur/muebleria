@@ -6,7 +6,12 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ResolvedBoardPart } from '@muebles/domain';
 import { FurnitureScene3D } from './FurnitureScene3D';
-import type { BoardColorMode, MaterialColorLookup } from './boardPartVisual';
+import type {
+  BoardColorMode,
+  MaterialColorLookup,
+  MaterialSurfaceMode,
+  MaterialTextureLookup,
+} from './boardPartVisual';
 
 export type ModuleScene3DProps = {
   readonly parts: readonly ResolvedBoardPart[];
@@ -17,9 +22,12 @@ export type ModuleScene3DProps = {
   readonly style?: CSSProperties;
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
+  readonly surfaceMode?: MaterialSurfaceMode;
   readonly cameraView?: { readonly type: 'front' | 'top' | 'side' | 'isometric'; readonly ts: number } | null;
   readonly cameraType?: 'perspective' | 'orthographic';
   readonly showWireframe?: boolean;
+  readonly showOutlines?: boolean;
   readonly selectedPartId?: string | null;
   readonly onSelectPart?: (partId: string | null) => void;
   readonly isolateSelected?: boolean;
@@ -47,9 +55,12 @@ export function ModuleScene3D({
   style,
   colorMode = 'material',
   materialColors,
+  materialTextures,
+  surfaceMode,
   cameraView,
   cameraType,
   showWireframe,
+  showOutlines,
   selectedPartId,
   onSelectPart,
   isolateSelected,
@@ -78,9 +89,12 @@ export function ModuleScene3D({
       showFloor={false}
       colorMode={colorMode}
       materialColors={materialColors}
+      materialTextures={materialTextures}
+      surfaceMode={surfaceMode}
       cameraView={cameraView}
       cameraType={cameraType}
       showWireframe={showWireframe}
+      showOutlines={showOutlines}
       selectedPartId={selectedPartId}
       onSelectPart={onSelectPart}
       isolateSelected={isolateSelected}

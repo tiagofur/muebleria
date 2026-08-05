@@ -59,6 +59,7 @@ describe('AppShell nav model (F017)', () => {
       'Cola',
     ]);
 
+    // design.md §4.1: composition first, then catalogs, Grupos last (Fase 6).
     expect(ingenieria.items.map((i) => i.id)).toEqual([
       'modules',
       'structures',
@@ -76,6 +77,15 @@ describe('AppShell nav model (F017)', () => {
       'Cantos',
       'Herrajes',
       'Grupos',
+    ]);
+    expect(ingenieria.items.map((i) => i.group)).toEqual([
+      'composition',
+      'composition',
+      'composition',
+      'catalogs',
+      'catalogs',
+      'catalogs',
+      'catalogs',
     ]);
 
     expect(config.items.map((i) => i.id)).toEqual([
@@ -114,6 +124,18 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('optionGroups')).toBe('Grupos');
     expect(labelForNavId('settings')).toBe('Ajustes');
     expect(labelForNavId('users')).toBe('Usuarios');
+  });
+
+  it('INGENIERÍA groups composition vs catalogs (Fase 6 IA)', () => {
+    const css = read('appShell.css');
+    expect(css).toMatch(/app-sidebar__group-label/);
+    expect(css).toMatch(/app-sidebar__item--nested/);
+    const src = read('AppShell.tsx');
+    expect(src).toMatch(/nav-group-\$\{item\.group\}/);
+    expect(src).toMatch(/Composición/);
+    expect(src).toMatch(/Catálogos/);
+    expect(src).toMatch(/group: 'composition'/);
+    expect(src).toMatch(/group: 'catalogs'/);
   });
 
   it('resolveNavSections appends Usuarios only when showAdminUsers', () => {

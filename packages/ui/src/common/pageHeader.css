@@ -53,6 +53,7 @@
 
 /* —— Subtitle / lead —— */
 .page-header__subtitle,
+.catalog-page__subtitle,
 .dashboard__subtitle,
 .prod-queue__subtitle,
 .module-showcase__lead {

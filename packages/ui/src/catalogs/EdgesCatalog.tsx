@@ -190,13 +190,22 @@ export function EdgesCatalog({
   return (
     <section className="catalog-page" aria-label="Catálogo de cantos">
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Cantos</h2>
+        <div>
+          <h2 className="catalog-page__title">Cantos</h2>
+          <p className="page-header__subtitle">
+            Cintillas y melaminas de canto del taller
+          </p>
+        </div>
         <div className="catalog-page__toolbar">
           {canMutate ? (
-          <button type="button" className="btn btn--primary" onClick={startCreate}>
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo canto
-          </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={startCreate}
+            >
+              <Plus size={16} strokeWidth={1.5} aria-hidden />
+              Nuevo canto
+            </button>
           ) : null}
         </div>
       </div>

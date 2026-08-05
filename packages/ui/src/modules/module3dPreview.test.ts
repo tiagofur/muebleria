@@ -32,6 +32,23 @@ const material: MaterialBoard = {
   grainDefault: false,
   active: true,
   defaultEdgeBandId: 'edge-a',
+  previewColor: '#F5F5F0',
+};
+
+const materialWood: MaterialBoard = {
+  id: 'mat-wood',
+  code: 'MAT-WOOD',
+  name: 'Maderado',
+  widthMm: 1830,
+  lengthMm: 2750,
+  thicknessMm: 18,
+  boardPrice: 120,
+  wastePercent: 10,
+  costPerM2: 60,
+  grainDefault: true,
+  active: true,
+  defaultEdgeBandId: 'edge-a',
+  previewColor: '#C4A574',
 };
 
 const optionGroups: OptionGroup[] = [
@@ -41,7 +58,7 @@ const optionGroups: OptionGroup[] = [
     name: 'Interior',
     kind: 'board',
     required: true,
-    optionIds: ['mat-a'],
+    optionIds: ['mat-a', 'mat-wood'],
   },
 ];
 
@@ -99,7 +116,7 @@ const catalog = {
   modules: [baseModule],
   structures: [structure],
   components: [comp],
-  materials: [material],
+  materials: [material, materialWood],
   edges: [edge],
   hardware: [] as readonly Hardware[],
   optionGroups,
@@ -136,5 +153,19 @@ describe('resolveModule3DPreview', () => {
     expect(preview.error).toBeNull();
     expect(preview.empty).toBe(true);
     expect(preview.parts).toEqual([]);
+  });
+
+  it('defaults INTERIOR to first material and allows finish override', () => {
+    const defaults = resolveModule3DPreview(baseModule, catalog);
+    expect(defaults.parts.every((p) => p.materialId === 'mat-a')).toBe(true);
+    expect(defaults.optionChoices.INTERIOR).toBe('mat-a');
+
+    const wood = resolveModule3DPreview(baseModule, catalog, null, {
+      INTERIOR: 'mat-wood',
+    });
+    expect(wood.error).toBeNull();
+    expect(wood.parts.every((p) => p.materialId === 'mat-wood')).toBe(true);
+    expect(wood.parts.every((p) => p.grain === 1)).toBe(true);
+    expect(wood.optionChoices.INTERIOR).toBe('mat-wood');
   });
 });

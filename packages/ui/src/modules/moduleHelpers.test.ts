@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Module, OptionGroup } from '@muebles/domain';
 import {
+  boardFinishPickerGroupsForModule,
   defaultOptionChoicesForModule,
   draftToModule,
   edgesFromFlags,
@@ -279,6 +280,66 @@ describe('suggestPartCode / defaultOptionChoicesForModule', () => {
     });
     // FIXED hardware lines with hardwareId must not force a choice
     expect(choices.FIXED).toBeUndefined();
+  });
+
+  it('lists board finish picker groups with materials (not hardware)', () => {
+    const catalogComponents = [
+      {
+        id: 'comp-side',
+        code: 'C-LAT',
+        name: 'Lateral',
+        placement: 'lateral_izquierdo' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 720,
+          widthMm: 590,
+          thicknessMm: 18,
+        },
+        defaultEdges: edgesFromFlags(true, true, true, true),
+        optionRoles: ['INTERIOR', 'FRENTE'],
+        active: true,
+      },
+    ];
+    const materials = [
+      {
+        id: 'mat-a',
+        code: 'MAT-A',
+        name: 'Blanco',
+        previewColor: '#F5F5F0',
+        grainDefault: false,
+      },
+      {
+        id: 'mat-b',
+        code: 'MAT-B',
+        name: 'Gris',
+        previewColor: '#CCCCCC',
+        grainDefault: false,
+      },
+      {
+        id: 'mat-c',
+        code: 'MAT-C',
+        name: 'Madera',
+        previewColor: '#C4A574',
+        grainDefault: true,
+      },
+    ];
+    const finishGroups = boardFinishPickerGroupsForModule(
+      {
+        components: [{ componentId: 'comp-side' }],
+        hardwareLines: modules[0]!.hardwareLines,
+      },
+      groups,
+      materials,
+      catalogComponents,
+    );
+    expect(finishGroups.map((g) => g.code)).toEqual(['INTERIOR', 'FRENTE']);
+    expect(finishGroups[0]!.options.map((o) => o.id)).toEqual([
+      'mat-a',
+      'mat-b',
+    ]);
+    expect(finishGroups[1]!.options[0]!.grainDefault).toBe(true);
+    // Hardware groups are excluded from finish pickers
+    expect(finishGroups.some((g) => g.code === 'BISAGRA')).toBe(false);
   });
 });
 

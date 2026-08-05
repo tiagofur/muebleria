@@ -334,7 +334,7 @@ export function KitchenPlanPanel({
             {layout.walls.length === 0 ? (
               <button
                 type="button"
-                className="btn btn--secondary btn--sm"
+                className="btn btn--small"
                 onClick={addDefaultL}
                 data-testid="kitchen-plan-add-l"
               >
@@ -343,7 +343,7 @@ export function KitchenPlanPanel({
             ) : null}
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--small"
               onClick={addWall}
               data-testid="kitchen-plan-add-wall"
             >
@@ -506,7 +506,7 @@ export function KitchenPlanPanel({
                       </select>
                       <button
                         type="button"
-                        className="btn btn--ghost btn--sm"
+                        className="btn btn--ghost btn--small"
                         onClick={() => removeWall(wall.id)}
                       >
                         Quitar
@@ -569,7 +569,7 @@ export function KitchenPlanPanel({
                             </select>
                             <button
                               type="button"
-                              className="btn btn--ghost btn--sm"
+                              className="btn btn--ghost btn--small"
                               onClick={() =>
                                 movePlacement(p.itemId, p.instanceIndex, -1)
                               }
@@ -579,7 +579,7 @@ export function KitchenPlanPanel({
                             </button>
                             <button
                               type="button"
-                              className="btn btn--ghost btn--sm"
+                              className="btn btn--ghost btn--small"
                               onClick={() =>
                                 movePlacement(p.itemId, p.instanceIndex, 1)
                               }
@@ -589,7 +589,7 @@ export function KitchenPlanPanel({
                             </button>
                             <button
                               type="button"
-                              className="btn btn--ghost btn--sm"
+                              className="btn btn--ghost btn--small"
                               onClick={() =>
                                 removePlacement(p.itemId, p.instanceIndex)
                               }
@@ -630,7 +630,7 @@ export function KitchenPlanPanel({
                       <button
                         key={w.id}
                         type="button"
-                        className="btn btn--secondary btn--sm"
+                        className="btn btn--small"
                         onClick={() =>
                           placeOnWall(f.itemId, f.instanceIndex, w.id)
                         }

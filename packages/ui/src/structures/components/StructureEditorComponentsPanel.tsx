@@ -70,11 +70,11 @@ export function StructureEditorComponentsPanel({
             </h4>
             <button
               type="button"
-              className="btn btn--secondary btn--small"
+              className="btn btn--small"
               onClick={onRequestAdd}
               data-testid="add-component-btn"
             >
-              <Plus size={14} className="mr-1" /> Agregar componente
+              <Plus size={14} /> Agregar componente
             </button>
           </div>
 
@@ -198,7 +198,7 @@ export function StructureEditorComponentsPanel({
             style={{
               padding: '1rem',
               backgroundColor: 'var(--bg-surface-elevated, var(--bg-surface))',
-              border: '1px solid var(--border)',
+              border: '1px solid var(--border-default)',
               borderRadius: 'var(--radius-md)',
             }}
             data-testid="structure-components-3d-preview"
@@ -222,7 +222,7 @@ export function StructureEditorComponentsPanel({
                     padding: '0.25rem 0.5rem',
                     fontSize: 'var(--text-xs)',
                     borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--border-default)',
                   }}
                   data-testid="structure-components-preset-select"
                 >

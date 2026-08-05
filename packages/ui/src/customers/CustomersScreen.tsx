@@ -192,9 +192,14 @@ export function CustomersScreen({
 	const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
 
 	return (
-		<section className="catalog-page" aria-label="Catálogo de clientes">
+		<section className="catalog-page" aria-label="Clientes">
 			<div className="catalog-page__header">
-				<h2 className="catalog-page__title">Registro de Clientes</h2>
+				<div>
+					<h2 className="catalog-page__title">Clientes</h2>
+					<p className="page-header__subtitle">
+						Personas y talleres a los que cotizás
+					</p>
+				</div>
 				<div className="catalog-page__toolbar">
 					<button type="button" className="btn btn--primary" onClick={startCreate}>
 						<Plus size={16} strokeWidth={1.5} aria-hidden />
@@ -219,9 +224,9 @@ export function CustomersScreen({
 				{isTrulyEmpty ? (
 					<EmptyState
 						icon={Users}
-						title="No hay clientes registrados"
-						description="Registrá al primer cliente del sistema para asignarle cotizaciones."
-						actionLabel="Agregar cliente"
+						title="No hay clientes"
+						description="Agregá el primer cliente para asignarle cotizaciones."
+						actionLabel="Nuevo cliente"
 						onAction={startCreate}
 					/>
 				) : isFilterEmpty ? (

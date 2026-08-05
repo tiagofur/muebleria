@@ -1778,6 +1778,9 @@ function AppContent({
           structures={structures}
           optionGroups={optionGroups}
           catalogComponents={components}
+          catalogMaterials={materials}
+          catalogEdges={edges}
+          catalogHardware={hardware}
           onCreate={createStructure}
           onUpdate={updateStructure}
           onDelete={deleteStructure}
@@ -1788,6 +1791,7 @@ function AppContent({
           onRequestEdit={(id) => onEntityEditRequest('structures', id)}
           onSelectionChange={onStructureSelectionChange}
           canMutate={canMutateModules}
+          resolveImageUrl={resolveMediaUrl}
         />
       ) : null}
       {navId === 'components' ? (
@@ -1816,6 +1820,7 @@ function AppContent({
           hardware={hardware}
           catalogStructures={structures}
           catalogComponents={components}
+          resolveImageUrl={resolveMediaUrl}
           customers={customers}
           canAssignOwner={canAssignOwner}
           assignableOwners={assignableOwners}

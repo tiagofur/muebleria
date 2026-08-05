@@ -1910,6 +1910,13 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(evaluatePartFormula('W / 3', dims)).toBe(167); // 500 / 3 = 166.67 -> 167
     });
 
+    it('accepts decimal literals in formulas', () => {
+      expect(evaluatePartFormula('1.5', dims)).toBe(2); // rounds to nearest mm
+      expect(evaluatePartFormula('T * 1.5', { ...dims, T: 18 })).toBe(27);
+      expect(evaluatePartFormula('W * 0.5', dims)).toBe(250);
+      expect(evaluatePartFormula('.5', dims)).toBe(1); // 0.5 → 1 mm
+    });
+
     it('throws ValidationError for invalid characters or injection attempts', () => {
       expect(() => evaluatePartFormula('W + alert(1)', dims)).toThrow(ValidationError);
       expect(() => evaluatePartFormula('W; 100', dims)).toThrow(ValidationError);
@@ -2701,13 +2708,15 @@ describe('3D Component spatial positioning & CAD variables', () => {
       code: 'C-PIS',
       name: 'Piso',
       placement: 'base',
-      geometry: { kind: 'rectangular_board', lengthMm: 560, widthMm: 464, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 2*T' },
+      // L along PW (grain L→R); W along PD.
+      geometry: { kind: 'rectangular_board', lengthMm: 464, widthMm: 560, thicknessMm: 18, lengthFormula: 'PW - 2*T', widthFormula: 'PD' },
       defaultEdges: MOCK_TEST_EDGES,
       optionRoles: ['board_base'],
       active: true,
       xFormula: 'T',
-      yFormula: '0',
+      yFormula: '0', // min-corner back edge (anchor offsets −Z from rotY 90)
       zFormula: '0',
+      rotateY: 90,
     };
 
     const catalog = {
@@ -2750,13 +2759,14 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(cost2.z).toBe(0);
     expect(cost2.rotateY).toBe(90);
 
-    // Piso
+    // Piso: L = PW - 2*T (grain along cabinet width), W = PD
     const piso = result.boardParts[2]!;
-    expect(piso.widthMm).toBe(600 - 2*15); // PW - 2*T = 570
-    expect(piso.lengthMm).toBe(560);
+    expect(piso.lengthMm).toBe(600 - 2 * 15); // PW - 2*T = 570
+    expect(piso.widthMm).toBe(560); // PD
     expect(piso.x).toBe(15); // T
-    expect(piso.y).toBe(0);
+    expect(piso.y).toBe(0); // min-corner back (mesh offset handles Ry90 −Z)
     expect(piso.z).toBe(0);
+    expect(piso.rotateY).toBe(90);
   });
 
   it('uses placement defaults when component has no x/y/z formulas', () => {
@@ -2818,11 +2828,11 @@ describe('3D Component spatial positioning & CAD variables', () => {
       placement: 'base',
       geometry: {
         kind: 'rectangular_board',
-        lengthMm: 560,
-        widthMm: 564,
+        lengthMm: 564,
+        widthMm: 560,
         thicknessMm: 18,
-        lengthFormula: 'PD',
-        widthFormula: 'PW - 2*T',
+        lengthFormula: 'PW - 2*T',
+        widthFormula: 'PD',
       },
       defaultEdges: MOCK_TEST_EDGES,
       optionRoles: ['board_base'],
@@ -2848,10 +2858,11 @@ describe('3D Component spatial positioning & CAD variables', () => {
       optionChoices: { board_base: 'mat-a' },
     });
     const part = result.boardParts[0]!;
-    // placement base: x = T (15), y = 0; only z overridden
+    // placement base (min-corner): x = T (15), y = 0; only z overridden
     expect(part.x).toBe(15);
     expect(part.y).toBe(0);
     expect(part.z).toBe(100);
+    expect(part.rotateY).toBe(90);
   });
 });
 

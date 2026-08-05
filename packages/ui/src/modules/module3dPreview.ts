@@ -7,6 +7,7 @@ import type {
   Catalog,
   DimensionPreset,
   Module,
+  OptionChoices,
   OptionGroup,
   ResolvedBoardPart,
   Structure,
@@ -30,6 +31,8 @@ export type Module3DPreviewResult = {
   readonly depth: number;
   readonly measurePresetId: string | undefined;
   readonly presets: readonly DimensionPreset[];
+  /** Effective option choices used for this resolve (defaults + overrides). */
+  readonly optionChoices: OptionChoices;
   readonly error: string | null;
   readonly empty: boolean;
 };
@@ -87,11 +90,13 @@ function dimsFromModule(
 /**
  * Resolve 3D preview for a module template.
  * @param measurePresetIdOverride when user picks a commercial size in the modal
+ * @param optionChoicesOverride partial finish choices (merged over defaults)
  */
 export function resolveModule3DPreview(
   module: Module,
   catalogInput: Module3DCatalogInput,
   measurePresetIdOverride?: string | null,
+  optionChoicesOverride?: OptionChoices | null,
 ): Module3DPreviewResult {
   const presets = module.presets ?? [];
   const measurePresetId =
@@ -105,12 +110,16 @@ export function resolveModule3DPreview(
     catalogInput.structures,
   );
 
-  const choices = defaultOptionChoicesForModule(
+  const defaults = defaultOptionChoicesForModule(
     module,
     catalogInput.optionGroups,
     catalogInput.components,
     catalogInput.structures,
   );
+  const choices: OptionChoices = {
+    ...defaults,
+    ...(optionChoicesOverride ?? {}),
+  };
 
   const catalog: Catalog = {
     materials: catalogInput.materials,
@@ -131,6 +140,7 @@ export function resolveModule3DPreview(
       depth: dims.depth,
       measurePresetId,
       presets,
+      optionChoices: choices,
       error: null,
       empty: bom.boardParts.length === 0,
     };
@@ -144,6 +154,7 @@ export function resolveModule3DPreview(
       depth: dims.depth,
       measurePresetId,
       presets,
+      optionChoices: choices,
       error: message,
       empty: true,
     };

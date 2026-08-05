@@ -568,33 +568,30 @@ export function parseOptionalNumber(raw: string): number | undefined {
   return n;
 }
 
+/** Module shape needed to discover which option-group roles it uses. */
+export type ModuleRolesSource = {
+  readonly components?: readonly { readonly componentId: string }[];
+  readonly structureId?: string;
+  readonly hardwareLines?: readonly {
+    readonly optionRole: string;
+    readonly hardwareId?: string;
+  }[];
+};
+
 /**
- * Default option choices for cost preview: first member of each required group used by the module.
- * Pure selection helper — does not compute prices.
- *
- * Option roles come from the module's component instances (+ the components of
- * its referenced structure when structures are provided) and from hardware
- * lines. Modules no longer carry board parts directly.
+ * Option-group codes referenced by the module (component optionRoles +
+ * variable hardware lines). Pure — no pricing.
  */
-export function defaultOptionChoicesForModule(
-  module: {
-    readonly components?: readonly { readonly componentId: string }[];
-    readonly structureId?: string;
-    readonly hardwareLines: readonly {
-      readonly optionRole: string;
-      readonly hardwareId?: string;
-    }[];
-  },
-  optionGroups: readonly OptionGroup[],
+export function usedOptionRolesForModule(
+  module: ModuleRolesSource,
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
-): Record<string, string> {
+): Set<string> {
   const usedRoles = new Set<string>();
-  for (const line of module.hardwareLines) {
+  for (const line of module.hardwareLines ?? []) {
     if (line.hardwareId) continue;
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }
-  // Collect optionRoles from the module's component instances
   if (module.components && catalogComponents) {
     for (const inst of module.components) {
       const comp = catalogComponents.find((c) => c.id === inst.componentId);
@@ -605,7 +602,6 @@ export function defaultOptionChoicesForModule(
       }
     }
   }
-  // Collect optionRoles from the referenced structure's component instances
   if (module.structureId && catalogStructures && catalogComponents) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     if (structure) {
@@ -619,6 +615,24 @@ export function defaultOptionChoicesForModule(
       }
     }
   }
+  return usedRoles;
+}
+
+/**
+ * Default option choices for cost/3D preview: first member of each group used
+ * by the module. Pure selection helper — does not compute prices.
+ */
+export function defaultOptionChoicesForModule(
+  module: ModuleRolesSource,
+  optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
+): Record<string, string> {
+  const usedRoles = usedOptionRolesForModule(
+    module,
+    catalogComponents,
+    catalogStructures,
+  );
 
   const choices: Record<string, string> = {};
   for (const group of optionGroups) {
@@ -629,6 +643,74 @@ export function defaultOptionChoicesForModule(
     }
   }
   return choices;
+}
+
+/** One selectable material/finish for a board option group in 3D preview. */
+export type BoardFinishPickerOption = {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly previewColor?: string;
+  readonly grainDefault: boolean;
+};
+
+/** Board option group (INTERIOR, FRENTE, …) with its catalog members. */
+export type BoardFinishPickerGroup = {
+  readonly code: string;
+  readonly name: string;
+  readonly options: readonly BoardFinishPickerOption[];
+};
+
+/**
+ * Board finish groups used by the module, for 3D preview material pickers.
+ * Only `kind === 'board'` groups with at least one known material.
+ */
+export function boardFinishPickerGroupsForModule(
+  module: ModuleRolesSource,
+  optionGroups: readonly OptionGroup[],
+  materials: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewColor?: string;
+    readonly grainDefault: boolean;
+    readonly active?: boolean;
+  }[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
+): BoardFinishPickerGroup[] {
+  const usedRoles = usedOptionRolesForModule(
+    module,
+    catalogComponents,
+    catalogStructures,
+  );
+  const byId = new Map(materials.map((m) => [m.id, m]));
+  const result: BoardFinishPickerGroup[] = [];
+
+  for (const group of optionGroups) {
+    if (group.kind !== 'board') continue;
+    if (!usedRoles.has(group.code)) continue;
+    const options: BoardFinishPickerOption[] = [];
+    for (const id of group.optionIds) {
+      const mat = byId.get(id);
+      if (!mat) continue;
+      if (mat.active === false) continue;
+      options.push({
+        id: mat.id,
+        code: mat.code,
+        name: mat.name,
+        previewColor: mat.previewColor,
+        grainDefault: mat.grainDefault,
+      });
+    }
+    if (options.length === 0) continue;
+    result.push({
+      code: group.code,
+      name: group.name,
+      options,
+    });
+  }
+  return result;
 }
 
 export const SEED_MODULE_CODES = ['MOD-GAB-01', 'MOD-CAJ-01'] as const;

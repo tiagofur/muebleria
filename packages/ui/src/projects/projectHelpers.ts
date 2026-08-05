@@ -276,6 +276,35 @@ export function filterProjectsByQuery(
   });
 }
 
+/** List filter: all statuses or a single ProjectStatus (Fase 2 UI chips). */
+export type ProjectStatusFilter = 'all' | ProjectStatus;
+
+export const PROJECT_STATUS_FILTER_OPTIONS: readonly {
+  readonly value: ProjectStatusFilter;
+  readonly label: string;
+}[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'draft', label: 'Borrador' },
+  { value: 'quoted', label: 'Cotizado' },
+  { value: 'accepted', label: 'Aceptado' },
+  { value: 'produced', label: 'En producción' },
+];
+
+/**
+ * Filter projects by text query and optional workflow status.
+ * Pure — no domain cost logic.
+ */
+export function filterProjectsList(
+  projects: readonly Project[],
+  query: string,
+  status: ProjectStatusFilter,
+  customers: readonly Customer[] = [],
+): Project[] {
+  const byQuery = filterProjectsByQuery(projects, query, customers);
+  if (status === 'all') return byQuery;
+  return byQuery.filter((p) => p.status === status);
+}
+
 /**
  * Format project money for display — shared formatMoneyDisplay (#51).
  * Optional currency defaults to MXN (product default).

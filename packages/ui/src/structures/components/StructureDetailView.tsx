@@ -64,10 +64,7 @@ export function StructureDetailView({
             <span className="workspace-chrome__code">{s.code}</span>
             <div className="workspace-chrome__title-row">
               <h2 className="workspace-chrome__title">{s.name}</h2>
-              <StructureRevisionBadge
-                revision={s.revision ?? 1}
-                variant="default"
-              />
+              <StructureRevisionBadge structure={s} />
               {s.active === false ? (
                 <span className="status-badge badge-inactive">Inactivo</span>
               ) : null}

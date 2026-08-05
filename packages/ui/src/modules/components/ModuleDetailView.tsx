@@ -128,8 +128,7 @@ export function ModuleDetailView({
         <div className="workspace-chrome__actions">
           <button
             type="button"
-            className="btn btn--outline"
-            style={{ marginRight: '8px' }}
+            className="btn"
             onClick={() => onView3D(mod)}
             data-testid="view-3d-btn"
           >

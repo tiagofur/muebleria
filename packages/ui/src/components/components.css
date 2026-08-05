@@ -10,19 +10,17 @@
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--space-4);
   margin-top: var(--space-4);
+  list-style: none;
+  margin-block: var(--space-4) 0;
+  padding: 0;
 }
 
 /* Internal layout (entity-card base already sets cursor/border/bg). */
 .component-card {
   display: flex;
   flex-direction: column;
-  position: relative;
-}
-
-.component-card__summary {
-  display: flex;
-  flex-direction: column;
   gap: var(--space-2);
+  position: relative;
 }
 
 .component-card__meta {
@@ -33,6 +31,7 @@
 }
 
 .component-card__code {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-muted);
   background-color: var(--surface-muted);
@@ -227,6 +226,24 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.component-geometry__formula-vars > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.component-geometry__formula-vars code {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  color: var(--text-brand);
 }
 
 .component-geometry__formula-guide-title {

@@ -64,6 +64,8 @@ const materialDraft = {
   imageUrl: '',
   previewColor: '',
   previewTextureUrl: '',
+      previewTextureTileWidthMm: 0,
+      previewTextureTileLengthMm: 0,
   notes: '',
 } as const;
 
@@ -137,6 +139,8 @@ describe('catalogStore — materials', () => {
       imageUrl: '',
       previewColor: '',
       previewTextureUrl: '',
+      previewTextureTileWidthMm: 0,
+      previewTextureTileLengthMm: 0,
       notes: '',
     });
 
@@ -168,6 +172,8 @@ describe('catalogStore — materials', () => {
       imageUrl: '',
       previewColor: '',
       previewTextureUrl: '',
+      previewTextureTileWidthMm: 0,
+      previewTextureTileLengthMm: 0,
       notes: '',
     });
 

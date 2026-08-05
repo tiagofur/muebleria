@@ -19,7 +19,10 @@ import {
   type BoardColorMode,
   type BoardPartVisual,
   type MaterialColorLookup,
+  type MaterialSurfaceMode,
+  type MaterialTextureLookup,
 } from './boardPartVisual';
+import { BoardMeshMaterial } from './BoardMeshMaterial';
 import { MeasurementTool } from './MeasurementTool';
 import { KeyboardNav } from './KeyboardNav';
 import { ModelExporter, type ModelFormat } from './ModelExporter';
@@ -54,8 +57,17 @@ export type FurnitureScene3DProps = {
   /** Default `material` = fast solid colors from catalog. */
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
+  /** Optional catalog texture URLs (material.previewTextureUrl). */
+  readonly materialTextures?: MaterialTextureLookup;
+  /** Color / grain / texture look when colorMode is material. */
+  readonly surfaceMode?: MaterialSurfaceMode;
   readonly cameraType?: 'perspective' | 'orthographic';
   readonly showWireframe?: boolean;
+  /**
+   * Draw silhouette edges on every board so component boundaries are readable
+   * without X-ray transparency.
+   */
+  readonly showOutlines?: boolean;
   /** Enable measurement tool mode (click two points to measure distance). */
   readonly measurementMode?: boolean;
   /** Trigger 3D model export. Set to a format to export; parent should reset to null. */
@@ -75,12 +87,14 @@ export type FurnitureScene3DProps = {
 function BoardMesh({
   visual,
   showWireframe = false,
+  showOutlines = false,
   selected = false,
   dimmed = false,
   onSelect,
 }: {
   readonly visual: BoardPartVisual;
   readonly showWireframe?: boolean;
+  readonly showOutlines?: boolean;
   readonly selected?: boolean;
   readonly dimmed?: boolean;
   readonly onSelect?: (partId: string) => void;
@@ -88,6 +102,13 @@ function BoardMesh({
   const [w, t, l] = visual.size;
   const transparent = showWireframe || dimmed;
   const opacity = dimmed ? 0.12 : showWireframe ? 0.3 : 1;
+  const showEdges = showOutlines || showWireframe || selected;
+  // Black outlines for clear board boundaries; selection keeps amber.
+  const edgeColor = selected
+    ? '#f5c542'
+    : showWireframe
+      ? visual.color
+      : '#000000';
   return (
     <group position={visual.position} rotation={visual.rotation}>
       <mesh
@@ -125,23 +146,29 @@ function BoardMesh({
         }
       >
         <boxGeometry args={[w, t, l]} />
-        <meshStandardMaterial
-          color={visual.color}
-          emissive={selected ? '#f5c542' : '#000000'}
-          emissiveIntensity={selected ? 0.4 : 0}
-          transparent={transparent}
-          opacity={opacity}
-          depthWrite={!transparent}
-          roughness={0.72}
-          metalness={0.04}
-        />
-        {(showWireframe || selected) && (
-          <Edges
-            scale={1}
-            threshold={15}
-            color={selected ? '#f5c542' : visual.color}
+        <Suspense
+          fallback={
+            <meshStandardMaterial
+              color={visual.color}
+              transparent={transparent}
+              opacity={opacity}
+              depthWrite={!transparent}
+              roughness={0.72}
+              metalness={0.04}
+            />
+          }
+        >
+          <BoardMeshMaterial
+            key={`${visual.id}:${visual.textureUrl ?? ''}:${visual.grain}:${visual.color}`}
+            visual={visual}
+            selected={selected}
+            transparent={transparent}
+            opacity={opacity}
           />
-        )}
+        </Suspense>
+        {showEdges ? (
+          <Edges scale={1} threshold={15} color={edgeColor} />
+        ) : null}
       </mesh>
     </group>
   );
@@ -176,7 +203,10 @@ function ModuleGroup({
   mod,
   colorMode,
   materialColors,
+  materialTextures,
+  surfaceMode,
   showWireframe,
+  showOutlines,
   selectedPartId,
   isolateSelected,
   onSelectPart,
@@ -184,7 +214,10 @@ function ModuleGroup({
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
+  readonly surfaceMode?: MaterialSurfaceMode;
   readonly showWireframe?: boolean;
+  readonly showOutlines?: boolean;
   readonly selectedPartId?: string | null;
   readonly isolateSelected?: boolean;
   readonly onSelectPart?: (partId: string) => void;
@@ -194,8 +227,10 @@ function ModuleGroup({
       boardPartsToVisuals(mod.parts, {
         colorMode,
         materialColors,
+        materialTextures,
+        surfaceMode,
       }),
-    [mod.parts, colorMode, materialColors],
+    [mod.parts, colorMode, materialColors, materialTextures, surfaceMode],
   );
   // Workshop → Three Y-up: [x, z, y]
   const groupPos: [number, number, number] = [
@@ -223,6 +258,7 @@ function ModuleGroup({
             key={`${mod.key}-${v.id}`}
             visual={v}
             showWireframe={showWireframe}
+            showOutlines={showOutlines}
             selected={selected}
             dimmed={dimmed}
             onSelect={onSelectPart}
@@ -296,8 +332,11 @@ function SceneContent({
   showFloor,
   colorMode,
   materialColors,
+  materialTextures,
+  surfaceMode,
   cameraView,
   showWireframe,
+  showOutlines,
   measurementMode,
   controlsRef,
   exportFormat,
@@ -314,8 +353,11 @@ function SceneContent({
   readonly showFloor: boolean;
   readonly colorMode: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
+  readonly surfaceMode?: MaterialSurfaceMode;
   readonly cameraView?: CameraViewType | null;
   readonly showWireframe?: boolean;
+  readonly showOutlines?: boolean;
   readonly measurementMode?: boolean;
   readonly controlsRef: React.RefObject<any>;
   readonly exportFormat?: ModelFormat | null;
@@ -370,7 +412,10 @@ function SceneContent({
               mod={mod}
               colorMode={colorMode}
               materialColors={materialColors}
+              materialTextures={materialTextures}
+              surfaceMode={surfaceMode}
               showWireframe={showWireframe}
+              showOutlines={showOutlines}
               selectedPartId={selectedPartId}
               isolateSelected={isolateSelected}
               onSelectPart={onSelectPart}
@@ -429,9 +474,12 @@ export function FurnitureScene3D({
   showFloor = true,
   colorMode = 'material',
   materialColors,
+  materialTextures,
+  surfaceMode,
   cameraView,
   cameraType = 'perspective',
   showWireframe,
+  showOutlines = false,
   measurementMode,
   exportFormat = null,
   onExportComplete,
@@ -547,8 +595,11 @@ export function FurnitureScene3D({
               showFloor={showFloor}
               colorMode={colorMode}
               materialColors={materialColors}
+              materialTextures={materialTextures}
+              surfaceMode={surfaceMode}
               cameraView={cameraView}
               showWireframe={showWireframe}
+              showOutlines={showOutlines}
               measurementMode={measurementMode}
               controlsRef={controlsRef}
               exportFormat={exportFormat}

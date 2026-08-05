@@ -105,7 +105,7 @@
 .measurement-label {
   background: var(--surface-card, #0f172a);
   color: #f59e0b;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: var(--weight-bold, 700);
   font-variant-numeric: tabular-nums;
   padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);

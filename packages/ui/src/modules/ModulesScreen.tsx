@@ -429,12 +429,11 @@ export function ModulesScreen({
   }, [openModuleId, openModuleEditId, modules]);
 
   /**
-   * Sync edit mode from shell URL (`/modules/:id/edit` — Fase 3 UI).
-   * - `'new'` sentinel: open create-new editor (still uses the existing modal
-   *   in this sub-fase; will become inline in 3a.2).
-   * - Real id: open edit on that module. For 3a.1 we still route through the
-   *   modal to preserve behavior; the inline layout lands in 3a.2.
-   * - null / '': close the editor.
+   * Sync edit mode from shell URL (`/modules/:id/edit`).
+   * Opens full-page editor (Fase 4 UI — no Modal LG).
+   * - `'new'` → empty draft create.
+   * - Real id → edit that module.
+   * - null / '' → close the editor.
    */
   useEffect(() => {
     if (openModuleEditId == null || openModuleEditId === '') {
@@ -837,11 +836,9 @@ export function ModulesScreen({
     );
   }
 
-  // Fase 3 UI 3a.2: when `openModuleEditId` is active and the shell wires
-  // `onRequestEdit`, render the editor inline (no Modal LG) with a sticky
-  // chrome + main/aside layout. Otherwise fall back to the legacy modal flow
-  // (used by tests / older code paths).
-  const inlineEditMode = !!openModuleEditId && !!onRequestEdit;
+  // Fase 4 UI: always full-page workspace editor (sticky chrome + cost aside).
+  // Modal LG is no longer used for create/edit — board canvas needs the width.
+  const inlineEditMode = modalOpen;
 
   return (
     <EntityEditorLayout
@@ -850,7 +847,7 @@ export function ModulesScreen({
       editorBackTestId="module-editor-back"
       discardConfirmTestId="module-editor-discard-confirm"
       modalTestId="module-modal"
-      modalSize="lg" /* size="lg" */
+      modalSize="lg"
       createTitle="Nuevo mueble"
       editTitle="Editar mueble"
       draftCode={draft.code}
@@ -1087,6 +1084,7 @@ export function ModulesScreen({
             open={show3DModal}
             module={viewerModule}
             catalog={module3dCatalog}
+            resolveMediaUrl={resolveImageUrl}
             onClose={() => {
               setShow3DModal(false);
               setViewerModule(null);

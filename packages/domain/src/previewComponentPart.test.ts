@@ -38,9 +38,9 @@ describe('previewPartForComponent', () => {
       },
       dims,
     );
-    // trasera default is rotateX:90; explicit 0 must win.
+    // Per-axis: explicit 0 wins for X; null Y/Z still take placement [90,180,0] → Y=180, Z=0.
     expect(part.rotateX).toBe(0);
-    expect(part.rotateY).toBe(0);
+    expect(part.rotateY).toBe(180);
     expect(part.rotateZ).toBe(0);
   });
 
@@ -78,7 +78,7 @@ describe('previewPartForComponent', () => {
   });
 
   it('falls back to placement pose on axes without an explicit formula', () => {
-    // trasera pose: x=T(18), y=0, z=T(18)
+    // trasera min-corner: x=T, y=0, z=T
     const part = previewPartForComponent(
       {
         placement: 'trasera',
@@ -89,7 +89,7 @@ describe('previewPartForComponent', () => {
       },
       dims,
     );
-    expect(part.x).toBe(18);
+    expect(part.x).toBe(18); // T
     expect(part.y).toBe(0);
     expect(part.z).toBe(18);
   });

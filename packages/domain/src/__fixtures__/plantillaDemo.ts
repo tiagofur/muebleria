@@ -429,11 +429,12 @@ const compGabRespaldo: Component = {
   defaultEdges: edgesAll(false, false, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
+  // Min-corner anchor: left=T, back=0. [90,180,0] rotation; mesh offset handles −X.
   xFormula: 'T',
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const compGabPiso: Component = {
@@ -441,15 +442,16 @@ const compGabPiso: Component = {
   code: 'COM-GAB-PIS',
   name: 'Piso Gabinete',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 590, widthMm: 269, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 269, widthMm: 590, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compGabManguete: Component = {
@@ -478,11 +480,12 @@ const compGabPuerta: Component = {
   defaultEdges: edgesAll(true, true, true, true),
   optionRoles: ['FRENTE'],
   active: true,
+  // Min-corner overlay: left=2, depth=PD (thickness grows outside to PD+T).
   xFormula: '2',
   yFormula: 'PD',
   zFormula: '2',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const compGabEntrepano: Component = {
@@ -525,15 +528,16 @@ const compCajPiso: Component = {
   code: 'COM-CAJ-PIS',
   name: 'Piso Cajonera',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 590, widthMm: 469, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 469, widthMm: 590, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compCajRespaldo: Component = {
@@ -549,7 +553,7 @@ const compCajRespaldo: Component = {
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 /** Cajonera module-level components: drawer parts. */
@@ -566,7 +570,7 @@ const compCajFrente: Component = {
   yFormula: 'PD',
   zFormula: 'i * 175',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const compCajLateral: Component = {
@@ -721,15 +725,16 @@ const compAlacenaBase: Component = {
   code: 'COM-ALA-BAS',
   name: 'Base Alacena',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 320, widthMm: 569, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 569, widthMm: 320, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compAlacenaRespaldo: Component = {
@@ -745,7 +750,7 @@ const compAlacenaRespaldo: Component = {
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const structAlacena: Structure = {
@@ -800,15 +805,16 @@ const compDespensaBase: Component = {
   code: 'COM-DES-BAS',
   name: 'Base Despensa',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 600, widthMm: 569, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 569, widthMm: 600, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compDespensaRespaldo: Component = {
@@ -824,7 +830,7 @@ const compDespensaRespaldo: Component = {
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const structDespensa: Structure = {
