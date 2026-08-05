@@ -287,4 +287,40 @@ describe('ComponentsScreen', () => {
     expect(screen.queryByTestId('component-detail-edit')).toBeNull();
     expect(screen.queryByRole('button', { name: /Nuevo Componente/i })).toBeNull();
   });
+
+  it('embeds the 3D preview in Geometry with a "Mostrar en el mueble" toggle (default on)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    // Open the editor on an existing component (card → detail → edit).
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+
+    // Switch to Geometry — the 3D preview now lives here (no separate "Vista 3D" tab).
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    // The old "Vista 3D" tab must be gone.
+    expect(screen.queryByTestId('component-editor-tab-preview3d')).toBeNull();
+
+    // The "Mostrar en el mueble" toggle is present and on by default.
+    const toggle = screen.getByTestId('show-in-context-toggle') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    // Container reference fields are present and editable.
+    expect(screen.getByTestId('container-pw')).toBeTruthy();
+    expect(screen.getByTestId('container-ph')).toBeTruthy();
+    expect(screen.getByTestId('container-pd')).toBeTruthy();
+
+    // Turning the toggle off switches the preview mode (ghost container hidden).
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(false);
+  });
 });

@@ -145,6 +145,12 @@ export {
   type SpatialPose,
 } from './spatialPlacement';
 
+export {
+  previewPartForComponent,
+  type ComponentPreviewInput,
+  type ComponentPreviewOptions,
+} from './previewComponentPart';
+
 export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, ComposedModuleResult } from './engine';
 
 export {

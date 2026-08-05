@@ -29,8 +29,7 @@ export type ComponentEditorTab =
   | 'general'
   | 'geometry'
   | 'edges'
-  | 'options'
-  | 'preview3d';
+  | 'options';
 
 export const COMPONENT_EDITOR_TABS: readonly {
   readonly id: ComponentEditorTab;
@@ -40,7 +39,6 @@ export const COMPONENT_EDITOR_TABS: readonly {
   { id: 'geometry', label: 'Geometría' },
   { id: 'edges', label: 'Cantos' },
   { id: 'options', label: 'Opciones' },
-  { id: 'preview3d', label: 'Vista 3D' },
 ];
 
 export interface ComponentDraft {

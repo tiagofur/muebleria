@@ -8,7 +8,7 @@ import type {
   ReactNode,
   SetStateAction,
 } from 'react';
-import type { OptionGroup, ResolvedBoardPart } from '@muebles/domain';
+import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
 import type { MaterialColorLookup } from '../../preview3d';
 import {
   COMPONENT_EDITOR_TABS,
@@ -19,7 +19,6 @@ import { ComponentEditorEdgesPanel } from './ComponentEditorEdgesPanel';
 import { ComponentEditorGeneralPanel } from './ComponentEditorGeneralPanel';
 import { ComponentEditorGeometryPanel } from './ComponentEditorGeometryPanel';
 import { ComponentEditorOptionsPanel } from './ComponentEditorOptionsPanel';
-import { ComponentEditorPreviewPanel } from './ComponentEditorPreviewPanel';
 
 export type ComponentEditorFormProps = {
   readonly formId: string;
@@ -34,6 +33,10 @@ export type ComponentEditorFormProps = {
   readonly optionGroups: readonly OptionGroup[];
   readonly previewParts: readonly ResolvedBoardPart[];
   readonly materialColors?: MaterialColorLookup;
+  readonly containerDims: PlacementDims;
+  readonly onContainerDimsChange: (dims: PlacementDims) => void;
+  readonly showInContext: boolean;
+  readonly onShowInContextChange: (v: boolean) => void;
 };
 
 export function ComponentEditorForm({
@@ -49,6 +52,10 @@ export function ComponentEditorForm({
   optionGroups,
   previewParts,
   materialColors,
+  containerDims,
+  onContainerDimsChange,
+  showInContext,
+  onShowInContextChange,
 }: ComponentEditorFormProps): ReactNode {
   return (
     <form id={formId} onSubmit={onSubmit} className="catalog-form">
@@ -63,12 +70,6 @@ export function ComponentEditorForm({
         role="tablist"
         aria-label="Secciones del editor de componente"
         data-testid="component-editor-tabs"
-        style={{
-          display: 'flex',
-          gap: '0.5rem',
-          borderBottom: '1px solid var(--border)',
-          marginBottom: '1.5rem',
-        }}
       >
         {COMPONENT_EDITOR_TABS.map((tab) => {
           const selected = editorTab === tab.id;
@@ -86,18 +87,6 @@ export function ComponentEditorForm({
                   ? 'module-editor__tab module-editor__tab--active'
                   : 'module-editor__tab'
               }
-              style={{
-                background: 'none',
-                border: 'none',
-                borderBottom: selected
-                  ? '2px solid var(--primary)'
-                  : '2px solid transparent',
-                color: selected ? 'var(--primary)' : 'var(--text-muted)',
-                padding: '0.75rem 1rem',
-                cursor: 'pointer',
-                fontWeight: selected ? '600' : '400',
-                transition: 'all 0.2s',
-              }}
               data-testid={`component-editor-tab-${tab.id}`}
               onClick={() => setEditorTab(tab.id)}
             >
@@ -120,6 +109,12 @@ export function ComponentEditorForm({
         draft={draft}
         setDraft={setDraft}
         hidden={editorTab !== 'geometry'}
+        previewParts={previewParts}
+        materialColors={materialColors}
+        containerDims={containerDims}
+        onContainerDimsChange={onContainerDimsChange}
+        showInContext={showInContext}
+        onShowInContextChange={onShowInContextChange}
       />
 
       <ComponentEditorEdgesPanel
@@ -134,13 +129,6 @@ export function ComponentEditorForm({
         setDraft={setDraft}
         optionGroups={optionGroups}
         hidden={editorTab !== 'options'}
-      />
-
-      <ComponentEditorPreviewPanel
-        draft={draft}
-        previewParts={previewParts}
-        hidden={editorTab !== 'preview3d'}
-        materialColors={materialColors}
       />
 
       <div className="modal__footer mt-6">

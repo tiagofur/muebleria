@@ -280,7 +280,7 @@ Common causes:
       )}
 
       {/* 3D Canvas viewport */}
-      <div className="component-editor__preview-section mt-4 mb-4" data-testid={`${testId}-viewport`}>
+      <div className="mt-4 mb-4" data-testid={`${testId}-viewport`}>
         <ModuleScene3D
           parts={parts}
           width={width}

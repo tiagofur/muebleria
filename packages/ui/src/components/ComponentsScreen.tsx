@@ -10,7 +10,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Component, OptionGroup, MaterialBoard } from '@muebles/domain';
+import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@muebles/domain';
+import { previewPartForComponent } from '@muebles/domain';
 import {
   EntityEditorLayout,
   useDebouncedValue,
@@ -129,6 +130,30 @@ export function ComponentsScreen({
     [materials],
   );
 
+  // Reference container (the "mueble" the piece belongs to). Defaults match a
+  // standard cabinet; the carpenter edits these so position formulas (X/Y/Z)
+  // resolve against the right PW/PH/PD. T always tracks the draft thickness.
+  const [containerDims, setContainerDims] = useState<PlacementDims>({
+    PW: 600,
+    PH: 720,
+    PD: 560,
+    T: 18,
+  });
+  const [showInContext, setShowInContext] = useState(true);
+
+  // Keep T in sync with the draft thickness so preview formulas using T stay true.
+  useEffect(() => {
+    setContainerDims((prev) =>
+      prev.T === draft.thicknessMm
+        ? prev
+        : { ...prev, T: draft.thicknessMm || prev.T },
+    );
+  }, [draft.thicknessMm]);
+
+  // Resolve the preview part via the domain helper (no math in React): it applies
+  // the placement heuristic + evaluates length/width/x/y/z formulas against the
+  // container dims. Replaces the old buggy inline builder that forced x/y/z = 0
+  // and collapsed rotateX === null to 0, dropping the placement heuristic.
   const previewParts = useMemo(() => {
     const roles = draft.optionRoles
       .split(',')
@@ -136,7 +161,6 @@ export function ComponentsScreen({
       .filter(Boolean);
 
     let firstMaterialId = 'preview-material';
-
     for (const role of roles) {
       const group = optionGroups.find(
         (g) => g.code.toUpperCase() === role.toUpperCase() && g.kind === 'board',
@@ -151,26 +175,28 @@ export function ComponentsScreen({
     }
 
     return [
-      {
-        id: 'preview',
-        widthMm: draft.widthMm || 300,
-        lengthMm: draft.lengthMm || 500,
-        thicknessMm: draft.thicknessMm || 18,
-        x: 0,
-        y: 0,
-        z: 0,
-        rotateX: draft.rotateX || 0,
-        rotateY: draft.rotateY || 0,
-        rotateZ: draft.rotateZ || 0,
-        optionRole: draft.optionRoles.split(',')[0]?.trim() || 'INTERIOR',
-        description: draft.name || 'Componente de Prueba',
-        quantity: 1,
-        grain: 0 as const,
-        edges: [],
-        materialId: firstMaterialId,
-      },
+      previewPartForComponent(
+        {
+          placement: draft.placement,
+          lengthMm: draft.lengthMm,
+          widthMm: draft.widthMm,
+          thicknessMm: draft.thicknessMm,
+          lengthFormula: draft.lengthFormula,
+          widthFormula: draft.widthFormula,
+          xFormula: draft.xFormula,
+          yFormula: draft.yFormula,
+          zFormula: draft.zFormula,
+          rotateX: draft.rotateX,
+          rotateY: draft.rotateY,
+          rotateZ: draft.rotateZ,
+          optionRole: draft.optionRoles.split(',')[0]?.trim() || 'INTERIOR',
+          description: draft.name || 'Componente de Prueba',
+          materialId: firstMaterialId,
+        },
+        containerDims,
+      ),
     ];
-  }, [draft, optionGroups]);
+  }, [draft, optionGroups, containerDims]);
 
   const normalizedComponents = useMemo(() => {
     return components.map((c) => ({
@@ -370,6 +396,10 @@ export function ComponentsScreen({
           optionGroups={optionGroups}
           previewParts={previewParts}
           materialColors={materialColors}
+          containerDims={containerDims}
+          onContainerDimsChange={setContainerDims}
+          showInContext={showInContext}
+          onShowInContextChange={setShowInContext}
         />
       )}
     />
