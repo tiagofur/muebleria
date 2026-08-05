@@ -415,10 +415,10 @@ const compGabCostado: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X).
+  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X, length on Z-up).
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compGabRespaldo: Component = {
   id: 'comp-gab-respaldo',
@@ -515,10 +515,10 @@ const compCajCostado: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X).
+  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X, length on Z-up).
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compCajPiso: Component = {
   id: 'comp-caj-piso',
@@ -713,8 +713,8 @@ const compAlacenaCostado: Component = {
   yFormula: '0',
   zFormula: '0',
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compAlacenaBase: Component = {
   id: 'comp-alacena-base',
@@ -792,8 +792,8 @@ const compDespensaCostado: Component = {
   yFormula: '0',
   zFormula: '0',
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compDespensaBase: Component = {
   id: 'comp-despensa-base',

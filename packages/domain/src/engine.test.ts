@@ -2803,11 +2803,11 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(result.boardParts).toHaveLength(2);
     expect(result.boardParts[0]!.x).toBe(0);
     expect(result.boardParts[0]!.rotateX).toBe(90);
-    expect(result.boardParts[0]!.rotateY).toBe(90);
+    expect(result.boardParts[0]!.rotateY).toBe(180);
     // mat-a thickness 15 → PW - T = 585
     expect(result.boardParts[1]!.x).toBe(585);
     expect(result.boardParts[1]!.rotateX).toBe(90);
-    expect(result.boardParts[1]!.rotateY).toBe(90);
+    expect(result.boardParts[1]!.rotateY).toBe(180);
   });
 
   it('keeps placement axes when only one spatial formula is set', () => {

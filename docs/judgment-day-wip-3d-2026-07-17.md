@@ -85,6 +85,7 @@ META App Excellence: [#132](https://github.com/tiagofur/muebleria/issues/132) ·
 | #126 | Go `PH/PW/PD/T/i` en evaluatePartFormula |
 | #128 | Per-axis pose; lateral_derecho; laterals rotX+Y 90 |
 | #129 | WebGL multi-módulo msg; ghosts; DEFAULT footprint |
+| JD-W3 cerrado (2026-08-04) | Rotación lateral corregida `[90,90,0]`→`[90,180,90]` en `defaultPoseForPlacement`; la convención `[90,90,0]` dejaba el costado como respaldo (length sobre X, espesor sobre Z) confirmado con matriz de Three.js. Anti-regresión: `packages/ui/src/preview3d/rotationMapping.test.ts`. Fix: `packages/domain/src/spatialPlacement.ts` + fixtures `plantillaDemo.ts`. |
 | #130 | validate/normalize color; no pisar en upload |
 | JD-W8 residual | module_components JSONB overrides espaciales en Go storage |
 | JD-S4 residual | draft rotate null vs 0 (ComponentDraft `number \| null`) |

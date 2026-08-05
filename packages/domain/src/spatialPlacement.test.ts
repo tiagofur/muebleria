@@ -21,16 +21,19 @@ describe('defaultPoseForPlacement', () => {
     const left1 = defaultPoseForPlacement('lateral_izquierdo', dims, 1, 2);
     expect(left0.x).toBe(0);
     expect(left0.rotateX).toBe(90);
-    expect(left0.rotateY).toBe(90);
+    expect(left0.rotateY).toBe(180);
+    expect(left0.rotateZ).toBe(90);
     expect(left1.x).toBe(582);
-    expect(left1.rotateY).toBe(90);
+    expect(left1.rotateY).toBe(180);
+    expect(left1.rotateZ).toBe(90);
 
     const right0 = defaultPoseForPlacement('lateral_derecho', dims, 0, 2);
     const right1 = defaultPoseForPlacement('lateral_derecho', dims, 1, 2);
     expect(right0.x).toBe(582);
     expect(right1.x).toBe(0);
     expect(right0.rotateX).toBe(90);
-    expect(right0.rotateY).toBe(90);
+    expect(right0.rotateY).toBe(180);
+    expect(right0.rotateZ).toBe(90);
   });
 
   it('anchors single right lateral at PW - T', () => {

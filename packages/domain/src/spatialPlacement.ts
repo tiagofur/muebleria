@@ -46,12 +46,16 @@ export function defaultPoseForPlacement(
     case 'superior':
       return { ...zero, x: T, y: 0, z: Math.max(0, PH - T) };
     case 'lateral_izquierdo':
-      // Stand vertical panel: rotX+rotY so thickness faces cabinet width (X).
+      // Stand vertical panel: rotX+rotY+rotZ so thickness faces cabinet width (X),
+      // length (PH) faces up (Z workshop / Y Three) and width (PD) faces depth (Y workshop / Z Three).
+      // [90,180,90] is the validated mapping (see rotationMapping.test.ts); the previous
+      // [90,90,0] left the panel lying like a back panel (length on X, thickness on Z). JD-W3.
       return {
         ...zero,
         x: quantity > 1 ? i * Math.max(0, PW - T) : 0,
         rotateX: 90,
-        rotateY: 90,
+        rotateY: 180,
+        rotateZ: 90,
       };
     case 'lateral_derecho': {
       // Right-anchored: qty=1 at PW-T; multi-qty spreads from right toward left.
@@ -62,7 +66,8 @@ export function defaultPoseForPlacement(
         ...zero,
         x,
         rotateX: 90,
-        rotateY: 90,
+        rotateY: 180,
+        rotateZ: 90,
       };
     }
     case 'trasera':
