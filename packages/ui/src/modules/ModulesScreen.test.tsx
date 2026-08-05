@@ -285,7 +285,7 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('shows primary tabs General/Composición/Costo and composition subtabs', async () => {
+  it('shows primary tabs General/Composición and composition subtabs (Costo is aside)', async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
@@ -293,7 +293,9 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tab-general')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tab-composition')).toBeTruthy();
-    expect(screen.getByTestId('module-editor-tab-cost')).toBeTruthy();
+    // Full-page: Costo lives in sticky aside, not as a third primary tab.
+    expect(screen.queryByTestId('module-editor-tab-cost')).toBeNull();
+    expect(screen.getByTestId('module-editor-cost-aside')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
 
     await user.click(screen.getByTestId('module-editor-tab-composition'));
@@ -317,9 +319,6 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.getByTestId('module-editor-panel-hardware').hidden).toBe(
       false,
     );
-
-    await user.click(screen.getByTestId('module-editor-tab-cost'));
-    expect(screen.getByTestId('module-editor-panel-cost').hidden).toBe(false);
 
     // No board-parts editor — modules compose structure + components only.
     expect(screen.queryByTestId('module-editor-tab-parts')).toBeNull();

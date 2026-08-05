@@ -298,8 +298,32 @@ function ProjectDetailViewInner(): ReactNode {
     ? 'Export de producción solo en Aceptado o En producción'
     : 'Exportar cut-list Optimizer (.xlsx)';
 
+  /** Show Optimizer in chrome only when plant-ready; otherwise it lives in Más. */
+  const showExportInChrome = Boolean(onExport) && productionExportOk;
+
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
-    const sections: DropdownMenuSection[] = [...exportMenu.sections];
+    const sections: DropdownMenuSection[] = [];
+
+    // When export is not yet plant-ready, park Optimizer in Más (not a disabled chrome CTA).
+    if (onExport && !productionExportOk) {
+      sections.push({
+        id: 'export-early',
+        label: 'Producción',
+        items: [
+          {
+            id: 'export-optimizer',
+            label: exportBusy ? 'Exportando…' : 'Exportar Optimizer',
+            hint: exportTitle,
+            disabled: true,
+            onSelect: () => {
+              /* disabled until accepted / produced */
+            },
+          },
+        ],
+      });
+    }
+
+    sections.push(...exportMenu.sections);
 
     const metaItems: DropdownMenuItem[] = [];
     if (canMutate && onDuplicate) {
@@ -340,10 +364,14 @@ function ProjectDetailViewInner(): ReactNode {
   }, [
     canMutate,
     canReopen,
+    exportBusy,
     exportMenu.sections,
+    exportTitle,
     onDuplicate,
+    onExport,
     onRequestReopen,
     onSaveAsTemplate,
+    productionExportOk,
     project.id,
     project.status,
   ]);
@@ -421,7 +449,7 @@ function ProjectDetailViewInner(): ReactNode {
             </button>
           ) : null}
 
-          {onExport ? (
+          {showExportInChrome && onExport ? (
             <button
               type="button"
               className={primary === 'export' ? 'btn btn--primary' : 'btn'}
@@ -488,7 +516,7 @@ function ProjectDetailViewInner(): ReactNode {
           <ProjectMeasureDefaults />
           <ProjectItemsSection />
 
-          {/* Advanced tools — off the happy path until requested */}
+          {/* Advanced tools — toggle group (not ARIA tabs: zero-selected is valid) */}
           <section
             className="project-detail__tools"
             data-testid="project-quote-tools"
@@ -498,13 +526,12 @@ function ProjectDetailViewInner(): ReactNode {
               <h3 className="project-detail__section-title">Herramientas</h3>
               <div
                 className="project-detail__tools-tabs"
-                role="tablist"
+                role="group"
                 aria-label="Paneles avanzados"
               >
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={toolsPanel === 'kitchen'}
+                  aria-pressed={toolsPanel === 'kitchen'}
                   className={
                     toolsPanel === 'kitchen'
                       ? 'project-detail__tools-tab project-detail__tools-tab--active'
@@ -517,8 +544,7 @@ function ProjectDetailViewInner(): ReactNode {
                 </button>
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={toolsPanel === 'scenarios'}
+                  aria-pressed={toolsPanel === 'scenarios'}
                   className={
                     toolsPanel === 'scenarios'
                       ? 'project-detail__tools-tab project-detail__tools-tab--active'
@@ -531,8 +557,7 @@ function ProjectDetailViewInner(): ReactNode {
                 </button>
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={toolsPanel === 'checklist'}
+                  aria-pressed={toolsPanel === 'checklist'}
                   className={
                     toolsPanel === 'checklist'
                       ? 'project-detail__tools-tab project-detail__tools-tab--active'
@@ -555,7 +580,6 @@ function ProjectDetailViewInner(): ReactNode {
 
             {toolsPanel === 'kitchen' ? (
               <div
-                role="tabpanel"
                 className="project-detail__tools-panel"
                 data-testid="project-tools-panel-kitchen"
               >
@@ -576,7 +600,6 @@ function ProjectDetailViewInner(): ReactNode {
 
             {toolsPanel === 'scenarios' ? (
               <div
-                role="tabpanel"
                 className="project-detail__tools-panel"
                 data-testid="project-tools-panel-scenarios"
               >
@@ -610,7 +633,6 @@ function ProjectDetailViewInner(): ReactNode {
 
             {toolsPanel === 'checklist' ? (
               <div
-                role="tabpanel"
                 className="project-detail__tools-panel"
                 data-testid="project-tools-panel-checklist"
               >

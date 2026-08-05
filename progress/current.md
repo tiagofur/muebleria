@@ -144,5 +144,12 @@ moduleHelpers, InstanceOverridesEditor, ModulesScreen, StructuresScreen, typeche
 - Ajustes: secciones Cotización · Identidad · Permisos; feedback sin emoji.
 - Tests: 446 passed.
 
+### JD R2 residuals ✅
+- Cola: 1 primary (Pack > Exportar corte).
+- Cotización: Export solo en chrome si plant-ready; si no → Más (disabled).
+- Tools: `role=group` + `aria-pressed` (no tablist inválido).
+- Módulo: tab ids = panel labels; Costo tab oculto si hay aside sticky.
+- BoardFinishPickers: CSS + tokens canónicos.
+
 
 

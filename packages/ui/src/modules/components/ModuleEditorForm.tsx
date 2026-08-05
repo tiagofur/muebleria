@@ -80,6 +80,11 @@ export type ModuleEditorFormProps = {
    * **below** the Components instance list — never replaces “Agregar componente”.
    */
   readonly boardEditorSlot?: ReactNode;
+  /**
+   * When true (full-page editor with sticky cost aside), hide the Costo primary
+   * tab and the duplicate CostPreviewPanel — cost lives in the aside only.
+   */
+  readonly costAsideVisible?: boolean;
 };
 
 function compositionBadge(draft: ModuleDraft): string {
@@ -123,14 +128,20 @@ export function ModuleEditorForm({
   missingGroups,
   groupLabels,
   boardEditorSlot,
+  costAsideVisible = false,
 }: ModuleEditorFormProps): ReactNode {
   const primary = primaryTabFor(editorTab);
   const compositionActive = isCompositionTab(editorTab);
+  const primaryTabs = costAsideVisible
+    ? MODULE_EDITOR_PRIMARY_TABS.filter((t) => t.id !== 'cost')
+    : MODULE_EDITOR_PRIMARY_TABS;
 
   const selectPrimary = (id: ModuleEditorPrimaryTab): void => {
     if (id === 'general') setEditorTab('general');
-    else if (id === 'cost') setEditorTab('cost');
-    else if (!compositionActive) setEditorTab(DEFAULT_COMPOSITION_TAB);
+    else if (id === 'cost' && !costAsideVisible) setEditorTab('cost');
+    else if (id === 'composition' && !compositionActive) {
+      setEditorTab(DEFAULT_COMPOSITION_TAB);
+    }
   };
 
   return (
@@ -148,28 +159,36 @@ export function ModuleEditorForm({
         aria-label="Secciones del editor de mueble"
         data-testid="module-editor-tabs"
       >
-        {MODULE_EDITOR_PRIMARY_TABS.map((tab) => {
-          const selected = primary === tab.id;
+        {primaryTabs.map((tab) => {
+          const selected =
+            tab.id === 'composition' ? compositionActive : primary === tab.id;
+          const tabId =
+            tab.id === 'general'
+              ? 'module-editor-tab-general'
+              : tab.id === 'cost'
+                ? 'module-editor-tab-cost'
+                : 'module-editor-tab-composition';
+          const controls =
+            tab.id === 'general'
+              ? 'module-editor-panel-general'
+              : tab.id === 'cost'
+                ? 'module-editor-panel-cost'
+                : 'module-editor-panel-structure';
           return (
             <button
               key={tab.id}
               type="button"
               role="tab"
-              id={`module-editor-primary-${tab.id}`}
+              id={tabId}
               aria-selected={selected}
+              aria-controls={controls}
               tabIndex={selected ? 0 : -1}
               className={
                 selected
                   ? 'module-editor__tab module-editor__tab--active'
                   : 'module-editor__tab'
               }
-              data-testid={
-                tab.id === 'general'
-                  ? 'module-editor-tab-general'
-                  : tab.id === 'cost'
-                    ? 'module-editor-tab-cost'
-                    : 'module-editor-tab-composition'
-              }
+              data-testid={tabId}
               onClick={() => selectPrimary(tab.id)}
             >
               {tab.label}
@@ -277,14 +296,26 @@ export function ModuleEditorForm({
         hidden={editorTab !== 'hardware'}
       />
 
-      <ModuleEditorCostPanel
-        editingId={editingId}
-        costPreview={costPreview}
-        previewBlocked={previewBlocked}
-        missingGroups={missingGroups}
-        groupLabels={groupLabels}
-        hidden={editorTab !== 'cost'}
-      />
+      {!costAsideVisible ? (
+        <ModuleEditorCostPanel
+          editingId={editingId}
+          costPreview={costPreview}
+          previewBlocked={previewBlocked}
+          missingGroups={missingGroups}
+          groupLabels={groupLabels}
+          hidden={editorTab !== 'cost'}
+        />
+      ) : editorTab === 'cost' ? (
+        <p
+          className="catalog-form__hint"
+          id="module-editor-panel-cost"
+          role="tabpanel"
+          aria-labelledby="module-editor-tab-cost"
+          data-testid="module-editor-panel-cost"
+        >
+          El costo y el desglose están en el panel lateral.
+        </p>
+      ) : null}
     </form>
   );
 }

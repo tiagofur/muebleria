@@ -5,6 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type { BoardFinishPickerGroup } from '../moduleHelpers';
+import './boardFinishPickers.css';
 
 export type BoardFinishPickersProps = {
   readonly groups: readonly BoardFinishPickerGroup[];
@@ -22,20 +23,9 @@ export function BoardFinishPickers({
   if (groups.length === 0) return null;
 
   return (
-    <div
-      className="board-finish-pickers"
-      data-testid={testId}
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
-        marginBottom: '0.75rem',
-        alignItems: 'flex-end',
-      }}
-    >
+    <div className="board-finish-pickers" data-testid={testId}>
       <p
-        className="catalog-form__hint"
-        style={{ flex: '1 1 100%', margin: 0 }}
+        className="catalog-form__hint board-finish-pickers__intro"
         data-testid={`${testId}-intro`}
       >
         Acabados de preview (solo esta vista 3D — no guarda la cotización):
@@ -46,35 +36,28 @@ export function BoardFinishPickers({
         return (
           <div
             key={g.code}
-            className="catalog-form__field"
-            style={{ marginBottom: 0, minWidth: '11rem' }}
+            className="catalog-form__field board-finish-pickers__field"
             data-testid={`${testId}-group-${g.code}`}
           >
             <label htmlFor={`${testId}-${g.code}`}>
               {g.name}
               {selectedOpt?.grainDefault ? ' · veta' : ''}
             </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="board-finish-pickers__control">
               {selectedOpt?.previewColor ? (
                 <span
+                  className="board-finish-pickers__swatch"
                   aria-hidden
                   title={selectedOpt.previewColor}
-                  style={{
-                    width: '1.1rem',
-                    height: '1.1rem',
-                    borderRadius: 'var(--radius-sm, 4px)',
-                    border: '1px solid var(--border, #ccc)',
-                    background: selectedOpt.previewColor,
-                    flexShrink: 0,
-                  }}
+                  style={{ background: selectedOpt.previewColor }}
                 />
               ) : null}
               <select
                 id={`${testId}-${g.code}`}
+                className="board-finish-pickers__select"
                 value={selected}
                 onChange={(e) => onChange(g.code, e.target.value)}
                 data-testid={`${testId}-select-${g.code}`}
-                style={{ flex: 1 }}
               >
                 {g.options.map((o) => (
                   <option key={o.id} value={o.id}>

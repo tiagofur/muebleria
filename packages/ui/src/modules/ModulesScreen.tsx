@@ -962,6 +962,7 @@ export function ModulesScreen({
             missingGroups={missingGroups}
             groupLabels={groupLabels}
             boardEditorSlot={resolvedBoardEditorSlot}
+            costAsideVisible={inlineEditMode}
           />
         );
 
@@ -972,6 +973,7 @@ export function ModulesScreen({
               <aside
                 className="module-editor-page__aside"
                 aria-label="Vista previa de costo"
+                data-testid="module-editor-cost-aside"
               >
                 <CostPreviewPanel
                   costPreview={costPreview}

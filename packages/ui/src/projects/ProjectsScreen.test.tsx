@@ -298,7 +298,8 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-detail-chrome')).toBeTruthy();
     expect(screen.getByTestId('project-detail-total')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
-    expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
+    // Draft: Optimizer lives in Más (not a disabled chrome CTA).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
 
     await user.click(screen.getByRole('button', { name: /^Lista$/i }));
@@ -317,15 +318,16 @@ describe('ProjectsScreen F022', () => {
     const primaries = chrome.querySelectorAll('.btn--primary');
     expect(primaries.length).toBe(1);
     expect(screen.getByTestId('project-send-quote')).toBeTruthy();
-    // Export stays secondary on draft (disabled until accepted).
-    expect(screen.getByTestId('project-chrome-export').className).not.toMatch(
-      /btn--primary/,
-    );
-    // Advanced tools start closed — kitchen plan not in DOM until tab click.
+    // Draft: Optimizer is not a chrome button (lives under Más until plant-ready).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    // Advanced tools start closed — kitchen plan not in DOM until toggle.
     expect(screen.getByTestId('project-quote-tools')).toBeTruthy();
     expect(screen.queryByTestId('project-tools-panel-kitchen')).toBeNull();
     await user.click(screen.getByTestId('project-tools-kitchen'));
     expect(screen.getByTestId('project-tools-panel-kitchen')).toBeTruthy();
+    expect(
+      screen.getByTestId('project-tools-kitchen').getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 
   it('opens Modal MD for new project metadata with customer picker', async () => {
@@ -472,8 +474,8 @@ describe('ProjectsScreen F022', () => {
     const totals = screen.getByLabelText('Totales de cotización');
     expect(within(totals).getByText('Precio de venta')).toBeTruthy();
     expect(within(totals).getByText('$202.50 MXN')).toBeTruthy();
-    // Export lives in sticky workspace chrome (issue #50)
-    expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
+    // Draft fixture: Optimizer is under Más until accepted/produced.
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(screen.getByTestId('project-detail-total').textContent).toMatch(
       /\$202\.50 MXN/,
     );
@@ -507,7 +509,7 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getAllByText('$202.50 MXN').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('disables export and shows message when preview blocked', async () => {
+  it('shows export-blocked message when preview blocked (draft keeps export out of chrome)', async () => {
     const user = userEvent.setup();
     renderScreen({
       breakdown: null,
@@ -516,10 +518,8 @@ describe('ProjectsScreen F022', () => {
     });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    const exportBtn = screen.getByRole('button', {
-      name: /Exportar Optimizer/i,
-    }) as HTMLButtonElement;
-    expect((exportBtn as HTMLButtonElement).disabled).toBe(true);
+    // Draft: Optimizer is not a chrome button (under Más until plant-ready).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(
       screen.getByText(/completá las opciones obligatorias/i),
     ).toBeTruthy();

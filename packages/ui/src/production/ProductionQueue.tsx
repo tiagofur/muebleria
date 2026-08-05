@@ -208,9 +208,27 @@ export function ProductionQueue({
                   </p>
                 </div>
                 <div className="prod-queue-card__actions">
+                  {/* At most one primary: Pack if available, else Optimizer. */}
+                  {onExportProductionPack ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={exportBusy}
+                      title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
+                      onClick={() => {
+                        void onExportProductionPack(project.id);
+                      }}
+                      data-testid={`prod-export-pack-${project.id}`}
+                    >
+                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+                      Pack producción
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    className="btn btn--primary"
+                    className={
+                      onExportProductionPack ? 'btn' : 'btn btn--primary'
+                    }
                     disabled={exportBusy}
                     onClick={() => {
                       void onExportOptimizer(project.id);
@@ -245,21 +263,6 @@ export function ProductionQueue({
                     >
                       <Tags size={16} strokeWidth={1.5} aria-hidden />
                       Etiquetas
-                    </button>
-                  ) : null}
-                  {onExportProductionPack ? (
-                    <button
-                      type="button"
-                      className="btn btn--primary"
-                      disabled={exportBusy}
-                      title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
-                      onClick={() => {
-                        void onExportProductionPack(project.id);
-                      }}
-                      data-testid={`prod-export-pack-${project.id}`}
-                    >
-                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                      Pack producción
                     </button>
                   ) : null}
                   {project.status === 'accepted' ? (
