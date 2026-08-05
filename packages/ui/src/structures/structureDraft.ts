@@ -62,6 +62,7 @@ export function structureToDraft(item: Structure): StructureDraft {
           componentId: c.componentId,
           quantity: c.quantity,
           placementOverride: c.placementOverride ?? '',
+          overrides: c.overrides,
         }))
       : [],
   };

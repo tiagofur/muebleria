@@ -92,6 +92,53 @@ describe('apiMappers', () => {
     expect(round.hardwareLines[0]?.hardwareId).toBe('hw1');
   });
 
+  it('round-trips structure component spatial overrides (slice 3)', () => {
+    const st: Structure = {
+      id: 's1',
+      code: 'EST-01',
+      name: 'Cuerpo',
+      components: [
+        {
+          componentId: 'lat-1',
+          quantity: 1,
+          placementOverride: 'lateral_izquierdo',
+          overrides: {
+            xFormula: '0',
+            yFormula: '0',
+            zFormula: '0',
+            lengthFormula: 'PH',
+            widthFormula: 'PD',
+            rotateX: 90,
+            rotateY: 180,
+            rotateZ: 90,
+          },
+        },
+      ],
+    };
+    const api = structureToApi(st);
+    const comps = api.components as Record<string, unknown>[];
+    expect(comps[0]?.overrides).toMatchObject({
+      xFormula: '0',
+      lengthFormula: 'PH',
+      rotateX: 90,
+      rotateY: 180,
+      rotateZ: 90,
+    });
+    const round = structureFromApi(api as Record<string, unknown>);
+    expect(round.components?.[0]?.overrides).toEqual({
+      edges: undefined,
+      notes: undefined,
+      lengthFormula: 'PH',
+      widthFormula: 'PD',
+      xFormula: '0',
+      yFormula: '0',
+      zFormula: '0',
+      rotateX: 90,
+      rotateY: 180,
+      rotateZ: 90,
+    });
+  });
+
   it('sorts categories parents before children', () => {
     const cats: ModuleCategory[] = [
       { id: 'child', name: 'Child', parentId: 'root', sortOrder: 0 },

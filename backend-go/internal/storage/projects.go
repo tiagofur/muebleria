@@ -81,6 +81,7 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 
 // componentInstanceOverridesJSON serializes instance overrides (edges + spatial)
 // for module_components.overrides JSONB. Returns nil when nothing to store.
+// length/width formulas live in dedicated columns on module_components.
 func componentInstanceOverridesJSON(ov *domain.ComponentInstanceOverrides) []byte {
 	if ov == nil {
 		return nil
@@ -97,6 +98,53 @@ func componentInstanceOverridesJSON(ov *domain.ComponentInstanceOverrides) []byt
 		return nil
 	}
 	return b
+}
+
+// isEmptyComponentInstanceOverrides reports whether ov has no persisted fields.
+func isEmptyComponentInstanceOverrides(ov *domain.ComponentInstanceOverrides) bool {
+	if ov == nil {
+		return true
+	}
+	return len(ov.Edges) == 0 &&
+		ov.LengthFormula == "" && ov.WidthFormula == "" &&
+		ov.XFormula == "" && ov.YFormula == "" && ov.ZFormula == "" &&
+		ov.RotateX == nil && ov.RotateY == nil && ov.RotateZ == nil
+}
+
+// fullComponentInstanceOverridesJSON serializes ALL override fields into JSONB.
+// Used by structure_components (no dedicated length/width formula columns).
+func fullComponentInstanceOverridesJSON(ov *domain.ComponentInstanceOverrides) []byte {
+	if isEmptyComponentInstanceOverrides(ov) {
+		return nil
+	}
+	b, err := json.Marshal(ov)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// parseComponentInstanceOverridesJSON unmarshals a JSONB overrides blob.
+// Returns nil for null/empty/invalid payloads.
+func parseComponentInstanceOverridesJSON(overridesJSON []byte) *domain.ComponentInstanceOverrides {
+	if len(overridesJSON) == 0 || string(overridesJSON) == "null" || string(overridesJSON) == "{}" {
+		return nil
+	}
+	ov := &domain.ComponentInstanceOverrides{}
+	if err := json.Unmarshal(overridesJSON, ov); err != nil {
+		// Fallback: edges-only legacy shape.
+		var edgeStruct struct {
+			Edges []domain.EdgeAssignment `json:"edges"`
+		}
+		if err2 := json.Unmarshal(overridesJSON, &edgeStruct); err2 == nil && len(edgeStruct.Edges) > 0 {
+			return &domain.ComponentInstanceOverrides{Edges: edgeStruct.Edges}
+		}
+		return nil
+	}
+	if isEmptyComponentInstanceOverrides(ov) {
+		return nil
+	}
+	return ov
 }
 
 // Cargar catálogo completo para el motor de cálculo

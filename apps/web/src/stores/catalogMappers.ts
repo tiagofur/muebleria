@@ -13,8 +13,8 @@ import type {
 } from '@muebles/domain';
 import type { ComponentPlacement } from '@muebles/domain';
 import {
+  draftToModule as draftToModuleFromUi,
   edgesFromFlags,
-  parseOptionalNumber,
   type ComponentDraft,
   type ModuleDraft,
   type StructureDraft,
@@ -25,63 +25,9 @@ function optionalNotes(notes: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+/** Re-export domain mapper from UI helpers (single source of truth). */
 export function draftToModule(id: string, draft: ModuleDraft): Module {
-  const width = parseOptionalNumber(draft.externalWidth);
-  const height = parseOptionalNumber(draft.externalHeight);
-  const depth = parseOptionalNumber(draft.externalDepth);
-  const hasDims =
-    width !== undefined || height !== undefined || depth !== undefined;
-
-  return {
-    id,
-    code: draft.code.trim(),
-    name: draft.name.trim(),
-    notes: optionalNotes(draft.notes),
-    categoryId: draft.categoryId.trim() || undefined,
-    furnitureType: draft.furnitureType,
-    baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
-    imageUrl: draft.imageUrl.trim() || undefined,
-    externalDims: hasDims
-      ? {
-          width: width ?? 0,
-          height: height ?? 0,
-          depth: depth ?? 0,
-        }
-      : undefined,
-    hardwareLines: draft.hardwareLines.map((l) => ({
-      id: l.id,
-      quantity: l.quantity,
-      descriptionOverride: optionalNotes(l.descriptionOverride),
-      optionRole:
-        l.mode === 'fixed'
-          ? l.optionRole.trim() || 'FIXED'
-          : l.optionRole.trim(),
-      hardwareId:
-        l.mode === 'fixed' && l.hardwareId.trim()
-          ? l.hardwareId.trim()
-          : undefined,
-    })),
-    structureId: draft.structureId.trim() || undefined,
-    components: draft.components.map((c) => ({
-      componentId: c.componentId,
-      quantity: c.quantity,
-      placementOverride: c.placementOverride
-        ? (c.placementOverride as ComponentPlacement)
-        : undefined,
-      // Preserve BoardEditor overrides (gap #1) — poses + dimensions.
-      overrides: c.overrides,
-    })),
-    presets:
-      draft.presets.length > 0
-        ? draft.presets.map((p) => ({
-            id: p.id,
-            name: p.name.trim() || undefined,
-            width: p.width,
-            height: p.height,
-            depth: p.depth,
-          }))
-        : undefined,
-  };
+  return draftToModuleFromUi(id, draft);
 }
 
 export function draftToStructure(id: string, draft: StructureDraft): Structure {
@@ -110,6 +56,8 @@ export function draftToStructure(id: string, draft: StructureDraft): Structure {
           placementOverride: c.placementOverride
             ? (c.placementOverride as ComponentPlacement)
             : undefined,
+          // Per-instance spatial/formula overrides (structure_components.overrides).
+          overrides: c.overrides,
         }))
       : undefined,
   };

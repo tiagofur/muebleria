@@ -92,7 +92,7 @@ META App Excellence: [#132](https://github.com/tiagofur/muebleria/issues/132) ·
 
 ### Residual (no bloquea CRITICAL)
 
-- `structure_components` aún sin columna overrides (solo placement_override) — spatial override en **estructuras** no persiste en API.
+- ~~`structure_components` aún sin columna overrides~~ **Cerrado (slice 3, 2026-08-05):** migración `000030` + load/save Go + draft mappers (`structureToDraft` / `draftToStructure`).
 - Catálogo Component `rotate_* INT NOT NULL DEFAULT 0` en Postgres: 0 en DB no distingue unset; non-zero y fórmulas sí.
 
 ## Criterio de cierre
