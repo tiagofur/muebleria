@@ -299,3 +299,162 @@
   accent-color: var(--brand-500);
   cursor: pointer;
 }
+
+/* —— ComponentEditorEdgesPanel + PlankEdgeDiagram —— */
+
+.component-edges__intro {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.component-edges__intro strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.component-edges__fallback {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.component-edges__fallback > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+  font-weight: var(--weight-medium);
+}
+
+.component-edge-check__sub {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-left: var(--space-2);
+}
+
+/* Diagram container */
+.plank-edge-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.plank-edge-diagram__svg {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  display: block;
+}
+
+/* The plank body */
+.plank-edge-diagram__plank {
+  fill: var(--surface-input);
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+
+/* Each clickable edge: a thick polyline */
+.plank-edge-diagram__edge {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 10;
+  stroke-linecap: round;
+  cursor: pointer;
+  transition: stroke var(--duration-fast) var(--ease-out);
+}
+
+.plank-edge-diagram__edge:hover {
+  stroke: var(--brand-400);
+}
+
+.plank-edge-diagram__edge:focus-visible {
+  outline: none;
+  /* Simulate the focus ring via a drop-shadow on the stroke. */
+  filter: drop-shadow(0 0 0 var(--shadow-focus));
+}
+
+.plank-edge-diagram__edge--on {
+  stroke: var(--brand-500);
+}
+
+.plank-edge-diagram__edge--on:hover {
+  stroke: var(--brand-600);
+}
+
+.plank-edge-diagram__edge.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.plank-edge-diagram__edge.is-disabled:hover {
+  stroke: var(--border-strong);
+}
+
+/* Edge code labels (L1/L2/W1/W2) */
+.plank-edge-diagram__label {
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  fill: var(--text-muted);
+  user-select: none;
+}
+
+.plank-edge-diagram__label--on {
+  fill: var(--brand-600);
+}
+
+/* Dimension caption inside the plank */
+.plank-edge-diagram__caption {
+  font-size: 12px;
+  fill: var(--text-muted);
+  user-select: none;
+}
+
+/* Compact legend below the diagram */
+.plank-edge-diagram__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.plank-edge-diagram__legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.plank-edge-diagram__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.plank-edge-diagram__legend-dot--on {
+  border-color: var(--brand-500);
+  background: var(--brand-500);
+}
+
+.plank-edge-diagram__legend-code {
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.plank-edge-diagram__legend-sub {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plank-edge-diagram__edge {
+    transition: none;
+  }
+}
