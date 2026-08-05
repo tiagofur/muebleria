@@ -93,4 +93,41 @@ describe('previewPartForComponent', () => {
     expect(part.y).toBe(0);
     expect(part.z).toBe(18);
   });
+
+  it('does not throw on a partial/invalid formula — falls back instead (preview tolerance)', () => {
+    // Typing "P" into a formula field used to crash the editor via the error
+    // boundary: the char passes the allowed-chars regex but matches no variable,
+    // so `new Function('return (P)')` throws ReferenceError. Preview must be
+    // tolerant because the user is typing the formula live.
+    const part = previewPartForComponent(
+      {
+        placement: 'custom',
+        lengthMm: 720,   // base value
+        widthMm: 560,    // base value
+        thicknessMm: 18,
+        lengthFormula: 'P',            // invalid partial
+        xFormula: 'PW -',              // invalid partial (trailing operator)
+      },
+      dims,
+    );
+    // Invalid formulas fall back to base dims / placement pose, never throw.
+    expect(part.lengthMm).toBe(720);
+    expect(part.x).toBe(0); // custom placement pose x
+  });
+
+  it('uses the evaluated value when a formula becomes valid mid-typing', () => {
+    const part = previewPartForComponent(
+      {
+        placement: 'custom',
+        lengthMm: 0,
+        widthMm: 0,
+        thicknessMm: 18,
+        lengthFormula: 'PH - 31',   // valid → 720 - 31 = 689
+        xFormula: 'T',              // valid → 18
+      },
+      dims,
+    );
+    expect(part.lengthMm).toBe(689);
+    expect(part.x).toBe(18);
+  });
 });

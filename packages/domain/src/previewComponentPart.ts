@@ -39,6 +39,24 @@ export type ComponentPreviewOptions = {
 };
 
 /**
+ * Preview is tolerant to partial/invalid formulas — the user is typing them
+ * live. Return null on failure so the caller falls back to a safe value,
+ * instead of crashing the editor. The production engine (resolveBom) stays
+ * strict because saved data is already validated.
+ */
+function tryEvaluate(
+  formula: string,
+  dims: Parameters<typeof evaluatePartFormula>[1],
+  contextInfo: Parameters<typeof evaluatePartFormula>[2],
+): number | null {
+  try {
+    return evaluatePartFormula(formula, dims, contextInfo);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve a preview part for one component copy against the given container dims.
  *
  * @param input   Component-like fields (geometry + formulas + rotation overrides).
@@ -59,19 +77,16 @@ export function previewPartForComponent(
   const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T };
   const lengthFormula = input.lengthFormula?.trim();
   const widthFormula = input.widthFormula?.trim();
+  const geomCtx = (field: 'length' | 'width') => ({
+    structureCode: input.code ?? '',
+    partDescription: input.description ?? '',
+    field,
+  });
   const lengthMm = lengthFormula
-    ? evaluatePartFormula(lengthFormula, geomDims, {
-        structureCode: input.code ?? '',
-        partDescription: input.description ?? '',
-        field: 'length',
-      })
+    ? tryEvaluate(lengthFormula, geomDims, geomCtx('length')) ?? Math.max(input.lengthMm, 1)
     : Math.max(input.lengthMm, 1);
   const widthMm = widthFormula
-    ? evaluatePartFormula(widthFormula, geomDims, {
-        structureCode: input.code ?? '',
-        partDescription: input.description ?? '',
-        field: 'width',
-      })
+    ? tryEvaluate(widthFormula, geomDims, geomCtx('width')) ?? Math.max(input.widthMm, 1)
     : Math.max(input.widthMm, 1);
   const thicknessMm = Math.max(input.thicknessMm || T, 1);
 
@@ -87,13 +102,13 @@ export function previewPartForComponent(
     field,
   });
   const x = input.xFormula?.trim()
-    ? evaluatePartFormula(input.xFormula, spatialDims, ctx('x'))
+    ? tryEvaluate(input.xFormula, spatialDims, ctx('x')) ?? placementPose.x
     : placementPose.x;
   const y = input.yFormula?.trim()
-    ? evaluatePartFormula(input.yFormula, spatialDims, ctx('y'))
+    ? tryEvaluate(input.yFormula, spatialDims, ctx('y')) ?? placementPose.y
     : placementPose.y;
   const z = input.zFormula?.trim()
-    ? evaluatePartFormula(input.zFormula, spatialDims, ctx('z'))
+    ? tryEvaluate(input.zFormula, spatialDims, ctx('z')) ?? placementPose.z
     : placementPose.z;
 
   // Rotations: explicit (incl. 0) wins over placement default; null means "auto".
