@@ -313,7 +313,13 @@ export function ComponentsScreen({
       return;
     }
     if (draft.lengthMm <= 0 || draft.widthMm <= 0 || draft.thicknessMm <= 0) {
-      setError('Las dimensiones deben ser mayores a 0.');
+      const offenders: string[] = [];
+      if (draft.lengthMm <= 0) offenders.push('el largo');
+      if (draft.widthMm <= 0) offenders.push('el ancho');
+      if (draft.thicknessMm <= 0) offenders.push('el espesor');
+      setError(
+        `Revisá las dimensiones: ${offenders.join(', ')} debe(n) ser mayor a 0.`,
+      );
       return;
     }
     if (!draft.optionRoles.trim()) {

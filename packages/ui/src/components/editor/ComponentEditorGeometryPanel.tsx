@@ -82,6 +82,20 @@ export function ComponentEditorGeometryPanel({
   // carpenter sees only the base dimensions, size formulas, and the 3D preview.
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // Inline dimension validation (P1): validate on blur, never coerce silently.
+  // A wrong mm is the workshop's most expensive mistake — surface it at the
+  // field instead of swallowing -5/abc into 0 and failing generically on save.
+  type DimErrors = { length?: string; width?: string; thickness?: string };
+  const [dimErrors, setDimErrors] = useState<DimErrors>({});
+
+  const validateDim = (key: keyof DimErrors, label: string, v: number) => {
+    const invalid = Number.isNaN(v) || v <= 0;
+    setDimErrors((prev) => ({
+      ...prev,
+      [key]: invalid ? `El ${label} debe ser mayor a 0.` : undefined,
+    }));
+  };
+
   return (
     <div
       role="tabpanel"
@@ -106,7 +120,7 @@ export function ComponentEditorGeometryPanel({
 
       <FieldGroup title="Dimensiones base" hint="tamaño fijo de la placa cuando no hay fórmula">
         <div className="module-editor__grid">
-          <div className="catalog-form__field">
+          <div className={`catalog-form__field${dimErrors.length ? ' catalog-form__field--error' : ''}`}>
             <label htmlFor={`${formId}-length`}>Largo Base (mm)</label>
             <input
               id={`${formId}-length`}
@@ -116,14 +130,21 @@ export function ComponentEditorGeometryPanel({
               onChange={(e) =>
                 setDraft((prev) => ({
                   ...prev,
-                  lengthMm: Math.max(0, Number(e.target.value)),
+                  lengthMm: Number(e.target.value) || 0,
                 }))
               }
+              onBlur={() => validateDim('length', 'largo', draft.lengthMm)}
+              aria-invalid={dimErrors.length ? true : undefined}
               required
               data-testid="input-length"
             />
+            {dimErrors.length ? (
+              <p className="catalog-form__error-text" data-testid="input-length-error">
+                {dimErrors.length}
+              </p>
+            ) : null}
           </div>
-          <div className="catalog-form__field">
+          <div className={`catalog-form__field${dimErrors.width ? ' catalog-form__field--error' : ''}`}>
             <label htmlFor={`${formId}-width`}>Ancho Base (mm)</label>
             <input
               id={`${formId}-width`}
@@ -133,14 +154,21 @@ export function ComponentEditorGeometryPanel({
               onChange={(e) =>
                 setDraft((prev) => ({
                   ...prev,
-                  widthMm: Math.max(0, Number(e.target.value)),
+                  widthMm: Number(e.target.value) || 0,
                 }))
               }
+              onBlur={() => validateDim('width', 'ancho', draft.widthMm)}
+              aria-invalid={dimErrors.width ? true : undefined}
               required
               data-testid="input-width"
             />
+            {dimErrors.width ? (
+              <p className="catalog-form__error-text" data-testid="input-width-error">
+                {dimErrors.width}
+              </p>
+            ) : null}
           </div>
-          <div className="catalog-form__field">
+          <div className={`catalog-form__field${dimErrors.thickness ? ' catalog-form__field--error' : ''}`}>
             <label htmlFor={`${formId}-thickness`}>Espesor Base (mm)</label>
             <input
               id={`${formId}-thickness`}
@@ -150,12 +178,19 @@ export function ComponentEditorGeometryPanel({
               onChange={(e) =>
                 setDraft((prev) => ({
                   ...prev,
-                  thicknessMm: Math.max(0, Number(e.target.value)),
+                  thicknessMm: Number(e.target.value) || 0,
                 }))
               }
+              onBlur={() => validateDim('thickness', 'espesor', draft.thicknessMm)}
+              aria-invalid={dimErrors.thickness ? true : undefined}
               required
               data-testid="input-thickness"
             />
+            {dimErrors.thickness ? (
+              <p className="catalog-form__error-text" data-testid="input-thickness-error">
+                {dimErrors.thickness}
+              </p>
+            ) : null}
           </div>
         </div>
       </FieldGroup>

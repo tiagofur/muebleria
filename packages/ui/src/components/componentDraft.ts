@@ -25,6 +25,60 @@ export const PLACEMENT_LABEL: Record<string, string> = Object.fromEntries(
   COMPONENT_PLACEMENTS.map((p) => [p.value, p.label]),
 );
 
+/**
+ * Placement options grouped for the Component editor's <select> with <optgroup>,
+ * each with a one-line workshop description shown under the select. The flat
+ * COMPONENT_PLACEMENTS above stays for Module/Structure editors that render a
+ * plain option list.
+ */
+export type PlacementOption = {
+  readonly value: string;
+  readonly label: string;
+  readonly description: string;
+};
+
+export const COMPONENT_PLACEMENT_GROUPS: readonly {
+  readonly label: string;
+  readonly options: readonly PlacementOption[];
+}[] = [
+  {
+    label: 'Laterales',
+    options: [
+      { value: 'lateral_izquierdo', label: 'Lateral Izquierdo', description: 'Costado vertical del lado izquierdo del mueble.' },
+      { value: 'lateral_derecho', label: 'Lateral Derecho', description: 'Costado vertical del lado derecho del mueble.' },
+    ],
+  },
+  {
+    label: 'Horizontales',
+    options: [
+      { value: 'base', label: 'Base', description: 'Piso del mueble (pieza horizontal inferior).' },
+      { value: 'superior', label: 'Superior', description: 'Tapa o techo del mueble (pieza horizontal superior).' },
+    ],
+  },
+  {
+    label: 'Verticales',
+    options: [
+      { value: 'trasera', label: 'Trasera', description: 'Fondo o respaldo del mueble.' },
+      { value: 'frontal', label: 'Frontal', description: 'Frente o manguete del mueble.' },
+    ],
+  },
+  {
+    label: 'Especiales',
+    options: [
+      { value: 'interno', label: 'Interno', description: 'Entrepaño o divisor interior.' },
+      { value: 'puerta', label: 'Puerta', description: 'Puerta batiente del mueble.' },
+      { value: 'frente_cajon', label: 'Frente de Cajón', description: 'Frente de un cajón.' },
+      { value: 'custom', label: 'Personalizado', description: 'Definir posición y rotación manualmente.' },
+    ],
+  },
+];
+
+export const PLACEMENT_DESCRIPTION: Record<string, string> = Object.fromEntries(
+  COMPONENT_PLACEMENT_GROUPS.flatMap((g) =>
+    g.options.map((o) => [o.value, o.description]),
+  ),
+);
+
 export type ComponentEditorTab =
   | 'general'
   | 'geometry'

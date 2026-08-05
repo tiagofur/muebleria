@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ComponentsScreen } from './ComponentsScreen';
 import type { Component, OptionGroup } from '@muebles/domain';
 
@@ -126,9 +125,8 @@ describe('ComponentsScreen', () => {
     // Switch to options tab
     fireEvent.click(screen.getByTestId('component-editor-tab-options'));
 
-    // Select FRENTE in the multi-select
-    const roleSelect = screen.getByTestId('input-optionRoles');
-    await userEvent.selectOptions(roleSelect, ['FRENTE']);
+    // Toggle the FRENTE chip on (replaces the old native multi-select)
+    fireEvent.click(screen.getByTestId('option-role-FRENTE'));
 
     // Submit
     fireEvent.click(screen.getByTestId('save-btn'));
@@ -363,5 +361,96 @@ describe('ComponentsScreen', () => {
     fireEvent.click(screen.getByTestId('component-geometry-advanced-reset'));
     expect((screen.getByTestId('input-rotate-x') as HTMLInputElement).value).toBe('');
     expect((screen.getByTestId('input-x-formula') as HTMLInputElement).value).toBe('');
+  });
+
+  it('validates dimensions on blur and clears the error when corrected (P1-a)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    // Type an invalid length and leave the field — error appears.
+    const lengthInput = screen.getByTestId('input-length');
+    fireEvent.change(lengthInput, { target: { value: '-5' } });
+    fireEvent.blur(lengthInput);
+    expect(screen.getByTestId('input-length-error').textContent).toContain(
+      'El largo debe ser mayor a 0',
+    );
+    expect(lengthInput.getAttribute('aria-invalid')).toBe('true');
+
+    // Correcting the value and blurring clears the error.
+    fireEvent.change(lengthInput, { target: { value: '720' } });
+    fireEvent.blur(lengthInput);
+    expect(screen.queryByTestId('input-length-error')).toBeNull();
+  });
+
+  it('groups placements with optgroups and shows a contextual description (P1-b)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+
+    // The select offers grouped placements.
+    const select = screen.getByTestId('input-placement') as HTMLSelectElement;
+    const groups = select.querySelectorAll('optgroup');
+    expect(groups.length).toBeGreaterThanOrEqual(4);
+
+    // Changing placement to "superior" surfaces its description.
+    fireEvent.change(select, { target: { value: 'superior' } });
+    expect(screen.getByTestId('placement-hint').textContent).toContain('Tapa');
+  });
+
+  it('toggles option roles via chips instead of a native multi-select (P2)', () => {
+    const onUpdate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-options'));
+
+    // c1 (Puerta) already has FRENTE selected, so the chip starts pressed.
+    const frenteChip = screen.getByTestId('option-role-FRENTE');
+    expect(frenteChip.getAttribute('aria-pressed')).toBe('true');
+
+    // Toggle it off, then back on — verifies the chip toggles both ways.
+    fireEvent.click(frenteChip);
+    expect(frenteChip.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(frenteChip);
+    expect(frenteChip.getAttribute('aria-pressed')).toBe('true');
+
+    // Saving persists the role.
+    fireEvent.click(screen.getByTestId('save-btn'));
+    expect(onUpdate).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ optionRoles: expect.stringContaining('FRENTE') }),
+    );
   });
 });

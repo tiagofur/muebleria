@@ -4,7 +4,8 @@
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import {
-  COMPONENT_PLACEMENTS,
+  COMPONENT_PLACEMENT_GROUPS,
+  PLACEMENT_DESCRIPTION,
   type ComponentDraft,
 } from '../componentDraft';
 
@@ -23,6 +24,7 @@ export function ComponentEditorGeneralPanel({
   editingId,
   hidden,
 }: ComponentEditorGeneralPanelProps): ReactNode {
+  const placementHint = PLACEMENT_DESCRIPTION[draft.placement];
   return (
     <div
       role="tabpanel"
@@ -73,12 +75,24 @@ export function ComponentEditorGeneralPanel({
             required
             data-testid="input-placement"
           >
-            {COMPONENT_PLACEMENTS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
+            {COMPONENT_PLACEMENT_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
+          {placementHint ? (
+            <p
+              className="component-general__placement-hint"
+              data-testid="placement-hint"
+            >
+              {placementHint}
+            </p>
+          ) : null}
         </div>
       </div>
 
