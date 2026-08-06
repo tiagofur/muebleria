@@ -10,6 +10,7 @@ import { isProductionQueueStatus } from './productionHelpers';
 export const PRODUCTION_ORDER_TABS = [
   'resumen',
   'modulos',
+  'piso',
   'despiece',
   'herrajes',
   'vistas',
@@ -26,6 +27,7 @@ export const PRODUCTION_ORDER_TAB_LABELS: Readonly<
 > = {
   resumen: 'Resumen',
   modulos: 'Módulos',
+  piso: 'Piso',
   despiece: 'Despiece',
   herrajes: 'Herrajes',
   vistas: 'Vistas',
@@ -42,6 +44,7 @@ export const PRODUCTION_ORDER_TABS_READY: ReadonlySet<ProductionOrderTab> =
   new Set([
     'resumen',
     'modulos',
+    'piso',
     'despiece',
     'herrajes',
     'vistas',

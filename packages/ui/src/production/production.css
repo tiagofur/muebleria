@@ -745,3 +745,103 @@
   color: var(--text-primary);
   max-width: 9rem;
 }
+
+/* --- Phase 4: paperless, scope, what-if --- */
+
+.prod-hub__scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.prod-hub__scope-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.prod-paperless {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.prod-paperless__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.prod-paperless__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+
+.prod-paperless__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  min-height: 10rem;
+}
+
+.prod-paperless__code {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-brand);
+}
+
+.prod-paperless__name {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.prod-paperless__meta,
+.prod-paperless__status {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.prod-paperless__advance {
+  margin-top: auto;
+  min-height: 2.75rem;
+  font-size: var(--text-md);
+}
+
+.prod-opt__whatif {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.prod-opt__whatif input[type='range'] {
+  flex: 1;
+  min-width: 8rem;
+  max-width: 16rem;
+}
+
+.prod-opt__whatif-val {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  min-width: 4rem;
+}

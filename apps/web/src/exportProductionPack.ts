@@ -24,6 +24,7 @@ import {
   wallElevationsPdfExport,
   productionDespiecePdfExport,
   productionCoverPdfExport,
+  assemblySheetsPdfExport,
 } from '@muebles/excel';
 
 export type ExportProductionPackResult =
@@ -145,6 +146,18 @@ export async function buildProductionPackExport(
         `elevaciones_${baseName}.pdf`,
         toUint8Array(elevationsBuffer),
       );
+    }
+
+    // 8. Assembly sheets (PROD-4.1) best-effort
+    try {
+      const assemblyBuffer = await assemblySheetsPdfExport({
+        project,
+        catalog,
+        customerName,
+      });
+      zip.file(`armado_${baseName}.pdf`, toUint8Array(assemblyBuffer));
+    } catch {
+      /* omit if no modules / resolve error */
     }
 
     const zipContent = await zip.generateAsync({ type: 'uint8array' });

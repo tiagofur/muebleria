@@ -710,6 +710,9 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Módulos: estado de **piso** (pendiente→cortado→encintado→armado→instalado) — solo fábrica (PROD-3.1)
   - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint)
   - Export piloto CNC JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
+  - Tab **Piso**: paperless cards + avance de estado (PROD-4.2)
+  - Hojas de armado PDF por módulo (PROD-4.1); what-if merma en Optimización (PROD-4.3)
+  - Selector **Ambiente** cuando hay 2+ KitchenSpace (filtra vistas; Optimizer = obra completa) (PROD-4.4)
   - Hub Resumen: checklist listo-para-cortar, totales de fábrica, pack; **solo lectura del diseño**
   - Hub Módulos: inventario con código de fábrica, medidas, ubicación, piezas
   - Hub Despiece: cut-list agrupable (material/módulo); misma población que Optimizer
