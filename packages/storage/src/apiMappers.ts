@@ -688,39 +688,157 @@ export function customerFromApi(raw: Record<string, unknown>): Customer {
 
 // --- Projects ---
 
+function kitchenWallToApi(w: {
+  id: string;
+  name?: string;
+  lengthMm: number;
+  angleDeg: number;
+  originXMm?: number;
+  originYMm?: number;
+}): Record<string, unknown> {
+  return {
+    id: w.id,
+    name: w.name ?? '',
+    length_mm: w.lengthMm,
+    angle_deg: w.angleDeg,
+    origin_x_mm: w.originXMm ?? null,
+    origin_y_mm: w.originYMm ?? null,
+  };
+}
+
+function kitchenPlacementToApi(p: {
+  itemId: string;
+  instanceIndex: number;
+  wallId: string;
+  offsetMm: number;
+  elevation: string;
+  baseClearanceMm?: number;
+  mode?: string;
+  freeXMm?: number;
+  freeYMm?: number;
+  freeYawDeg?: number;
+}): Record<string, unknown> {
+  return {
+    item_id: p.itemId,
+    instance_index: p.instanceIndex,
+    wall_id: p.wallId,
+    offset_mm: p.offsetMm,
+    elevation: p.elevation,
+    base_clearance_mm:
+      p.baseClearanceMm === undefined ? null : p.baseClearanceMm,
+    mode: p.mode ?? 'wall',
+    free_x_mm: p.freeXMm === undefined ? null : p.freeXMm,
+    free_y_mm: p.freeYMm === undefined ? null : p.freeYMm,
+    free_yaw_deg: p.freeYawDeg === undefined ? null : p.freeYawDeg,
+  };
+}
+
 function kitchenLayoutToApi(
   layout: Project['kitchenLayout'],
 ): Record<string, unknown> | null {
   if (!layout) return null;
   return {
-    walls: layout.walls.map((w) => ({
-      id: w.id,
-      name: w.name ?? '',
-      length_mm: w.lengthMm,
-      angle_deg: w.angleDeg,
-      origin_x_mm: w.originXMm ?? null,
-      origin_y_mm: w.originYMm ?? null,
-    })),
-    placements: layout.placements.map((p) => ({
-      item_id: p.itemId,
-      instance_index: p.instanceIndex,
-      wall_id: p.wallId,
-      offset_mm: p.offsetMm,
-      elevation: p.elevation,
-      base_clearance_mm:
-        p.baseClearanceMm === undefined ? null : p.baseClearanceMm,
-      mode: p.mode ?? 'wall',
-      free_x_mm: p.freeXMm === undefined ? null : p.freeXMm,
-      free_y_mm: p.freeYMm === undefined ? null : p.freeYMm,
-      free_yaw_deg: p.freeYawDeg === undefined ? null : p.freeYawDeg,
-    })),
+    walls: layout.walls.map(kitchenWallToApi),
+    placements: layout.placements.map(kitchenPlacementToApi),
     base_clearance_mm:
       layout.baseClearanceMm === undefined ? null : layout.baseClearanceMm,
     wall_cabinet_z_mm:
       layout.wallCabinetZMm === undefined ? null : layout.wallCabinetZMm,
     show_countertop:
       layout.showCountertop === undefined ? null : layout.showCountertop,
+    active_space_id: layout.activeSpaceId ?? null,
+    spaces: layout.spaces?.length
+      ? layout.spaces.map((s) => ({
+          id: s.id,
+          name: s.name,
+          walls: s.walls.map(kitchenWallToApi),
+          placements: s.placements.map(kitchenPlacementToApi),
+          base_clearance_mm:
+            s.baseClearanceMm === undefined ? null : s.baseClearanceMm,
+          wall_cabinet_z_mm:
+            s.wallCabinetZMm === undefined ? null : s.wallCabinetZMm,
+          show_countertop:
+            s.showCountertop === undefined ? null : s.showCountertop,
+        }))
+      : null,
   };
+}
+
+function kitchenWallFromApi(w: unknown): {
+  id: string;
+  name?: string;
+  lengthMm: number;
+  angleDeg: number;
+  originXMm?: number;
+  originYMm?: number;
+} {
+  const wr = w as Record<string, unknown>;
+  const ox = wr.origin_x_mm ?? wr.originXMm;
+  const oy = wr.origin_y_mm ?? wr.originYMm;
+  return {
+    id: str(wr.id),
+    name: str(wr.name) || undefined,
+    lengthMm: num(wr.length_mm ?? wr.lengthMm, 1),
+    angleDeg: num(wr.angle_deg ?? wr.angleDeg),
+    originXMm:
+      ox === null || ox === undefined || ox === '' ? undefined : num(ox),
+    originYMm:
+      oy === null || oy === undefined || oy === '' ? undefined : num(oy),
+  };
+}
+
+function kitchenPlacementFromApi(p: unknown): {
+  itemId: string;
+  instanceIndex: number;
+  wallId: string;
+  offsetMm: number;
+  elevation: 'floor' | 'wall';
+  baseClearanceMm?: number;
+  mode?: 'free';
+  freeXMm?: number;
+  freeYMm?: number;
+  freeYawDeg?: number;
+} {
+  const pr = p as Record<string, unknown>;
+  const elev = str(pr.elevation, 'floor');
+  const bcRaw = pr.base_clearance_mm ?? pr.baseClearanceMm;
+  const baseClearanceMm =
+    bcRaw === null || bcRaw === undefined || bcRaw === ''
+      ? undefined
+      : Math.max(0, Math.round(num(bcRaw)));
+  const modeRaw = str(pr.mode, 'wall');
+  const mode = modeRaw === 'free' ? ('free' as const) : ('wall' as const);
+  const fx = pr.free_x_mm ?? pr.freeXMm;
+  const fy = pr.free_y_mm ?? pr.freeYMm;
+  const fyaw = pr.free_yaw_deg ?? pr.freeYawDeg;
+  return {
+    itemId: str(pr.item_id ?? pr.itemId),
+    instanceIndex: Math.max(
+      0,
+      Math.floor(num(pr.instance_index ?? pr.instanceIndex)),
+    ),
+    wallId: str(pr.wall_id ?? pr.wallId),
+    offsetMm: num(pr.offset_mm ?? pr.offsetMm),
+    elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+    ...(mode === 'free' ? { mode: 'free' as const } : {}),
+    ...(fx === null || fx === undefined || fx === ''
+      ? {}
+      : { freeXMm: num(fx) }),
+    ...(fy === null || fy === undefined || fy === ''
+      ? {}
+      : { freeYMm: num(fy) }),
+    ...(fyaw === null || fyaw === undefined || fyaw === ''
+      ? {}
+      : { freeYawDeg: num(fyaw) }),
+  };
+}
+
+function optionalPlanMm(
+  raw: unknown,
+): number | undefined {
+  if (raw === null || raw === undefined || raw === '') return undefined;
+  return Math.max(0, Math.round(num(raw)));
 }
 
 function kitchenLayoutFromApi(
@@ -730,79 +848,61 @@ function kitchenLayoutFromApi(
   const row = raw as Record<string, unknown>;
   const wallsRaw = Array.isArray(row.walls) ? row.walls : [];
   const placementsRaw = Array.isArray(row.placements) ? row.placements : [];
-  const walls = wallsRaw.map((w) => {
-    const wr = w as Record<string, unknown>;
-    const ox = wr.origin_x_mm ?? wr.originXMm;
-    const oy = wr.origin_y_mm ?? wr.originYMm;
+  const walls = wallsRaw.map(kitchenWallFromApi);
+  const placements = placementsRaw.map(kitchenPlacementFromApi);
+
+  const spacesRaw = Array.isArray(row.spaces) ? row.spaces : [];
+  const spaces = spacesRaw.map((s) => {
+    const sr = s as Record<string, unknown>;
+    const sWalls = Array.isArray(sr.walls) ? sr.walls.map(kitchenWallFromApi) : [];
+    const sPlacements = Array.isArray(sr.placements)
+      ? sr.placements.map(kitchenPlacementFromApi)
+      : [];
+    const sBc = optionalPlanMm(sr.base_clearance_mm ?? sr.baseClearanceMm);
+    const sWz = optionalPlanMm(sr.wall_cabinet_z_mm ?? sr.wallCabinetZMm);
+    const sCt = sr.show_countertop ?? sr.showCountertop;
     return {
-      id: str(wr.id),
-      name: str(wr.name) || undefined,
-      lengthMm: num(wr.length_mm ?? wr.lengthMm, 1),
-      angleDeg: num(wr.angle_deg ?? wr.angleDeg),
-      originXMm:
-        ox === null || ox === undefined || ox === ''
-          ? undefined
-          : num(ox),
-      originYMm:
-        oy === null || oy === undefined || oy === ''
-          ? undefined
-          : num(oy),
+      id: str(sr.id),
+      name: str(sr.name) || 'Espacio',
+      walls: sWalls,
+      placements: sPlacements,
+      ...(sBc === undefined ? {} : { baseClearanceMm: sBc }),
+      ...(sWz === undefined ? {} : { wallCabinetZMm: sWz }),
+      ...(sCt === null || sCt === undefined || sCt === ''
+        ? {}
+        : { showCountertop: Boolean(sCt) }),
     };
   });
-  const placements = placementsRaw.map((p) => {
-    const pr = p as Record<string, unknown>;
-    const elev = str(pr.elevation, 'floor');
-    const bcRaw = pr.base_clearance_mm ?? pr.baseClearanceMm;
-    const baseClearanceMm =
-      bcRaw === null || bcRaw === undefined || bcRaw === ''
-        ? undefined
-        : Math.max(0, Math.round(num(bcRaw)));
-    const modeRaw = str(pr.mode, 'wall');
-    const mode = modeRaw === 'free' ? ('free' as const) : ('wall' as const);
-    const fx = pr.free_x_mm ?? pr.freeXMm;
-    const fy = pr.free_y_mm ?? pr.freeYMm;
-    const fyaw = pr.free_yaw_deg ?? pr.freeYawDeg;
-    return {
-      itemId: str(pr.item_id ?? pr.itemId),
-      instanceIndex: Math.max(0, Math.floor(num(pr.instance_index ?? pr.instanceIndex))),
-      wallId: str(pr.wall_id ?? pr.wallId),
-      offsetMm: num(pr.offset_mm ?? pr.offsetMm),
-      elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
-      ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
-      ...(mode === 'free' ? { mode: 'free' as const } : {}),
-      ...(fx === null || fx === undefined || fx === ''
-        ? {}
-        : { freeXMm: num(fx) }),
-      ...(fy === null || fy === undefined || fy === ''
-        ? {}
-        : { freeYMm: num(fy) }),
-      ...(fyaw === null || fyaw === undefined || fyaw === ''
-        ? {}
-        : { freeYawDeg: num(fyaw) }),
-    };
-  });
-  if (walls.length === 0 && placements.length === 0) return undefined;
-  const layoutBc = row.base_clearance_mm ?? row.baseClearanceMm;
-  const baseClearanceMm =
-    layoutBc === null || layoutBc === undefined || layoutBc === ''
-      ? undefined
-      : Math.max(0, Math.round(num(layoutBc)));
-  const wallZRaw = row.wall_cabinet_z_mm ?? row.wallCabinetZMm;
-  const wallCabinetZMm =
-    wallZRaw === null || wallZRaw === undefined || wallZRaw === ''
-      ? undefined
-      : Math.max(0, Math.round(num(wallZRaw)));
+
+  const hasSpaces = spaces.length > 0;
+  const hasTop = walls.length > 0 || placements.length > 0;
+  if (!hasSpaces && !hasTop) return undefined;
+
+  const layoutBc = optionalPlanMm(row.base_clearance_mm ?? row.baseClearanceMm);
+  const wallCabinetZMm = optionalPlanMm(
+    row.wall_cabinet_z_mm ?? row.wallCabinetZMm,
+  );
   const ctRaw = row.show_countertop ?? row.showCountertop;
   const showCountertop =
     ctRaw === null || ctRaw === undefined || ctRaw === ''
       ? undefined
       : Boolean(ctRaw);
+  const activeSpaceIdRaw = row.active_space_id ?? row.activeSpaceId;
+  const activeSpaceId =
+    activeSpaceIdRaw === null ||
+    activeSpaceIdRaw === undefined ||
+    activeSpaceIdRaw === ''
+      ? undefined
+      : str(activeSpaceIdRaw);
+
   return {
     walls,
     placements,
-    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+    ...(layoutBc === undefined ? {} : { baseClearanceMm: layoutBc }),
     ...(wallCabinetZMm === undefined ? {} : { wallCabinetZMm }),
     ...(showCountertop === undefined ? {} : { showCountertop }),
+    ...(hasSpaces ? { spaces } : {}),
+    ...(activeSpaceId ? { activeSpaceId } : {}),
   };
 }
 

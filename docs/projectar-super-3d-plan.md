@@ -181,7 +181,7 @@ Cada parte es entregable autónomo, testeable, idealmente PR &lt; 400 líneas cu
 | Ítem | Estado |
 |------|--------|
 | **Islas / free place** | **Hecho** — `mode: 'free'` + `freeXMm`/`freeYMm`/`freeYawDeg`; layout 3D; drag en piso; botón «Isla» / inspector |
-| Multi-ambiente | Pendiente |
+| **Multi-ambiente** | **Hecho** — `KitchenSpace[]` + `activeSpaceId`; mirror top-level; tabs en Proyectar; unplaced global |
 | Import plano PDF/DXF | Pendiente |
 | Zoclo como pieza real en BOM / patas como herraje automático | Pendiente |
 | Luces / materiales PBR | Pendiente |

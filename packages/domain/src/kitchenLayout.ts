@@ -7,12 +7,17 @@
  */
 
 import type {
+  KitchenSpace,
   KitchenWall,
   PlacementElevation,
   ProjectItem,
   ProjectItemPlacement,
   ProjectKitchenLayout,
 } from './types';
+
+/** Default space id for legacy single-space layouts. */
+export const DEFAULT_KITCHEN_SPACE_ID = 'space-main';
+export const DEFAULT_KITCHEN_SPACE_NAME = 'Cocina';
 
 /** Default height (mm) for wall-hung units in 3D when elevation is `wall`. */
 export const DEFAULT_WALL_CABINET_Z_MM = 1400;
@@ -83,7 +88,200 @@ export type KitchenLayoutResult = {
 };
 
 export function emptyKitchenLayout(): ProjectKitchenLayout {
-  return { walls: [], placements: [] };
+  return {
+    walls: [],
+    placements: [],
+    spaces: [
+      {
+        id: DEFAULT_KITCHEN_SPACE_ID,
+        name: DEFAULT_KITCHEN_SPACE_NAME,
+        walls: [],
+        placements: [],
+      },
+    ],
+    activeSpaceId: DEFAULT_KITCHEN_SPACE_ID,
+  };
+}
+
+function spacePlanFields(
+  source: {
+    readonly baseClearanceMm?: number;
+    readonly wallCabinetZMm?: number;
+    readonly showCountertop?: boolean;
+  },
+): Pick<
+  KitchenSpace,
+  'baseClearanceMm' | 'wallCabinetZMm' | 'showCountertop'
+> {
+  return {
+    ...(source.baseClearanceMm === undefined
+      ? {}
+      : { baseClearanceMm: source.baseClearanceMm }),
+    ...(source.wallCabinetZMm === undefined
+      ? {}
+      : { wallCabinetZMm: source.wallCabinetZMm }),
+    ...(source.showCountertop === undefined
+      ? {}
+      : { showCountertop: source.showCountertop }),
+  };
+}
+
+function kitchenSpaceFromTopLevel(
+  layout: ProjectKitchenLayout,
+  id: string,
+  name: string,
+): KitchenSpace {
+  return {
+    id,
+    name,
+    walls: layout.walls,
+    placements: layout.placements,
+    ...spacePlanFields(layout),
+  };
+}
+
+function flattenActiveSpace(
+  spaces: readonly KitchenSpace[],
+  active: KitchenSpace,
+): ProjectKitchenLayout {
+  return {
+    walls: active.walls,
+    placements: active.placements,
+    ...spacePlanFields(active),
+    spaces,
+    activeSpaceId: active.id,
+  };
+}
+
+/**
+ * Ensure `spaces` + `activeSpaceId` exist. Legacy layouts (walls only) become
+ * a single "Cocina" space. When spaces exist they are source of truth; top-level
+ * walls/placements are re-mirrored from the active space.
+ *
+ * Edits to top-level must go through `syncActiveKitchenSpace` (or
+ * set/add/remove helpers) so the active space entry is updated first.
+ */
+export function ensureKitchenSpaces(
+  layout: ProjectKitchenLayout,
+): ProjectKitchenLayout {
+  if (layout.spaces && layout.spaces.length > 0) {
+    const activeId =
+      layout.activeSpaceId &&
+      layout.spaces.some((s) => s.id === layout.activeSpaceId)
+        ? layout.activeSpaceId
+        : layout.spaces[0]!.id;
+    const active =
+      layout.spaces.find((s) => s.id === activeId) ?? layout.spaces[0]!;
+    return flattenActiveSpace(layout.spaces, active);
+  }
+  const space = kitchenSpaceFromTopLevel(
+    layout,
+    DEFAULT_KITCHEN_SPACE_ID,
+    DEFAULT_KITCHEN_SPACE_NAME,
+  );
+  return flattenActiveSpace([space], space);
+}
+
+/**
+ * Write top-level content into the active space entry (keep other spaces).
+ * Does not re-mirror from spaces first — top-level edits are the source.
+ */
+export function syncActiveKitchenSpace(
+  layout: ProjectKitchenLayout,
+): ProjectKitchenLayout {
+  if (!layout.spaces || layout.spaces.length === 0) {
+    // Legacy: create spaces from current top-level.
+    return ensureKitchenSpaces(layout);
+  }
+  const activeId =
+    layout.activeSpaceId &&
+    layout.spaces.some((s) => s.id === layout.activeSpaceId)
+      ? layout.activeSpaceId
+      : layout.spaces[0]!.id;
+  const activeName =
+    layout.spaces.find((s) => s.id === activeId)?.name ??
+    DEFAULT_KITCHEN_SPACE_NAME;
+  const active = kitchenSpaceFromTopLevel(layout, activeId, activeName);
+  const spaces = layout.spaces.map((s) => (s.id === activeId ? active : s));
+  return flattenActiveSpace(spaces, active);
+}
+
+/** Switch active space; persists current top-level into previous active first. */
+export function setActiveKitchenSpace(
+  layout: ProjectKitchenLayout,
+  spaceId: string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  const next = synced.spaces!.find((s) => s.id === spaceId);
+  if (!next) return synced;
+  return flattenActiveSpace(synced.spaces!, next);
+}
+
+/** Add a named space and switch to it (empty walls/placements). */
+export function addKitchenSpace(
+  layout: ProjectKitchenLayout,
+  name: string,
+  newId: () => string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  const id = newId();
+  const trimmed = name.trim() || `Espacio ${synced.spaces!.length + 1}`;
+  const space: KitchenSpace = {
+    id,
+    name: trimmed,
+    walls: [],
+    placements: [],
+  };
+  const spaces = [...synced.spaces!, space];
+  return flattenActiveSpace(spaces, space);
+}
+
+/** Rename a space (does not switch). */
+export function renameKitchenSpace(
+  layout: ProjectKitchenLayout,
+  spaceId: string,
+  name: string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  const trimmed = name.trim();
+  if (!trimmed) return synced;
+  const spaces = synced.spaces!.map((s) =>
+    s.id === spaceId ? { ...s, name: trimmed } : s,
+  );
+  const active =
+    spaces.find((s) => s.id === synced.activeSpaceId) ?? spaces[0]!;
+  return flattenActiveSpace(spaces, active);
+}
+
+/**
+ * Remove a space. No-op when only one remains.
+ * Switches to the first remaining space if the active one was removed.
+ */
+export function removeKitchenSpace(
+  layout: ProjectKitchenLayout,
+  spaceId: string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  if (synced.spaces!.length <= 1) return synced;
+  const spaces = synced.spaces!.filter((s) => s.id !== spaceId);
+  if (spaces.length === synced.spaces!.length) return synced;
+  const activeId =
+    synced.activeSpaceId === spaceId
+      ? spaces[0]!.id
+      : (synced.activeSpaceId ?? spaces[0]!.id);
+  const active = spaces.find((s) => s.id === activeId) ?? spaces[0]!;
+  return flattenActiveSpace(spaces, active);
+}
+
+/** All placements across spaces (or top-level if no spaces). */
+export function allKitchenPlacements(
+  layout: ProjectKitchenLayout,
+): readonly ProjectItemPlacement[] {
+  if (layout.spaces && layout.spaces.length > 0) {
+    // Prefer spaces as source of truth after sync; include active mirror once.
+    return layout.spaces.flatMap((s) => s.placements);
+  }
+  return layout.placements;
 }
 
 /** Chain walls in order: each starts where the previous ends unless origin is set. */
@@ -216,14 +414,13 @@ export function kitchenLayoutWarnings(
   return warnings;
 }
 
-/** Drop placements that no longer match items; keep walls and plan defaults. */
-export function pruneKitchenLayout(
-  layout: ProjectKitchenLayout,
-  items: readonly ProjectItem[],
-): ProjectKitchenLayout {
-  const itemById = new Map(items.map((it) => [it.id, it]));
-  const wallIds = new Set(layout.walls.map((w) => w.id));
-  const placements = layout.placements.filter((p) => {
+function prunePlacementsInSpace(
+  walls: readonly KitchenWall[],
+  placements: readonly ProjectItemPlacement[],
+  itemById: Map<string, ProjectItem>,
+): ProjectItemPlacement[] {
+  const wallIds = new Set(walls.map((w) => w.id));
+  return placements.filter((p) => {
     const item = itemById.get(p.itemId);
     if (!item) return false;
     if (p.instanceIndex < 0 || p.instanceIndex >= Math.max(1, item.quantity)) {
@@ -232,19 +429,52 @@ export function pruneKitchenLayout(
     if (isFreePlacement(p)) return true;
     return wallIds.has(p.wallId);
   });
-  return {
+}
+
+/** Drop placements that no longer match items; keep walls and plan defaults. */
+export function pruneKitchenLayout(
+  layout: ProjectKitchenLayout,
+  items: readonly ProjectItem[],
+): ProjectKitchenLayout {
+  const itemById = new Map(items.map((it) => [it.id, it]));
+  const placements = prunePlacementsInSpace(
+    layout.walls,
+    layout.placements,
+    itemById,
+  );
+  const base: ProjectKitchenLayout = {
     walls: layout.walls,
     placements,
-    ...(layout.baseClearanceMm === undefined
-      ? {}
-      : { baseClearanceMm: layout.baseClearanceMm }),
-    ...(layout.wallCabinetZMm === undefined
-      ? {}
-      : { wallCabinetZMm: layout.wallCabinetZMm }),
-    ...(layout.showCountertop === undefined
-      ? {}
-      : { showCountertop: layout.showCountertop }),
+    ...spacePlanFields(layout),
   };
+
+  if (!layout.spaces || layout.spaces.length === 0) {
+    return base;
+  }
+
+  const spaces = layout.spaces.map((s) => {
+    // Active space: use pruned top-level (may be more recent).
+    if (s.id === layout.activeSpaceId) {
+      return {
+        id: s.id,
+        name: s.name,
+        walls: layout.walls,
+        placements,
+        ...spacePlanFields(layout),
+      };
+    }
+    return {
+      ...s,
+      placements: prunePlacementsInSpace(s.walls, s.placements, itemById),
+    };
+  });
+
+  const activeId =
+    layout.activeSpaceId && spaces.some((s) => s.id === layout.activeSpaceId)
+      ? layout.activeSpaceId
+      : spaces[0]!.id;
+  const active = spaces.find((s) => s.id === activeId) ?? spaces[0]!;
+  return flattenActiveSpace(spaces, active);
 }
 
 /**
@@ -257,7 +487,13 @@ export function pruneKitchenLayoutOrClear(
 ): ProjectKitchenLayout | undefined {
   if (!layout) return undefined;
   const pruned = pruneKitchenLayout(layout, items);
-  if (pruned.walls.length === 0 && pruned.placements.length === 0) {
+  const hasAnyWalls =
+    pruned.walls.length > 0 ||
+    (pruned.spaces?.some((s) => s.walls.length > 0) ?? false);
+  const hasAnyPlacements =
+    pruned.placements.length > 0 ||
+    (pruned.spaces?.some((s) => s.placements.length > 0) ?? false);
+  if (!hasAnyWalls && !hasAnyPlacements) {
     return undefined;
   }
   return pruned;

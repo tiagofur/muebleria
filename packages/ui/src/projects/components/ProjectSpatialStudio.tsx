@@ -22,23 +22,30 @@ import type {
   ProjectKitchenLayout,
 } from '@muebles/domain';
 import {
+  addKitchenSpace,
+  allKitchenPlacements,
   BASE_CLEARANCE_PRESETS_MM,
   createDefaultLWalls,
   DEFAULT_BASE_CLEARANCE_MM,
   DEFAULT_WALL_CABINET_Z_MM,
   defaultMeasurePresetId,
   emptyKitchenLayout,
+  ensureKitchenSpaces,
   isFreePlacement,
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   pruneKitchenLayout,
+  removeKitchenSpace,
+  renameKitchenSpace,
   repackPlacementsOnWall,
   reorderPlacementOnWall,
   resolveBaseClearanceMm,
   resolveModuleMeasurePreset,
   resolveWallCabinetZMm,
   resolveWallFrames,
+  setActiveKitchenSpace,
   snapOffsetOnWall,
+  syncActiveKitchenSpace,
   WALL_CABINET_Z_PRESETS_MM,
 } from '@muebles/domain';
 import {
@@ -54,9 +61,11 @@ import {
   Move3d,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   Redo2,
   RefreshCw,
   Scan,
+  Trash2,
   Undo2,
   X,
 } from 'lucide-react';
@@ -239,24 +248,34 @@ export function ProjectSpatialStudio({
 
   const layout = useMemo(
     () =>
-      pruneKitchenLayout(
-        project.kitchenLayout ?? emptyKitchenLayout(),
-        project.items,
+      ensureKitchenSpaces(
+        pruneKitchenLayout(
+          project.kitchenLayout ?? emptyKitchenLayout(),
+          project.items,
+        ),
       ),
     [project.kitchenLayout, project.items],
   );
+
+  const spaces = layout.spaces ?? [];
+  const activeSpaceId = layout.activeSpaceId ?? spaces[0]?.id ?? null;
+  const activeSpaceName =
+    spaces.find((s) => s.id === activeSpaceId)?.name ?? 'Cocina';
 
   const footprints = useMemo(
     () => allFootprints(project, modules),
     [project, modules],
   );
 
+  /** Placed across ALL spaces so a unit in Baño is not "unplaced" in Cocina. */
   const placedKeys = useMemo(
     () =>
       new Set(
-        layout.placements.map((p) => `${p.itemId}#${p.instanceIndex}`),
+        allKitchenPlacements(layout).map(
+          (p) => `${p.itemId}#${p.instanceIndex}`,
+        ),
       ),
-    [layout.placements],
+    [layout],
   );
 
   const unplaced = useMemo(
@@ -493,7 +512,54 @@ export function ProjectSpatialStudio({
       setUndoStack((s) => [...s.slice(-29), layout]);
       setRedoStack([]);
     }
-    onChangeLayout(pruneKitchenLayout(next, project.items));
+    // Keep multi-space metadata; write top-level edits into the active space.
+    const merged = syncActiveKitchenSpace({
+      ...layout,
+      ...next,
+      spaces: next.spaces ?? layout.spaces,
+      activeSpaceId: next.activeSpaceId ?? layout.activeSpaceId,
+    });
+    onChangeLayout(pruneKitchenLayout(merged, project.items));
+  };
+
+  const switchSpace = (spaceId: string) => {
+    if (!canEdit && spaceId !== activeSpaceId) {
+      // Read-only: still allow navigating spaces without history.
+      onChangeLayout(
+        pruneKitchenLayout(
+          setActiveKitchenSpace(layout, spaceId),
+          project.items,
+        ),
+      );
+      setSelectedKey(null);
+      setTargetWallId(null);
+      return;
+    }
+    if (spaceId === activeSpaceId) return;
+    commit(setActiveKitchenSpace(layout, spaceId));
+    setSelectedKey(null);
+    setTargetWallId(null);
+  };
+
+  const handleAddSpace = () => {
+    if (!canEdit) return;
+    const n = (layout.spaces?.length ?? 0) + 1;
+    commit(addKitchenSpace(layout, `Espacio ${n}`, newId));
+    setSelectedKey(null);
+    setTargetWallId(null);
+  };
+
+  const handleRenameActiveSpace = (name: string) => {
+    if (!canEdit || !activeSpaceId) return;
+    commit(renameKitchenSpace(layout, activeSpaceId, name));
+  };
+
+  const handleRemoveActiveSpace = () => {
+    if (!canEdit || !activeSpaceId) return;
+    if ((layout.spaces?.length ?? 0) <= 1) return;
+    commit(removeKitchenSpace(layout, activeSpaceId));
+    setSelectedKey(null);
+    setTargetWallId(null);
   };
 
   const undoPlan = () => {
@@ -977,6 +1043,41 @@ export function ProjectSpatialStudio({
             </span>
           ) : null}
         </div>
+        <div
+          className="spatial-studio__spaces"
+          role="tablist"
+          aria-label="Ambientes del plano"
+          data-testid="spatial-studio-spaces"
+        >
+          {spaces.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={s.id === activeSpaceId}
+              className={
+                s.id === activeSpaceId
+                  ? 'spatial-studio__space-tab spatial-studio__space-tab--active'
+                  : 'spatial-studio__space-tab'
+              }
+              onClick={() => switchSpace(s.id)}
+              data-testid={`spatial-studio-space-${s.id}`}
+            >
+              {s.name}
+            </button>
+          ))}
+          {canEdit ? (
+            <button
+              type="button"
+              className="spatial-studio__space-tab spatial-studio__space-tab--add"
+              onClick={handleAddSpace}
+              title="Agregar ambiente (baño, living…)"
+              data-testid="spatial-studio-add-space"
+            >
+              <Plus size={14} strokeWidth={1.5} aria-hidden /> Ambiente
+            </button>
+          ) : null}
+        </div>
         <div className="spatial-studio__chrome-actions">
           {!canEdit ? (
             <span className="spatial-studio__frozen" data-testid="spatial-studio-frozen">
@@ -1102,11 +1203,38 @@ export function ProjectSpatialStudio({
           </div>
 
           <section className="spatial-studio__section">
-            <h3 className="spatial-studio__section-title">Ambiente</h3>
+            <h3 className="spatial-studio__section-title">
+              Ambiente · {activeSpaceName}
+            </h3>
+            {canEdit ? (
+              <label className="spatial-studio__field">
+                <span>Nombre del ambiente</span>
+                <input
+                  type="text"
+                  value={activeSpaceName}
+                  disabled={!canEdit}
+                  onChange={(e) => handleRenameActiveSpace(e.target.value)}
+                  data-testid="spatial-studio-space-name"
+                />
+              </label>
+            ) : null}
+            {canEdit && spaces.length > 1 ? (
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={handleRemoveActiveSpace}
+                title="Eliminar este ambiente y sus colocaciones"
+                data-testid="spatial-studio-remove-space"
+              >
+                <Trash2 size={14} strokeWidth={1.5} aria-hidden /> Eliminar
+                ambiente
+              </button>
+            ) : null}
             {layout.walls.length === 0 ? (
               <div className="spatial-studio__empty-walls">
                 <p className="spatial-studio__hint">
-                  Todavía no hay muros. Creá una L para empezar a colocar.
+                  Todavía no hay muros en «{activeSpaceName}». Creá una L para
+                  empezar a colocar.
                 </p>
                 {canEdit ? (
                   <button

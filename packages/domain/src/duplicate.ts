@@ -151,16 +151,44 @@ export function duplicateProject(
   // Remap kitchen placements to new item ids (same order).
   const oldIds = project.items.map((it) => it.id);
   const idMap = new Map(oldIds.map((id, i) => [id, items[i]!.id]));
+  const remapPlacement = <
+    T extends { itemId: string },
+  >(
+    p: T,
+  ): (T & { itemId: string }) | null => {
+    const newItemId = idMap.get(p.itemId);
+    if (!newItemId) return null;
+    return { ...p, itemId: newItemId };
+  };
   const kitchenLayout = project.kitchenLayout
     ? {
         walls: project.kitchenLayout.walls.map((w) => ({ ...w })),
         placements: project.kitchenLayout.placements
-          .map((p) => {
-            const newItemId = idMap.get(p.itemId);
-            if (!newItemId) return null;
-            return { ...p, itemId: newItemId };
-          })
+          .map(remapPlacement)
           .filter((p): p is NonNullable<typeof p> => p != null),
+        ...(project.kitchenLayout.baseClearanceMm === undefined
+          ? {}
+          : { baseClearanceMm: project.kitchenLayout.baseClearanceMm }),
+        ...(project.kitchenLayout.wallCabinetZMm === undefined
+          ? {}
+          : { wallCabinetZMm: project.kitchenLayout.wallCabinetZMm }),
+        ...(project.kitchenLayout.showCountertop === undefined
+          ? {}
+          : { showCountertop: project.kitchenLayout.showCountertop }),
+        ...(project.kitchenLayout.activeSpaceId
+          ? { activeSpaceId: project.kitchenLayout.activeSpaceId }
+          : {}),
+        ...(project.kitchenLayout.spaces
+          ? {
+              spaces: project.kitchenLayout.spaces.map((s) => ({
+                ...s,
+                walls: s.walls.map((w) => ({ ...w })),
+                placements: s.placements
+                  .map(remapPlacement)
+                  .filter((p): p is NonNullable<typeof p> => p != null),
+              })),
+            }
+          : {}),
       }
     : undefined;
 

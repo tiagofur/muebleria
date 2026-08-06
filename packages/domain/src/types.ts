@@ -419,8 +419,26 @@ export interface ProjectItemPlacement {
   readonly freeYawDeg?: number;
 }
 
+/**
+ * One named environment (cocina, baño, living…) inside a kitchen plan.
+ * Walls + placements are local to the space. Presentation only — not BOM.
+ */
+export interface KitchenSpace {
+  readonly id: string;
+  readonly name: string;
+  readonly walls: readonly KitchenWall[];
+  readonly placements: readonly ProjectItemPlacement[];
+  readonly baseClearanceMm?: number;
+  readonly wallCabinetZMm?: number;
+  readonly showCountertop?: boolean;
+}
+
 /** Optional kitchen plan attached to a project. */
 export interface ProjectKitchenLayout {
+  /**
+   * Active space content (mirrored from `spaces[active]` when multi-ambiente).
+   * Existing consumers (3D, prune, studio) read these fields.
+   */
   readonly walls: readonly KitchenWall[];
   readonly placements: readonly ProjectItemPlacement[];
   /**
@@ -438,6 +456,13 @@ export interface ProjectKitchenLayout {
    * Presentation only — not BOM. Omit → true (obra look).
    */
   readonly showCountertop?: boolean;
+  /**
+   * Named spaces (multi-ambiente). When omitted, the top-level walls/placements
+   * are treated as a single default space ("Cocina").
+   */
+  readonly spaces?: readonly KitchenSpace[];
+  /** Id of the active space; mirrored into top-level walls/placements. */
+  readonly activeSpaceId?: string;
 }
 
 /** Simple installation checklist item (#139). */

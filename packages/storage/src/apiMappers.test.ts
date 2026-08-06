@@ -273,6 +273,78 @@ describe('apiMappers', () => {
     });
   });
 
+  it('round-trips multi-space kitchen layouts', () => {
+    const p: Project = {
+      id: 'pr-multi',
+      name: 'Cocina + Baño',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+        activeSpaceId: 'sp-cocina',
+        spaces: [
+          {
+            id: 'sp-cocina',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [
+              {
+                itemId: 'i1',
+                instanceIndex: 0,
+                wallId: 'w1',
+                offsetMm: 0,
+                elevation: 'floor',
+              },
+            ],
+          },
+          {
+            id: 'sp-bath',
+            name: 'Baño',
+            walls: [{ id: 'wb', lengthMm: 2000, angleDeg: 0 }],
+            placements: [
+              {
+                itemId: 'i2',
+                instanceIndex: 0,
+                wallId: 'wb',
+                offsetMm: 100,
+                elevation: 'floor',
+              },
+            ],
+          },
+        ],
+      },
+      items: [
+        { id: 'i1', moduleId: 'm1', quantity: 1, optionChoices: {} },
+        { id: 'i2', moduleId: 'm1', quantity: 1, optionChoices: {} },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    expect(kl.active_space_id).toBe('sp-cocina');
+    const spaces = kl.spaces as Record<string, unknown>[];
+    expect(spaces).toHaveLength(2);
+    expect(spaces[1]!.name).toBe('Baño');
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.kitchenLayout?.spaces).toHaveLength(2);
+    expect(round.kitchenLayout?.spaces?.[1]?.placements[0]?.itemId).toBe('i2');
+    expect(round.kitchenLayout?.activeSpaceId).toBe('sp-cocina');
+  });
+
   it('round-trips free-place (island) kitchen placements', () => {
     const p: Project = {
       id: 'pr-free',

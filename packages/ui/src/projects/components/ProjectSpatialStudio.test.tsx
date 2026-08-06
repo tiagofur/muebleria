@@ -156,6 +156,46 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements[0]!.itemId).toBe('it-a');
   });
 
+  it('adds a second environment (multi-ambiente)', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    expect(screen.getByTestId('spatial-studio-spaces')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('spatial-studio-add-space'));
+    expect(onChangeLayout).toHaveBeenCalled();
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      spaces?: Array<{ name: string; walls: unknown[]; placements: unknown[] }>;
+      activeSpaceId?: string;
+      walls: unknown[];
+    };
+    expect(next.spaces?.length).toBeGreaterThanOrEqual(2);
+    expect(next.walls).toHaveLength(0); // new empty space is active
+  });
+
   it('places unplaced unit as free island', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {

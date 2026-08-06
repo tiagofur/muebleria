@@ -15,6 +15,14 @@ import {
   DEFAULT_BASE_CLEARANCE_MM,
   resolveBaseClearanceMm,
   resolveWallCabinetZMm,
+  ensureKitchenSpaces,
+  setActiveKitchenSpace,
+  addKitchenSpace,
+  renameKitchenSpace,
+  removeKitchenSpace,
+  allKitchenPlacements,
+  syncActiveKitchenSpace,
+  DEFAULT_KITCHEN_SPACE_ID,
 } from './kitchenLayout';
 import type { ProjectItem, ProjectKitchenLayout } from './types';
 
@@ -463,6 +471,129 @@ describe('kitchenLayout', () => {
         [],
       ),
     ).toBeUndefined();
+  });
+
+  it('ensureKitchenSpaces wraps legacy layout as Cocina', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'i1',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+      ],
+    };
+    const next = ensureKitchenSpaces(layout);
+    expect(next.spaces).toHaveLength(1);
+    expect(next.spaces![0]!.name).toBe('Cocina');
+    expect(next.activeSpaceId).toBe(DEFAULT_KITCHEN_SPACE_ID);
+    expect(next.walls).toHaveLength(1);
+    expect(next.placements).toHaveLength(1);
+  });
+
+  it('switches spaces while keeping each space content', () => {
+    let layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'i1',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+      ],
+    };
+    layout = ensureKitchenSpaces(layout);
+    layout = addKitchenSpace(layout, 'Baño', () => 'space-bath');
+    expect(layout.activeSpaceId).toBe('space-bath');
+    expect(layout.walls).toHaveLength(0);
+    expect(layout.placements).toHaveLength(0);
+    // Place on baño
+    layout = syncActiveKitchenSpace({
+      ...layout,
+      walls: [{ id: 'wb', lengthMm: 2000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'i2',
+          instanceIndex: 0,
+          wallId: 'wb',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+      ],
+    });
+    layout = setActiveKitchenSpace(layout, DEFAULT_KITCHEN_SPACE_ID);
+    expect(layout.walls[0]!.id).toBe('w1');
+    expect(layout.placements[0]!.itemId).toBe('i1');
+    layout = setActiveKitchenSpace(layout, 'space-bath');
+    expect(layout.walls[0]!.id).toBe('wb');
+    expect(layout.placements[0]!.itemId).toBe('i2');
+    expect(allKitchenPlacements(layout)).toHaveLength(2);
+  });
+
+  it('rename and remove kitchen spaces', () => {
+    let layout = ensureKitchenSpaces({
+      walls: [],
+      placements: [],
+    });
+    layout = addKitchenSpace(layout, 'Living', () => 'space-living');
+    layout = renameKitchenSpace(layout, 'space-living', 'Living comedor');
+    expect(layout.spaces!.find((s) => s.id === 'space-living')!.name).toBe(
+      'Living comedor',
+    );
+    layout = removeKitchenSpace(layout, 'space-living');
+    expect(layout.spaces).toHaveLength(1);
+    // Cannot remove last space
+    const only = removeKitchenSpace(layout, layout.spaces![0]!.id);
+    expect(only.spaces).toHaveLength(1);
+  });
+
+  it('prunes placements in inactive spaces', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [],
+      activeSpaceId: 'a',
+      spaces: [
+        {
+          id: 'a',
+          name: 'Cocina',
+          walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+          placements: [],
+        },
+        {
+          id: 'b',
+          name: 'Baño',
+          walls: [{ id: 'wb', lengthMm: 2000, angleDeg: 0 }],
+          placements: [
+            {
+              itemId: 'gone',
+              instanceIndex: 0,
+              wallId: 'wb',
+              offsetMm: 0,
+              elevation: 'floor',
+            },
+            {
+              itemId: 'keep',
+              instanceIndex: 0,
+              wallId: 'wb',
+              offsetMm: 100,
+              elevation: 'floor',
+            },
+          ],
+        },
+      ],
+    };
+    const items: ProjectItem[] = [
+      { id: 'keep', moduleId: 'm1', quantity: 1, optionChoices: {} },
+    ];
+    const pruned = pruneKitchenLayout(layout, items);
+    const bath = pruned.spaces!.find((s) => s.id === 'b')!;
+    expect(bath.placements).toHaveLength(1);
+    expect(bath.placements[0]!.itemId).toBe('keep');
   });
 
   it('reorders on wall by re-packing offsets', () => {

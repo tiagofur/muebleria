@@ -175,7 +175,7 @@ Cotización accepted
 - Detección automática de L/U desde plano importado.  
 - Render fotorrealista / materiales PBR.  
 - Física, colisión perfecta, instalación eléctrica/agua.  
-- Multi-ambiente completo (baño + living) — un **espacio** por proyecto basta.
+- ~~Multi-ambiente completo (baño + living)~~ → **v1 hecho**: `KitchenSpace[]` + tabs en Proyectar (un ambiente activo a la vez).
 
 ### 5.3 Modelo de dominio (implementado — #133)
 
@@ -229,7 +229,14 @@ interface ProjectKitchenLayout {
 - [x] UI no calcula BOM; domain solo valida geometría de placement  
 - [x] 3D orienta módulos al muro (yaw)  
 - [x] Unplaced no desaparecen del 3D de cotización  
-- [x] Delete/qty prunes placements 
+- [x] Delete/qty prunes placements  
+
+### 5.6 Evolución: SUPER 3D Proyectar (post-semilla)
+
+Plan de producto y slices de UX (viewport hero, toolbar, snap, realismo de obra):  
+→ **`docs/projectar-super-3d-plan.md`**
+
+Diagnóstico clave: el canvas reutiliza `module-scene-3d` con **altura fija 380px**, por eso en Proyectar el centro se ve con banda negra vacía. Parte 0 del plan = viewport a pantalla completa del área central.
 
 ---
 

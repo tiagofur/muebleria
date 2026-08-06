@@ -52,6 +52,50 @@
   gap: var(--space-2);
 }
 
+.spatial-studio__spaces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
+}
+
+.spatial-studio__space-tab {
+  appearance: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-input);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full, 999px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.spatial-studio__space-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.spatial-studio__space-tab--active {
+  border-color: var(--accent-500, hsl(210 80% 50%));
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.spatial-studio__space-tab--add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
 .spatial-studio__frozen {
   display: inline-flex;
   align-items: center;
