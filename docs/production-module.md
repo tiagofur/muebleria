@@ -1,10 +1,10 @@
 # Módulo Producción — Workspace de fábrica
 
 **Producto:** Muebles (cotización + ingeniería + producción de taller)  
-**Estado:** Documento canónico de producto (plan vivo)  
+**Estado:** **Fases 0–4 implementadas en main** (META #214 cerrado 2026-08-06)  
 **Fecha:** 2026-08-06  
 **Audiencia:** producto, implementadores, revisores, agentes  
-**Alcance de este doc:** **solo especificación** — no implementa código.
+**Alcance de este doc:** contrato de producto + baseline. Siguiente iteración: polish UX (no features bloqueantes).
 
 ---
 
@@ -510,15 +510,42 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 | 1 | Un jefe de taller puede imprimir elevaciones + despiece + pack coherente. |
 | 2 | Se ve preview de pliegos y se exporta CSV; import nesting se gestiona en Optimización. |
 | 3 | El piso puede marcar avance; CNC solo si #111 avanza con hardware real. |
+| 4 | Assembly sheets + paperless piso + what-if merma + filtro por ambiente. Nesting nativo **no** requerido. |
 
-### 10.4 Orden de implementación recomendado
+### 10.4 Cierre META (#214)
 
-1. PROD-0.1 → 0.3 → 0.2 (shell + hub, luego limpiar proyecto).  
-2. PROD-0.4 (vistas read-only reutilizando 3D/layout existentes).  
-3. PROD-1.3 y 1.4 (rápido, reorganiza UI sobre datos existentes).  
-4. PROD-1.1 → 1.2 (elevaciones = mayor valor de documentación).  
-5. PROD-2.x.  
-6. PROD-3.x según dolor real del taller.
+**Cerrado:** 2026-08-06 — workspace de fábrica usable de punta a punta sin editar diseño.
+
+| PR | Fase | Issues |
+|----|------|--------|
+| #234 | 0 | #215–#218 |
+| #236 | 1 | #219–#222 |
+| #237 | 2 | #223–#225 |
+| #238 | 3 | #226–#227, #111 |
+| #243 | 4 | #239–#242 |
+
+**No bloquean cierre (explícito / demanda futura):**
+
+- Nesting nativo como fuente de verdad de corte (D5)
+- DXF / post-procesador CNC de marca (después del pilot JSON #111)
+- App móvil nativa / offline PWA
+- Optimizer export parcial por ambiente
+
+**Siguiente iteración (polish, no features bloqueantes):**
+
+- Densidad/cromo del hub (tabs en mobile, vacío estados)
+- Copy y microcopy de capas L0/L1/L2
+- Smoke manual de taller con obra real
+- Ajustes de PDF (márgenes, tipografía) según feedback de impresión
+
+
+### 10.5 Orden histórico (ya ejecutado)
+
+1. PROD-0.1 → 0.3 → 0.2 → 0.4  
+2. PROD-1.1–1.4  
+3. PROD-2.1–2.3  
+4. PROD-3.1–3.3  
+5. PROD-4.1–4.4  
 
 ---
 
