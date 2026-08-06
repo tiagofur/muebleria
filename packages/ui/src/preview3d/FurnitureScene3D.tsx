@@ -42,6 +42,7 @@ import {
   planSceneLighting,
   type SceneLightingMode,
 } from './sceneLighting';
+import { isPastDragThreshold } from './moduleDragGesture';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
@@ -509,7 +510,11 @@ function ModuleGroup({
   readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
   const { camera, gl } = useThree();
+  /** True only after pointer moved past threshold (real drag). */
   const dragging = useRef(false);
+  /** Pointer is down on module; may become drag or stay as click-select. */
+  const pressPending = useRef(false);
+  const pressStart = useRef({ x: 0, y: 0 });
   const dragMode = useRef<'wall' | 'free' | null>(null);
   const floorPlane = useMemo(
     () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
@@ -518,6 +523,14 @@ function ModuleGroup({
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const hit = useMemo(() => new THREE.Vector3(), []);
   const ndc = useMemo(() => new THREE.Vector2(), []);
+
+  const canFreeDrag = Boolean(
+    wallDragEnabled && freeDrag && onModuleFreeMove,
+  );
+  const canWallDrag = Boolean(
+    wallDragEnabled && !freeDrag && wallDrag && onModuleWallOffset,
+  );
+  const canDrag = canFreeDrag || canWallDrag;
 
   const applyDragFromClient = useCallback(
     (clientX: number, clientY: number) => {
@@ -566,7 +579,32 @@ function ModuleGroup({
     ],
   );
 
+  const beginRealDrag = useCallback(
+    (clientX: number, clientY: number) => {
+      if (dragging.current) return;
+      dragging.current = true;
+      pressPending.current = false;
+      dragMode.current = canFreeDrag ? 'free' : 'wall';
+      setOrbitSuppressed(true);
+      if (controlsRef.current) controlsRef.current.enabled = false;
+      document.body.style.cursor = 'grabbing';
+      if (canFreeDrag) onModuleFreeDragStart?.(mod.key);
+      else onModuleWallDragStart?.(mod.key);
+      applyDragFromClient(clientX, clientY);
+    },
+    [
+      canFreeDrag,
+      setOrbitSuppressed,
+      controlsRef,
+      onModuleFreeDragStart,
+      onModuleWallDragStart,
+      mod.key,
+      applyDragFromClient,
+    ],
+  );
+
   const endDrag = useCallback(() => {
+    pressPending.current = false;
     if (!dragging.current) return;
     const mode = dragMode.current;
     dragging.current = false;
@@ -584,21 +622,33 @@ function ModuleGroup({
     mod.key,
   ]);
 
-  const canFreeDrag = Boolean(
-    wallDragEnabled && freeDrag && onModuleFreeMove,
-  );
-  const canWallDrag = Boolean(
-    wallDragEnabled && !freeDrag && wallDrag && onModuleWallOffset,
-  );
-  const canDrag = canFreeDrag || canWallDrag;
-
   useEffect(() => {
     if (!canDrag) return;
     const onMove = (e: PointerEvent) => {
+      if (pressPending.current && !dragging.current) {
+        if (
+          isPastDragThreshold(
+            pressStart.current.x,
+            pressStart.current.y,
+            e.clientX,
+            e.clientY,
+          )
+        ) {
+          beginRealDrag(e.clientX, e.clientY);
+        }
+        return;
+      }
       if (!dragging.current) return;
       applyDragFromClient(e.clientX, e.clientY);
     };
-    const onUp = () => endDrag();
+    const onUp = () => {
+      // Click without drag: only select (already done on pointer down).
+      if (pressPending.current && !dragging.current) {
+        pressPending.current = false;
+        return;
+      }
+      endDrag();
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
@@ -607,7 +657,7 @@ function ModuleGroup({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [canDrag, applyDragFromClient, endDrag]);
+  }, [canDrag, applyDragFromClient, beginRealDrag, endDrag]);
 
   const visuals = useMemo(
     () =>
@@ -644,17 +694,19 @@ function ModuleGroup({
       onPointerDown={
         canDrag
           ? (e) => {
+              // Only primary button; leave orbit/right-click alone.
+              if (e.button !== 0) return;
               e.stopPropagation();
               (e.target as Element).setPointerCapture?.(e.pointerId);
-              dragging.current = true;
-              dragMode.current = canFreeDrag ? 'free' : 'wall';
-              setOrbitSuppressed(true);
-              if (controlsRef.current) controlsRef.current.enabled = false;
-              document.body.style.cursor = 'grabbing';
+              // Click = select now. Drag starts only after movement threshold
+              // (avoids jumping the unit when the floor raycast differs from
+              // the click on the cabinet face).
+              pressPending.current = true;
+              pressStart.current = { x: e.clientX, y: e.clientY };
+              dragging.current = false;
+              dragMode.current = null;
               onSelectModule?.(mod.key);
-              if (canFreeDrag) onModuleFreeDragStart?.(mod.key);
-              else onModuleWallDragStart?.(mod.key);
-              applyDragFromClient(e.clientX, e.clientY);
+              document.body.style.cursor = 'grab';
             }
           : undefined
       }
