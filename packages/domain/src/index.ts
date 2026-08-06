@@ -337,6 +337,21 @@ export {
 } from './cncPilot';
 
 export {
+  buildAssemblySheets,
+  type AssemblySheet,
+  type AssemblySheetHardwareLine,
+} from './assemblySheets';
+
+export {
+  PRODUCTION_SCOPE_ALL,
+  listProductionSpaceOptions,
+  itemIdsForProductionSpace,
+  unplacedItemIdsForProduction,
+  projectScopedToProductionSpace,
+  type ProductionSpaceOption,
+} from './productionScope';
+
+export {
   projectWithRoleChoice,
   compareRoleScenario,
   applyRoleChoiceToProject,

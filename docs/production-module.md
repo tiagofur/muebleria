@@ -430,7 +430,7 @@ Mismo ZIP **más**, cuando existan generadores:
 | ID | Decisión | Default hasta issue de dominio |
 |----|----------|--------------------------------|
 | D1 | ¿Entidad `ProductionOrder` separada? | **v0+v1 parcial:** sigue siendo `Project` + `production` state (`revision`, fingerprints). No hay entidad OP separada aún; basta para stale-export. |
-| D2 | ¿Producción parcial (solo un ambiente)? | **No en Fase 0–1.** OP = proyecto completo. Icebox: producir por `KitchenSpace`. |
+| D2 | ¿Producción parcial (solo un ambiente)? | **v1 UI:** filtro por `KitchenSpace` en hub (vistas). Export Optimizer sigue siendo obra completa. |
 | D3 | ¿Quién crea la OP? | Automática al existir proyecto `accepted` visible en cola; no hay wizard aparte en v0. |
 | D4 | ¿Re-export después de editar diseño en accepted? | Permitido técnicamente hoy; UI debe **advertir** regenerar pack. v1: bump de revision. |
 | D5 | Nesting nativo | **Fuera** hasta demanda + decisión explícita; no sneaky-scope en PRs de UI. |
@@ -496,7 +496,11 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 | 3 | PROD-3.1 | Estados de piso por módulo (cortado → armado) | **[#226](https://github.com/tiagofur/muebleria/issues/226)** ✅ | 0.3 |
 | 3 | PROD-3.2 | Advertencia / revision de OP al re-exportar | **[#227](https://github.com/tiagofur/muebleria/issues/227)** ✅ | 0.3, D1 |
 | 3 | PROD-3.3 | CNC metadatos / DXF (piloto) | **[#111](https://github.com/tiagofur/muebleria/issues/111)** ✅ JSON pilot | demanda real |
-| 4 | PROD-4.x | Icebox: assembly sheets, paperless, OP por ambiente, nesting nativo | en [#214](https://github.com/tiagofur/muebleria/issues/214) | producto |
+| 4 | PROD-4.1 | Hojas de armado PDF por módulo | **[#239](https://github.com/tiagofur/muebleria/issues/239)** ✅ | 3.1 |
+| 4 | PROD-4.2 | Modo paperless de piso (tablet) | **[#240](https://github.com/tiagofur/muebleria/issues/240)** ✅ | 3.1 |
+| 4 | PROD-4.3 | What-if merma en Optimización | **[#241](https://github.com/tiagofur/muebleria/issues/241)** ✅ | 2.3 |
+| 4 | PROD-4.4 | OP filtrable por ambiente (KitchenSpace) | **[#242](https://github.com/tiagofur/muebleria/issues/242)** ✅ | multi-space |
+| 4 | — | Nesting nativo como verdad de corte | **No** (D5) | demanda |
 
 ### 10.3 Definición de “fase hecha”
 
@@ -564,3 +568,4 @@ El módulo Producción se considera **sólido (Fase 0+1)** cuando:
 | 2026-08-06 | **Fase 1 implementada** (PROD-1.1–1.4): elevaciones PDF, pack ampliado, despiece/herrajes/documentos. |
 | 2026-08-06 | **Fase 2 implementada** (PROD-2.1–2.3): preview tableros, CSV cut-list, UI optimización L0/L1/L2. |
 | 2026-08-06 | **Fase 3 implementada** (PROD-3.1–3.3): floor status, OP revision/stale, CNC pilot JSON (#111). |
+| 2026-08-06 | **Fase 4 implementada** (PROD-4.1–4.4): assembly sheets, paperless piso, what-if merma, scope por ambiente. Nesting nativo sigue fuera (D5). |

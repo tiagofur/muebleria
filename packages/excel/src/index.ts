@@ -64,4 +64,9 @@ export {
   CUT_LIST_CSV_SEPARATOR,
 } from './cutListCsvExport';
 
+export {
+  assemblySheetsPdfExport,
+  type AssemblySheetsPdfInput,
+} from './assemblySheetsPdfExport';
+
 

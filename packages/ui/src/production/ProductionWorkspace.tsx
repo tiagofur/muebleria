@@ -2,7 +2,7 @@
  * Production workspace shell: queue list OR order hub (PROD-0.1).
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type {
   Catalog,
   HardwarePurchaseRow,
@@ -16,6 +16,9 @@ import {
   buildProductionElevations,
   ensureProductionRevision,
   getProductionStaleInfo,
+  listProductionSpaceOptions,
+  PRODUCTION_SCOPE_ALL,
+  projectScopedToProductionSpace,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
@@ -79,6 +82,7 @@ export type ProductionWorkspaceProps = {
   ) => void;
   readonly canSetFloorStatus?: boolean;
   readonly onExportCncPilot?: (projectId: string) => void | Promise<void>;
+  readonly onExportAssemblySheets?: (projectId: string) => void | Promise<void>;
 };
 
 export function ProductionWorkspace({
@@ -113,7 +117,11 @@ export function ProductionWorkspace({
   onSetFloorStatus,
   canSetFloorStatus = false,
   onExportCncPilot,
+  onExportAssemblySheets,
 }: ProductionWorkspaceProps): ReactNode {
+  const [productionScopeId, setProductionScopeId] =
+    useState<string>(PRODUCTION_SCOPE_ALL);
+
   const orderProject = useMemo(() => {
     if (!orderProjectId) return null;
     return projects.find((p) => p.id === orderProjectId) ?? null;
@@ -152,22 +160,46 @@ export function ProductionWorkspace({
       );
     }
 
+    const spaceOptions = listProductionSpaceOptions(orderProject);
+    const scopedProject = projectScopedToProductionSpace(
+      orderProject,
+      productionScopeId,
+    );
+
+    // Cut/hardware resolved on full project for export truth; views use scoped.
+    // For filtered UI lists, resolve cut rows on scoped project via domain later
+    // by filtering cut rows client-side when scope is set.
     const cut = resolveCutRows(orderProject.id);
+    const scopedCutRows =
+      productionScopeId === PRODUCTION_SCOPE_ALL || !cut.rows
+        ? cut.rows
+        : cut.rows.filter((r) =>
+            scopedProject.items.some(
+              (it) =>
+                modules.find((m) => m.id === it.moduleId)?.code === r.moduleCode ||
+                !r.moduleCode,
+            ),
+          );
+
     const readiness = buildProductionOrderReadiness({
-      project: orderProject,
-      cutRows: cut.rows,
+      project: scopedProject,
+      cutRows: scopedCutRows,
       cutListError: cut.error,
     });
     const hardware = resolveHardware
       ? resolveHardware(orderProject.id)
       : { rows: null as readonly HardwarePurchaseRow[] | null, error: null };
-    const elevations = buildProductionElevations(orderProject, modules);
+    const elevations = buildProductionElevations(scopedProject, modules);
     // Ensure OP revision exists for plant-ready projects (display only; persist via store on export/floor).
-    const projectForHub =
+    const projectForHubBase =
       orderProject.status === 'accepted' || orderProject.status === 'produced'
         ? ensureProductionRevision(orderProject, new Date().toISOString())
         : orderProject;
-    const staleInfo = getProductionStaleInfo(projectForHub);
+    const projectForHub = {
+      ...projectScopedToProductionSpace(projectForHubBase, productionScopeId),
+      production: projectForHubBase.production,
+    };
+    const staleInfo = getProductionStaleInfo(projectForHubBase);
 
     return (
       <ProductionOrderHub
@@ -208,7 +240,7 @@ export function ProductionWorkspace({
         }
         exportBusy={exportBusy}
         modules={modules}
-        cutRows={cut.rows}
+        cutRows={scopedCutRows}
         cutListError={cut.error}
         hardwareRows={hardware.rows}
         hardwareError={hardware.error}
@@ -236,6 +268,14 @@ export function ProductionWorkspace({
             ? () => onExportCncPilot(orderProject.id)
             : undefined
         }
+        onExportAssemblySheets={
+          onExportAssemblySheets
+            ? () => onExportAssemblySheets(orderProject.id)
+            : undefined
+        }
+        spaceOptions={spaceOptions}
+        productionScopeId={productionScopeId}
+        onProductionScopeChange={setProductionScopeId}
       />
     );
   }

@@ -3,7 +3,7 @@
  * Clear layer labels so estimate is never confused with machine nesting.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type {
   BoardSheetEstimate,
   MaterialBoard,
@@ -88,6 +88,9 @@ export function ProductionOrderOptimizationPanel({
   exportBusy = false,
   canImportNesting = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
+  /** null = use catalog waste; number = what-if override (PROD-4.3). */
+  const [wasteWhatIf, setWasteWhatIf] = useState<number | null>(null);
+
   const summary = useMemo(() => {
     if (!catalog) return null;
     try {
@@ -102,8 +105,9 @@ export function ProductionOrderOptimizationPanel({
     return estimateBoardSheets(
       summary.materials,
       catalog.materials,
+      wasteWhatIf,
     ).filter((s) => s.estimatedSheets > 0);
-  }, [summary, catalog]);
+  }, [summary, catalog, wasteWhatIf]);
 
   const byMaterial = useMemo(
     () => (cutRows ? groupCutRowsByMaterial(cutRows) : new Map()),
@@ -131,6 +135,29 @@ export function ProductionOrderOptimizationPanel({
         <p className="prod-opt__disclaimer">
           Estimado — nesting real en software de corte
         </p>
+        <label className="prod-opt__whatif" data-testid="prod-opt-waste-whatif">
+          <span>What-if merma (%)</span>
+          <input
+            type="range"
+            min={0}
+            max={30}
+            step={1}
+            value={wasteWhatIf ?? 10}
+            onChange={(e) => setWasteWhatIf(Number(e.target.value))}
+            aria-label="Merma what-if porcentaje"
+          />
+          <span className="prod-opt__whatif-val">
+            {wasteWhatIf == null ? 'catálogo' : `${wasteWhatIf}%`}
+          </span>
+          <button
+            type="button"
+            className="btn btn--small btn--ghost"
+            onClick={() => setWasteWhatIf(null)}
+            data-testid="prod-opt-waste-catalog"
+          >
+            Usar merma catálogo
+          </button>
+        </label>
         {!catalog || sheetEstimates.length === 0 ? (
           <p className="prod-hub__placeholder-body">
             Sin datos de área de tablero para estimar pliegos.
@@ -146,7 +173,8 @@ export function ProductionOrderOptimizationPanel({
                   {s.sheetWidthMm > 0
                     ? ` · ${s.sheetWidthMm}×${s.sheetLengthMm} mm`
                     : ''}
-                  {s.wastePercent > 0 ? ` · merma cat. ${s.wastePercent}%` : ''}
+                  {` · merma ${s.wastePercent}%`}
+                  {wasteWhatIf != null ? ' (what-if)' : ' (cat.)'}
                 </span>
               </li>
             ))}

@@ -36,6 +36,7 @@ export type EntitySection = Exclude<
 export const PRODUCTION_PATH_TABS = [
   'resumen',
   'modulos',
+  'piso',
   'despiece',
   'herrajes',
   'vistas',

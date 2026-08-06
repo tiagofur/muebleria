@@ -60,4 +60,13 @@ describe('estimateBoardSheets', () => {
     expect(rows[0]!.estimatedSheets).toBe(0);
     expect(rows[0]!.sheetAreaM2).toBe(0);
   });
+
+  it('accepts waste percent override for what-if (PROD-4.3)', () => {
+    const base = estimateBoardSheets([usage(5)], [mat]);
+    const high = estimateBoardSheets([usage(5)], [mat], 50);
+    expect(high[0]!.wastePercent).toBe(50);
+    expect(high[0]!.estimatedSheets).toBeGreaterThanOrEqual(
+      base[0]!.estimatedSheets,
+    );
+  });
 });

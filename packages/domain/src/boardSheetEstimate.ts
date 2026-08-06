@@ -28,13 +28,21 @@ export type BoardSheetEstimate = {
 /**
  * Estimate full sheets needed per material from aggregated m² usage.
  * Uses catalog board width × length as one sheet; applies material waste %.
+ *
+ * @param wastePercentOverride — PROD-4.3 what-if: when set (0–100), replaces
+ *   each material's catalog waste for estimation only (does not mutate catalog).
  */
 export function estimateBoardSheets(
   materials: readonly MaterialUsageRow[],
   catalogMaterials: readonly MaterialBoard[],
+  wastePercentOverride?: number | null,
 ): BoardSheetEstimate[] {
   const byId = new Map(catalogMaterials.map((m) => [m.id, m]));
   const out: BoardSheetEstimate[] = [];
+  const override =
+    wastePercentOverride != null && Number.isFinite(wastePercentOverride)
+      ? Math.min(100, Math.max(0, wastePercentOverride))
+      : null;
 
   for (const row of materials) {
     if (!(row.areaM2 > 0)) continue;
@@ -45,7 +53,8 @@ export function estimateBoardSheets(
       sheetWidthMm > 0 && sheetLengthMm > 0
         ? (sheetWidthMm * sheetLengthMm) / 1_000_000
         : 0;
-    const wastePercent = mat?.wastePercent ?? 0;
+    const wastePercent =
+      override != null ? override : (mat?.wastePercent ?? 0);
     let estimatedSheets = 0;
     if (sheetAreaM2 > 0) {
       const withWaste = row.areaM2 * (1 + Math.max(0, wastePercent) / 100);

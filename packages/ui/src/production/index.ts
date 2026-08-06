@@ -82,3 +82,8 @@ export {
   ProductionOrderOptimizationPanel,
   type ProductionOrderOptimizationPanelProps,
 } from './ProductionOrderOptimizationPanel';
+
+export {
+  ProductionOrderPaperlessPanel,
+  type ProductionOrderPaperlessPanelProps,
+} from './ProductionOrderPaperlessPanel';

@@ -50,7 +50,10 @@ import {
   type ProductionDocumentItem,
 } from './ProductionOrderDocumentsPanel';
 import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
+import { ProductionOrderPaperlessPanel } from './ProductionOrderPaperlessPanel';
 import type { Catalog, NestingImportResult } from '@muebles/domain';
+import type { ProductionSpaceOption } from '@muebles/domain';
+import { PRODUCTION_SCOPE_ALL } from '@muebles/domain';
 import './production.css';
 
 export type ProductionOrderHubProps = {
@@ -93,6 +96,11 @@ export type ProductionOrderHubProps = {
   readonly canSetFloorStatus?: boolean;
   readonly staleInfo?: ProductionStaleInfo | null;
   readonly onExportCncPilot?: () => void | Promise<void>;
+  readonly onExportAssemblySheets?: () => void | Promise<void>;
+  /** PROD-4.4 multi-ambiente filter */
+  readonly spaceOptions?: readonly ProductionSpaceOption[];
+  readonly productionScopeId?: string;
+  readonly onProductionScopeChange?: (scopeId: string) => void;
 };
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -188,6 +196,10 @@ export function ProductionOrderHub({
   canSetFloorStatus = false,
   staleInfo = null,
   onExportCncPilot,
+  onExportAssemblySheets,
+  spaceOptions = [],
+  productionScopeId = PRODUCTION_SCOPE_ALL,
+  onProductionScopeChange,
 }: ProductionOrderHubProps): ReactNode {
   const documents: readonly ProductionDocumentItem[] = [
     {
@@ -252,6 +264,14 @@ export function ProductionOrderHub({
       available: readiness.materialsResolved && Boolean(onExportCncPilot),
       reason: 'Requiere piezas de tablero',
       onDownload: onExportCncPilot,
+    },
+    {
+      id: 'assembly',
+      label: 'Hojas de armado (PDF)',
+      hint: 'Una página por módulo: medidas + herrajes + estado piso',
+      available: project.items.length > 0 && Boolean(onExportAssemblySheets),
+      reason: 'Sin módulos en el alcance',
+      onDownload: onExportAssemblySheets,
     },
   ];
 
@@ -322,6 +342,34 @@ export function ProductionOrderHub({
           >
             {staleInfo.messageEs}
           </p>
+        ) : null}
+
+        {spaceOptions.length >= 2 && onProductionScopeChange ? (
+          <div
+            className="prod-hub__scope"
+            data-testid="prod-hub-space-scope"
+          >
+            <label className="prod-hub__scope-label" htmlFor="prod-scope-select">
+              Ambiente
+            </label>
+            <select
+              id="prod-scope-select"
+              className="prod-modulos__floor-select"
+              value={productionScopeId}
+              onChange={(e) => onProductionScopeChange(e.target.value)}
+              data-testid="prod-scope-select"
+            >
+              <option value={PRODUCTION_SCOPE_ALL}>Toda la obra</option>
+              {spaceOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.itemCount})
+                </option>
+              ))}
+            </select>
+            <span className="prod-modulos__muted">
+              Filtra vistas de fábrica · export Optimizer sigue siendo obra completa
+            </span>
+          </div>
         ) : null}
 
         <div className="prod-hub__chrome-actions">
@@ -509,6 +557,15 @@ export function ProductionOrderHub({
             project={project}
             modules={modules}
             cutRows={cutRows}
+            onSetFloorStatus={onSetFloorStatus}
+            canSetFloorStatus={canSetFloorStatus}
+          />
+        ) : null}
+
+        {activeTab === 'piso' ? (
+          <ProductionOrderPaperlessPanel
+            project={project}
+            modules={modules}
             onSetFloorStatus={onSetFloorStatus}
             canSetFloorStatus={canSetFloorStatus}
           />

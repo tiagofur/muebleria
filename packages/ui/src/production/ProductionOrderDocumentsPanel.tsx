@@ -19,7 +19,8 @@ export type ProductionDocumentId =
   | 'labels'
   | 'elevations'
   | 'despiece'
-  | 'cnc-pilot';
+  | 'cnc-pilot'
+  | 'assembly';
 
 export type ProductionDocumentItem = {
   readonly id: ProductionDocumentId;
@@ -44,6 +45,7 @@ const ICONS: Record<ProductionDocumentId, typeof FileText> = {
   elevations: FileText,
   despiece: FileText,
   'cnc-pilot': FileText,
+  assembly: FileText,
 };
 
 export function ProductionOrderDocumentsPanel({

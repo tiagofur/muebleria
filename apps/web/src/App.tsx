@@ -130,6 +130,7 @@ import { buildProductionPackExport } from './exportProductionPack';
 import { buildWallElevationsExport } from './exportWallElevations';
 import { buildCutListCsvExport } from './exportCutListCsv';
 import { buildCncPilotExport } from './exportCncPilot';
+import { buildAssemblySheetsExport } from './exportAssemblySheets';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
 import {
   buildOptimizerExport,
@@ -1474,6 +1475,59 @@ function AppContent({
     [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
+  const handleExportAssemblySheets = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildAssemblySheetsExport(
+          project,
+          catalog,
+          resolveCustomerName(project.customerId, customers),
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          toast({
+            type: 'error',
+            message: 'No se pudo generar hojas de armado',
+          });
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+  );
+
   const handleExportCutListCsv = useCallback(
     async (projectId?: string) => {
       const project =
@@ -1960,6 +2014,9 @@ function AppContent({
           }
           onExportCncPilot={(id) => {
             void handleExportCncPilot(id);
+          }}
+          onExportAssemblySheets={(id) => {
+            void handleExportAssemblySheets(id);
           }}
         />
       ) : null}
