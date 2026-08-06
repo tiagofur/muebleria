@@ -319,6 +319,115 @@ describe('kitchenLayout', () => {
     expect(pruned.placements[0]!.itemId).toBe('keep');
   });
 
+  it('places free (island) modules by freeX/Y/yaw without wall id', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [
+        {
+          id: 'w1',
+          lengthMm: 3000,
+          angleDeg: 0,
+          originXMm: 0,
+          originYMm: 0,
+        },
+      ],
+      placements: [
+        {
+          itemId: 'island',
+          instanceIndex: 0,
+          wallId: '',
+          offsetMm: 0,
+          elevation: 'floor',
+          mode: 'free',
+          freeXMm: 1200,
+          freeYMm: 900,
+          freeYawDeg: 90,
+        },
+      ],
+    };
+    const fps = [
+      {
+        itemId: 'island',
+        instanceIndex: 0,
+        width: 1200,
+        height: 900,
+        depth: 600,
+      },
+    ];
+    const result = layoutKitchenPlacements(layout, fps);
+    expect(result.placements).toHaveLength(1);
+    const pl = result.placements[0]!;
+    expect(pl.originX).toBe(1200);
+    expect(pl.originY).toBe(900);
+    expect(pl.yawDeg).toBe(90);
+    expect(pl.wallId).toBe('');
+  });
+
+  it('keeps free placements when pruning even without matching wall', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'island',
+          instanceIndex: 0,
+          wallId: 'deleted-wall',
+          offsetMm: 0,
+          elevation: 'floor',
+          mode: 'free',
+          freeXMm: 500,
+          freeYMm: 400,
+        },
+        {
+          itemId: 'wall-unit',
+          instanceIndex: 0,
+          wallId: 'gone-wall',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+      ],
+    };
+    const items: ProjectItem[] = [
+      { id: 'island', moduleId: 'm1', quantity: 1, optionChoices: {} },
+      { id: 'wall-unit', moduleId: 'm1', quantity: 1, optionChoices: {} },
+    ];
+    const pruned = pruneKitchenLayout(layout, items);
+    expect(pruned.placements).toHaveLength(1);
+    expect(pruned.placements[0]!.itemId).toBe('island');
+    expect(pruned.placements[0]!.mode).toBe('free');
+  });
+
+  it('does not warn free placements for missing wall or wall overhang', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 500, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'island',
+          instanceIndex: 0,
+          wallId: '',
+          offsetMm: 0,
+          elevation: 'floor',
+          mode: 'free',
+          freeXMm: 100,
+          freeYMm: 200,
+        },
+      ],
+    };
+    const items: ProjectItem[] = [
+      { id: 'island', moduleId: 'm1', quantity: 1, optionChoices: {} },
+    ];
+    const fps = [
+      {
+        itemId: 'island',
+        instanceIndex: 0,
+        width: 1200,
+        height: 900,
+        depth: 600,
+      },
+    ];
+    const w = kitchenLayoutWarnings(layout, items, fps);
+    expect(w.some((s) => s.includes('Muro no encontrado'))).toBe(false);
+    expect(w.some((s) => s.includes('sobresale'))).toBe(false);
+  });
+
   it('prunes invalid instanceIndex when qty shrinks', () => {
     const layout: ProjectKitchenLayout = {
       walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],

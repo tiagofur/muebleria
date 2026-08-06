@@ -156,6 +156,86 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements[0]!.itemId).toBe('it-a');
   });
 
+  it('places unplaced unit as free island', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [
+          { id: 'w1', lengthMm: 3000, angleDeg: 0, originXMm: 0, originYMm: 0 },
+        ],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-filter-unplaced'));
+    fireEvent.click(screen.getByTestId('spatial-studio-place-island-it-a-0'));
+    expect(onChangeLayout).toHaveBeenCalled();
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      placements: Array<{
+        mode?: string;
+        freeXMm?: number;
+        freeYMm?: number;
+        itemId: string;
+      }>;
+    };
+    expect(next.placements).toHaveLength(1);
+    expect(next.placements[0]!.itemId).toBe('it-a');
+    expect(next.placements[0]!.mode).toBe('free');
+    expect(typeof next.placements[0]!.freeXMm).toBe('number');
+    expect(typeof next.placements[0]!.freeYMm).toBe('number');
+  });
+
+  it('shows free-mode inspector for island placement', () => {
+    const projectIsland: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: '',
+            offsetMm: 0,
+            elevation: 'floor',
+            mode: 'free',
+            freeXMm: 1000,
+            freeYMm: 800,
+            freeYawDeg: 90,
+          },
+        ],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectIsland}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    expect(screen.getByTestId('spatial-studio-free-mode')).toBeTruthy();
+    expect(screen.getByTestId('spatial-studio-free-x')).toBeTruthy();
+    expect(
+      (screen.getByTestId('spatial-studio-free-yaw') as HTMLSelectElement).value,
+    ).toBe('90');
+  });
+
   it('repacks wall and supports undo of plan edits', () => {
     const onChangeLayout = vi.fn();
     const projectWithTwo: Project = {

@@ -54,6 +54,33 @@ describe('apiMappers', () => {
     });
   });
 
+  it('round-trips texture tile size X/Y mm', () => {
+    const m: MaterialBoard = {
+      id: 'm2',
+      code: 'MAD-1',
+      name: 'Maderado',
+      widthMm: 1830,
+      lengthMm: 2440,
+      thicknessMm: 18,
+      grainDefault: true,
+      boardPrice: 120,
+      wastePercent: 8,
+      costPerM2: 30,
+      previewTextureUrl: '/api/media/wood.webp',
+      previewTextureTileWidthMm: 400,
+      previewTextureTileLengthMm: 600,
+      active: true,
+    };
+    const api = materialToApi(m);
+    expect(api.preview_texture_tile_width_mm).toBe(400);
+    expect(api.preview_texture_tile_length_mm).toBe(600);
+    expect(materialFromApi(api as Record<string, unknown>)).toMatchObject({
+      previewTextureUrl: '/api/media/wood.webp',
+      previewTextureTileWidthMm: 400,
+      previewTextureTileLengthMm: 600,
+    });
+  });
+
   it('maps module components + structureId to API and back', () => {
     const mod: Module = {
       id: 'mod1',
@@ -244,6 +271,58 @@ describe('apiMappers', () => {
       inferior: { depth: 560, height: 720 },
       superior: { depth: 320 },
     });
+  });
+
+  it('round-trips free-place (island) kitchen placements', () => {
+    const p: Project = {
+      id: 'pr-free',
+      name: 'Con isla',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: '',
+            offsetMm: 0,
+            elevation: 'floor',
+            mode: 'free',
+            freeXMm: 1400,
+            freeYMm: 1100,
+            freeYawDeg: 90,
+          },
+        ],
+      },
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: {},
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    const placements = kl.placements as Record<string, unknown>[];
+    expect(placements[0]!.mode).toBe('free');
+    expect(placements[0]!.free_x_mm).toBe(1400);
+    expect(placements[0]!.free_y_mm).toBe(1100);
+    expect(placements[0]!.free_yaw_deg).toBe(90);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    const free = round.kitchenLayout?.placements[0];
+    expect(free?.mode).toBe('free');
+    expect(free?.freeXMm).toBe(1400);
+    expect(free?.freeYMm).toBe(1100);
+    expect(free?.freeYawDeg).toBe(90);
   });
 
   it('omits measure_defaults when empty and reads camelCase (#109)', () => {

@@ -218,6 +218,7 @@ export {
   BASE_CLEARANCE_PRESETS_MM,
   WALL_CABINET_Z_PRESETS_MM,
   emptyKitchenLayout,
+  isFreePlacement,
   resolveWallFrames,
   kitchenLayoutWarnings,
   pruneKitchenLayout,

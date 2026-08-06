@@ -383,16 +383,22 @@ export interface KitchenWall {
   readonly originYMm?: number;
 }
 
+/** How a quote unit is anchored in the kitchen plan. Default `wall`. */
+export type PlacementMode = 'wall' | 'free';
+
 /**
- * Placement of one copy of a quote line on a wall.
- * Does not affect BOM — presentation/obra only (#133).
+ * Placement of one copy of a quote line on a wall or free (island).
+ * Does not affect BOM — presentation/obra only (#133 / free-place icebox).
  */
 export interface ProjectItemPlacement {
   readonly itemId: string;
   /** 0-based index when ProjectItem.quantity > 1. */
   readonly instanceIndex: number;
+  /**
+   * Wall id when mode is `wall` (or omitted). Empty / ignored when mode is `free`.
+   */
   readonly wallId: string;
-  /** Distance along the wall from the wall start (mm). */
+  /** Distance along the wall from the wall start (mm). Ignored when free. */
   readonly offsetMm: number;
   readonly elevation: PlacementElevation;
   /**
@@ -400,6 +406,17 @@ export interface ProjectItemPlacement {
    * Only used when elevation is `floor`. Omit to inherit layout default.
    */
   readonly baseClearanceMm?: number;
+  /**
+   * `free` = island / free place on the floor plane (not snapped to a wall).
+   * Omit or `wall` = classic wall-run placement.
+   */
+  readonly mode?: PlacementMode;
+  /** Plan X (mm) when mode is free. */
+  readonly freeXMm?: number;
+  /** Plan Y / depth (mm) when mode is free. */
+  readonly freeYMm?: number;
+  /** Plan yaw (degrees) when mode is free. 0 = face +Y depth into room convention. */
+  readonly freeYawDeg?: number;
 }
 
 /** Optional kitchen plan attached to a project. */

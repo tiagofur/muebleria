@@ -709,6 +709,10 @@ function kitchenLayoutToApi(
       elevation: p.elevation,
       base_clearance_mm:
         p.baseClearanceMm === undefined ? null : p.baseClearanceMm,
+      mode: p.mode ?? 'wall',
+      free_x_mm: p.freeXMm === undefined ? null : p.freeXMm,
+      free_y_mm: p.freeYMm === undefined ? null : p.freeYMm,
+      free_yaw_deg: p.freeYawDeg === undefined ? null : p.freeYawDeg,
     })),
     base_clearance_mm:
       layout.baseClearanceMm === undefined ? null : layout.baseClearanceMm,
@@ -753,6 +757,11 @@ function kitchenLayoutFromApi(
       bcRaw === null || bcRaw === undefined || bcRaw === ''
         ? undefined
         : Math.max(0, Math.round(num(bcRaw)));
+    const modeRaw = str(pr.mode, 'wall');
+    const mode = modeRaw === 'free' ? ('free' as const) : ('wall' as const);
+    const fx = pr.free_x_mm ?? pr.freeXMm;
+    const fy = pr.free_y_mm ?? pr.freeYMm;
+    const fyaw = pr.free_yaw_deg ?? pr.freeYawDeg;
     return {
       itemId: str(pr.item_id ?? pr.itemId),
       instanceIndex: Math.max(0, Math.floor(num(pr.instance_index ?? pr.instanceIndex))),
@@ -760,6 +769,16 @@ function kitchenLayoutFromApi(
       offsetMm: num(pr.offset_mm ?? pr.offsetMm),
       elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
       ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+      ...(mode === 'free' ? { mode: 'free' as const } : {}),
+      ...(fx === null || fx === undefined || fx === ''
+        ? {}
+        : { freeXMm: num(fx) }),
+      ...(fy === null || fy === undefined || fy === ''
+        ? {}
+        : { freeYMm: num(fy) }),
+      ...(fyaw === null || fyaw === undefined || fyaw === ''
+        ? {}
+        : { freeYawDeg: num(fyaw) }),
     };
   });
   if (walls.length === 0 && placements.length === 0) return undefined;

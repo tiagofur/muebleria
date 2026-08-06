@@ -28,6 +28,7 @@ import {
   DEFAULT_WALL_CABINET_Z_MM,
   defaultMeasurePresetId,
   emptyKitchenLayout,
+  isFreePlacement,
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   pruneKitchenLayout,
@@ -273,6 +274,10 @@ export function ProjectSpatialStudio({
         instanceIndex: p.instanceIndex,
         elevation: p.elevation,
         offsetMm: p.offsetMm,
+        free: isFreePlacement(p),
+        freeXMm: p.freeXMm,
+        freeYMm: p.freeYMm,
+        freeYawDeg: p.freeYawDeg,
       })),
     [layout.placements],
   );
@@ -394,6 +399,7 @@ export function ProjectSpatialStudio({
       }
     > = {};
     for (const p of layout.placements) {
+      if (isFreePlacement(p)) continue;
       const wall = wallById.get(p.wallId);
       if (!wall) continue;
       const key = `${p.itemId}#${p.instanceIndex}`;
@@ -409,13 +415,41 @@ export function ProjectSpatialStudio({
     return out;
   }, [layout.placements, preview.walls, preview.modules]);
 
+  /** Free-floor drag keys (islands). */
+  const freeDragByKey = useMemo(() => {
+    const out: Record<string, true> = {};
+    for (const p of layout.placements) {
+      if (!isFreePlacement(p)) continue;
+      out[`${p.itemId}#${p.instanceIndex}`] = true;
+    }
+    return out;
+  }, [layout.placements]);
+
+  /**
+   * Displayed kitchen layout is shifted to +X/+Y. Free plan coords are unshifted;
+   * convert floor hits with this delta.
+   */
+  const planShiftMm = useMemo(() => {
+    const raw = resolveWallFrames(layout.walls);
+    const disp = preview.walls;
+    if (raw.length === 0 || disp.length === 0) return { x: 0, y: 0 };
+    const d0 = disp[0]!;
+    const r0 = raw.find((w) => w.id === d0.id) ?? raw[0]!;
+    return {
+      x: d0.originXMm - r0.originXMm,
+      y: d0.originYMm - r0.originYMm,
+    };
+  }, [layout.walls, preview.walls]);
+
   const planFrames = useMemo(
     () => resolveWallFrames(layout.walls),
     [layout.walls],
   );
 
   const planMini = useMemo(() => {
-    if (planFrames.length === 0) return null;
+    if (planFrames.length === 0 && layout.placements.every((p) => !isFreePlacement(p))) {
+      return null;
+    }
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -426,13 +460,23 @@ export function ProjectSpatialStudio({
       maxX = Math.max(maxX, f.originXMm, f.endXMm);
       maxY = Math.max(maxY, f.originYMm, f.endYMm);
     }
+    for (const p of layout.placements) {
+      if (!isFreePlacement(p)) continue;
+      const fx = p.freeXMm ?? 0;
+      const fy = p.freeYMm ?? 0;
+      minX = Math.min(minX, fx);
+      minY = Math.min(minY, fy);
+      maxX = Math.max(maxX, fx + 600);
+      maxY = Math.max(maxY, fy + 400);
+    }
+    if (!Number.isFinite(minX)) return null;
     const pad = 24;
     const spanX = Math.max(maxX - minX, 1);
     const spanY = Math.max(maxY - minY, 1);
     const size = 200;
     const scale = (size - pad * 2) / Math.max(spanX, spanY);
     return { minX, minY, pad, scale, size };
-  }, [planFrames]);
+  }, [planFrames, layout.placements]);
 
   if (!open) return null;
 
@@ -508,6 +552,52 @@ export function ProjectSpatialStudio({
     });
     setSelectedKey(`${itemId}#${instanceIndex}`);
     setTargetWallId(wall.id);
+  };
+
+  const placeAsIsland = (itemId: string, instanceIndex: number) => {
+    if (!canEdit) return;
+    const base = ensureWalls();
+    const item = project.items.find((it) => it.id === itemId);
+    const mod = item
+      ? modules.find((m) => m.id === item.moduleId)
+      : undefined;
+    const dims = item ? resolveItemDims(item, mod) : null;
+    const width = dims?.width ?? 600;
+    const depth = dims?.depth ?? 560;
+    const frames = resolveWallFrames(base.walls);
+    let freeXMm = 1200;
+    let freeYMm = 1000;
+    if (frames.length > 0) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const f of frames) {
+        minX = Math.min(minX, f.originXMm, f.endXMm);
+        minY = Math.min(minY, f.originYMm, f.endYMm);
+        maxX = Math.max(maxX, f.originXMm, f.endXMm);
+        maxY = Math.max(maxY, f.originYMm, f.endYMm);
+      }
+      freeXMm = Math.round((minX + maxX) / 2 - width / 2);
+      freeYMm = Math.round((minY + maxY) / 2 - depth / 2);
+    }
+    const placement: ProjectItemPlacement = {
+      itemId,
+      instanceIndex,
+      wallId: '',
+      offsetMm: 0,
+      elevation: 'floor',
+      mode: 'free',
+      freeXMm,
+      freeYMm,
+      freeYawDeg: 0,
+    };
+    commit({
+      ...base,
+      placements: [...base.placements, placement],
+    });
+    setSelectedKey(`${itemId}#${instanceIndex}`);
+    setInspectorTab('position');
   };
 
   const removePlacement = (itemId: string, instanceIndex: number) => {
@@ -691,12 +781,147 @@ export function ProjectSpatialStudio({
     const placement = layout.placements.find(
       (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
     );
-    if (!placement) return;
+    if (!placement || isFreePlacement(placement)) return;
     // Final snap without stacking another undo (session already recorded).
     applyOffsetOnWall(itemId, instanceIndex, placement.offsetMm, {
       history: 'none',
       snap: true,
     });
+  };
+
+  const applyFreePlanPosition = (
+    itemId: string,
+    instanceIndex: number,
+    planXMm: number,
+    planYMm: number,
+    opts?: { readonly history?: 'push' | 'none' },
+  ) => {
+    // Soft 50 mm grid while free-dragging (obra feel without CAD snap).
+    const freeXMm = Math.round(planXMm / 50) * 50;
+    const freeYMm = Math.round(planYMm / 50) * 50;
+    commit(
+      {
+        ...layout,
+        placements: layout.placements.map((p) =>
+          p.itemId === itemId && p.instanceIndex === instanceIndex
+            ? {
+                ...p,
+                mode: 'free' as const,
+                freeXMm,
+                freeYMm,
+                freeYawDeg: Number.isFinite(p.freeYawDeg) ? p.freeYawDeg : 0,
+              }
+            : p,
+        ),
+      },
+      { history: opts?.history ?? 'push' },
+    );
+  };
+
+  const handleModuleFreeMove = (
+    moduleKey: string,
+    planXMm: number,
+    planYMm: number,
+  ) => {
+    if (!canEdit) return;
+    const hash = moduleKey.lastIndexOf('#');
+    if (hash < 0) return;
+    const itemId = moduleKey.slice(0, hash);
+    const instanceIndex = Number(moduleKey.slice(hash + 1)) || 0;
+    applyFreePlanPosition(itemId, instanceIndex, planXMm, planYMm, {
+      history: 'none',
+    });
+  };
+
+  const handleModuleFreeDragStart = (_moduleKey: string) => {
+    if (!canEdit || wallDragSession.current) return;
+    wallDragSession.current = true;
+    setUndoStack((s) => [...s.slice(-29), layout]);
+    setRedoStack([]);
+  };
+
+  const handleModuleFreeDragEnd = (_moduleKey: string) => {
+    wallDragSession.current = false;
+  };
+
+  const convertSelectedToIsland = () => {
+    if (!canEdit || !selectedPlacement || !selectedRef) return;
+    if (isFreePlacement(selectedPlacement)) return;
+    const dims = selectedDims;
+    const wall = planFrames.find((f) => f.id === selectedPlacement.wallId);
+    let freeXMm = selectedPlacement.offsetMm;
+    let freeYMm = 800;
+    if (wall) {
+      const angle = ((wall.angleDeg % 360) + 360) % 360;
+      if (angle > 45 && angle < 135) {
+        freeXMm = wall.originXMm;
+        freeYMm = wall.originYMm + selectedPlacement.offsetMm;
+      } else if (angle > 225 && angle < 315) {
+        freeXMm = wall.originXMm;
+        freeYMm = wall.originYMm - selectedPlacement.offsetMm;
+      } else if (angle >= 135 && angle <= 225) {
+        freeXMm = wall.originXMm - selectedPlacement.offsetMm;
+        freeYMm = wall.originYMm;
+      } else {
+        freeXMm = wall.originXMm + selectedPlacement.offsetMm;
+        freeYMm = wall.originYMm;
+      }
+    }
+    // Nudge slightly into the room so it is not stuck in the wall plane.
+    const depth = dims?.depth ?? 560;
+    freeYMm = Math.round(freeYMm + depth * 0.15);
+    commit({
+      ...layout,
+      placements: layout.placements.map((p) =>
+        p.itemId === selectedPlacement.itemId &&
+        p.instanceIndex === selectedPlacement.instanceIndex
+          ? {
+              itemId: p.itemId,
+              instanceIndex: p.instanceIndex,
+              wallId: '',
+              offsetMm: 0,
+              elevation: 'floor' as const,
+              mode: 'free' as const,
+              freeXMm: Math.round(freeXMm),
+              freeYMm: Math.round(freeYMm),
+              freeYawDeg: 0,
+              ...(p.baseClearanceMm === undefined
+                ? {}
+                : { baseClearanceMm: p.baseClearanceMm }),
+            }
+          : p,
+      ),
+    });
+  };
+
+  const convertSelectedToWall = () => {
+    if (!canEdit || !selectedPlacement || !activeWallId) return;
+    if (!isFreePlacement(selectedPlacement)) return;
+    const offset = nextOffsetOnWall(layout, activeWallId, footprints, 20);
+    commit({
+      ...layout,
+      placements: layout.placements.map((p) => {
+        if (
+          p.itemId !== selectedPlacement.itemId ||
+          p.instanceIndex !== selectedPlacement.instanceIndex
+        ) {
+          return p;
+        }
+        const {
+          mode: _m,
+          freeXMm: _x,
+          freeYMm: _y,
+          freeYawDeg: _yaw,
+          ...rest
+        } = p;
+        return {
+          ...rest,
+          wallId: activeWallId,
+          offsetMm: offset,
+        };
+      }),
+    });
+    setTargetWallId(activeWallId);
   };
 
   const repackSelectedWall = () => {
@@ -1130,21 +1355,36 @@ export function ProjectSpatialStudio({
                               ) : null}
                             </span>
                           </button>
-                          {canEdit && activeWallId ? (
-                            <button
-                              type="button"
-                              className="btn btn--small btn--primary"
-                              onClick={() =>
-                                placeOnWall(
-                                  f.itemId,
-                                  f.instanceIndex,
-                                  activeWallId,
-                                )
-                              }
-                              data-testid={`spatial-studio-place-${f.itemId}-${f.instanceIndex}`}
-                            >
-                              Colocar
-                            </button>
+                          {canEdit ? (
+                            <span className="spatial-studio__place-actions">
+                              {activeWallId ? (
+                                <button
+                                  type="button"
+                                  className="btn btn--small btn--primary"
+                                  onClick={() =>
+                                    placeOnWall(
+                                      f.itemId,
+                                      f.instanceIndex,
+                                      activeWallId,
+                                    )
+                                  }
+                                  data-testid={`spatial-studio-place-${f.itemId}-${f.instanceIndex}`}
+                                >
+                                  Colocar
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="btn btn--small"
+                                title="Colocar como isla libre en el plano"
+                                onClick={() =>
+                                  placeAsIsland(f.itemId, f.instanceIndex)
+                                }
+                                data-testid={`spatial-studio-place-island-${f.itemId}-${f.instanceIndex}`}
+                              >
+                                Isla
+                              </button>
+                            </span>
                           ) : null}
                         </div>
                       </li>
@@ -1157,7 +1397,8 @@ export function ProjectSpatialStudio({
                   Tip: doble click coloca en el muro activo
                   {activeWallId
                     ? ` (${layout.walls.find((w) => w.id === activeWallId)?.name ?? 'muro'})`
-                    : ''}.
+                    : ''}
+                  . «Isla» coloca libre en el piso.
                 </p>
               ) : null}
             </section>
@@ -1211,8 +1452,9 @@ export function ProjectSpatialStudio({
                             ) : null}
                           </span>
                           <span className="spatial-studio__item-meta">
-                            {p.elevation === 'wall' ? 'Alto' : 'Piso'} ·{' '}
-                            {Math.round(p.offsetMm)} mm
+                            {p.free
+                              ? `Isla · ${Math.round(p.freeXMm ?? 0)}, ${Math.round(p.freeYMm ?? 0)}`
+                              : `${p.elevation === 'wall' ? 'Alto' : 'Piso'} · ${Math.round(p.offsetMm)} mm`}
                           </span>
                         </button>
                       </li>
@@ -1244,7 +1486,7 @@ export function ProjectSpatialStudio({
           >
             <span className="spatial-studio__mode-pill" data-testid="spatial-studio-mode-pill">
               <Move3d size={14} strokeWidth={1.5} aria-hidden />
-              Mueble = arrastrar · muro = activar · vacío = orbitar
+              Mueble = arrastrar (muro/isla) · muro = activar · vacío = orbitar
             </span>
             <div className="spatial-studio__toolbar-group" role="group" aria-label="Cámara">
               <button
@@ -1417,6 +1659,11 @@ export function ProjectSpatialStudio({
                 onModuleWallOffset={handleModuleWallOffset}
                 onModuleWallDragStart={handleModuleWallDragStart}
                 onModuleWallDragEnd={handleModuleWallDragEnd}
+                freeDragByKey={freeDragByKey}
+                planShiftMm={planShiftMm}
+                onModuleFreeMove={handleModuleFreeMove}
+                onModuleFreeDragStart={handleModuleFreeDragStart}
+                onModuleFreeDragEnd={handleModuleFreeDragEnd}
                 selectedWallId={activeWallId}
                 onSelectWall={(wallId) => {
                   setTargetWallId(wallId);
@@ -1481,18 +1728,58 @@ export function ProjectSpatialStudio({
                   );
                 })}
                 {layout.placements.map((p) => {
-                  const wall = planFrames.find((f) => f.id === p.wallId);
-                  if (!wall) return null;
-                  const angle = ((wall.angleDeg % 360) + 360) % 360;
-                  const w = moduleWidth(
+                  const key = `${p.itemId}#${p.instanceIndex}`;
+                  const selected = selectedKey === key;
+                  const itemStub =
                     project.items.find((i) => i.id === p.itemId) ?? {
                       id: p.itemId,
                       moduleId: '',
                       quantity: 1,
                       optionChoices: {},
-                    },
-                    modules,
-                  );
+                    };
+                  const w = moduleWidth(itemStub, modules);
+                  const item = project.items.find((i) => i.id === p.itemId);
+                  const mod = item
+                    ? modules.find((m) => m.id === item.moduleId)
+                    : undefined;
+                  const depth =
+                    resolveItemDims(itemStub, mod)?.depth ?? 560;
+
+                  if (isFreePlacement(p)) {
+                    const fx = p.freeXMm ?? 0;
+                    const fy = p.freeYMm ?? 0;
+                    const rx =
+                      planMini.pad + (fx - planMini.minX) * planMini.scale;
+                    const ry =
+                      planMini.pad + (fy - planMini.minY) * planMini.scale;
+                    const rw = Math.max(6, w * planMini.scale);
+                    const rh = Math.max(6, depth * planMini.scale * 0.35);
+                    return (
+                      <rect
+                        key={key}
+                        x={rx}
+                        y={ry}
+                        width={rw}
+                        height={rh}
+                        fill={
+                          selected
+                            ? 'var(--accent-500, #3b82f6)'
+                            : '#eab308'
+                        }
+                        opacity={0.9}
+                        rx={1}
+                        onClick={() => {
+                          setSelectedKey(key);
+                          setInspectorTab('position');
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    );
+                  }
+
+                  const wall = planFrames.find((f) => f.id === p.wallId);
+                  if (!wall) return null;
+                  const angle = ((wall.angleDeg % 360) + 360) % 360;
                   let rx =
                     planMini.pad +
                     (wall.originXMm - planMini.minX) * planMini.scale;
@@ -1522,8 +1809,6 @@ export function ProjectSpatialStudio({
                       (wall.originYMm - planMini.minY) * planMini.scale -
                       5;
                   }
-                  const key = `${p.itemId}#${p.instanceIndex}`;
-                  const selected = selectedKey === key;
                   return (
                     <rect
                       key={key}
@@ -1785,7 +2070,103 @@ export function ProjectSpatialStudio({
                           Colocar en muro activo
                         </button>
                       ) : null}
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={() =>
+                            placeAsIsland(
+                              selectedRef.itemId,
+                              selectedRef.instanceIndex,
+                            )
+                          }
+                          data-testid="spatial-studio-place-island-selected"
+                        >
+                          Colocar como isla
+                        </button>
+                      ) : null}
                     </div>
+                  ) : isFreePlacement(selectedPlacement) ? (
+                    <>
+                      <p
+                        className="spatial-studio__hint"
+                        data-testid="spatial-studio-free-mode"
+                      >
+                        Isla libre — arrastrá en el piso 3D (grilla 50 mm).
+                      </p>
+                      <label className="spatial-studio__field">
+                        <span>X plano (mm)</span>
+                        <input
+                          type="number"
+                          step={50}
+                          value={Math.round(selectedPlacement.freeXMm ?? 0)}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            if (!Number.isFinite(v)) return;
+                            applyFreePlanPosition(
+                              selectedPlacement.itemId,
+                              selectedPlacement.instanceIndex,
+                              v,
+                              selectedPlacement.freeYMm ?? 0,
+                            );
+                          }}
+                          data-testid="spatial-studio-free-x"
+                        />
+                      </label>
+                      <label className="spatial-studio__field">
+                        <span>Y plano (mm)</span>
+                        <input
+                          type="number"
+                          step={50}
+                          value={Math.round(selectedPlacement.freeYMm ?? 0)}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            if (!Number.isFinite(v)) return;
+                            applyFreePlanPosition(
+                              selectedPlacement.itemId,
+                              selectedPlacement.instanceIndex,
+                              selectedPlacement.freeXMm ?? 0,
+                              v,
+                            );
+                          }}
+                          data-testid="spatial-studio-free-y"
+                        />
+                      </label>
+                      <label className="spatial-studio__field">
+                        <span>Rotación (°)</span>
+                        <select
+                          value={Math.round(selectedPlacement.freeYawDeg ?? 0)}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const yaw = Number(e.target.value);
+                            if (!Number.isFinite(yaw)) return;
+                            patchPlacement(
+                              selectedPlacement.itemId,
+                              selectedPlacement.instanceIndex,
+                              { freeYawDeg: yaw, mode: 'free' },
+                            );
+                          }}
+                          data-testid="spatial-studio-free-yaw"
+                        >
+                          <option value={0}>0° — +X</option>
+                          <option value={90}>90° — +Y</option>
+                          <option value={180}>180°</option>
+                          <option value={270}>270°</option>
+                        </select>
+                      </label>
+                      {canEdit && activeWallId ? (
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={convertSelectedToWall}
+                          data-testid="spatial-studio-to-wall"
+                        >
+                          Anclar a muro activo
+                        </button>
+                      ) : null}
+                    </>
                   ) : (
                     <>
                       <label className="spatial-studio__field">
@@ -1835,6 +2216,17 @@ export function ProjectSpatialStudio({
                           data-testid="spatial-studio-repack-wall"
                         >
                           Compactar muro
+                        </button>
+                      ) : null}
+
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={convertSelectedToIsland}
+                          data-testid="spatial-studio-to-island"
+                        >
+                          Convertir a isla
                         </button>
                       ) : null}
 

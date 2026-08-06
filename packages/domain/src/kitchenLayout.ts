@@ -125,6 +125,11 @@ export function resolveWallFrames(
   return out;
 }
 
+/** True when placement is a free island (not wall-anchored). */
+export function isFreePlacement(p: ProjectItemPlacement): boolean {
+  return p.mode === 'free';
+}
+
 /**
  * Soft validation warnings (Spanish). Does not throw.
  */
@@ -152,6 +157,21 @@ export function kitchenLayoutWarnings(
         `Índice de copia inválido para ítem ${p.itemId} (copia ${p.instanceIndex + 1}).`,
       );
     }
+    if (isFreePlacement(p)) {
+      if (
+        p.freeXMm !== undefined &&
+        !Number.isFinite(p.freeXMm)
+      ) {
+        warnings.push('Posición libre inválida (X).');
+      }
+      if (
+        p.freeYMm !== undefined &&
+        !Number.isFinite(p.freeYMm)
+      ) {
+        warnings.push('Posición libre inválida (Y).');
+      }
+      continue;
+    }
     const wall = wallById.get(p.wallId);
     if (!wall) {
       warnings.push(`Muro no encontrado para una colocación (${p.wallId}).`);
@@ -169,9 +189,10 @@ export function kitchenLayoutWarnings(
     }
   }
 
-  // Soft overlap on same wall (same elevation)
+  // Soft overlap on same wall (same elevation) — wall-anchored only
   const byWallElev = new Map<string, ProjectItemPlacement[]>();
   for (const p of layout.placements) {
+    if (isFreePlacement(p)) continue;
     if (!wallById.has(p.wallId)) continue;
     const key = `${p.wallId}|${p.elevation}`;
     const list = byWallElev.get(key) ?? [];
@@ -205,8 +226,11 @@ export function pruneKitchenLayout(
   const placements = layout.placements.filter((p) => {
     const item = itemById.get(p.itemId);
     if (!item) return false;
-    if (!wallIds.has(p.wallId)) return false;
-    return p.instanceIndex >= 0 && p.instanceIndex < Math.max(1, item.quantity);
+    if (p.instanceIndex < 0 || p.instanceIndex >= Math.max(1, item.quantity)) {
+      return false;
+    }
+    if (isFreePlacement(p)) return true;
+    return wallIds.has(p.wallId);
   });
   return {
     walls: layout.walls,
@@ -431,9 +455,8 @@ export function layoutKitchenPlacements(
   let maxTopZ = 1;
 
   for (const p of layout.placements) {
-    const wall = wallById.get(p.wallId);
     const fp = fpByKey.get(`${p.itemId}#${p.instanceIndex}`);
-    if (!wall || !fp) continue;
+    if (!fp) continue;
 
     const elev: PlacementElevation = p.elevation === 'wall' ? 'wall' : 'floor';
     const baseClearanceMm =
@@ -441,18 +464,33 @@ export function layoutKitchenPlacements(
         ? 0
         : resolveBaseClearanceMm(layout, p, options);
     const originZ = elev === 'wall' ? wallZ : baseClearanceMm;
-    const yawDeg = wallDirectionYawDeg(wall.angleDeg);
-    const { originX, originY } = placementOriginsOnWall(
-      wall,
-      p.offsetMm,
-      fp.width,
-    );
+
+    let originX: number;
+    let originY: number;
+    let yawDeg: number;
+    let wallId = p.wallId;
+
+    if (isFreePlacement(p)) {
+      originX = Number.isFinite(p.freeXMm) ? (p.freeXMm as number) : 0;
+      originY = Number.isFinite(p.freeYMm) ? (p.freeYMm as number) : 0;
+      yawDeg = wallDirectionYawDeg(
+        Number.isFinite(p.freeYawDeg) ? (p.freeYawDeg as number) : 0,
+      );
+      wallId = p.wallId || '';
+    } else {
+      const wall = wallById.get(p.wallId);
+      if (!wall) continue;
+      yawDeg = wallDirectionYawDeg(wall.angleDeg);
+      const origins = placementOriginsOnWall(wall, p.offsetMm, fp.width);
+      originX = origins.originX;
+      originY = origins.originY;
+    }
 
     placements.push({
       itemId: p.itemId,
       instanceIndex: p.instanceIndex,
       instanceKey: `${p.itemId}#${p.instanceIndex}`,
-      wallId: p.wallId,
+      wallId,
       width: fp.width,
       height: fp.height,
       depth: fp.depth,

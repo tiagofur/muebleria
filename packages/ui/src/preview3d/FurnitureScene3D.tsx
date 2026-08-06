@@ -137,6 +137,22 @@ export type FurnitureScene3DProps = {
   readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   /** When true, pointer-drag on a module updates offset along its wall. */
   readonly wallDragEnabled?: boolean;
+  /**
+   * Free-floor drag (islands). Keys = module.instanceKey that use free place.
+   * planShift converts displayed (shifted) floor hits back to layout plan mm.
+   */
+  readonly freeDragByKey?: Readonly<Record<string, true>>;
+  readonly planShiftMm?: { readonly x: number; readonly y: number };
+  /** Free drag reports plan X/Y in layout (unshifted) workshop mm. */
+  readonly onModuleFreeMove?: (
+    moduleKey: string,
+    planXMm: number,
+    planYMm: number,
+  ) => void;
+  /** Fired once when a free-drag gesture starts (undo history). */
+  readonly onModuleFreeDragStart?: (moduleKey: string) => void;
+  /** Fired when free-drag ends. */
+  readonly onModuleFreeDragEnd?: (moduleKey: string) => void;
   /** Highlight and click-select walls (set active wall in Proyectar). */
   readonly selectedWallId?: string | null;
   readonly onSelectWall?: (wallId: string) => void;
@@ -424,6 +440,11 @@ function ModuleGroup({
   onModuleWallOffset,
   onModuleWallDragStart,
   onModuleWallDragEnd,
+  freeDrag,
+  planShiftMm,
+  onModuleFreeMove,
+  onModuleFreeDragStart,
+  onModuleFreeDragEnd,
   controlsRef,
   setOrbitSuppressed,
 }: {
@@ -450,11 +471,21 @@ function ModuleGroup({
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
   readonly onModuleWallDragStart?: (moduleKey: string) => void;
   readonly onModuleWallDragEnd?: (moduleKey: string) => void;
+  readonly freeDrag?: boolean;
+  readonly planShiftMm?: { readonly x: number; readonly y: number };
+  readonly onModuleFreeMove?: (
+    moduleKey: string,
+    planXMm: number,
+    planYMm: number,
+  ) => void;
+  readonly onModuleFreeDragStart?: (moduleKey: string) => void;
+  readonly onModuleFreeDragEnd?: (moduleKey: string) => void;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
   const { camera, gl } = useThree();
   const dragging = useRef(false);
+  const dragMode = useRef<'wall' | 'free' | null>(null);
   const floorPlane = useMemo(
     () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     [],
@@ -465,13 +496,23 @@ function ModuleGroup({
 
   const applyDragFromClient = useCallback(
     (clientX: number, clientY: number) => {
-      if (!wallDrag || !onModuleWallOffset) return;
       const rect = gl.domElement.getBoundingClientRect();
       ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
       ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(ndc, camera);
       if (!raycaster.ray.intersectPlane(floorPlane, hit)) return;
       // Three (x,y,z) → workshop (x, y_plan=z)
+      if (dragMode.current === 'free' && onModuleFreeMove) {
+        const shiftX = planShiftMm?.x ?? 0;
+        const shiftY = planShiftMm?.y ?? 0;
+        onModuleFreeMove(
+          mod.key,
+          Math.round(hit.x - shiftX),
+          Math.round(hit.z - shiftY),
+        );
+        return;
+      }
+      if (!wallDrag || !onModuleWallOffset) return;
       const offset = offsetMmFromPlanPoint(
         {
           originXMm: wallDrag.originXMm,
@@ -488,6 +529,8 @@ function ModuleGroup({
     [
       wallDrag,
       onModuleWallOffset,
+      onModuleFreeMove,
+      planShiftMm,
       gl.domElement,
       ndc,
       raycaster,
@@ -500,15 +543,32 @@ function ModuleGroup({
 
   const endDrag = useCallback(() => {
     if (!dragging.current) return;
+    const mode = dragMode.current;
     dragging.current = false;
+    dragMode.current = null;
     setOrbitSuppressed(false);
     if (controlsRef.current) controlsRef.current.enabled = true;
     document.body.style.cursor = '';
-    onModuleWallDragEnd?.(mod.key);
-  }, [controlsRef, setOrbitSuppressed, onModuleWallDragEnd, mod.key]);
+    if (mode === 'free') onModuleFreeDragEnd?.(mod.key);
+    else onModuleWallDragEnd?.(mod.key);
+  }, [
+    controlsRef,
+    setOrbitSuppressed,
+    onModuleWallDragEnd,
+    onModuleFreeDragEnd,
+    mod.key,
+  ]);
+
+  const canFreeDrag = Boolean(
+    wallDragEnabled && freeDrag && onModuleFreeMove,
+  );
+  const canWallDrag = Boolean(
+    wallDragEnabled && !freeDrag && wallDrag && onModuleWallOffset,
+  );
+  const canDrag = canFreeDrag || canWallDrag;
 
   useEffect(() => {
-    if (!wallDragEnabled || !wallDrag) return;
+    if (!canDrag) return;
     const onMove = (e: PointerEvent) => {
       if (!dragging.current) return;
       applyDragFromClient(e.clientX, e.clientY);
@@ -522,7 +582,7 @@ function ModuleGroup({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [wallDragEnabled, wallDrag, applyDragFromClient, endDrag]);
+  }, [canDrag, applyDragFromClient, endDrag]);
 
   const visuals = useMemo(
     () =>
@@ -543,7 +603,6 @@ function ModuleGroup({
   const yawRad = ((mod.yawDeg ?? 0) * Math.PI) / 180;
   const groupRot: [number, number, number] = [0, yawRad, 0];
   const hasSelection = Boolean(selectedPartId);
-  const canWallDrag = Boolean(wallDragEnabled && wallDrag && onModuleWallOffset);
 
   return (
     <group
@@ -558,16 +617,18 @@ function ModuleGroup({
           : undefined
       }
       onPointerDown={
-        canWallDrag
+        canDrag
           ? (e) => {
               e.stopPropagation();
               (e.target as Element).setPointerCapture?.(e.pointerId);
               dragging.current = true;
+              dragMode.current = canFreeDrag ? 'free' : 'wall';
               setOrbitSuppressed(true);
               if (controlsRef.current) controlsRef.current.enabled = false;
               document.body.style.cursor = 'grabbing';
               onSelectModule?.(mod.key);
-              onModuleWallDragStart?.(mod.key);
+              if (canFreeDrag) onModuleFreeDragStart?.(mod.key);
+              else onModuleWallDragStart?.(mod.key);
               applyDragFromClient(e.clientX, e.clientY);
             }
           : undefined
@@ -699,6 +760,11 @@ function SceneContent({
   onModuleWallDragStart,
   onModuleWallDragEnd,
   wallDragEnabled,
+  freeDragByKey,
+  planShiftMm,
+  onModuleFreeMove,
+  onModuleFreeDragStart,
+  onModuleFreeDragEnd,
   selectedWallId,
   onSelectWall,
   showFloorGrid,
@@ -731,6 +797,11 @@ function SceneContent({
   readonly onModuleWallDragStart?: (moduleKey: string) => void;
   readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   readonly wallDragEnabled?: boolean;
+  readonly freeDragByKey?: FurnitureScene3DProps['freeDragByKey'];
+  readonly planShiftMm?: FurnitureScene3DProps['planShiftMm'];
+  readonly onModuleFreeMove?: FurnitureScene3DProps['onModuleFreeMove'];
+  readonly onModuleFreeDragStart?: FurnitureScene3DProps['onModuleFreeDragStart'];
+  readonly onModuleFreeDragEnd?: FurnitureScene3DProps['onModuleFreeDragEnd'];
   readonly selectedWallId?: string | null;
   readonly onSelectWall?: (wallId: string) => void;
   readonly showFloorGrid?: boolean;
@@ -820,6 +891,11 @@ function SceneContent({
               onModuleWallOffset={onModuleWallOffset}
               onModuleWallDragStart={onModuleWallDragStart}
               onModuleWallDragEnd={onModuleWallDragEnd}
+              freeDrag={Boolean(freeDragByKey?.[mod.key])}
+              planShiftMm={planShiftMm}
+              onModuleFreeMove={onModuleFreeMove}
+              onModuleFreeDragStart={onModuleFreeDragStart}
+              onModuleFreeDragEnd={onModuleFreeDragEnd}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
             />
@@ -899,6 +975,11 @@ export function FurnitureScene3D({
   onModuleWallDragStart,
   onModuleWallDragEnd,
   wallDragEnabled = false,
+  freeDragByKey,
+  planShiftMm,
+  onModuleFreeMove,
+  onModuleFreeDragStart,
+  onModuleFreeDragEnd,
   fillViewport = false,
   showHint = true,
   selectedWallId = null,
@@ -924,7 +1005,11 @@ export function FurnitureScene3D({
     'Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para pan',
     '← → ↑ ↓ teclado · + − zoom',
     selectionEnabled ? 'click para seleccionar' : null,
-    wallDragEnabled ? 'arrastrá un mueble para deslizarlo en el muro' : null,
+    wallDragEnabled
+      ? freeDragByKey && Object.keys(freeDragByKey).length > 0
+        ? 'arrastrá un mueble en muro o isla libre'
+        : 'arrastrá un mueble para deslizarlo en el muro'
+      : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -1084,6 +1169,11 @@ export function FurnitureScene3D({
               onModuleWallDragStart={onModuleWallDragStart}
               onModuleWallDragEnd={onModuleWallDragEnd}
               wallDragEnabled={wallDragEnabled && !measurementMode}
+              freeDragByKey={freeDragByKey}
+              planShiftMm={planShiftMm}
+              onModuleFreeMove={onModuleFreeMove}
+              onModuleFreeDragStart={onModuleFreeDragStart}
+              onModuleFreeDragEnd={onModuleFreeDragEnd}
               selectedWallId={selectedWallId}
               onSelectWall={onSelectWall}
               showFloorGrid={showFloorGrid}

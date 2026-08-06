@@ -178,12 +178,14 @@ Cada parte es entregable autónomo, testeable, idealmente PR &lt; 400 líneas cu
 
 ### Parte 6 — Icebox (después de SUPER 3D usable)
 
-- Islas / free place  
-- Multi-ambiente  
-- Import plano PDF/DXF  
-- Zoclo como pieza real en BOM / patas como herraje automático  
-- Luces / materiales PBR  
-- Colaboración multi-usuario en el plano  
+| Ítem | Estado |
+|------|--------|
+| **Islas / free place** | **Hecho** — `mode: 'free'` + `freeXMm`/`freeYMm`/`freeYawDeg`; layout 3D; drag en piso; botón «Isla» / inspector |
+| Multi-ambiente | Pendiente |
+| Import plano PDF/DXF | Pendiente |
+| Zoclo como pieza real en BOM / patas como herraje automático | Pendiente |
+| Luces / materiales PBR | Pendiente |
+| Colaboración multi-usuario en el plano | Pendiente |
 
 ---
 
