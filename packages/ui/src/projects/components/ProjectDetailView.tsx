@@ -80,11 +80,13 @@ type QuoteToolsPanel = 'kitchen' | 'scenarios' | 'checklist' | null;
 
 /**
  * Exactly one lifecycle/production primary per status (buttons.css rule).
- * Exports stay available as secondary when they are not the stage action.
+ * PROD-0.2: when factory workspace is wired (`onOpenInProduction`), plant-ready
+ * primary is open-production — not Optimizer / mark-produced in quote chrome.
  */
 type ChromePrimary =
   | 'send'
   | 'accept'
+  | 'open-production'
   | 'mark-produced'
   | 'export'
   | null;
@@ -133,6 +135,8 @@ export interface ProjectDetailViewProps {
   readonly productionExportOk: boolean;
   readonly onExport?: () => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
+  /** Navigate to production order hub (PROD-0.1). Only when plant-ready. */
+  readonly onOpenInProduction?: (projectId: string) => void;
 
   // --- Item handlers + inline-remove confirm ---
   readonly itemHandlers: ProjectDetailItemHandlers;
@@ -231,6 +235,8 @@ function resolveChromePrimary(args: {
   hasChangeStatus: boolean;
   hasMarkProduced: boolean;
   hasExport: boolean;
+  /** PROD-0.2: factory hub available — prefers open-production over plant chrome CTAs. */
+  hasOpenInProduction: boolean;
 }): ChromePrimary {
   const {
     status,
@@ -239,9 +245,16 @@ function resolveChromePrimary(args: {
     hasChangeStatus,
     hasMarkProduced,
     hasExport,
+    hasOpenInProduction,
   } = args;
   if (status === 'draft' && canMutate && hasChangeStatus) return 'send';
   if (status === 'quoted' && canMutate && hasChangeStatus) return 'accept';
+  if (
+    (status === 'accepted' || status === 'produced') &&
+    hasOpenInProduction
+  ) {
+    return 'open-production';
+  }
   if (status === 'accepted' && canMarkProduced && hasMarkProduced) {
     return 'mark-produced';
   }
@@ -268,6 +281,7 @@ function ProjectDetailViewInner(): ReactNode {
     exportBusy,
     productionExportDisabled,
     productionExportOk,
+    onOpenInProduction,
     onExport,
     onBackToList,
     onOpenPresentation,
@@ -306,6 +320,7 @@ function ProjectDetailViewInner(): ReactNode {
       .length;
   }, [project, modules]);
 
+  const hasOpenInProduction = Boolean(onOpenInProduction);
   const primary = resolveChromePrimary({
     status: project.status,
     canMutate,
@@ -313,17 +328,43 @@ function ProjectDetailViewInner(): ReactNode {
     hasChangeStatus: Boolean(onChangeStatus),
     hasMarkProduced: Boolean(onMarkProduced),
     hasExport: Boolean(onExport),
+    hasOpenInProduction,
   });
 
   const exportTitle = !productionExportOk
     ? 'Export de producción solo en Aceptado o En producción'
     : 'Exportar cut-list Optimizer (.xlsx)';
 
-  /** Show Optimizer in chrome only when plant-ready; otherwise it lives in Más. */
-  const showExportInChrome = Boolean(onExport) && productionExportOk;
+  /**
+   * PROD-0.2: Optimizer leaves quote chrome when factory workspace is wired.
+   * Without `onOpenInProduction`, keep prior plant-ready chrome export.
+   */
+  const showExportInChrome =
+    Boolean(onExport) && productionExportOk && !hasOpenInProduction;
+  /** Mark-produced lives in OP hub when factory workspace is available. */
+  const showMarkProducedInChrome =
+    primary === 'mark-produced' &&
+    Boolean(onMarkProduced) &&
+    !hasOpenInProduction;
 
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
+
+    // PROD-0.2: plant-ready + workspace → prefer hub entry in Más before loose exports.
+    if (hasOpenInProduction && productionExportOk && onOpenInProduction) {
+      sections.push({
+        id: 'production-hub',
+        label: 'Producción',
+        items: [
+          {
+            id: 'open-production',
+            label: 'Abrir en Producción',
+            hint: 'Pack, corte, checklist de fábrica',
+            onSelect: () => onOpenInProduction(project.id),
+          },
+        ],
+      });
+    }
 
     // When export is not yet plant-ready, park Optimizer in Más (not a disabled chrome CTA).
     if (onExport && !productionExportOk) {
@@ -338,6 +379,26 @@ function ProjectDetailViewInner(): ReactNode {
             disabled: true,
             onSelect: () => {
               /* disabled until accepted / produced */
+            },
+          },
+        ],
+      });
+    }
+
+    // When workspace is wired and plant-ready, also park Optimizer under Más
+    // (secondary path; primary path is the hub).
+    if (onExport && productionExportOk && hasOpenInProduction) {
+      sections.push({
+        id: 'export-secondary',
+        label: 'Exports rápidos',
+        items: [
+          {
+            id: 'export-optimizer',
+            label: exportBusy ? 'Exportando…' : 'Exportar Optimizer',
+            hint: 'También en la orden de Producción',
+            disabled: productionExportDisabled,
+            onSelect: () => {
+              void onExport();
             },
           },
         ],
@@ -399,11 +460,14 @@ function ProjectDetailViewInner(): ReactNode {
     exportBusy,
     exportMenu.sections,
     exportTitle,
+    hasOpenInProduction,
     onDuplicate,
     onExport,
+    onOpenInProduction,
     onRequestDelete,
     onRequestReopen,
     onSaveAsTemplate,
+    productionExportDisabled,
     productionExportOk,
     project.id,
     project.status,
@@ -479,7 +543,20 @@ function ProjectDetailViewInner(): ReactNode {
               <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar cotización
             </button>
           ) : null}
-          {primary === 'mark-produced' && onMarkProduced ? (
+          {primary === 'open-production' && onOpenInProduction ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onOpenInProduction(project.id)}
+              data-testid="project-open-in-production"
+              title="Abre la orden en el workspace de Producción (solo fábrica)"
+            >
+              <Factory size={16} strokeWidth={1.5} aria-hidden /> Abrir en
+              Producción
+            </button>
+          ) : null}
+
+          {showMarkProducedInChrome && onMarkProduced ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -751,6 +828,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     productionExportOk: props.productionExportOk,
     onExport: props.onExport,
     onExportProductionPack: props.onExportProductionPack,
+    onOpenInProduction: props.onOpenInProduction,
     itemHandlers: props.itemHandlers,
     removeConfirm: props.removeConfirm,
     updateProjectLevelChoice: props.updateProjectLevelChoice,

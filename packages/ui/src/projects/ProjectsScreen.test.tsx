@@ -957,6 +957,46 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(onSaveAsTemplate).toHaveBeenCalledWith('prj-1', 'Mi plantilla');
   });
 
+  it('PROD-0.2: plant-ready chrome prefers Abrir en Producción over factory exports', async () => {
+    const user = userEvent.setup();
+    const onOpenInProduction = vi.fn();
+    const onMarkProduced = vi.fn();
+    const accepted: Project = {
+      ...projects[0]!,
+      id: 'prj-acc',
+      name: 'Obra aceptada',
+      status: 'accepted',
+    };
+    renderScreen({
+      projects: [accepted],
+      projectEstimates: { 'prj-acc': 500 },
+      onOpenInProduction,
+      onMarkProduced,
+      canMarkProduced: true,
+      onExportProductionPack: vi.fn(),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-acc'));
+
+    const openBtn = screen.getByTestId('project-open-in-production');
+    expect(openBtn.className).toMatch(/btn--primary/);
+    // Factory actions leave chrome when hub is wired.
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    expect(screen.queryByTestId('project-mark-produced')).toBeNull();
+
+    await user.click(openBtn);
+    expect(onOpenInProduction).toHaveBeenCalledWith('prj-acc');
+
+    // Secondary path: exports still reachable under Más.
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(
+      screen.getByRole('menuitem', { name: /Abrir en Producción/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('menuitem', { name: /Exportar Optimizer/i }),
+    ).toBeTruthy();
+  });
+
   it('management modal lists templates with a delete button', async () => {
     const user = userEvent.setup();
     const { onDeleteTemplate } = renderScreen({
