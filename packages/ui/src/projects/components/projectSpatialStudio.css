@@ -15,10 +15,11 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-card);
+  flex: 0 0 auto;
 }
 
 .spatial-studio__chrome-lead {
@@ -98,16 +99,28 @@
 }
 
 .spatial-studio__viewport {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: #1a1c1e;
+  /* Center column must consume all remaining height for fillViewport 3D */
+  overflow: hidden;
 }
 
-.spatial-studio__viewport .module-scene-3d {
-  flex: 1;
+.spatial-studio__viewport .module-scene-3d,
+.spatial-studio__viewport .module-scene-3d--fill {
+  flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* R3F Canvas root must stretch with the wrap */
+.spatial-studio__viewport .module-scene-3d__canvas-wrap > div {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .spatial-studio__section {

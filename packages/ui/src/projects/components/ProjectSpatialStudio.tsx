@@ -733,6 +733,7 @@ export function ProjectSpatialStudio({
                 totalHeight={preview.totalHeight}
                 totalDepth={preview.totalDepth}
                 showFloor
+                fillViewport
                 testId="spatial-studio-scene"
                 colorMode="material"
                 materialColors={materialColors}

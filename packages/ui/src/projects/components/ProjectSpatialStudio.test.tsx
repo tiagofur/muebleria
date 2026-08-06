@@ -5,6 +5,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import type { Module, Project } from '@muebles/domain';
+
+vi.mock('../../preview3d', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../preview3d')>();
+  return {
+    ...actual,
+    canUseWebGL: () => true,
+    FurnitureScene3D: (props: {
+      testId?: string;
+      fillViewport?: boolean;
+      className?: string;
+    }) => (
+      <div
+        data-testid={props.testId ?? 'furniture-scene-3d'}
+        className={[
+          'module-scene-3d',
+          props.fillViewport ? 'module-scene-3d--fill' : '',
+          props.className ?? '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      />
+    ),
+  };
+});
+
 import { ProjectSpatialStudio } from './ProjectSpatialStudio';
 
 afterEach(() => {
@@ -71,6 +96,38 @@ describe('ProjectSpatialStudio', () => {
       />,
     );
     expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
+  });
+
+  it('uses fillViewport studio layout class for hero 3D', async () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    // Lazy FurnitureScene3D + useEffect(canUseWebGL)
+    const scene = await screen.findByTestId('spatial-studio-scene');
+    expect(scene.className).toContain('module-scene-3d--fill');
   });
 
   it('creates L walls and places unplaced unit on wall', () => {

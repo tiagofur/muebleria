@@ -131,6 +131,11 @@ export type FurnitureScene3DProps = {
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
   /** When true, pointer-drag on a module updates offset along its wall. */
   readonly wallDragEnabled?: boolean;
+  /**
+   * Fill parent height/width (Proyectar studio). Default embedded preview
+   * keeps a fixed ~380px canvas for modals/editors.
+   */
+  readonly fillViewport?: boolean;
 };
 
 function BoardMesh({
@@ -762,6 +767,7 @@ export function FurnitureScene3D({
   wallDragByKey,
   onModuleWallOffset,
   wallDragEnabled = false,
+  fillViewport = false,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -770,6 +776,22 @@ export function FurnitureScene3D({
   const selectionEnabled =
     (Boolean(onSelectPart) || Boolean(onSelectModule)) && !measurementMode;
   const hasWalls = walls.length > 0;
+  const rootClass = [
+    'module-scene-3d',
+    fillViewport ? 'module-scene-3d--fill' : '',
+    className ?? '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const hintText = [
+    'Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para pan',
+    '← → ↑ ↓ teclado · + − zoom',
+    selectionEnabled ? 'click para seleccionar' : null,
+    wallDragEnabled ? 'arrastrá un mueble para deslizarlo en el muro' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   if (
     sceneModules.length === 0 &&
@@ -777,7 +799,7 @@ export function FurnitureScene3D({
   ) {
     return (
       <div
-        className={`module-scene-3d module-scene-3d--empty ${className ?? ''}`}
+        className={`${rootClass} module-scene-3d--empty`}
         style={style}
         data-testid={`${testId}-empty`}
       >
@@ -794,7 +816,7 @@ export function FurnitureScene3D({
   ) {
     return (
       <div
-        className={`module-scene-3d module-scene-3d--empty ${className ?? ''}`}
+        className={`${rootClass} module-scene-3d--empty`}
         style={style}
         data-testid={`${testId}-empty`}
       >
@@ -804,24 +826,20 @@ export function FurnitureScene3D({
   }
 
   return (
-    <div
-      className={`module-scene-3d ${className ?? ''}`}
-      style={style}
-      data-testid={testId}
-    >
-      <p className="module-scene-3d__hint">
-        Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para desplazar (pan)
-        · ← → ↑ ↓ para navegar con teclado · + − para zoom
-        {selectionEnabled ? ' · click en una pieza para inspeccionar' : ''}
-        {wallDragEnabled
-          ? ' · arrastrá un mueble sobre el piso para deslizarlo en el muro'
-          : ''}
-      </p>
+    <div className={rootClass} style={style} data-testid={testId}>
+      {!fillViewport ? (
+        <p className="module-scene-3d__hint">{hintText}</p>
+      ) : null}
       <div
         className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
         tabIndex={0}
         aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
       >
+        {fillViewport ? (
+          <p className="module-scene-3d__hint module-scene-3d__hint--overlay">
+            {hintText}
+          </p>
+        ) : null}
         <ErrorBoundary
           fallback={(error, reset) => (
             <div className="r3f-error-fallback" role="alert" aria-label="Error en la vista 3D">
@@ -856,9 +874,17 @@ export function FurnitureScene3D({
         <Canvas
           shadows
           dpr={[1, 2]}
+          style={
+            fillViewport
+              ? { width: '100%', height: '100%', display: 'block' }
+              : undefined
+          }
           gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
           onPointerMissed={() => {
-            if (selectionEnabled) onSelectPart?.(null);
+            if (selectionEnabled) {
+              onSelectPart?.(null);
+              onSelectModule?.(null);
+            }
           }}
         >
           {cameraType === 'orthographic' ? (

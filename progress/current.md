@@ -4,6 +4,12 @@
 - **Branch:** `wip/jd-w3-lateral-rotation-fix`
 - **Inicio:** 2026-08-06
 
+## SUPER 3D plan (2026-08-06)
+
+- Plan: `docs/projectar-super-3d-plan.md` (Parte 0–6)
+- **Parte 0 Viewport hero ✅:** `fillViewport` en FurnitureScene3D; CSS `--fill` sin 380px; hint overlay; chrome más denso
+- **Siguiente:** Parte 1 Tooling escena (toolbar cámara / planta toggle)
+
 ## Proyectar — place & move 3D (Fase A)
 
 Botón **Proyectar** en chrome de cotización → fullscreen `ProjectSpatialStudio`.
