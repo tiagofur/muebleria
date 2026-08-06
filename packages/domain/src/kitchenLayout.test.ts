@@ -10,6 +10,8 @@ import {
   kitchenLayoutWarnings,
   wallDirectionYawDeg,
   offsetMmFromPlanPoint,
+  snapOffsetOnWall,
+  repackPlacementsOnWall,
   DEFAULT_BASE_CLEARANCE_MM,
   resolveBaseClearanceMm,
 } from './kitchenLayout';
@@ -147,6 +149,63 @@ describe('kitchenLayout', () => {
         { elevation: 'wall' },
       ),
     ).toBe(0);
+  });
+
+  it('snaps offset to peer edge with gap', () => {
+    const snapped = snapOffsetOnWall({
+      offsetMm: 615,
+      moduleWidthMm: 600,
+      wallLengthMm: 3000,
+      peers: [{ offsetMm: 0, widthMm: 600 }],
+      thresholdMm: 20,
+      gapMm: 20,
+    });
+    // peer ends at 600; + gap 20 → 620
+    expect(snapped).toBe(620);
+  });
+
+  it('does not snap when outside threshold', () => {
+    expect(
+      snapOffsetOnWall({
+        offsetMm: 200,
+        moduleWidthMm: 600,
+        wallLengthMm: 3000,
+        peers: [{ offsetMm: 0, widthMm: 600 }],
+        thresholdMm: 10,
+        gapMm: 20,
+      }),
+    ).toBe(200);
+  });
+
+  it('repacks placements on a wall with gap', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'a',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 50,
+          elevation: 'floor',
+        },
+        {
+          itemId: 'b',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 900,
+          elevation: 'floor',
+        },
+      ],
+    };
+    const fps = [
+      { itemId: 'a', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+      { itemId: 'b', instanceIndex: 0, width: 400, height: 720, depth: 560 },
+    ];
+    const next = repackPlacementsOnWall(layout, 'w1', fps, 20);
+    const a = next.placements.find((p) => p.itemId === 'a')!;
+    const b = next.placements.find((p) => p.itemId === 'b')!;
+    expect(a.offsetMm).toBe(0);
+    expect(b.offsetMm).toBe(620);
   });
 
   it('snaps wall angles to cardinal yaw', () => {

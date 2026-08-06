@@ -129,6 +129,10 @@ export type FurnitureScene3DProps = {
     >
   >;
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
+  /** Fired once when a wall-drag gesture starts (for undo history). */
+  readonly onModuleWallDragStart?: (moduleKey: string) => void;
+  /** Fired when wall-drag ends (for final snap / re-pack). */
+  readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   /** When true, pointer-drag on a module updates offset along its wall. */
   readonly wallDragEnabled?: boolean;
   /** Highlight and click-select walls (set active wall in Proyectar). */
@@ -360,6 +364,8 @@ function ModuleGroup({
   wallDrag,
   wallDragEnabled,
   onModuleWallOffset,
+  onModuleWallDragStart,
+  onModuleWallDragEnd,
   controlsRef,
   setOrbitSuppressed,
 }: {
@@ -384,6 +390,8 @@ function ModuleGroup({
   };
   readonly wallDragEnabled?: boolean;
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
+  readonly onModuleWallDragStart?: (moduleKey: string) => void;
+  readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
@@ -438,7 +446,8 @@ function ModuleGroup({
     setOrbitSuppressed(false);
     if (controlsRef.current) controlsRef.current.enabled = true;
     document.body.style.cursor = '';
-  }, [controlsRef, setOrbitSuppressed]);
+    onModuleWallDragEnd?.(mod.key);
+  }, [controlsRef, setOrbitSuppressed, onModuleWallDragEnd, mod.key]);
 
   useEffect(() => {
     if (!wallDragEnabled || !wallDrag) return;
@@ -500,6 +509,7 @@ function ModuleGroup({
               if (controlsRef.current) controlsRef.current.enabled = false;
               document.body.style.cursor = 'grabbing';
               onSelectModule?.(mod.key);
+              onModuleWallDragStart?.(mod.key);
               applyDragFromClient(e.clientX, e.clientY);
             }
           : undefined
@@ -621,6 +631,8 @@ function SceneContent({
   onSelectModule,
   wallDragByKey,
   onModuleWallOffset,
+  onModuleWallDragStart,
+  onModuleWallDragEnd,
   wallDragEnabled,
   selectedWallId,
   onSelectWall,
@@ -650,6 +662,8 @@ function SceneContent({
   readonly onSelectModule?: (moduleKey: string | null) => void;
   readonly wallDragByKey?: FurnitureScene3DProps['wallDragByKey'];
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
+  readonly onModuleWallDragStart?: (moduleKey: string) => void;
+  readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   readonly wallDragEnabled?: boolean;
   readonly selectedWallId?: string | null;
   readonly onSelectWall?: (wallId: string) => void;
@@ -734,6 +748,8 @@ function SceneContent({
               wallDrag={wallDragByKey?.[mod.key]}
               wallDragEnabled={wallDragEnabled}
               onModuleWallOffset={onModuleWallOffset}
+              onModuleWallDragStart={onModuleWallDragStart}
+              onModuleWallDragEnd={onModuleWallDragEnd}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
             />
@@ -810,6 +826,8 @@ export function FurnitureScene3D({
   onSelectModule,
   wallDragByKey,
   onModuleWallOffset,
+  onModuleWallDragStart,
+  onModuleWallDragEnd,
   wallDragEnabled = false,
   fillViewport = false,
   showHint = true,
@@ -992,6 +1010,8 @@ export function FurnitureScene3D({
               }
               wallDragByKey={wallDragByKey}
               onModuleWallOffset={onModuleWallOffset}
+              onModuleWallDragStart={onModuleWallDragStart}
+              onModuleWallDragEnd={onModuleWallDragEnd}
               wallDragEnabled={wallDragEnabled && !measurementMode}
               selectedWallId={selectedWallId}
               onSelectWall={onSelectWall}

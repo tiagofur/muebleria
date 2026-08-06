@@ -10,7 +10,8 @@
 - **Parte 0 Viewport hero ✅:** `fillViewport` en FurnitureScene3D; CSS `--fill` sin 380px; hint overlay; chrome más denso
 - **Parte 1 Tooling escena ✅:** toolbar flotante (vistas, contornos, rayos X, plano mini 2D, mode pill)
 - **Parte 2 Lista/colocación ✅:** filtros, rail colapsable, doble click colocar, click muro 3D, código dominante
-- **Siguiente:** Parte 3 Manipulación (snap, re-pack al soltar, undo)
+- **Parte 3 Manipulación ✅:** snapOffsetOnWall, repack, drag history, undo/redo, mover de muro
+- **Siguiente:** Parte 4 Realismo obra
 
 ## Proyectar — place & move 3D (Fase A)
 

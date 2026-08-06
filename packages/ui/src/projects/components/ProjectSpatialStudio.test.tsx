@@ -127,6 +127,94 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements[0]!.itemId).toBe('it-a');
   });
 
+  it('repacks wall and supports undo of plan edits', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithTwo: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-a',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p600',
+        },
+        {
+          id: 'it-b',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p600',
+        },
+      ],
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 100,
+            elevation: 'floor',
+          },
+          {
+            itemId: 'it-b',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 900,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    const { rerender } = render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithTwo}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    fireEvent.click(screen.getByTestId('spatial-studio-repack-wall'));
+    expect(onChangeLayout).toHaveBeenCalled();
+    const packed = onChangeLayout.mock.calls.at(-1)![0];
+    expect(packed.placements.find((p: { itemId: string }) => p.itemId === 'it-a')!.offsetMm).toBe(0);
+    expect(packed.placements.find((p: { itemId: string }) => p.itemId === 'it-b')!.offsetMm).toBe(620);
+
+    // Undo needs the studio to have recorded previous layout; re-render with packed state
+    // and click undo after another edit that has history.
+    rerender(
+      <ProjectSpatialStudio
+        open
+        project={{ ...projectWithTwo, kitchenLayout: packed }}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    fireEvent.click(screen.getByTestId('spatial-studio-nudge-right'));
+    const undoBtn = screen.getByTestId(
+      'spatial-studio-undo',
+    ) as HTMLButtonElement;
+    expect(undoBtn.disabled).toBe(false);
+    fireEvent.click(undoBtn);
+    const afterUndo = onChangeLayout.mock.calls.at(-1)![0];
+    // Undo restores layout as of before the nudge (packed offsets).
+    expect(
+      afterUndo.placements.find((p: { itemId: string }) => p.itemId === 'it-a')!
+        .offsetMm,
+    ).toBe(0);
+  });
+
   it('collapses list to rail with unplaced badge', () => {
     const projectWithWalls: Project = {
       ...project,

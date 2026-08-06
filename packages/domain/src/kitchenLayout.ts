@@ -559,6 +559,93 @@ export function offsetMmFromPlanPoint(
   return Math.max(0, Math.min(maxOff, Math.round(offset)));
 }
 
+export type WallOffsetPeer = {
+  readonly offsetMm: number;
+  readonly widthMm: number;
+};
+
+/**
+ * Snap an offset to wall ends or peer cabinet edges (same wall).
+ * Prefer gapMm between units when snapping to a peer.
+ */
+export function snapOffsetOnWall(params: {
+  readonly offsetMm: number;
+  readonly moduleWidthMm: number;
+  readonly wallLengthMm: number;
+  readonly peers?: readonly WallOffsetPeer[];
+  readonly thresholdMm?: number;
+  readonly gapMm?: number;
+}): number {
+  const width = Math.max(1, Math.round(params.moduleWidthMm));
+  const wallLen = Math.max(1, Math.round(params.wallLengthMm));
+  const threshold = Math.max(0, params.thresholdMm ?? 15);
+  const gap = Math.max(0, params.gapMm ?? 20);
+  const maxOff = Math.max(0, wallLen - width);
+  let offset = Math.max(0, Math.min(maxOff, Math.round(params.offsetMm)));
+
+  const targets: number[] = [0, maxOff];
+  for (const peer of params.peers ?? []) {
+    const pOff = Math.round(peer.offsetMm);
+    const pW = Math.max(1, Math.round(peer.widthMm));
+    // Align our left to peer right + gap
+    targets.push(pOff + pW + gap);
+    // Align our right to peer left - gap  → left = peerLeft - gap - width
+    targets.push(pOff - gap - width);
+    // Flush align left edges / right edges
+    targets.push(pOff);
+    targets.push(pOff + pW - width);
+  }
+
+  let best = offset;
+  let bestDist = threshold + 1;
+  for (const t of targets) {
+    const clamped = Math.max(0, Math.min(maxOff, t));
+    const d = Math.abs(clamped - offset);
+    if (d <= threshold && d < bestDist) {
+      bestDist = d;
+      best = clamped;
+    }
+  }
+  return best;
+}
+
+/**
+ * Re-pack all placements on a wall by current order (offset), with gap.
+ * Elevations are preserved; only offsetMm changes.
+ */
+export function repackPlacementsOnWall(
+  layout: ProjectKitchenLayout,
+  wallId: string,
+  footprints: readonly KitchenFootprint[],
+  gapMm: number = 20,
+): ProjectKitchenLayout {
+  const onWall = layout.placements
+    .filter((p) => p.wallId === wallId)
+    .sort((a, b) => a.offsetMm - b.offsetMm);
+  if (onWall.length === 0) return layout;
+
+  const fpByKey = new Map(
+    footprints.map((f) => [`${f.itemId}#${f.instanceIndex}`, f]),
+  );
+  const newOffset = new Map<string, number>();
+  let cursor = 0;
+  for (const p of onWall) {
+    const key = `${p.itemId}#${p.instanceIndex}`;
+    newOffset.set(key, cursor);
+    const w = fpByKey.get(key)?.width ?? 600;
+    cursor += w + gapMm;
+  }
+
+  return {
+    ...layout,
+    placements: layout.placements.map((p) => {
+      const key = `${p.itemId}#${p.instanceIndex}`;
+      const next = newOffset.get(key);
+      return next === undefined ? p : { ...p, offsetMm: next };
+    }),
+  };
+}
+
 /** Suggest next offset on a wall (pack after last placement). */
 export function nextOffsetOnWall(
   layout: ProjectKitchenLayout,

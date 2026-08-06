@@ -9,6 +9,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -29,10 +30,12 @@ import {
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   pruneKitchenLayout,
+  repackPlacementsOnWall,
   reorderPlacementOnWall,
   resolveBaseClearanceMm,
   resolveModuleMeasurePreset,
   resolveWallFrames,
+  snapOffsetOnWall,
 } from '@muebles/domain';
 import {
   ArrowDown,
@@ -47,8 +50,10 @@ import {
   Move3d,
   PanelLeftClose,
   PanelLeftOpen,
+  Redo2,
   RefreshCw,
   Scan,
+  Undo2,
   X,
 } from 'lucide-react';
 import {
@@ -174,10 +179,21 @@ export function ProjectSpatialStudio({
   } | null>(null);
   const [listCollapsed, setListCollapsed] = useState(false);
   const [listFilter, setListFilter] = useState<ListFilter>('all');
+  const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
+  const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
+  const wallDragSession = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setUseR3f(canUseWebGL());
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      setUndoStack([]);
+      setRedoStack([]);
+      wallDragSession.current = false;
+    }
   }, [open]);
 
   useEffect(() => {
@@ -376,7 +392,31 @@ export function ProjectSpatialStudio({
     setCameraView({ type, ts: Date.now() });
   };
 
-  const commit = (next: ProjectKitchenLayout) => {
+  const commit = (
+    next: ProjectKitchenLayout,
+    opts?: { readonly history?: 'push' | 'none' },
+  ) => {
+    const history = opts?.history ?? 'push';
+    if (history === 'push' && !wallDragSession.current) {
+      setUndoStack((s) => [...s.slice(-29), layout]);
+      setRedoStack([]);
+    }
+    onChangeLayout(pruneKitchenLayout(next, project.items));
+  };
+
+  const undoPlan = () => {
+    if (!canEdit || undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1]!;
+    setUndoStack((s) => s.slice(0, -1));
+    setRedoStack((s) => [...s, layout]);
+    onChangeLayout(pruneKitchenLayout(prev, project.items));
+  };
+
+  const redoPlan = () => {
+    if (!canEdit || redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1]!;
+    setRedoStack((s) => s.slice(0, -1));
+    setUndoStack((s) => [...s, layout]);
     onChangeLayout(pruneKitchenLayout(next, project.items));
   };
 
@@ -459,24 +499,12 @@ export function ProjectSpatialStudio({
 
   const nudgeOffset = (delta: number) => {
     if (!canEdit || !selectedPlacement) return;
-    const wall = layout.walls.find((w) => w.id === selectedPlacement.wallId);
-    const w = moduleWidth(
-      project.items.find((i) => i.id === selectedPlacement.itemId) ?? {
-        id: selectedPlacement.itemId,
-        moduleId: '',
-        quantity: 1,
-        optionChoices: {},
-      },
-      modules,
+    applyOffsetOnWall(
+      selectedPlacement.itemId,
+      selectedPlacement.instanceIndex,
+      selectedPlacement.offsetMm + delta,
+      { history: 'push', snap: true },
     );
-    const maxOff = Math.max(0, (wall?.lengthMm ?? 3000) - w);
-    const next = Math.max(
-      0,
-      Math.min(maxOff, Math.round(selectedPlacement.offsetMm + delta)),
-    );
-    patchPlacement(selectedPlacement.itemId, selectedPlacement.instanceIndex, {
-      offsetMm: next,
-    });
   };
 
   const moveAlongWall = (dir: -1 | 1) => {
@@ -516,13 +544,138 @@ export function ProjectSpatialStudio({
     heightMm: 2400,
   }));
 
+  const applyOffsetOnWall = (
+    itemId: string,
+    instanceIndex: number,
+    rawOffset: number,
+    opts?: { readonly history?: 'push' | 'none'; readonly snap?: boolean },
+  ) => {
+    const placement = layout.placements.find(
+      (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+    );
+    if (!placement) return;
+    const wall = layout.walls.find((w) => w.id === placement.wallId);
+    const width = moduleWidth(
+      project.items.find((i) => i.id === itemId) ?? {
+        id: itemId,
+        moduleId: '',
+        quantity: 1,
+        optionChoices: {},
+      },
+      modules,
+    );
+    const peers = layout.placements
+      .filter(
+        (p) =>
+          p.wallId === placement.wallId &&
+          !(p.itemId === itemId && p.instanceIndex === instanceIndex),
+      )
+      .map((p) => ({
+        offsetMm: p.offsetMm,
+        widthMm: moduleWidth(
+          project.items.find((i) => i.id === p.itemId) ?? {
+            id: p.itemId,
+            moduleId: '',
+            quantity: 1,
+            optionChoices: {},
+          },
+          modules,
+        ),
+      }));
+    const offsetMm =
+      opts?.snap === false
+        ? Math.max(
+            0,
+            Math.min(
+              Math.max(0, (wall?.lengthMm ?? 3000) - width),
+              Math.round(rawOffset),
+            ),
+          )
+        : snapOffsetOnWall({
+            offsetMm: rawOffset,
+            moduleWidthMm: width,
+            wallLengthMm: wall?.lengthMm ?? 3000,
+            peers,
+            thresholdMm: 18,
+            gapMm: 20,
+          });
+    commit(
+      {
+        ...layout,
+        placements: layout.placements.map((p) =>
+          p.itemId === itemId && p.instanceIndex === instanceIndex
+            ? { ...p, offsetMm }
+            : p,
+        ),
+      },
+      { history: opts?.history ?? 'push' },
+    );
+  };
+
+  const handleModuleWallDragStart = (_moduleKey: string) => {
+    if (!canEdit || wallDragSession.current) return;
+    wallDragSession.current = true;
+    setUndoStack((s) => [...s.slice(-29), layout]);
+    setRedoStack([]);
+  };
+
   const handleModuleWallOffset = (moduleKey: string, offsetMm: number) => {
     if (!canEdit) return;
     const hash = moduleKey.lastIndexOf('#');
     if (hash < 0) return;
     const itemId = moduleKey.slice(0, hash);
     const instanceIndex = Number(moduleKey.slice(hash + 1)) || 0;
-    patchPlacement(itemId, instanceIndex, { offsetMm });
+    // Live drag: no per-frame history; light snap while moving.
+    applyOffsetOnWall(itemId, instanceIndex, offsetMm, {
+      history: 'none',
+      snap: true,
+    });
+  };
+
+  const handleModuleWallDragEnd = (moduleKey: string) => {
+    wallDragSession.current = false;
+    if (!canEdit) return;
+    const hash = moduleKey.lastIndexOf('#');
+    if (hash < 0) return;
+    const itemId = moduleKey.slice(0, hash);
+    const instanceIndex = Number(moduleKey.slice(hash + 1)) || 0;
+    const placement = layout.placements.find(
+      (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+    );
+    if (!placement) return;
+    // Final snap without stacking another undo (session already recorded).
+    applyOffsetOnWall(itemId, instanceIndex, placement.offsetMm, {
+      history: 'none',
+      snap: true,
+    });
+  };
+
+  const repackSelectedWall = () => {
+    if (!canEdit || !selectedPlacement) return;
+    commit(
+      repackPlacementsOnWall(
+        layout,
+        selectedPlacement.wallId,
+        footprints,
+        20,
+      ),
+    );
+  };
+
+  const moveSelectedToWall = (wallId: string) => {
+    if (!canEdit || !selectedPlacement) return;
+    if (selectedPlacement.wallId === wallId) return;
+    const offset = nextOffsetOnWall(layout, wallId, footprints, 20);
+    commit({
+      ...layout,
+      placements: layout.placements.map((p) =>
+        p.itemId === selectedPlacement.itemId &&
+        p.instanceIndex === selectedPlacement.instanceIndex
+          ? { ...p, wallId, offsetMm: offset }
+          : p,
+      ),
+    });
+    setTargetWallId(wallId);
   };
 
   return (
@@ -1004,6 +1157,28 @@ export function ProjectSpatialStudio({
                 <RefreshCw size={14} strokeWidth={1.5} aria-hidden />
               </button>
             </div>
+            <div className="spatial-studio__toolbar-group" role="group" aria-label="Historial del plano">
+              <button
+                type="button"
+                className="btn btn--small"
+                disabled={!canEdit || undoStack.length === 0}
+                onClick={undoPlan}
+                title="Deshacer plano"
+                data-testid="spatial-studio-undo"
+              >
+                <Undo2 size={14} strokeWidth={1.5} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                disabled={!canEdit || redoStack.length === 0}
+                onClick={redoPlan}
+                title="Rehacer plano"
+                data-testid="spatial-studio-redo"
+              >
+                <Redo2 size={14} strokeWidth={1.5} aria-hidden />
+              </button>
+            </div>
             <div className="spatial-studio__toolbar-group" role="group" aria-label="Visualización">
               <button
                 type="button"
@@ -1089,6 +1264,8 @@ export function ProjectSpatialStudio({
                 wallDragEnabled={canEdit}
                 wallDragByKey={wallDragByKey}
                 onModuleWallOffset={handleModuleWallOffset}
+                onModuleWallDragStart={handleModuleWallDragStart}
+                onModuleWallDragEnd={handleModuleWallDragEnd}
                 selectedWallId={activeWallId}
                 onSelectWall={(wallId) => {
                   setTargetWallId(wallId);
@@ -1458,15 +1635,44 @@ export function ProjectSpatialStudio({
                           onChange={(e) => {
                             const v = Number(e.target.value);
                             if (!Number.isFinite(v)) return;
-                            patchPlacement(
+                            applyOffsetOnWall(
                               selectedPlacement.itemId,
                               selectedPlacement.instanceIndex,
-                              { offsetMm: Math.max(0, Math.round(v)) },
+                              v,
+                              { history: 'push', snap: true },
                             );
                           }}
                           data-testid="spatial-studio-offset"
                         />
                       </label>
+
+                      <label className="spatial-studio__field">
+                        <span>Muro</span>
+                        <select
+                          value={selectedPlacement.wallId}
+                          disabled={!canEdit}
+                          onChange={(e) => moveSelectedToWall(e.target.value)}
+                          data-testid="spatial-studio-move-wall"
+                        >
+                          {layout.walls.map((w, i) => (
+                            <option key={w.id} value={w.id}>
+                              {w.name?.trim() || `Muro ${i + 1}`}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={repackSelectedWall}
+                          title="Reempaquetar todos los muebles del muro con gap 20 mm"
+                          data-testid="spatial-studio-repack-wall"
+                        >
+                          Compactar muro
+                        </button>
+                      ) : null}
 
                       <div
                         className="spatial-studio__nudge"

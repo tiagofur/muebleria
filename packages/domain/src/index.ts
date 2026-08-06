@@ -225,11 +225,14 @@ export {
   placementAabb,
   reorderPlacementOnWall,
   offsetMmFromPlanPoint,
+  snapOffsetOnWall,
+  repackPlacementsOnWall,
   resolveBaseClearanceMm,
   layoutKitchenPlacements,
   nextOffsetOnWall,
   createDefaultLWalls,
 } from './kitchenLayout';
+export type { WallOffsetPeer } from './kitchenLayout';
 export type {
   KitchenFootprint,
   ResolvedWallFrame,

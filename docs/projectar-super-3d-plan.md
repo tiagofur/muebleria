@@ -266,7 +266,7 @@ Recomendación: **A** (más Promob “escenario grande”).
 | 0 Viewport hero | ✅ done (`fillViewport` + CSS studio; canvas no longer 380px in Proyectar) |
 | 1 Tooling escena | ✅ done (toolbar cámara/contornos/X-ray + planta mini toggle) |
 | 2 Lista / colocación | ✅ done (filtros, colapsable, doble click, muro activo 3D, código dominante) |
-| 3 Manipulación | ⏳ pending |
+| 3 Manipulación | ✅ done (snap wall drag, compactar muro, move wall, undo/redo plano) |
 | 4 Realismo obra | ⏳ pending |
 | 5 Puente cotización | ⏳ pending |
 | 6 Icebox | 🧊 |
