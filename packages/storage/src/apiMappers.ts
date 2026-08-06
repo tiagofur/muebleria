@@ -712,6 +712,10 @@ function kitchenLayoutToApi(
     })),
     base_clearance_mm:
       layout.baseClearanceMm === undefined ? null : layout.baseClearanceMm,
+    wall_cabinet_z_mm:
+      layout.wallCabinetZMm === undefined ? null : layout.wallCabinetZMm,
+    show_countertop:
+      layout.showCountertop === undefined ? null : layout.showCountertop,
   };
 }
 
@@ -764,10 +768,22 @@ function kitchenLayoutFromApi(
     layoutBc === null || layoutBc === undefined || layoutBc === ''
       ? undefined
       : Math.max(0, Math.round(num(layoutBc)));
+  const wallZRaw = row.wall_cabinet_z_mm ?? row.wallCabinetZMm;
+  const wallCabinetZMm =
+    wallZRaw === null || wallZRaw === undefined || wallZRaw === ''
+      ? undefined
+      : Math.max(0, Math.round(num(wallZRaw)));
+  const ctRaw = row.show_countertop ?? row.showCountertop;
+  const showCountertop =
+    ctRaw === null || ctRaw === undefined || ctRaw === ''
+      ? undefined
+      : Boolean(ctRaw);
   return {
     walls,
     placements,
     ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+    ...(wallCabinetZMm === undefined ? {} : { wallCabinetZMm }),
+    ...(showCountertop === undefined ? {} : { showCountertop }),
   };
 }
 

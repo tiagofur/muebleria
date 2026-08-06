@@ -11,7 +11,8 @@
 - **Parte 1 Tooling escena ✅:** toolbar flotante (vistas, contornos, rayos X, plano mini 2D, mode pill)
 - **Parte 2 Lista/colocación ✅:** filtros, rail colapsable, doble click colocar, click muro 3D, código dominante
 - **Parte 3 Manipulación ✅:** snapOffsetOnWall, repack, drag history, undo/redo, mover de muro
-- **Siguiente:** Parte 4 Realismo obra
+- **Parte 4 Realismo obra ✅:** zoclo reentrante, mesada visual, wallCabinetZMm, grilla 500 mm
+- **Siguiente:** Parte 5 Puente cotización
 
 ## Proyectar — place & move 3D (Fase A)
 

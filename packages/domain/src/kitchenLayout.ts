@@ -26,6 +26,9 @@ export const DEFAULT_BASE_CLEARANCE_MM = 100;
 /** Suggested zoclo/patas heights for UI chips (mm). */
 export const BASE_CLEARANCE_PRESETS_MM = [0, 80, 100, 120, 150] as const;
 
+/** Suggested wall-cabinet install heights (bottom of unit, mm). */
+export const WALL_CABINET_Z_PRESETS_MM = [1300, 1400, 1450, 1500, 1600] as const;
+
 export type KitchenFootprint = {
   readonly itemId: string;
   readonly instanceIndex: number;
@@ -67,6 +70,7 @@ export type KitchenPlacedModule = {
    * 0 for wall-hung or when no plinth space.
    */
   readonly baseClearanceMm: number;
+  readonly elevation: PlacementElevation;
 };
 
 export type KitchenLayoutResult = {
@@ -210,6 +214,12 @@ export function pruneKitchenLayout(
     ...(layout.baseClearanceMm === undefined
       ? {}
       : { baseClearanceMm: layout.baseClearanceMm }),
+    ...(layout.wallCabinetZMm === undefined
+      ? {}
+      : { wallCabinetZMm: layout.wallCabinetZMm }),
+    ...(layout.showCountertop === undefined
+      ? {}
+      : { showCountertop: layout.showCountertop }),
   };
 }
 
@@ -365,6 +375,26 @@ export function resolveBaseClearanceMm(
   return DEFAULT_BASE_CLEARANCE_MM;
 }
 
+/** Bottom Z (mm) for wall-hung units: layout override → options → default 1400. */
+export function resolveWallCabinetZMm(
+  layout: ProjectKitchenLayout | undefined,
+  options?: { readonly wallCabinetZMm?: number },
+): number {
+  if (
+    layout?.wallCabinetZMm !== undefined &&
+    Number.isFinite(layout.wallCabinetZMm)
+  ) {
+    return Math.max(0, Math.round(layout.wallCabinetZMm));
+  }
+  if (
+    options?.wallCabinetZMm !== undefined &&
+    Number.isFinite(options.wallCabinetZMm)
+  ) {
+    return Math.max(0, Math.round(options.wallCabinetZMm));
+  }
+  return DEFAULT_WALL_CABINET_Z_MM;
+}
+
 /**
  * Place modules using kitchen plan. Axis-aligned cabinets (v1):
  * - angle ~0°: along +X at wall originY, yaw 0
@@ -379,7 +409,7 @@ export function layoutKitchenPlacements(
     readonly baseClearanceMm?: number;
   },
 ): KitchenLayoutResult {
-  const wallZ = options?.wallCabinetZMm ?? DEFAULT_WALL_CABINET_Z_MM;
+  const wallZ = resolveWallCabinetZMm(layout, options);
   const walls = resolveWallFrames(layout.walls);
   const wallById = new Map(walls.map((w) => [w.id, w]));
   const fpByKey = new Map(
@@ -431,6 +461,7 @@ export function layoutKitchenPlacements(
       originZ,
       yawDeg,
       baseClearanceMm,
+      elevation: elev,
     });
 
     const box = placementAabb(originX, originY, fp.width, fp.depth, yawDeg);

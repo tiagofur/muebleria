@@ -25,6 +25,7 @@ import {
   BASE_CLEARANCE_PRESETS_MM,
   createDefaultLWalls,
   DEFAULT_BASE_CLEARANCE_MM,
+  DEFAULT_WALL_CABINET_Z_MM,
   defaultMeasurePresetId,
   emptyKitchenLayout,
   kitchenLayoutWarnings,
@@ -34,8 +35,10 @@ import {
   reorderPlacementOnWall,
   resolveBaseClearanceMm,
   resolveModuleMeasurePreset,
+  resolveWallCabinetZMm,
   resolveWallFrames,
   snapOffsetOnWall,
+  WALL_CABINET_Z_PRESETS_MM,
 } from '@muebles/domain';
 import {
   ArrowDown,
@@ -181,6 +184,7 @@ export function ProjectSpatialStudio({
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
   const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
+  const [showFloorGrid, setShowFloorGrid] = useState(true);
   const wallDragSession = useRef(false);
 
   useEffect(() => {
@@ -532,6 +536,7 @@ export function ProjectSpatialStudio({
     originZ: m.originZ,
     yawDeg: m.yawDeg,
     baseClearanceMm: m.baseClearanceMm,
+    showCountertop: m.showCountertop,
     showOuterGhost: true,
   }));
 
@@ -930,6 +935,83 @@ export function ProjectSpatialStudio({
                     data-testid="spatial-studio-layout-plinth-custom"
                   />
                 </label>
+
+                <span className="spatial-studio__field-label">
+                  Alacenas (altura de instalación)
+                </span>
+                <p className="spatial-studio__hint">
+                  Base inferior de los altos:{' '}
+                  {resolveWallCabinetZMm(layout)} mm del piso.
+                </p>
+                <div
+                  className="spatial-studio__preset-grid"
+                  role="listbox"
+                  aria-label="Altura de alacenas"
+                >
+                  {WALL_CABINET_Z_PRESETS_MM.map((mm) => {
+                    const active = resolveWallCabinetZMm(layout) === mm;
+                    return (
+                      <button
+                        key={mm}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        disabled={!canEdit}
+                        className={
+                          active
+                            ? 'spatial-studio__preset spatial-studio__preset--active'
+                            : 'spatial-studio__preset'
+                        }
+                        onClick={() =>
+                          commit({ ...layout, wallCabinetZMm: mm })
+                        }
+                        data-testid={`spatial-studio-wall-z-${mm}`}
+                      >
+                        <span className="spatial-studio__preset-name">
+                          {mm}
+                        </span>
+                        <span className="spatial-studio__preset-dims">mm</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <label className="spatial-studio__field">
+                  <span>Personalizado altos (mm)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    disabled={!canEdit}
+                    value={
+                      layout.wallCabinetZMm ?? DEFAULT_WALL_CABINET_Z_MM
+                    }
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v)) return;
+                      commit({
+                        ...layout,
+                        wallCabinetZMm: Math.max(0, Math.round(v)),
+                      });
+                    }}
+                    data-testid="spatial-studio-wall-z-custom"
+                  />
+                </label>
+
+                <label className="spatial-studio__field spatial-studio__check-row">
+                  <input
+                    type="checkbox"
+                    checked={layout.showCountertop !== false}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        showCountertop: e.target.checked,
+                      })
+                    }
+                    data-testid="spatial-studio-toggle-countertop"
+                  />
+                  <span>Mesada visual sobre bajos</span>
+                </label>
               </div>
             ) : null}
           </section>
@@ -1227,6 +1309,20 @@ export function ProjectSpatialStudio({
               >
                 <MapIcon size={14} strokeWidth={1.5} aria-hidden /> Plano
               </button>
+              <button
+                type="button"
+                className={
+                  showFloorGrid
+                    ? 'btn btn--small spatial-studio__tool--on'
+                    : 'btn btn--small'
+                }
+                aria-pressed={showFloorGrid}
+                onClick={() => setShowFloorGrid((v) => !v)}
+                title="Grilla de piso (500 mm)"
+                data-testid="spatial-studio-toggle-grid"
+              >
+                Grilla
+              </button>
             </div>
           </div>
 
@@ -1256,6 +1352,7 @@ export function ProjectSpatialStudio({
                 surfaceMode={DEFAULT_MATERIAL_SURFACE_MODE}
                 showOutlines={showOutlines}
                 showWireframe={showWireframe}
+                showFloorGrid={showFloorGrid}
                 selectedModuleKey={selectedKey}
                 onSelectModule={(key) => {
                   setSelectedKey(key);

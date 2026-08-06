@@ -411,6 +411,16 @@ export interface ProjectKitchenLayout {
    * Typical workshop values: 80–150. Omit → domain default (100).
    */
   readonly baseClearanceMm?: number;
+  /**
+   * Bottom height of wall-hung units (alacenas), mm from floor.
+   * Typical 1400–1500. Omit → domain default (1400).
+   */
+  readonly wallCabinetZMm?: number;
+  /**
+   * When true, 3D shows a simple visual countertop on floor cabinets.
+   * Presentation only — not BOM. Omit → true (obra look).
+   */
+  readonly showCountertop?: boolean;
 }
 
 /** Simple installation checklist item (#139). */

@@ -357,6 +357,37 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements[0]!.elevation).toBe('floor');
   });
 
+  it('toggles countertop and sets wall cabinet install height', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+        showCountertop: true,
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-wall-z-1500'));
+    expect(onChangeLayout).toHaveBeenCalledWith(
+      expect.objectContaining({ wallCabinetZMm: 1500 }),
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-toggle-countertop'));
+    expect(onChangeLayout).toHaveBeenCalledWith(
+      expect.objectContaining({ showCountertop: false }),
+    );
+  });
+
   it('sets layout base clearance (zoclo) for floor cabinets', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {

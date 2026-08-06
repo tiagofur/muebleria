@@ -42,6 +42,9 @@ export type ProjectModule3DInstance = {
   readonly yawDeg: number;
   /** Plinth/legs clearance under floor units (mm); 0 if none / wall-hung. */
   readonly baseClearanceMm: number;
+  readonly elevation: 'floor' | 'wall';
+  /** Visual countertop slab (floor units only, presentation). */
+  readonly showCountertop: boolean;
   readonly error: string | null;
 };
 
@@ -261,6 +264,7 @@ export function resolveProject3DPreview(
     const layout = layoutKitchenPlacements(kitchen, fps);
     walls = layout.walls;
     layoutWarnings.push(...layout.warnings);
+    const showCountertop = kitchen.showCountertop !== false;
     const placedModules: ProjectModule3DInstance[] = layout.placements.map(
       (place) => {
         const row = byItemId.get(place.itemId);
@@ -278,6 +282,9 @@ export function resolveProject3DPreview(
           originZ: place.originZ,
           yawDeg: place.yawDeg,
           baseClearanceMm: place.baseClearanceMm,
+          elevation: place.elevation,
+          showCountertop:
+            showCountertop && place.elevation === 'floor',
           error: row?.error ?? null,
         };
       },
@@ -353,6 +360,8 @@ export function resolveProject3DPreview(
           originZ: place.originZ,
           yawDeg: 0,
           baseClearanceMm: 0,
+          elevation: 'floor' as const,
+          showCountertop: false,
           error: row.error,
         };
       });
@@ -393,6 +402,8 @@ export function resolveProject3DPreview(
         originZ: place.originZ,
         yawDeg: 0,
         baseClearanceMm: 0,
+        elevation: 'floor' as const,
+        showCountertop: false,
         error: row.error,
       };
     });

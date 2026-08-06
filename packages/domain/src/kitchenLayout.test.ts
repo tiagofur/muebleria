@@ -14,6 +14,7 @@ import {
   repackPlacementsOnWall,
   DEFAULT_BASE_CLEARANCE_MM,
   resolveBaseClearanceMm,
+  resolveWallCabinetZMm,
 } from './kitchenLayout';
 import type { ProjectItem, ProjectKitchenLayout } from './types';
 
@@ -162,6 +163,37 @@ describe('kitchenLayout', () => {
     });
     // peer ends at 600; + gap 20 → 620
     expect(snapped).toBe(620);
+  });
+
+  it('uses layout wallCabinetZMm for wall-hung units', () => {
+    const layout: ProjectKitchenLayout = {
+      wallCabinetZMm: 1500,
+      walls: [
+        {
+          id: 'w1',
+          lengthMm: 2000,
+          angleDeg: 0,
+          originXMm: 0,
+          originYMm: 0,
+        },
+      ],
+      placements: [
+        {
+          itemId: 'i1',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'wall',
+        },
+      ],
+    };
+    const fps = [
+      { itemId: 'i1', instanceIndex: 0, width: 600, height: 720, depth: 350 },
+    ];
+    const result = layoutKitchenPlacements(layout, fps);
+    expect(resolveWallCabinetZMm(layout)).toBe(1500);
+    expect(result.placements[0]!.originZ).toBe(1500);
+    expect(result.placements[0]!.elevation).toBe('wall');
   });
 
   it('does not snap when outside threshold', () => {

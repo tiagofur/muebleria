@@ -50,9 +50,11 @@ export type FurnitureSceneModule = {
   readonly yawDeg?: number;
   /**
    * Plinth/legs height under the cabinet (mm). Group originZ already sits on
-   * top of this clearance; a simple toe-kick box is drawn below when > 0.
+   * top of this clearance; a recessed toe-kick is drawn below when > 0.
    */
   readonly baseClearanceMm?: number;
+  /** Visual countertop slab on top of floor cabinets (presentation). */
+  readonly showCountertop?: boolean;
   readonly showOuterGhost?: boolean;
 };
 
@@ -145,6 +147,8 @@ export type FurnitureScene3DProps = {
   readonly fillViewport?: boolean;
   /** When false, hide orbit/help hint (studio toolbar replaces it). Default true. */
   readonly showHint?: boolean;
+  /** Subtle floor grid in mm (obra look). */
+  readonly showFloorGrid?: boolean;
 };
 
 function BoardMesh({
@@ -264,7 +268,10 @@ function OuterGhost({
   );
 }
 
-/** Simple toe-kick / legs volume under a floor cabinet (local space). */
+/**
+ * Recessed toe-kick under a floor cabinet (local space).
+ * Front face (local Z=0) is open by ~50 mm; mass sits toward the back.
+ */
 function PlinthMesh({
   width,
   depth,
@@ -274,12 +281,16 @@ function PlinthMesh({
   readonly depth: number;
   readonly height: number;
 }): ReactNode {
-  const W = Math.max(width * 0.92, 1);
+  const recess = Math.min(50, Math.max(20, depth * 0.1));
+  const W = Math.max(width * 0.98, 1);
   const H = Math.max(height, 1);
-  const D = Math.max(depth * 0.88, 1);
+  const D = Math.max(depth - recess, 1);
   // Group origin is already at clearance height; plinth sits below local Y=0.
   return (
-    <mesh position={[width / 2, -H / 2, depth / 2]} userData={{ plinth: true }}>
+    <mesh
+      position={[width / 2, -H / 2, recess + D / 2]}
+      userData={{ plinth: true }}
+    >
       <boxGeometry args={[W, H, D]} />
       <meshStandardMaterial
         color="#2c2f34"
@@ -287,6 +298,53 @@ function PlinthMesh({
         metalness={0.02}
       />
     </mesh>
+  );
+}
+
+/** Simple countertop slab (presentation only). */
+function CountertopMesh({
+  width,
+  height,
+  depth,
+}: {
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}): ReactNode {
+  const thickness = 38;
+  const overhangFront = 25;
+  const W = Math.max(width + 8, 1);
+  const D = Math.max(depth + overhangFront, 1);
+  return (
+    <mesh
+      position={[width / 2, height + thickness / 2, D / 2 - overhangFront / 2]}
+      userData={{ countertop: true }}
+    >
+      <boxGeometry args={[W, thickness, D]} />
+      <meshStandardMaterial
+        color="#c4c0b8"
+        roughness={0.45}
+        metalness={0.08}
+      />
+    </mesh>
+  );
+}
+
+function FloorGrid({
+  totalWidth,
+  totalDepth,
+}: {
+  readonly totalWidth: number;
+  readonly totalDepth: number;
+}): ReactNode {
+  const cell = 500; // 50 cm grid
+  const w = Math.max(totalWidth * 1.5, cell * 4);
+  const d = Math.max(totalDepth * 1.5, cell * 4);
+  return (
+    <gridHelper
+      args={[Math.max(w, d), Math.max(4, Math.round(Math.max(w, d) / cell)), '#4a5568', '#2d3748']}
+      position={[totalWidth / 2, 1, totalDepth / 2]}
+    />
   );
 }
 
@@ -530,6 +588,13 @@ function ModuleGroup({
           height={mod.baseClearanceMm!}
         />
       ) : null}
+      {mod.showCountertop ? (
+        <CountertopMesh
+          width={mod.width}
+          height={mod.height}
+          depth={mod.depth}
+        />
+      ) : null}
       {visuals.map((v) => {
         const selected = selectedPartId === v.id || Boolean(moduleSelected);
         const dimmed =
@@ -636,6 +701,7 @@ function SceneContent({
   wallDragEnabled,
   selectedWallId,
   onSelectWall,
+  showFloorGrid,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -667,6 +733,7 @@ function SceneContent({
   readonly wallDragEnabled?: boolean;
   readonly selectedWallId?: string | null;
   readonly onSelectWall?: (wallId: string) => void;
+  readonly showFloorGrid?: boolean;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const framing = useMemo(
@@ -715,6 +782,9 @@ function SceneContent({
                 metalness={0}
               />
             </mesh>
+          ) : null}
+          {showFloor && showFloorGrid ? (
+            <FloorGrid totalWidth={totalWidth} totalDepth={totalDepth} />
           ) : null}
           {walls.map((w) => (
             <WallMesh
@@ -833,6 +903,7 @@ export function FurnitureScene3D({
   showHint = true,
   selectedWallId = null,
   onSelectWall,
+  showFloorGrid = false,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -1015,6 +1086,7 @@ export function FurnitureScene3D({
               wallDragEnabled={wallDragEnabled && !measurementMode}
               selectedWallId={selectedWallId}
               onSelectWall={onSelectWall}
+              showFloorGrid={showFloorGrid}
             />
           </Suspense>          </Canvas>
         </Suspense>
