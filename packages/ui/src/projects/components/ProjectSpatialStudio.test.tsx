@@ -2,10 +2,14 @@
  * @vitest-environment jsdom
  */
 
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import type { Module, Project } from '@muebles/domain';
 import { ProjectSpatialStudio } from './ProjectSpatialStudio';
+
+afterEach(() => {
+  cleanup();
+});
 
 const modA: Module = {
   id: 'm-a',
@@ -18,6 +22,7 @@ const modA: Module = {
   furnitureType: 'inferior',
   presets: [
     { id: 'p600', name: '600', width: 600, height: 720, depth: 560 },
+    { id: 'p800', name: '800', width: 800, height: 720, depth: 560 },
   ],
 };
 
@@ -114,5 +119,55 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements).toHaveLength(1);
     expect(next.placements[0]!.itemId).toBe('it-a');
     expect(next.placements[0]!.elevation).toBe('floor');
+  });
+
+  it('changes measure preset from properties panel (Promob-like)', () => {
+    const onUpdateItem = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-a',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p600',
+        },
+      ],
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    expect(screen.getByTestId('spatial-studio-dims').textContent).toMatch(
+      /600/,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-preset-p800'));
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', measurePresetId: 'p800' }),
+    );
   });
 });

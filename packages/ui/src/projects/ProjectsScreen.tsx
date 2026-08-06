@@ -980,6 +980,11 @@ export function ProjectsScreen({
           onChangeLayout={(layout) =>
             onUpdateKitchenLayout(selectedProject.id, layout)
           }
+          onUpdateItem={
+            canMutate
+              ? (item) => onUpdateItem(selectedProject.id, item)
+              : undefined
+          }
         />
       ) : null}
 

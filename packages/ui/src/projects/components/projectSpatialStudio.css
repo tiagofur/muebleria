@@ -187,6 +187,153 @@
   background: var(--surface-input);
 }
 
+.spatial-studio__item-row--active {
+  border-color: var(--accent-500, hsl(210 80% 50%));
+  box-shadow: var(--shadow-focus);
+}
+
+.spatial-studio__item-pick {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.spatial-studio__identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.spatial-studio__dims-hero {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em;
+}
+
+.spatial-studio__dims-sep {
+  color: var(--text-muted);
+  font-weight: var(--weight-normal);
+}
+
+.spatial-studio__dims-unit {
+  margin-left: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  color: var(--text-muted);
+}
+
+.spatial-studio__tabs {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+}
+
+.spatial-studio__tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.spatial-studio__tab--active {
+  background: var(--surface-card);
+  color: var(--text-brand);
+  box-shadow: var(--shadow-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.spatial-studio__tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.spatial-studio__field-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.spatial-studio__preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.spatial-studio__preset {
+  appearance: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: var(--transition-colors);
+}
+
+.spatial-studio__preset:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.spatial-studio__preset--active {
+  border-color: var(--accent-500, hsl(210 80% 50%));
+  background: var(--surface-card);
+  box-shadow: var(--shadow-focus);
+}
+
+.spatial-studio__preset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spatial-studio__preset-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.spatial-studio__preset-dims {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.spatial-studio__finishes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .spatial-studio__item-label {
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);

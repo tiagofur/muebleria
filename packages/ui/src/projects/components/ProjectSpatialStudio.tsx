@@ -1,6 +1,7 @@
 /**
  * Project spatial studio (“Proyectar”) — place & move quote units on walls in 3D.
- * Phase A: walls + place/select/move offset/elevation. Measures/pricing later.
+ * Phase A: walls + place/select/move. Phase B: Promob-like properties (measure
+ * presets + finishes) editing the same ProjectItem as the quote.
  */
 
 import {
@@ -15,16 +16,19 @@ import type {
   Module,
   PlacementElevation,
   Project,
+  ProjectItem,
   ProjectItemPlacement,
   ProjectKitchenLayout,
 } from '@muebles/domain';
 import {
   createDefaultLWalls,
+  defaultMeasurePresetId,
   emptyKitchenLayout,
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   pruneKitchenLayout,
   reorderPlacementOnWall,
+  resolveModuleMeasurePreset,
 } from '@muebles/domain';
 import {
   ArrowDown,
@@ -44,6 +48,12 @@ import {
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
 import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
+import {
+  groupsForModuleItem,
+  optionLabelForId,
+  optionsForGroup,
+  setItemOptionChoice,
+} from '../projectHelpers';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -58,8 +68,12 @@ export type ProjectSpatialStudioProps = {
   readonly canEdit: boolean;
   readonly onClose: () => void;
   readonly onChangeLayout: (layout: ProjectKitchenLayout) => void;
+  /** Update a quote line (measures / options) — same as list editor. */
+  readonly onUpdateItem?: (item: ProjectItem) => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
 };
+
+type InspectorTab = 'props' | 'position';
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -76,6 +90,38 @@ function defaultElevationForModule(
   return 'floor';
 }
 
+function resolveItemDims(
+  item: ProjectItem,
+  module: Module | undefined,
+): { width: number; height: number; depth: number } {
+  if (!module) return { width: 600, height: 720, depth: 560 };
+  try {
+    const preset = resolveModuleMeasurePreset(
+      module,
+      item.measurePresetId?.trim() ||
+        defaultMeasurePresetId(module) ||
+        undefined,
+    );
+    if (preset) {
+      return {
+        width: preset.width,
+        height: preset.height,
+        depth: preset.depth,
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  if (module.externalDims) {
+    return {
+      width: module.externalDims.width,
+      height: module.externalDims.height,
+      depth: module.externalDims.depth,
+    };
+  }
+  return { width: 600, height: 720, depth: 560 };
+}
+
 export function ProjectSpatialStudio({
   open,
   project,
@@ -84,11 +130,13 @@ export function ProjectSpatialStudio({
   canEdit,
   onClose,
   onChangeLayout,
+  onUpdateItem,
   resolveMediaUrl,
 }: ProjectSpatialStudioProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [targetWallId, setTargetWallId] = useState<string | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('props');
 
   useEffect(() => {
     if (!open) return;
@@ -162,18 +210,63 @@ export function ProjectSpatialStudio({
     [catalog.materials, resolveMediaUrl],
   );
 
-  const selectedPlacement = useMemo(() => {
+  const selectedRef = useMemo(() => {
     if (!selectedKey) return null;
     const hash = selectedKey.lastIndexOf('#');
     if (hash < 0) return null;
     const itemId = selectedKey.slice(0, hash);
     const instanceIndex = Number(selectedKey.slice(hash + 1)) || 0;
+    return { itemId, instanceIndex };
+  }, [selectedKey]);
+
+  const selectedItem = useMemo(() => {
+    if (!selectedRef) return null;
+    return project.items.find((i) => i.id === selectedRef.itemId) ?? null;
+  }, [selectedRef, project.items]);
+
+  const selectedModule = useMemo(() => {
+    if (!selectedItem) return undefined;
+    return modules.find((m) => m.id === selectedItem.moduleId);
+  }, [selectedItem, modules]);
+
+  const selectedPlacement = useMemo(() => {
+    if (!selectedRef) return null;
     return (
       layout.placements.find(
-        (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+        (p) =>
+          p.itemId === selectedRef.itemId &&
+          p.instanceIndex === selectedRef.instanceIndex,
       ) ?? null
     );
-  }, [selectedKey, layout.placements]);
+  }, [selectedRef, layout.placements]);
+
+  const selectedDims = useMemo(
+    () =>
+      selectedItem
+        ? resolveItemDims(selectedItem, selectedModule)
+        : null,
+    [selectedItem, selectedModule],
+  );
+
+  const optionGroupsForItem = useMemo(
+    () =>
+      groupsForModuleItem(
+        selectedModule,
+        catalog.optionGroups,
+        catalog.components,
+        catalog.structures,
+      ),
+    [selectedModule, catalog],
+  );
+
+  const pickerCatalogs = useMemo(
+    () => ({
+      materials: catalog.materials,
+      edges: catalog.edges,
+      hardware: catalog.hardware,
+    }),
+    [catalog.materials, catalog.edges, catalog.hardware],
+  );
 
   if (!open) return null;
 
@@ -391,27 +484,54 @@ export function ProjectSpatialStudio({
               <p className="spatial-studio__hint">Todos los muebles están en el plano.</p>
             ) : (
               <ul className="spatial-studio__item-list">
-                {unplaced.map((f) => (
-                  <li key={`${f.itemId}#${f.instanceIndex}`}>
-                    <div className="spatial-studio__item-row">
-                      <span className="spatial-studio__item-label">
-                        {itemLabel(f.itemId, f.instanceIndex, project, modules)}
-                      </span>
-                      {canEdit && activeWallId ? (
+                {unplaced.map((f) => {
+                  const key = `${f.itemId}#${f.instanceIndex}`;
+                  const active = selectedKey === key;
+                  return (
+                    <li key={key}>
+                      <div
+                        className={
+                          active
+                            ? 'spatial-studio__item-row spatial-studio__item-row--active'
+                            : 'spatial-studio__item-row'
+                        }
+                      >
                         <button
                           type="button"
-                          className="btn btn--small btn--primary"
-                          onClick={() =>
-                            placeOnWall(f.itemId, f.instanceIndex, activeWallId)
-                          }
-                          data-testid={`spatial-studio-place-${f.itemId}-${f.instanceIndex}`}
+                          className="spatial-studio__item-pick"
+                          onClick={() => {
+                            setSelectedKey(key);
+                            setInspectorTab('props');
+                          }}
+                          data-testid={`spatial-studio-unplaced-${f.itemId}-${f.instanceIndex}`}
                         >
-                          Colocar
+                          {itemLabel(
+                            f.itemId,
+                            f.instanceIndex,
+                            project,
+                            modules,
+                          )}
                         </button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
+                        {canEdit && activeWallId ? (
+                          <button
+                            type="button"
+                            className="btn btn--small btn--primary"
+                            onClick={() =>
+                              placeOnWall(
+                                f.itemId,
+                                f.instanceIndex,
+                                activeWallId,
+                              )
+                            }
+                            data-testid={`spatial-studio-place-${f.itemId}-${f.instanceIndex}`}
+                          >
+                            Colocar
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -438,7 +558,10 @@ export function ProjectSpatialStudio({
                             ? 'spatial-studio__item-btn spatial-studio__item-btn--active'
                             : 'spatial-studio__item-btn'
                         }
-                        onClick={() => setSelectedKey(key)}
+                        onClick={() => {
+                          setSelectedKey(key);
+                          setInspectorTab('props');
+                        }}
                         data-testid={`spatial-studio-placed-${p.itemId}-${p.instanceIndex}`}
                       >
                         {itemLabel(p.itemId, p.instanceIndex, project, modules)}
@@ -504,130 +627,339 @@ export function ProjectSpatialStudio({
           className="spatial-studio__inspector"
           data-testid="spatial-studio-inspector"
         >
-          <h3 className="spatial-studio__section-title">Inspector</h3>
-          {!selectedPlacement ? (
+          <h3 className="spatial-studio__section-title">Propiedades</h3>
+          {!selectedItem || !selectedRef ? (
             <p className="spatial-studio__hint">
-              Seleccioná un mueble en la lista o en el 3D para moverlo a lo largo
-              del muro.
+              Seleccioná un mueble en la lista o en el 3D — como en Promob: a la
+              derecha editás medida, acabados y posición.
             </p>
           ) : (
             <div className="spatial-studio__inspector-body">
-              <p className="spatial-studio__item-label">
-                {itemLabel(
-                  selectedPlacement.itemId,
-                  selectedPlacement.instanceIndex,
-                  project,
-                  modules,
-                )}
-              </p>
+              <div className="spatial-studio__identity">
+                <p className="spatial-studio__item-label">
+                  {selectedModule
+                    ? `${selectedModule.code} — ${selectedModule.name}`
+                    : selectedItem.moduleId}
+                </p>
+                {selectedDims ? (
+                  <p
+                    className="spatial-studio__dims-hero"
+                    data-testid="spatial-studio-dims"
+                  >
+                    <span>{selectedDims.width}</span>
+                    <span className="spatial-studio__dims-sep">×</span>
+                    <span>{selectedDims.height}</span>
+                    <span className="spatial-studio__dims-sep">×</span>
+                    <span>{selectedDims.depth}</span>
+                    <span className="spatial-studio__dims-unit">mm</span>
+                  </p>
+                ) : null}
+                <p className="spatial-studio__item-meta">
+                  A × H × P ·{' '}
+                  {selectedPlacement
+                    ? selectedPlacement.elevation === 'wall'
+                      ? 'en muro (alto)'
+                      : 'en piso'
+                    : 'sin colocar'}
+                </p>
+              </div>
 
-              <label className="spatial-studio__field">
-                <span>Offset en muro (mm)</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={10}
-                  value={Math.round(selectedPlacement.offsetMm)}
-                  disabled={!canEdit}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (!Number.isFinite(v)) return;
-                    patchPlacement(
-                      selectedPlacement.itemId,
-                      selectedPlacement.instanceIndex,
-                      { offsetMm: Math.max(0, Math.round(v)) },
-                    );
-                  }}
-                  data-testid="spatial-studio-offset"
-                />
-              </label>
-
-              <div className="spatial-studio__nudge" role="group" aria-label="Mover en muro">
+              <div
+                className="spatial-studio__tabs"
+                role="tablist"
+                aria-label="Inspector"
+              >
                 <button
                   type="button"
-                  className="btn btn--small"
-                  disabled={!canEdit}
-                  onClick={() => nudgeOffset(-50)}
-                  title="−50 mm"
-                  data-testid="spatial-studio-nudge-left"
+                  role="tab"
+                  aria-selected={inspectorTab === 'props'}
+                  className={
+                    inspectorTab === 'props'
+                      ? 'spatial-studio__tab spatial-studio__tab--active'
+                      : 'spatial-studio__tab'
+                  }
+                  onClick={() => setInspectorTab('props')}
+                  data-testid="spatial-studio-tab-props"
                 >
-                  <ArrowLeft size={16} strokeWidth={1.5} aria-hidden />
+                  Mueble
                 </button>
                 <button
                   type="button"
-                  className="btn btn--small"
-                  disabled={!canEdit}
-                  onClick={() => nudgeOffset(50)}
-                  title="+50 mm"
-                  data-testid="spatial-studio-nudge-right"
+                  role="tab"
+                  aria-selected={inspectorTab === 'position'}
+                  className={
+                    inspectorTab === 'position'
+                      ? 'spatial-studio__tab spatial-studio__tab--active'
+                      : 'spatial-studio__tab'
+                  }
+                  onClick={() => setInspectorTab('position')}
+                  data-testid="spatial-studio-tab-position"
                 >
-                  <ArrowRight size={16} strokeWidth={1.5} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  disabled={!canEdit}
-                  onClick={() => moveAlongWall(-1)}
-                  title="Reordenar antes"
-                  data-testid="spatial-studio-reorder-prev"
-                >
-                  <ArrowUp size={16} strokeWidth={1.5} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  disabled={!canEdit}
-                  onClick={() => moveAlongWall(1)}
-                  title="Reordenar después"
-                  data-testid="spatial-studio-reorder-next"
-                >
-                  <ArrowDown size={16} strokeWidth={1.5} aria-hidden />
+                  Posición
                 </button>
               </div>
 
-              <label className="spatial-studio__field">
-                <span>Elevación</span>
-                <select
-                  value={selectedPlacement.elevation}
-                  disabled={!canEdit}
-                  onChange={(e) =>
-                    patchPlacement(
-                      selectedPlacement.itemId,
-                      selectedPlacement.instanceIndex,
-                      {
-                        elevation:
-                          e.target.value === 'wall' ? 'wall' : 'floor',
-                      },
-                    )
-                  }
-                  data-testid="spatial-studio-elevation"
+              {inspectorTab === 'props' ? (
+                <div
+                  className="spatial-studio__tab-panel"
+                  data-testid="spatial-studio-panel-props"
                 >
-                  <option value="floor">Piso (base)</option>
-                  <option value="wall">Muro (alto)</option>
-                </select>
-              </label>
+                  {(selectedModule?.presets?.length ?? 0) > 0 ? (
+                    <div className="spatial-studio__field">
+                      <span className="spatial-studio__field-label">
+                        Medida comercial
+                      </span>
+                      <div
+                        className="spatial-studio__preset-grid"
+                        role="listbox"
+                        aria-label="Presets de medida"
+                      >
+                        {selectedModule!.presets!.map((pr) => {
+                          const active =
+                            (selectedItem.measurePresetId ??
+                              defaultMeasurePresetId(selectedModule!)) ===
+                            pr.id;
+                          const label = pr.name?.trim()
+                            ? pr.name
+                            : `${pr.width}×${pr.height}`;
+                          return (
+                            <button
+                              key={pr.id}
+                              type="button"
+                              role="option"
+                              aria-selected={active}
+                              disabled={!canEdit || !onUpdateItem}
+                              className={
+                                active
+                                  ? 'spatial-studio__preset spatial-studio__preset--active'
+                                  : 'spatial-studio__preset'
+                              }
+                              onClick={() =>
+                                onUpdateItem?.({
+                                  ...selectedItem,
+                                  measurePresetId: pr.id,
+                                })
+                              }
+                              data-testid={`spatial-studio-preset-${pr.id}`}
+                            >
+                              <span className="spatial-studio__preset-name">
+                                {label}
+                              </span>
+                              <span className="spatial-studio__preset-dims">
+                                {pr.width}×{pr.height}×{pr.depth}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="spatial-studio__hint">
+                      Este mueble no tiene presets comerciales — las medidas
+                      vienen del módulo base.
+                    </p>
+                  )}
 
-              {canEdit ? (
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  onClick={() =>
-                    removePlacement(
-                      selectedPlacement.itemId,
-                      selectedPlacement.instanceIndex,
-                    )
-                  }
-                  data-testid="spatial-studio-unplace"
+                  {optionGroupsForItem.length > 0 ? (
+                    <div className="spatial-studio__finishes">
+                      <span className="spatial-studio__field-label">
+                        Acabados y herrajes
+                      </span>
+                      {optionGroupsForItem.map((group) => {
+                        const options = optionsForGroup(group, pickerCatalogs);
+                        const lineValue =
+                          selectedItem.optionChoices[group.code]?.trim() ?? '';
+                        const projectDefault =
+                          project.projectLevelChoices?.[group.code]?.trim() ??
+                          '';
+                        const inheritLabel = projectDefault
+                          ? `Proyecto (${optionLabelForId(projectDefault, group, pickerCatalogs)})`
+                          : 'Default del proyecto';
+                        return (
+                          <label
+                            key={group.id}
+                            className="spatial-studio__field"
+                          >
+                            <span>{group.name}</span>
+                            <select
+                              value={lineValue}
+                              disabled={!canEdit || !onUpdateItem}
+                              onChange={(e) => {
+                                if (!onUpdateItem) return;
+                                onUpdateItem({
+                                  ...selectedItem,
+                                  optionChoices: setItemOptionChoice(
+                                    selectedItem.optionChoices,
+                                    group.code,
+                                    e.target.value,
+                                  ),
+                                });
+                              }}
+                              data-testid={`spatial-studio-choice-${group.code}`}
+                            >
+                              <option value="">{inheritLabel}</option>
+                              {options.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="spatial-studio__hint">
+                      Sin grupos de opción requeridos para este mueble.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              {inspectorTab === 'position' ? (
+                <div
+                  className="spatial-studio__tab-panel"
+                  data-testid="spatial-studio-panel-position"
                 >
-                  Sacar del plano
-                </button>
+                  {!selectedPlacement ? (
+                    <div className="spatial-studio__empty-walls">
+                      <p className="spatial-studio__hint">
+                        Este mueble aún no está en el plano.
+                      </p>
+                      {canEdit && activeWallId ? (
+                        <button
+                          type="button"
+                          className="btn btn--primary btn--small"
+                          onClick={() =>
+                            placeOnWall(
+                              selectedRef.itemId,
+                              selectedRef.instanceIndex,
+                              activeWallId,
+                            )
+                          }
+                          data-testid="spatial-studio-place-selected"
+                        >
+                          Colocar en muro activo
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <>
+                      <label className="spatial-studio__field">
+                        <span>Offset en muro (mm)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={10}
+                          value={Math.round(selectedPlacement.offsetMm)}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            if (!Number.isFinite(v)) return;
+                            patchPlacement(
+                              selectedPlacement.itemId,
+                              selectedPlacement.instanceIndex,
+                              { offsetMm: Math.max(0, Math.round(v)) },
+                            );
+                          }}
+                          data-testid="spatial-studio-offset"
+                        />
+                      </label>
+
+                      <div
+                        className="spatial-studio__nudge"
+                        role="group"
+                        aria-label="Mover en muro"
+                      >
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          disabled={!canEdit}
+                          onClick={() => nudgeOffset(-50)}
+                          title="−50 mm"
+                          data-testid="spatial-studio-nudge-left"
+                        >
+                          <ArrowLeft size={16} strokeWidth={1.5} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          disabled={!canEdit}
+                          onClick={() => nudgeOffset(50)}
+                          title="+50 mm"
+                          data-testid="spatial-studio-nudge-right"
+                        >
+                          <ArrowRight size={16} strokeWidth={1.5} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          disabled={!canEdit}
+                          onClick={() => moveAlongWall(-1)}
+                          title="Reordenar antes"
+                          data-testid="spatial-studio-reorder-prev"
+                        >
+                          <ArrowUp size={16} strokeWidth={1.5} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          disabled={!canEdit}
+                          onClick={() => moveAlongWall(1)}
+                          title="Reordenar después"
+                          data-testid="spatial-studio-reorder-next"
+                        >
+                          <ArrowDown size={16} strokeWidth={1.5} aria-hidden />
+                        </button>
+                      </div>
+
+                      <label className="spatial-studio__field">
+                        <span>Elevación</span>
+                        <select
+                          value={selectedPlacement.elevation}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            patchPlacement(
+                              selectedPlacement.itemId,
+                              selectedPlacement.instanceIndex,
+                              {
+                                elevation:
+                                  e.target.value === 'wall' ? 'wall' : 'floor',
+                              },
+                            )
+                          }
+                          data-testid="spatial-studio-elevation"
+                        >
+                          <option value="floor">Piso (base)</option>
+                          <option value="wall">Muro (alto)</option>
+                        </select>
+                      </label>
+
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={() =>
+                            removePlacement(
+                              selectedPlacement.itemId,
+                              selectedPlacement.instanceIndex,
+                            )
+                          }
+                          data-testid="spatial-studio-unplace"
+                        >
+                          Sacar del plano
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
               ) : null}
             </div>
           )}
 
           <p className="spatial-studio__phase-note">
-            Fase 1: colocar y mover. Medidas y precio en el ambiente vienen en
-            la siguiente etapa.
+            Medidas = presets del catálogo (como lista de talles en Promob). A×H×P
+            libre mm vendrá después para no romper el precio Go/TS.
           </p>
         </aside>
       </div>

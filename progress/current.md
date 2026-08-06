@@ -16,7 +16,8 @@ Botón **Proyectar** en chrome de cotización → fullscreen `ProjectSpatialStud
 | Inspector: offset, nudge ±50, reorder, elevación, sacar | ✅ |
 | 3D: muros + yaw + select módulo | ✅ |
 | unplacedPolicy hide en studio | ✅ |
-| Medidas en ambiente | ⏳ Fase B |
+| Propiedades Promob (presets + acabados) | ✅ | tabs Mueble / Posición; onUpdateItem |
+| A×H×P libre mm | ⏳ | requiere measureDims domain TS+Go |
 
 ### Key files
 - `packages/ui/src/projects/components/ProjectSpatialStudio.tsx`
