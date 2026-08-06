@@ -5,20 +5,19 @@
 import type { DimensionPreset, Structure } from '@muebles/domain';
 import type { ComponentInstanceDraft } from '../modules';
 
-export type StructureEditorTab =
-  | 'general'
-  | 'presets'
-  | 'components'
-  | 'preview3d';
+/**
+ * Tab order: General → Componentes (primary job) → Presets.
+ * Vista 3D is co-located on Componentes (live sticky preview), not a separate tab.
+ */
+export type StructureEditorTab = 'general' | 'components' | 'presets';
 
 export const STRUCTURE_EDITOR_TABS: readonly {
   readonly id: StructureEditorTab;
   readonly label: string;
 }[] = [
   { id: 'general', label: 'General' },
-  { id: 'presets', label: 'Presets' },
   { id: 'components', label: 'Componentes' },
-  { id: 'preview3d', label: 'Vista 3D' },
+  { id: 'presets', label: 'Presets' },
 ] as const;
 
 export interface StructureDraft {

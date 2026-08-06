@@ -53,6 +53,7 @@ export function StructureEditorComponentsPanel({
       id="structure-editor-panel-components"
       aria-labelledby="structure-editor-tab-components"
       hidden={hidden}
+      data-testid="structure-editor-panel-components"
     >
       <div
         className={
@@ -60,6 +61,7 @@ export function StructureEditorComponentsPanel({
             ? 'structure-components-layout structure-components-layout--with-preview'
             : 'structure-components-layout'
         }
+        data-testid="structure-editor-panel-components-body"
       >
         <div className="structure-components-list">
           <div className="structure-editor-panel-header">
@@ -68,7 +70,7 @@ export function StructureEditorComponentsPanel({
             </h4>
             <button
               type="button"
-              className="btn btn--small"
+              className="btn btn--small btn--primary"
               onClick={onRequestAdd}
               data-testid="add-component-btn"
             >
@@ -78,10 +80,21 @@ export function StructureEditorComponentsPanel({
           </div>
 
           {draft.components.length === 0 ? (
-            <p className="catalog-empty">
-              Sin componentes. Agregá componentes reutilizables a esta
-              estructura compuesta.
-            </p>
+            <div className="structure-components-empty" data-testid="components-empty">
+              <p className="catalog-empty">
+                Sin componentes. El cuerpo necesita al menos una pieza
+                (laterales, base, etc.).
+              </p>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={onRequestAdd}
+                data-testid="add-component-empty-cta"
+              >
+                <Plus size={16} strokeWidth={1.5} aria-hidden /> Agregar primer
+                componente
+              </button>
+            </div>
           ) : (
             <div data-testid="component-instance-list">
               {draft.components.map((comp, idx) => {
@@ -129,8 +142,8 @@ export function StructureEditorComponentsPanel({
                         Quitar
                       </button>
                     </div>
-                    <div className="module-editor__grid">
-                      <div className="catalog-form__field module-editor__field--narrow">
+                    <div className="structure-editor__grid">
+                      <div className="catalog-form__field structure-editor__field--narrow">
                         <label>Cantidad</label>
                         <input
                           type="number"
@@ -203,13 +216,14 @@ export function StructureEditorComponentsPanel({
             data-testid="structure-components-3d-preview"
           >
             <div className="structure-editor-panel-header">
-              <h4 className="module-editor__section-title">Vista 3D en vivo</h4>
+              <h4 className="module-editor__section-title">Vista 3D</h4>
               {preview.presets.length > 0 && onPreviewPresetChange ? (
                 <select
                   className="structure-components-3d__preset"
                   value={previewPresetId || preview.presetId || ''}
                   onChange={(e) => onPreviewPresetChange(e.target.value)}
                   data-testid="structure-components-preset-select"
+                  aria-label="Medida de prueba para el 3D"
                 >
                   {preview.presets.map((pr) => (
                     <option key={pr.id} value={pr.id}>
@@ -221,6 +235,9 @@ export function StructureEditorComponentsPanel({
                 </select>
               ) : null}
             </div>
+            <p className="structure-components-3d__hint">
+              Preview en vivo al armar el cuerpo (única vista 3D del editor).
+            </p>
 
             {preview.error ? (
               <p className="catalog-form__error">{preview.error}</p>
@@ -228,7 +245,7 @@ export function StructureEditorComponentsPanel({
 
             {preview.empty && !preview.error ? (
               <p className="catalog-empty">
-                Vista previa 3D vacía. Agregá componentes para visualizar.
+                Vista previa vacía. Agregá componentes a la izquierda.
               </p>
             ) : null}
 

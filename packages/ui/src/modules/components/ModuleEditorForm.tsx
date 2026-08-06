@@ -1,14 +1,16 @@
 /**
  * Module create/edit form shell — primary groups + composition sub-tabs.
- * Fase 4 UI: General / Composición / Costo (reduces 6 equal tabs).
+ * Critique pack: sticky tabs, keyboard roving, structure empty badge.
  */
 
-import type {
-  Dispatch,
-  FormEvent,
-  KeyboardEvent as ReactKeyboardEvent,
-  ReactNode,
-  SetStateAction,
+import {
+  useCallback,
+  useRef,
+  type Dispatch,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type SetStateAction,
 } from 'react';
 import type {
   Component,
@@ -135,12 +137,73 @@ export function ModuleEditorForm({
   const primaryTabs = costAsideVisible
     ? MODULE_EDITOR_PRIMARY_TABS.filter((t) => t.id !== 'cost')
     : MODULE_EDITOR_PRIMARY_TABS;
+  const structureMissing = !draft.structureId.trim();
 
-  const selectPrimary = (id: ModuleEditorPrimaryTab): void => {
-    if (id === 'general') setEditorTab('general');
-    else if (id === 'cost' && !costAsideVisible) setEditorTab('cost');
-    else if (id === 'composition' && !compositionActive) {
-      setEditorTab(DEFAULT_COMPOSITION_TAB);
+  const primaryTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const subTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const selectPrimary = useCallback(
+    (id: ModuleEditorPrimaryTab): void => {
+      if (id === 'general') setEditorTab('general');
+      else if (id === 'cost' && !costAsideVisible) setEditorTab('cost');
+      else if (id === 'composition') {
+        if (!compositionActive) setEditorTab(DEFAULT_COMPOSITION_TAB);
+      }
+    },
+    [compositionActive, costAsideVisible, setEditorTab],
+  );
+
+  const onPrimaryKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const n = primaryTabs.length;
+    const current = primaryTabs.findIndex((t) =>
+      t.id === 'composition' ? compositionActive : t.id === primary,
+    );
+    if (current < 0) return;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = (current + 1) % n;
+      selectPrimary(primaryTabs[next]!.id);
+      primaryTabRefs.current[next]?.focus();
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = (current - 1 + n) % n;
+      selectPrimary(primaryTabs[next]!.id);
+      primaryTabRefs.current[next]?.focus();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      selectPrimary(primaryTabs[0]!.id);
+      primaryTabRefs.current[0]?.focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      selectPrimary(primaryTabs[n - 1]!.id);
+      primaryTabRefs.current[n - 1]?.focus();
+    }
+  };
+
+  const onSubKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const n = MODULE_EDITOR_COMPOSITION_TABS.length;
+    const current = MODULE_EDITOR_COMPOSITION_TABS.findIndex(
+      (t) => t.id === editorTab,
+    );
+    if (current < 0) return;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = (current + 1) % n;
+      setEditorTab(MODULE_EDITOR_COMPOSITION_TABS[next]!.id);
+      subTabRefs.current[next]?.focus();
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = (current - 1 + n) % n;
+      setEditorTab(MODULE_EDITOR_COMPOSITION_TABS[next]!.id);
+      subTabRefs.current[next]?.focus();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      setEditorTab(MODULE_EDITOR_COMPOSITION_TABS[0]!.id);
+      subTabRefs.current[0]?.focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      setEditorTab(MODULE_EDITOR_COMPOSITION_TABS[n - 1]!.id);
+      subTabRefs.current[n - 1]?.focus();
     }
   };
 
@@ -151,15 +214,20 @@ export function ModuleEditorForm({
       onSubmit={onSubmit}
       noValidate
     >
-      {error ? <p className="catalog-form__error">{error}</p> : null}
+      {error ? (
+        <p className="catalog-form__error" data-testid="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <div
         className="module-editor__tabs"
         role="tablist"
         aria-label="Secciones del editor de mueble"
         data-testid="module-editor-tabs"
+        onKeyDown={onPrimaryKeyDown}
       >
-        {primaryTabs.map((tab) => {
+        {primaryTabs.map((tab, index) => {
           const selected =
             tab.id === 'composition' ? compositionActive : primary === tab.id;
           const tabId =
@@ -174,11 +242,16 @@ export function ModuleEditorForm({
               : tab.id === 'cost'
                 ? 'module-editor-panel-cost'
                 : 'module-editor-panel-structure';
+          const showStructureBadge =
+            tab.id === 'composition' && structureMissing;
           return (
             <button
               key={tab.id}
               type="button"
               role="tab"
+              ref={(el) => {
+                primaryTabRefs.current[index] = el;
+              }}
               id={tabId}
               aria-selected={selected}
               aria-controls={controls}
@@ -193,6 +266,15 @@ export function ModuleEditorForm({
             >
               {tab.label}
               {tab.id === 'composition' ? compositionBadge(draft) : ''}
+              {showStructureBadge ? (
+                <span
+                  className="module-editor__tab-badge"
+                  data-testid="module-editor-structure-badge"
+                  title="Sin estructura base"
+                >
+                  !
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -204,8 +286,9 @@ export function ModuleEditorForm({
           role="tablist"
           aria-label="Composición del mueble"
           data-testid="module-editor-composition-tabs"
+          onKeyDown={onSubKeyDown}
         >
-          {MODULE_EDITOR_COMPOSITION_TABS.map((tab) => {
+          {MODULE_EDITOR_COMPOSITION_TABS.map((tab, index) => {
             const selected = editorTab === tab.id;
             let badge = '';
             if (tab.id === 'components' && draft.components.length > 0) {
@@ -215,11 +298,16 @@ export function ModuleEditorForm({
             } else if (tab.id === 'hardware' && draft.hardwareLines.length > 0) {
               badge = ` (${draft.hardwareLines.length})`;
             }
+            const showEmptyStructure =
+              tab.id === 'structure' && structureMissing;
             return (
               <button
                 key={tab.id}
                 type="button"
                 role="tab"
+                ref={(el) => {
+                  subTabRefs.current[index] = el;
+                }}
                 id={`module-editor-tab-${tab.id}`}
                 aria-selected={selected}
                 aria-controls={`module-editor-panel-${tab.id}`}
@@ -234,6 +322,15 @@ export function ModuleEditorForm({
               >
                 {tab.label}
                 {badge}
+                {showEmptyStructure ? (
+                  <span
+                    className="module-editor__tab-badge"
+                    data-testid="module-editor-structure-sub-badge"
+                    title="Elegí una estructura base"
+                  >
+                    !
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -248,6 +345,7 @@ export function ModuleEditorForm({
         setDraftCascadeLevel={setDraftCascadeLevel}
         resolveImageUrl={resolveImageUrl}
         onUploadImage={onUploadImage}
+        editingId={editingId}
         hidden={editorTab !== 'general'}
       />
 

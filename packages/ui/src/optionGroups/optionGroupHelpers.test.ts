@@ -223,6 +223,89 @@ describe('requiredGroupCodesForModule', () => {
     );
     expect(codes).toEqual([]);
   });
+
+  it('collects board roles from structure components when catalogs are provided', () => {
+    const catalogComponents = [
+      {
+        id: 'comp-base',
+        code: 'C-BASE',
+        name: 'Base',
+        placement: 'base' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 600,
+          widthMm: 560,
+          thicknessMm: 18,
+        },
+        defaultEdges: [] as const,
+        optionRoles: ['INTERIOR'] as const,
+        active: true,
+      },
+      {
+        id: 'comp-door',
+        code: 'C-DOOR',
+        name: 'Puerta',
+        placement: 'puerta' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 700,
+          widthMm: 400,
+          thicknessMm: 18,
+        },
+        defaultEdges: [] as const,
+        optionRoles: ['FRENTE'] as const,
+        active: true,
+      },
+    ];
+    const catalogStructures = [
+      {
+        id: 'str-1',
+        code: 'STR-GAB',
+        name: 'Cuerpo gabinete',
+        components: [
+          { id: 'i1', componentId: 'comp-base', quantity: 1 },
+          { id: 'i2', componentId: 'comp-door', quantity: 1 },
+        ],
+        active: true,
+      },
+    ];
+    const codes = requiredGroupCodesForModule(
+      {
+        structureId: 'str-1',
+        components: [],
+        hardwareLines: [{ optionRole: 'BISAGRA' }],
+      },
+      [
+        ...groups,
+        {
+          id: 'og-f',
+          code: 'FRENTE',
+          name: 'Frentes',
+          kind: 'board',
+          required: true,
+          optionIds: ['m1'],
+        },
+      ],
+      catalogComponents,
+      catalogStructures,
+    );
+    expect(codes.sort()).toEqual(['BISAGRA', 'FRENTE', 'INTERIOR']);
+  });
+
+  it('without component catalogs only hardware roles are discovered (regression)', () => {
+    const codes = requiredGroupCodesForModule(
+      {
+        structureId: 'str-1',
+        components: [{ componentId: 'comp-base' }],
+        hardwareLines: [{ optionRole: 'BISAGRA' }],
+      },
+      groups,
+      // catalogComponents / catalogStructures omitted on purpose
+    );
+    // Board roles on components/structures are invisible without catalogs —
+    // callers MUST pass them (quote UI used to forget and only showed herrajes).
+    expect(codes).toEqual(['BISAGRA']);
+  });
 });
 
 describe('SEED_OPTION_GROUP_CODES (OPT-03)', () => {

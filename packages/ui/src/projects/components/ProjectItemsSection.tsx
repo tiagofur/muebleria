@@ -27,6 +27,8 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     modules,
     optionGroups,
     catalogs,
+    catalogComponents,
+    catalogStructures,
     itemHandlers,
     removeConfirm,
     viewer3D,
@@ -147,7 +149,12 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
         <div className="project-item-list">
           {project.items.map((item, index) => {
             const mod = modules.find((m) => m.id === item.moduleId);
-            const groups = groupsForModuleItem(mod, optionGroups);
+            const groups = groupsForModuleItem(
+              mod,
+              optionGroups,
+              catalogComponents,
+              catalogStructures,
+            );
 
             // Drop indicator classes
             const isOver = overIndex === index;

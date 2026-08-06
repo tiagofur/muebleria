@@ -170,19 +170,129 @@
   min-width: 0;
 }
 
-/* —— ComponentDetailView (Fase 3 follow-up) —— */
-/* Reuses module-detail__section / __title / __row / __preset-list / __notes
-   from modules.css. Only the container hook is component-specific. */
+/* —— ComponentDetailView —— */
+/* Wave 1: layout + tokens live in common/engineeringDetail.css
+   (.eng-detail / EngineeringDetailLayout). */
 
-.component-detail {
+/* —— Component editor shell (own identity, no module-editor dependency) —— */
+
+.component-editor__tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+}
+
+.component-editor__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  white-space: nowrap;
+}
+
+.component-editor__tab:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.component-editor__tab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.component-editor__tab--active {
+  background: var(--surface-card);
+  color: var(--text-brand);
+  box-shadow: var(--shadow-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.component-editor__tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-full);
+  background: var(--danger-600, #b91c1c);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+
+.component-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem var(--space-3);
+}
+
+.component-general__convention {
   display: flex;
   flex-direction: column;
-  gap: var(--density-page-gap);
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.component-general__convention code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-brand);
 }
 
 /* —— ComponentEditorGeometryPanel —— */
-/* Grouped fields with semantic headings (dimensiones base / fórmulas / posición / rotación)
-   replace the previous flat stack of identical grids. */
+/* Workspace: form | sticky 3D (desktop). Formula guide collapsed by default. */
+
+.component-geometry__workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.component-geometry__form {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.component-geometry__viewport {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.component-geometry__viewport-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
 
 .component-geometry__group {
   border: none;
@@ -207,19 +317,66 @@
   color: var(--text-muted);
 }
 
-/* Formula variables guide (migrated from inline styles). */
+/* Formula variables guide — collapsed by default (critique P1) */
 .component-geometry__formula-guide {
-  padding: var(--space-3);
   margin-bottom: var(--space-4);
   border-radius: var(--radius-md);
   background: var(--surface-input);
   border: 1px solid var(--border-subtle);
   font-size: var(--text-xs);
+  overflow: hidden;
+}
+
+.component-geometry__formula-guide-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: var(--space-3);
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.component-geometry__formula-guide-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.component-geometry__formula-guide-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .component-geometry__formula-guide-title {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.component-geometry__formula-guide-summary {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.component-geometry__formula-guide-body {
+  padding: 0 var(--space-3) var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-3);
+}
+
+.component-geometry__formula-guide-lead {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
 }
 
 .component-geometry__formula-vars {
@@ -246,11 +403,21 @@
   color: var(--text-brand);
 }
 
-.component-geometry__formula-guide-title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
+@media (min-width: 56rem) {
+  .component-geometry__workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.95fr);
+    align-items: start;
+    gap: var(--space-5);
+  }
+
+  .component-geometry__viewport {
+    position: sticky;
+    top: 3.25rem; /* under sticky editor tabs */
+  }
 }
+
+/* —— Embedded 3D preview bar lives inside viewport —— */
 
 /* —— Advanced disclosure (position + rotation) —— */
 /* Collapsed by default; the summary line in the header shows live state so a
@@ -333,21 +500,12 @@
   }
 }
 
-/* —— Embedded 3D preview (replaces the old "Vista 3D" tab) —— */
-
-.component-geometry__preview {
-  margin-top: var(--space-5);
-  border-top: 1px solid var(--border-subtle);
-  padding-top: var(--space-4);
-}
-
 .component-geometry__preview-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-3);
 }
 
 .component-geometry__container-fields {

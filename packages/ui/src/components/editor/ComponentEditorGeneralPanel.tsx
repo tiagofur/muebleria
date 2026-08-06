@@ -6,6 +6,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import {
   COMPONENT_PLACEMENT_GROUPS,
   PLACEMENT_DESCRIPTION,
+  sizeFormulasForPlacement,
   type ComponentDraft,
 } from '../componentDraft';
 
@@ -25,6 +26,12 @@ export function ComponentEditorGeneralPanel({
   hidden,
 }: ComponentEditorGeneralPanelProps): ReactNode {
   const placementHint = PLACEMENT_DESCRIPTION[draft.placement];
+  const convention = sizeFormulasForPlacement(draft.placement);
+  const canApplyConvention =
+    convention != null &&
+    !draft.lengthFormula.trim() &&
+    !draft.widthFormula.trim();
+
   return (
     <div
       role="tabpanel"
@@ -33,7 +40,7 @@ export function ComponentEditorGeneralPanel({
       hidden={hidden}
       data-testid="component-editor-panel-general"
     >
-      <div className="module-editor__grid">
+      <div className="component-editor__grid">
         <div className="catalog-form__field">
           <label htmlFor={`${formId}-code`}>Código</label>
           <input
@@ -46,7 +53,20 @@ export function ComponentEditorGeneralPanel({
             required
             disabled={!!editingId}
             data-testid="input-code"
+            aria-describedby={
+              editingId ? `${formId}-code-hint` : undefined
+            }
           />
+          {editingId ? (
+            <p
+              id={`${formId}-code-hint`}
+              className="catalog-form__hint"
+              data-testid="input-code-hint"
+            >
+              El código no se cambia al editar (identifica la pieza en el
+              catálogo).
+            </p>
+          ) : null}
         </div>
         <div className="catalog-form__field">
           <label htmlFor={`${formId}-name`}>Nombre</label>
@@ -63,7 +83,7 @@ export function ComponentEditorGeneralPanel({
         </div>
       </div>
 
-      <div className="module-editor__grid">
+      <div className="component-editor__grid">
         <div className="catalog-form__field">
           <label htmlFor={`${formId}-placement`}>Ubicación</label>
           <select
@@ -92,6 +112,34 @@ export function ComponentEditorGeneralPanel({
             >
               {placementHint}
             </p>
+          ) : null}
+          {convention ? (
+            <div className="component-general__convention">
+              <p className="catalog-form__hint">
+                Convención de tamaño: Largo ={' '}
+                <code>{convention.lengthFormula}</code>, Ancho ={' '}
+                <code>{convention.widthFormula}</code>
+                {canApplyConvention
+                  ? ' (fórmulas de geometría vacías).'
+                  : ' (solo si las fórmulas están vacías).'}
+              </p>
+              {canApplyConvention ? (
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  data-testid="apply-placement-convention"
+                  onClick={() =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      lengthFormula: convention.lengthFormula,
+                      widthFormula: convention.widthFormula,
+                    }))
+                  }
+                >
+                  Aplicar convención en geometría
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

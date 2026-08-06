@@ -305,13 +305,111 @@ describe('StructuresScreen', () => {
     // Click on create structure button
     fireEvent.click(screen.getByTestId('create-structure-btn'));
 
-    // Verify Tab Vista 3D exists
-    const previewTab = screen.getByTestId('structure-editor-tab-preview3d');
-    expect(previewTab).toBeTruthy();
+    // Critique: no separate Vista 3D tab — live 3D lives on Componentes
+    expect(screen.queryByTestId('structure-editor-tab-preview3d')).toBeNull();
+    fireEvent.click(screen.getByTestId('structure-editor-tab-components'));
+    expect(screen.getByTestId('structure-editor-panel-components')).toBeTruthy();
+    // Empty body badge + empty CTA
+    expect(screen.getByTestId('structure-editor-components-badge')).toBeTruthy();
+    expect(screen.getByTestId('components-empty')).toBeTruthy();
+  });
 
-    // Switch to Vista 3D
-    fireEvent.click(previewTab);
-    expect(screen.getByTestId('structure-editor-panel-preview3d')).toBeTruthy();
+  it('critique: tab order General → Componentes → Presets; save jumps to components', () => {
+    render(
+      <StructuresScreen
+        structures={[]}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('create-structure-btn'));
+    const tabs = screen.getByTestId('structure-editor-tabs');
+    const tabButtons = tabs.querySelectorAll('[role="tab"]');
+    expect(tabButtons[0]?.getAttribute('data-testid')).toBe(
+      'structure-editor-tab-general',
+    );
+    expect(tabButtons[1]?.getAttribute('data-testid')).toBe(
+      'structure-editor-tab-components',
+    );
+    expect(tabButtons[2]?.getAttribute('data-testid')).toBe(
+      'structure-editor-tab-presets',
+    );
+
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'EST-X' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Sin piezas' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+    expect(screen.getByTestId('form-error').textContent).toMatch(/componente/i);
+    expect(screen.getByTestId('structure-editor-panel-components').hidden).toBe(
+      false,
+    );
+  });
+
+  it('critique: preset labeled fields and exterior hint on general', () => {
+    render(
+      <StructuresScreen
+        structures={[]}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('create-structure-btn'));
+    expect(screen.getByTestId('structure-exterior-hint').textContent).toMatch(
+      /referencia del cuerpo/i,
+    );
+
+    fireEvent.click(screen.getByTestId('structure-editor-tab-presets'));
+    fireEvent.click(screen.getByTestId('add-preset-btn'));
+    expect(screen.getByTestId('preset-width-0')).toBeTruthy();
+    expect(screen.getByTestId('preset-height-0')).toBeTruthy();
+    expect(screen.getByLabelText(/^Ancho \(mm\)$/i)).toBeTruthy();
+  });
+
+  it('detail workspace shows exterior metric, components and history disclosure', () => {
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        catalogMaterials={[]}
+        catalogEdges={[]}
+        catalogHardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('EST-GAB-720'));
+    expect(screen.getByTestId('structure-detail')).toBeTruthy();
+    expect(screen.getByTestId('structure-detail-metric').textContent).toMatch(
+      /600/,
+    );
+    expect(screen.getByTestId('structure-detail-dims')).toBeTruthy();
+    expect(screen.getByTestId('structure-detail-components').textContent).toMatch(
+      /COM-COS-01|Costado/,
+    );
+    expect(screen.getByTestId('structure-detail-history')).toBeTruthy();
+    expect(screen.getByTestId('structure-detail-notes').textContent).toMatch(
+      /bajo mesada/i,
+    );
   });
 
   it('shows a Vista 3D button in the detail that opens the 3D modal', () => {

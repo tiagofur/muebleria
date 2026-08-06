@@ -188,8 +188,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       (res.status === 500 && /not found|no rows/i.test(putBody));
 
     if (!missing) {
-      console.error(`API upsert failed ${pathById}: ${res?.status} ${putBody}`);
-      return;
+      const msg = `API upsert failed ${pathById}: ${res?.status} ${putBody}`;
+      console.error(msg);
+      // Must throw so saveCatalog rejects and the shell toasts — silent
+      // return left materials looking saved in UI until refresh (e.g. new
+      // columns not yet migrated / old server binary).
+      throw new Error(msg);
     }
 
     try {
@@ -202,13 +206,17 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         const text = await created.text().catch(() => '');
         // Conflict on POST = already created concurrently → treat as success.
         if (!isConflict(created.status, text)) {
-          console.error(
-            `API create failed ${pathCollection}: ${created.status} ${text}`,
-          );
+          const msg = `API create failed ${pathCollection}: ${created.status} ${text}`;
+          console.error(msg);
+          throw new Error(msg);
         }
       }
     } catch (err) {
+      if (err instanceof Error && err.message.startsWith('API create failed')) {
+        throw err;
+      }
       console.error(`API create error ${pathCollection}:`, err);
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 

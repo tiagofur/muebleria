@@ -105,6 +105,41 @@ export const COMPONENT_EDITOR_TABS: readonly {
   { id: 'options', label: 'Opciones' },
 ];
 
+/**
+ * Suggested size formulas for a placement (workshop conventions).
+ * Opt-in via "Aplicar convención" — never auto-overwrite existing formulas.
+ */
+export function sizeFormulasForPlacement(
+  placement: string,
+): { readonly lengthFormula: string; readonly widthFormula: string } | null {
+  switch (placement) {
+    case 'base':
+    case 'superior':
+      // L = furniture width (grain L→R); W = depth
+      return { lengthFormula: 'PW', widthFormula: 'PD' };
+    case 'lateral_izquierdo':
+    case 'lateral_derecho':
+      return { lengthFormula: 'PH', widthFormula: 'PD' };
+    case 'trasera':
+    case 'frontal':
+      return { lengthFormula: 'PH - 31', widthFormula: 'PW - 31' };
+    case 'puerta':
+      return { lengthFormula: 'PH - 3', widthFormula: 'PW - 4' };
+    case 'interno':
+      return { lengthFormula: 'PW - 31', widthFormula: 'PD' };
+    default:
+      return null;
+  }
+}
+
+/** Count non-empty option role codes in the draft CSV. */
+export function countOptionRoles(optionRoles: string): number {
+  return optionRoles
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean).length;
+}
+
 export interface ComponentDraft {
   code: string;
   name: string;

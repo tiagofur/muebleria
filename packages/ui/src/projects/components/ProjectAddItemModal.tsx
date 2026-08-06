@@ -17,6 +17,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  Component,
   EdgeBand,
   Hardware,
   MaterialBoard,
@@ -24,6 +25,7 @@ import type {
   ModuleCategory,
   OptionChoices,
   OptionGroup,
+  Structure,
 } from '@muebles/domain';
 import {
   cascadeOptions,
@@ -67,6 +69,12 @@ export interface ProjectAddItemModalProps {
     readonly edges: readonly EdgeBand[];
     readonly hardware: readonly Hardware[];
   };
+  /**
+   * Composed modules resolve INTERIOR/FRENTE from structure/component roles.
+   * Without these, the add-item form only offers hardware groups.
+   */
+  readonly catalogComponents?: readonly Component[];
+  readonly catalogStructures?: readonly Structure[];
   /** F029: project-wide option defaults — empty key = inherit on this line. */
   readonly projectLevelChoices: Readonly<Record<string, string>>;
   /** #109: per-furnitureType measure defaults → pre-select closest preset. */
@@ -83,12 +91,14 @@ export function ProjectAddItemModal({
   categories,
   optionGroups,
   catalogs,
+  catalogComponents = [],
+  catalogStructures = [],
   projectLevelChoices,
   measureDefaults,
 }: ProjectAddItemModalProps): ReactNode {
   const formId = useId();
   const [addItem, setAddItem] = useState<AddItemDraft>(() =>
-    emptyAddItemDraft(modules, optionGroups),
+    emptyAddItemDraft(modules, optionGroups, catalogComponents, catalogStructures),
   );
   const [itemError, setItemError] = useState<string | null>(null);
   const [addCategoryL1, setAddCategoryL1] = useState('');
@@ -101,23 +111,35 @@ export function ProjectAddItemModal({
       if (prev.moduleId && modules.some((m) => m.id === prev.moduleId)) {
         return prev;
       }
-      return emptyAddItemDraft(modules, optionGroups);
+      return emptyAddItemDraft(
+        modules,
+        optionGroups,
+        catalogComponents,
+        catalogStructures,
+      );
     });
-  }, [modules, optionGroups]);
+  }, [modules, optionGroups, catalogComponents, catalogStructures]);
 
   // Reset internal state only on the closed → open transition so an in-flight
   // session is never clobbered by a parent re-render.
   const prevOpen = useRef(open);
   useEffect(() => {
     if (!prevOpen.current && open) {
-      setAddItem(emptyAddItemDraft(modules, optionGroups));
+      setAddItem(
+        emptyAddItemDraft(
+          modules,
+          optionGroups,
+          catalogComponents,
+          catalogStructures,
+        ),
+      );
       setItemError(null);
       setAddCategoryL1('');
       setAddCategoryL2('');
       setAddCategoryL3('');
     }
     prevOpen.current = open;
-  }, [open, modules, optionGroups]);
+  }, [open, modules, optionGroups, catalogComponents, catalogStructures]);
 
   const addItemCategoryFilter: CategoryFilterId = useMemo(() => {
     const id = cascadeSelectedCategoryId({
@@ -144,12 +166,24 @@ export function ProjectAddItemModal({
   );
 
   const addModule = modules.find((m) => m.id === addItem.moduleId);
-  const addGroups = groupsForModuleItem(addModule, optionGroups);
+  const addGroups = groupsForModuleItem(
+    addModule,
+    optionGroups,
+    catalogComponents,
+    catalogStructures,
+  );
 
   const selectModuleForAdd = (moduleId: string) => {
     const mod = modules.find((m) => m.id === moduleId);
     // Prefill only groups without a project-level default (F029 inherit).
-    const seeded = mod ? defaultChoicesForNewItem(mod, optionGroups) : {};
+    const seeded = mod
+      ? defaultChoicesForNewItem(
+          mod,
+          optionGroups,
+          catalogComponents,
+          catalogStructures,
+        )
+      : {};
     const projectLevel = projectLevelChoices ?? {};
     const optionChoices: Record<string, string> = {};
     for (const [code, id] of Object.entries(seeded)) {
@@ -185,7 +219,12 @@ export function ProjectAddItemModal({
       return;
     }
 
-    const groups = groupsForModuleItem(mod, optionGroups);
+    const groups = groupsForModuleItem(
+      mod,
+      optionGroups,
+      catalogComponents,
+      catalogStructures,
+    );
     const effective = effectiveOptionChoices(addItem.optionChoices, projectLevelChoices);
     for (const group of groups) {
       if (!effective[group.code]) {

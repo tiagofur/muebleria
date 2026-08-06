@@ -389,7 +389,7 @@ export function OptionGroupsScreen({
                 <div className="catalog-row-detail__actions">
                   <button
                     type="button"
-                    className="btn btn--small"
+                    className="btn btn--small btn--primary"
                     onClick={() => startEdit(row)}
                   >
                     <Pencil size={14} strokeWidth={1.5} aria-hidden />
@@ -397,7 +397,7 @@ export function OptionGroupsScreen({
                   </button>
                   <button
                     type="button"
-                    className="btn btn--small btn--danger"
+                    className="btn btn--small"
                     onClick={() => requestDelete(row.id)}
                   >
                     <Trash2 size={14} strokeWidth={1.5} aria-hidden />
@@ -495,51 +495,64 @@ export function OptionGroupsScreen({
         <form id={formId} className="catalog-form" onSubmit={handleSubmit}>
           {error ? <p className="catalog-form__error">{error}</p> : null}
 
-          <div className="catalog-form__field">
-            <label htmlFor="og-code">Código</label>
-            <input
-              id="og-code"
-              value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              autoComplete="off"
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="og-name">Nombre</label>
-            <input
-              id="og-name"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="og-kind">Tipo (kind)</label>
-            <select
-              id="og-kind"
-              value={draft.kind}
-              onChange={(e) => setKind(e.target.value as OptionGroupKind)}
-            >
-              <option value="board">{optionGroupKindLabel('board')}</option>
-              <option value="hardware">{optionGroupKindLabel('hardware')}</option>
-              <option value="edge">{optionGroupKindLabel('edge')}</option>
-            </select>
-          </div>
-          <div className="catalog-form__field catalog-form__row-check">
-            <input
-              id="og-required"
-              type="checkbox"
-              checked={draft.required}
-              onChange={(e) =>
-                setDraft({ ...draft, required: e.target.checked })
-              }
-            />
-            <label htmlFor="og-required">Requerido (bloquea precio si falta)</label>
-          </div>
+          <fieldset
+            className="catalog-form__section"
+            data-testid="option-group-form-identity"
+          >
+            <legend className="catalog-form__section-title">Identidad</legend>
+            <div className="catalog-form__field">
+              <label htmlFor="og-code">Código</label>
+              <input
+                id="og-code"
+                value={draft.code}
+                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="og-name">Nombre</label>
+              <input
+                id="og-name"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="og-kind">Tipo</label>
+              <select
+                id="og-kind"
+                value={draft.kind}
+                onChange={(e) => setKind(e.target.value as OptionGroupKind)}
+              >
+                <option value="board">{optionGroupKindLabel('board')}</option>
+                <option value="hardware">
+                  {optionGroupKindLabel('hardware')}
+                </option>
+                <option value="edge">{optionGroupKindLabel('edge')}</option>
+              </select>
+            </div>
+            <div className="catalog-form__field catalog-form__row-check">
+              <input
+                id="og-required"
+                type="checkbox"
+                checked={draft.required}
+                onChange={(e) =>
+                  setDraft({ ...draft, required: e.target.checked })
+                }
+              />
+              <label htmlFor="og-required">
+                Requerido (bloquea precio si falta)
+              </label>
+            </div>
+          </fieldset>
 
-          <fieldset className="option-members">
-            <legend>
+          <fieldset
+            className="catalog-form__section option-members"
+            data-testid="option-group-form-members"
+          >
+            <legend className="catalog-form__section-title">
               Miembros ({optionGroupKindLabel(draft.kind).toLowerCase()})
             </legend>
             {memberCandidates.length === 0 ? (

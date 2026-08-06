@@ -33,14 +33,17 @@ const living: Module = {
   hardwareLines: [],
 };
 
-describe('ModuleShowcase (F040 / F043)', () => {
-  it('renders card with image and placeholder for missing photo', () => {
+describe('ModuleShowcase (F040 / F043 redesign)', () => {
+  it('renders photo-first cards: name dominant, image or placeholder', () => {
     render(<ModuleShowcase modules={[sample, living]} />);
     expect(screen.getByText('Vitrina de muebles')).toBeTruthy();
     expect(screen.getByTestId('showcase-card-m1')).toBeTruthy();
     expect(screen.getByTestId('catalog-image')).toBeTruthy();
     expect(screen.getByTestId('catalog-image-placeholder')).toBeTruthy();
+    expect(screen.getByText('Gabinete')).toBeTruthy();
     expect(screen.getAllByText(/600/).length).toBeGreaterThan(0);
+    // No primary CTA on cards — browse only
+    expect(screen.queryByTestId('showcase-use-m1')).toBeNull();
   });
 
   it('filters by category chip (F043)', async () => {
@@ -60,7 +63,7 @@ describe('ModuleShowcase (F040 / F043)', () => {
     expect(screen.queryByTestId('showcase-card-m2')).toBeNull();
   });
 
-  it('opens read-only detail and fires Usar en cotización (F043)', async () => {
+  it('opens read-only detail and fires Usar en cotización only from detail', async () => {
     const user = userEvent.setup();
     const onUseInQuote = vi.fn();
     render(
@@ -71,11 +74,7 @@ describe('ModuleShowcase (F040 / F043)', () => {
       />,
     );
 
-    expect(screen.getByTestId('showcase-use-m1').textContent).toMatch(
-      /Usar en cotización/,
-    );
-    await user.click(screen.getByTestId('showcase-use-m1'));
-    expect(onUseInQuote).toHaveBeenCalledWith('m1');
+    expect(screen.queryByTestId('showcase-use-m1')).toBeNull();
 
     await user.click(screen.getByTestId('showcase-card-open-m1'));
     const detail = screen.getByTestId('showcase-detail');
@@ -84,6 +83,15 @@ describe('ModuleShowcase (F040 / F043)', () => {
     expect(detail.textContent).toMatch(/solo lectura/i);
 
     await user.click(screen.getByTestId('showcase-detail-use'));
-    expect(onUseInQuote).toHaveBeenCalledTimes(2);
+    expect(onUseInQuote).toHaveBeenCalledTimes(1);
+    expect(onUseInQuote).toHaveBeenCalledWith('m1');
+  });
+
+  it('hides quote CTA in detail when onUseInQuote is omitted', async () => {
+    const user = userEvent.setup();
+    render(<ModuleShowcase modules={[sample]} categories={categories} />);
+    await user.click(screen.getByTestId('showcase-card-open-m1'));
+    expect(screen.getByTestId('showcase-detail')).toBeTruthy();
+    expect(screen.queryByTestId('showcase-detail-use')).toBeNull();
   });
 });

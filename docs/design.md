@@ -630,16 +630,12 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Detalle (workspace tool — issue #50):**
   - **Chrome sticky** (`.workspace-chrome`): nombre, status, meta densa, precio de venta, **acciones agrupadas** (ver abajo)
   - Cuerpo en **2 columnas** (`.project-detail__body`): columna principal (`.project-detail__main` = opciones de proyecto opcionales + ítems/muebles) | panel sticky de desglose (`.project-totals`). Nunca más de dos hijos directos del grid o el layout se rompe.
-- **Chrome — agrupación de acciones (Fase 2 UI):**
-  - **Exportar Optimizer** (`btn--primary`): visible solo si `onExport && !productionExportDisabled` (rol puede exportar producción + status accepted/produced + no bloqueado). Caso típico de planta.
-  - **Más exports ▾** (`btn` + `DropdownMenu`): menú con los 6 exports restantes agrupados por sección:
-    - *Producción*: Lista de herrajes, Etiquetas (encintado PDF), Pack producción (ZIP). Solo visibles si `canExportProduction`.
-    - *Comercial*: Exportar cotización (XLSX F030), PDF listado (F045 detailed), PDF resumen (F045 summary). Visibles para todos los roles excepto `produccion`.
-  - **Presentar** (`btn--primary` o `btn`): overlay fullscreen de modo cliente, sin costos internos.
-  - **Editar / Duplicar / Guardar como plantilla** (`btn`): solo si `canMutate`.
-  - **Marcar en producción** (`btn--primary`): transición `accepted → produced`; visible solo si status=accepted y `canMarkProduced`.
-  - **Reabrir a borrador** (`btn`): si `canReopen` y status ∈ {quoted, accepted, produced}.
-  - **Eliminar** (`btn--danger`): si `canDelete`.
+- **Chrome — agrupación de acciones (wave 4 density):**
+  - **Exactamente un `btn--primary` de ciclo de vida** por status: Enviar (draft) · Aceptar (quoted) · Marcar en producción (accepted) · Exportar Optimizer (accepted/produced cuando planta lista).
+  - **Exportar Optimizer** en chrome solo si plant-ready (`productionExportOk`); si no, vive deshabilitado bajo **Más**.
+  - **Presentar** + **Editar** (si `canMutate`) como secundarios en chrome.
+  - **Más ▾** (`DropdownMenu`): exports (Producción / Comercial) + Duplicar / Guardar plantilla / Reabrir / **Eliminar**. Sin botón danger permanente en chrome.
+  - Mobile: total y actions full-width debajo del lead (`.project-detail` + workspace-chrome).
 - **Cliente:** picker de clientes activos + acción «Nuevo cliente» (alta inline o navegación a Clientes según wiring del shell)
 - **Plantillas (#110):** toolbar con «Desde plantilla» (picker) y «Plantillas» (gestión); chrome con «Guardar como plantilla» desde un proyecto
 - **Búsqueda / filtros:** SearchInput
@@ -651,12 +647,12 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Ruta nav:** `modules` (sección **INGENIERÍA**, no TRABAJO)
 - **Path:** `packages/ui/src/modules/`
 - **Título de pantalla:** **Muebles**
-- **Patrón:** card-detalle (cards → vista detalle inline)
+- **Patrón:** card-detalle + `EntityEditorLayout` (lista → detalle → editor full-page). Shell de detalle: `EngineeringDetailLayout` (`.eng-detail`).
 - **Lista:** cards con código, nombre, conteos de partes/herrajes, estimate de precio de venta (shell)
-- **Detalle (workspace tool — issue #50):**
-  - **Chrome sticky:** código, nombre, categoría/meta, precio estimado, Editar (primary), Duplicar/Eliminar
-  - Cuerpo: preview de costo + piezas + herrajes densos (sin header de página web)
-- **Editor:** Modal **LG** con tabs (General, Estructura, Componentes, Medidas, Herrajes, Costo). Pendiente de migración a vista detalle inline (Fase 3).
+- **Detalle (wave 3 UI):**
+  - **Chrome sticky:** código, nombre, categoría/meta, **Precio est.**, Vista 3D, Editar (primary), menú **Más** (Duplicar / Eliminar)
+  - **Body 2-col:** primario = preview de costo + componentes; secundario = estructura/medidas + herrajes + presets comerciales
+- **Editor:** full-page workspace con tabs (General, Estructura, Componentes, Medidas, Herrajes, Costo).
 - **Preview de costo:** props del shell (`costPreview`, `previewBlocked`, `missingGroups`); sin fórmulas en UI
 - **Categorías jerárquicas (F025):** panel lateral con árbol editable de hasta 3 niveles + filtro en cascada
 - **EmptyState** + SearchInput con debounce
@@ -666,10 +662,12 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 - **Rutas nav:** `materials` | `edges` | `hardware` | `optionGroups` (sección INGENIERÍA)
 - **Paths:** `packages/ui/src/catalogs/`, `packages/ui/src/optionGroups/`
-- **Patrón común:** tabla-expand (`.data-table` + `--wrap` + expand de fila + Modal **SM**)
+- **Patrón común:** tabla-expand (`.data-table` + `--wrap` + expand de fila + Modal **SM**/ **MD**)
 - **Tabla (issue #56 + Fase 1):** `.data-table-wrap` es scrollport (`overflow: auto` + `max-height`); `th` con `position: sticky; top: 0`, fondo sólido y `border-collapse: separate` para sticky fiable; filas densas vía tokens `--density-table-*`; edge-fade gradients laterales. Desde Fase 1 UI, `catalog-table-wrap` / `users-table-wrap` / `dashboard-owners-wrap` son aliases de `.data-table-wrap` en `common/dataTable.css`.
+- **Expand (wave 5):** `.catalog-row-detail` card inset con defs densas; en actions **Editar** es `btn--primary` small, desactivar/eliminar secundario.
+- **Forms (wave 5):** fieldsets `.catalog-form__section` + título sentence-case (no ALL CAPS). Materiales ya tenía secciones; Cantos (Identidad / Medida y costo), Herrajes (Identidad / Compra), Grupos (Identidad / Miembros) alineados.
 - **Materiales / Cantos / Herrajes:** `CatalogTable`, desactivar/reactivar, badges de activo, imagen (F042), color swatch y `defaultEdgeBandId` (F027)
-- **Grupos de opciones:** pantalla propia con tabla/listado y modal; preview de precio gated por `PricePreviewGate` cuando faltan resoluciones
+- **Grupos de opciones:** pantalla propia con tabla/listado y modal; preview de precio gated por `PricePreviewGate` (tokens de estado, no hex sueltos)
 - **EmptyState** con CTA «+ Agregar…»
 - **RBAC**: `roleCanAccessCatalogNav` (admin, ingeniero, gerente_ventas, vendedor). Mutar: `roleCanMutateCatalog` (solo admin/ingeniero).
 
@@ -687,10 +685,10 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 - **Ruta nav:** `showcase` (sección TRABAJO)
 - **Path:** `packages/ui/src/modules/ModuleShowcase.tsx`
-- **Patrón:** card-grid (read-only + modal informativo MD)
-- **Contenido:** catálogo comercial de muebles por foto **sin BOM ni costos** (F040/F043). Filtros por categoría (chips), búsqueda por código/nombre.
-- **Card:** foto o placeholder, código, nombre, dimensiones principales, CTA «Usar en cotización» (dispara alta de cotización con ese módulo).
-- **Detalle:** modal MD con imagen grande, descripción, dimensiones, opciones visibles (sin precios de costo).
+- **Patrón:** card-grid comercial foto-first (read-only + modal informativo **LG**)
+- **Contenido:** catálogo comercial de muebles por foto **sin BOM ni costos** (F040/F043). Filtros por categoría (chips root), búsqueda por código/nombre.
+- **Card:** media **4:3**, nombre dominante, medidas, código muted + badge de categoría. Click abre detalle. **Sin** CTA primary en la card (browse-only).
+- **Detalle:** modal **LG** con imagen hero, código, medidas, categoría, notas; un solo primary «Usar en cotización» (si el shell pasa `onUseInQuote`). Opciones visibles sin costo: pendiente de prop de grupos (no inventar precios).
 - **RBAC**: `roleCanAccessShowcaseNav` (admin, ingeniero, gerente_ventas, vendedor). No `produccion`, no `user`.
 - **Icono:** `Store`
 
@@ -711,9 +709,10 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 - **Ruta nav:** `structures` (sección INGENIERÍA)
 - **Path:** `packages/ui/src/structures/StructuresScreen.tsx` (F049)
-- **Patrón actual:** card-expand (cards expandibles sobre la grid + Modal **LG** con tabs para editar). Pendiente de migración a card-detalle en Fase 3.
-- **Contenido:** cuerpos reutilizables compuestos de piezas con roles. Cada card muestra código, nombre, dimensiones, revisión (`structure-revision-badge`).
-- **Editor:** Modal LG con tabs: General, Componentes, Presets de medida, Preview. `structureRevisionPin` para congela revisión en cotizaciones cerradas.
+- **Patrón actual:** card-detalle + `EntityEditorLayout` (lista → detalle → editor full-page). Shell de detalle: `EngineeringDetailLayout` (`.eng-detail`).
+- **Contenido:** cuerpos reutilizables compuestos de piezas. Cada card muestra código, nombre, dimensiones, revisión (`structure-revision-badge`).
+- **Detalle (wave 2 UI):** chrome sticky con métrica Exterior (A×H×P) + Vista 3D + Editar; body 2-col — primario (dims + instancias de componentes), secundario (presets de medida + historial de revisiones en disclosure).
+- **Editor:** full-page workspace con tabs sticky **General → Componentes → Presets** (sin tab Vista 3D suelto: 3D live sticky en Componentes). Badge si body vacío; save salta a Componentes. Presets con labels + validación blur. `structureRevisionPin` congela revisión en cotizaciones cerradas.
 - **RBAC**: `roleCanMutateModules` (admin, ingeniero).
 - **Icono:** `LayoutGrid`
 
@@ -721,9 +720,10 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 - **Ruta nav:** `components` (sección INGENIERÍA)
 - **Path:** `packages/ui/src/components/ComponentsScreen.tsx`
-- **Patrón actual:** tabla-expand (usando `CatalogTable` con `expandedId`) + Modal **LG** con tabs para editar. Pendiente de migración a card-detalle en Fase 3.
-- **Contenido:** piezas reutilizables para componer estructuras. Cada fila/card muestra código, nombre, dimensiones, placement, notas.
-- **Editor:** Modal LG con tabs: General, Geometría, Cantos, Opciones, Preview 3D.
+- **Patrón actual:** card-detalle + `EntityEditorLayout` (lista → detalle → editor full-page). Shell de detalle: `EngineeringDetailLayout` (`.eng-detail`).
+- **Contenido:** piezas reutilizables para componer estructuras. Cada card muestra código, nombre, dimensiones, placement.
+- **Detalle (wave 1 UI):** chrome sticky con métrica de placa (L×A×E) + Editar; body 2-col — primario (geometría + `PlankEdgeDiagram` solo lectura), secundario (pose en disclosure, roles, perforaciones).
+- **Editor:** full-page workspace con tabs sticky: General, Geometría (form | 3D sticky en desktop; guía de fórmulas colapsada), Cantos (`PlankEdgeDiagram`), Opciones (chips + badge si falta rol). Save exige ≥1 rol y salta a Opciones si falta.
 - **RBAC**: `roleCanMutateModules` (admin, ingeniero).
 - **Icono:** `Puzzle`
 

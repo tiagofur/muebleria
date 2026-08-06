@@ -58,6 +58,10 @@ describe('EdgesCatalog (gap #6)', () => {
     const addBtn = screen.getByRole('button', { name: /agregar|nueva|crear/i });
     await user.click(addBtn);
 
+    // Wave 5: form sections for consistency with materials
+    expect(screen.getByTestId('edge-form-identity')).toBeTruthy();
+    expect(screen.getByTestId('edge-form-measure')).toBeTruthy();
+
     // Fill the form
     await user.type(screen.getByLabelText(/código/i), 'CANTO-NEW');
     await user.type(screen.getByLabelText(/nombre/i), 'Canto nuevo');

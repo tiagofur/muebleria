@@ -1,5 +1,6 @@
 /**
- * Sales showcase of modules — photos without BOM/cost editing (F040 / F043).
+ * Sales showcase of modules — commercial photo catalog without BOM/cost (F040 / F043).
+ * Browse by photo → confirm in detail → quote. Primary CTA only in detail.
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
@@ -103,20 +104,22 @@ export function ModuleShowcase({
 
   return (
     <section className="module-showcase" aria-label="Vitrina de muebles">
-      <header className="module-showcase__header">
-        <div>
+      <header className="module-showcase__header page-header">
+        <div className="module-showcase__header-text">
           <h2 className="module-showcase__title">Vitrina de muebles</h2>
           <p className="module-showcase__lead">
-            Catálogo visual para cotizar. Las medidas son de referencia; el
-            despiece lo arma ingeniería.
+            Catálogo visual para cotizar. Elegí por foto; las medidas son de
+            referencia y el despiece lo arma ingeniería.
           </p>
         </div>
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Buscar mueble…"
-          aria-label="Buscar en vitrina"
-        />
+        <div className="page-header__actions module-showcase__search">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Buscar mueble…"
+            aria-label="Buscar en vitrina"
+          />
+        </div>
       </header>
 
       {showCategoryFilter ? (
@@ -203,7 +206,7 @@ export function ModuleShowcase({
           {rows.map((m) => {
             const catName = categoryLabel(m, categories);
             return (
-              <li key={m.id}>
+              <li key={m.id} className="module-showcase__grid-item">
                 <article
                   className="module-showcase-card"
                   data-testid={`showcase-card-${m.id}`}
@@ -215,36 +218,31 @@ export function ModuleShowcase({
                     data-testid={`showcase-card-open-${m.id}`}
                     aria-label={`Ver ${m.name}`}
                   >
-                    <CatalogImage
-                      src={resolveImageUrl(m.imageUrl)}
-                      alt={m.name}
-                      size="lg"
-                      className="module-showcase-card__img"
-                    />
+                    <div className="module-showcase-card__media">
+                      <CatalogImage
+                        src={resolveImageUrl(m.imageUrl)}
+                        alt={m.name}
+                        size="lg"
+                        className="module-showcase-card__img"
+                      />
+                    </div>
                     <div className="module-showcase-card__body">
-                      <p className="module-showcase-card__code">{m.code}</p>
                       <h3 className="module-showcase-card__name">{m.name}</h3>
                       <p className="module-showcase-card__dims">
                         {dimLabel(m)}
                       </p>
-                      {catName ? (
-                        <p className="module-showcase-card__cat">{catName}</p>
-                      ) : null}
+                      <div className="module-showcase-card__meta">
+                        <span className="module-showcase-card__code">
+                          {m.code}
+                        </span>
+                        {catName ? (
+                          <span className="module-showcase-card__cat">
+                            {catName}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </button>
-                  {onUseInQuote ? (
-                    <div className="module-showcase-card__actions">
-                      <button
-                        type="button"
-                        className="btn btn--primary btn--small module-showcase-card__cta"
-                        onClick={() => onUseInQuote(m.id)}
-                        data-testid={`showcase-use-${m.id}`}
-                      >
-                        <ShoppingCart size={14} strokeWidth={1.5} aria-hidden />
-                        Usar en cotización
-                      </button>
-                    </div>
-                  ) : null}
                 </article>
               </li>
             );
@@ -256,7 +254,7 @@ export function ModuleShowcase({
         open={detail !== null}
         onClose={() => setDetailId(null)}
         title={detail?.name ?? 'Mueble'}
-        size="md"
+        size="lg"
         footer={
           detail ? (
             <div className="module-showcase-detail__footer">
@@ -290,36 +288,37 @@ export function ModuleShowcase({
             className="module-showcase-detail"
             data-testid="showcase-detail"
           >
-            <CatalogImage
-              src={resolveImageUrl(detail.imageUrl)}
-              alt={detail.name}
-              size="lg"
-              className="module-showcase-detail__img"
-            />
-            <dl className="module-showcase-detail__meta">
-              <div>
-                <dt>Código</dt>
-                <dd>{detail.code}</dd>
-              </div>
-              <div>
-                <dt>Medidas</dt>
-                <dd>{dimLabel(detail)}</dd>
-              </div>
-              {categoryLabel(detail, categories) ? (
+            <div className="module-showcase-detail__media">
+              <CatalogImage
+                src={resolveImageUrl(detail.imageUrl)}
+                alt={detail.name}
+                size="lg"
+                className="module-showcase-detail__img"
+              />
+            </div>
+            <div className="module-showcase-detail__content">
+              <p className="module-showcase-detail__code">{detail.code}</p>
+              <dl className="module-showcase-detail__meta">
                 <div>
-                  <dt>Categoría</dt>
-                  <dd>{categoryLabel(detail, categories)}</dd>
+                  <dt>Medidas</dt>
+                  <dd>{dimLabel(detail)}</dd>
                 </div>
-              ) : null}
-            </dl>
-            {detail.notes ? (
-              <p className="module-showcase-detail__notes">{detail.notes}</p>
-            ) : (
-              <p className="module-showcase-detail__notes module-showcase-detail__notes--muted">
-                Vista de solo lectura. El despiece y costos los define
-                ingeniería al armar la cotización.
-              </p>
-            )}
+                {categoryLabel(detail, categories) ? (
+                  <div>
+                    <dt>Categoría</dt>
+                    <dd>{categoryLabel(detail, categories)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {detail.notes ? (
+                <p className="module-showcase-detail__notes">{detail.notes}</p>
+              ) : (
+                <p className="module-showcase-detail__notes module-showcase-detail__notes--muted">
+                  Vista de solo lectura. El despiece y los costos los define
+                  ingeniería al armar la cotización.
+                </p>
+              )}
+            </div>
           </div>
         ) : null}
       </Modal>

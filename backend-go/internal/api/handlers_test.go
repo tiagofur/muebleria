@@ -1293,6 +1293,40 @@ func TestHandleMaterialByIDUpdateCleansReplacedImage(t *testing.T) {
 	}
 }
 
+// PUT must decode and forward texture tile mm into UpdateMaterialBoard.
+func TestHandleMaterialByIDUpdateReceivesTextureTiles(t *testing.T) {
+	store := &stubStore{
+		materialReturnedByID: &domain.MaterialBoard{ID: "m1"},
+	}
+	srv := &Server{Store: store}
+
+	body := strings.NewReader(`{
+		"code":"MAD-1","name":"Madera","width_mm":1830,"length_mm":2440,"thickness_mm":18,
+		"board_price":10,"waste_percent":5,"active":true,
+		"preview_texture_url":"/api/media/wood.webp",
+		"preview_texture_tile_width_mm":400,
+		"preview_texture_tile_length_mm":600
+	}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.SetPathValue("id", "m1")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterialByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if store.updateMaterialReceived == nil {
+		t.Fatal("expected UpdateMaterialBoard payload")
+	}
+	got := store.updateMaterialReceived
+	if got.PreviewTextureTileWidthMm != 400 || got.PreviewTextureTileLengthMm != 600 {
+		t.Fatalf("tiles = %.0f x %.0f, want 400 x 600", got.PreviewTextureTileWidthMm, got.PreviewTextureTileLengthMm)
+	}
+	if got.PreviewTextureURL != "/api/media/wood.webp" {
+		t.Fatalf("texture url = %q", got.PreviewTextureURL)
+	}
+}
+
 // When the URL does NOT change, the file must be preserved.
 func TestHandleMaterialByIDUpdateKeepsSameImage(t *testing.T) {
 	dir := t.TempDir()
