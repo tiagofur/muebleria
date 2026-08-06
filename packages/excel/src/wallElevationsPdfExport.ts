@@ -20,7 +20,8 @@ export type WallElevationsPdfInput = {
 
 const PAGE_W = 841.89; // A4 landscape
 const PAGE_H = 595.28;
-const MARGIN = 36;
+/** Print-friendly margin (~12 mm) for shop printers. */
+const MARGIN = 40;
 
 function drawText(
   page: PDFPage,

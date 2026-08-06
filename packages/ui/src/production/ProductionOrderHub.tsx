@@ -373,31 +373,10 @@ export function ProductionOrderHub({
         ) : null}
 
         <div className="prod-hub__chrome-actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={onOpenDesign}
-            data-testid="prod-hub-open-design"
-            title="Abre la cotización/diseño (sale del workspace de fábrica)"
-          >
-            <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
-            Ver cotización / diseño
-          </button>
-          {project.status === 'accepted' && onMarkProduced ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={onMarkProduced}
-              data-testid="prod-hub-mark-produced"
-            >
-              <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
-              Marcar en producción
-            </button>
-          ) : null}
           {onExportProductionPack ? (
             <button
               type="button"
-              className="btn btn--primary"
+              className="btn btn--primary prod-hub__chrome-primary"
               disabled={exportBusy || !readiness.packGenerable}
               onClick={() => {
                 void onExportProductionPack();
@@ -405,7 +384,7 @@ export function ProductionOrderHub({
               data-testid="prod-hub-export-pack"
               title={
                 readiness.packGenerable
-                  ? 'ZIP con Optimizer, herrajes y etiquetas'
+                  ? 'ZIP: Optimizer, herrajes, etiquetas, elevaciones, armado…'
                   : 'Pack no disponible: falta despiece de corte válido'
               }
             >
@@ -413,35 +392,60 @@ export function ProductionOrderHub({
               {exportBusy ? 'Generando…' : 'Pack de producción'}
             </button>
           ) : null}
+          <div className="prod-hub__chrome-secondary">
+            <button
+              type="button"
+              className="btn"
+              onClick={onOpenDesign}
+              data-testid="prod-hub-open-design"
+              title="Abre la cotización/diseño (sale del workspace de fábrica)"
+            >
+              <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
+              Ver cotización
+            </button>
+            {project.status === 'accepted' && onMarkProduced ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={onMarkProduced}
+                data-testid="prod-hub-mark-produced"
+              >
+                <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
+                Marcar en planta
+              </button>
+            ) : null}
+          </div>
         </div>
       </header>
 
-      <nav
-        className="prod-hub__tabs"
-        role="tablist"
-        aria-label="Secciones de la orden de producción"
-      >
-        {PRODUCTION_ORDER_TABS.map((tab) => {
-          const selected = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={
-                selected
-                  ? 'prod-hub__tab prod-hub__tab--active'
-                  : 'prod-hub__tab'
-              }
-              onClick={() => onTabChange(tab)}
-              data-testid={`prod-hub-tab-${tab}`}
-            >
-              {PRODUCTION_ORDER_TAB_LABELS[tab]}
-            </button>
-          );
-        })}
-      </nav>
+      <div className="prod-hub__tabs-wrap">
+        <nav
+          className="prod-hub__tabs"
+          role="tablist"
+          aria-label="Secciones de la orden de producción"
+        >
+          {PRODUCTION_ORDER_TABS.map((tab) => {
+            const selected = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={
+                  selected
+                    ? 'prod-hub__tab prod-hub__tab--active'
+                    : 'prod-hub__tab'
+                }
+                onClick={() => onTabChange(tab)}
+                data-testid={`prod-hub-tab-${tab}`}
+              >
+                {PRODUCTION_ORDER_TAB_LABELS[tab]}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
       <div className="prod-hub__body" role="tabpanel">
         {activeTab === 'resumen' ? (
