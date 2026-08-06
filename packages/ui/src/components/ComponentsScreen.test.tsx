@@ -254,6 +254,32 @@ describe('ComponentsScreen', () => {
     expect(screen.getByText('COM-ENT-01')).toBeTruthy();
   });
 
+  it('detail workspace shows plate metric, edge diagram and pose disclosure', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByText('Puerta')[0]!);
+    expect(screen.getByTestId('component-detail')).toBeTruthy();
+    expect(screen.getByTestId('component-detail-metric').textContent).toMatch(
+      /717/,
+    );
+    expect(screen.getByTestId('component-detail-geometry')).toBeTruthy();
+    expect(screen.getByTestId('component-detail-edges')).toBeTruthy();
+    expect(screen.getByTestId('plank-edge-diagram')).toBeTruthy();
+    expect(screen.getByTestId('component-detail-pose')).toBeTruthy();
+    expect(screen.getByTestId('component-detail-roles').textContent).toMatch(
+      /FRENTE/,
+    );
+  });
+
   it('shows/hides actions based on canMutate', () => {
     const { rerender } = render(
       <ComponentsScreen
@@ -417,6 +443,120 @@ describe('ComponentsScreen', () => {
     // Changing placement to "superior" surfaces its description.
     fireEvent.change(select, { target: { value: 'superior' } });
     expect(screen.getByTestId('placement-hint').textContent).toContain('Tapa');
+  });
+
+  it('critique: code locked hint when editing', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    expect(screen.getByTestId('input-code-hint').textContent).toMatch(
+      /no se cambia/i,
+    );
+  });
+
+  it('critique: formula guide collapsed; 3D viewport present', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    expect(screen.getByTestId('component-geometry-viewport')).toBeTruthy();
+    const guideToggle = screen.getByTestId('formula-guide-toggle');
+    expect(guideToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('formula-guide-body')).toBeNull();
+    fireEvent.click(guideToggle);
+    expect(guideToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('formula-guide-body').textContent).toMatch(/PW/);
+
+    // Focus formula field also expands guide after collapse
+    fireEvent.click(guideToggle);
+    expect(guideToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.focus(screen.getByTestId('input-length-formula'));
+    expect(guideToggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('critique: options tab badge when no roles; save jumps to options', () => {
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
+    expect(screen.getByTestId('component-editor-options-badge')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'COM-X' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Sin rol' },
+    });
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    fireEvent.change(screen.getByTestId('input-length'), {
+      target: { value: '100' },
+    });
+    fireEvent.change(screen.getByTestId('input-width'), {
+      target: { value: '100' },
+    });
+    fireEvent.change(screen.getByTestId('input-thickness'), {
+      target: { value: '18' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+    expect(screen.getByTestId('form-error').textContent).toMatch(/rol de opción/i);
+    expect(screen.getByTestId('component-editor-panel-options').hidden).toBe(
+      false,
+    );
+  });
+
+  it('critique: apply placement size convention when formulas empty', () => {
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
+    fireEvent.change(screen.getByTestId('input-placement'), {
+      target: { value: 'base' },
+    });
+    fireEvent.click(screen.getByTestId('apply-placement-convention'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    expect(
+      (screen.getByTestId('input-length-formula') as HTMLInputElement).value,
+    ).toBe('PW');
+    expect(
+      (screen.getByTestId('input-width-formula') as HTMLInputElement).value,
+    ).toBe('PD');
   });
 
   it('toggles option roles via chips instead of a native multi-select (P2)', () => {

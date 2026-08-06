@@ -64,6 +64,7 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `progress/history.md` | Bitácora de sesiones anteriores | Si necesitas contexto histórico |
 | `docs/prd.md` | Producto, usuarios del taller, dominio, fórmulas, anti-scope | Antes de dominio o producto |
 | `docs/app-excellence.md` | Plan post-horizonte: ventas/ingeniería/producción, layout cocina, CNC policy, issues | Roadmap de excelencia / issues #125+ |
+| `docs/production-module.md` | **Módulo Producción:** separación diseño vs fábrica, pantallas, pack, optimización, roadmap e issues | Antes de tocar nav/UI Producción, elevaciones PDF, pack ampliado o nesting visual |
 | `docs/judgment-day-wip-3d-2026-07-17.md` | Findings JD Round 1 (WIP 3D/espacial) | Antes de tocar preview 3D o mappers espaciales |
 | `docs/PRODUCT.md` | Contexto Impeccable (register, personality, anti-refs) | Setup del skill UI; no reemplaza el PRD |
 | `docs/architecture.md` | Paquetes, boundaries, flujo de datos | Antes de crear archivos |

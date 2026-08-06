@@ -32,9 +32,9 @@ export function ModuleEditorStructurePanel({
       data-testid="module-editor-panel-structure"
     >
       <h4 className="module-editor__section-title">Estructura (cuerpo)</h4>
-      <p className="catalog-empty" style={{ marginTop: 0 }}>
-        El cuerpo se arma en Ingeniería → Estructuras (solo componentes). Acá
-        elegís cuál usa este mueble y la medida base.
+      <p className="module-editor__hint module-editor__hint--flush">
+        El cuerpo se arma en Ingeniería → Estructuras. Acá elegís cuál usa este
+        mueble y la medida base (obligatoria si hay estructura).
       </p>
       <div className="catalog-form__field">
         <label htmlFor="mod-structure">Estructura base</label>

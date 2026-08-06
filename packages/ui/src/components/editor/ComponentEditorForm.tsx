@@ -1,12 +1,16 @@
 /**
  * Component create/edit form shell — tabs + panels.
+ * Critique fix: sticky tabs, keyboard roving, options badge when empty.
  */
 
-import type {
-  Dispatch,
-  FormEvent,
-  ReactNode,
-  SetStateAction,
+import {
+  useCallback,
+  useRef,
+  type Dispatch,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type SetStateAction,
 } from 'react';
 import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
 import type {
@@ -15,6 +19,7 @@ import type {
 } from '../../preview3d';
 import {
   COMPONENT_EDITOR_TABS,
+  countOptionRoles,
   type ComponentDraft,
   type ComponentEditorTab,
 } from '../componentDraft';
@@ -62,8 +67,39 @@ export function ComponentEditorForm({
   showInContext,
   onShowInContextChange,
 }: ComponentEditorFormProps): ReactNode {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const roleCount = countOptionRoles(draft.optionRoles);
+  const optionsMissing = roleCount === 0;
+
+  const focusTab = useCallback((index: number) => {
+    const tab = COMPONENT_EDITOR_TABS[index];
+    if (!tab) return;
+    setEditorTab(tab.id);
+    tabRefs.current[index]?.focus();
+  }, [setEditorTab]);
+
+  const onTabListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const n = COMPONENT_EDITOR_TABS.length;
+    const current = COMPONENT_EDITOR_TABS.findIndex((t) => t.id === editorTab);
+    if (current < 0) return;
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusTab((current + 1) % n);
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusTab((current - 1 + n) % n);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusTab(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusTab(n - 1);
+    }
+  };
+
   return (
-    <form id={formId} onSubmit={onSubmit} className="catalog-form">
+    <form id={formId} onSubmit={onSubmit} className="catalog-form component-editor">
       {error ? (
         <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
@@ -71,31 +107,45 @@ export function ComponentEditorForm({
       ) : null}
 
       <div
-        className="module-editor__tabs"
+        className="component-editor__tabs"
         role="tablist"
         aria-label="Secciones del editor de componente"
         data-testid="component-editor-tabs"
+        onKeyDown={onTabListKeyDown}
       >
-        {COMPONENT_EDITOR_TABS.map((tab) => {
+        {COMPONENT_EDITOR_TABS.map((tab, index) => {
           const selected = editorTab === tab.id;
+          const showBadge = tab.id === 'options' && optionsMissing;
           return (
             <button
               key={tab.id}
               type="button"
               role="tab"
+              ref={(el) => {
+                tabRefs.current[index] = el;
+              }}
               id={`component-editor-tab-${tab.id}`}
               aria-selected={selected}
               aria-controls={`component-editor-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
               className={
                 selected
-                  ? 'module-editor__tab module-editor__tab--active'
-                  : 'module-editor__tab'
+                  ? 'component-editor__tab component-editor__tab--active'
+                  : 'component-editor__tab'
               }
               data-testid={`component-editor-tab-${tab.id}`}
               onClick={() => setEditorTab(tab.id)}
             >
               {tab.label}
+              {showBadge ? (
+                <span
+                  className="component-editor__tab-badge"
+                  data-testid="component-editor-options-badge"
+                  title="Falta al menos un rol de opción"
+                >
+                  !
+                </span>
+              ) : null}
             </button>
           );
         })}

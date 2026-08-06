@@ -289,7 +289,7 @@ export function EdgesCatalog({
                 <div className="catalog-row-detail__actions">
                   <button
                     type="button"
-                    className="btn btn--small"
+                    className="btn btn--small btn--primary"
                     onClick={() => startEdit(row)}
                   >
                     <Pencil size={14} strokeWidth={1.5} aria-hidden />
@@ -298,7 +298,7 @@ export function EdgesCatalog({
                   {row.active ? (
                     <button
                       type="button"
-                      className="btn btn--small btn--danger"
+                      className="btn btn--small"
                       onClick={() => onDeactivate(row.id)}
                     >
                       <EyeOff size={14} strokeWidth={1.5} aria-hidden />
@@ -374,61 +374,70 @@ export function EdgesCatalog({
         <form id={formId} className="catalog-form" onSubmit={handleSubmit}>
           {error ? <p className="catalog-form__error">{error}</p> : null}
 
-          <div className="catalog-form__field">
-            <label htmlFor="edge-code">Código</label>
-            <input
-              id="edge-code"
-              value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              autoComplete="off"
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="edge-name">Nombre</label>
-            <input
-              id="edge-name"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="edge-thickness">Espesor (mm)</label>
-            <input
-              id="edge-thickness"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.thicknessMm}
-              onChange={(e) =>
-                setDraft({ ...draft, thicknessMm: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="edge-cost">Costo / ML</label>
-            <input
-              id="edge-cost"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.costPerMl}
-              onChange={(e) =>
-                setDraft({ ...draft, costPerMl: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="edge-notes">Notas</label>
-            <textarea
-              id="edge-notes"
-              value={draft.notes}
-              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-            />
-          </div>
+          <fieldset className="catalog-form__section" data-testid="edge-form-identity">
+            <legend className="catalog-form__section-title">Identidad</legend>
+            <div className="catalog-form__field">
+              <label htmlFor="edge-code">Código</label>
+              <input
+                id="edge-code"
+                value={draft.code}
+                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="edge-name">Nombre</label>
+              <input
+                id="edge-name"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                required
+              />
+            </div>
+          </fieldset>
+
+          <fieldset className="catalog-form__section" data-testid="edge-form-measure">
+            <legend className="catalog-form__section-title">
+              Medida y costo
+            </legend>
+            <div className="catalog-form__field">
+              <label htmlFor="edge-thickness">Espesor (mm)</label>
+              <input
+                id="edge-thickness"
+                type="number"
+                min={0}
+                step="any"
+                value={draft.thicknessMm}
+                onChange={(e) =>
+                  setDraft({ ...draft, thicknessMm: Number(e.target.value) })
+                }
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="edge-cost">Costo / ML</label>
+              <input
+                id="edge-cost"
+                type="number"
+                min={0}
+                step="any"
+                value={draft.costPerMl}
+                onChange={(e) =>
+                  setDraft({ ...draft, costPerMl: Number(e.target.value) })
+                }
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="edge-notes">Notas</label>
+              <textarea
+                id="edge-notes"
+                value={draft.notes}
+                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+              />
+            </div>
+          </fieldset>
         </form>
       </Modal>
     </section>

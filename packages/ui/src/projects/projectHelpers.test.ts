@@ -457,6 +457,77 @@ describe('OPT-04 / PRJ-03 option pickers', () => {
     expect(used.some((g) => g.code === 'EDGE-DEF')).toBe(false);
   });
 
+  it('groupsForModuleItem discovers INTERIOR/FRENTE from structure components', () => {
+    // Real modules no longer put INTERIOR/FRENTE on hardwareLines — roles live
+    // on composed structure components. Without catalogs, only herrajes appear.
+    const composedModule: Module = {
+      id: 'm-composed',
+      code: 'MOD-COMP',
+      name: 'Compuesto',
+      structureId: 'str-1',
+      hardwareLines: [{ id: 'h1', quantity: 2, optionRole: 'BISAGRA' }],
+    };
+    const catalogComponents = [
+      {
+        id: 'c-int',
+        code: 'C-INT',
+        name: 'Lateral',
+        placement: 'lateral_izquierdo' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 720,
+          widthMm: 560,
+          thicknessMm: 18,
+        },
+        defaultEdges: [] as const,
+        optionRoles: ['INTERIOR'] as const,
+        active: true,
+      },
+      {
+        id: 'c-front',
+        code: 'C-FR',
+        name: 'Puerta',
+        placement: 'puerta' as const,
+        geometry: {
+          kind: 'rectangular_board' as const,
+          lengthMm: 700,
+          widthMm: 400,
+          thicknessMm: 18,
+        },
+        defaultEdges: [] as const,
+        optionRoles: ['FRENTE'] as const,
+        active: true,
+      },
+    ];
+    const catalogStructures = [
+      {
+        id: 'str-1',
+        code: 'STR',
+        name: 'Cuerpo',
+        components: [
+          { id: 'i1', componentId: 'c-int', quantity: 2 },
+          { id: 'i2', componentId: 'c-front', quantity: 1 },
+        ],
+        active: true,
+      },
+    ];
+
+    const withoutCatalog = groupsForModuleItem(composedModule, groups);
+    expect(withoutCatalog.map((g) => g.code)).toEqual(['BISAGRA']);
+
+    const withCatalog = groupsForModuleItem(
+      composedModule,
+      groups,
+      catalogComponents,
+      catalogStructures,
+    );
+    expect(withCatalog.map((g) => g.code).sort()).toEqual([
+      'BISAGRA',
+      'FRENTE',
+      'INTERIOR',
+    ]);
+  });
+
   it('optionsForGroup returns empty when group has no optionIds', () => {
     const emptyGroup: OptionGroup = {
       id: 'empty',

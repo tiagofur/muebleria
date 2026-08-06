@@ -1,12 +1,16 @@
 /**
  * Structure create/edit form shell — tabs + panels.
+ * Critique: General → Componentes → Presets; sticky tabs; badges; no dual 3D tab.
  */
 
-import type {
-  Dispatch,
-  FormEvent,
-  ReactNode,
-  SetStateAction,
+import {
+  useCallback,
+  useRef,
+  type Dispatch,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type SetStateAction,
 } from 'react';
 import type { Component, DimensionPreset } from '@muebles/domain';
 import {
@@ -15,7 +19,6 @@ import {
   type StructureEditorTab,
 } from '../structureDraft';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
-import { StructureEditor3DPanel } from './StructureEditor3DPanel';
 import { StructureEditorComponentsPanel } from './StructureEditorComponentsPanel';
 import { StructureEditorGeneralPanel } from './StructureEditorGeneralPanel';
 import { StructureEditorPresetsPanel } from './StructureEditorPresetsPanel';
@@ -67,8 +70,45 @@ export function StructureEditorForm({
   onRemovePreset,
   onUpdatePreset,
 }: StructureEditorFormProps): ReactNode {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const componentsEmpty = draft.components.length === 0;
+
+  const focusTab = useCallback(
+    (index: number) => {
+      const tab = STRUCTURE_EDITOR_TABS[index];
+      if (!tab) return;
+      setEditorTab(tab.id);
+      tabRefs.current[index]?.focus();
+    },
+    [setEditorTab],
+  );
+
+  const onTabListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const n = STRUCTURE_EDITOR_TABS.length;
+    const current = STRUCTURE_EDITOR_TABS.findIndex((t) => t.id === editorTab);
+    if (current < 0) return;
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusTab((current + 1) % n);
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusTab((current - 1 + n) % n);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusTab(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusTab(n - 1);
+    }
+  };
+
   return (
-    <form id={formId} onSubmit={onSubmit} className="catalog-form">
+    <form
+      id={formId}
+      onSubmit={onSubmit}
+      className="catalog-form structure-editor"
+    >
       {error ? (
         <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
@@ -76,37 +116,52 @@ export function StructureEditorForm({
       ) : null}
 
       <div
-        className="module-editor__tabs"
+        className="structure-editor__tabs"
         role="tablist"
         aria-label="Secciones del editor de estructura"
         data-testid="structure-editor-tabs"
+        onKeyDown={onTabListKeyDown}
       >
-        {STRUCTURE_EDITOR_TABS.map((tab) => {
+        {STRUCTURE_EDITOR_TABS.map((tab, index) => {
           const selected = editorTab === tab.id;
+          const showEmptyBadge = tab.id === 'components' && componentsEmpty;
+          const countLabel =
+            tab.id === 'presets' && draft.presets.length > 0
+              ? ` (${draft.presets.length})`
+              : tab.id === 'components' && draft.components.length > 0
+                ? ` (${draft.components.length})`
+                : '';
           return (
             <button
               key={tab.id}
               type="button"
               role="tab"
+              ref={(el) => {
+                tabRefs.current[index] = el;
+              }}
               id={`structure-editor-tab-${tab.id}`}
               aria-selected={selected}
               aria-controls={`structure-editor-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
               className={
                 selected
-                  ? 'module-editor__tab module-editor__tab--active'
-                  : 'module-editor__tab'
+                  ? 'structure-editor__tab structure-editor__tab--active'
+                  : 'structure-editor__tab'
               }
               data-testid={`structure-editor-tab-${tab.id}`}
               onClick={() => setEditorTab(tab.id)}
             >
               {tab.label}
-              {tab.id === 'presets' && draft.presets.length > 0
-                ? ` (${draft.presets.length})`
-                : ''}
-              {tab.id === 'components' && draft.components.length > 0
-                ? ` (${draft.components.length})`
-                : ''}
+              {countLabel}
+              {showEmptyBadge ? (
+                <span
+                  className="structure-editor__tab-badge"
+                  data-testid="structure-editor-components-badge"
+                  title="Agregá al menos un componente"
+                >
+                  !
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -120,16 +175,6 @@ export function StructureEditorForm({
         hidden={editorTab !== 'general'}
       />
 
-      <StructureEditorPresetsPanel
-        presets={draft.presets}
-        previewPresetId={previewPresetId}
-        onPreviewPresetChange={onPreviewPresetChange}
-        onAdd={onAddPreset}
-        onRemove={onRemovePreset}
-        onUpdate={onUpdatePreset}
-        hidden={editorTab !== 'presets'}
-      />
-
       <StructureEditorComponentsPanel
         draft={draft}
         setDraft={setDraft}
@@ -141,12 +186,17 @@ export function StructureEditorForm({
         onPreviewPresetChange={onPreviewPresetChange}
       />
 
-      <StructureEditor3DPanel
-        draft={draft}
-        catalogInput={catalogInput}
-        previewPresetId={previewPresetId}
-        onPreviewPresetChange={onPreviewPresetChange}
-        hidden={editorTab !== 'preview3d'}
+      <StructureEditorPresetsPanel
+        presets={draft.presets}
+        exteriorDims={{
+          width: draft.widthMm,
+          height: draft.heightMm,
+          depth: draft.depthMm,
+        }}
+        onAdd={onAddPreset}
+        onRemove={onRemovePreset}
+        onUpdate={onUpdatePreset}
+        hidden={editorTab !== 'presets'}
       />
     </form>
   );

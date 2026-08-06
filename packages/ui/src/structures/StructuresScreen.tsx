@@ -331,20 +331,24 @@ export function StructuresScreen({
       return;
     }
 
+    if (draft.components.length === 0) {
+      setError(
+        'La estructura necesita al menos un componente (por ejemplo laterales o base). Abrí la pestaña Componentes.',
+      );
+      setEditorTab('components');
+      return;
+    }
+
     if (draft.presets) {
       for (const pr of draft.presets) {
         if (pr.width <= 0 || pr.height <= 0 || pr.depth <= 0) {
-          setError('Las dimensiones de los presets deben ser mayores a 0.');
+          setError(
+            'Las dimensiones de los presets deben ser mayores a 0. Revisá la pestaña Presets.',
+          );
+          setEditorTab('presets');
           return;
         }
       }
-    }
-
-    if (draft.components.length === 0) {
-      setError(
-        'La estructura necesita al menos un componente (por ejemplo laterales o base).',
-      );
-      return;
     }
 
     if (editingId) {

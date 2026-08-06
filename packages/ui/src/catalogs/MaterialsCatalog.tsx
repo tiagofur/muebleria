@@ -678,7 +678,7 @@ export function MaterialsCatalog({
                 <div className="catalog-row-detail__actions">
                   <button
                     type="button"
-                    className="btn btn--small"
+                    className="btn btn--small btn--primary"
                     onClick={() => startEdit(row)}
                   >
                     <Pencil size={14} strokeWidth={1.5} aria-hidden />
@@ -687,7 +687,7 @@ export function MaterialsCatalog({
                   {row.active ? (
                     <button
                       type="button"
-                      className="btn btn--small btn--danger"
+                      className="btn btn--small"
                       onClick={() => onDeactivate(row.id)}
                     >
                       <EyeOff size={14} strokeWidth={1.5} aria-hidden />

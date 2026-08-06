@@ -41,15 +41,15 @@ export function ModuleEditorComponentsPanel({
         </h4>
         <button
           type="button"
-          className="btn btn--small"
+          className="btn btn--small btn--primary"
           disabled={!composedEnabled}
           onClick={onRequestAdd}
           data-testid="add-component-btn"
         >
-          <Plus size={14} /> Agregar componente
+          <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar componente
         </button>
       </div>
-      <p className="catalog-empty" style={{ marginTop: 0 }}>
+      <p className="module-editor__hint module-editor__hint--flush">
         Puertas, entrepaños y otros reutilizables del catálogo. Requiere
         estructura base.
       </p>

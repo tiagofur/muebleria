@@ -76,6 +76,87 @@ func TestCalcBoardLineCost(t *testing.T) {
 	}
 }
 
+func TestCalcProjectBreakdown_ComposedModuleIncludesBoardAndEdge(t *testing.T) {
+	// Regression: composed modules have empty Module.BoardParts; cost must
+	// come from structure/component expansion (ResolveBom). Without this,
+	// API /projects/:id/calculate returned materials=0 edge=0 and only hardware.
+	edge := domain.EdgeBand{
+		ID: "edge-1", Code: "CAN", Name: "Canto", CostPerMl: 10.0, Active: true,
+	}
+	mat := domain.MaterialBoard{
+		ID: "mat-1", Code: "TAB", Name: "Melamina", Active: true,
+		WidthMm: 1830, LengthMm: 2440, ThicknessMm: 18, CostPerM2: 100.0,
+		DefaultEdgeBandID: "edge-1",
+	}
+	hw := domain.Hardware{
+		ID: "hw-1", Code: "HER", Name: "Bisagra", Unit: domain.UnitPiece,
+		CostPerUnit: 25.0, Active: true,
+	}
+	comp := domain.Component{
+		ID: "comp-1", Code: "COS", Name: "Costado", Placement: domain.PlacementLateralIzquierdo,
+		GeometryKind: "rectangular_board", LengthMm: 1000, WidthMm: 500, ThicknessMm: 18,
+		DefaultEdges: []domain.EdgeAssignment{
+			{Side: "L1", Enabled: true}, {Side: "L2", Enabled: false},
+			{Side: "W1", Enabled: true}, {Side: "W2", Enabled: false},
+		},
+		OptionRoles: []string{"INTERIOR"}, Active: true,
+	}
+	st := domain.Structure{
+		ID: "st-1", Code: "EST", Name: "Cuerpo",
+		WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true,
+		Components: []domain.ComponentInstance{{ComponentID: "comp-1", Quantity: 1}},
+	}
+	mod := domain.Module{
+		ID: "mod-1", Code: "MOD-C", Name: "Compuesto",
+		StructureID: "st-1", WidthMm: 600, HeightMm: 720, DepthMm: 560,
+		// BoardParts intentionally empty — real composed modules look like this.
+		HardwareLines: []domain.HardwareLine{
+			{ID: "hl1", Quantity: 2, OptionRole: "BISAGRA"},
+		},
+	}
+	catalog := domain.Catalog{
+		Materials:  []domain.MaterialBoard{mat},
+		Edges:      []domain.EdgeBand{edge},
+		Hardware:   []domain.Hardware{hw},
+		Structures: []domain.Structure{st},
+		Components: []domain.Component{comp},
+		Modules:    []domain.Module{mod},
+	}
+	project := domain.Project{
+		ID: "p1", Name: "T", CustomerID: "c", Currency: "MXN",
+		MarginFactor: 1.35, LaborFixedCost: 0, Status: domain.StatusDraft,
+		Items: []domain.ProjectItem{{
+			ID: "i1", ModuleID: "mod-1", Quantity: 1,
+			OptionChoices: map[string]string{"INTERIOR": "mat-1", "BISAGRA": "hw-1"},
+		}},
+	}
+
+	// 1000×500 mm = 0.5 m² → board 50; edge L1 1m + W1 0.5m = 1.5 ml → edge 15; hw 50
+	bd, err := CalcProjectBreakdown(project, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bd.MaterialsCost <= 0 {
+		t.Fatalf("MaterialsCost=%v want > 0 (composed expansion)", bd.MaterialsCost)
+	}
+	if bd.EdgeTotal <= 0 {
+		t.Fatalf("EdgeTotal=%v want > 0 (composed expansion)", bd.EdgeTotal)
+	}
+	if math.Abs(bd.MaterialsCost-50.0) > 1e-9 {
+		t.Errorf("MaterialsCost=%v want 50", bd.MaterialsCost)
+	}
+	if math.Abs(bd.EdgeTotal-15.0) > 1e-9 {
+		t.Errorf("EdgeTotal=%v want 15", bd.EdgeTotal)
+	}
+	if math.Abs(bd.HardwareTotal-50.0) > 1e-9 {
+		t.Errorf("HardwareTotal=%v want 50", bd.HardwareTotal)
+	}
+	// sale = (50+15+50)*1.35 = 155.25
+	if math.Abs(bd.SalePrice-155.25) > 1e-9 {
+		t.Errorf("SalePrice=%v want 155.25", bd.SalePrice)
+	}
+}
+
 func TestCalcProjectBreakdown(t *testing.T) {
 	material := domain.MaterialBoard{
 		ID:        "mat-1",

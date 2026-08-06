@@ -327,7 +327,10 @@ export function ComponentsScreen({
       return;
     }
     if (!draft.optionRoles.trim()) {
-      setError('Debe especificar al menos un Rol de Opción.');
+      setError(
+        'Falta al menos un rol de opción. Abrí la pestaña Opciones y elegí un grupo.',
+      );
+      setEditorTab('options');
       return;
     }
 

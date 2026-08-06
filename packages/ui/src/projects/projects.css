@@ -213,6 +213,35 @@
   gap: var(--density-page-gap, var(--space-3));
 }
 
+/* Wave 4 — chrome action density: stage primary + Presentar + Editar + Más.
+   Actions take full row under total on narrow widths (workspace-chrome media). */
+.project-detail__chrome-actions {
+  /* Prefer wrapping as a group; avoid stretching single buttons. */
+  flex: 1 1 auto;
+  min-width: min(100%, 12rem);
+}
+
+.project-detail .workspace-chrome__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(100%, 28rem);
+  white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+  .project-detail .workspace-chrome__total {
+    order: 2;
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .project-detail__chrome-actions {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 .project-detail__notes {
   margin: 0;
   font-size: var(--text-base);

@@ -26,8 +26,9 @@ export function StructureEditorGeneralPanel({
       id="structure-editor-panel-general"
       aria-labelledby="structure-editor-tab-general"
       hidden={hidden}
+      data-testid="structure-editor-panel-general"
     >
-      <div className="module-editor__grid">
+      <div className="structure-editor__grid">
         <div className="catalog-form__field">
           <label htmlFor={`${formId}-code`}>Código de Estructura</label>
           <input
@@ -40,7 +41,18 @@ export function StructureEditorGeneralPanel({
             required
             disabled={!!editingId}
             data-testid="input-code"
+            aria-describedby={editingId ? `${formId}-code-hint` : undefined}
           />
+          {editingId ? (
+            <p
+              id={`${formId}-code-hint`}
+              className="catalog-form__hint"
+              data-testid="structure-code-hint"
+            >
+              El código no se cambia al editar (identifica el cuerpo en el
+              catálogo).
+            </p>
+          ) : null}
         </div>
 
         <div className="catalog-form__field">
@@ -58,61 +70,71 @@ export function StructureEditorGeneralPanel({
         </div>
       </div>
 
-      <div className="module-editor__grid">
-        <div className="catalog-form__field">
-          <label htmlFor={`${formId}-width`}>Ancho Externo (mm)</label>
-          <input
-            id={`${formId}-width`}
-            type="number"
-            min={0}
-            value={draft.widthMm || ''}
-            onChange={(e) =>
-              setDraft((prev) => ({
-                ...prev,
-                widthMm: Math.max(0, Number(e.target.value)),
-              }))
-            }
-            placeholder="Opcional"
-            data-testid="input-width"
-          />
-        </div>
+      <fieldset className="catalog-form__section structure-editor__dims">
+        <legend className="catalog-form__section-title">
+          Dimensiones exteriores
+        </legend>
+        <p className="catalog-form__hint" data-testid="structure-exterior-hint">
+          Tamaño de referencia del cuerpo. Los presets (pestaña Presets) son
+          variantes de prueba de estirado; el 3D usa un preset si hay, si no
+          estas medidas.
+        </p>
+        <div className="structure-editor__grid">
+          <div className="catalog-form__field">
+            <label htmlFor={`${formId}-width`}>Ancho Externo (mm)</label>
+            <input
+              id={`${formId}-width`}
+              type="number"
+              min={0}
+              value={draft.widthMm || ''}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  widthMm: Math.max(0, Number(e.target.value)),
+                }))
+              }
+              placeholder="Opcional"
+              data-testid="input-width"
+            />
+          </div>
 
-        <div className="catalog-form__field">
-          <label htmlFor={`${formId}-height`}>Alto Externo (mm)</label>
-          <input
-            id={`${formId}-height`}
-            type="number"
-            min={0}
-            value={draft.heightMm || ''}
-            onChange={(e) =>
-              setDraft((prev) => ({
-                ...prev,
-                heightMm: Math.max(0, Number(e.target.value)),
-              }))
-            }
-            placeholder="Opcional"
-            data-testid="input-height"
-          />
-        </div>
+          <div className="catalog-form__field">
+            <label htmlFor={`${formId}-height`}>Alto Externo (mm)</label>
+            <input
+              id={`${formId}-height`}
+              type="number"
+              min={0}
+              value={draft.heightMm || ''}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  heightMm: Math.max(0, Number(e.target.value)),
+                }))
+              }
+              placeholder="Opcional"
+              data-testid="input-height"
+            />
+          </div>
 
-        <div className="catalog-form__field">
-          <label htmlFor={`${formId}-depth`}>Profundidad (mm)</label>
-          <input
-            id={`${formId}-depth`}
-            type="number"
-            min={0}
-            value={draft.depthMm || ''}
-            onChange={(e) =>
-              setDraft((prev) => ({
-                ...prev,
-                depthMm: Math.max(0, Number(e.target.value)),
-              }))
-            }
-            placeholder="Opcional"
-            data-testid="input-depth"
-          />
+          <div className="catalog-form__field">
+            <label htmlFor={`${formId}-depth`}>Profundidad (mm)</label>
+            <input
+              id={`${formId}-depth`}
+              type="number"
+              min={0}
+              value={draft.depthMm || ''}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  depthMm: Math.max(0, Number(e.target.value)),
+                }))
+              }
+              placeholder="Opcional"
+              data-testid="input-depth"
+            />
+          </div>
         </div>
-      </div>
+      </fieldset>
 
       <div className="catalog-form__field">
         <label htmlFor={`${formId}-notes`}>Notas / Descripción técnica</label>

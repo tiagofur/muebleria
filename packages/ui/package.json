@@ -17,7 +17,8 @@
     "./common/surfaceCard.css": "./src/common/surfaceCard.css",
     "./common/dataTable.css": "./src/common/dataTable.css",
     "./common/pageHeader.css": "./src/common/pageHeader.css",
-    "./common/entityCard.css": "./src/common/entityCard.css"
+    "./common/entityCard.css": "./src/common/entityCard.css",
+    "./common/engineeringDetail.css": "./src/common/engineeringDetail.css"
   },
   "files": [
     "src"

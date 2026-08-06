@@ -216,42 +216,65 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 			return domain.QuoteBreakdown{}, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		// Structural module validation before any cost math (TS: resolveBom → validateModule).
-		if err := ValidateModule(module); err != nil {
+		// Composed modules (structure + components) expand via ResolveBomWithPin —
+		// NEVER iterate module.BoardParts alone (empty after F053 composition).
+		// Mirrors packages/domain calcLiveProjectBreakdown → resolveBom.
+		choices := choicesForItem(project, item)
+		bom, err := ResolveBomWithPin(
+			module,
+			choices,
+			catalog,
+			item.MeasurePresetID,
+			item.StructureRevisionPin,
+		)
+		if err != nil {
 			return domain.QuoteBreakdown{}, err
 		}
 
-		choices := choicesForItem(project, item)
-
-		for _, part := range module.BoardParts {
-			material, err := ResolveMaterial(part, choices, catalog.Materials)
+		for _, part := range bom.BoardParts {
+			material, ok := findMaterial(catalog, part.MaterialID)
+			if !ok {
+				return domain.QuoteBreakdown{}, fmt.Errorf(
+					"material not found: %s", part.MaterialID,
+				)
+			}
+			var edgeBand *domain.EdgeBand
+			if part.EdgeBandID != "" {
+				edge, ok := findEdgeBand(catalog, part.EdgeBandID)
+				if !ok {
+					return domain.QuoteBreakdown{}, fmt.Errorf(
+						"edge band not found: %s", part.EdgeBandID,
+					)
+				}
+				edgeBand = &edge
+			}
+			// Cost math reuses BoardPart shape (dims/edges/qty only).
+			raw := domain.BoardPart{
+				ID:          part.ID,
+				Code:        part.Code,
+				Description: part.Description,
+				Quantity:    part.Quantity,
+				LengthMm:    part.LengthMm,
+				WidthMm:     part.WidthMm,
+				Edges:       part.Edges,
+				OptionRole:  part.OptionRole,
+			}
+			lineCost, err := CalcBoardLineCost(raw, material, edgeBand, item.Quantity)
 			if err != nil {
 				return domain.QuoteBreakdown{}, err
 			}
-			edgeBand, err := ResolveEdgeBand(part, *material, choices, catalog.Edges)
-			if err != nil {
-				return domain.QuoteBreakdown{}, err
-			}
-
-			lineCost, err := CalcBoardLineCost(part, *material, edgeBand, item.Quantity)
-			if err != nil {
-				return domain.QuoteBreakdown{}, err
-			}
-
 			materialsCost += lineCost.BoardCost
 			edgeTotal += lineCost.EdgeCost
 		}
 
-		for _, line := range module.HardwareLines {
-			hw, err := ResolveHardware(line, choices, catalog.Hardware)
+		for _, line := range bom.HardwareLines {
+			// Cast each qty to float64 before multiply — int*int can overflow
+			// on 32-bit before conversion (issue #10; TS multiplies as float).
+			lineCost, err := CalcHardwareLineCost(line, catalog, item.Quantity)
 			if err != nil {
 				return domain.QuoteBreakdown{}, err
 			}
-
-			// Cast each qty to float64 before multiply — int*int can overflow
-			// on 32-bit before conversion (issue #10; TS multiplies as float).
-			lineCost := float64(line.Quantity) * float64(item.Quantity) * hw.CostPerUnit
-			hardwareTotal += lineCost
+			hardwareTotal += lineCost.HardwareCost
 		}
 
 		laborModular += float64(item.Quantity) * module.BaseLaborCost

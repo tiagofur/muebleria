@@ -907,6 +907,7 @@ export function ModulesScreen({
                 categories={categories}
                 catalogComponents={catalogComponents}
                 hardwareById={hardwareById}
+                structures={structures}
                 costPreview={costPreview}
                 previewBlocked={previewBlocked}
                 missingGroups={missingGroups}

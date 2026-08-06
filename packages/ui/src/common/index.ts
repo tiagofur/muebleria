@@ -46,6 +46,10 @@ export {
   EntityEditorLayout,
   type EntityEditorLayoutProps,
 } from './EntityEditorLayout';
+export {
+  EngineeringDetailLayout,
+  type EngineeringDetailLayoutProps,
+} from './EngineeringDetailLayout';
 export { EMPTY_PLACEHOLDER, formatEmpty } from './formatEmpty';
 export {
   formatMoneyDisplay,

@@ -37,8 +37,49 @@ import {
   hardwareListFileName,
 } from './exportHardwareList';
 import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
+import { resolveDisplayBreakdown } from './App';
+import type { QuoteBreakdown } from '@muebles/domain';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+const localBd: QuoteBreakdown = {
+  materialsCost: 100,
+  edgeTotal: 10,
+  hardwareTotal: 20,
+  directCost: 130,
+  laborModular: 0,
+  laborFixedCost: 0,
+  marginFactor: 1.35,
+  salePrice: 175.5,
+};
+const remoteBd: QuoteBreakdown = {
+  materialsCost: 101,
+  edgeTotal: 11,
+  hardwareTotal: 20,
+  directCost: 132,
+  laborModular: 0,
+  laborFixedCost: 0,
+  marginFactor: 1.35,
+  salePrice: 178.2,
+};
+
+describe('resolveDisplayBreakdown (list vs detail parity)', () => {
+  it('with costs visible prefers local so detail matches list estimate', () => {
+    expect(resolveDisplayBreakdown(localBd, remoteBd, true)).toBe(localBd);
+  });
+
+  it('cost-redacted roles prefer remote salePrice (server authoritative)', () => {
+    expect(resolveDisplayBreakdown(localBd, remoteBd, false)).toBe(remoteBd);
+  });
+
+  it('falls back to remote when local is null', () => {
+    expect(resolveDisplayBreakdown(null, remoteBd, true)).toBe(remoteBd);
+  });
+
+  it('falls back to local when remote is null', () => {
+    expect(resolveDisplayBreakdown(localBd, null, false)).toBe(localBd);
+  });
+});
 
 describe('@muebles/web #15 setState side effects / stale patches', () => {
   it('project mutations live in projectStore; catalog mutations in catalogStore (F063)', () => {
@@ -112,6 +153,11 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
     expect(appSrc).toContain('breakdownLoading={breakdownLoading}');
     expect(appSrc).toContain('breakdownError={breakdownError ?? projectQuote.breakdownError}');
+    // List vs detail: display uses resolveDisplayBreakdown (local-first when costs visible).
+    expect(appSrc).toContain('resolveDisplayBreakdown(');
+    expect(appSrc).not.toContain(
+      'breakdown={backendBreakdown ?? projectQuote.breakdown}',
+    );
     // Fallback copy + error toast moved to projectStore hook.
     const projectStoreSrc = readFileSync(
       join(here, 'stores/projectStore.ts'),
