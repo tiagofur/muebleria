@@ -483,6 +483,17 @@ export interface KitchenSpace {
   readonly underlay?: KitchenPlanUnderlay;
 }
 
+/**
+ * Soft lock: who is editing the kitchen plan (Proyectar).
+ * Expires if not renewed — prevents silent multi-user overwrite without OT.
+ */
+export interface ProjectPlanEditSession {
+  readonly userId: string;
+  readonly userName: string;
+  /** ISO-8601 expiry; after this the session is free. */
+  readonly expiresAt: string;
+}
+
 /** Optional kitchen plan attached to a project. */
 export interface ProjectKitchenLayout {
   /**
@@ -594,6 +605,11 @@ export interface Project {
    * Optional kitchen plan (walls + placements). Omitted = linear 3D run only.
    */
   readonly kitchenLayout?: ProjectKitchenLayout;
+  /**
+   * Soft lock for Proyectar multi-user collaboration.
+   * When present and not expired, another editor should open read-only.
+   */
+  readonly planEditSession?: ProjectPlanEditSession;
   /**
    * Optional installation checklist for obra (#139).
    */

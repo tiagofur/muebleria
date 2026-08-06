@@ -36,6 +36,7 @@ import {
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   parseDxfToKitchenWalls,
+  planEditSessionHeldByOther,
   pruneKitchenLayout,
   removeKitchenSpace,
   renameKitchenSpace,
@@ -120,6 +121,13 @@ export type ProjectSpatialStudioProps = {
     readonly listFilter?: ListFilter;
     readonly selectKey?: string | null;
   } | null;
+  /**
+   * Soft lock actor for multi-user Proyectar. When omitted, no lock protocol.
+   */
+  readonly planActor?: { readonly userId: string; readonly userName: string };
+  readonly onAcquirePlanEdit?: () => boolean;
+  readonly onRenewPlanEdit?: () => boolean;
+  readonly onReleasePlanEdit?: () => void;
 };
 
 type InspectorTab = 'props' | 'position';
@@ -192,15 +200,20 @@ export function ProjectSpatialStudio({
   project,
   modules,
   catalog,
-  canEdit,
+  canEdit: statusCanEdit,
   onClose,
   onChangeLayout,
   onUpdateItem,
   resolveMediaUrl,
   quoteSalePrice = null,
   bootstrap = null,
+  planActor,
+  onAcquirePlanEdit,
+  onRenewPlanEdit,
+  onReleasePlanEdit,
 }: ProjectSpatialStudioProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
+  const [planLockBlocked, setPlanLockBlocked] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [targetWallId, setTargetWallId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('props');
@@ -235,6 +248,7 @@ export function ProjectSpatialStudio({
       setRedoStack([]);
       wallDragSession.current = false;
       appliedBootstrap.current = false;
+      setPlanLockBlocked(false);
       return;
     }
     if (bootstrap && !appliedBootstrap.current) {
@@ -247,6 +261,33 @@ export function ProjectSpatialStudio({
       setListCollapsed(false);
     }
   }, [open, bootstrap]);
+
+  // Multi-user soft lock for Proyectar.
+  useEffect(() => {
+    if (!open || !statusCanEdit || !planActor || !onAcquirePlanEdit) {
+      setPlanLockBlocked(false);
+      return;
+    }
+    const ok = onAcquirePlanEdit();
+    setPlanLockBlocked(!ok);
+    if (!ok) return;
+    const interval = window.setInterval(() => {
+      const renewed = onRenewPlanEdit?.() ?? true;
+      if (!renewed) setPlanLockBlocked(true);
+    }, 45_000);
+    return () => {
+      window.clearInterval(interval);
+      onReleasePlanEdit?.();
+    };
+  }, [
+    open,
+    statusCanEdit,
+    planActor?.userId,
+    project.id,
+    onAcquirePlanEdit,
+    onRenewPlanEdit,
+    onReleasePlanEdit,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -267,6 +308,19 @@ export function ProjectSpatialStudio({
       ),
     [project.kitchenLayout, project.items],
   );
+
+  const heldByOther = Boolean(
+    planActor &&
+      planEditSessionHeldByOther(project.planEditSession, planActor.userId),
+  );
+  const editBlocked = planLockBlocked || heldByOther;
+  // Shadow canEdit for the rest of the component: mutations + edit UI respect
+  // soft lock. statusCanEdit remains for frozen-project chrome only.
+  const canEdit = statusCanEdit && !editBlocked;
+  const lockHolderName =
+    heldByOther && project.planEditSession?.userName?.trim()
+      ? project.planEditSession.userName.trim()
+      : null;
 
   const spaces = layout.spaces ?? [];
   const activeSpaceId = layout.activeSpaceId ?? spaces[0]?.id ?? null;
@@ -1189,10 +1243,21 @@ export function ProjectSpatialStudio({
           ) : null}
         </div>
         <div className="spatial-studio__chrome-actions">
-          {!canEdit ? (
+          {!statusCanEdit ? (
             <span className="spatial-studio__frozen" data-testid="spatial-studio-frozen">
               <Lock size={14} strokeWidth={1.5} aria-hidden /> Plano congelado
               (solo lectura)
+            </span>
+          ) : editBlocked ? (
+            <span
+              className="spatial-studio__plan-locked"
+              data-testid="spatial-studio-plan-locked"
+              title="Otro usuario tiene el plano abierto. Podés ver, no editar."
+            >
+              <Lock size={14} strokeWidth={1.5} aria-hidden />
+              {lockHolderName
+                ? `${lockHolderName} está editando el plano`
+                : 'Otro usuario está editando el plano'}
             </span>
           ) : null}
           <button

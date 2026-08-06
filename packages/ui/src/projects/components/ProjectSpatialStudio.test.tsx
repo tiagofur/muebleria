@@ -127,6 +127,68 @@ describe('ProjectSpatialStudio', () => {
     expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
   });
 
+  it('soft-locks plan when another user holds the session', () => {
+    const onAcquire = vi.fn(() => false);
+    const onChangeLayout = vi.fn();
+    const held: Project = {
+      ...project,
+      planEditSession: {
+        userId: 'u-other',
+        userName: 'María',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={held}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        planActor={{ userId: 'u-me', userName: 'Yo' }}
+        onAcquirePlanEdit={onAcquire}
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    expect(onAcquire).toHaveBeenCalled();
+    const banner = screen.getByTestId('spatial-studio-plan-locked');
+    expect(banner.textContent).toMatch(/María|editando/i);
+    expect(screen.queryByTestId('spatial-studio-add-space')).toBeNull();
+    fireEvent.doubleClick(screen.getByTestId('spatial-studio-unplaced-it-a-0'));
+    expect(onChangeLayout).not.toHaveBeenCalled();
+  });
+
+  it('acquires soft lock when free and shows no lock banner', () => {
+    const onAcquire = vi.fn(() => true);
+    render(
+      <ProjectSpatialStudio
+        open
+        project={{
+          ...project,
+          kitchenLayout: {
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [],
+          },
+        }}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        planActor={{ userId: 'u-me', userName: 'Yo' }}
+        onAcquirePlanEdit={onAcquire}
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    expect(onAcquire).toHaveBeenCalled();
+    expect(screen.queryByTestId('spatial-studio-plan-locked')).toBeNull();
+    expect(screen.getByTestId('spatial-studio-add-space')).toBeTruthy();
+  });
+
   it('filters list and places on double-click', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {

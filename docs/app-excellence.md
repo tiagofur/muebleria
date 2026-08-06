@@ -112,15 +112,21 @@ El horizonte H01–H12 está **cerrado**; el WIP actual refina paneles + 3D + co
 
 ### 3.3 Producción — “cortar y armar sin ambigüedad”
 
+> **Canónico del workspace de fábrica (separación diseño vs producción, pantallas, pack ampliado, roadmap e issues):**  
+> **`docs/production-module.md`** — leer antes de tocar UI/nav de Producción o docs de taller.
+
 | Capacidad | Prioridad | Notas |
 |-----------|-----------|--------|
 | Cola accepted → export → produced | ✅ | |
 | Etiquetas + encintado + m² + cut-list rica | ✅ | |
 | **Export Excel Optimizer** (único plan de corte *ahora*) | **P0** | Mantener + tests fixture |
-| Resumen de pliegos estimado (sin nesting) | P1 | Heurística m² / pliego catálogo |
-| Import resultado nesting (consumo real) | P2 | PRD Fase 5 |
+| Resumen de pliegos estimado (sin nesting) | ✅ | #135 |
+| Import resultado nesting (consumo real) | ✅ | #142 |
+| Pack de producción ZIP | ✅ | #134 |
+| QR en etiquetas | ✅ | #141 |
+| **Workspace Producción** (hub, vistas read-only, elevaciones PDF) | 📋 | `docs/production-module.md` · META roadmap |
+| Preview visual de tableros | 📋 | Fase 2 del módulo |
 | **Metadatos CNC / DXF / post-procesadores** | **Doc only** | #111 · ver §4 |
-| Pack de producción (ZIP: Optimizer + herrajes + etiquetas PDF) | P1 | Un click para el taller |
 
 ---
 
@@ -176,6 +182,7 @@ Cotización accepted
 - Render fotorrealista / materiales PBR.  
 - Física, colisión perfecta, instalación eléctrica/agua.  
 - ~~Multi-ambiente completo (baño + living)~~ → **v1 hecho**: `KitchenSpace[]` + tabs en Proyectar (un ambiente activo a la vez).
+- ~~Multi-usuario concurrente en el plano~~ → **v1 soft lock**: `Project.planEditSession` (TTL 2 min, renew ~45s); banner + solo lectura si otro usuario tiene Proyectar abierto. No websockets/OT.
 
 ### 5.3 Modelo de dominio (implementado — #133)
 

@@ -125,6 +125,16 @@ export interface ProjectsScreenProps {
     projectId: string,
     layout: import('@muebles/domain').ProjectKitchenLayout,
   ) => void;
+  /**
+   * Soft lock for multi-user Proyectar (auth). When omitted, no lock protocol.
+   */
+  readonly planActor?: {
+    readonly userId: string;
+    readonly userName: string;
+  };
+  readonly onAcquirePlanEdit?: (projectId: string) => boolean;
+  readonly onRenewPlanEdit?: (projectId: string) => boolean;
+  readonly onReleasePlanEdit?: (projectId: string) => void;
   /** Apply A/B scenario B role choice to all lines (#137). Draft only. */
   readonly onApplyScenarioB?: (
     projectId: string,
@@ -288,6 +298,10 @@ export function ProjectsScreen({
   onRemoveItem,
   onReorderItems,
   onUpdateKitchenLayout,
+  planActor,
+  onAcquirePlanEdit,
+  onRenewPlanEdit,
+  onReleasePlanEdit,
   onApplyScenarioB,
   onDuplicateWithScenarioB,
   onExportScenarioPdf,
@@ -995,6 +1009,22 @@ export function ProjectsScreen({
               : null)
           }
           bootstrap={spatialBootstrap}
+          planActor={planActor}
+          onAcquirePlanEdit={
+            planActor && onAcquirePlanEdit
+              ? () => onAcquirePlanEdit(selectedProject.id)
+              : undefined
+          }
+          onRenewPlanEdit={
+            planActor && onRenewPlanEdit
+              ? () => onRenewPlanEdit(selectedProject.id)
+              : undefined
+          }
+          onReleasePlanEdit={
+            planActor && onReleasePlanEdit
+              ? () => onReleasePlanEdit(selectedProject.id)
+              : undefined
+          }
           onClose={() => {
             setShowSpatialStudio(false);
             setSpatialBootstrap(null);

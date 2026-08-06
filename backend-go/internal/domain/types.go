@@ -367,6 +367,9 @@ type Project struct {
 	MeasureDefaults json.RawMessage `json:"measure_defaults,omitempty"`
 	// KitchenLayout is optional walls+placements plan (#133). JSON object or null.
 	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
+	// PlanEditSession soft-locks Proyectar for multi-user collaboration.
+	// Shape: { "user_id", "user_name", "expires_at" }.
+	PlanEditSession json.RawMessage `json:"plan_edit_session,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	Notes         string          `json:"notes,omitempty"`

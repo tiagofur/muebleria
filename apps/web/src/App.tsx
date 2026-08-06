@@ -254,6 +254,25 @@ function computeModuleCostPreview(
 
 
 /**
+ * Unify list-card estimate vs detail totals (same project must show the same
+ * sale price). List always uses local domain (`projectEstimates` / F022).
+ *
+ * - With costs visible (admin/guest): prefer local so detail matches the list
+ *   and does not "jump" when the backend calculate response arrives.
+ * - Cost-redacted roles (vendedor): catalog unit prices are zeroed client-side,
+ *   so the server salePrice is authoritative when present.
+ * - Fallbacks: local → remote → null.
+ */
+export function resolveDisplayBreakdown(
+  local: QuoteBreakdown | null,
+  remote: QuoteBreakdown | null,
+  showCosts: boolean,
+): QuoteBreakdown | null {
+  if (!showCosts && remote) return remote;
+  return local ?? remote;
+}
+
+/**
  * PRJ-06 / UX-03: domain breakdown for the selected project when option gate is open.
  */
 function computeSelectedProjectBreakdown(
@@ -277,6 +296,8 @@ function computeSelectedProjectBreakdown(
     project,
     catalog.modules,
     catalog.optionGroups,
+    catalog.components,
+    catalog.structures,
   );
   if (!gate.ok) {
     return {
@@ -1060,6 +1081,37 @@ function AppContent({
   const updateMeasureDefaults = projectActions.updateMeasureDefaults;
   const updateInstallationChecklist = projectActions.updateInstallationChecklist;
   const updateKitchenLayout = projectActions.updateKitchenLayout;
+  const planActor = useMemo(
+    () =>
+      authUser
+        ? {
+            userId: authUser.id,
+            userName: authUser.name?.trim() || authUser.email || 'Usuario',
+          }
+        : undefined,
+    [authUser],
+  );
+  const acquirePlanEditSession = useCallback(
+    (projectId: string) => {
+      if (!planActor) return false;
+      return projectActions.acquirePlanEditSession(projectId, planActor);
+    },
+    [projectActions, planActor],
+  );
+  const renewPlanEditSession = useCallback(
+    (projectId: string) => {
+      if (!planActor) return false;
+      return projectActions.renewPlanEditSession(projectId, planActor);
+    },
+    [projectActions, planActor],
+  );
+  const releasePlanEditSession = useCallback(
+    (projectId: string) => {
+      if (!planActor) return;
+      projectActions.releasePlanEditSession(projectId, planActor.userId);
+    },
+    [projectActions, planActor],
+  );
   const applyScenarioB = projectActions.applyScenarioB;
   const importNestingResult = projectActions.importNestingResult;
   const duplicateWithScenarioB = useCallback(
@@ -1839,13 +1891,25 @@ function AppContent({
           onUpdateProjectLevelChoices={updateProjectLevelChoices}
           onUpdateMeasureDefaults={updateMeasureDefaults}
           onUpdateKitchenLayout={updateKitchenLayout}
+          planActor={planActor}
+          onAcquirePlanEdit={
+            planActor ? acquirePlanEditSession : undefined
+          }
+          onRenewPlanEdit={planActor ? renewPlanEditSession : undefined}
+          onReleasePlanEdit={
+            planActor ? releasePlanEditSession : undefined
+          }
           onApplyScenarioB={applyScenarioB}
           onDuplicateWithScenarioB={duplicateWithScenarioB}
           onExportScenarioPdf={exportCommercialScenarioPdf}
           onUpdateInstallationChecklist={updateInstallationChecklist}
           onImportNesting={importNestingResult}
           onSelectionChange={onProjectSelectionChange}
-          breakdown={backendBreakdown ?? projectQuote.breakdown}
+          breakdown={resolveDisplayBreakdown(
+            projectQuote.breakdown,
+            backendBreakdown,
+            showCosts,
+          )}
           materialSummary={materialSummary}
           breakdownLoading={breakdownLoading}
           breakdownError={breakdownError ?? projectQuote.breakdownError}

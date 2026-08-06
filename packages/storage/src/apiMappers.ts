@@ -1064,6 +1064,13 @@ export function projectToApi(p: Project): Record<string, unknown> {
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     measure_defaults: measureDefaultsToApi(p.measureDefaults),
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
+    plan_edit_session: p.planEditSession
+      ? {
+          user_id: p.planEditSession.userId,
+          user_name: p.planEditSession.userName,
+          expires_at: p.planEditSession.expiresAt,
+        }
+      : null,
     nesting_import: p.nestingImport
       ? {
           imported_at: p.nestingImport.importedAt,
@@ -1130,6 +1137,22 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     kitchenLayout: kitchenLayoutFromApi(
       raw.kitchen_layout ?? raw.kitchenLayout,
     ),
+    planEditSession: (() => {
+      const rawSes = raw.plan_edit_session ?? raw.planEditSession;
+      if (!rawSes || typeof rawSes !== 'object' || Array.isArray(rawSes)) {
+        return undefined;
+      }
+      const s = rawSes as Record<string, unknown>;
+      const userId = str(s.user_id ?? s.userId);
+      const userName = str(s.user_name ?? s.userName);
+      const expiresAt = str(s.expires_at ?? s.expiresAt);
+      if (!userId || !expiresAt) return undefined;
+      return {
+        userId,
+        userName: userName || 'Usuario',
+        expiresAt,
+      };
+    })(),
     nestingImport: (() => {
       const rawNest = raw.nesting_import ?? raw.nestingImport;
       if (!rawNest || typeof rawNest !== 'object' || Array.isArray(rawNest)) return undefined;

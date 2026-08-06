@@ -89,13 +89,19 @@ describe('catalogStore — setCatalog', () => {
 // ---------------------------------------------------------------------------
 
 describe('catalogStore — materials', () => {
-  it('createMaterial appends + persists + toasts success', () => {
+  async function flush(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('createMaterial appends + persists + toasts success', async () => {
     const { deps, saved, toasts } = makeDeps();
     const store = createCatalogStore({ deps });
     store.getState().setCatalog(seedCatalog());
     const before = store.getState().catalog!.materials.length;
 
     store.getState().createMaterial(materialDraft);
+    await flush();
 
     expect(store.getState().catalog!.materials).toHaveLength(before + 1);
     const added = store.getState().catalog!.materials[before]!;
@@ -108,6 +114,47 @@ describe('catalogStore — materials', () => {
     expect(toasts[0]!.message).toContain('MAT-NEW');
   });
 
+  it('updateMaterial persists texture tile X/Y mm into catalog + save payload', async () => {
+    const { deps, saved } = makeDeps();
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const first = cat.materials[0]!;
+
+    store.getState().updateMaterial(first.id, {
+      ...materialDraft,
+      code: first.code,
+      name: first.name,
+      widthMm: first.widthMm,
+      lengthMm: first.lengthMm,
+      thicknessMm: first.thicknessMm,
+      grainDefault: true,
+      boardPrice: first.boardPrice ?? 100,
+      wastePercent: first.wastePercent ?? 0,
+      defaultEdgeBandId: first.defaultEdgeBandId ?? '',
+      imageUrl: '/api/media/wood.webp',
+      previewColor: '#C4A574',
+      previewTextureUrl: '/api/media/wood.webp',
+      previewTextureTileWidthMm: 400,
+      previewTextureTileLengthMm: 600,
+      notes: '',
+    });
+    await flush();
+
+    const updated = store
+      .getState()
+      .catalog!.materials.find((m) => m.id === first.id)!;
+    expect(updated.previewTextureTileWidthMm).toBe(400);
+    expect(updated.previewTextureTileLengthMm).toBe(600);
+    expect(updated.previewTextureUrl).toBe('/api/media/wood.webp');
+
+    // Last saveCatalog call includes the tile sizes on the material.
+    const last = saved[saved.length - 1]!;
+    const savedMat = last.materials.find((m) => m.id === first.id)!;
+    expect(savedMat.previewTextureTileWidthMm).toBe(400);
+    expect(savedMat.previewTextureTileLengthMm).toBe(600);
+  });
+
   it('createMaterial is a no-op when catalog is null', () => {
     const { deps, saved, toasts } = makeDeps();
     const store = createCatalogStore({ deps });
@@ -116,7 +163,7 @@ describe('catalogStore — materials', () => {
     expect(toasts).toHaveLength(0);
   });
 
-  it('updateMaterial #138: emits info toast when price changed AND drafts > 0', () => {
+  it('updateMaterial #138: emits info toast when price changed AND drafts > 0', async () => {
     const { deps, toasts } = makeDeps({
       getDraftProjectsCount: () => 3,
     });
@@ -143,13 +190,14 @@ describe('catalogStore — materials', () => {
       previewTextureTileLengthMm: 0,
       notes: '',
     });
+    await flush();
 
     const infoToast = toasts.find((t) => t.type === 'info');
     expect(infoToast).toBeDefined();
     expect(infoToast!.message).toContain('3 cotizaciones');
   });
 
-  it('updateMaterial #138: NO info toast when no drafts', () => {
+  it('updateMaterial #138: NO info toast when no drafts', async () => {
     const { deps, toasts } = makeDeps({
       getDraftProjectsCount: () => 0,
     });
@@ -176,6 +224,7 @@ describe('catalogStore — materials', () => {
       previewTextureTileLengthMm: 0,
       notes: '',
     });
+    await flush();
 
     expect(toasts.find((t) => t.type === 'info')).toBeUndefined();
   });
@@ -195,7 +244,7 @@ describe('catalogStore — materials', () => {
     expect(toasts[0]!.message).toContain('↓');
   });
 
-  it('saveCatalog failure emits error toast', async () => {
+  it('saveCatalog failure emits error toast and NO success toast', async () => {
     const { deps, toasts } = makeDeps({
       saveCatalog: async () => {
         throw new Error('disk full');
@@ -206,10 +255,9 @@ describe('catalogStore — materials', () => {
       const store = createCatalogStore({ deps });
       store.getState().setCatalog(seedCatalog());
       store.getState().createMaterial(materialDraft);
-      // wait microtask for the .catch to run
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
       expect(toasts.find((t) => t.type === 'error')).toBeDefined();
+      expect(toasts.find((t) => t.type === 'success')).toBeUndefined();
     } finally {
       errorSpy.mockRestore();
     }
@@ -263,6 +311,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
       name: 'Bisagra',
       unit: 'piece',
       costPerUnit: 5,
+      packageSize: '',
       imageUrl: '',
       notes: '',
     });
@@ -271,15 +320,49 @@ describe('catalogStore — hardware / optionGroups / components', () => {
     ).toBe(true);
   });
 
-  it('deleteOptionGroup removes by id', () => {
-    const { deps } = makeDeps();
+  it('deleteOptionGroup removes by id (guest, no backend DELETE)', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const { deps } = makeDeps({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
     const store = createCatalogStore({ deps });
     const cat = seedCatalog();
     store.getState().setCatalog(cat);
     const first = cat.optionGroups[0]!;
     const before = cat.optionGroups.length;
-    store.getState().deleteOptionGroup(first.id);
+    await store.getState().deleteOptionGroup(first.id);
     expect(store.getState().catalog!.optionGroups).toHaveLength(before - 1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('deleteOptionGroup (auth) calls backend DELETE with token', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response('{}', { status: 200 }),
+    );
+    const { deps } = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const first = cat.optionGroups[0]!;
+
+    await store.getState().deleteOptionGroup(first.id);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://test/api/catalog/option-groups/${first.id}`,
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer jwt-xyz',
+        }),
+      }),
+    );
+    expect(
+      store.getState().catalog!.optionGroups.some((g) => g.id === first.id),
+    ).toBe(false);
   });
 
   it('toggleComponentActive flips active (silent, no toast)', () => {
@@ -302,7 +385,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
 // ---------------------------------------------------------------------------
 
 describe('catalogStore — categories (atypical)', () => {
-  it('deleteCategory blocked when has subcategories', () => {
+  it('deleteCategory blocked when has subcategories', async () => {
     const { deps, toasts } = makeDeps({ newId: () => 'cat-1' });
     const store = createCatalogStore({ deps });
     store.getState().setCatalog(seedCatalog());
@@ -319,7 +402,7 @@ describe('catalogStore — categories (atypical)', () => {
       sortOrder: '0',
     });
 
-    store.getState().deleteCategory('cat-1');
+    await store.getState().deleteCategory('cat-1');
 
     // Parent still there
     expect(
@@ -331,7 +414,7 @@ describe('catalogStore — categories (atypical)', () => {
     });
   });
 
-  it('deleteCategory clears categoryId from modules pointing at it', () => {
+  it('deleteCategory clears categoryId from modules pointing at it', async () => {
     const { deps } = makeDeps({ newId: () => 'cat-1' });
     const store = createCatalogStore({ deps });
     const cat = seedCatalog();
@@ -349,6 +432,8 @@ describe('catalogStore — categories (atypical)', () => {
       notes: target.notes ?? '',
       categoryId: 'cat-1',
       furnitureType: target.furnitureType ?? 'inferior',
+      baseMode: '',
+      baseClearanceMm: '',
       baseLaborCost: String(target.baseLaborCost ?? ''),
       imageUrl: target.imageUrl ?? '',
       externalWidth: '',
@@ -360,12 +445,43 @@ describe('catalogStore — categories (atypical)', () => {
       presets: [],
     });
 
-    store.getState().deleteCategory('cat-1');
+    await store.getState().deleteCategory('cat-1');
 
     const updatedModule = store
       .getState()
       .catalog!.modules.find((m) => m.id === target.id)!;
     expect(updatedModule.categoryId).toBeUndefined();
+  });
+
+  it('deleteCategory (auth) calls backend DELETE with token', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response('{}', { status: 200 }),
+    );
+    const { deps } = makeDeps({
+      newId: () => 'cat-auth-1',
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    store.getState().createCategory({
+      name: 'ToDelete',
+      parentId: '',
+      sortOrder: '0',
+    });
+
+    await store.getState().deleteCategory('cat-auth-1');
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://test/api/catalog/categories/cat-auth-1',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer jwt-xyz',
+        }),
+      }),
+    );
   });
 });
 
@@ -374,17 +490,51 @@ describe('catalogStore — categories (atypical)', () => {
 // ---------------------------------------------------------------------------
 
 describe('catalogStore — modules', () => {
-  it('deleteModule invokes onModuleDeleted callback', () => {
-    const { deps } = makeDeps();
+  it('deleteModule invokes onModuleDeleted callback (guest, no backend DELETE)', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const { deps } = makeDeps({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
     const store = createCatalogStore({ deps });
     const cat = seedCatalog();
     store.getState().setCatalog(cat);
     const first = cat.modules[0]!;
     const spy = vi.fn();
 
-    store.getState().deleteModule(first.id, spy);
+    await store.getState().deleteModule(first.id, spy);
 
     expect(spy).toHaveBeenCalledWith(first.id);
+    expect(
+      store.getState().catalog!.modules.some((m) => m.id === first.id),
+    ).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('deleteModule (auth) calls backend DELETE with token', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response('{}', { status: 200 }),
+    );
+    const { deps } = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt-xyz',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const first = cat.modules[0]!;
+
+    await store.getState().deleteModule(first.id);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://test/api/catalog/modules/${first.id}`,
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer jwt-xyz',
+        }),
+      }),
+    );
     expect(
       store.getState().catalog!.modules.some((m) => m.id === first.id),
     ).toBe(false);

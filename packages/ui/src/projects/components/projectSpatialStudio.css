@@ -162,6 +162,23 @@
   color: var(--text-muted);
 }
 
+.spatial-studio__plan-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--warning-700);
+  background: var(--warning-50);
+  border: 1px solid var(--warning-500);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  max-width: min(28rem, 42vw);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .spatial-studio__quote-total {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);

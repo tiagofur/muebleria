@@ -45,6 +45,7 @@ export type {
   KitchenSpace,
   ProjectKitchenLayout,
   ModuleBaseMode,
+  ProjectPlanEditSession,
   InstallationChecklistItem,
   QuotePriceSnapshot,
   Catalog,
@@ -257,6 +258,16 @@ export type {
 } from './kitchenLayout';
 
 export { roundHardwarePurchaseQuantity } from './engine/labels';
+
+export {
+  PLAN_EDIT_SESSION_TTL_MS,
+  isPlanEditSessionExpired,
+  planEditSessionHeldByOther,
+  acquirePlanEditSession,
+  renewPlanEditSession,
+  releasePlanEditSession,
+} from './planEditSession';
+export type { PlanEditActor } from './planEditSession';
 
 export {
   parseDxfToKitchenWalls,
