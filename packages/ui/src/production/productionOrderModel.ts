@@ -45,6 +45,7 @@ export const PRODUCTION_ORDER_TABS_READY: ReadonlySet<ProductionOrderTab> =
     'despiece',
     'herrajes',
     'vistas',
+    'optimizacion',
     'documentos',
     'exports',
   ]);
@@ -178,6 +179,4 @@ export function buildProductionOrderReadiness(input: {
 /** Roadmap issue refs for placeholder tabs (no wrong interpretations). */
 export const PRODUCTION_ORDER_TAB_ROADMAP: Readonly<
   Partial<Record<ProductionOrderTab, string>>
-> = {
-  optimizacion: 'PROD-2.3 / #225',
-};
+> = {};

@@ -15,6 +15,11 @@ export interface ProductionBoardViewProps {
   readonly rows: readonly ProductionCutRow[];
   readonly sheetWidthMm?: number;
   readonly sheetHeightMm?: number;
+  /**
+   * When true, show grain hash marks and estimated fill % (heuristic pack only).
+   * PROD-2.1 — never presents as machine-official nesting.
+   */
+  readonly showEstimateMetrics?: boolean;
 }
 
 const DEFAULT_SHEET_W = 2440;
@@ -80,6 +85,7 @@ export function ProductionBoardView({
   rows,
   sheetWidthMm = DEFAULT_SHEET_W,
   sheetHeightMm = DEFAULT_SHEET_H,
+  showEstimateMetrics = false,
 }: ProductionBoardViewProps): ReactNode {
   const placed = useMemo(
     () => simplePack(rows, sheetWidthMm, sheetHeightMm),
@@ -90,6 +96,18 @@ export function ProductionBoardView({
   const scale = 600 / sheetWidthMm;
   const svgW = sheetWidthMm * scale;
   const svgH = sheetHeightMm * scale;
+
+  const fillPct = useMemo(() => {
+    if (!showEstimateMetrics || rows.length === 0) return null;
+    const sheetArea = sheetWidthMm * sheetHeightMm;
+    if (!(sheetArea > 0)) return null;
+    let pieceArea = 0;
+    for (const r of rows) {
+      pieceArea += r.lengthMm * r.widthMm * Math.max(1, r.quantity);
+    }
+    // Cap at 100 for display; simple pack may overflow sheet visually.
+    return Math.min(100, Math.round((pieceArea / sheetArea) * 1000) / 10);
+  }, [rows, sheetWidthMm, sheetHeightMm, showEstimateMetrics]);
 
   // Unique materials for color assignment.
   const materialColors = useMemo(() => {
@@ -107,9 +125,11 @@ export function ProductionBoardView({
       <div className="production-board__header">
         <span className="production-board__label">
           Tablero {sheetWidthMm} × {sheetHeightMm} mm
+          {showEstimateMetrics ? ' · preview estimada' : ''}
         </span>
         <span className="production-board__count">
           {placed.length} pieza{placed.length === 1 ? '' : 's'}
+          {fillPct != null ? ` · ~${fillPct}% área` : ''}
         </span>
       </div>
       {rows.length === 0 ? (
@@ -157,8 +177,23 @@ export function ProductionBoardView({
                     fontSize={9}
                     fill="var(--text-primary)"
                   >
-                    {p.row.description?.slice(0, 12)}
+                    {(p.row.partCode || p.row.description || '').slice(0, 12)}
                   </text>
+                ) : null}
+                {showEstimateMetrics &&
+                p.row.grain === 1 &&
+                p.w * scale > 24 &&
+                p.h * scale > 16 ? (
+                  <line
+                    x1={p.x * scale + 4}
+                    y1={p.y * scale + p.h * scale - 6}
+                    x2={p.x * scale + p.w * scale - 4}
+                    y2={p.y * scale + p.h * scale - 6}
+                    stroke="var(--text-muted)"
+                    strokeWidth={1}
+                    strokeDasharray="3 2"
+                    data-testid={`production-piece-grain-${i}`}
+                  />
                 ) : null}
               </g>
             );

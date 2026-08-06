@@ -705,7 +705,8 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Patrón:** workspace de fábrica (no editor de cotización)
 - **Contenido:**
   - Cola: tabs accepted / produced; CTA primario **Abrir orden**
-  - Hub tabs: Resumen · Módulos · **Despiece** · **Herrajes** · **Vistas** (planta + elevaciones + 3D) · Optimización (placeholder Fase 2) · **Documentos** · Exports
+  - Hub tabs: Resumen · Módulos · **Despiece** · **Herrajes** · **Vistas** (planta + elevaciones + 3D) · **Optimización** (L0 estimado / L1 preview / L2 import nesting) · **Documentos** · Exports
+  - Optimización: capas etiquetadas; Optimizer Excel sigue siendo plan de corte oficial; CSV cut-list genérico en Despiece/Documentos/Exports
   - Hub Resumen: checklist listo-para-cortar, totales de fábrica, pack; **solo lectura del diseño**
   - Hub Módulos: inventario con código de fábrica, medidas, ubicación, piezas
   - Hub Despiece: cut-list agrupable (material/módulo); misma población que Optimizer

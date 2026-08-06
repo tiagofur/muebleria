@@ -77,3 +77,8 @@ export {
   ProductionElevationPreview,
   type ProductionElevationPreviewProps,
 } from './ProductionElevationPreview';
+
+export {
+  ProductionOrderOptimizationPanel,
+  type ProductionOrderOptimizationPanelProps,
+} from './ProductionOrderOptimizationPanel';

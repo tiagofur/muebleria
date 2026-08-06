@@ -4,8 +4,10 @@
 
 import { useMemo, type ReactNode } from 'react';
 import type {
+  Catalog,
   HardwarePurchaseRow,
   Module,
+  NestingImportResult,
   ProductionCutRow,
   Project,
 } from '@muebles/domain';
@@ -49,15 +51,22 @@ export type ProductionWorkspaceProps = {
   readonly onExportPieceLabels?: (projectId: string) => void | Promise<void>;
   readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
   readonly onExportElevations?: (projectId: string) => void | Promise<void>;
+  readonly onExportCutListCsv?: (projectId: string) => void | Promise<void>;
   readonly onMarkProduced: (projectId: string) => void;
   readonly exportBusy?: boolean;
   readonly loading?: boolean;
   readonly cutRowsFor?: ProductionQueueProps['cutRowsFor'];
-  /** PROD-0.4 / 1.x */
+  /** PROD-0.4 / 1.x / 2.x */
   readonly modules?: readonly Module[];
   readonly catalog3d?: Module3DCatalogInput | null;
+  readonly catalog?: Catalog | null;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   readonly hideHardwareCosts?: boolean;
+  readonly onImportNesting?: (
+    projectId: string,
+    nesting: NestingImportResult,
+  ) => void;
+  readonly canImportNesting?: boolean;
 };
 
 export function ProductionWorkspace({
@@ -76,15 +85,19 @@ export function ProductionWorkspace({
   onExportPieceLabels,
   onExportProductionPack,
   onExportElevations,
+  onExportCutListCsv,
   onMarkProduced,
   exportBusy = false,
   loading = false,
   cutRowsFor,
   modules = [],
   catalog3d = null,
+  catalog = null,
   resolveMediaUrl,
   resolveHardware,
   hideHardwareCosts = false,
+  onImportNesting,
+  canImportNesting = false,
 }: ProductionWorkspaceProps): ReactNode {
   const orderProject = useMemo(() => {
     if (!orderProjectId) return null;
@@ -162,6 +175,11 @@ export function ProductionWorkspace({
             ? () => onExportElevations(orderProject.id)
             : undefined
         }
+        onExportCutListCsv={
+          onExportCutListCsv
+            ? () => onExportCutListCsv(orderProject.id)
+            : undefined
+        }
         onMarkProduced={
           orderProject.status === 'accepted'
             ? () => onMarkProduced(orderProject.id)
@@ -174,9 +192,16 @@ export function ProductionWorkspace({
         hardwareRows={hardware.rows}
         hardwareError={hardware.error}
         catalog3d={catalog3d}
+        catalog={catalog}
         resolveMediaUrl={resolveMediaUrl}
         hideHardwareCosts={hideHardwareCosts}
         elevationsAvailable={elevations.walls.length > 0}
+        onImportNesting={
+          onImportNesting
+            ? (nesting) => onImportNesting(orderProject.id, nesting)
+            : undefined
+        }
+        canImportNesting={canImportNesting}
       />
     );
   }

@@ -490,9 +490,9 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 | 1 | PROD-1.2 | Pack ZIP ampliado (carátula + elevaciones + despiece) | **[#220](https://github.com/tiagofur/muebleria/issues/220)** ✅ | 1.1, #134 |
 | 1 | PROD-1.3 | Pantalla Despiece producción (cut-list rica dedicada) | **[#221](https://github.com/tiagofur/muebleria/issues/221)** ✅ | 0.1 |
 | 1 | PROD-1.4 | Pantalla Herrajes + Documentos (regenerar PDFs) | **[#222](https://github.com/tiagofur/muebleria/issues/222)** ✅ | 0.1 |
-| 2 | PROD-2.1 | Preview visual de tableros / pliegos | **[#223](https://github.com/tiagofur/muebleria/issues/223)** | #135, 0.1 |
-| 2 | PROD-2.2 | Export CSV cut-list genérico | **[#224](https://github.com/tiagofur/muebleria/issues/224)** | 1.3 |
-| 2 | PROD-2.3 | Optimización UI unificada (L0+L1+L2 import #142) | **[#225](https://github.com/tiagofur/muebleria/issues/225)** | 2.1, #142 |
+| 2 | PROD-2.1 | Preview visual de tableros / pliegos | **[#223](https://github.com/tiagofur/muebleria/issues/223)** ✅ | #135, 0.1 |
+| 2 | PROD-2.2 | Export CSV cut-list genérico | **[#224](https://github.com/tiagofur/muebleria/issues/224)** ✅ | 1.3 |
+| 2 | PROD-2.3 | Optimización UI unificada (L0+L1+L2 import #142) | **[#225](https://github.com/tiagofur/muebleria/issues/225)** ✅ | 2.1, #142 |
 | 3 | PROD-3.1 | Estados de piso por módulo (cortado → armado) | **[#226](https://github.com/tiagofur/muebleria/issues/226)** | 0.3 |
 | 3 | PROD-3.2 | Advertencia / revision de OP al re-exportar | **[#227](https://github.com/tiagofur/muebleria/issues/227)** | 0.3, D1 |
 | 3 | PROD-3.3 | CNC metadatos / DXF (piloto) | **[#111](https://github.com/tiagofur/muebleria/issues/111)** | demanda real |
@@ -562,3 +562,4 @@ El módulo Producción se considera **sólido (Fase 0+1)** cuando:
 | 2026-08-06 | Creación: visión workspace, reglas, pantallas, pack, roadmap. Issues #214–#227 + enlace #111. Baseline #134/#135/#141/#142. |
 | 2026-08-06 | **Fase 0 implementada** (PROD-0.1–0.4): shell, desacople, hub, módulos + vistas read-only. |
 | 2026-08-06 | **Fase 1 implementada** (PROD-1.1–1.4): elevaciones PDF, pack ampliado, despiece/herrajes/documentos. |
+| 2026-08-06 | **Fase 2 implementada** (PROD-2.1–2.3): preview tableros, CSV cut-list, UI optimización L0/L1/L2. |

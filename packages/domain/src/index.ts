@@ -297,6 +297,7 @@ export {
 } from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';
+export type { BoardSheetEstimate } from './boardSheetEstimate';
 
 export {
   buildProductionElevations,
@@ -306,7 +307,6 @@ export {
   type ProductionUnplacedUnit,
   type ProductionElevationsResult,
 } from './productionElevations';
-export type { BoardSheetEstimate } from './boardSheetEstimate';
 
 export {
   projectWithRoleChoice,

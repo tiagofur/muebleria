@@ -46,6 +46,8 @@ import {
   ProductionOrderDocumentsPanel,
   type ProductionDocumentItem,
 } from './ProductionOrderDocumentsPanel';
+import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
+import type { Catalog, NestingImportResult } from '@muebles/domain';
 import './production.css';
 
 export type ProductionOrderHubProps = {
@@ -63,6 +65,7 @@ export type ProductionOrderHubProps = {
   readonly onExportPieceLabels?: () => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
   readonly onExportElevations?: () => void | Promise<void>;
+  readonly onExportCutListCsv?: () => void | Promise<void>;
   readonly onMarkProduced?: () => void;
   readonly exportBusy?: boolean;
   /** PROD-0.4: catalog modules for inventory + 3D. */
@@ -72,10 +75,14 @@ export type ProductionOrderHubProps = {
   readonly hardwareRows?: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
   readonly catalog3d?: Module3DCatalogInput | null;
+  /** Full catalog for material summary / sheet estimate (optimización). */
+  readonly catalog?: Catalog | null;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   readonly hideHardwareCosts?: boolean;
   /** Has kitchen walls for elevations PDF. */
   readonly elevationsAvailable?: boolean;
+  readonly onImportNesting?: (nesting: NestingImportResult) => void;
+  readonly canImportNesting?: boolean;
 };
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -152,6 +159,7 @@ export function ProductionOrderHub({
   onExportPieceLabels,
   onExportProductionPack,
   onExportElevations,
+  onExportCutListCsv,
   onMarkProduced,
   exportBusy = false,
   modules = [],
@@ -160,9 +168,12 @@ export function ProductionOrderHub({
   hardwareRows = null,
   hardwareError = null,
   catalog3d = null,
+  catalog = null,
   resolveMediaUrl,
   hideHardwareCosts = false,
   elevationsAvailable = false,
+  onImportNesting,
+  canImportNesting = false,
 }: ProductionOrderHubProps): ReactNode {
   const documents: readonly ProductionDocumentItem[] = [
     {
@@ -180,6 +191,14 @@ export function ProductionOrderHub({
       available: readiness.optimizerGenerable,
       reason: 'Requiere despiece válido',
       onDownload: onExportOptimizer,
+    },
+    {
+      id: 'cutlist-csv',
+      label: 'Cut-list CSV',
+      hint: 'CSV genérico (separador ;) para sierra/CNC/terceros',
+      available: readiness.materialsResolved && Boolean(onExportCutListCsv),
+      reason: 'Requiere piezas de tablero',
+      onDownload: onExportCutListCsv,
     },
     {
       id: 'hardware',
@@ -455,6 +474,8 @@ export function ProductionOrderHub({
           <ProductionOrderDespiecePanel
             cutRows={cutRows}
             cutError={cutListError}
+            onExportCsv={onExportCutListCsv}
+            exportBusy={exportBusy}
           />
         ) : null}
 
@@ -490,6 +511,18 @@ export function ProductionOrderHub({
               </p>
             </div>
           )
+        ) : null}
+
+        {activeTab === 'optimizacion' ? (
+          <ProductionOrderOptimizationPanel
+            project={project}
+            catalog={catalog}
+            cutRows={cutRows}
+            onExportOptimizer={onExportOptimizer}
+            onImportNesting={onImportNesting}
+            exportBusy={exportBusy}
+            canImportNesting={canImportNesting}
+          />
         ) : null}
 
         {activeTab === 'documentos' ? (
@@ -557,6 +590,20 @@ export function ProductionOrderHub({
                 >
                   <Tags size={16} strokeWidth={1.5} aria-hidden />
                   Etiquetas
+                </button>
+              ) : null}
+              {onExportCutListCsv ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={exportBusy || !readiness.materialsResolved}
+                  onClick={() => {
+                    void onExportCutListCsv();
+                  }}
+                  data-testid="prod-hub-exports-csv"
+                >
+                  <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+                  Cut-list CSV
                 </button>
               ) : null}
             </div>

@@ -14,6 +14,7 @@ import {
 export type ProductionDocumentId =
   | 'pack'
   | 'optimizer'
+  | 'cutlist-csv'
   | 'hardware'
   | 'labels'
   | 'elevations'
@@ -36,6 +37,7 @@ export type ProductionOrderDocumentsPanelProps = {
 const ICONS: Record<ProductionDocumentId, typeof FileText> = {
   pack: Package,
   optimizer: FileSpreadsheet,
+  'cutlist-csv': FileSpreadsheet,
   hardware: Wrench,
   labels: Tags,
   elevations: FileText,

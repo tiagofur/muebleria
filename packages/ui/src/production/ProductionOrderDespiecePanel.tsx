@@ -8,6 +8,8 @@ import type { ProductionCutRow } from '@muebles/domain';
 export type ProductionOrderDespiecePanelProps = {
   readonly cutRows: readonly ProductionCutRow[] | null;
   readonly cutError?: string | null;
+  readonly onExportCsv?: () => void | Promise<void>;
+  readonly exportBusy?: boolean;
 };
 
 type GroupBy = 'material' | 'module' | 'none';
@@ -34,6 +36,8 @@ function pieceCode(row: ProductionCutRow, index: number): string {
 export function ProductionOrderDespiecePanel({
   cutRows,
   cutError,
+  onExportCsv,
+  exportBusy = false,
 }: ProductionOrderDespiecePanelProps): ReactNode {
   const [groupBy, setGroupBy] = useState<GroupBy>('material');
   const [query, setQuery] = useState('');
@@ -137,6 +141,19 @@ export function ProductionOrderDespiecePanel({
         <p className="prod-modulos__count" data-testid="prod-despiece-count">
           {filtered.length} línea{filtered.length === 1 ? '' : 's'}
         </p>
+        {onExportCsv ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={exportBusy || cutRows.length === 0}
+            onClick={() => {
+              void onExportCsv();
+            }}
+            data-testid="prod-despiece-export-csv"
+          >
+            Exportar CSV
+          </button>
+        ) : null}
       </div>
 
       {groups.map((g) => (

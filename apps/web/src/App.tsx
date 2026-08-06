@@ -128,6 +128,7 @@ import { buildHardwareListExport } from './exportHardwareList';
 import { buildPieceLabelsExport } from './exportPieceLabels';
 import { buildProductionPackExport } from './exportProductionPack';
 import { buildWallElevationsExport } from './exportWallElevations';
+import { buildCutListCsvExport } from './exportCutListCsv';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
 import {
   buildOptimizerExport,
@@ -1398,6 +1399,55 @@ function AppContent({
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
   );
 
+  const handleExportCutListCsv = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildCutListCsvExport(project, catalog);
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          toast({
+            type: 'error',
+            message: 'No se pudo exportar cut-list CSV',
+          });
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, toast, session, actorRole],
+  );
+
   const handleExportProductionPack = useCallback(
     async (projectId?: string) => {
       const project =
@@ -1757,6 +1807,9 @@ function AppContent({
           onExportElevations={(id) => {
             void handleExportElevations(id);
           }}
+          onExportCutListCsv={(id) => {
+            void handleExportCutListCsv(id);
+          }}
           onMarkProduced={markProjectProduced}
           exportBusy={exportBusy}
           cutRowsFor={
@@ -1794,6 +1847,7 @@ function AppContent({
               : undefined
           }
           modules={modules}
+          catalog={catalog}
           catalog3d={
             catalog
               ? {
@@ -1809,6 +1863,8 @@ function AppContent({
           }
           resolveMediaUrl={resolveMediaUrl}
           hideHardwareCosts={!showCosts}
+          onImportNesting={importNestingResult}
+          canImportNesting={canMutateProjects || canMarkProduced}
         />
       ) : null}
       {navId === 'materials' ? (
