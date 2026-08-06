@@ -10,6 +10,8 @@ import {
   kitchenLayoutWarnings,
   wallDirectionYawDeg,
   offsetMmFromPlanPoint,
+  DEFAULT_BASE_CLEARANCE_MM,
+  resolveBaseClearanceMm,
 } from './kitchenLayout';
 import type { ProjectItem, ProjectKitchenLayout } from './types';
 
@@ -78,12 +80,73 @@ describe('kitchenLayout', () => {
     const result = layoutKitchenPlacements(layout, fps);
     expect(result.placements).toHaveLength(3);
     expect(result.placements[0]!.originX).toBe(0);
-    expect(result.placements[0]!.originZ).toBe(0);
+    // Floor units sit on default zoclo/patas clearance.
+    expect(result.placements[0]!.originZ).toBe(DEFAULT_BASE_CLEARANCE_MM);
+    expect(result.placements[0]!.baseClearanceMm).toBe(DEFAULT_BASE_CLEARANCE_MM);
     expect(result.placements[0]!.yawDeg).toBe(0);
     expect(result.placements[1]!.originX).toBe(620);
     expect(result.placements[2]!.originY).toBe(100);
     expect(result.placements[2]!.originZ).toBe(1400);
+    expect(result.placements[2]!.baseClearanceMm).toBe(0);
     expect(result.placements[2]!.yawDeg).toBe(90);
+  });
+
+  it('applies layout and per-placement baseClearance for floor units', () => {
+    const layout: ProjectKitchenLayout = {
+      baseClearanceMm: 120,
+      walls: [
+        {
+          id: 'w1',
+          lengthMm: 3000,
+          angleDeg: 0,
+          originXMm: 0,
+          originYMm: 0,
+        },
+      ],
+      placements: [
+        {
+          itemId: 'i1',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+        {
+          itemId: 'i2',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 700,
+          elevation: 'floor',
+          baseClearanceMm: 80,
+        },
+        {
+          itemId: 'i3',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 1400,
+          elevation: 'floor',
+          baseClearanceMm: 0,
+        },
+      ],
+    };
+    const fps = [
+      { itemId: 'i1', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+      { itemId: 'i2', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+      { itemId: 'i3', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+    ];
+    const result = layoutKitchenPlacements(layout, fps);
+    expect(result.placements[0]!.originZ).toBe(120);
+    expect(result.placements[1]!.originZ).toBe(80);
+    expect(result.placements[2]!.originZ).toBe(0);
+  });
+
+  it('resolveBaseClearanceMm ignores wall elevation', () => {
+    expect(
+      resolveBaseClearanceMm(
+        { walls: [], placements: [], baseClearanceMm: 150 },
+        { elevation: 'wall' },
+      ),
+    ).toBe(0);
   });
 
   it('snaps wall angles to cardinal yaw', () => {

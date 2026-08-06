@@ -40,6 +40,8 @@ export type ProjectModule3DInstance = {
   readonly originZ: number;
   /** Workshop plan yaw (degrees). Width follows wall; 0 = straight run. */
   readonly yawDeg: number;
+  /** Plinth/legs clearance under floor units (mm); 0 if none / wall-hung. */
+  readonly baseClearanceMm: number;
   readonly error: string | null;
 };
 
@@ -275,6 +277,7 @@ export function resolveProject3DPreview(
           originY: place.originY,
           originZ: place.originZ,
           yawDeg: place.yawDeg,
+          baseClearanceMm: place.baseClearanceMm,
           error: row?.error ?? null,
         };
       },
@@ -349,6 +352,7 @@ export function resolveProject3DPreview(
           originY: place.originY,
           originZ: place.originZ,
           yawDeg: 0,
+          baseClearanceMm: 0,
           error: row.error,
         };
       });
@@ -388,6 +392,7 @@ export function resolveProject3DPreview(
         originY: place.originY,
         originZ: place.originZ,
         yawDeg: 0,
+        baseClearanceMm: 0,
         error: row.error,
       };
     });

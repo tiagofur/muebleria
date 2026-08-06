@@ -121,6 +121,32 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements[0]!.elevation).toBe('floor');
   });
 
+  it('sets layout base clearance (zoclo) for floor cabinets', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-layout-plinth-120'));
+    expect(onChangeLayout).toHaveBeenCalledWith(
+      expect.objectContaining({ baseClearanceMm: 120 }),
+    );
+  });
+
   it('changes measure preset from properties panel (Promob-like)', () => {
     const onUpdateItem = vi.fn();
     const projectWithWalls: Project = {

@@ -21,13 +21,16 @@ import type {
   ProjectKitchenLayout,
 } from '@muebles/domain';
 import {
+  BASE_CLEARANCE_PRESETS_MM,
   createDefaultLWalls,
+  DEFAULT_BASE_CLEARANCE_MM,
   defaultMeasurePresetId,
   emptyKitchenLayout,
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   pruneKitchenLayout,
   reorderPlacementOnWall,
+  resolveBaseClearanceMm,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
 import {
@@ -364,11 +367,19 @@ export function ProjectSpatialStudio({
     if (!canEdit) return;
     commit({
       ...layout,
-      placements: layout.placements.map((p) =>
-        p.itemId === itemId && p.instanceIndex === instanceIndex
-          ? { ...p, ...patch }
-          : p,
-      ),
+      placements: layout.placements.map((p) => {
+        if (p.itemId !== itemId || p.instanceIndex !== instanceIndex) return p;
+        const next: ProjectItemPlacement = { ...p, ...patch };
+        // Allow clearing optional override (inherit plan default).
+        if (
+          'baseClearanceMm' in patch &&
+          patch.baseClearanceMm === undefined
+        ) {
+          const { baseClearanceMm: _drop, ...rest } = next;
+          return rest;
+        }
+        return next;
+      }),
     });
   };
 
@@ -418,6 +429,7 @@ export function ProjectSpatialStudio({
     originY: m.originY,
     originZ: m.originZ,
     yawDeg: m.yawDeg,
+    baseClearanceMm: m.baseClearanceMm,
     showOuterGhost: true,
   }));
 
@@ -512,6 +524,83 @@ export function ProjectSpatialStudio({
                 ))}
               </ul>
             )}
+
+            {layout.walls.length > 0 ? (
+              <div
+                className="spatial-studio__field"
+                style={{ marginTop: 'var(--space-3)' }}
+              >
+                <span className="spatial-studio__field-label">
+                  Zoclo / patas (bajos)
+                </span>
+                <p className="spatial-studio__hint">
+                  Espacio bajo los muebles de piso para zoclo o patas. Default del
+                  plano: {resolveBaseClearanceMm(layout, { elevation: 'floor' })}{' '}
+                  mm.
+                </p>
+                <div
+                  className="spatial-studio__preset-grid"
+                  role="listbox"
+                  aria-label="Altura de zoclo del plano"
+                >
+                  {BASE_CLEARANCE_PRESETS_MM.map((mm) => {
+                    const current = resolveBaseClearanceMm(layout, {
+                      elevation: 'floor',
+                    });
+                    const active = current === mm;
+                    return (
+                      <button
+                        key={mm}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        disabled={!canEdit}
+                        className={
+                          active
+                            ? 'spatial-studio__preset spatial-studio__preset--active'
+                            : 'spatial-studio__preset'
+                        }
+                        onClick={() =>
+                          commit({
+                            ...layout,
+                            baseClearanceMm: mm,
+                          })
+                        }
+                        data-testid={`spatial-studio-layout-plinth-${mm}`}
+                      >
+                        <span className="spatial-studio__preset-name">
+                          {mm === 0 ? 'Sin' : `${mm}`}
+                        </span>
+                        <span className="spatial-studio__preset-dims">
+                          {mm === 0 ? 'al piso' : 'mm'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <label className="spatial-studio__field">
+                  <span>Personalizado (mm)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    disabled={!canEdit}
+                    value={
+                      layout.baseClearanceMm ?? DEFAULT_BASE_CLEARANCE_MM
+                    }
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v)) return;
+                      commit({
+                        ...layout,
+                        baseClearanceMm: Math.max(0, Math.round(v)),
+                      });
+                    }}
+                    data-testid="spatial-studio-layout-plinth-custom"
+                  />
+                </label>
+              </div>
+            ) : null}
           </section>
 
           <section className="spatial-studio__section">
@@ -978,6 +1067,91 @@ export function ProjectSpatialStudio({
                           <option value="wall">Muro (alto)</option>
                         </select>
                       </label>
+
+                      {selectedPlacement.elevation === 'floor' ? (
+                        <div className="spatial-studio__field">
+                          <span className="spatial-studio__field-label">
+                            Zoclo / patas de este mueble
+                          </span>
+                          <p className="spatial-studio__hint">
+                            Efectivo:{' '}
+                            {resolveBaseClearanceMm(layout, selectedPlacement)} mm
+                            {selectedPlacement.baseClearanceMm === undefined
+                              ? ' (default del plano)'
+                              : ' (override)'}
+                          </p>
+                          <div
+                            className="spatial-studio__preset-grid"
+                            role="listbox"
+                            aria-label="Altura de zoclo del mueble"
+                          >
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={
+                                selectedPlacement.baseClearanceMm === undefined
+                              }
+                              disabled={!canEdit}
+                              className={
+                                selectedPlacement.baseClearanceMm === undefined
+                                  ? 'spatial-studio__preset spatial-studio__preset--active'
+                                  : 'spatial-studio__preset'
+                              }
+                              onClick={() =>
+                                patchPlacement(
+                                  selectedPlacement.itemId,
+                                  selectedPlacement.instanceIndex,
+                                  { baseClearanceMm: undefined },
+                                )
+                              }
+                              data-testid="spatial-studio-item-plinth-default"
+                            >
+                              <span className="spatial-studio__preset-name">
+                                Plano
+                              </span>
+                              <span className="spatial-studio__preset-dims">
+                                {resolveBaseClearanceMm(layout, {
+                                  elevation: 'floor',
+                                })}{' '}
+                                mm
+                              </span>
+                            </button>
+                            {BASE_CLEARANCE_PRESETS_MM.map((mm) => {
+                              const active =
+                                selectedPlacement.baseClearanceMm === mm;
+                              return (
+                                <button
+                                  key={mm}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={active}
+                                  disabled={!canEdit}
+                                  className={
+                                    active
+                                      ? 'spatial-studio__preset spatial-studio__preset--active'
+                                      : 'spatial-studio__preset'
+                                  }
+                                  onClick={() =>
+                                    patchPlacement(
+                                      selectedPlacement.itemId,
+                                      selectedPlacement.instanceIndex,
+                                      { baseClearanceMm: mm },
+                                    )
+                                  }
+                                  data-testid={`spatial-studio-item-plinth-${mm}`}
+                                >
+                                  <span className="spatial-studio__preset-name">
+                                    {mm === 0 ? 'Sin' : `${mm}`}
+                                  </span>
+                                  <span className="spatial-studio__preset-dims">
+                                    {mm === 0 ? 'al piso' : 'mm'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
 
                       {canEdit ? (
                         <button

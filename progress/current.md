@@ -18,6 +18,7 @@ Botón **Proyectar** en chrome de cotización → fullscreen `ProjectSpatialStud
 | unplacedPolicy hide en studio | ✅ |
 | Propiedades Promob (presets + acabados) | ✅ | tabs Mueble / Posición; onUpdateItem |
 | Drag 3D a lo largo del muro | ✅ | floor raycast → offsetMm, clamp |
+| Zoclo / patas (base clearance) | ✅ | default 100 mm + override por mueble + plinth 3D |
 | A×H×P libre mm | ❌ no por ahora | solo presets del mueble |
 
 ### Key files

@@ -214,6 +214,8 @@ export {
 
 export {
   DEFAULT_WALL_CABINET_Z_MM,
+  DEFAULT_BASE_CLEARANCE_MM,
+  BASE_CLEARANCE_PRESETS_MM,
   emptyKitchenLayout,
   resolveWallFrames,
   kitchenLayoutWarnings,
@@ -223,6 +225,7 @@ export {
   placementAabb,
   reorderPlacementOnWall,
   offsetMmFromPlanPoint,
+  resolveBaseClearanceMm,
   layoutKitchenPlacements,
   nextOffsetOnWall,
   createDefaultLWalls,

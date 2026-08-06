@@ -159,6 +159,7 @@ export function Project3DModal({
                 originY: m.originY,
                 originZ: m.originZ,
                 yawDeg: m.yawDeg,
+                baseClearanceMm: m.baseClearanceMm,
                 showOuterGhost: true,
               }))}
               totalWidth={preview.totalWidth}

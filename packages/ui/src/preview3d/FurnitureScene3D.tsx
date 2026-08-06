@@ -48,6 +48,11 @@ export type FurnitureSceneModule = {
    * so cabinet width follows the wall (kitchen layout).
    */
   readonly yawDeg?: number;
+  /**
+   * Plinth/legs height under the cabinet (mm). Group originZ already sits on
+   * top of this clearance; a simple toe-kick box is drawn below when > 0.
+   */
+  readonly baseClearanceMm?: number;
   readonly showOuterGhost?: boolean;
 };
 
@@ -240,6 +245,32 @@ function OuterGhost({
         wireframe
         transparent
         opacity={highlighted ? 0.45 : 0.18}
+      />
+    </mesh>
+  );
+}
+
+/** Simple toe-kick / legs volume under a floor cabinet (local space). */
+function PlinthMesh({
+  width,
+  depth,
+  height,
+}: {
+  readonly width: number;
+  readonly depth: number;
+  readonly height: number;
+}): ReactNode {
+  const W = Math.max(width * 0.92, 1);
+  const H = Math.max(height, 1);
+  const D = Math.max(depth * 0.88, 1);
+  // Group origin is already at clearance height; plinth sits below local Y=0.
+  return (
+    <mesh position={[width / 2, -H / 2, depth / 2]} userData={{ plinth: true }}>
+      <boxGeometry args={[W, H, D]} />
+      <meshStandardMaterial
+        color="#2c2f34"
+        roughness={0.92}
+        metalness={0.02}
       />
     </mesh>
   );
@@ -440,6 +471,13 @@ function ModuleGroup({
           height={mod.height}
           depth={mod.depth}
           highlighted={moduleSelected}
+        />
+      ) : null}
+      {(mod.baseClearanceMm ?? 0) > 0 ? (
+        <PlinthMesh
+          width={mod.width}
+          depth={mod.depth}
+          height={mod.baseClearanceMm!}
         />
       ) : null}
       {visuals.map((v) => {

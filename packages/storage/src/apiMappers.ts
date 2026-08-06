@@ -707,7 +707,11 @@ function kitchenLayoutToApi(
       wall_id: p.wallId,
       offset_mm: p.offsetMm,
       elevation: p.elevation,
+      base_clearance_mm:
+        p.baseClearanceMm === undefined ? null : p.baseClearanceMm,
     })),
+    base_clearance_mm:
+      layout.baseClearanceMm === undefined ? null : layout.baseClearanceMm,
   };
 }
 
@@ -740,16 +744,31 @@ function kitchenLayoutFromApi(
   const placements = placementsRaw.map((p) => {
     const pr = p as Record<string, unknown>;
     const elev = str(pr.elevation, 'floor');
+    const bcRaw = pr.base_clearance_mm ?? pr.baseClearanceMm;
+    const baseClearanceMm =
+      bcRaw === null || bcRaw === undefined || bcRaw === ''
+        ? undefined
+        : Math.max(0, Math.round(num(bcRaw)));
     return {
       itemId: str(pr.item_id ?? pr.itemId),
       instanceIndex: Math.max(0, Math.floor(num(pr.instance_index ?? pr.instanceIndex))),
       wallId: str(pr.wall_id ?? pr.wallId),
       offsetMm: num(pr.offset_mm ?? pr.offsetMm),
       elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
+      ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
     };
   });
   if (walls.length === 0 && placements.length === 0) return undefined;
-  return { walls, placements };
+  const layoutBc = row.base_clearance_mm ?? row.baseClearanceMm;
+  const baseClearanceMm =
+    layoutBc === null || layoutBc === undefined || layoutBc === ''
+      ? undefined
+      : Math.max(0, Math.round(num(layoutBc)));
+  return {
+    walls,
+    placements,
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+  };
 }
 
 const MEASURE_DEFAULT_TYPES = new Set(['inferior', 'superior', 'alto']);

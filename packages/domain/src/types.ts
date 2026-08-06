@@ -395,12 +395,22 @@ export interface ProjectItemPlacement {
   /** Distance along the wall from the wall start (mm). */
   readonly offsetMm: number;
   readonly elevation: PlacementElevation;
+  /**
+   * Clearance under this unit for plinth/legs (zoclo/patas), mm.
+   * Only used when elevation is `floor`. Omit to inherit layout default.
+   */
+  readonly baseClearanceMm?: number;
 }
 
 /** Optional kitchen plan attached to a project. */
 export interface ProjectKitchenLayout {
   readonly walls: readonly KitchenWall[];
   readonly placements: readonly ProjectItemPlacement[];
+  /**
+   * Default clearance under floor cabinets for plinth/legs (zoclo/patas), mm.
+   * Typical workshop values: 80–150. Omit → domain default (100).
+   */
+  readonly baseClearanceMm?: number;
 }
 
 /** Simple installation checklist item (#139). */

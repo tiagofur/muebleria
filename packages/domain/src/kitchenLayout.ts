@@ -17,6 +17,15 @@ import type {
 /** Default height (mm) for wall-hung units in 3D when elevation is `wall`. */
 export const DEFAULT_WALL_CABINET_Z_MM = 1400;
 
+/**
+ * Default clearance under floor cabinets for plinth / legs (zoclo/patas), mm.
+ * Common workshop toe-kick height; overridable per plan or per placement.
+ */
+export const DEFAULT_BASE_CLEARANCE_MM = 100;
+
+/** Suggested zoclo/patas heights for UI chips (mm). */
+export const BASE_CLEARANCE_PRESETS_MM = [0, 80, 100, 120, 150] as const;
+
 export type KitchenFootprint = {
   readonly itemId: string;
   readonly instanceIndex: number;
@@ -53,6 +62,11 @@ export type KitchenPlacedModule = {
    * 0 = +X wall, 90 = +Y wall, 180 = −X, 270 = −Y.
    */
   readonly yawDeg: number;
+  /**
+   * Clearance under the cabinet used for originZ when on floor (zoclo/patas).
+   * 0 for wall-hung or when no plinth space.
+   */
+  readonly baseClearanceMm: number;
 };
 
 export type KitchenLayoutResult = {
@@ -177,7 +191,7 @@ export function kitchenLayoutWarnings(
   return warnings;
 }
 
-/** Drop placements that no longer match items; keep walls. */
+/** Drop placements that no longer match items; keep walls and plan defaults. */
 export function pruneKitchenLayout(
   layout: ProjectKitchenLayout,
   items: readonly ProjectItem[],
@@ -190,7 +204,13 @@ export function pruneKitchenLayout(
     if (!wallIds.has(p.wallId)) return false;
     return p.instanceIndex >= 0 && p.instanceIndex < Math.max(1, item.quantity);
   });
-  return { walls: layout.walls, placements };
+  return {
+    walls: layout.walls,
+    placements,
+    ...(layout.baseClearanceMm === undefined
+      ? {}
+      : { baseClearanceMm: layout.baseClearanceMm }),
+  };
 }
 
 /**
@@ -315,14 +335,49 @@ export function reorderPlacementOnWall(
 }
 
 /**
+ * Resolve plinth/legs clearance (mm) for a floor placement.
+ * Wall elevation → 0. Floor → placement override → layout default → domain default.
+ */
+export function resolveBaseClearanceMm(
+  layout: ProjectKitchenLayout | undefined,
+  placement?: Pick<ProjectItemPlacement, 'elevation' | 'baseClearanceMm'>,
+  options?: { readonly baseClearanceMm?: number },
+): number {
+  if (placement?.elevation === 'wall') return 0;
+  if (
+    placement?.baseClearanceMm !== undefined &&
+    Number.isFinite(placement.baseClearanceMm)
+  ) {
+    return Math.max(0, Math.round(placement.baseClearanceMm));
+  }
+  if (
+    layout?.baseClearanceMm !== undefined &&
+    Number.isFinite(layout.baseClearanceMm)
+  ) {
+    return Math.max(0, Math.round(layout.baseClearanceMm));
+  }
+  if (
+    options?.baseClearanceMm !== undefined &&
+    Number.isFinite(options.baseClearanceMm)
+  ) {
+    return Math.max(0, Math.round(options.baseClearanceMm));
+  }
+  return DEFAULT_BASE_CLEARANCE_MM;
+}
+
+/**
  * Place modules using kitchen plan. Axis-aligned cabinets (v1):
  * - angle ~0°: along +X at wall originY, yaw 0
  * - angle ~90°: along +Y at wall originX, yaw 90 (depth into −X / room)
+ * - floor units sit on baseClearanceMm (zoclo/patas); wall units at wallCabinetZMm
  */
 export function layoutKitchenPlacements(
   layout: ProjectKitchenLayout,
   footprints: readonly KitchenFootprint[],
-  options?: { readonly wallCabinetZMm?: number },
+  options?: {
+    readonly wallCabinetZMm?: number;
+    readonly baseClearanceMm?: number;
+  },
 ): KitchenLayoutResult {
   const wallZ = options?.wallCabinetZMm ?? DEFAULT_WALL_CABINET_Z_MM;
   const walls = resolveWallFrames(layout.walls);
@@ -351,7 +406,11 @@ export function layoutKitchenPlacements(
     if (!wall || !fp) continue;
 
     const elev: PlacementElevation = p.elevation === 'wall' ? 'wall' : 'floor';
-    const originZ = elev === 'wall' ? wallZ : 0;
+    const baseClearanceMm =
+      elev === 'wall'
+        ? 0
+        : resolveBaseClearanceMm(layout, p, options);
+    const originZ = elev === 'wall' ? wallZ : baseClearanceMm;
     const yawDeg = wallDirectionYawDeg(wall.angleDeg);
     const { originX, originY } = placementOriginsOnWall(
       wall,
@@ -371,6 +430,7 @@ export function layoutKitchenPlacements(
       originY,
       originZ,
       yawDeg,
+      baseClearanceMm,
     });
 
     const box = placementAabb(originX, originY, fp.width, fp.depth, yawDeg);
