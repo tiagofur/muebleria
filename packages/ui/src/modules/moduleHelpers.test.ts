@@ -139,6 +139,33 @@ describe('edges / draft mapping', () => {
     expect(d.components).toEqual([]);
     expect(d.code).toBe('');
     expect(d.categoryId).toBe('');
+    expect(d.baseMode).toBe('');
+    expect(d.baseClearanceMm).toBe('');
+  });
+
+  it('draftToModule maps baseMode and baseClearanceMm (zoclo)', () => {
+    const draft = {
+      ...emptyModuleDraft(),
+      code: 'MOD-Z',
+      name: 'Bajo zoclo',
+      baseMode: 'plinth_board' as const,
+      baseClearanceMm: '120',
+    };
+    const mod = draftToModule('mod-z', draft);
+    expect(mod.baseMode).toBe('plinth_board');
+    expect(mod.baseClearanceMm).toBe(120);
+
+    const none = draftToModule('mod-n', {
+      ...emptyModuleDraft(),
+      code: 'N',
+      name: 'N',
+      baseMode: '',
+    });
+    expect(none.baseMode).toBeUndefined();
+
+    const roundTrip = moduleToDraft(mod);
+    expect(roundTrip.baseMode).toBe('plinth_board');
+    expect(roundTrip.baseClearanceMm).toBe('120');
   });
 
   it('draftToModule maps structure + component instances (live board path)', () => {

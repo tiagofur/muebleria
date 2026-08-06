@@ -300,6 +300,9 @@ describe('ModulesScreen navigation + modals (F021)', () => {
 
     await user.click(screen.getByTestId('module-editor-tab-composition'));
     expect(screen.getByTestId('module-editor-composition-tabs')).toBeTruthy();
+    // No structure yet → badges on composition + structure subtab
+    expect(screen.getByTestId('module-editor-structure-badge')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-structure-sub-badge')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-structure').hidden).toBe(
       false,
     );
@@ -430,6 +433,40 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(draft.furnitureType).toBe('superior');
   });
 
+  it('general panel exposes baseMode + B and persists on save', async () => {
+    const user = userEvent.setup();
+    const { onCreate } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    await screen.findByTestId('module-editor-page');
+
+    await user.type(screen.getByLabelText('Código'), 'MOD-ZOCLO-1');
+    await user.type(screen.getByLabelText('Nombre'), 'Bajo con zoclo');
+
+    const baseSelect = screen.getByTestId(
+      'module-base-mode',
+    ) as HTMLSelectElement;
+    expect(baseSelect.value).toBe('none');
+    await user.selectOptions(baseSelect, 'plinth_board');
+    expect(baseSelect.value).toBe('plinth_board');
+
+    const bInput = screen.getByTestId(
+      'module-base-clearance',
+    ) as HTMLInputElement;
+    await user.clear(bInput);
+    await user.type(bInput, '120');
+
+    await user.click(screen.getByRole('button', { name: /^Guardar/i }));
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledTimes(1);
+    });
+    const saved = onCreate.mock.calls[0]![0];
+    expect(saved.baseMode).toBe('plinth_board');
+    // Draft form keeps B as string; catalogStore maps via draftToModule → number.
+    expect(saved.baseClearanceMm).toBe('120');
+  });
+
   it('opens full-page create from requestCreateKey prop (Dashboard handoff)', () => {
     renderScreen({ requestCreateKey: 1 });
     const page = screen.getByTestId('module-editor-page');
@@ -446,10 +483,27 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.getByTestId('module-detail-chrome')).toBeTruthy();
     expect(screen.getByTestId('module-detail-total')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /^Lista$/i }));
+    await user.click(
+      screen.getByRole('button', { name: /Volver a la lista|^Lista$/i }),
+    );
     expect(screen.queryByTestId('module-detail')).toBeNull();
     expect(screen.getByTestId('module-card-mod-1')).toBeTruthy();
     expect(onEditingChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('detail workspace shows cost, structure panel and Más overflow', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    expect(screen.getByTestId('module-detail-cost')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-components')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-structure')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-hardware')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-presets')).toBeTruthy();
+    expect(screen.getByTestId('module-detail-edit')).toBeTruthy();
+    // Duplicar / Eliminar live behind Más (not always-visible primary noise)
+    expect(screen.getByRole('button', { name: /^Más$/i })).toBeTruthy();
   });
 });
 

@@ -27,6 +27,8 @@ export type ModuleEditorGeneralPanelProps = {
   readonly setDraftCascadeLevel: (level: 1 | 2 | 3, value: string) => void;
   readonly resolveImageUrl: (url: string | undefined) => string | undefined;
   readonly onUploadImage?: (file: File) => Promise<string>;
+  /** When set, code is locked (same convention as components/structures). */
+  readonly editingId?: string | null;
   readonly hidden: boolean;
 };
 
@@ -38,6 +40,7 @@ export function ModuleEditorGeneralPanel({
   setDraftCascadeLevel,
   resolveImageUrl,
   onUploadImage,
+  editingId = null,
   hidden,
 }: ModuleEditorGeneralPanelProps): ReactNode {
   return (
@@ -59,7 +62,20 @@ export function ModuleEditorGeneralPanel({
             onChange={(e) => setDraft({ ...draft, code: e.target.value })}
             autoComplete="off"
             required
+            disabled={!!editingId}
+            data-testid="input-code"
+            aria-describedby={editingId ? 'mod-code-hint' : undefined}
           />
+          {editingId ? (
+            <p
+              id="mod-code-hint"
+              className="module-editor__hint"
+              data-testid="module-code-hint"
+            >
+              El código no se cambia al editar (identifica el mueble en el
+              catálogo y en cotizaciones).
+            </p>
+          ) : null}
         </div>
         <div className="catalog-form__field">
           <label htmlFor="mod-name">Nombre</label>
@@ -138,6 +154,65 @@ export function ModuleEditorGeneralPanel({
           aplican por tipo al agregar el mueble a una cotización.
         </p>
       </div>
+
+      <div
+        className="module-editor__grid module-editor__grid--spaced"
+        data-testid="module-base-mode-field"
+      >
+        <div className="catalog-form__field">
+          <label htmlFor="mod-base-mode">Base (zoclo / patas)</label>
+          <select
+            id="mod-base-mode"
+            value={draft.baseMode || 'none'}
+            onChange={(e) => {
+              const v = e.target.value;
+              setDraft({
+                ...draft,
+                baseMode:
+                  v === 'none' ? '' : (v as ModuleDraft['baseMode']),
+              });
+            }}
+            data-testid="module-base-mode"
+          >
+            <option value="none">Sin base (solo cuerpo)</option>
+            <option value="plinth_board">
+              Zoclo de melamina (pieza de corte)
+            </option>
+            <option value="plinth_strip">
+              Zoclo perfil comprado (ml, sin corte)
+            </option>
+            <option value="legs">Patas / niveladores</option>
+          </select>
+          <p className="module-editor__hint">
+            Melamina: componentes con rol ZOCLO (material hereda FRENTE si no
+            hay choice). Perfil: herraje ZOCLO_PERFIL en metro lineal. Patas:
+            herraje PATAS.
+          </p>
+        </div>
+        {(draft.baseMode && draft.baseMode !== 'none') ||
+        draft.baseClearanceMm.trim() ? (
+          <div className="catalog-form__field">
+            <label htmlFor="mod-base-clearance">Altura B (mm)</label>
+            <input
+              id="mod-base-clearance"
+              type="number"
+              min={0}
+              step={10}
+              value={draft.baseClearanceMm}
+              onChange={(e) =>
+                setDraft({ ...draft, baseClearanceMm: e.target.value })
+              }
+              placeholder="100 (default)"
+              data-testid="module-base-clearance"
+            />
+            <p className="module-editor__hint">
+              Altura de zoclo o pata. Entra en fórmulas de pieza como variable{' '}
+              <code>B</code> y en el clearance 3D del plano.
+            </p>
+          </div>
+        ) : null}
+      </div>
+
       <div
         className="module-editor__grid module-editor__grid--spaced"
         data-testid="module-category-cascade"

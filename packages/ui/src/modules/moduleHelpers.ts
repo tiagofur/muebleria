@@ -11,12 +11,13 @@ import type {
   FurnitureType,
   HardwareLine,
   Module,
+  ModuleBaseMode,
   ModuleCategory,
   OptionGroup,
   OptionGroupKind,
   Structure,
 } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import { childrenOf, isModuleBaseMode } from '@muebles/domain';
 import {
   matchesCodeOrName,
   normalizeCode,
@@ -86,6 +87,13 @@ export type ModuleDraft = {
   categoryId: string;
   /** Fundamental furniture type for project measure defaults (#109). */
   furnitureType: FurnitureType;
+  /**
+   * Floor base: none | plinth_board | plinth_strip | legs.
+   * Empty string treated as none.
+   */
+  baseMode: ModuleBaseMode | '';
+  /** Plinth/legs height B (mm) as string for the form. Empty = domain default. */
+  baseClearanceMm: string;
   externalWidth: string;
   externalHeight: string;
   externalDepth: string;
@@ -110,6 +118,8 @@ export function emptyModuleDraft(): ModuleDraft {
     notes: '',
     categoryId: '',
     furnitureType: 'inferior',
+    baseMode: '',
+    baseClearanceMm: '',
     externalWidth: '',
     externalHeight: '',
     externalDepth: '',
@@ -226,6 +236,9 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     notes: mod.notes ?? '',
     categoryId: mod.categoryId ?? '',
     furnitureType: mod.furnitureType ?? 'inferior',
+    baseMode: mod.baseMode && isModuleBaseMode(mod.baseMode) ? mod.baseMode : '',
+    baseClearanceMm:
+      mod.baseClearanceMm !== undefined ? String(mod.baseClearanceMm) : '',
     externalWidth: mod.externalDims ? String(mod.externalDims.width) : '',
     externalHeight: mod.externalDims ? String(mod.externalDims.height) : '',
     externalDepth: mod.externalDims ? String(mod.externalDims.depth) : '',
@@ -266,6 +279,12 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
   const hasDims =
     width !== undefined || height !== undefined || depth !== undefined;
 
+  const baseMode =
+    draft.baseMode && isModuleBaseMode(draft.baseMode)
+      ? draft.baseMode
+      : undefined;
+  const baseClearanceMm = parseOptionalNumber(draft.baseClearanceMm);
+
   return {
     id,
     code: draft.code.trim(),
@@ -273,6 +292,8 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
     notes: optionalNotes(draft.notes),
     categoryId: draft.categoryId.trim() || undefined,
     furnitureType: draft.furnitureType,
+    baseMode,
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
     baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
     imageUrl: draft.imageUrl.trim() || undefined,
     externalDims: hasDims
