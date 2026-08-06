@@ -80,6 +80,8 @@ import {
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   DEFAULT_SCENE_LIGHTING_MODE,
+  type BoardColorMode,
+  type MaterialSurfaceMode,
   type SceneLightingMode,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
@@ -220,6 +222,12 @@ export function ProjectSpatialStudio({
   const [showOutlines, setShowOutlines] = useState(true);
   const [showWireframe, setShowWireframe] = useState(false);
   const [showPlan2d, setShowPlan2d] = useState(false);
+  /** How boards are painted: catalog finishes vs workshop role tints. */
+  const [colorMode, setColorMode] = useState<BoardColorMode>('material');
+  /** Solid / grain / photo texture when colorMode is material. */
+  const [surfaceMode, setSurfaceMode] = useState<MaterialSurfaceMode>(
+    DEFAULT_MATERIAL_SURFACE_MODE,
+  );
   const [cameraView, setCameraView] = useState<{
     readonly type: 'front' | 'top' | 'side' | 'isometric';
     readonly ts: number;
@@ -2019,6 +2027,45 @@ export function ProjectSpatialStudio({
                   <option value="soft">Luz: Suave</option>
                 </select>
               </label>
+              <label
+                className="spatial-studio__lighting-field"
+                title="Cómo se pinta: acabados del material o colores por rol de taller"
+              >
+                <span className="spatial-studio__sr-only">Cómo se pinta</span>
+                <select
+                  value={colorMode}
+                  onChange={(e) =>
+                    setColorMode(e.target.value as BoardColorMode)
+                  }
+                  data-testid="spatial-studio-color-mode"
+                  aria-label="Cómo se pinta la escena"
+                >
+                  <option value="material">Pintura: Acabados</option>
+                  <option value="role">Pintura: Roles taller</option>
+                </select>
+              </label>
+              {colorMode === 'material' ? (
+                <label
+                  className="spatial-studio__lighting-field"
+                  title="Vista del acabado: solo color, color con veta, o textura foto"
+                >
+                  <span className="spatial-studio__sr-only">
+                    Vista del acabado
+                  </span>
+                  <select
+                    value={surfaceMode}
+                    onChange={(e) =>
+                      setSurfaceMode(e.target.value as MaterialSurfaceMode)
+                    }
+                    data-testid="spatial-studio-surface-mode"
+                    aria-label="Vista del acabado del material"
+                  >
+                    <option value="color">Relleno: Solo color</option>
+                    <option value="grain">Relleno: Color + veta</option>
+                    <option value="texture">Relleno: Textura</option>
+                  </select>
+                </label>
+              ) : null}
             </div>
           </div>
 
@@ -2042,10 +2089,10 @@ export function ProjectSpatialStudio({
                 showHint={false}
                 cameraView={cameraView}
                 testId="spatial-studio-scene"
-                colorMode="material"
+                colorMode={colorMode}
                 materialColors={materialColors}
                 materialTextures={materialTextures}
-                surfaceMode={DEFAULT_MATERIAL_SURFACE_MODE}
+                surfaceMode={surfaceMode}
                 lightingMode={lightingMode}
                 showOutlines={showOutlines}
                 showWireframe={showWireframe}
