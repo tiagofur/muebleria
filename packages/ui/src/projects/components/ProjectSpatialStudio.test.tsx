@@ -431,6 +431,43 @@ EOF
     expect(typeof next.placements[0]!.freeYMm).toBe('number');
   });
 
+  it('exposes color and surface fill modes for 3D materials', () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    const colorSel = screen.getByTestId(
+      'spatial-studio-color-mode',
+    ) as HTMLSelectElement;
+    expect(colorSel.value).toBe('material');
+    const surfaceSel = screen.getByTestId(
+      'spatial-studio-surface-mode',
+    ) as HTMLSelectElement;
+    expect(surfaceSel.value).toBeTruthy();
+    fireEvent.change(surfaceSel, { target: { value: 'grain' } });
+    expect(
+      (screen.getByTestId('spatial-studio-surface-mode') as HTMLSelectElement)
+        .value,
+    ).toBe('grain');
+    fireEvent.change(colorSel, { target: { value: 'role' } });
+    // Surface fill only applies to material paint mode.
+    expect(screen.queryByTestId('spatial-studio-surface-mode')).toBeNull();
+  });
+
   it('exposes lighting mode selector for 3D scene', () => {
     render(
       <ProjectSpatialStudio
