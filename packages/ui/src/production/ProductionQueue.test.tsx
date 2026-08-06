@@ -34,6 +34,7 @@ describe('ProductionQueue (F038)', () => {
     const onMark = vi.fn();
     const onOpt = vi.fn();
     const onHw = vi.fn();
+    const onOpen = vi.fn();
     render(
       <ProductionQueue
         projects={[
@@ -43,6 +44,7 @@ describe('ProductionQueue (F038)', () => {
         ]}
         customerLabelFor={() => 'Ana'}
         salePriceFor={() => 1000}
+        onOpenOrder={onOpen}
         onExportOptimizer={onOpt}
         onExportHardware={onHw}
         onMarkProduced={onMark}
@@ -52,6 +54,8 @@ describe('ProductionQueue (F038)', () => {
     expect(screen.queryByText('Borrador')).toBeNull();
     expect(screen.queryByText('Living hecho')).toBeNull();
 
+    await user.click(screen.getByTestId('prod-open-order-p1'));
+    expect(onOpen).toHaveBeenCalledWith('p1');
     await user.click(screen.getByTestId('prod-export-opt-p1'));
     expect(onOpt).toHaveBeenCalledWith('p1');
     await user.click(screen.getByTestId('prod-mark-p1'));

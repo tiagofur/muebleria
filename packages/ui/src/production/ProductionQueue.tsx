@@ -38,6 +38,8 @@ export type ProductionQueueProps = {
   readonly projects: readonly Project[];
   readonly customerLabelFor: (customerId: string) => string;
   readonly salePriceFor: (projectId: string) => number | null;
+  /** Open production order hub (PROD-0.1). Primary path into the OP. */
+  readonly onOpenOrder?: (projectId: string) => void;
   readonly onExportOptimizer: (projectId: string) => void | Promise<void>;
   readonly onExportHardware: (projectId: string) => void | Promise<void>;
   /** Piece labels PDF with edge banding (F046 / #96). */
@@ -71,6 +73,7 @@ export function ProductionQueue({
   projects,
   customerLabelFor,
   salePriceFor,
+  onOpenOrder,
   onExportOptimizer,
   onExportHardware,
   onExportPieceLabels,
@@ -100,8 +103,8 @@ export function ProductionQueue({
     tab === 'accepted' ? 'Para fabricar' : 'Ya en planta';
   const subtitle =
     tab === 'accepted'
-      ? 'Cotizaciones aceptadas: exportá el corte y los herrajes, y marcá cuando salga a planta.'
-      : 'Pedidos ya marcados en producción. Podés reexportar el corte o el pack.';
+      ? 'Cotizaciones aceptadas: abrí la orden de producción para el pack, el corte y el checklist de fábrica.'
+      : 'Pedidos ya en planta. Reabrí la orden para reexportar o revisar el checklist.';
 
   return (
     <section className="prod-queue" aria-label="Cola de producción">
@@ -208,11 +211,23 @@ export function ProductionQueue({
                   </p>
                 </div>
                 <div className="prod-queue-card__actions">
-                  {/* At most one primary: Pack if available, else Optimizer. */}
-                  {onExportProductionPack ? (
+                  {/* Primary: open OP hub when wired (PROD-0.1). */}
+                  {onOpenOrder ? (
                     <button
                       type="button"
                       className="btn btn--primary"
+                      onClick={() => onOpenOrder(project.id)}
+                      data-testid={`prod-open-order-${project.id}`}
+                    >
+                      <Factory size={16} strokeWidth={1.5} aria-hidden />
+                      Abrir orden
+                    </button>
+                  ) : null}
+                  {/* Pack: primary only when hub open is not available. */}
+                  {onExportProductionPack ? (
+                    <button
+                      type="button"
+                      className={onOpenOrder ? 'btn' : 'btn btn--primary'}
                       disabled={exportBusy}
                       title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
                       onClick={() => {
@@ -227,7 +242,9 @@ export function ProductionQueue({
                   <button
                     type="button"
                     className={
-                      onExportProductionPack ? 'btn' : 'btn btn--primary'
+                      onOpenOrder || onExportProductionPack
+                        ? 'btn'
+                        : 'btn btn--primary'
                     }
                     disabled={exportBusy}
                     onClick={() => {

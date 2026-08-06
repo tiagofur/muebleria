@@ -112,6 +112,7 @@ export interface ProjectDetailContextValue {
   readonly productionExportOk: boolean;
   readonly onExport?: () => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
+  readonly onOpenInProduction?: (projectId: string) => void;
 
   // --- Item handlers ---
   readonly itemHandlers: ProjectDetailItemHandlers;

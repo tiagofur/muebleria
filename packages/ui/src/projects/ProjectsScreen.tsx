@@ -213,6 +213,11 @@ export interface ProjectsScreenProps {
   /** Pack ZIP: Optimizer + herrajes + etiquetas (#134). */
   readonly onExportProductionPack?: () => void | Promise<void>;
   /**
+   * Open factory workspace for the selected plant-ready project (PROD-0.1).
+   * Shell navigates to `/produccion/:id`.
+   */
+  readonly onOpenInProduction?: (projectId: string) => void;
+  /**
    * Commercial quote export for client (F030 / #36).
    * Shell owns breakdown → xlsx → download.
    */
@@ -322,6 +327,7 @@ export function ProjectsScreen({
   onExportHardware,
   onExportPieceLabels,
   onExportProductionPack,
+  onOpenInProduction,
   onExportCommercialQuote,
   onExportCommercialQuotePdf,
   exportErrors = [],
@@ -693,12 +699,16 @@ export function ProjectsScreen({
     if (!selectedProject) return { sections: [] };
     const itemsEmpty = selectedProject.items.length === 0;
 
+    /** PROD-0.2: factory exports stay available as secondary under Más. */
+    const factorySecondaryHint = onOpenInProduction
+      ? 'También en Producción'
+      : undefined;
     const productionItems = [
       onExportHardware
         ? {
             id: 'hardware',
             label: 'Lista de herrajes',
-            hint: 'Para compras (.xlsx)',
+            hint: factorySecondaryHint ?? 'Para compras (.xlsx)',
             disabled: productionExportDisabled,
             onSelect: () => void onExportHardware(),
           }
@@ -707,7 +717,7 @@ export function ProjectsScreen({
         ? {
             id: 'labels',
             label: 'Etiquetas',
-            hint: 'Pieza + encintado (PDF)',
+            hint: factorySecondaryHint ?? 'Pieza + encintado (PDF)',
             disabled: productionExportDisabled,
             onSelect: () => void onExportPieceLabels(),
           }
@@ -716,7 +726,9 @@ export function ProjectsScreen({
         ? {
             id: 'pack',
             label: 'Pack producción',
-            hint: 'ZIP (Optimizer + herrajes + etiquetas + resumen)',
+            hint:
+              factorySecondaryHint ??
+              'ZIP (Optimizer + herrajes + etiquetas + resumen)',
             disabled: productionExportDisabled,
             onSelect: () => void onExportProductionPack(),
           }
@@ -774,6 +786,7 @@ export function ProjectsScreen({
     onExportHardware,
     onExportPieceLabels,
     onExportProductionPack,
+    onOpenInProduction,
     onExportCommercialQuote,
     onExportCommercialQuotePdf,
     productionExportDisabled,
@@ -854,6 +867,7 @@ export function ProjectsScreen({
           productionExportOk={productionExportOk}
           onExport={onExport}
           onExportProductionPack={onExportProductionPack}
+          onOpenInProduction={onOpenInProduction}
           itemHandlers={{
             onUpdateItemQuantity: updateItemQuantity,
             onUpdateItemMeasurePreset: updateItemMeasurePreset,

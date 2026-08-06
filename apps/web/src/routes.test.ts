@@ -14,6 +14,8 @@ import {
   moduleIdFromPath,
   navFromPath,
   pathForNav,
+  productionOrderFromPath,
+  productionOrderPath,
   projectIdFromPath,
   projectPath,
   structureEditIdFromPath,
@@ -97,5 +99,25 @@ describe('app routes', () => {
     expect(isNewEntityEditPath('/modules/new/edit', 'modules')).toBe(true);
     expect(isNewEntityEditPath('/modules/some-id/edit', 'modules')).toBe(false);
     expect(moduleEditIdFromPath('/modules/new/edit')).toBe(NEW_ENTITY_ID);
+  });
+
+  it('resolves production order deep links (PROD-0.1)', () => {
+    const id = '969f82ae-8da6-45d0-b49a-951dbfde309e';
+    expect(navFromPath('/produccion')).toBe('production');
+    expect(navFromPath(`/produccion/${id}`)).toBe('production');
+    expect(navFromPath(`/produccion/${id}/despiece`)).toBe('production');
+    expect(productionOrderPath(id)).toBe(`/produccion/${id}`);
+    expect(productionOrderPath(id, 'resumen')).toBe(`/produccion/${id}`);
+    expect(productionOrderPath(id, 'exports')).toBe(`/produccion/${id}/exports`);
+    expect(productionOrderFromPath('/produccion')).toBeNull();
+    expect(productionOrderFromPath(`/produccion/${id}`)).toEqual({
+      projectId: id,
+      tab: 'resumen',
+    });
+    expect(productionOrderFromPath(`/produccion/${id}/vistas`)).toEqual({
+      projectId: id,
+      tab: 'vistas',
+    });
+    expect(productionOrderFromPath(`/produccion/${id}/nope`)).toBeNull();
   });
 });

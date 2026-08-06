@@ -398,7 +398,7 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 
 | Sección | Ítems (label → nav id) |
 |---------|------------------------|
-| TRABAJO | Inicio (`home`), Cotizaciones (`projects`), Clientes (`customers`), Vitrina (`showcase`), Cola (`production`, solo si `roleUsesProductionQueue`) |
+| TRABAJO | Inicio (`home`), Cotizaciones (`projects`), Clientes (`customers`), Vitrina (`showcase`), Producción (`production`, roles con `roleCanAccessProductionNav`) |
 | INGENIERÍA | Muebles (`modules`), Estructuras (`structures`), Componentes (`components`), Materiales (`materials`), Cantos (`edges`), Herrajes (`hardware`), Grupos (`optionGroups`) |
 | CONFIG | Ajustes (`settings`), Usuarios (`users`, solo admin) |
 
@@ -409,7 +409,7 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 | Nav / UI | Código (no renombrar) | Notas |
 |----------|------------------------|--------|
 | **Inicio** | `home` | No «Home». Dashboard para todos los roles (variantes por `homeMode`) |
-| **Cola** | `production` | Solo roles `roleUsesProductionQueue` (hoy: produccion). Antes polimórfico bajo `home`; ahora nav propio |
+| **Producción** | `production` | Roles con `roleCanAccessProductionNav` (export producción: produccion, ingeniero, admin, gerente). Cola + hub OP (`/produccion/:id`). Ver `docs/production-module.md` |
 | **Cotizaciones** | `projects` / `Project` | No «Proyectos» en UI |
 | **Clientes** | `customers` | |
 | **Vitrina** | `showcase` | Catálogo comercial (sin BOM/costos). F040/F043 |
@@ -630,11 +630,12 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Detalle (workspace tool — issue #50):**
   - **Chrome sticky** (`.workspace-chrome`): nombre, status, meta densa, precio de venta, **acciones agrupadas** (ver abajo)
   - Cuerpo en **2 columnas** (`.project-detail__body`): columna principal (`.project-detail__main` = opciones de proyecto opcionales + ítems/muebles) | panel sticky de desglose (`.project-totals`). Nunca más de dos hijos directos del grid o el layout se rompe.
-- **Chrome — agrupación de acciones (wave 4 density):**
-  - **Exactamente un `btn--primary` de ciclo de vida** por status: Enviar (draft) · Aceptar (quoted) · Marcar en producción (accepted) · Exportar Optimizer (accepted/produced cuando planta lista).
-  - **Exportar Optimizer** en chrome solo si plant-ready (`productionExportOk`); si no, vive deshabilitado bajo **Más**.
+- **Chrome — agrupación de acciones (wave 4 density + PROD-0.2):**
+  - **Exactamente un `btn--primary` de ciclo de vida** por status: Enviar (draft) · Aceptar (quoted) · **Abrir en Producción** (accepted/produced si el shell pasa `onOpenInProduction`) · si no hay workspace de fábrica: Marcar en producción / Exportar Optimizer.
+  - **Sin muro de fábrica en cotización:** con `onOpenInProduction`, Optimizer / pack / herrajes / etiquetas / marcar producido **no** son primarios del chrome; viven en **Producción** (hub) y como secundarios bajo **Más** (hint «También en Producción»).
+  - **Exportar Optimizer** en chrome solo si plant-ready **y** no hay `onOpenInProduction`; si no, bajo **Más**.
   - **Presentar** + **Editar** (si `canMutate`) como secundarios en chrome.
-  - **Más ▾** (`DropdownMenu`): exports (Producción / Comercial) + Duplicar / Guardar plantilla / Reabrir / **Eliminar**. Sin botón danger permanente en chrome.
+  - **Más ▾** (`DropdownMenu`): Abrir en Producción (si aplica) + exports rápidos + Comercial + Duplicar / Guardar plantilla / Reabrir / **Eliminar**.
   - Mobile: total y actions full-width debajo del lead (`.project-detail` + workspace-chrome).
 - **Cliente:** picker de clientes activos + acción «Nuevo cliente» (alta inline o navegación a Clientes según wiring del shell)
 - **Plantillas (#110):** toolbar con «Desde plantilla» (picker) y «Plantillas» (gestión); chrome con «Guardar como plantilla» desde un proyecto
@@ -692,17 +693,25 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **RBAC**: `roleCanAccessShowcaseNav` (admin, ingeniero, gerente_ventas, vendedor). No `produccion`, no `user`.
 - **Icono:** `Store`
 
-### 6.7 Cola de producción
+### 6.7 Producción (cola + orden de fábrica)
 
-- **Ruta nav:** `production` (sección TRABAJO, solo roles con `roleUsesProductionQueue`)
-- **Path:** `/produccion` · `packages/ui/src/production/ProductionQueue.tsx`
-- **Patrón:** especial (cola de fabricación con tabs accepted/produced)
+- **Ruta nav:** `production` (sección TRABAJO, label **Producción**)
+- **Paths:**
+  - `/produccion` — cola de trabajo
+  - `/produccion/:projectId` — hub de orden (OP)
+  - `/produccion/:projectId/:tab` — sub-vista (`resumen`, `exports`, …)
+- **Código:** `ProductionWorkspace` → `ProductionQueue` | `ProductionOrderHub` (`packages/ui/src/production/`)
+- **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
+- **Patrón:** workspace de fábrica (no editor de cotización)
 - **Contenido:**
-  - Tabs: «Listos para fabricar» (accepted) y «En producción» (produced)
-  - Por proyecto: cliente, muebles (resumen), exports de producción (Optimizer, herrajes, etiquetas, pack), acción «Marcar producido»
-  - Sin edición de maestros, sin crear proyectos, sin costos
-- **Histórico:** antes (pre-Fase 2 UI) esta pantalla se montaba polimórficamente bajo `home` para `produccion`. Ahora tiene nav + URL propia; `home` siempre es Dashboard para todos los roles.
-- **RBAC**: solo `produccion` (vía `roleUsesProductionQueue`). Ingeniero/gerente gestionan producción vía `/projects` con exports (no usan la cola).
+  - Cola: tabs accepted / produced; CTA primario **Abrir orden**
+  - Hub tabs: Resumen · Módulos · Despiece (placeholder) · Herrajes (placeholder) · **Vistas** (planta + 3D read-only) · Optimización (placeholder) · Documentos (placeholder) · Exports
+  - Hub Resumen: checklist listo-para-cortar, totales de fábrica, pack; **solo lectura del diseño**
+  - Hub Módulos: inventario con código de fábrica, medidas, ubicación, piezas
+  - Hub Vistas: `PresentationKitchenPlanSlide` + `FurnitureScene3D` (sin gizmos de diseño)
+  - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome)
+- **RBAC nav:** `roleCanAccessProductionNav` (= roles de export producción F041).  
+  Filtro de lista de cotizaciones a solo plant-ready sigue siendo `roleUsesProductionQueue` (**solo** `produccion`).
 - **Icono:** `Factory`
 
 ### 6.8 Estructuras

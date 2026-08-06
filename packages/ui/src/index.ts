@@ -196,12 +196,22 @@ export {
 
 export {
   ProductionQueue,
+  ProductionWorkspace,
+  ProductionOrderHub,
   filterProductionQueue,
   filterProductionVisible,
   isProductionQueueStatus,
   type ProductionQueueProps,
+  type ProductionWorkspaceProps,
+  type ProductionOrderHubProps,
   ProductionBoardView,
   type ProductionBoardViewProps,
+  PRODUCTION_ORDER_TABS,
+  parseProductionOrderTab,
+  projectAllowsProductionOrder,
+  buildProductionOrderReadiness,
+  type ProductionOrderTab,
+  type ProductionOrderReadiness,
 } from './production';
 
 export {

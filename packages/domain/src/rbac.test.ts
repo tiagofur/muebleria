@@ -100,23 +100,21 @@ describe('rbac (F035)', () => {
     expect(roleCanViewPortfolioDashboard('produccion')).toBe(false);
   });
 
-  it('production queue home is produccion only (F038)', () => {
+  it('production queue filter remains produccion only (F038)', () => {
     expect(roleUsesProductionQueue('produccion')).toBe(true);
     expect(roleUsesProductionQueue('vendedor')).toBe(false);
     expect(roleUsesProductionQueue('ingeniero')).toBe(false);
   });
 
-  it('production nav id is exposed only for roles that use the queue (Fase 2 UI)', () => {
-    // Pre-Fase 2: ProductionQueue mounted polymorphically under `home`.
-    // Post-Fase 2: dedicated nav id `production` filtered via navIdsForRole.
+  it('production nav is for production-export roles (PROD-0.1)', () => {
+    // Factory workspace nav (queue + OP hub) — not the plant-only project filter.
     expect(navIdsForRole('produccion').has('production')).toBe(true);
-    expect(navIdsForRole('admin').has('production')).toBe(false);
-    expect(navIdsForRole('ingeniero').has('production')).toBe(false);
+    expect(navIdsForRole('admin').has('production')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('production')).toBe(true);
+    expect(navIdsForRole('gerente_ventas').has('production')).toBe(true);
     expect(navIdsForRole('vendedor').has('production')).toBe(false);
-    expect(navIdsForRole('gerente_ventas').has('production')).toBe(false);
-    // Guest (local mode): does NOT get production nav (no plant queue locally).
+    // Guest (local mode): does NOT get production nav.
     expect(navIdsForRole(null).has('production')).toBe(false);
-    // produccion still sees `home` (Dashboard) alongside `production`.
     expect(navIdsForRole('produccion').has('home')).toBe(true);
   });
 

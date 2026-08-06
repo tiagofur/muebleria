@@ -152,7 +152,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        * (rbac.ts navIdsForRole adds 'production' only for roles with
        * roleUsesProductionQueue). design.md §6.7.
        */
-      { id: 'production', label: 'Cola', icon: Factory },
+      { id: 'production', label: 'Producción', icon: Factory },
     ],
   },
   {

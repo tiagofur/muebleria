@@ -131,11 +131,26 @@ export function roleCanViewPortfolioDashboard(
   return role === 'admin' || role === 'gerente_ventas';
 }
 
-/** Home is the plant floor queue (F038). */
+/**
+ * Role whose *project list* is plant-filtered (accepted/produced only).
+ * Historically F038: only `produccion` works the floor queue as portfolio.
+ * Do not expand this without revisiting `projectsForRole` filtering.
+ */
 export function roleUsesProductionQueue(
   role: string | null | undefined,
 ): boolean {
   return role === 'produccion';
+}
+
+/**
+ * Sidebar «Producción» + OP hub (PROD-0.1).
+ * Export roles (F041) can open the factory workspace; guest/local stays off.
+ * Distinct from `roleUsesProductionQueue` so ingeniero keeps full quote list.
+ */
+export function roleCanAccessProductionNav(
+  role: string | null | undefined,
+): boolean {
+  return roleCanExportProduction(role);
 }
 
 /**
@@ -249,9 +264,8 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   }
   if (roleCanAccessSettings(role)) ids.add('settings');
   if (roleCanManageUsers(role)) ids.add('users');
-  // Fase 2 UI: production queue is its own nav (used to be polymorphic home).
-  // Only roles that use the queue get the dedicated nav entry.
-  if (roleUsesProductionQueue(role)) ids.add('production');
+  // PROD-0.1: factory workspace nav for production-export roles.
+  if (roleCanAccessProductionNav(role)) ids.add('production');
   return ids;
 }
 

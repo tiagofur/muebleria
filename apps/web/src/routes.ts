@@ -29,6 +29,27 @@ export type EntitySection = Exclude<
   'home' | 'users' | 'settings' | 'showcase' | 'production'
 >;
 
+/**
+ * Production order hub tabs (PROD-0.1). Kept local to routes so web shell
+ * can deep-link without importing the full UI model at parse time.
+ */
+export const PRODUCTION_PATH_TABS = [
+  'resumen',
+  'modulos',
+  'despiece',
+  'herrajes',
+  'vistas',
+  'optimizacion',
+  'documentos',
+  'exports',
+] as const;
+
+export type ProductionPathTab = (typeof PRODUCTION_PATH_TABS)[number];
+
+function isProductionPathTab(value: string): value is ProductionPathTab {
+  return (PRODUCTION_PATH_TABS as readonly string[]).includes(value);
+}
+
 const ENTITY_SECTIONS: readonly EntitySection[] = [
   'projects',
   'customers',
@@ -205,4 +226,44 @@ export function navFromPath(pathname: string): AppNavId | null {
     }
   }
   return null;
+}
+
+/**
+ * Production order deep link: `/produccion/:projectId` or
+ * `/produccion/:projectId/:tab` (PROD-0.1).
+ */
+export function productionOrderPath(
+  projectId: string,
+  tab?: ProductionPathTab | null,
+): string {
+  const base = `${NAV_PATHS.production}/${encodeURIComponent(projectId)}`;
+  if (!tab || tab === 'resumen') return base;
+  return `${base}/${tab}`;
+}
+
+export function productionOrderFromPath(pathname: string): {
+  readonly projectId: string;
+  readonly tab: ProductionPathTab;
+} | null {
+  const base = NAV_PATHS.production;
+  const normalized = normalizePathname(pathname);
+  if (normalized === base) return null;
+  if (!normalized.startsWith(`${base}/`)) return null;
+  const rest = normalized.slice(base.length + 1);
+  if (!rest) return null;
+  const parts = rest.split('/').filter(Boolean);
+  if (parts.length === 0 || parts.length > 2) return null;
+  let projectId: string;
+  try {
+    projectId = decodeURIComponent(parts[0]!);
+  } catch {
+    projectId = parts[0]!;
+  }
+  if (!projectId || projectId.includes('/')) return null;
+  const tabRaw = parts[1];
+  const tab: ProductionPathTab =
+    tabRaw && isProductionPathTab(tabRaw) ? tabRaw : 'resumen';
+  // Unknown second segment → treat as invalid (not an order route).
+  if (tabRaw && !isProductionPathTab(tabRaw)) return null;
+  return { projectId, tab };
 }

@@ -56,7 +56,7 @@ describe('AppShell nav model (F017)', () => {
       'Cotizaciones',
       'Clientes',
       'Vitrina',
-      'Cola',
+      'Producción',
     ]);
 
     // design.md §4.1: composition first, then catalogs, Grupos last (Fase 6).
@@ -119,7 +119,7 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('projects')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
     expect(labelForNavId('showcase')).toBe('Vitrina');
-    expect(labelForNavId('production')).toBe('Cola');
+    expect(labelForNavId('production')).toBe('Producción');
     expect(labelForNavId('modules')).toBe('Muebles');
     expect(labelForNavId('optionGroups')).toBe('Grupos');
     expect(labelForNavId('settings')).toBe('Ajustes');
