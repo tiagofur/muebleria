@@ -140,7 +140,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(screen.queryByTestId('prod-hub-resumen')).toBeNull();
   });
 
-  it('shows placeholder for optimizacion (Phase 2)', () => {
+  it('shows optimizacion panel with L0/L1/L2 layers (PROD-2.3)', () => {
     const readiness = buildProductionOrderReadiness({
       project: project(),
       cutRows: [],
@@ -157,9 +157,13 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
         onOpenDesign={vi.fn()}
         onExportOptimizer={vi.fn()}
         onExportHardware={vi.fn()}
+        cutRows={[]}
       />,
     );
-    expect(screen.getByTestId('prod-hub-placeholder-optimizacion')).toBeTruthy();
+    expect(screen.getByTestId('prod-hub-optimizacion')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-l0')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-l1')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-l2')).toBeTruthy();
   });
 
   it('shows not-ready banner on resumen when cut list empty', () => {

@@ -632,3 +632,104 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
 }
+
+/* --- Phase 2: optimización L0/L1/L2 --- */
+
+.prod-opt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.prod-opt__layer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.prod-opt__layer--official {
+  border-color: var(--border-brand);
+}
+
+.prod-opt__layer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.prod-opt__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+}
+
+.prod-opt__badge--l0 {
+  background: var(--surface-muted, var(--surface-card));
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.prod-opt__badge--l1 {
+  background: var(--surface-selected);
+  color: var(--text-brand);
+  border: 1px solid var(--border-brand);
+}
+
+.prod-opt__badge--l2 {
+  background: hsl(150 30% 92%);
+  color: hsl(150 40% 25%);
+  border: 1px solid hsl(150 30% 70%);
+}
+
+.prod-opt__disclaimer {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.prod-opt__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.prod-opt__list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.prod-opt__name {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.prod-opt__meta {
+  color: var(--text-secondary);
+}
+
+.prod-opt__boards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.prod-opt__board-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
