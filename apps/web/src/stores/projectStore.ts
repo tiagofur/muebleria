@@ -709,6 +709,19 @@ export function createProjectStore(options: InternalOptions) {
       if (!project) return false;
       const next = acquirePlanEditSessionDomain(project.planEditSession, actor);
       if (!next) return false;
+      // Already hold a live session: skip patch so open Proyectar does not
+      // thrash project → re-render → effect loops (Maximum update depth).
+      const cur = project.planEditSession;
+      if (
+        cur &&
+        cur.userId === next.userId &&
+        cur.userName === next.userName
+      ) {
+        const exp = Date.parse(cur.expiresAt);
+        if (Number.isFinite(exp) && exp > Date.now()) {
+          return true;
+        }
+      }
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) =>

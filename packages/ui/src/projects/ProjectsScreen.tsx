@@ -4,6 +4,7 @@
  */
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -428,6 +429,20 @@ export function ProjectsScreen({
     selectedId !== null
       ? (projects.find((p) => p.id === selectedId) ?? null)
       : null;
+
+  const selectedProjectId = selectedProject?.id;
+  const handleAcquirePlanEdit = useCallback((): boolean => {
+    if (!selectedProjectId || !onAcquirePlanEdit) return false;
+    return onAcquirePlanEdit(selectedProjectId);
+  }, [selectedProjectId, onAcquirePlanEdit]);
+  const handleRenewPlanEdit = useCallback((): boolean => {
+    if (!selectedProjectId || !onRenewPlanEdit) return false;
+    return onRenewPlanEdit(selectedProjectId);
+  }, [selectedProjectId, onRenewPlanEdit]);
+  const handleReleasePlanEdit = useCallback((): void => {
+    if (!selectedProjectId || !onReleasePlanEdit) return;
+    onReleasePlanEdit(selectedProjectId);
+  }, [selectedProjectId, onReleasePlanEdit]);
 
   // Domain breakdown target: selected detail project
   useEffect(() => {
@@ -1011,19 +1026,13 @@ export function ProjectsScreen({
           bootstrap={spatialBootstrap}
           planActor={planActor}
           onAcquirePlanEdit={
-            planActor && onAcquirePlanEdit
-              ? () => onAcquirePlanEdit(selectedProject.id)
-              : undefined
+            planActor && onAcquirePlanEdit ? handleAcquirePlanEdit : undefined
           }
           onRenewPlanEdit={
-            planActor && onRenewPlanEdit
-              ? () => onRenewPlanEdit(selectedProject.id)
-              : undefined
+            planActor && onRenewPlanEdit ? handleRenewPlanEdit : undefined
           }
           onReleasePlanEdit={
-            planActor && onReleasePlanEdit
-              ? () => onReleasePlanEdit(selectedProject.id)
-              : undefined
+            planActor && onReleasePlanEdit ? handleReleasePlanEdit : undefined
           }
           onClose={() => {
             setShowSpatialStudio(false);

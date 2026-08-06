@@ -1091,26 +1091,28 @@ function AppContent({
         : undefined,
     [authUser],
   );
+  // Use getState() so callbacks stay stable when project store patches
+  // (useProjectStore() whole-state would change identity every save).
   const acquirePlanEditSession = useCallback(
     (projectId: string) => {
       if (!planActor) return false;
-      return projectActions.acquirePlanEditSession(projectId, planActor);
+      return getProjectStoreState().acquirePlanEditSession(projectId, planActor);
     },
-    [projectActions, planActor],
+    [planActor],
   );
   const renewPlanEditSession = useCallback(
     (projectId: string) => {
       if (!planActor) return false;
-      return projectActions.renewPlanEditSession(projectId, planActor);
+      return getProjectStoreState().renewPlanEditSession(projectId, planActor);
     },
-    [projectActions, planActor],
+    [planActor],
   );
   const releasePlanEditSession = useCallback(
     (projectId: string) => {
       if (!planActor) return;
-      projectActions.releasePlanEditSession(projectId, planActor.userId);
+      getProjectStoreState().releasePlanEditSession(projectId, planActor.userId);
     },
-    [projectActions, planActor],
+    [planActor],
   );
   const applyScenarioB = projectActions.applyScenarioB;
   const importNestingResult = projectActions.importNestingResult;
