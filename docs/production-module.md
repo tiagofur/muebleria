@@ -429,7 +429,7 @@ Mismo ZIP **más**, cuando existan generadores:
 
 | ID | Decisión | Default hasta issue de dominio |
 |----|----------|--------------------------------|
-| D1 | ¿Entidad `ProductionOrder` separada? | **v0:** contexto UI sobre `Project`. **v1:** revision/snapshot al aceptar o al “congelar para fábrica”. |
+| D1 | ¿Entidad `ProductionOrder` separada? | **v0+v1 parcial:** sigue siendo `Project` + `production` state (`revision`, fingerprints). No hay entidad OP separada aún; basta para stale-export. |
 | D2 | ¿Producción parcial (solo un ambiente)? | **No en Fase 0–1.** OP = proyecto completo. Icebox: producir por `KitchenSpace`. |
 | D3 | ¿Quién crea la OP? | Automática al existir proyecto `accepted` visible en cola; no hay wizard aparte en v0. |
 | D4 | ¿Re-export después de editar diseño en accepted? | Permitido técnicamente hoy; UI debe **advertir** regenerar pack. v1: bump de revision. |
@@ -493,9 +493,9 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 | 2 | PROD-2.1 | Preview visual de tableros / pliegos | **[#223](https://github.com/tiagofur/muebleria/issues/223)** ✅ | #135, 0.1 |
 | 2 | PROD-2.2 | Export CSV cut-list genérico | **[#224](https://github.com/tiagofur/muebleria/issues/224)** ✅ | 1.3 |
 | 2 | PROD-2.3 | Optimización UI unificada (L0+L1+L2 import #142) | **[#225](https://github.com/tiagofur/muebleria/issues/225)** ✅ | 2.1, #142 |
-| 3 | PROD-3.1 | Estados de piso por módulo (cortado → armado) | **[#226](https://github.com/tiagofur/muebleria/issues/226)** | 0.3 |
-| 3 | PROD-3.2 | Advertencia / revision de OP al re-exportar | **[#227](https://github.com/tiagofur/muebleria/issues/227)** | 0.3, D1 |
-| 3 | PROD-3.3 | CNC metadatos / DXF (piloto) | **[#111](https://github.com/tiagofur/muebleria/issues/111)** | demanda real |
+| 3 | PROD-3.1 | Estados de piso por módulo (cortado → armado) | **[#226](https://github.com/tiagofur/muebleria/issues/226)** ✅ | 0.3 |
+| 3 | PROD-3.2 | Advertencia / revision de OP al re-exportar | **[#227](https://github.com/tiagofur/muebleria/issues/227)** ✅ | 0.3, D1 |
+| 3 | PROD-3.3 | CNC metadatos / DXF (piloto) | **[#111](https://github.com/tiagofur/muebleria/issues/111)** ✅ JSON pilot | demanda real |
 | 4 | PROD-4.x | Icebox: assembly sheets, paperless, OP por ambiente, nesting nativo | en [#214](https://github.com/tiagofur/muebleria/issues/214) | producto |
 
 ### 10.3 Definición de “fase hecha”
@@ -563,3 +563,4 @@ El módulo Producción se considera **sólido (Fase 0+1)** cuando:
 | 2026-08-06 | **Fase 0 implementada** (PROD-0.1–0.4): shell, desacople, hub, módulos + vistas read-only. |
 | 2026-08-06 | **Fase 1 implementada** (PROD-1.1–1.4): elevaciones PDF, pack ampliado, despiece/herrajes/documentos. |
 | 2026-08-06 | **Fase 2 implementada** (PROD-2.1–2.3): preview tableros, CSV cut-list, UI optimización L0/L1/L2. |
+| 2026-08-06 | **Fase 3 implementada** (PROD-3.1–3.3): floor status, OP revision/stale, CNC pilot JSON (#111). |

@@ -707,6 +707,9 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Cola: tabs accepted / produced; CTA primario **Abrir orden**
   - Hub tabs: Resumen · Módulos · **Despiece** · **Herrajes** · **Vistas** (planta + elevaciones + 3D) · **Optimización** (L0 estimado / L1 preview / L2 import nesting) · **Documentos** · Exports
   - Optimización: capas etiquetadas; Optimizer Excel sigue siendo plan de corte oficial; CSV cut-list genérico en Despiece/Documentos/Exports
+  - Módulos: estado de **piso** (pendiente→cortado→encintado→armado→instalado) — solo fábrica (PROD-3.1)
+  - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint)
+  - Export piloto CNC JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
   - Hub Resumen: checklist listo-para-cortar, totales de fábrica, pack; **solo lectura del diseño**
   - Hub Módulos: inventario con código de fábrica, medidas, ubicación, piezas
   - Hub Despiece: cut-list agrupable (material/módulo); misma población que Optimizer

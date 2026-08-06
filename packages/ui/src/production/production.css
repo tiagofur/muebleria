@@ -733,3 +733,15 @@
   font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
+
+/* --- Phase 3: floor status --- */
+.prod-modulos__floor-select {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  max-width: 9rem;
+}

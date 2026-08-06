@@ -342,6 +342,9 @@ type ProjectItem struct {
 	// (#108). nil = live (current revision). Pinned at close time so the BOM of
 	// a closed quote is not silently mutated by later structure edits.
 	StructureRevisionPin *int `json:"structure_revision_pin,omitempty"`
+	// FloorStatus is shop-floor progress (PROD-3.1): pending|cut|edged|assembled|installed.
+	// Empty/omitted = pending. Does not affect BOM or pricing.
+	FloorStatus string `json:"floor_status,omitempty"`
 }
 
 type Project struct {
@@ -372,6 +375,9 @@ type Project struct {
 	PlanEditSession json.RawMessage `json:"plan_edit_session,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
+	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
+	// Shape: { revision, revision_at, fingerprint, last_export_* }.
+	Production json.RawMessage `json:"production,omitempty"`
 	Notes         string          `json:"notes,omitempty"`
 	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
 	CreatedAt     time.Time           `json:"created_at"`

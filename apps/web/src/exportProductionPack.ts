@@ -103,7 +103,9 @@ export async function buildProductionPackExport(
       moduleUnitCount,
       cutRowCount: cutRows.length,
       readyToCut: cutRows.length > 0,
-      notes: project.notes,
+      notes: project.production?.revision
+        ? `OP rev. ${project.production.revision}${project.notes ? ` — ${project.notes}` : ''}`
+        : project.notes,
     });
 
     // 6. Despiece PDF

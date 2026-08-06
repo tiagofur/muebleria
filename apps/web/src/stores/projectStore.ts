@@ -21,6 +21,7 @@ import type {
   Catalog,
   Customer,
   InstallationChecklistItem,
+  ItemFloorStatus,
   OptionChoices,
   Project,
   ProjectItem,
@@ -34,12 +35,15 @@ import {
   applyRoleChoiceToProject,
   createProjectFromTemplate,
   duplicateProject as deepCopyProject,
+  ensureProductionRevision as ensureProductionRevisionDomain,
   projectToTemplate,
   pruneKitchenLayoutOrClear,
+  recordProductionExport as recordProductionExportDomain,
   releasePlanEditSession as releasePlanEditSessionDomain,
   renewPlanEditSession as renewPlanEditSessionDomain,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
+  setProjectItemFloorStatus,
   transitionProjectStatus,
   snapshotOnStatusChange,
   restoreProjectVersion,
@@ -251,6 +255,16 @@ export interface ProjectState {
     projectId: string,
     nestingImport: NonNullable<Project['nestingImport']>,
   ) => void;
+  /** PROD-3.1 — shop-floor status per line item. */
+  readonly setItemFloorStatus: (
+    projectId: string,
+    itemId: string,
+    status: ItemFloorStatus,
+  ) => void;
+  /** PROD-3.2 — stamp export revision after factory pack/export. */
+  readonly recordProductionExport: (projectId: string) => void;
+  /** PROD-3.2 — ensure OP revision when opening plant-ready order. */
+  readonly ensureProductionRevision: (projectId: string) => void;
   readonly duplicateWithScenarioB: (
     projectId: string,
     role: string,
@@ -794,6 +808,39 @@ export function createProjectStore(options: InternalOptions) {
         ),
       );
       toast({ type: 'success', message: '✓ Nesting importado' });
+    },
+
+    setItemFloorStatus: (projectId, itemId, status) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const now = new Date().toISOString();
+      const updated = setProjectItemFloorStatus(project, itemId, status, now);
+      if (updated === project) return;
+      patch(set, get, (ps) =>
+        ps.map((p) => (p.id === projectId ? updated : p)),
+      );
+    },
+
+    recordProductionExport: (projectId) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const now = new Date().toISOString();
+      const updated = recordProductionExportDomain(project, now);
+      patch(set, get, (ps) =>
+        ps.map((p) => (p.id === projectId ? updated : p)),
+      );
+    },
+
+    ensureProductionRevision: (projectId) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project) return;
+      if (project.status !== 'accepted' && project.status !== 'produced') return;
+      const now = new Date().toISOString();
+      const updated = ensureProductionRevisionDomain(project, now);
+      if (updated === project) return;
+      patch(set, get, (ps) =>
+        ps.map((p) => (p.id === projectId ? updated : p)),
+      );
     },
 
     duplicateWithScenarioB: (projectId, role, choiceId, onNavigateToNewProject) => {

@@ -129,6 +129,7 @@ import { buildPieceLabelsExport } from './exportPieceLabels';
 import { buildProductionPackExport } from './exportProductionPack';
 import { buildWallElevationsExport } from './exportWallElevations';
 import { buildCutListCsvExport } from './exportCutListCsv';
+import { buildCncPilotExport } from './exportCncPilot';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
 import {
   buildOptimizerExport,
@@ -1133,6 +1134,17 @@ function AppContent({
   );
   const applyScenarioB = projectActions.applyScenarioB;
   const importNestingResult = projectActions.importNestingResult;
+  const setItemFloorStatus = projectActions.setItemFloorStatus;
+  const recordProductionExport = projectActions.recordProductionExport;
+  const ensureProductionRevisionOnProject =
+    projectActions.ensureProductionRevision;
+
+  // PROD-3.2: freeze OP revision when opening a plant-ready order.
+  useEffect(() => {
+    if (!routeProductionOrderId) return;
+    ensureProductionRevisionOnProject(routeProductionOrderId);
+  }, [routeProductionOrderId, ensureProductionRevisionOnProject]);
+
   const duplicateWithScenarioB = useCallback(
     (projectId: string, role: string, choiceId: string) => {
       projectActions.duplicateWithScenarioB(
@@ -1385,6 +1397,11 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        if (projectId != null) {
+          recordProductionExport(projectId);
+        } else if (project) {
+          recordProductionExport(project.id);
+        }
         toast({
           type: 'success',
           message:
@@ -1396,7 +1413,65 @@ function AppContent({
         setExportBusy(false);
       }
     },
-    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+    [
+      selectedProject,
+      projects,
+      catalog,
+      customers,
+      toast,
+      session,
+      actorRole,
+      recordProductionExport,
+    ],
+  );
+
+  const handleExportCncPilot = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildCncPilotExport(project, catalog);
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          toast({
+            type: 'error',
+            message: 'No se pudo generar CNC pilot JSON',
+          });
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
   const handleExportCutListCsv = useCallback(
@@ -1488,6 +1563,8 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        // PROD-3.2 — stamp OP export revision so stale detection works.
+        recordProductionExport(project.id);
         toast({
           type: 'success',
           message:
@@ -1499,7 +1576,16 @@ function AppContent({
         setExportBusy(false);
       }
     },
-    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+    [
+      selectedProject,
+      projects,
+      catalog,
+      customers,
+      toast,
+      session,
+      actorRole,
+      recordProductionExport,
+    ],
   );
 
   const handleExportCommercialQuote = useCallback(async () => {
@@ -1865,6 +1951,16 @@ function AppContent({
           hideHardwareCosts={!showCosts}
           onImportNesting={importNestingResult}
           canImportNesting={canMutateProjects || canMarkProduced}
+          onSetFloorStatus={(projectId, itemId, status) => {
+            setItemFloorStatus(projectId, itemId, status);
+          }}
+          canSetFloorStatus={
+            session === 'auth' &&
+            (canMarkProduced || roleCanExportProduction(actorRole))
+          }
+          onExportCncPilot={(id) => {
+            void handleExportCncPilot(id);
+          }}
         />
       ) : null}
       {navId === 'materials' ? (

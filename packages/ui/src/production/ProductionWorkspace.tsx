@@ -6,12 +6,17 @@ import { useMemo, type ReactNode } from 'react';
 import type {
   Catalog,
   HardwarePurchaseRow,
+  ItemFloorStatus,
   Module,
   NestingImportResult,
   ProductionCutRow,
   Project,
 } from '@muebles/domain';
-import { buildProductionElevations } from '@muebles/domain';
+import {
+  buildProductionElevations,
+  ensureProductionRevision,
+  getProductionStaleInfo,
+} from '@muebles/domain';
 import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
 import { ProductionQueue, type ProductionQueueProps } from './ProductionQueue';
@@ -67,6 +72,13 @@ export type ProductionWorkspaceProps = {
     nesting: NestingImportResult,
   ) => void;
   readonly canImportNesting?: boolean;
+  readonly onSetFloorStatus?: (
+    projectId: string,
+    itemId: string,
+    status: ItemFloorStatus,
+  ) => void;
+  readonly canSetFloorStatus?: boolean;
+  readonly onExportCncPilot?: (projectId: string) => void | Promise<void>;
 };
 
 export function ProductionWorkspace({
@@ -98,6 +110,9 @@ export function ProductionWorkspace({
   hideHardwareCosts = false,
   onImportNesting,
   canImportNesting = false,
+  onSetFloorStatus,
+  canSetFloorStatus = false,
+  onExportCncPilot,
 }: ProductionWorkspaceProps): ReactNode {
   const orderProject = useMemo(() => {
     if (!orderProjectId) return null;
@@ -147,10 +162,16 @@ export function ProductionWorkspace({
       ? resolveHardware(orderProject.id)
       : { rows: null as readonly HardwarePurchaseRow[] | null, error: null };
     const elevations = buildProductionElevations(orderProject, modules);
+    // Ensure OP revision exists for plant-ready projects (display only; persist via store on export/floor).
+    const projectForHub =
+      orderProject.status === 'accepted' || orderProject.status === 'produced'
+        ? ensureProductionRevision(orderProject, new Date().toISOString())
+        : orderProject;
+    const staleInfo = getProductionStaleInfo(projectForHub);
 
     return (
       <ProductionOrderHub
-        project={orderProject}
+        project={projectForHub}
         customerLabel={customerLabelFor(orderProject.customerId)}
         salePrice={salePriceFor(orderProject.id)}
         readiness={readiness}
@@ -202,6 +223,19 @@ export function ProductionWorkspace({
             : undefined
         }
         canImportNesting={canImportNesting}
+        onSetFloorStatus={
+          onSetFloorStatus
+            ? (itemId, status) =>
+                onSetFloorStatus(orderProject.id, itemId, status)
+            : undefined
+        }
+        canSetFloorStatus={canSetFloorStatus}
+        staleInfo={staleInfo}
+        onExportCncPilot={
+          onExportCncPilot
+            ? () => onExportCncPilot(orderProject.id)
+            : undefined
+        }
       />
     );
   }
