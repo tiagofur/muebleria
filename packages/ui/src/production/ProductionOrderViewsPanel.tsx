@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module, Project } from '@muebles/domain';
+import { buildProductionElevations } from '@muebles/domain';
 import {
   FurnitureScene3D,
   canUseWebGL,
@@ -19,6 +20,7 @@ import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { PresentationKitchenPlanSlide } from '../projects/components/PresentationKitchenPlanSlide';
 import { PaintModeField } from '../preview3d/PaintModeField';
 import { MaterialSurfaceModeField } from '../preview3d/MaterialSurfaceModeField';
+import { ProductionElevationPreview } from './ProductionElevationPreview';
 import '../common/furniture3dViewer.css';
 
 export type ProductionOrderViewsPanelProps = {
@@ -26,6 +28,8 @@ export type ProductionOrderViewsPanelProps = {
   readonly modules: readonly Module[];
   readonly catalog: Module3DCatalogInput;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
+  readonly onExportElevations?: () => void | Promise<void>;
+  readonly exportBusy?: boolean;
 };
 
 export function ProductionOrderViewsPanel({
@@ -33,6 +37,8 @@ export function ProductionOrderViewsPanel({
   modules,
   catalog,
   resolveMediaUrl,
+  onExportElevations,
+  exportBusy = false,
 }: ProductionOrderViewsPanelProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
@@ -48,6 +54,11 @@ export function ProductionOrderViewsPanel({
   const preview = useMemo(
     () => resolveProject3DPreview(project, catalog),
     [project, catalog],
+  );
+
+  const elevations = useMemo(
+    () => buildProductionElevations(project, modules),
+    [project, modules],
   );
 
   const materialColors = useMemo(
@@ -72,6 +83,63 @@ export function ProductionOrderViewsPanel({
           de muros ni placements.
         </p>
         <PresentationKitchenPlanSlide project={project} modules={modules} />
+      </section>
+
+      <section
+        className="prod-vistas__section"
+        aria-label="Elevaciones por muro"
+        data-testid="prod-vistas-elevaciones"
+      >
+        <div className="prod-modulos__toolbar">
+          <h3 className="prod-hub__section-title" style={{ margin: 0 }}>
+            Elevaciones por muro
+          </h3>
+          {onExportElevations ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={exportBusy || elevations.walls.length === 0}
+              onClick={() => {
+                void onExportElevations();
+              }}
+              data-testid="prod-vistas-export-elevations"
+              title={
+                elevations.walls.length === 0
+                  ? 'Sin muros en el layout'
+                  : 'PDF multi-página de elevaciones'
+              }
+            >
+              Descargar PDF elevaciones
+            </button>
+          ) : null}
+        </div>
+        <p className="prod-vistas__hint">
+          Alzado frontal con códigos y anchos. Sin inventar posiciones para
+          módulos sin colocar.
+        </p>
+        {elevations.walls.length === 0 ? (
+          <p className="prod-hub__placeholder-body">
+            No hay muros en el layout. Definí el plano en cotización (Proyectar)
+            para generar elevaciones.
+          </p>
+        ) : (
+          <div className="prod-vistas__elev-list">
+            {elevations.walls.map((wall) => (
+              <ProductionElevationPreview key={wall.wallId} wall={wall} />
+            ))}
+          </div>
+        )}
+        {elevations.unplaced.length > 0 ? (
+          <p className="prod-vistas__hint" data-testid="prod-elev-unplaced">
+            Sin colocar: {elevations.unplaced.map((u) => u.label).join(', ')}
+          </p>
+        ) : null}
+        {elevations.freePlace.length > 0 ? (
+          <p className="prod-vistas__hint" data-testid="prod-elev-free">
+            Libre / isla (no en alzado de muro):{' '}
+            {elevations.freePlace.map((u) => u.label).join(', ')}
+          </p>
+        ) : null}
       </section>
 
       <section
@@ -180,9 +248,6 @@ export function ProductionOrderViewsPanel({
         )}
       </section>
 
-      <p className="prod-modulos__footnote">
-        Elevaciones PDF por muro con cotas: roadmap PROD-1.1 (#219).
-      </p>
     </div>
   );
 }

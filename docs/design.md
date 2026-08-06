@@ -705,10 +705,14 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Patrón:** workspace de fábrica (no editor de cotización)
 - **Contenido:**
   - Cola: tabs accepted / produced; CTA primario **Abrir orden**
-  - Hub tabs: Resumen · Módulos · Despiece (placeholder) · Herrajes (placeholder) · **Vistas** (planta + 3D read-only) · Optimización (placeholder) · Documentos (placeholder) · Exports
+  - Hub tabs: Resumen · Módulos · **Despiece** · **Herrajes** · **Vistas** (planta + elevaciones + 3D) · Optimización (placeholder Fase 2) · **Documentos** · Exports
   - Hub Resumen: checklist listo-para-cortar, totales de fábrica, pack; **solo lectura del diseño**
   - Hub Módulos: inventario con código de fábrica, medidas, ubicación, piezas
-  - Hub Vistas: `PresentationKitchenPlanSlide` + `FurnitureScene3D` (sin gizmos de diseño)
+  - Hub Despiece: cut-list agrupable (material/módulo); misma población que Optimizer
+  - Hub Herrajes: picking list + export
+  - Hub Vistas: planta + elevaciones SVG + PDF elevaciones + 3D (sin gizmos de diseño)
+  - Hub Documentos: regenerar pack / Optimizer / herrajes / etiquetas / elevaciones
+  - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas + resumen + despiece + elevaciones (si hay muros)
   - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome)
 - **RBAC nav:** `roleCanAccessProductionNav` (= roles de export producción F041).  
   Filtro de lista de cotizaciones a solo plant-ready sigue siendo `roleUsesProductionQueue` (**solo** `produccion`).

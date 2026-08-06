@@ -116,7 +116,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(screen.getByText('Gabinete')).toBeTruthy();
   });
 
-  it('shows placeholder for not-yet-built tabs', () => {
+  it('shows despiece panel when tab is despiece (PROD-1.3)', () => {
     const readiness = buildProductionOrderReadiness({
       project: project(),
       cutRows: [],
@@ -133,10 +133,33 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
         onOpenDesign={vi.fn()}
         onExportOptimizer={vi.fn()}
         onExportHardware={vi.fn()}
+        cutRows={[]}
       />,
     );
-    expect(screen.getByTestId('prod-hub-placeholder-despiece')).toBeTruthy();
+    expect(screen.getByTestId('prod-hub-despiece')).toBeTruthy();
     expect(screen.queryByTestId('prod-hub-resumen')).toBeNull();
+  });
+
+  it('shows placeholder for optimizacion (Phase 2)', () => {
+    const readiness = buildProductionOrderReadiness({
+      project: project(),
+      cutRows: [],
+    });
+    render(
+      <ProductionOrderHub
+        project={project()}
+        customerLabel="Ana"
+        salePrice={null}
+        readiness={readiness}
+        activeTab="optimizacion"
+        onTabChange={vi.fn()}
+        onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()}
+        onExportOptimizer={vi.fn()}
+        onExportHardware={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('prod-hub-placeholder-optimizacion')).toBeTruthy();
   });
 
   it('shows not-ready banner on resumen when cut list empty', () => {

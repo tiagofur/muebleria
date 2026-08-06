@@ -5,6 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type {
+  HardwarePurchaseRow,
   Module,
   ProductionCutRow,
   Project,
@@ -39,6 +40,12 @@ import {
 } from './productionOrderModel';
 import { ProductionOrderModulesPanel } from './ProductionOrderModulesPanel';
 import { ProductionOrderViewsPanel } from './ProductionOrderViewsPanel';
+import { ProductionOrderDespiecePanel } from './ProductionOrderDespiecePanel';
+import { ProductionOrderHardwarePanel } from './ProductionOrderHardwarePanel';
+import {
+  ProductionOrderDocumentsPanel,
+  type ProductionDocumentItem,
+} from './ProductionOrderDocumentsPanel';
 import './production.css';
 
 export type ProductionOrderHubProps = {
@@ -55,13 +62,20 @@ export type ProductionOrderHubProps = {
   readonly onExportHardware: () => void | Promise<void>;
   readonly onExportPieceLabels?: () => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
+  readonly onExportElevations?: () => void | Promise<void>;
   readonly onMarkProduced?: () => void;
   readonly exportBusy?: boolean;
   /** PROD-0.4: catalog modules for inventory + 3D. */
   readonly modules?: readonly Module[];
   readonly cutRows?: readonly ProductionCutRow[] | null;
+  readonly cutListError?: string | null;
+  readonly hardwareRows?: readonly HardwarePurchaseRow[] | null;
+  readonly hardwareError?: string | null;
   readonly catalog3d?: Module3DCatalogInput | null;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
+  readonly hideHardwareCosts?: boolean;
+  /** Has kitchen walls for elevations PDF. */
+  readonly elevationsAvailable?: boolean;
 };
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -137,13 +151,69 @@ export function ProductionOrderHub({
   onExportHardware,
   onExportPieceLabels,
   onExportProductionPack,
+  onExportElevations,
   onMarkProduced,
   exportBusy = false,
   modules = [],
   cutRows = null,
+  cutListError = null,
+  hardwareRows = null,
+  hardwareError = null,
   catalog3d = null,
   resolveMediaUrl,
+  hideHardwareCosts = false,
+  elevationsAvailable = false,
 }: ProductionOrderHubProps): ReactNode {
+  const documents: readonly ProductionDocumentItem[] = [
+    {
+      id: 'pack',
+      label: 'Pack de producción (ZIP)',
+      hint: 'Optimizer + herrajes + etiquetas + resumen + elevaciones + despiece',
+      available: readiness.packGenerable && Boolean(onExportProductionPack),
+      reason: 'Requiere despiece de corte válido',
+      onDownload: onExportProductionPack,
+    },
+    {
+      id: 'optimizer',
+      label: 'Optimizer (Excel)',
+      hint: 'Plan de corte Plantilla_Optimizer.xlsx',
+      available: readiness.optimizerGenerable,
+      reason: 'Requiere despiece válido',
+      onDownload: onExportOptimizer,
+    },
+    {
+      id: 'hardware',
+      label: 'Lista de herrajes',
+      hint: 'Picking / compras (.xlsx)',
+      available: Boolean(onExportHardware),
+      onDownload: onExportHardware,
+    },
+    {
+      id: 'labels',
+      label: 'Etiquetas de pieza',
+      hint: 'PDF con encintado y QR',
+      available: Boolean(onExportPieceLabels) && readiness.materialsResolved,
+      reason: 'Requiere piezas de tablero',
+      onDownload: onExportPieceLabels,
+    },
+    {
+      id: 'elevations',
+      label: 'Elevaciones por muro (PDF)',
+      hint: 'Alzados con códigos y medidas',
+      available: elevationsAvailable && Boolean(onExportElevations),
+      reason: 'Sin muros en el layout de cocina',
+      onDownload: onExportElevations,
+    },
+    {
+      id: 'despiece',
+      label: 'Despiece (ver tab)',
+      hint: 'Lista de piezas en la pestaña Despiece',
+      available: readiness.materialsResolved,
+      reason: 'Sin piezas de tablero',
+      onDownload: () => onTabChange('despiece'),
+    },
+  ];
+
   return (
     <section
       className="prod-hub"
@@ -381,6 +451,23 @@ export function ProductionOrderHub({
           />
         ) : null}
 
+        {activeTab === 'despiece' ? (
+          <ProductionOrderDespiecePanel
+            cutRows={cutRows}
+            cutError={cutListError}
+          />
+        ) : null}
+
+        {activeTab === 'herrajes' ? (
+          <ProductionOrderHardwarePanel
+            rows={hardwareRows}
+            error={hardwareError}
+            onExportHardware={onExportHardware}
+            exportBusy={exportBusy}
+            hideCosts={hideHardwareCosts}
+          />
+        ) : null}
+
         {activeTab === 'vistas' ? (
           catalog3d ? (
             <ProductionOrderViewsPanel
@@ -388,6 +475,8 @@ export function ProductionOrderHub({
               modules={modules}
               catalog={catalog3d}
               resolveMediaUrl={resolveMediaUrl}
+              onExportElevations={onExportElevations}
+              exportBusy={exportBusy}
             />
           ) : (
             <div
@@ -401,6 +490,13 @@ export function ProductionOrderHub({
               </p>
             </div>
           )
+        ) : null}
+
+        {activeTab === 'documentos' ? (
+          <ProductionOrderDocumentsPanel
+            documents={documents}
+            exportBusy={exportBusy}
+          />
         ) : null}
 
         {activeTab === 'exports' ? (

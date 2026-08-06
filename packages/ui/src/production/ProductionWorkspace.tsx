@@ -3,7 +3,13 @@
  */
 
 import { useMemo, type ReactNode } from 'react';
-import type { Module, ProductionCutRow, Project } from '@muebles/domain';
+import type {
+  HardwarePurchaseRow,
+  Module,
+  ProductionCutRow,
+  Project,
+} from '@muebles/domain';
+import { buildProductionElevations } from '@muebles/domain';
 import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
 import { ProductionQueue, type ProductionQueueProps } from './ProductionQueue';
@@ -34,18 +40,24 @@ export type ProductionWorkspaceProps = {
     readonly rows: readonly ProductionCutRow[] | null;
     readonly error?: string | null;
   };
+  readonly resolveHardware?: (projectId: string) => {
+    readonly rows: readonly HardwarePurchaseRow[] | null;
+    readonly error?: string | null;
+  };
   readonly onExportOptimizer: (projectId: string) => void | Promise<void>;
   readonly onExportHardware: (projectId: string) => void | Promise<void>;
   readonly onExportPieceLabels?: (projectId: string) => void | Promise<void>;
   readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
+  readonly onExportElevations?: (projectId: string) => void | Promise<void>;
   readonly onMarkProduced: (projectId: string) => void;
   readonly exportBusy?: boolean;
   readonly loading?: boolean;
   readonly cutRowsFor?: ProductionQueueProps['cutRowsFor'];
-  /** PROD-0.4 */
+  /** PROD-0.4 / 1.x */
   readonly modules?: readonly Module[];
   readonly catalog3d?: Module3DCatalogInput | null;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
+  readonly hideHardwareCosts?: boolean;
 };
 
 export function ProductionWorkspace({
@@ -63,6 +75,7 @@ export function ProductionWorkspace({
   onExportHardware,
   onExportPieceLabels,
   onExportProductionPack,
+  onExportElevations,
   onMarkProduced,
   exportBusy = false,
   loading = false,
@@ -70,6 +83,8 @@ export function ProductionWorkspace({
   modules = [],
   catalog3d = null,
   resolveMediaUrl,
+  resolveHardware,
+  hideHardwareCosts = false,
 }: ProductionWorkspaceProps): ReactNode {
   const orderProject = useMemo(() => {
     if (!orderProjectId) return null;
@@ -115,6 +130,10 @@ export function ProductionWorkspace({
       cutRows: cut.rows,
       cutListError: cut.error,
     });
+    const hardware = resolveHardware
+      ? resolveHardware(orderProject.id)
+      : { rows: null as readonly HardwarePurchaseRow[] | null, error: null };
+    const elevations = buildProductionElevations(orderProject, modules);
 
     return (
       <ProductionOrderHub
@@ -138,6 +157,11 @@ export function ProductionWorkspace({
             ? () => onExportProductionPack(orderProject.id)
             : undefined
         }
+        onExportElevations={
+          onExportElevations
+            ? () => onExportElevations(orderProject.id)
+            : undefined
+        }
         onMarkProduced={
           orderProject.status === 'accepted'
             ? () => onMarkProduced(orderProject.id)
@@ -146,8 +170,13 @@ export function ProductionWorkspace({
         exportBusy={exportBusy}
         modules={modules}
         cutRows={cut.rows}
+        cutListError={cut.error}
+        hardwareRows={hardware.rows}
+        hardwareError={hardware.error}
         catalog3d={catalog3d}
         resolveMediaUrl={resolveMediaUrl}
+        hideHardwareCosts={hideHardwareCosts}
+        elevationsAvailable={elevations.walls.length > 0}
       />
     );
   }
