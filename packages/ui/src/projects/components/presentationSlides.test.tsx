@@ -168,6 +168,25 @@ describe('PresentationKitchenPlanSlide', () => {
     expect(screen.queryByText('Alacena (muro)')).toBeNull();
   });
 
+  it('warns when quote has unplaced units', () => {
+    const layout = makeKitchenLayout({ placements: [] });
+    const project = makeProject({
+      kitchenLayout: layout,
+      items: [
+        {
+          id: 'it-1',
+          moduleId: modules[0]!.id,
+          quantity: 2,
+          optionChoices: {},
+        },
+      ],
+    });
+    render(<PresentationKitchenPlanSlide project={project} modules={modules} />);
+    expect(screen.getByTestId('presentation-kitchen-unplaced').textContent).toMatch(
+      /2 unidad/,
+    );
+  });
+
   it('renders multiple walls', () => {
     const layout = makeKitchenLayout({
       walls: [

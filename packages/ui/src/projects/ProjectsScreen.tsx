@@ -349,6 +349,10 @@ export function ProjectsScreen({
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
   const [showSpatialStudio, setShowSpatialStudio] = useState(false);
+  const [spatialBootstrap, setSpatialBootstrap] = useState<{
+    listFilter?: 'all' | 'unplaced' | 'placed';
+    selectKey?: string | null;
+  } | null>(null);
 
   // Fase 3 slice 3.5: auto-open presentation when autoPresentId matches.
   useEffect(() => {
@@ -550,6 +554,11 @@ export function ProjectsScreen({
     if (!selectedId) return;
     onAddItem(selectedId, payload);
     closeAddItemModal();
+    // Bridge to Proyectar: open studio focused on unplaced units after add.
+    if (onUpdateKitchenLayout && canMutate) {
+      setSpatialBootstrap({ listFilter: 'unplaced' });
+      setShowSpatialStudio(true);
+    }
   };
 
   const updateItemMeasurePreset = (item: ProjectItem, measurePresetId: string) => {
@@ -858,7 +867,10 @@ export function ProjectsScreen({
           onOpenPresentation={() => setShowPresentation(true)}
           onOpenSpatialStudio={
             onUpdateKitchenLayout
-              ? () => setShowSpatialStudio(true)
+              ? () => {
+                  setSpatialBootstrap(null);
+                  setShowSpatialStudio(true);
+                }
               : undefined
           }
           onEditMeta={startEditMeta}
@@ -976,7 +988,17 @@ export function ProjectsScreen({
           catalog={project3dCatalog}
           canEdit={canMutate && selectedProject.status === 'draft'}
           resolveMediaUrl={resolveImageUrl}
-          onClose={() => setShowSpatialStudio(false)}
+          quoteSalePrice={
+            breakdown?.salePrice ??
+            (typeof projectEstimates[selectedProject.id] === 'number'
+              ? (projectEstimates[selectedProject.id] as number)
+              : null)
+          }
+          bootstrap={spatialBootstrap}
+          onClose={() => {
+            setShowSpatialStudio(false);
+            setSpatialBootstrap(null);
+          }}
           onChangeLayout={(layout) =>
             onUpdateKitchenLayout(selectedProject.id, layout)
           }

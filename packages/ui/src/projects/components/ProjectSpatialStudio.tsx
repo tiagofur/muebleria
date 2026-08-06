@@ -69,11 +69,14 @@ import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
 import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
 import {
+  estimateLineSalePrice,
+  formatProjectMoney,
   groupsForModuleItem,
   optionLabelForId,
   optionsForGroup,
   setItemOptionChoice,
 } from '../projectHelpers';
+import type { Catalog } from '@muebles/domain';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -91,10 +94,20 @@ export type ProjectSpatialStudioProps = {
   /** Update a quote line (measures / options) — same as list editor. */
   readonly onUpdateItem?: (item: ProjectItem) => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
+  /** Project sale total (read-only context in chrome). */
+  readonly quoteSalePrice?: number | null;
+  /**
+   * When opening after "Agregar mueble", start on unplaced filter and
+   * optionally select an instance key (`itemId#index`).
+   */
+  readonly bootstrap?: {
+    readonly listFilter?: ListFilter;
+    readonly selectKey?: string | null;
+  } | null;
 };
 
 type InspectorTab = 'props' | 'position';
-type ListFilter = 'all' | 'unplaced' | 'placed';
+export type ListFilter = 'all' | 'unplaced' | 'placed';
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -168,6 +181,8 @@ export function ProjectSpatialStudio({
   onChangeLayout,
   onUpdateItem,
   resolveMediaUrl,
+  quoteSalePrice = null,
+  bootstrap = null,
 }: ProjectSpatialStudioProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -186,6 +201,7 @@ export function ProjectSpatialStudio({
   const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
   const [showFloorGrid, setShowFloorGrid] = useState(true);
   const wallDragSession = useRef(false);
+  const appliedBootstrap = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -197,8 +213,19 @@ export function ProjectSpatialStudio({
       setUndoStack([]);
       setRedoStack([]);
       wallDragSession.current = false;
+      appliedBootstrap.current = false;
+      return;
     }
-  }, [open]);
+    if (bootstrap && !appliedBootstrap.current) {
+      appliedBootstrap.current = true;
+      if (bootstrap.listFilter) setListFilter(bootstrap.listFilter);
+      if (bootstrap.selectKey) {
+        setSelectedKey(bootstrap.selectKey);
+        setInspectorTab('props');
+      }
+      setListCollapsed(false);
+    }
+  }, [open, bootstrap]);
 
   useEffect(() => {
     if (!open) return;
@@ -315,6 +342,23 @@ export function ProjectSpatialStudio({
         : null,
     [selectedItem, selectedModule],
   );
+
+  const pricingCatalog = useMemo((): Catalog => {
+    return {
+      materials: catalog.materials,
+      edges: catalog.edges,
+      hardware: catalog.hardware,
+      optionGroups: catalog.optionGroups,
+      modules: catalog.modules,
+      structures: catalog.structures,
+      components: catalog.components,
+    };
+  }, [catalog]);
+
+  const selectedLineSale = useMemo(() => {
+    if (!selectedItem) return null;
+    return estimateLineSalePrice(project, selectedItem.id, pricingCatalog);
+  }, [selectedItem, project, pricingCatalog]);
 
   const optionGroupsForItem = useMemo(
     () =>
@@ -698,11 +742,21 @@ export function ProjectSpatialStudio({
             <h2 className="spatial-studio__title">Proyectar</h2>
             <p className="spatial-studio__subtitle">{project.name}</p>
           </div>
+          {quoteSalePrice != null ? (
+            <span
+              className="spatial-studio__quote-total"
+              data-testid="spatial-studio-quote-total"
+              title="Total de venta de la cotización"
+            >
+              Total {formatProjectMoney(quoteSalePrice, project.currency)}
+            </span>
+          ) : null}
         </div>
         <div className="spatial-studio__chrome-actions">
           {!canEdit ? (
             <span className="spatial-studio__frozen" data-testid="spatial-studio-frozen">
               <Lock size={14} strokeWidth={1.5} aria-hidden /> Plano congelado
+              (solo lectura)
             </span>
           ) : null}
           <button
@@ -711,7 +765,7 @@ export function ProjectSpatialStudio({
             onClick={onClose}
             data-testid="spatial-studio-close"
           >
-            <X size={16} strokeWidth={1.5} aria-hidden /> Cerrar
+            <X size={16} strokeWidth={1.5} aria-hidden /> Volver a cotización
           </button>
         </div>
       </header>
@@ -1528,6 +1582,19 @@ export function ProjectSpatialStudio({
                     <span className="spatial-studio__dims-sep">×</span>
                     <span>{selectedDims.depth}</span>
                     <span className="spatial-studio__dims-unit">mm</span>
+                  </p>
+                ) : null}
+                {selectedLineSale != null ? (
+                  <p
+                    className="spatial-studio__line-price"
+                    data-testid="spatial-studio-line-price"
+                  >
+                    Línea{' '}
+                    {formatProjectMoney(selectedLineSale, project.currency)}
+                    <span className="spatial-studio__line-price-hint">
+                      {' '}
+                      · est. sin MO fija
+                    </span>
                   </p>
                 ) : null}
                 <p className="spatial-studio__item-meta">

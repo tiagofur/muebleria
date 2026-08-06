@@ -12,7 +12,8 @@
 - **Parte 2 Lista/colocación ✅:** filtros, rail colapsable, doble click colocar, click muro 3D, código dominante
 - **Parte 3 Manipulación ✅:** snapOffsetOnWall, repack, drag history, undo/redo, mover de muro
 - **Parte 4 Realismo obra ✅:** zoclo reentrante, mesada visual, wallCabinetZMm, grilla 500 mm
-- **Siguiente:** Parte 5 Puente cotización
+- **Parte 5 Puente cotización ✅:** add→studio unplaced, total+line price, Presentar unplaced warn
+- **Siguiente:** Parte 6 icebox / polish
 
 ## Proyectar — place & move 3D (Fase A)
 

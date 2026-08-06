@@ -83,6 +83,35 @@ const catalog = {
 };
 
 describe('ProjectSpatialStudio', () => {
+  it('applies bootstrap filter unplaced when opening after add-item', () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        bootstrap={{ listFilter: 'unplaced' }}
+        quoteSalePrice={1500}
+      />,
+    );
+    expect(screen.getByTestId('spatial-studio-filter-unplaced').className).toMatch(
+      /filter--on/,
+    );
+    expect(screen.getByTestId('spatial-studio-quote-total').textContent).toMatch(
+      /Total/,
+    );
+  });
+
   it('does not render when closed', () => {
     render(
       <ProjectSpatialStudio

@@ -3,6 +3,7 @@
  */
 
 import type {
+  Catalog,
   Component,
   Customer,
   EdgeBand,
@@ -19,6 +20,7 @@ import type {
   WorkshopSettings,
 } from '@muebles/domain';
 import {
+  calcProjectBreakdown,
   DEFAULT_WORKSHOP_SETTINGS,
   effectiveOptionChoices,
 } from '@muebles/domain';
@@ -248,13 +250,22 @@ export function validateItemQuantity(quantity: number): string | null {
 export function emptyAddItemDraft(
   modules: readonly Module[],
   optionGroups: readonly OptionGroup[] = [],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
 ): AddItemDraft {
   const moduleId = modules[0]?.id ?? '';
   const mod = modules.find((m) => m.id === moduleId);
   return {
     moduleId,
     quantity: 1,
-    optionChoices: mod ? defaultChoicesForNewItem(mod, optionGroups) : {},
+    optionChoices: mod
+      ? defaultChoicesForNewItem(
+          mod,
+          optionGroups,
+          catalogComponents,
+          catalogStructures,
+        )
+      : {},
     measurePresetId: mod?.presets?.[0]?.id,
   };
 }
@@ -406,6 +417,31 @@ export function optionLabelForId(
 ): string {
   const opt = optionsForGroup(group, catalogs).find((o) => o.id === optionId);
   return opt ? `${opt.name} — ${opt.code}` : optionId;
+}
+
+/**
+ * Approximate sale price for a single quote line (item × qty).
+ * Uses domain calc with laborFixedCost=0 so the line is comparable in the
+ * spatial studio inspector — not a formal invoice split of MO fija.
+ */
+export function estimateLineSalePrice(
+  project: Project,
+  itemId: string,
+  catalog: Catalog,
+): number | null {
+  const item = project.items.find((i) => i.id === itemId);
+  if (!item) return null;
+  try {
+    const lineProject: Project = {
+      ...project,
+      items: [item],
+      laborFixedCost: 0,
+      priceSnapshot: undefined,
+    };
+    return calcProjectBreakdown(lineProject, catalog).salePrice;
+  } catch {
+    return null;
+  }
 }
 
 /**

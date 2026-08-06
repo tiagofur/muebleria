@@ -268,5 +268,5 @@ Recomendación: **A** (más Promob “escenario grande”).
 | 2 Lista / colocación | ✅ done (filtros, colapsable, doble click, muro activo 3D, código dominante) |
 | 3 Manipulación | ✅ done (snap wall drag, compactar muro, move wall, undo/redo plano) |
 | 4 Realismo obra | ✅ done (toe-kick recess, mesada, wallCabinetZ, floor grid) |
-| 5 Puente cotización | ⏳ pending |
+| 5 Puente cotización | ✅ done (add→Proyectar unplaced, line price, Presentar warn, freeze copy) |
 | 6 Icebox | 🧊 |
