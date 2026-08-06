@@ -531,12 +531,17 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 - App móvil nativa / offline PWA
 - Optimizer export parcial por ambiente
 
-**Siguiente iteración (polish, no features bloqueantes):**
+**Polish (iteración post-META, en main vía PR):**
 
-- Densidad/cromo del hub (tabs en mobile, vacío estados)
-- Copy y microcopy de capas L0/L1/L2
-- Smoke manual de taller con obra real
-- Ajustes de PDF (márgenes, tipografía) según feedback de impresión
+- Tabs del hub sticky + scroll horizontal en mobile
+- Chrome: pack primary a full-width en phone; copy de cola/hub más claro
+- Optimización: leyenda L0/L1/L2 en español de taller
+- Tablas con scroll touch; márgenes PDF algo más generosos
+
+**Aún útil con obra real (feedback de taller, no bloqueante):**
+
+- Smoke manual con proyecto accepted multi-ambiente
+- Ajustes finos de PDF según impresora del taller
 
 
 ### 10.5 Orden histórico (ya ejecutado)

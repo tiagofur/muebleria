@@ -20,7 +20,8 @@ export type AssemblySheetsPdfInput = {
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
-const MARGIN = 40;
+/** ~12–14 mm margins for A4 workshop print. */
+const MARGIN = 42;
 
 function drawText(
   page: PDFPage,

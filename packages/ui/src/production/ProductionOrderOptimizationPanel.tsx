@@ -118,10 +118,27 @@ export function ProductionOrderOptimizationPanel({
 
   return (
     <div className="prod-opt" data-testid="prod-hub-optimizacion">
-      <p className="prod-hub__exports-hint">
-        Capas de optimización. El plan de corte oficial sigue siendo el{' '}
-        <strong>Optimizer Excel</strong> (export abajo).
-      </p>
+      <div className="prod-opt__intro">
+        <p className="prod-hub__exports-hint">
+          Tres capas de información. Solo el <strong>Optimizer Excel</strong>{' '}
+          (abajo) es el plan de corte oficial para la sierra o el nesting del
+          taller.
+        </p>
+        <ul className="prod-opt__legend" aria-label="Leyenda de capas">
+          <li>
+            <LayerBadge layer="L0" label="Estimado" /> cuántos pliegos comprar
+            (heurística)
+          </li>
+          <li>
+            <LayerBadge layer="L1" label="Preview" /> cómo se ven las piezas en
+            un tablero (no es nesting real)
+          </li>
+          <li>
+            <LayerBadge layer="L2" label="Real" /> consumo importado del
+            software de corte
+          </li>
+        </ul>
+      </div>
 
       {/* L0 — estimated sheets */}
       <section
@@ -133,10 +150,11 @@ export function ProductionOrderOptimizationPanel({
           <LayerBadge layer="L0" label="Pliegos estimados" />
         </div>
         <p className="prod-opt__disclaimer">
-          Estimado — nesting real en software de corte
+          Solo para comprar material. No usés este número para programar la
+          máquina: el nesting real se hace afuera (o en L2 si ya importaste).
         </p>
         <label className="prod-opt__whatif" data-testid="prod-opt-waste-whatif">
-          <span>What-if merma (%)</span>
+          <span>Probar otra merma (%)</span>
           <input
             type="range"
             min={0}
@@ -192,12 +210,14 @@ export function ProductionOrderOptimizationPanel({
           <LayerBadge layer="L1" label="Preview de tableros" />
         </div>
         <p className="prod-opt__disclaimer">
-          Preview estimada (empaquetado simple) — no es el plan de máquina ni
-          reemplaza el Optimizer
+          Vista aproximada (piezas en rectángulos, empaquetado simple). Sirve
+          para revisar tamaños y códigos — <strong>no</strong> es el plan de
+          máquina ni sustituye el Optimizer.
         </p>
         {!cutRows || cutRows.length === 0 ? (
           <p className="prod-hub__placeholder-body">
-            Sin piezas de corte para previsualizar.
+            Sin piezas de corte para previsualizar. Revisá el despiece o el
+            BOM en cotización.
           </p>
         ) : (
           <div className="prod-opt__boards">
@@ -233,7 +253,8 @@ export function ProductionOrderOptimizationPanel({
           <LayerBadge layer="L2" label="Import nesting (real)" />
         </div>
         <p className="prod-opt__disclaimer">
-          Consumo real del software de corte del taller (CSV)
+          Resultado real del optimizador externo del taller. Comparalo con L0
+          para ver si compraste de más o de menos.
         </p>
         {nesting && nesting.rows.length > 0 ? (
           <div data-testid="prod-opt-nesting-data">
@@ -295,8 +316,9 @@ export function ProductionOrderOptimizationPanel({
       <section className="prod-opt__layer prod-opt__layer--official">
         <h3 className="prod-hub__section-title">Plan de corte oficial</h3>
         <p className="prod-vistas__hint">
-          Plantilla_Optimizer.xlsx — fuente de verdad para la sierra / nesting
-          externo.
+          <strong>Plantilla_Optimizer.xlsx</strong> — única fuente de verdad
+          para sierra y nesting externo. L0 y L1 son ayuda visual; L2 es
+          resultado importado.
         </p>
         {onExportOptimizer ? (
           <button

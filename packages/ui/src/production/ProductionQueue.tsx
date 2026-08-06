@@ -103,8 +103,8 @@ export function ProductionQueue({
     tab === 'accepted' ? 'Para fabricar' : 'Ya en planta';
   const subtitle =
     tab === 'accepted'
-      ? 'Cotizaciones aceptadas: abrí la orden de producción para el pack, el corte y el checklist de fábrica.'
-      : 'Pedidos ya en planta. Reabrí la orden para reexportar o revisar el checklist.';
+      ? 'Aceptadas por el cliente. Abrí la orden para pack, despiece, elevaciones y piso — sin editar el diseño aquí.'
+      : 'Marcadas en planta. Reabrí la orden para reexportar, ver avance de piso o regenerar docs.';
 
   return (
     <section className="prod-queue" aria-label="Cola de producción">
