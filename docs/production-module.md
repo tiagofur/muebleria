@@ -120,6 +120,9 @@ Inventario **ya implementado** (no reabrir issues cerrados como “nuevo trabajo
 | Capacidad | Estado | Referencia |
 |-----------|--------|------------|
 | Cola producción (`accepted` → export → `produced`) | ✅ | `ProductionQueue`, F038 |
+| Workspace Producción (nav + hub OP + rutas) | ✅ PROD-0.1/0.3 | `#215` `#217` · `ProductionWorkspace` |
+| Desacople exports de fábrica del chrome de cotización | ✅ PROD-0.2 | `#216` · `ProjectDetailView` + Más |
+| Módulos + planta/3D read-only en hub | ✅ PROD-0.4 | `#218` · tabs `modulos` / `vistas` |
 | Export Optimizer.xlsx | ✅ | PRD EXP-*, `packages/excel` |
 | Export herrajes | ✅ | F041 |
 | Etiquetas de pieza + encintado | ✅ | F046 |
@@ -476,10 +479,10 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 | Fase | Código | Título corto | Issue | Depende de |
 |------|--------|--------------|-------|------------|
 | — | **PROD-META** | META: Módulo Producción — workspace de fábrica | **[#214](https://github.com/tiagofur/muebleria/issues/214)** | — |
-| 0 | PROD-0.1 | Shell Producción: nav, rutas, hub por proyecto | **[#215](https://github.com/tiagofur/muebleria/issues/215)** | META |
-| 0 | PROD-0.2 | Desacople: acciones de fábrica fuera del flujo de diseño | **[#216](https://github.com/tiagofur/muebleria/issues/216)** | 0.1 |
-| 0 | PROD-0.3 | Hub OP: checklist listo-para-cortar + totales fábrica | **[#217](https://github.com/tiagofur/muebleria/issues/217)** | 0.1 |
-| 0 | PROD-0.4 | Read-only: módulos + 3D/planta en contexto Producción | **[#218](https://github.com/tiagofur/muebleria/issues/218)** | 0.1 |
+| 0 | PROD-0.1 | Shell Producción: nav, rutas, hub por proyecto | **[#215](https://github.com/tiagofur/muebleria/issues/215)** ✅ | META |
+| 0 | PROD-0.2 | Desacople: acciones de fábrica fuera del flujo de diseño | **[#216](https://github.com/tiagofur/muebleria/issues/216)** ✅ | 0.1 |
+| 0 | PROD-0.3 | Hub OP: checklist listo-para-cortar + totales fábrica | **[#217](https://github.com/tiagofur/muebleria/issues/217)** ✅ | 0.1 |
+| 0 | PROD-0.4 | Read-only: módulos + 3D/planta en contexto Producción | **[#218](https://github.com/tiagofur/muebleria/issues/218)** ✅ | 0.1 |
 | 1 | PROD-1.1 | Elevaciones PDF por muro con medidas y códigos | **[#219](https://github.com/tiagofur/muebleria/issues/219)** | 0.4, layout cocina |
 | 1 | PROD-1.2 | Pack ZIP ampliado (carátula + elevaciones + despiece) | **[#220](https://github.com/tiagofur/muebleria/issues/220)** | 1.1, #134 |
 | 1 | PROD-1.3 | Pantalla Despiece producción (cut-list rica dedicada) | **[#221](https://github.com/tiagofur/muebleria/issues/221)** | 0.1 |
@@ -554,3 +557,4 @@ El módulo Producción se considera **sólido (Fase 0+1)** cuando:
 | Fecha | Cambio |
 |-------|--------|
 | 2026-08-06 | Creación: visión workspace, reglas, pantallas, pack, roadmap. Issues #214–#227 + enlace #111. Baseline #134/#135/#141/#142. |
+| 2026-08-06 | **Fase 0 implementada** (PROD-0.1–0.4): shell, desacople, hub, módulos + vistas read-only. |
