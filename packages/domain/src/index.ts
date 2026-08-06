@@ -256,6 +256,8 @@ export type {
   KitchenLayoutResult,
 } from './kitchenLayout';
 
+export { roundHardwarePurchaseQuantity } from './engine/labels';
+
 export {
   parseDxfToKitchenWalls,
   createPlanUnderlay,

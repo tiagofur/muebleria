@@ -217,8 +217,9 @@ export const plantillaCatalog: Catalog = {
       name: 'Zoclo perfil plástico aluminio',
       unit: 'meter',
       costPerUnit: 18,
+      packageSize: 4,
       active: true,
-      notes: 'Barra comercial 4 m — cotizar en ml; redondear a barras en compra.',
+      notes: 'Barra comercial 4 m — lista de compra redondea a barras.',
     },
   ],
   optionGroups: [

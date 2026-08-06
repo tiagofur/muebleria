@@ -48,5 +48,6 @@ export {
 } from './cut';
 export {
   generateHardwareList,
+  roundHardwarePurchaseQuantity,
   generateProjectMaterialSummary,
 } from './labels';

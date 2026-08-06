@@ -468,18 +468,19 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	defer tx.Rollback(ctx)
 	now := time.Now().UTC()
 
-	// Hardware profile (ml)
+	// Hardware profile (ml), package 4 m bars
 	_, err = tx.Exec(ctx, `
-		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, notes, active, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8)
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, notes, active, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9)
 		ON CONFLICT (code) DO UPDATE SET
 			name = EXCLUDED.name,
 			unit = EXCLUDED.unit,
 			cost_per_unit = EXCLUDED.cost_per_unit,
+			package_size = EXCLUDED.package_size,
 			notes = EXCLUDED.notes,
 			updated_at = EXCLUDED.updated_at`,
-		seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil plástico aluminio", "meter", 18.0,
-		"Barra comercial 4 m — cotizar en ml; redondear a barras en compra.",
+		seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil plástico aluminio", "meter", 18.0, 4.0,
+		"Barra comercial 4 m — lista de compra redondea a barras.",
 		now, now)
 	if err != nil {
 		return fmt.Errorf("ensure plinth hardware: %w", err)

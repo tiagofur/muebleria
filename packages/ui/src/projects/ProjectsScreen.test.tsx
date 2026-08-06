@@ -270,6 +270,7 @@ describe('ProjectsScreen F022', () => {
             description: 'Bisagra',
             unit: 'piece',
             quantity: 4,
+            purchaseQuantity: 4,
             costPerUnit: 10,
             lineCost: 40,
           },
@@ -302,7 +303,9 @@ describe('ProjectsScreen F022', () => {
     expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
 
-    await user.click(screen.getByRole('button', { name: /^Lista$/i }));
+    await user.click(
+      screen.getByRole('button', { name: /Volver a la lista|^Lista$/i }),
+    );
     expect(screen.queryByTestId('project-detail')).toBeNull();
     expect(screen.getByLabelText('Lista de cotizaciones')).toBeTruthy();
     expect(onSelectionChange).toHaveBeenCalledWith(null);
@@ -638,22 +641,41 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByRole('heading', { name: 'Nueva cotización' })).toBeTruthy();
   });
 
-  it('opens SM confirm modal before delete', async () => {
+  it('opens SM confirm modal before delete (Eliminar under Más)', async () => {
     const user = userEvent.setup();
     const { onDelete } = renderScreen();
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    await user.click(screen.getByRole('button', { name: /^Eliminar$/i }));
+    // Wave 4: destructive action is under Más, not a permanent chrome danger btn.
+    expect(
+      screen.queryByRole('button', { name: /^Eliminar$/i }),
+    ).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Eliminar$/i }));
     const dialog = screen.getByRole('dialog');
     expect(
       within(dialog).getByRole('heading', { name: 'Eliminar cotización' }),
     ).toBeTruthy();
     expect(within(dialog).getByText(/Cocina Ana/)).toBeTruthy();
-    // Toolbar still has "Eliminar"; confirm is the danger button in the dialog.
     await user.click(
       within(dialog).getByRole('button', { name: /^Eliminar$/i }),
     );
     expect(onDelete).toHaveBeenCalledWith('prj-1');
+  });
+
+  it('chrome keeps Presentar + Editar visible and parks overflow in Más', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.getByTestId('project-chrome-actions')).toBeTruthy();
+    expect(screen.getByTestId('project-chrome-present')).toBeTruthy();
+    expect(screen.getByTestId('project-chrome-edit')).toBeTruthy();
+    // Draft: no permanent Optimizer chrome button.
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.getByRole('menuitem', { name: /^Duplicar$/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /^Eliminar$/i })).toBeTruthy();
   });
 });
 

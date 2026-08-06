@@ -15,6 +15,6 @@ describe('@muebles/excel', () => {
     expect(typeof hardwareListExport).toBe('function');
     expect(typeof commercialQuoteExport).toBe('function');
     expect(OPTIMIZER_DATA_HEADERS).toHaveLength(10);
-    expect(HARDWARE_LIST_HEADERS).toHaveLength(6);
+    expect(HARDWARE_LIST_HEADERS).toHaveLength(8);
   });
 });

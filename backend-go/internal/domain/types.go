@@ -121,6 +121,9 @@ type Hardware struct {
 	Name        string       `json:"name"`
 	Unit        HardwareUnit `json:"unit"`
 	CostPerUnit float64      `json:"cost_per_unit"`
+	// PackageSize is commercial pack size in the same unit (e.g. 4 for 4 m bars).
+	// Nil = no purchase rounding.
+	PackageSize *float64 `json:"package_size,omitempty"`
 	// ImageURL relative media path (F040).
 	ImageURL  string    `json:"image_url,omitempty"`
 	Notes     string    `json:"notes,omitempty"`

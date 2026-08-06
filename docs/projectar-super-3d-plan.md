@@ -184,6 +184,7 @@ Cada parte es entregable autónomo, testeable, idealmente PR &lt; 400 líneas cu
 | **Multi-ambiente** | **Hecho** — `KitchenSpace[]` + `activeSpaceId`; mirror top-level; tabs en Proyectar; unplaced global |
 | **Import plano PDF/DXF** | **Hecho (v1)** — DXF LINE/LWPOLYLINE → muros; PNG/JPG underlay + escala mm; PDF → exportá a imagen |
 | **Zoclo en BOM** | **Hecho (v1)** — `baseMode` + `B`; board `ZOCLO` (fallback FRENTE); strip `ZOCLO_PERFIL` ml; `PATAS` |
+| **Empaque herrajes (barras)** | **Hecho** — `Hardware.packageSize` + lista compra ceil + export Consumo/A comprar/Paquetes |
 | Luces / materiales PBR | Pendiente |
 | Colaboración multi-usuario en el plano | Pendiente |
 

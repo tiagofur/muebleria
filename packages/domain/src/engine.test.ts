@@ -1712,6 +1712,7 @@ describe('generateHardwareList', () => {
     );
 
     // GAB hardware lines: bisagra×2, jaladera×1, pata×4, tornillo×40, soporte×4
+    // purchaseQuantity === quantity when no packageSize.
     expect(rows).toEqual([
       {
         hardwareId: IDS.hwBisagra,
@@ -1719,6 +1720,7 @@ describe('generateHardwareList', () => {
         description: 'Bisagra Cierre Lento',
         unit: 'piece',
         quantity: 2,
+        purchaseQuantity: 2,
         costPerUnit: 35,
         lineCost: 70,
       },
@@ -1728,6 +1730,7 @@ describe('generateHardwareList', () => {
         description: 'Jaladera Acero Inox',
         unit: 'piece',
         quantity: 1,
+        purchaseQuantity: 1,
         costPerUnit: 45,
         lineCost: 45,
       },
@@ -1737,6 +1740,7 @@ describe('generateHardwareList', () => {
         description: 'Pata Regulable Plastica',
         unit: 'piece',
         quantity: 4,
+        purchaseQuantity: 4,
         costPerUnit: 15,
         lineCost: 60,
       },
@@ -1746,6 +1750,7 @@ describe('generateHardwareList', () => {
         description: 'Soporte de Entrepaño',
         unit: 'piece',
         quantity: 4,
+        purchaseQuantity: 4,
         costPerUnit: 2,
         lineCost: 8,
       },
@@ -1755,6 +1760,7 @@ describe('generateHardwareList', () => {
         description: 'Tornillo 4x50 mm',
         unit: 'piece',
         quantity: 40,
+        purchaseQuantity: 40,
         costPerUnit: 0.5,
         lineCost: 20,
       },
@@ -1864,6 +1870,30 @@ describe('generateHardwareList', () => {
     expect(() => generateHardwareList(project, catalog)).toThrow(
       /no hay herrajes para exportar/i,
     );
+  });
+
+  it('ceils meter hardware to package bars (zoclo perfil 4 m)', () => {
+    const project: Project = {
+      ...gabOnlyProject,
+      items: [
+        {
+          id: 'item-perfil',
+          moduleId: 'mod-bajo-perfil-600',
+          quantity: 1,
+          optionChoices: plantillaChoices,
+        },
+      ],
+    };
+    const rows = generateHardwareList(project, plantillaCatalogWithModules);
+    const zoclo = rows.find((r) => r.code === 'HER-ZOC-ALU');
+    expect(zoclo).toBeTruthy();
+    // 600 mm → 0.6 m consumption
+    expect(zoclo!.quantity).toBe(0.6);
+    expect(zoclo!.packageSize).toBe(4);
+    expect(zoclo!.purchasePackages).toBe(1);
+    expect(zoclo!.purchaseQuantity).toBe(4);
+    // Cost for 4 m purchased, not 0.6 m consumed
+    expect(zoclo!.lineCost).toBe(4 * 18);
   });
 });
 

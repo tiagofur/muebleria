@@ -201,9 +201,40 @@ export function generateProjectMaterialSummary(
 }
 
 /**
+ * Round net consumption up to commercial packages.
+ * packageSize is in the same unit as quantity (e.g. 4 for 4 m bars).
+ */
+export function roundHardwarePurchaseQuantity(
+  quantity: number,
+  packageSize?: number,
+): {
+  purchaseQuantity: number;
+  purchasePackages?: number;
+  packageSize?: number;
+} {
+  if (!(quantity > 0) || !Number.isFinite(quantity)) {
+    return { purchaseQuantity: 0 };
+  }
+  const pkg =
+    packageSize !== undefined && Number.isFinite(packageSize) && packageSize > 0
+      ? packageSize
+      : undefined;
+  if (pkg === undefined) {
+    return { purchaseQuantity: quantity };
+  }
+  const packages = Math.max(1, Math.ceil(quantity / pkg - 1e-12));
+  return {
+    purchaseQuantity: packages * pkg,
+    purchasePackages: packages,
+    packageSize: pkg,
+  };
+}
+
+/**
  * Aggregate project hardware into a purchase list (PRD EXP-08).
  * Quantity = hardwareLine.quantity × item.quantity, summed by hardwareId.
  * Board parts are never included. Sorted by code, then description.
+ * When Hardware.packageSize is set, purchaseQuantity/lineCost use package ceil.
  */
 export function generateHardwareList(
   project: Project,
@@ -290,15 +321,28 @@ export function generateHardwareList(
   }
 
   const rows: HardwarePurchaseRow[] = [...totals.values()].map(
-    ({ quantity, hardware }) => ({
-      hardwareId: hardware.id,
-      code: hardware.code,
-      description: hardware.name,
-      unit: hardware.unit,
-      quantity,
-      costPerUnit: hardware.costPerUnit,
-      lineCost: quantity * hardware.costPerUnit,
-    }),
+    ({ quantity, hardware }) => {
+      const rounded = roundHardwarePurchaseQuantity(
+        quantity,
+        hardware.packageSize,
+      );
+      return {
+        hardwareId: hardware.id,
+        code: hardware.code,
+        description: hardware.name,
+        unit: hardware.unit,
+        quantity,
+        purchaseQuantity: rounded.purchaseQuantity,
+        ...(rounded.purchasePackages === undefined
+          ? {}
+          : { purchasePackages: rounded.purchasePackages }),
+        ...(rounded.packageSize === undefined
+          ? {}
+          : { packageSize: rounded.packageSize }),
+        costPerUnit: hardware.costPerUnit,
+        lineCost: rounded.purchaseQuantity * hardware.costPerUnit,
+      };
+    },
   );
 
   rows.sort((a, b) => {

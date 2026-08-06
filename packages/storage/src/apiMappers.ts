@@ -135,6 +135,8 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     name: h.name,
     unit: h.unit,
     cost_per_unit: h.costPerUnit,
+    package_size:
+      h.packageSize === undefined ? null : h.packageSize,
     image_url: h.imageUrl ?? '',
     notes: h.notes ?? '',
     active: h.active,
@@ -143,12 +145,20 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
 
 export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
   const unit = str(raw.unit, 'piece');
+  const pkgRaw = raw.package_size ?? raw.packageSize;
+  const packageSize =
+    pkgRaw === null || pkgRaw === undefined || pkgRaw === ''
+      ? undefined
+      : Math.max(0, num(pkgRaw));
   return {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
     unit: (unit === 'set' || unit === 'meter' ? unit : 'piece') as Hardware['unit'],
     costPerUnit: num(raw.cost_per_unit ?? raw.costPerUnit),
+    ...(packageSize !== undefined && packageSize > 0
+      ? { packageSize }
+      : {}),
     imageUrl: str(raw.image_url ?? raw.imageUrl) || undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),

@@ -77,8 +77,9 @@ describe('hardwareListExport', () => {
       expect(row.getCell(1).value).toBe(domainRow.code);
       expect(row.getCell(2).value).toBe(domainRow.description);
       expect(row.getCell(4).value).toBe(domainRow.quantity);
-      expect(Number(row.getCell(5).value)).toBe(domainRow.costPerUnit);
-      expect(Number(row.getCell(6).value)).toBe(domainRow.lineCost);
+      expect(row.getCell(5).value).toBe(domainRow.purchaseQuantity);
+      expect(Number(row.getCell(7).value)).toBe(domainRow.costPerUnit);
+      expect(Number(row.getCell(8).value)).toBe(domainRow.lineCost);
     });
     expect(dataCount).toBe(rows.length);
     expect(dataCount).toBe(5);

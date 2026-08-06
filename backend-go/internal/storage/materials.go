@@ -223,7 +223,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 
 func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, image_url, notes, active, created_at, updated_at
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, notes, active, created_at, updated_at
 		FROM hardwares
 		ORDER BY name ASC;
 	`
@@ -238,9 +238,13 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 		var h domain.Hardware
 		var notes *string
 		var imageURL *string
-		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &imageURL, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
+		var packageSize *float64
+		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
 		if err != nil {
 			return nil, err
+		}
+		if packageSize != nil {
+			h.PackageSize = packageSize
 		}
 		if imageURL != nil {
 			h.ImageURL = *imageURL
@@ -385,7 +389,7 @@ func (s *PostgresStore) ReactivateEdgeBand(ctx context.Context, id string) error
 
 func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, image_url, notes, active, created_at, updated_at
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, notes, active, created_at, updated_at
 		FROM hardwares
 		WHERE id = $1;
 	`
@@ -393,9 +397,13 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 	var h domain.Hardware
 	var notes *string
 	var imageURL *string
-	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &imageURL, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
+	var packageSize *float64
+	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
 	if err != nil {
 		return nil, err
+	}
+	if packageSize != nil {
+		h.PackageSize = packageSize
 	}
 	if imageURL != nil {
 		h.ImageURL = *imageURL
@@ -407,13 +415,17 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 }
 
 func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) error {
+	var pkg interface{}
+	if h.PackageSize != nil {
+		pkg = *h.PackageSize
+	}
 	if h.ID != "" {
 		query := `
-			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, image_url, notes, active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, image_url, notes, active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, h.ImageURL, h.Notes, h.Active).
+		err := s.Pool.QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.Notes, h.Active).
 			Scan(&h.CreatedAt, &h.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating hardware: %w", err)
@@ -421,11 +433,11 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 		return nil
 	}
 	query := `
-		INSERT INTO hardwares (code, name, unit, cost_per_unit, image_url, notes, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO hardwares (code, name, unit, cost_per_unit, package_size, image_url, notes, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, h.ImageURL, h.Notes, h.Active).
+	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.Notes, h.Active).
 		Scan(&h.ID, &h.CreatedAt, &h.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating hardware: %w", err)
@@ -434,13 +446,17 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 }
 
 func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain.Hardware) error {
+	var pkg interface{}
+	if h.PackageSize != nil {
+		pkg = *h.PackageSize
+	}
 	query := `
 		UPDATE hardwares
-		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, image_url = $5, notes = $6, active = $7, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $8
+		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, notes = $7, active = $8, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $9
 		RETURNING updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, h.ImageURL, h.Notes, h.Active, id).
+	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.Notes, h.Active, id).
 		Scan(&h.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

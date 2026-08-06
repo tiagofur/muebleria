@@ -77,6 +77,12 @@ export interface Hardware {
   readonly name: string;
   readonly unit: HardwareUnit;
   readonly costPerUnit: number;
+  /**
+   * Commercial package size in the same unit as `unit`.
+   * Example: unit `meter` + packageSize `4` → barras de 4 m.
+   * Used by the hardware purchase list to ceil consumption to packages.
+   */
+  readonly packageSize?: number;
   /** Relative media URL (F040). */
   readonly imageUrl?: string;
   readonly notes?: string;
@@ -823,8 +829,19 @@ export interface HardwarePurchaseRow {
   readonly code: string;
   readonly description: string;
   readonly unit: HardwareUnit;
+  /** Net consumption in catalog unit (e.g. meters from BOM). */
   readonly quantity: number;
+  /**
+   * Quantity to buy in catalog unit after package rounding.
+   * Equals `quantity` when the hardware has no packageSize.
+   */
+  readonly purchaseQuantity: number;
+  /** Packages to buy (ceil); only set when packageSize is defined. */
+  readonly purchasePackages?: number;
+  /** Echo of Hardware.packageSize when applied. */
+  readonly packageSize?: number;
   readonly costPerUnit: number;
+  /** Cost of purchaseQuantity (not raw quantity). */
   readonly lineCost: number;
 }
 
