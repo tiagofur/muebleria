@@ -57,13 +57,18 @@ export const IDS = {
   hwTornillo: 'hw-tornillo-4x50',
   hwCorredera: 'hw-corredera-500',
   hwSoporte: 'hw-soporte-entrepano',
+  /** Purchased plinth profile (plastic/aluminium look), unit meter. */
+  hwZocloPerfil: 'hw-zoclo-perfil-alu',
   ogInterior: 'og-interior',
   ogFrente: 'og-frente',
   ogFondo: 'og-fondo',
   ogBisagra: 'og-bisagra',
   ogCorredera: 'og-corredera',
+  ogZoclo: 'og-zoclo',
+  ogZocloPerfil: 'og-zoclo-perfil',
   modGab: 'mod-gab-01',
   modCaj: 'mod-caj-01',
+  modBajoZoclo: 'mod-bajo-zoclo-600',
   /** Seed customers referenced by plantilla / demo projects. */
   custPlantilla1: 'cust-plantilla-1',
   custPlantilla2: 'cust-plantilla-2',
@@ -206,6 +211,15 @@ export const plantillaCatalog: Catalog = {
       costPerUnit: 2,
       active: true,
     },
+    {
+      id: IDS.hwZocloPerfil,
+      code: 'HER-ZOC-ALU',
+      name: 'Zoclo perfil plástico aluminio',
+      unit: 'meter',
+      costPerUnit: 18,
+      active: true,
+      notes: 'Barra comercial 4 m — cotizar en ml; redondear a barras en compra.',
+    },
   ],
   optionGroups: [
     {
@@ -247,6 +261,23 @@ export const plantillaCatalog: Catalog = {
       kind: 'hardware',
       required: true,
       optionIds: [IDS.hwCorredera],
+    },
+    {
+      id: IDS.ogZoclo,
+      code: 'ZOCLO',
+      name: 'Melamina de zoclo',
+      kind: 'board',
+      required: false,
+      // Front materials; if no choice, BOM falls back to FRENTE anyway.
+      optionIds: [IDS.matMaderado, IDS.matArauco],
+    },
+    {
+      id: IDS.ogZocloPerfil,
+      code: 'ZOCLO_PERFIL',
+      name: 'Zoclo perfil (ml)',
+      kind: 'hardware',
+      required: false,
+      optionIds: [IDS.hwZocloPerfil],
     },
   ],
   customers: [
@@ -394,6 +425,32 @@ export const seedComponentBase: Component = {
   defaultEdges: edgesAll(false, false, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
+};
+
+/**
+ * Frontal melamine plinth (zoclo). length along PW (W), height = B (plinth mm).
+ * Material role ZOCLO → falls back to FRENTE when no choice.
+ */
+export const seedComponentZoclo: Component = {
+  id: 'seed-comp-zoclo',
+  code: 'COM-ZOC-01',
+  name: 'Zoclo frontal',
+  placement: 'custom',
+  geometry: {
+    kind: 'rectangular_board',
+    lengthMm: 600,
+    widthMm: 100,
+    thicknessMm: 18,
+    lengthFormula: 'PW',
+    widthFormula: 'B',
+  },
+  defaultEdges: edgesAll(true, false, false, false),
+  optionRoles: ['ZOCLO'],
+  active: true,
+  xFormula: '0',
+  yFormula: '0',
+  zFormula: '0',
+  notes: 'Altura B desde Module.baseClearanceMm. En BOM solo si baseMode=plinth_board.',
 };
 
 // --- Parametric components for MOD-GAB-01 / MOD-CAJ-01 (Fase 2+3) ---
@@ -676,6 +733,66 @@ export const seedComposedModule: Module = {
 };
 
 /**
+ * Inferior with melamine plinth (zoclo) demo — baseMode plinth_board + COM-ZOC-01.
+ * Material inherits FRENTE when ZOCLO is not chosen on the quote line.
+ */
+export const seedModBajoZoclo: Module = {
+  id: IDS.modBajoZoclo,
+  code: 'MOD-BAJO-ZOCLO-600',
+  name: 'Bajo 600 con zoclo melamina',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  furnitureType: 'inferior',
+  baseMode: 'plinth_board',
+  baseClearanceMm: 100,
+  structureId: 'seed-struct-test',
+  components: [
+    { componentId: 'seed-comp-puerta', quantity: 1 },
+    { componentId: 'seed-comp-zoclo', quantity: 1 },
+  ],
+  hardwareLines: [
+    { id: 'bz-h01', quantity: 2, optionRole: 'BISAGRA' },
+  ],
+  presets: [
+    {
+      id: 'bz-preset-600',
+      name: 'Ancho 600',
+      width: 600,
+      height: 720,
+      depth: 560,
+    },
+  ],
+  notes:
+    'Demo zoclo melamina: baseMode=plinth_board, B=100, componente COM-ZOC-01 (rol ZOCLO → fallback FRENTE).',
+};
+
+/**
+ * Same body with purchased plinth profile (ml) — no melamine zoclo piece.
+ */
+export const seedModBajoPerfil: Module = {
+  id: 'mod-bajo-perfil-600',
+  code: 'MOD-BAJO-PERFIL-600',
+  name: 'Bajo 600 con zoclo perfil (ml)',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  furnitureType: 'inferior',
+  baseMode: 'plinth_strip',
+  baseClearanceMm: 100,
+  structureId: 'seed-struct-test',
+  components: [{ componentId: 'seed-comp-puerta', quantity: 1 }],
+  hardwareLines: [
+    { id: 'bp-h01', quantity: 2, optionRole: 'BISAGRA' },
+    {
+      id: 'bp-h-zoclo',
+      quantity: 1,
+      optionRole: 'ZOCLO_PERFIL',
+      hardwareId: IDS.hwZocloPerfil,
+      descriptionOverride: 'Zoclo perfil (ml frontal)',
+    },
+  ],
+  notes:
+    'Demo zoclo perfil: baseMode=plinth_strip; herraje HER-ZOC-ALU en ml = W/1000.',
+};
+
+/**
  * Valid structure fixture for seed/testing.
  *
  * Since F053 a Structure composes reusable Component instances instead of
@@ -864,13 +981,22 @@ export const seedModDespensa: Module = {
 
 export const plantillaCatalogWithModules: Catalog = {
   ...plantillaCatalog,
-  modules: [modGab01, modCaj01, seedComposedModule, seedModAlacena, seedModDespensa],
+  modules: [
+    modGab01,
+    modCaj01,
+    seedComposedModule,
+    seedModBajoZoclo,
+    seedModBajoPerfil,
+    seedModAlacena,
+    seedModDespensa,
+  ],
   structures: [structGab01, structCaj01, SEED_STRUCTURE, structAlacena, structDespensa],
   components: [
     seedComponentPuerta,
     seedComponentEntrepano,
     seedComponentCostado,
     seedComponentBase,
+    seedComponentZoclo,
     compGabCostado,
     compGabRespaldo,
     compGabPiso,

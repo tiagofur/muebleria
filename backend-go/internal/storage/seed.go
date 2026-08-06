@@ -29,12 +29,15 @@ var (
 	seedHwTornillo  = "a0000003-0000-0000-0000-000000000004"
 	seedHwCorredera = "a0000003-0000-0000-0000-000000000005"
 	seedHwSoporte   = "a0000003-0000-0000-0000-000000000006"
+	seedHwZocloPerfil = "a0000003-0000-0000-0000-000000000007"
 	// Option groups
 	seedOGInterior  = "a0000004-0000-0000-0000-000000000001"
 	seedOGFrente    = "a0000004-0000-0000-0000-000000000002"
 	seedOGFondo     = "a0000004-0000-0000-0000-000000000003"
 	seedOGBisagra   = "a0000004-0000-0000-0000-000000000004"
 	seedOGCorredera = "a0000004-0000-0000-0000-000000000005"
+	seedOGZoclo       = "a0000004-0000-0000-0000-000000000006"
+	seedOGZocloPerfil = "a0000004-0000-0000-0000-000000000007"
 	// Customers
 	seedCustPlantilla1 = "a0000005-0000-0000-0000-000000000001"
 	seedCustPlantilla2 = "a0000005-0000-0000-0000-000000000002"
@@ -42,6 +45,8 @@ var (
 	seedModGab     = "a0000006-0000-0000-0000-000000000001"
 	seedModCaj     = "a0000006-0000-0000-0000-000000000002"
 	seedModComp    = "a0000006-0000-0000-0000-000000000003"
+	seedModBajoZoclo  = "a0000006-0000-0000-0000-000000000004"
+	seedModBajoPerfil = "a0000006-0000-0000-0000-000000000005"
 	// Structure
 	seedStruct    = "a0000007-0000-0000-0000-000000000001"
 	seedStructPre = "a0000007-0000-0000-0000-000000000002"
@@ -50,13 +55,15 @@ var (
 	seedCompEntrepano = "a0000008-0000-0000-0000-000000000002"
 	seedCompCostado   = "a0000008-0000-0000-0000-000000000003"
 	seedCompBase      = "a0000008-0000-0000-0000-000000000004"
+	seedCompZoclo     = "a0000008-0000-0000-0000-000000000005"
 	// Project
 	seedProj     = "a0000009-0000-0000-0000-000000000001"
 	seedProjItem = "a0000009-0000-0000-0000-000000000002"
 )
 
 // SeedCatalog populates the database with plantilla seed data.
-// Idempotent — skips if materials already exist.
+// Idempotent — skips full plantilla if materials already exist, but always
+// ensures plinth/zoclo catalog entities (option groups, component, demo modules).
 func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	var count int
 	err := s.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM material_boards`).Scan(&count)
@@ -64,7 +71,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		return fmt.Errorf("seed check: %w", err)
 	}
 	if count > 0 {
-		return nil
+		// Existing DB: still upsert zoclo demo entities so upgrades get them.
+		return s.ensurePlinthCatalog(ctx)
 	}
 
 	tx, err := s.Pool.Begin(ctx)
@@ -127,6 +135,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", 0.5},
 		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", 120},
 		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", 2},
+		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil plástico aluminio", "meter", 18},
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active, created_at, updated_at)
@@ -148,6 +157,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		{seedOGFondo, "FONDO", "Fondos delgados", "board", true, []string{seedMatMdf}},
 		{seedOGBisagra, "BISAGRA", "Bisagras", "hardware", true, []string{seedHwBisagra}},
 		{seedOGCorredera, "CORREDERA", "Correderas", "hardware", true, []string{seedHwCorredera}},
+		{seedOGZoclo, "ZOCLO", "Melamina de zoclo", "board", false, []string{seedMatMaderado, seedMatArauco}},
+		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil}},
 	} {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO option_groups (id, code, name, kind, required)
@@ -293,6 +304,23 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("seed component base: %w", err)
 	}
+	// Frontal melamine plinth (zoclo): PW × B, role ZOCLO.
+	frontEdgeOnly, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: false},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},
+	})
+	_, err = tx.Exec(ctx, `
+		INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
+			length_formula, width_formula, x_formula, y_formula, z_formula,
+			default_edges, option_roles, active, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true,$16,$17)
+		ON CONFLICT (code) DO NOTHING`,
+		seedCompZoclo, "COM-ZOC-01", "Zoclo frontal", "custom", "rectangular_board",
+		600, 100, 18, "PW", "B", "0", "0", "0",
+		frontEdgeOnly, []string{"ZOCLO"}, now, now)
+	if err != nil {
+		return fmt.Errorf("seed component zoclo: %w", err)
+	}
 
 	// --- LINK STRUCTURE ↔ COMPONENTS (F053) ---
 	// The structure body composes costado×2 + base×1; doors/shelves are added
@@ -357,6 +385,11 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		}
 	}
 
+	// --- PLINTH DEMO MODULES (zoclo melamina + perfil) ---
+	if err := seedPlinthModulesTx(ctx, tx, now); err != nil {
+		return err
+	}
+
 	// --- DEMO PROJECT ---
 	_, err = tx.Exec(ctx, `
 		INSERT INTO projects (id, name, customer_id, currency, margin_factor, labor_fixed_cost, status, created_at, updated_at)
@@ -418,7 +451,222 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		}
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	// Also run ensure for any plinth bits that use ON CONFLICT paths.
+	return s.ensurePlinthCatalog(ctx)
+}
+
+// ensurePlinthCatalog upserts zoclo option groups, profile hardware, component,
+// and demo modules. Safe on existing DBs (seed early-return path).
+func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	now := time.Now().UTC()
+
+	// Hardware profile (ml)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, notes, active, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8)
+		ON CONFLICT (code) DO UPDATE SET
+			name = EXCLUDED.name,
+			unit = EXCLUDED.unit,
+			cost_per_unit = EXCLUDED.cost_per_unit,
+			notes = EXCLUDED.notes,
+			updated_at = EXCLUDED.updated_at`,
+		seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil plástico aluminio", "meter", 18.0,
+		"Barra comercial 4 m — cotizar en ml; redondear a barras en compra.",
+		now, now)
+	if err != nil {
+		return fmt.Errorf("ensure plinth hardware: %w", err)
+	}
+
+	// Resolve material ids for option group members (may differ if not seed UUIDs).
+	var matFrente, matInterior string
+	_ = tx.QueryRow(ctx, `SELECT id FROM material_boards WHERE code = 'TAB-MAD-FRE' LIMIT 1`).Scan(&matFrente)
+	_ = tx.QueryRow(ctx, `SELECT id FROM material_boards WHERE code = 'TAB-ARA-BLA' LIMIT 1`).Scan(&matInterior)
+	if matFrente == "" {
+		matFrente = seedMatMaderado
+	}
+	if matInterior == "" {
+		matInterior = seedMatArauco
+	}
+
+	for _, og := range []struct {
+		id, code, name, kind string
+		required             bool
+		optIDs               []string
+	}{
+		{seedOGZoclo, "ZOCLO", "Melamina de zoclo", "board", false, []string{matFrente, matInterior}},
+		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil}},
+	} {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO option_groups (id, code, name, kind, required)
+			VALUES ($1,$2,$3,$4,$5)
+			ON CONFLICT (code) DO UPDATE SET
+				name = EXCLUDED.name,
+				kind = EXCLUDED.kind,
+				required = EXCLUDED.required`,
+			og.id, og.code, og.name, og.kind, og.required)
+		if err != nil {
+			return fmt.Errorf("ensure og %s: %w", og.code, err)
+		}
+		var ogID string
+		if err := tx.QueryRow(ctx, `SELECT id FROM option_groups WHERE code = $1`, og.code).Scan(&ogID); err != nil {
+			return fmt.Errorf("ensure og id %s: %w", og.code, err)
+		}
+		for _, eid := range og.optIDs {
+			if eid == "" {
+				continue
+			}
+			_, err = tx.Exec(ctx, `
+				INSERT INTO option_group_members (option_group_id, entity_id)
+				VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+				ogID, eid)
+			if err != nil {
+				return fmt.Errorf("ensure og member %s: %w", og.code, err)
+			}
+		}
+	}
+
+	frontEdgeOnly, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: false},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},
+	})
+	_, err = tx.Exec(ctx, `
+		INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
+			length_formula, width_formula, x_formula, y_formula, z_formula,
+			default_edges, option_roles, active, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true,$16,$17)
+		ON CONFLICT (code) DO UPDATE SET
+			name = EXCLUDED.name,
+			length_formula = EXCLUDED.length_formula,
+			width_formula = EXCLUDED.width_formula,
+			option_roles = EXCLUDED.option_roles,
+			updated_at = EXCLUDED.updated_at`,
+		seedCompZoclo, "COM-ZOC-01", "Zoclo frontal", "custom", "rectangular_board",
+		600, 100, 18, "PW", "B", "0", "0", "0",
+		frontEdgeOnly, []string{"ZOCLO"}, now, now)
+	if err != nil {
+		return fmt.Errorf("ensure component zoclo: %w", err)
+	}
+
+	if err := seedPlinthModulesTx(ctx, tx, now); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, now time.Time) error {
+	// Prefer existing composed structure if present.
+	structID := seedStruct
+	var existingStruct string
+	if err := tx.QueryRow(ctx, `SELECT id FROM structures WHERE code = 'EST-COMP-600' LIMIT 1`).Scan(&existingStruct); err == nil && existingStruct != "" {
+		structID = existingStruct
+	}
+
+	var compZocloID, compPuertaID, hwZocloID string
+	_ = tx.QueryRow(ctx, `SELECT id FROM components WHERE code = 'COM-ZOC-01' LIMIT 1`).Scan(&compZocloID)
+	_ = tx.QueryRow(ctx, `SELECT id FROM components WHERE code = 'COM-PUE-01' LIMIT 1`).Scan(&compPuertaID)
+	_ = tx.QueryRow(ctx, `SELECT id FROM hardwares WHERE code = 'HER-ZOC-ALU' LIMIT 1`).Scan(&hwZocloID)
+	if compZocloID == "" {
+		compZocloID = seedCompZoclo
+	}
+	if compPuertaID == "" {
+		compPuertaID = seedCompPuerta
+	}
+	if hwZocloID == "" {
+		hwZocloID = seedHwZocloPerfil
+	}
+
+	// Melamina zoclo module
+	b := 100
+	_, err := tx.Exec(ctx, `
+		INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes,
+			furniture_type, structure_id, base_mode, base_clearance_mm, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'inferior',$9,'plinth_board',$10,$11,$12)
+		ON CONFLICT (code) DO UPDATE SET
+			name = EXCLUDED.name,
+			base_mode = EXCLUDED.base_mode,
+			base_clearance_mm = EXCLUDED.base_clearance_mm,
+			structure_id = EXCLUDED.structure_id,
+			updated_at = EXCLUDED.updated_at`,
+		seedModBajoZoclo, "MOD-BAJO-ZOCLO-600", "Bajo 600 con zoclo melamina",
+		0, 600, 720, 560,
+		"Demo zoclo melamina: baseMode=plinth_board, B=100, COM-ZOC-01 (rol ZOCLO → fallback FRENTE).",
+		structID, b, now, now)
+	if err != nil {
+		return fmt.Errorf("seed module bajo zoclo: %w", err)
+	}
+	var modZocloID string
+	if err := tx.QueryRow(ctx, `SELECT id FROM modules WHERE code = 'MOD-BAJO-ZOCLO-600'`).Scan(&modZocloID); err != nil {
+		return err
+	}
+	// Replace module components (idempotent)
+	if _, err := tx.Exec(ctx, `DELETE FROM module_components WHERE module_id = $1`, modZocloID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO module_components (module_id, component_id, quantity, placement_override)
+		VALUES ($1,$2,1,'puerta'), ($1,$3,1,'custom')`,
+		modZocloID, compPuertaID, compZocloID); err != nil {
+		return fmt.Errorf("seed module_components zoclo: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM hardware_lines WHERE module_id = $1`, modZocloID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO hardware_lines (module_id, quantity, option_role)
+		VALUES ($1, 2, 'BISAGRA')`, modZocloID); err != nil {
+		return fmt.Errorf("seed hw lines zoclo: %w", err)
+	}
+
+	// Perfil (ml) module
+	_, err = tx.Exec(ctx, `
+		INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes,
+			furniture_type, structure_id, base_mode, base_clearance_mm, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'inferior',$9,'plinth_strip',$10,$11,$12)
+		ON CONFLICT (code) DO UPDATE SET
+			name = EXCLUDED.name,
+			base_mode = EXCLUDED.base_mode,
+			base_clearance_mm = EXCLUDED.base_clearance_mm,
+			structure_id = EXCLUDED.structure_id,
+			updated_at = EXCLUDED.updated_at`,
+		seedModBajoPerfil, "MOD-BAJO-PERFIL-600", "Bajo 600 con zoclo perfil (ml)",
+		0, 600, 720, 560,
+		"Demo zoclo perfil: baseMode=plinth_strip; herraje HER-ZOC-ALU en ml = W/1000.",
+		structID, b, now, now)
+	if err != nil {
+		return fmt.Errorf("seed module bajo perfil: %w", err)
+	}
+	var modPerfilID string
+	if err := tx.QueryRow(ctx, `SELECT id FROM modules WHERE code = 'MOD-BAJO-PERFIL-600'`).Scan(&modPerfilID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM module_components WHERE module_id = $1`, modPerfilID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO module_components (module_id, component_id, quantity, placement_override)
+		VALUES ($1,$2,1,'puerta')`,
+		modPerfilID, compPuertaID); err != nil {
+		return fmt.Errorf("seed module_components perfil: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM hardware_lines WHERE module_id = $1`, modPerfilID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO hardware_lines (module_id, quantity, option_role, hardware_id, description_override)
+		VALUES ($1, 2, 'BISAGRA', NULL, NULL),
+		       ($1, 1, 'ZOCLO_PERFIL', $2, 'Zoclo perfil (ml frontal)')`,
+		modPerfilID, hwZocloID); err != nil {
+		return fmt.Errorf("seed hw lines perfil: %w", err)
+	}
+	return nil
 }
 
 // --- helpers ---
