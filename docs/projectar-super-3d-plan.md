@@ -262,8 +262,10 @@ Recomendación: **A** (más Promob “escenario grande”).
 ## 10. Estado de este documento
 
 - **Aprobado para planificación:** sesión 2026-08-06 (usuario: planear SUPER 3D, no codear).  
-- **Siguiente acción de implementación (cuando se pida):** **Parte 0 — Viewport hero**.  
-- Actualizar este doc al cerrar cada parte (checkbox mental o tabla de estado).
+- **Implementación 0–5 + icebox v1:** en `main` (PR #228 y siguientes).  
+- **Smoke automatizado:** 2026-08-06 — PASS (ver `docs/projectar-smoke-checklist.md`).  
+- **Smoke browser (WebGL / 2 usuarios):** checklist manual pendiente de ojo humano.  
+- Alcance de este hilo de trabajo: **solo 3D / Proyectar** (no módulo Producción).
 
 | Parte | Estado |
 |-------|--------|
@@ -273,4 +275,4 @@ Recomendación: **A** (más Promob “escenario grande”).
 | 3 Manipulación | ✅ done (snap wall drag, compactar muro, move wall, undo/redo plano) |
 | 4 Realismo obra | ✅ done (toe-kick recess, mesada, wallCabinetZ, floor grid) |
 | 5 Puente cotización | ✅ done (add→Proyectar unplaced, line price, Presentar warn, freeze copy) |
-| 6 Icebox | 🧊 |
+| 6 Icebox v1 | ✅ done (islas, multi-ambiente, import, zoclo BOM, barras, luces livianas, soft lock) |
