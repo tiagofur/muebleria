@@ -10,7 +10,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Component, OptionGroup, MaterialBoard } from '@muebles/domain';
+import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@muebles/domain';
+import { previewPartForComponent } from '@muebles/domain';
 import {
   EntityEditorLayout,
   useDebouncedValue,
@@ -31,7 +32,7 @@ import {
 import { ComponentDetailView } from './editor/ComponentDetailView';
 import { ComponentEditorForm } from './editor/ComponentEditorForm';
 import { ComponentListView } from './editor/ComponentListView';
-import { materialColorMap } from '../preview3d';
+import { materialColorMap, materialTextureMap } from '../preview3d';
 import './components.css';
 
 export type { ComponentDraft };
@@ -83,7 +84,7 @@ export function ComponentsScreen({
     () => components.map((c) => c.id),
     [components],
   );
-  const { selectedId: expandedId, setSelectedId, toggleSelectedId } =
+  const { selectedId: expandedId, setSelectedId } =
     useRoutableEntitySelection({
       openEntityId: openComponentId,
       onSelectionChange,
@@ -128,7 +129,35 @@ export function ComponentsScreen({
     () => materialColorMap(materials),
     [materials],
   );
+  const materialTextures = useMemo(
+    () => materialTextureMap(materials),
+    [materials],
+  );
 
+  // Reference container (the "mueble" the piece belongs to). Defaults match a
+  // standard cabinet; the carpenter edits these so position formulas (X/Y/Z)
+  // resolve against the right PW/PH/PD. T always tracks the draft thickness.
+  const [containerDims, setContainerDims] = useState<PlacementDims>({
+    PW: 600,
+    PH: 720,
+    PD: 560,
+    T: 18,
+  });
+  const [showInContext, setShowInContext] = useState(true);
+
+  // Keep T in sync with the draft thickness so preview formulas using T stay true.
+  useEffect(() => {
+    setContainerDims((prev) =>
+      prev.T === draft.thicknessMm
+        ? prev
+        : { ...prev, T: draft.thicknessMm || prev.T },
+    );
+  }, [draft.thicknessMm]);
+
+  // Resolve the preview part via the domain helper (no math in React): it applies
+  // the placement heuristic + evaluates length/width/x/y/z formulas against the
+  // container dims. Replaces the old buggy inline builder that forced x/y/z = 0
+  // and collapsed rotateX === null to 0, dropping the placement heuristic.
   const previewParts = useMemo(() => {
     const roles = draft.optionRoles
       .split(',')
@@ -136,7 +165,6 @@ export function ComponentsScreen({
       .filter(Boolean);
 
     let firstMaterialId = 'preview-material';
-
     for (const role of roles) {
       const group = optionGroups.find(
         (g) => g.code.toUpperCase() === role.toUpperCase() && g.kind === 'board',
@@ -151,26 +179,28 @@ export function ComponentsScreen({
     }
 
     return [
-      {
-        id: 'preview',
-        widthMm: draft.widthMm || 300,
-        lengthMm: draft.lengthMm || 500,
-        thicknessMm: draft.thicknessMm || 18,
-        x: 0,
-        y: 0,
-        z: 0,
-        rotateX: draft.rotateX || 0,
-        rotateY: draft.rotateY || 0,
-        rotateZ: draft.rotateZ || 0,
-        optionRole: draft.optionRoles.split(',')[0]?.trim() || 'INTERIOR',
-        description: draft.name || 'Componente de Prueba',
-        quantity: 1,
-        grain: 0 as const,
-        edges: [],
-        materialId: firstMaterialId,
-      },
+      previewPartForComponent(
+        {
+          placement: draft.placement,
+          lengthMm: draft.lengthMm,
+          widthMm: draft.widthMm,
+          thicknessMm: draft.thicknessMm,
+          lengthFormula: draft.lengthFormula,
+          widthFormula: draft.widthFormula,
+          xFormula: draft.xFormula,
+          yFormula: draft.yFormula,
+          zFormula: draft.zFormula,
+          rotateX: draft.rotateX,
+          rotateY: draft.rotateY,
+          rotateZ: draft.rotateZ,
+          optionRole: draft.optionRoles.split(',')[0]?.trim() || 'INTERIOR',
+          description: draft.name || 'Componente de Prueba',
+          materialId: firstMaterialId,
+        },
+        containerDims,
+      ),
     ];
-  }, [draft, optionGroups]);
+  }, [draft, optionGroups, containerDims]);
 
   const normalizedComponents = useMemo(() => {
     return components.map((c) => ({
@@ -287,7 +317,13 @@ export function ComponentsScreen({
       return;
     }
     if (draft.lengthMm <= 0 || draft.widthMm <= 0 || draft.thicknessMm <= 0) {
-      setError('Las dimensiones deben ser mayores a 0.');
+      const offenders: string[] = [];
+      if (draft.lengthMm <= 0) offenders.push('el largo');
+      if (draft.widthMm <= 0) offenders.push('el ancho');
+      if (draft.thicknessMm <= 0) offenders.push('el espesor');
+      setError(
+        `Revisá las dimensiones: ${offenders.join(', ')} debe(n) ser mayor a 0.`,
+      );
       return;
     }
     if (!draft.optionRoles.trim()) {
@@ -304,7 +340,8 @@ export function ComponentsScreen({
     forceCloseEditor();
   };
 
-  const inlineEditMode = !!openComponentEditId && !!onRequestEdit;
+  // Fase 5 UI: always full-page workspace editor (same pattern as modules).
+  const inlineEditMode = modalOpen;
 
   const selectedComponent = expandedId
     ? (normalizedComponents.find((c) => c.id === expandedId) ?? null)
@@ -317,7 +354,9 @@ export function ComponentsScreen({
       editorBackTestId="component-editor-back"
       discardConfirmTestId="component-editor-discard-confirm"
       modalTestId="component-modal"
-      entityTitle="Componente"
+      entityTitle="componente"
+      createTitle="Nuevo componente"
+      editTitle="Editar componente"
       draftCode={draft.code}
       formId={formId}
       modalOpen={modalOpen}
@@ -328,6 +367,26 @@ export function ComponentsScreen({
       closeModal={closeModal}
       setConfirmDiscard={setConfirmDiscard}
       forceCloseEditor={forceCloseEditor}
+      headerActions={
+        <>
+          <button
+            type="button"
+            className="btn"
+            onClick={closeModal}
+            data-testid="component-editor-cancel"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            data-testid="save-btn"
+          >
+            Guardar
+          </button>
+        </>
+      }
       renderListView={() => (
         <ComponentListView
           rows={rows}
@@ -335,12 +394,9 @@ export function ComponentsScreen({
           setSearch={setSearch}
           status={status}
           setStatus={setStatus}
-          expandedId={expandedId}
-          onToggleExpand={toggleSelectedId}
           canMutate={canMutate}
           onCreate={handleCreateNew}
-          onEdit={handleEdit}
-          onToggleActive={handleToggleActive}
+          onOpenDetail={(item) => setSelectedId(item.id)}
         />
       )}
       renderDetailView={
@@ -361,7 +417,6 @@ export function ComponentsScreen({
           formId={formId}
           error={error}
           onSubmit={onSubmit}
-          onCancel={closeModal}
           editorTab={editorTab}
           setEditorTab={setEditorTab}
           draft={draft}
@@ -370,6 +425,11 @@ export function ComponentsScreen({
           optionGroups={optionGroups}
           previewParts={previewParts}
           materialColors={materialColors}
+          materialTextures={materialTextures}
+          containerDims={containerDims}
+          onContainerDimsChange={setContainerDims}
+          showInContext={showInContext}
+          onShowInContextChange={setShowInContext}
         />
       )}
     />

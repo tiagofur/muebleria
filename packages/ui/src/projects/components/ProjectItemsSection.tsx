@@ -127,7 +127,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
         <h3 className="project-detail__section-title">Muebles ({project.items.length})</h3>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {project.items.length > 0 ? (
-            <button type="button" className="btn btn--small btn--outline" onClick={viewer3D.onOpenQuote3D} data-testid="project-view-3d-run">
+            <button type="button" className="btn btn--small" onClick={viewer3D.onOpenQuote3D} data-testid="project-view-3d-run">
               <Box size={14} strokeWidth={1.5} aria-hidden /> Vista 3D cotización
             </button>
           ) : null}
@@ -197,7 +197,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                   </div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {mod && (
-                      <button type="button" className="btn btn--small btn--outline" onClick={() => viewer3D.onOpenItem3D(item, mod)} data-testid={`view-3d-btn-${item.id}`}>
+                      <button type="button" className="btn btn--small" onClick={() => viewer3D.onOpenItem3D(item, mod)} data-testid={`view-3d-btn-${item.id}`}>
                         <Box size={14} strokeWidth={1.5} aria-hidden /> 3D
                       </button>
                     )}

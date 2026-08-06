@@ -38,9 +38,14 @@ export type {
   ProjectVersion,
   ProjectTemplate,
   PlacementElevation,
+  PlacementMode,
   KitchenWall,
   ProjectItemPlacement,
+  KitchenPlanUnderlay,
+  KitchenSpace,
   ProjectKitchenLayout,
+  ModuleBaseMode,
+  ProjectPlanEditSession,
   InstallationChecklistItem,
   QuotePriceSnapshot,
   Catalog,
@@ -145,6 +150,22 @@ export {
   type SpatialPose,
 } from './spatialPlacement';
 
+export {
+  eulerXyzMatrix,
+  localBoxMinCornerRenderOffset,
+  localOriginWorkshopFromMinCorner,
+  groupPositionFromMinCorner,
+  type BoardLocalSize,
+  type SpatialRotation,
+  type Vec3,
+} from './spatialAnchor';
+
+export {
+  previewPartForComponent,
+  type ComponentPreviewInput,
+  type ComponentPreviewOptions,
+} from './previewComponentPart';
+
 export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, ComposedModuleResult } from './engine';
 
 export {
@@ -198,20 +219,81 @@ export {
 
 export {
   DEFAULT_WALL_CABINET_Z_MM,
+  DEFAULT_BASE_CLEARANCE_MM,
+  BASE_CLEARANCE_PRESETS_MM,
+  WALL_CABINET_Z_PRESETS_MM,
   emptyKitchenLayout,
+  DEFAULT_KITCHEN_SPACE_ID,
+  DEFAULT_KITCHEN_SPACE_NAME,
+  ensureKitchenSpaces,
+  syncActiveKitchenSpace,
+  setActiveKitchenSpace,
+  addKitchenSpace,
+  renameKitchenSpace,
+  removeKitchenSpace,
+  allKitchenPlacements,
+  isFreePlacement,
   resolveWallFrames,
   kitchenLayoutWarnings,
   pruneKitchenLayout,
+  pruneKitchenLayoutOrClear,
+  wallDirectionYawDeg,
+  placementAabb,
+  reorderPlacementOnWall,
+  offsetMmFromPlanPoint,
+  snapOffsetOnWall,
+  repackPlacementsOnWall,
+  resolveBaseClearanceMm,
+  resolveWallCabinetZMm,
   layoutKitchenPlacements,
   nextOffsetOnWall,
   createDefaultLWalls,
 } from './kitchenLayout';
+export type { WallOffsetPeer } from './kitchenLayout';
 export type {
   KitchenFootprint,
   ResolvedWallFrame,
   KitchenPlacedModule,
   KitchenLayoutResult,
 } from './kitchenLayout';
+
+export { roundHardwarePurchaseQuantity } from './engine/labels';
+
+export {
+  PLAN_EDIT_SESSION_TTL_MS,
+  isPlanEditSessionExpired,
+  planEditSessionHeldByOther,
+  acquirePlanEditSession,
+  renewPlanEditSession,
+  releasePlanEditSession,
+} from './planEditSession';
+export type { PlanEditActor } from './planEditSession';
+
+export {
+  parseDxfToKitchenWalls,
+  createPlanUnderlay,
+  scalePlanUnderlay,
+  DEFAULT_UNDERLAY_WIDTH_MM,
+  DEFAULT_UNDERLAY_HEIGHT_MM,
+} from './planImport';
+export type { DxfImportResult, ParseDxfOptions } from './planImport';
+
+export {
+  ZOCLO_BOARD_ROLE,
+  ZOCLO_STRIP_ROLE,
+  PATAS_ROLE,
+  ZOCLO_BOARD_FALLBACK_ROLE,
+  isModuleBaseMode,
+  resolveModuleBaseMode,
+  resolveModuleBaseClearanceMm,
+  resolveBoardOptionChoiceId,
+  plinthStripMeters,
+  filterComponentInstancesForBaseMode,
+  applyBaseModeToHardwareLines,
+  isZocloBoardRole,
+  isZocloStripRole,
+  isPatasRole,
+} from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';
 export type { BoardSheetEstimate } from './boardSheetEstimate';

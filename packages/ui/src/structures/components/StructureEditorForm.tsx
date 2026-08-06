@@ -24,7 +24,8 @@ export type StructureEditorFormProps = {
   readonly formId: string;
   readonly error: string | null;
   readonly onSubmit: (e: FormEvent) => void;
-  readonly onCancel: () => void;
+  /** @deprecated Footer moved to EntityEditorLayout chrome (Fase 5). */
+  readonly onCancel?: () => void;
   readonly editorTab: StructureEditorTab;
   readonly setEditorTab: Dispatch<SetStateAction<StructureEditorTab>>;
   readonly draft: StructureDraft;
@@ -44,7 +45,6 @@ export function StructureEditorForm({
   formId,
   error,
   onSubmit,
-  onCancel,
   editorTab,
   setEditorTab,
   draft,
@@ -70,9 +70,9 @@ export function StructureEditorForm({
   return (
     <form id={formId} onSubmit={onSubmit} className="catalog-form">
       {error ? (
-        <div className="alert alert--danger mb-4" data-testid="form-error">
+        <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
-        </div>
+        </p>
       ) : null}
 
       <div
@@ -80,12 +80,6 @@ export function StructureEditorForm({
         role="tablist"
         aria-label="Secciones del editor de estructura"
         data-testid="structure-editor-tabs"
-        style={{
-          display: 'flex',
-          gap: '0.5rem',
-          borderBottom: '1px solid var(--border)',
-          marginBottom: '1.5rem',
-        }}
       >
         {STRUCTURE_EDITOR_TABS.map((tab) => {
           const selected = editorTab === tab.id;
@@ -103,24 +97,15 @@ export function StructureEditorForm({
                   ? 'module-editor__tab module-editor__tab--active'
                   : 'module-editor__tab'
               }
-              style={{
-                background: 'none',
-                border: 'none',
-                borderBottom: selected
-                  ? '2px solid var(--primary)'
-                  : '2px solid transparent',
-                color: selected ? 'var(--primary)' : 'var(--text-muted)',
-                padding: '0.75rem 1rem',
-                cursor: 'pointer',
-                fontWeight: selected ? '600' : '400',
-                transition: 'all 0.2s',
-              }}
               data-testid={`structure-editor-tab-${tab.id}`}
               onClick={() => setEditorTab(tab.id)}
             >
               {tab.label}
               {tab.id === 'presets' && draft.presets.length > 0
                 ? ` (${draft.presets.length})`
+                : ''}
+              {tab.id === 'components' && draft.components.length > 0
+                ? ` (${draft.components.length})`
                 : ''}
             </button>
           );
@@ -163,19 +148,6 @@ export function StructureEditorForm({
         onPreviewPresetChange={onPreviewPresetChange}
         hidden={editorTab !== 'preview3d'}
       />
-
-      <div className="modal__footer mt-6">
-        <button
-          type="button"
-          className="btn btn--secondary"
-          onClick={onCancel}
-        >
-          Cancelar
-        </button>
-        <button type="submit" className="btn btn--primary" data-testid="save-btn">
-          Guardar
-        </button>
-      </div>
     </form>
   );
 }

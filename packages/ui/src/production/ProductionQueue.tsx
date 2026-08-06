@@ -96,6 +96,13 @@ export function ProductionQueue({
     );
   }
 
+  const title =
+    tab === 'accepted' ? 'Para fabricar' : 'Ya en planta';
+  const subtitle =
+    tab === 'accepted'
+      ? 'Cotizaciones aceptadas: exportá el corte y los herrajes, y marcá cuando salga a planta.'
+      : 'Pedidos ya marcados en producción. Podés reexportar el corte o el pack.';
+
   return (
     <section className="prod-queue" aria-label="Cola de producción">
       <header className="prod-queue__header">
@@ -107,11 +114,10 @@ export function ProductionQueue({
             aria-hidden
           />
           <div>
-            <h2 className="prod-queue__title">Listos para fabricar</h2>
-            <p className="prod-queue__subtitle">
-              Cotizaciones aceptadas: exportá el corte y los herrajes, y marcá
-              cuando salga a planta.
-            </p>
+            <h2 className="prod-queue__title" data-testid="prod-queue-title">
+              {title}
+            </h2>
+            <p className="prod-queue__subtitle">{subtitle}</p>
           </div>
         </div>
       </header>
@@ -202,9 +208,27 @@ export function ProductionQueue({
                   </p>
                 </div>
                 <div className="prod-queue-card__actions">
+                  {/* At most one primary: Pack if available, else Optimizer. */}
+                  {onExportProductionPack ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={exportBusy}
+                      title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
+                      onClick={() => {
+                        void onExportProductionPack(project.id);
+                      }}
+                      data-testid={`prod-export-pack-${project.id}`}
+                    >
+                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+                      Pack producción
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    className="btn btn--primary"
+                    className={
+                      onExportProductionPack ? 'btn' : 'btn btn--primary'
+                    }
                     disabled={exportBusy}
                     onClick={() => {
                       void onExportOptimizer(project.id);
@@ -239,21 +263,6 @@ export function ProductionQueue({
                     >
                       <Tags size={16} strokeWidth={1.5} aria-hidden />
                       Etiquetas
-                    </button>
-                  ) : null}
-                  {onExportProductionPack ? (
-                    <button
-                      type="button"
-                      className="btn btn--primary"
-                      disabled={exportBusy}
-                      title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
-                      onClick={() => {
-                        void onExportProductionPack(project.id);
-                      }}
-                      data-testid={`prod-export-pack-${project.id}`}
-                    >
-                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                      Pack producción
                     </button>
                   ) : null}
                   {project.status === 'accepted' ? (

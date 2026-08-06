@@ -119,6 +119,80 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Grouped ABM sections (Fase 3 UI materials) — progressive disclosure friendly */
+.catalog-form__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-form-gap);
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.catalog-form__section-title {
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.catalog-form__disclosure {
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  overflow: hidden;
+}
+
+.catalog-form__disclosure-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--duration-fast, 150ms) ease;
+}
+
+.catalog-form__disclosure-header:hover {
+  background: var(--surface-hover);
+}
+
+.catalog-form__disclosure-header:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.catalog-form__disclosure-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  flex: 1 1 auto;
+}
+
+.catalog-form__disclosure-summary {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--weight-regular);
+}
+
+.catalog-form__disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-form-gap);
+  padding: 0 var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-3);
+}
+
 .catalog-form__field {
   display: flex;
   flex-direction: column;
@@ -193,6 +267,23 @@
   flex-direction: row;
   align-items: center;
   gap: var(--space-2);
+}
+
+/** Side-by-side numeric fields (e.g. texture tile X/Y). */
+.catalog-form__field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.catalog-form__field-row > .catalog-form__field {
+  margin-bottom: 0;
+}
+
+.catalog-form__field--grow {
+  flex: 1 1 8rem;
+  min-width: 8rem;
 }
 
 .catalog-form__error {
@@ -576,3 +667,53 @@
 }
 
 /* Shared CatalogImage moved to common/catalogImage.css (F1 UI sub-fase 1a). */
+
+/* Catalog Grid & Responsive Drawer Views */
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-4);
+}
+
+.catalog-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  gap: var(--space-3);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-shadow), var(--transition-colors);
+}
+
+.catalog-card:hover {
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-md);
+}
+
+/* Responsive Drawer for Detail View */
+.catalog-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 26rem;
+  max-width: 100vw;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-lg);
+  border-left: 1px solid var(--border-default);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-6);
+  overflow-y: auto;
+}
+
+@media (max-width: 48rem) {
+  .catalog-drawer {
+    width: 100vw;
+    border-left: none;
+  }
+}
+

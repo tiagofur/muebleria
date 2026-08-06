@@ -27,6 +27,7 @@ const HARDWARE_CODES = [
   'HER-TOR-4X50',
   'HER-CORR-500',
   'HER-SOP-ENT',
+  'HER-ZOC-ALU',
 ] as const;
 const OPTION_GROUP_CODES = [
   'INTERIOR',
@@ -48,6 +49,8 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
 
     const codes = seed.catalog.modules.map((m) => m.code);
     expect(codes).toContain('MOD-GAB-01');
+    expect(codes).toContain('MOD-BAJO-ZOCLO-600');
+    expect(codes).toContain('MOD-BAJO-PERFIL-600');
     expect(codes).toContain('MOD-CAJ-01');
   });
 
@@ -127,6 +130,35 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
     expect(byCode.get('FONDO')!.optionIds).toContain(IDS.matMdf);
     expect(byCode.get('BISAGRA')!.optionIds).toContain(IDS.hwBisagra);
     expect(byCode.get('CORREDERA')!.optionIds).toContain(IDS.hwCorredera);
+
+    // Optional zoclo groups (not in required OPTION_GROUP_CODES list).
+    expect(byCode.get('ZOCLO')?.kind).toBe('board');
+    expect(byCode.get('ZOCLO')?.required).toBe(false);
+    expect(byCode.get('ZOCLO_PERFIL')?.kind).toBe('hardware');
+  });
+
+  it('seed bajo zoclo resolves BOM with plinth board (FRENTE fallback)', () => {
+    const seed = createSeedWorkspace();
+    const mod = seed.catalog.modules.find((m) => m.code === 'MOD-BAJO-ZOCLO-600')!;
+    expect(mod.baseMode).toBe('plinth_board');
+    expect(mod.baseClearanceMm).toBe(100);
+    const presetId = mod.presets?.[0]?.id;
+    const bom = resolveBom(mod, plantillaChoices, seed.catalog, presetId);
+    const zoclo = bom.boardParts.find((p) => p.optionRole === 'ZOCLO');
+    expect(zoclo).toBeTruthy();
+    expect(zoclo!.widthMm).toBe(100); // B
+    expect(zoclo!.materialId).toBe(IDS.matMaderado); // FRENTE fallback
+  });
+
+  it('seed bajo perfil bills ZOCLO_PERFIL in linear meters', () => {
+    const seed = createSeedWorkspace();
+    const mod = seed.catalog.modules.find((m) => m.code === 'MOD-BAJO-PERFIL-600')!;
+    expect(mod.baseMode).toBe('plinth_strip');
+    const bom = resolveBom(mod, plantillaChoices, seed.catalog);
+    const strip = bom.hardwareLines.find((h) => h.optionRole === 'ZOCLO_PERFIL');
+    expect(strip).toBeTruthy();
+    expect(strip!.quantity).toBe(0.6);
+    expect(bom.boardParts.find((p) => p.optionRole === 'ZOCLO')).toBeUndefined();
   });
 
   it('MOD-GAB-01 and MOD-CAJ-01 have correct optionRoles (MOD-07)', () => {

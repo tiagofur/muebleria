@@ -6,6 +6,7 @@ import type {
   Catalog,
   ComponentPlacement,
   DimensionPreset,
+  OptionChoices,
   ResolvedBoardPart,
   Structure,
 } from '@muebles/domain';
@@ -22,6 +23,7 @@ export type Structure3DPreviewResult = {
   readonly depth: number;
   readonly presetId: string | undefined;
   readonly presets: readonly DimensionPreset[];
+  readonly optionChoices: OptionChoices;
   readonly error: string | null;
   readonly empty: boolean;
 };
@@ -65,11 +67,13 @@ function dimsFromStructure(
 
 /**
  * Resolve 3D preview for a structure draft.
+ * @param optionChoicesOverride partial board finishes merged over defaults
  */
 export function resolveStructure3DPreview(
   draft: StructureDraft,
   catalogInput: Module3DCatalogInput,
   presetIdOverride?: string | null,
+  optionChoicesOverride?: OptionChoices | null,
 ): Structure3DPreviewResult {
   const presets = draft.presets ?? [];
   const presetId =
@@ -97,7 +101,7 @@ export function resolveStructure3DPreview(
     })),
   };
 
-  const optionChoices = defaultOptionChoicesForModule(
+  const defaults = defaultOptionChoicesForModule(
     {
       components: draft.components,
       hardwareLines: [],
@@ -105,6 +109,10 @@ export function resolveStructure3DPreview(
     catalogInput.optionGroups,
     catalogInput.components,
   );
+  const optionChoices: OptionChoices = {
+    ...defaults,
+    ...(optionChoicesOverride ?? {}),
+  };
 
   const catalog: Catalog = {
     materials: catalogInput.materials,
@@ -166,6 +174,7 @@ export function resolveStructure3DPreview(
       depth: dims.depth,
       presetId,
       presets,
+      optionChoices,
       error: null,
       empty: resolvedBoardParts.length === 0,
     };
@@ -181,6 +190,7 @@ export function resolveStructure3DPreview(
       depth: dims.depth,
       presetId,
       presets,
+      optionChoices,
       error: message,
       empty: true,
     };

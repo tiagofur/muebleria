@@ -30,10 +30,14 @@ import type {
   QuoteBreakdown,
 } from '@muebles/domain';
 import {
+  acquirePlanEditSession as acquirePlanEditSessionDomain,
   applyRoleChoiceToProject,
   createProjectFromTemplate,
   duplicateProject as deepCopyProject,
   projectToTemplate,
+  pruneKitchenLayoutOrClear,
+  releasePlanEditSession as releasePlanEditSessionDomain,
+  renewPlanEditSession as renewPlanEditSessionDomain,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   transitionProjectStatus,
@@ -224,6 +228,19 @@ export interface ProjectState {
   readonly updateKitchenLayout: (
     projectId: string,
     kitchenLayout: ProjectKitchenLayout,
+  ) => void;
+  /** Soft lock for Proyectar multi-user. Returns false if another user holds it. */
+  readonly acquirePlanEditSession: (
+    projectId: string,
+    actor: { readonly userId: string; readonly userName: string },
+  ) => boolean;
+  readonly renewPlanEditSession: (
+    projectId: string,
+    actor: { readonly userId: string; readonly userName: string },
+  ) => boolean;
+  readonly releasePlanEditSession: (
+    projectId: string,
+    userId: string,
   ) => void;
   readonly applyScenarioB: (
     projectId: string,
@@ -597,30 +614,32 @@ export function createProjectStore(options: InternalOptions) {
     updateProjectItem: (projectId, item) => {
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
-        ps.map((p) =>
-          p.id === projectId
-            ? {
-                ...p,
-                items: p.items.map((i) => (i.id === item.id ? item : i)),
-                updatedAt: now,
-              }
-            : p,
-        ),
+        ps.map((p) => {
+          if (p.id !== projectId) return p;
+          const items = p.items.map((i) => (i.id === item.id ? item : i));
+          return {
+            ...p,
+            items,
+            kitchenLayout: pruneKitchenLayoutOrClear(p.kitchenLayout, items),
+            updatedAt: now,
+          };
+        }),
       );
     },
 
     removeProjectItem: (projectId, itemId) => {
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
-        ps.map((p) =>
-          p.id === projectId
-            ? {
-                ...p,
-                items: p.items.filter((i) => i.id !== itemId),
-                updatedAt: now,
-              }
-            : p,
-        ),
+        ps.map((p) => {
+          if (p.id !== projectId) return p;
+          const items = p.items.filter((i) => i.id !== itemId);
+          return {
+            ...p,
+            items,
+            kitchenLayout: pruneKitchenLayoutOrClear(p.kitchenLayout, items),
+            updatedAt: now,
+          };
+        }),
       );
     },
 
@@ -682,6 +701,55 @@ export function createProjectStore(options: InternalOptions) {
               }
             : p,
         ),
+      );
+    },
+
+    acquirePlanEditSession: (projectId, actor) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project) return false;
+      const next = acquirePlanEditSessionDomain(project.planEditSession, actor);
+      if (!next) return false;
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === projectId
+            ? { ...p, planEditSession: next, updatedAt: now }
+            : p,
+        ),
+      );
+      return true;
+    },
+
+    renewPlanEditSession: (projectId, actor) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project) return false;
+      const next = renewPlanEditSessionDomain(project.planEditSession, actor);
+      if (!next) return false;
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === projectId
+            ? { ...p, planEditSession: next, updatedAt: now }
+            : p,
+        ),
+      );
+      return true;
+    },
+
+    releasePlanEditSession: (projectId, userId) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const next = releasePlanEditSessionDomain(project.planEditSession, userId);
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) => {
+          if (p.id !== projectId) return p;
+          if (next === undefined) {
+            const { planEditSession: _drop, ...rest } = p;
+            return { ...rest, updatedAt: now };
+          }
+          return { ...p, planEditSession: next, updatedAt: now };
+        }),
       );
     },
 

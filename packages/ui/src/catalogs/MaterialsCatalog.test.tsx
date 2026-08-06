@@ -127,3 +127,60 @@ describe('MaterialsCatalog image upload (F042)', () => {
     expect(src).toContain('imageUrl');
   });
 });
+
+describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
+  it('uses MD modal, grouped sections, and 3D disclosure collapsed on create', async () => {
+    const user = userEvent.setup();
+    render(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo material/i }));
+    expect(screen.getByTestId('material-form-modal')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Materiales' })).toBeTruthy();
+    // Core price field visible without opening advanced.
+    expect(screen.getByLabelText(/Precio del tablero/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Espesor/i)).toBeTruthy();
+    // 3D fields stay collapsed until disclosure opens.
+    expect(screen.queryByTestId('material-preview-3d-body')).toBeNull();
+    expect(screen.queryByTestId('material-use-photo-texture')).toBeNull();
+
+    await user.click(screen.getByTestId('material-preview-3d-toggle'));
+    expect(screen.getByTestId('material-preview-3d-body')).toBeTruthy();
+    expect(screen.getByTestId('material-use-photo-texture')).toBeTruthy();
+  });
+
+  it('opens Vista 3D when editing a material with preview config', async () => {
+    const user = userEvent.setup();
+    const withPreview: MaterialBoard = {
+      ...sampleMaterial,
+      previewColor: '#F5F5F0',
+    };
+    render(
+      <MaterialsCatalog
+        materials={[withPreview]}
+        edges={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+      />,
+    );
+
+    await user.click(screen.getByText('MAT-01'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/i }));
+    expect(screen.getByTestId('material-preview-3d-body')).toBeTruthy();
+    expect(screen.getByTestId('material-preview-color-input')).toBeTruthy();
+  });
+});

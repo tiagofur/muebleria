@@ -54,6 +54,33 @@ describe('apiMappers', () => {
     });
   });
 
+  it('round-trips texture tile size X/Y mm', () => {
+    const m: MaterialBoard = {
+      id: 'm2',
+      code: 'MAD-1',
+      name: 'Maderado',
+      widthMm: 1830,
+      lengthMm: 2440,
+      thicknessMm: 18,
+      grainDefault: true,
+      boardPrice: 120,
+      wastePercent: 8,
+      costPerM2: 30,
+      previewTextureUrl: '/api/media/wood.webp',
+      previewTextureTileWidthMm: 400,
+      previewTextureTileLengthMm: 600,
+      active: true,
+    };
+    const api = materialToApi(m);
+    expect(api.preview_texture_tile_width_mm).toBe(400);
+    expect(api.preview_texture_tile_length_mm).toBe(600);
+    expect(materialFromApi(api as Record<string, unknown>)).toMatchObject({
+      previewTextureUrl: '/api/media/wood.webp',
+      previewTextureTileWidthMm: 400,
+      previewTextureTileLengthMm: 600,
+    });
+  });
+
   it('maps module components + structureId to API and back', () => {
     const mod: Module = {
       id: 'mod1',
@@ -90,6 +117,53 @@ describe('apiMappers', () => {
     expect(round.components?.[0]?.quantity).toBe(2);
     expect(round.baseLaborCost).toBe(50);
     expect(round.hardwareLines[0]?.hardwareId).toBe('hw1');
+  });
+
+  it('round-trips structure component spatial overrides (slice 3)', () => {
+    const st: Structure = {
+      id: 's1',
+      code: 'EST-01',
+      name: 'Cuerpo',
+      components: [
+        {
+          componentId: 'lat-1',
+          quantity: 1,
+          placementOverride: 'lateral_izquierdo',
+          overrides: {
+            xFormula: '0',
+            yFormula: '0',
+            zFormula: '0',
+            lengthFormula: 'PH',
+            widthFormula: 'PD',
+            rotateX: 90,
+            rotateY: 180,
+            rotateZ: 90,
+          },
+        },
+      ],
+    };
+    const api = structureToApi(st);
+    const comps = api.components as Record<string, unknown>[];
+    expect(comps[0]?.overrides).toMatchObject({
+      xFormula: '0',
+      lengthFormula: 'PH',
+      rotateX: 90,
+      rotateY: 180,
+      rotateZ: 90,
+    });
+    const round = structureFromApi(api as Record<string, unknown>);
+    expect(round.components?.[0]?.overrides).toEqual({
+      edges: undefined,
+      notes: undefined,
+      lengthFormula: 'PH',
+      widthFormula: 'PD',
+      xFormula: '0',
+      yFormula: '0',
+      zFormula: '0',
+      rotateX: 90,
+      rotateY: 180,
+      rotateZ: 90,
+    });
   });
 
   it('sorts categories parents before children', () => {
@@ -139,6 +213,24 @@ describe('apiMappers', () => {
     const items = api.items as Record<string, unknown>[];
     expect(items[0]?.module_id).toBe('m1');
     expect(projectFromApi(api as Record<string, unknown>).customerId).toBe('c1');
+  });
+
+  it('round-trips module baseMode + baseClearanceMm (zoclo)', () => {
+    const mod: Module = {
+      id: 'mod-z',
+      code: 'BAJO-Z',
+      name: 'Bajo con zoclo',
+      furnitureType: 'inferior',
+      baseMode: 'plinth_board',
+      baseClearanceMm: 120,
+      hardwareLines: [],
+    };
+    const api = moduleToApi(mod);
+    expect(api.base_mode).toBe('plinth_board');
+    expect(api.base_clearance_mm).toBe(120);
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.baseMode).toBe('plinth_board');
+    expect(round.baseClearanceMm).toBe(120);
   });
 
   it('round-trips module furnitureType (snake + camel read) (#109)', () => {
@@ -197,6 +289,166 @@ describe('apiMappers', () => {
       inferior: { depth: 560, height: 720 },
       superior: { depth: 320 },
     });
+  });
+
+  it('round-trips kitchen plan underlay', () => {
+    const p: Project = {
+      id: 'pr-underlay',
+      name: 'Con plano',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+        underlay: {
+          imageUrl: '/api/media/plan.png',
+          widthMm: 5000,
+          heightMm: 4000,
+          originXMm: 0,
+          originYMm: 0,
+          opacity: 0.4,
+          fileName: 'plan.png',
+        },
+      },
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    const u = kl.underlay as Record<string, unknown>;
+    expect(u.image_url).toBe('/api/media/plan.png');
+    expect(u.width_mm).toBe(5000);
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.kitchenLayout?.underlay?.imageUrl).toBe('/api/media/plan.png');
+    expect(round.kitchenLayout?.underlay?.heightMm).toBe(4000);
+  });
+
+  it('round-trips multi-space kitchen layouts', () => {
+    const p: Project = {
+      id: 'pr-multi',
+      name: 'Cocina + Baño',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+        activeSpaceId: 'sp-cocina',
+        spaces: [
+          {
+            id: 'sp-cocina',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [
+              {
+                itemId: 'i1',
+                instanceIndex: 0,
+                wallId: 'w1',
+                offsetMm: 0,
+                elevation: 'floor',
+              },
+            ],
+          },
+          {
+            id: 'sp-bath',
+            name: 'Baño',
+            walls: [{ id: 'wb', lengthMm: 2000, angleDeg: 0 }],
+            placements: [
+              {
+                itemId: 'i2',
+                instanceIndex: 0,
+                wallId: 'wb',
+                offsetMm: 100,
+                elevation: 'floor',
+              },
+            ],
+          },
+        ],
+      },
+      items: [
+        { id: 'i1', moduleId: 'm1', quantity: 1, optionChoices: {} },
+        { id: 'i2', moduleId: 'm1', quantity: 1, optionChoices: {} },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    expect(kl.active_space_id).toBe('sp-cocina');
+    const spaces = kl.spaces as Record<string, unknown>[];
+    expect(spaces).toHaveLength(2);
+    expect(spaces[1]!.name).toBe('Baño');
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.kitchenLayout?.spaces).toHaveLength(2);
+    expect(round.kitchenLayout?.spaces?.[1]?.placements[0]?.itemId).toBe('i2');
+    expect(round.kitchenLayout?.activeSpaceId).toBe('sp-cocina');
+  });
+
+  it('round-trips free-place (island) kitchen placements', () => {
+    const p: Project = {
+      id: 'pr-free',
+      name: 'Con isla',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: '',
+            offsetMm: 0,
+            elevation: 'floor',
+            mode: 'free',
+            freeXMm: 1400,
+            freeYMm: 1100,
+            freeYawDeg: 90,
+          },
+        ],
+      },
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: {},
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    const placements = kl.placements as Record<string, unknown>[];
+    expect(placements[0]!.mode).toBe('free');
+    expect(placements[0]!.free_x_mm).toBe(1400);
+    expect(placements[0]!.free_y_mm).toBe(1100);
+    expect(placements[0]!.free_yaw_deg).toBe(90);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    const free = round.kitchenLayout?.placements[0];
+    expect(free?.mode).toBe('free');
+    expect(free?.freeXMm).toBe(1400);
+    expect(free?.freeYMm).toBe(1100);
+    expect(free?.freeYawDeg).toBe(90);
   });
 
   it('omits measure_defaults when empty and reads camelCase (#109)', () => {

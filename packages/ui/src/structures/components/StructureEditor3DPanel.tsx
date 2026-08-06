@@ -24,7 +24,11 @@ export function StructureEditor3DPanel({
   hidden,
 }: StructureEditor3DPanelProps): ReactNode {
   const preview = useMemo(() => {
-    return resolveStructure3DPreview(draft, catalogInput, previewPresetId || undefined);
+    return resolveStructure3DPreview(
+      draft,
+      catalogInput,
+      previewPresetId || undefined,
+    );
   }, [draft, catalogInput, previewPresetId]);
 
   return (
@@ -34,13 +38,10 @@ export function StructureEditor3DPanel({
       aria-labelledby="structure-editor-tab-preview3d"
       hidden={hidden}
       data-testid="structure-editor-panel-preview3d"
+      className="structure-editor-3d-tab"
     >
-      {/* Preset selector */}
       {preview.presets.length > 0 ? (
-        <div
-          className="catalog-form__field"
-          style={{ marginBottom: '0.75rem' }}
-        >
+        <div className="catalog-form__field">
           <label htmlFor="structure-3d-preset">Medida de prueba (preset)</label>
           <select
             id="structure-3d-preset"
@@ -58,13 +59,13 @@ export function StructureEditor3DPanel({
           </select>
         </div>
       ) : (
-        <p className="text-small text-muted mb-3">
-          Mostrando dimensiones de la estructura: {preview.width}×{preview.height}×{preview.depth} mm.
-          (Podés definir presets en la pestaña &quot;Presets de Medida&quot;).
+        <p className="catalog-empty">
+          Mostrando dimensiones de la estructura: {preview.width}×
+          {preview.height}×{preview.depth} mm. (Podés definir presets en la
+          pestaña &quot;Presets&quot;).
         </p>
       )}
 
-      {/* Error / Empty states */}
       {preview.error ? (
         <p className="catalog-form__error" data-testid="structure-3d-error">
           {preview.error}
@@ -73,11 +74,11 @@ export function StructureEditor3DPanel({
 
       {preview.empty && !preview.error ? (
         <p className="catalog-empty" data-testid="structure-3d-empty">
-          Sin componentes para mostrar en el cuerpo. Agregá componentes en la pestaña &quot;Componentes&quot;.
+          Sin componentes para mostrar en el cuerpo. Agregá componentes en la
+          pestaña &quot;Componentes&quot;.
         </p>
       ) : null}
 
-      {/* 3D viewer */}
       {!preview.empty ? (
         <Furniture3DViewer
           parts={preview.parts}

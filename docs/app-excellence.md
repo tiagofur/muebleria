@@ -77,7 +77,7 @@ El horizonte H01–H12 está **cerrado**; el WIP actual refina paneles + 3D + co
 
 ### Deuda / gaps de producto
 
-1. **Layout de cocina real:** hoy la vista 3D de cotización es una **corrida lineal** (`layoutProjectRun`), no muros ni reordenamiento manual.  
+1. **Layout de cocina:** semilla #133 en código (`Project.kitchenLayout`, `KitchenPlanPanel`, 3D branch). Hardening en curso: yaw por muro, unplaced como cola lineal, prune al mutar ítems, fidelidad 2D 180°/270°.  
 2. **Plan de corte nativo:** no hay nesting 2D en app; el camino es **export Excel → optimizador externo** (correcto para ahora).  
 3. **CNC / máquinas:** documentado (#111), **no implementar** hasta demanda real.  
 4. **Plantillas de proyecto / params de obra:** #110, #109.  
@@ -92,8 +92,8 @@ El horizonte H01–H12 está **cerrado**; el WIP actual refina paneles + 3D + co
 | Capacidad | Prioridad | Notas |
 |-----------|-----------|--------|
 | Cotización + PDF/Excel comercial | ✅ hoy | Mantener legible y confiable |
-| Vista 3D de la cotización | 🔧 WIP | Corrida lineal; luego layout de muros |
-| **Layout simple de cocina** (muros + colocar/reordenar) | **P0 producto** | Ver §5 |
+| Vista 3D de la cotización | 🔧 WIP | Linear fallback; kitchen plan when placements exist |
+| **Layout simple de cocina** (muros + colocar/reordenar) | 🔧 seed #133 | Hardening: yaw, unplaced tail, prune — ver §5 |
 | Plantillas de proyecto (“cocina 3 m”) | P1 | #110 |
 | Comparar 2 opciones de material/frente | P2 | Misma cotización, dos escenarios |
 | Enlace de propuesta / PDF con foto 3D | P2 | Export estático o captura |
@@ -112,15 +112,21 @@ El horizonte H01–H12 está **cerrado**; el WIP actual refina paneles + 3D + co
 
 ### 3.3 Producción — “cortar y armar sin ambigüedad”
 
+> **Canónico del workspace de fábrica (separación diseño vs producción, pantallas, pack ampliado, roadmap e issues):**  
+> **`docs/production-module.md`** — leer antes de tocar UI/nav de Producción o docs de taller.
+
 | Capacidad | Prioridad | Notas |
 |-----------|-----------|--------|
 | Cola accepted → export → produced | ✅ | |
 | Etiquetas + encintado + m² + cut-list rica | ✅ | |
 | **Export Excel Optimizer** (único plan de corte *ahora*) | **P0** | Mantener + tests fixture |
-| Resumen de pliegos estimado (sin nesting) | P1 | Heurística m² / pliego catálogo |
-| Import resultado nesting (consumo real) | P2 | PRD Fase 5 |
+| Resumen de pliegos estimado (sin nesting) | ✅ | #135 |
+| Import resultado nesting (consumo real) | ✅ | #142 |
+| Pack de producción ZIP | ✅ | #134 |
+| QR en etiquetas | ✅ | #141 |
+| **Workspace Producción** (hub, vistas read-only, elevaciones PDF) | 📋 | `docs/production-module.md` · META roadmap |
+| Preview visual de tableros | 📋 | Fase 2 del módulo |
 | **Metadatos CNC / DXF / post-procesadores** | **Doc only** | #111 · ver §4 |
-| Pack de producción (ZIP: Optimizer + herrajes + etiquetas PDF) | P1 | Un click para el taller |
 
 ---
 
@@ -175,53 +181,69 @@ Cotización accepted
 - Detección automática de L/U desde plano importado.  
 - Render fotorrealista / materiales PBR.  
 - Física, colisión perfecta, instalación eléctrica/agua.  
-- Multi-ambiente completo (baño + living) — un **espacio** por proyecto basta.
+- ~~Multi-ambiente completo (baño + living)~~ → **v1 hecho**: `KitchenSpace[]` + tabs en Proyectar (un ambiente activo a la vez).
+- ~~Multi-usuario concurrente en el plano~~ → **v1 soft lock**: `Project.planEditSession` (TTL 2 min, renew ~45s); banner + solo lectura si otro usuario tiene Proyectar abierto. No websockets/OT.
 
-### 5.3 Modelo de dominio propuesto (borrador)
+### 5.3 Modelo de dominio (implementado — #133)
+
+Fuente de verdad: `packages/domain` (`Project.kitchenLayout`, `kitchenLayout.ts`).
 
 ```ts
-// Conceptual — no implementado aún
-interface ProjectSpace {
-  id: string;
-  name: string; // "Cocina"
-  walls: Wall[];
-}
-
-interface Wall {
+// Actual (types.ts) — no multi-space aún
+interface KitchenWall {
   id: string;
   lengthMm: number;
-  // optional: angleDeg or next-wall join for L/U simple
+  name?: string;
+  angleDeg: number; // 0 = +X, 90 = +Y
+  originXMm?: number;
+  originYMm?: number;
 }
 
 interface ProjectItemPlacement {
-  itemId: string;       // ProjectItem.id
+  itemId: string;
   instanceIndex: number; // qty > 1
   wallId: string;
-  offsetMm: number;     // along wall from start
+  offsetMm: number;
   elevation: 'floor' | 'wall';
-  // optional later: rotateYDeg, depthOffsetMm
+}
+
+interface ProjectKitchenLayout {
+  walls: KitchenWall[];
+  placements: ProjectItemPlacement[];
 }
 ```
 
 - `ProjectItem` **sigue** siendo la línea comercial (módulo, qty, opciones, preset).  
 - El placement es **capa de presentación de obra**, no redefine el BOM.  
-- Si no hay placement → fallback a `layoutProjectRun` (comportamiento actual).
+- Si no hay walls+placements → fallback a `layoutProjectRun`.  
+- 3D kitchen: yaw por muro; unidades sin colocar → cola lineal + warning (política A).  
+- Mutar ítems (delete / bajar qty) → `pruneKitchenLayoutOrClear` en store.
 
 ### 5.4 UX v1
 
-1. En detalle de cotización: pestaña **“Plano”** junto a lista de muebles.  
-2. Toolbar: Añadir muro · Seleccionar · Mover · (Zoom).  
+1. En detalle de cotización: **Herramientas → Plan de cocina** (progressive disclosure).  
+2. Toolbar: Crear L · Añadir muro · colocar desde “Sin colocar” · drag offset.  
 3. Panel: lista de ítems sin colocar + ítems en muro.  
 4. Botón **Vista 3D** usa placements si existen.  
-5. Copy en español de taller: “Así queda la corrida”, no jerga CAD.
+5. Copy: “Según plano de cocina…” / fallback lineal con hint al plan.
 
 ### 5.5 Criterios de aceptación (slice)
 
-- [ ] Crear 2–3 muros (L simple) y colocar ≥ 3 módulos de la cotización  
-- [ ] Reordenar dos bases en el mismo muro y ver cambio en 2D y 3D  
-- [ ] Persistencia API + local sin perder placements al recargar  
-- [ ] Cotización sin plano sigue funcionando (fallback lineal)  
-- [ ] UI no calcula BOM; domain solo valida geometría de placement  
+- [x] Crear 2–3 muros (L simple) y colocar ≥ 3 módulos de la cotización  
+- [x] Reordenar dos bases en el mismo muro (re-pack offsets)  
+- [x] Persistencia API + JSONB sin perder placements al recargar  
+- [x] Cotización sin plano sigue funcionando (fallback lineal)  
+- [x] UI no calcula BOM; domain solo valida geometría de placement  
+- [x] 3D orienta módulos al muro (yaw)  
+- [x] Unplaced no desaparecen del 3D de cotización  
+- [x] Delete/qty prunes placements  
+
+### 5.6 Evolución: SUPER 3D Proyectar (post-semilla)
+
+Plan de producto y slices de UX (viewport hero, toolbar, snap, realismo de obra):  
+→ **`docs/projectar-super-3d-plan.md`**
+
+Diagnóstico clave: el canvas reutiliza `module-scene-3d` con **altura fija 380px**, por eso en Proyectar el centro se ve con banda negra vacía. Parte 0 del plan = viewport a pantalla completa del área central.
 
 ---
 

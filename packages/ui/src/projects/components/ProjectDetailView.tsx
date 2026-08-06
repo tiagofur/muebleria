@@ -19,8 +19,9 @@
  *   - ProjectTotalsAside   → breakdown, material summary, nesting, issues
  */
 
-import { type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type {
+  Component,
   Customer,
   ExportIssue,
   FurnitureType,
@@ -32,18 +33,26 @@ import type {
   ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
+  Structure,
 } from '@muebles/domain';
 
 import {
   Check,
   ChevronLeft,
   Copy,
+  Factory,
   LayoutTemplate,
+  MoreHorizontal,
   Pencil,
+  RotateCcw,
   Send,
   Trash2,
 } from 'lucide-react';
-import { DropdownMenu, type DropdownMenuSection } from '../../common';
+import {
+  DropdownMenu,
+  type DropdownMenuItem,
+  type DropdownMenuSection,
+} from '../../common';
 import { KitchenPlanPanel } from './KitchenPlanPanel';
 import { QuoteScenarioCompare } from './QuoteScenarioCompare';
 import { InstallationChecklistPanel } from './InstallationChecklistPanel';
@@ -52,6 +61,7 @@ import { ProjectItemsSection } from './ProjectItemsSection';
 import { ProjectOptionsSection } from './ProjectOptionsSection';
 import { ProjectMeasureDefaults } from './ProjectMeasureDefaults';
 import { ProjectTotalsAside } from './ProjectTotalsAside';
+import { allFootprints } from '../kitchenPlanHelpers';
 import {
   formatProjectMoney,
   resolveCustomerName,
@@ -64,6 +74,20 @@ import {
   type ProjectDetailRemoveConfirm,
   type ProjectDetail3DHandlers,
 } from './projectDetailContext';
+
+/** Advanced quote tools — collapsed by default (progressive disclosure). */
+type QuoteToolsPanel = 'kitchen' | 'scenarios' | 'checklist' | null;
+
+/**
+ * Exactly one lifecycle/production primary per status (buttons.css rule).
+ * Exports stay available as secondary when they are not the stage action.
+ */
+type ChromePrimary =
+  | 'send'
+  | 'accept'
+  | 'mark-produced'
+  | 'export'
+  | null;
 
 // ─── Re-export context types for external consumers ──────────────────
 export type { ProjectDetailCatalogs, ProjectDetailItemHandlers, ProjectDetailRemoveConfirm, ProjectDetail3DHandlers };
@@ -80,6 +104,9 @@ export interface ProjectDetailViewProps {
   readonly modules: readonly Module[];
   readonly optionGroups: readonly OptionGroup[];
   readonly catalogs: ProjectDetailCatalogs;
+  /** Needed so line pickers resolve INTERIOR/FRENTE from structure components. */
+  readonly catalogComponents?: readonly Component[];
+  readonly catalogStructures?: readonly Structure[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
 
@@ -141,6 +168,7 @@ export interface ProjectDetailViewProps {
   // --- Navigation / chrome action handlers ---
   readonly onBackToList: () => void;
   readonly onOpenPresentation: () => void;
+  readonly onOpenSpatialStudio?: () => void;
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
@@ -196,6 +224,36 @@ export interface ProjectDetailViewProps {
 
 // ─── Inner component (consumes context) ─────────────────────────────
 
+function resolveChromePrimary(args: {
+  status: ProjectStatus;
+  canMutate: boolean;
+  canMarkProduced: boolean;
+  hasChangeStatus: boolean;
+  hasMarkProduced: boolean;
+  hasExport: boolean;
+}): ChromePrimary {
+  const {
+    status,
+    canMutate,
+    canMarkProduced,
+    hasChangeStatus,
+    hasMarkProduced,
+    hasExport,
+  } = args;
+  if (status === 'draft' && canMutate && hasChangeStatus) return 'send';
+  if (status === 'quoted' && canMutate && hasChangeStatus) return 'accept';
+  if (status === 'accepted' && canMarkProduced && hasMarkProduced) {
+    return 'mark-produced';
+  }
+  if (
+    (status === 'accepted' || status === 'produced') &&
+    hasExport
+  ) {
+    return 'export';
+  }
+  return null;
+}
+
 function ProjectDetailViewInner(): ReactNode {
   const ctx = useProjectDetail();
   const {
@@ -213,6 +271,7 @@ function ProjectDetailViewInner(): ReactNode {
     onExport,
     onBackToList,
     onOpenPresentation,
+    onOpenSpatialStudio,
     onEditMeta,
     onDuplicate,
     onSaveAsTemplate,
@@ -232,13 +291,139 @@ function ProjectDetailViewInner(): ReactNode {
   } = ctx;
 
   const chromeSale = breakdown?.salePrice ?? null;
+  const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
+
+  const kitchenUnplacedCount = useMemo(() => {
+    const fps = allFootprints(project, modules);
+    const layout = project.kitchenLayout;
+    if (!layout || layout.walls.length === 0) {
+      return fps.length > 0 ? fps.length : 0;
+    }
+    const placed = new Set(
+      layout.placements.map((p) => `${p.itemId}#${p.instanceIndex}`),
+    );
+    return fps.filter((f) => !placed.has(`${f.itemId}#${f.instanceIndex}`))
+      .length;
+  }, [project, modules]);
+
+  const primary = resolveChromePrimary({
+    status: project.status,
+    canMutate,
+    canMarkProduced,
+    hasChangeStatus: Boolean(onChangeStatus),
+    hasMarkProduced: Boolean(onMarkProduced),
+    hasExport: Boolean(onExport),
+  });
+
+  const exportTitle = !productionExportOk
+    ? 'Export de producción solo en Aceptado o En producción'
+    : 'Exportar cut-list Optimizer (.xlsx)';
+
+  /** Show Optimizer in chrome only when plant-ready; otherwise it lives in Más. */
+  const showExportInChrome = Boolean(onExport) && productionExportOk;
+
+  const moreSections = useMemo((): readonly DropdownMenuSection[] => {
+    const sections: DropdownMenuSection[] = [];
+
+    // When export is not yet plant-ready, park Optimizer in Más (not a disabled chrome CTA).
+    if (onExport && !productionExportOk) {
+      sections.push({
+        id: 'export-early',
+        label: 'Producción',
+        items: [
+          {
+            id: 'export-optimizer',
+            label: exportBusy ? 'Exportando…' : 'Exportar Optimizer',
+            hint: exportTitle,
+            disabled: true,
+            onSelect: () => {
+              /* disabled until accepted / produced */
+            },
+          },
+        ],
+      });
+    }
+
+    sections.push(...exportMenu.sections);
+
+    const metaItems: DropdownMenuItem[] = [];
+    if (canMutate && onDuplicate) {
+      metaItems.push({
+        id: 'duplicate',
+        label: 'Duplicar',
+        icon: <Copy size={16} strokeWidth={1.5} aria-hidden />,
+        onSelect: () => onDuplicate(project.id),
+      });
+    }
+    if (canMutate && onSaveAsTemplate) {
+      metaItems.push({
+        id: 'save-template',
+        label: 'Guardar como plantilla',
+        icon: <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />,
+        onSelect: () => onSaveAsTemplate(project.id),
+      });
+    }
+    if (
+      canReopen &&
+      (project.status === 'quoted' ||
+        project.status === 'accepted' ||
+        project.status === 'produced') &&
+      onRequestReopen
+    ) {
+      metaItems.push({
+        id: 'reopen',
+        label: 'Reabrir a borrador',
+        icon: <RotateCcw size={16} strokeWidth={1.5} aria-hidden />,
+        onSelect: () => onRequestReopen(),
+      });
+    }
+    // Destructive action lives in Más (wave 4 chrome density) — not a permanent
+    // danger button that steals visual weight from the stage primary.
+    if (canDelete) {
+      metaItems.push({
+        id: 'delete',
+        label: 'Eliminar',
+        icon: <Trash2 size={16} strokeWidth={1.5} aria-hidden />,
+        onSelect: () => onRequestDelete(),
+      });
+    }
+    if (metaItems.length > 0) {
+      sections.push({ id: 'meta', label: 'Cotización', items: metaItems });
+    }
+
+    return sections;
+  }, [
+    canDelete,
+    canMutate,
+    canReopen,
+    exportBusy,
+    exportMenu.sections,
+    exportTitle,
+    onDuplicate,
+    onExport,
+    onRequestDelete,
+    onRequestReopen,
+    onSaveAsTemplate,
+    productionExportOk,
+    project.id,
+    project.status,
+  ]);
+
+  const toggleTools = (panel: Exclude<QuoteToolsPanel, null>): void => {
+    setToolsPanel((current) => (current === panel ? null : panel));
+  };
 
   return (
     <>
-      {/* Sticky tool chrome */}
+      {/* Sticky tool chrome — at most ONE .btn--primary in the action group */}
       <header className="workspace-chrome" data-testid="project-detail-chrome">
         <div className="workspace-chrome__lead">
-          <button type="button" className="btn btn--ghost btn--small" onClick={onBackToList}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--small"
+            onClick={onBackToList}
+            aria-label="Volver a la lista"
+          >
             <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
             Lista
           </button>
@@ -268,46 +453,11 @@ function ProjectDetailViewInner(): ReactNode {
             {chromeSale == null ? '—' : formatProjectMoney(chromeSale, project.currency)}
           </span>
         </div>
-        <div className="workspace-chrome__actions">
-          {onExport ? (
-            <button type="button" className="btn btn--primary" disabled={productionExportDisabled}
-              title={!productionExportOk ? 'Export de producción solo en Aceptado o En producción' : 'Exportar cut-list Optimizer (.xlsx)'}
-              onClick={() => { void onExport?.(); }} data-testid="project-chrome-export">
-              {ctx.exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
-            </button>
-          ) : null}
-          {ctx.onExportProductionPack ? (
-            <button type="button" className="btn btn--primary" disabled={productionExportDisabled}
-              title={!productionExportOk ? 'Pack de producción solo en Aceptado o En producción' : 'Descargar paquete completo ZIP (Optimizer + Herrajes + Etiquetas + Resumen)'}
-              onClick={() => { void ctx.onExportProductionPack?.(); }} data-testid="project-chrome-export-pack">
-              {ctx.exportBusy ? 'Generando Pack…' : '📦 Pack Producción'}
-            </button>
-          ) : null}
-          {exportMenu.sections.length > 0 ? (
-            <DropdownMenu ariaLabel="Más exports" triggerLabel={exportBusy ? 'Exportando…' : 'Más exports'}
-              triggerClassName="btn" disabled={exportBusy} sections={exportMenu.sections} onClose={exportMenu.onClose} />
-          ) : null}
-          <button type="button" className="btn" onClick={onOpenPresentation} data-testid="project-chrome-present"
-            title="Modo presentación para el cliente (sin costos ni exports de planta)">
-            Presentar
-          </button>
-          {canMutate ? (
-            <button type="button" className="btn" onClick={() => onEditMeta(project)}>
-              <Pencil size={16} strokeWidth={1.5} aria-hidden /> Editar
-            </button>
-          ) : null}
-          {canMutate && onDuplicate ? (
-            <button type="button" className="btn" onClick={() => onDuplicate(project.id)}>
-              <Copy size={16} strokeWidth={1.5} aria-hidden /> Duplicar
-            </button>
-          ) : null}
-          {canMutate && onSaveAsTemplate ? (
-            <button type="button" className="btn" onClick={() => onSaveAsTemplate(project.id)}
-              data-testid={`save-as-template-btn-${project.id}`}>
-              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden /> Guardar como plantilla
-            </button>
-          ) : null}
-          {canMutate && project.status === 'draft' && onChangeStatus ? (
+        <div
+          className="workspace-chrome__actions project-detail__chrome-actions"
+          data-testid="project-chrome-actions"
+        >
+          {primary === 'send' && onChangeStatus ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -318,7 +468,7 @@ function ProjectDetailViewInner(): ReactNode {
               <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
             </button>
           ) : null}
-          {canMutate && project.status === 'quoted' && onChangeStatus ? (
+          {primary === 'accept' && onChangeStatus ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -329,21 +479,81 @@ function ProjectDetailViewInner(): ReactNode {
               <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar cotización
             </button>
           ) : null}
-          {canMarkProduced && project.status === 'accepted' && onMarkProduced ? (
-            <button type="button" className="btn btn--primary" onClick={() => onMarkProduced(project.id)}
-              data-testid="project-mark-produced">
-              Marcar en producción
+          {primary === 'mark-produced' && onMarkProduced ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onMarkProduced(project.id)}
+              data-testid="project-mark-produced"
+            >
+              <Factory size={16} strokeWidth={1.5} aria-hidden /> Marcar en
+              producción
             </button>
           ) : null}
-          {canReopen && (project.status === 'quoted' || project.status === 'accepted' || project.status === 'produced') && onRequestReopen ? (
-            <button type="button" className="btn" onClick={onRequestReopen} data-testid="project-reopen">
-              Reabrir a borrador
+
+          {showExportInChrome && onExport ? (
+            <button
+              type="button"
+              className={primary === 'export' ? 'btn btn--primary' : 'btn'}
+              disabled={productionExportDisabled}
+              title={exportTitle}
+              onClick={() => {
+                void onExport?.();
+              }}
+              data-testid="project-chrome-export"
+            >
+              {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
             </button>
           ) : null}
-          {canDelete ? (
-            <button type="button" className="btn btn--danger" onClick={onRequestDelete}>
-              <Trash2 size={16} strokeWidth={1.5} aria-hidden /> Eliminar
+
+          <button
+            type="button"
+            className="btn"
+            onClick={onOpenPresentation}
+            data-testid="project-chrome-present"
+            title="Modo presentación para el cliente (sin costos ni exports de planta)"
+          >
+            Presentar
+          </button>
+
+          {onOpenSpatialStudio ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={onOpenSpatialStudio}
+              data-testid="project-chrome-projectar"
+              title="Estudio 3D: colocar y mover muebles en el ambiente"
+            >
+              Proyectar
             </button>
+          ) : null}
+
+          {canMutate ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => onEditMeta(project)}
+              data-testid="project-chrome-edit"
+            >
+              <Pencil size={16} strokeWidth={1.5} aria-hidden /> Editar
+            </button>
+          ) : null}
+
+          {moreSections.length > 0 ? (
+            <DropdownMenu
+              ariaLabel="Más acciones de la cotización"
+              triggerLabel={exportBusy ? 'Trabajando…' : 'Más'}
+              triggerIcon={
+                <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden />
+              }
+              triggerClassName="btn"
+              disabled={
+                exportBusy &&
+                moreSections.every((s) => s.items.every((i) => i.disabled))
+              }
+              sections={moreSections}
+              onClose={exportMenu.onClose}
+            />
           ) : null}
         </div>
       </header>
@@ -359,35 +569,150 @@ function ProjectDetailViewInner(): ReactNode {
 
       <div className="project-detail__body">
         <div className="project-detail__main">
+          {/* Core quote path first: options → measures → items */}
           <ProjectOptionsSection />
           <ProjectMeasureDefaults />
-
-          <KitchenPlanPanel
-            project={project}
-            modules={modules}
-            canEdit={Boolean(canMutate && project.status === 'draft' && onUpdateKitchenLayout)}
-            onChange={(layout) => { onUpdateKitchenLayout?.(project.id, layout); }}
-          />
-
-          <QuoteScenarioCompare
-            project={project}
-            catalog={{ materials: catalogs.materials, edges: catalogs.edges, hardware: catalogs.hardware, optionGroups, modules }}
-            optionGroups={optionGroups}
-            canApply={Boolean(canMutate && project.status === 'draft' && onApplyScenarioB)}
-            canDuplicate={Boolean(canMutate && onDuplicateWithScenarioB)}
-            currency={project.currency}
-            onApplyB={(role, choiceId) => { onApplyScenarioB?.(project.id, role, choiceId); }}
-            onDuplicateWithB={(role, choiceId) => { onDuplicateWithScenarioB?.(project.id, role, choiceId); }}
-            onExportScenarioPdf={(role, choiceId) => { onExportScenarioPdf?.(project.id, role, choiceId); }}
-          />
-
-          <InstallationChecklistPanel
-            project={project}
-            canEdit={Boolean(canMutate && onUpdateInstallationChecklist)}
-            onChange={(items) => { onUpdateInstallationChecklist?.(project.id, items); }}
-          />
-
           <ProjectItemsSection />
+
+          {/* Advanced tools — toggle group (not ARIA tabs: zero-selected is valid) */}
+          <section
+            className="project-detail__tools"
+            data-testid="project-quote-tools"
+            aria-label="Herramientas de cotización"
+          >
+            <div className="project-detail__tools-header">
+              <h3 className="project-detail__section-title">Herramientas</h3>
+              <div
+                className="project-detail__tools-tabs"
+                role="group"
+                aria-label="Paneles avanzados"
+              >
+                <button
+                  type="button"
+                  aria-pressed={toolsPanel === 'kitchen'}
+                  className={
+                    toolsPanel === 'kitchen'
+                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
+                      : 'project-detail__tools-tab'
+                  }
+                  data-testid="project-tools-kitchen"
+                  onClick={() => toggleTools('kitchen')}
+                >
+                  Plan de cocina
+                  {kitchenUnplacedCount > 0 ? (
+                    <span
+                      className="project-detail__tools-badge"
+                      data-testid="project-tools-kitchen-unplaced"
+                      title={`${kitchenUnplacedCount} sin colocar en el plano`}
+                    >
+                      {kitchenUnplacedCount}
+                    </span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={toolsPanel === 'scenarios'}
+                  className={
+                    toolsPanel === 'scenarios'
+                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
+                      : 'project-detail__tools-tab'
+                  }
+                  data-testid="project-tools-scenarios"
+                  onClick={() => toggleTools('scenarios')}
+                >
+                  Escenarios A/B
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={toolsPanel === 'checklist'}
+                  className={
+                    toolsPanel === 'checklist'
+                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
+                      : 'project-detail__tools-tab'
+                  }
+                  data-testid="project-tools-checklist"
+                  onClick={() => toggleTools('checklist')}
+                >
+                  Checklist instalación
+                </button>
+              </div>
+            </div>
+
+            {toolsPanel === null ? (
+              <p className="project-detail__tools-hint">
+                Abrí un panel solo si lo necesitás. La cotización del día son los
+                muebles y el precio a la derecha.
+              </p>
+            ) : null}
+
+            {toolsPanel === 'kitchen' ? (
+              <div
+                className="project-detail__tools-panel"
+                data-testid="project-tools-panel-kitchen"
+              >
+                <KitchenPlanPanel
+                  project={project}
+                  modules={modules}
+                  canEdit={Boolean(
+                    canMutate &&
+                      project.status === 'draft' &&
+                      onUpdateKitchenLayout,
+                  )}
+                  onChange={(layout) => {
+                    onUpdateKitchenLayout?.(project.id, layout);
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {toolsPanel === 'scenarios' ? (
+              <div
+                className="project-detail__tools-panel"
+                data-testid="project-tools-panel-scenarios"
+              >
+                <QuoteScenarioCompare
+                  project={project}
+                  catalog={{
+                    materials: catalogs.materials,
+                    edges: catalogs.edges,
+                    hardware: catalogs.hardware,
+                    optionGroups,
+                    modules,
+                  }}
+                  optionGroups={optionGroups}
+                  canApply={Boolean(
+                    canMutate && project.status === 'draft' && onApplyScenarioB,
+                  )}
+                  canDuplicate={Boolean(canMutate && onDuplicateWithScenarioB)}
+                  currency={project.currency}
+                  onApplyB={(role, choiceId) => {
+                    onApplyScenarioB?.(project.id, role, choiceId);
+                  }}
+                  onDuplicateWithB={(role, choiceId) => {
+                    onDuplicateWithScenarioB?.(project.id, role, choiceId);
+                  }}
+                  onExportScenarioPdf={(role, choiceId) => {
+                    onExportScenarioPdf?.(project.id, role, choiceId);
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {toolsPanel === 'checklist' ? (
+              <div
+                className="project-detail__tools-panel"
+                data-testid="project-tools-panel-checklist"
+              >
+                <InstallationChecklistPanel
+                  project={project}
+                  canEdit={Boolean(canMutate && onUpdateInstallationChecklist)}
+                  onChange={(items) => {
+                    onUpdateInstallationChecklist?.(project.id, items);
+                  }}
+                />
+              </div>
+            ) : null}
+          </section>
         </div>
 
         <ProjectTotalsAside />
@@ -405,6 +730,8 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     modules: props.modules,
     optionGroups: props.optionGroups,
     catalogs: props.catalogs,
+    catalogComponents: props.catalogComponents ?? [],
+    catalogStructures: props.catalogStructures ?? [],
     customers: props.customers,
     ownerLabels: props.ownerLabels,
     breakdown: props.breakdown ?? null,
@@ -434,6 +761,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onOpenAddItemModal: props.onOpenAddItemModal,
     onBackToList: props.onBackToList,
     onOpenPresentation: props.onOpenPresentation,
+    onOpenSpatialStudio: props.onOpenSpatialStudio,
     onEditMeta: props.onEditMeta,
     onDuplicate: props.onDuplicate,
     onSaveAsTemplate: props.onSaveAsTemplate,

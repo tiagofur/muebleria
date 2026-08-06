@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ComponentsScreen } from './ComponentsScreen';
 import type { Component, OptionGroup } from '@muebles/domain';
 
@@ -126,9 +125,8 @@ describe('ComponentsScreen', () => {
     // Switch to options tab
     fireEvent.click(screen.getByTestId('component-editor-tab-options'));
 
-    // Select FRENTE in the multi-select
-    const roleSelect = screen.getByTestId('input-optionRoles');
-    await userEvent.selectOptions(roleSelect, ['FRENTE']);
+    // Toggle the FRENTE chip on (replaces the old native multi-select)
+    fireEvent.click(screen.getByTestId('option-role-FRENTE'));
 
     // Submit
     fireEvent.click(screen.getByTestId('save-btn'));
@@ -286,5 +284,173 @@ describe('ComponentsScreen', () => {
 
     expect(screen.queryByTestId('component-detail-edit')).toBeNull();
     expect(screen.queryByRole('button', { name: /Nuevo Componente/i })).toBeNull();
+  });
+
+  it('embeds the 3D preview in Geometry with a "Mostrar en el mueble" toggle (default on)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    // Open the editor on an existing component (card → detail → edit).
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+
+    // Switch to Geometry — the 3D preview now lives here (no separate "Vista 3D" tab).
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    // The old "Vista 3D" tab must be gone.
+    expect(screen.queryByTestId('component-editor-tab-preview3d')).toBeNull();
+
+    // The "Mostrar en el mueble" toggle is present and on by default.
+    const toggle = screen.getByTestId('show-in-context-toggle') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    // Container reference fields are present and editable.
+    expect(screen.getByTestId('container-pw')).toBeTruthy();
+    expect(screen.getByTestId('container-ph')).toBeTruthy();
+    expect(screen.getByTestId('container-pd')).toBeTruthy();
+
+    // Turning the toggle off switches the preview mode (ghost container hidden).
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(false);
+  });
+
+  it('collapses position + rotation behind an "Avanzado" disclosure (P0 cognitive load)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    // Open editor on an existing component.
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    // The advanced disclosure is collapsed by default: position/rotation inputs are hidden.
+    const toggleBtn = screen.getByTestId('component-geometry-advanced-toggle');
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('input-rotate-x')).toBeNull();
+    expect(screen.queryByTestId('input-x-formula')).toBeNull();
+
+    // Opening the disclosure reveals the six advanced inputs.
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('input-rotate-x')).toBeTruthy();
+    expect(screen.getByTestId('input-rotate-y')).toBeTruthy();
+    expect(screen.getByTestId('input-rotate-z')).toBeTruthy();
+    expect(screen.getByTestId('input-x-formula')).toBeTruthy();
+    expect(screen.getByTestId('input-y-formula')).toBeTruthy();
+    expect(screen.getByTestId('input-z-formula')).toBeTruthy();
+
+    // "Restablecer a automático" clears all six fields in one click.
+    fireEvent.change(screen.getByTestId('input-rotate-x'), { target: { value: '45' } });
+    fireEvent.change(screen.getByTestId('input-x-formula'), { target: { value: 'T' } });
+    fireEvent.click(screen.getByTestId('component-geometry-advanced-reset'));
+    expect((screen.getByTestId('input-rotate-x') as HTMLInputElement).value).toBe('');
+    expect((screen.getByTestId('input-x-formula') as HTMLInputElement).value).toBe('');
+  });
+
+  it('validates dimensions on blur and clears the error when corrected (P1-a)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+
+    // Type an invalid length and leave the field — error appears.
+    const lengthInput = screen.getByTestId('input-length');
+    fireEvent.change(lengthInput, { target: { value: '-5' } });
+    fireEvent.blur(lengthInput);
+    expect(screen.getByTestId('input-length-error').textContent).toContain(
+      'El largo debe ser mayor a 0',
+    );
+    expect(lengthInput.getAttribute('aria-invalid')).toBe('true');
+
+    // Correcting the value and blurring clears the error.
+    fireEvent.change(lengthInput, { target: { value: '720' } });
+    fireEvent.blur(lengthInput);
+    expect(screen.queryByTestId('input-length-error')).toBeNull();
+  });
+
+  it('groups placements with optgroups and shows a contextual description (P1-b)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+
+    // The select offers grouped placements.
+    const select = screen.getByTestId('input-placement') as HTMLSelectElement;
+    const groups = select.querySelectorAll('optgroup');
+    expect(groups.length).toBeGreaterThanOrEqual(4);
+
+    // Changing placement to "superior" surfaces its description.
+    fireEvent.change(select, { target: { value: 'superior' } });
+    expect(screen.getByTestId('placement-hint').textContent).toContain('Tapa');
+  });
+
+  it('toggles option roles via chips instead of a native multi-select (P2)', () => {
+    const onUpdate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-options'));
+
+    // c1 (Puerta) already has FRENTE selected, so the chip starts pressed.
+    const frenteChip = screen.getByTestId('option-role-FRENTE');
+    expect(frenteChip.getAttribute('aria-pressed')).toBe('true');
+
+    // Toggle it off, then back on — verifies the chip toggles both ways.
+    fireEvent.click(frenteChip);
+    expect(frenteChip.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(frenteChip);
+    expect(frenteChip.getAttribute('aria-pressed')).toBe('true');
+
+    // Saving persists the role.
+    fireEvent.click(screen.getByTestId('save-btn'));
+    expect(onUpdate).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ optionRoles: expect.stringContaining('FRENTE') }),
+    );
   });
 });

@@ -5,6 +5,17 @@
   min-height: 360px;
 }
 
+/**
+ * Full-bleed viewport (Proyectar / SUPER 3D). Parent must be a sized flex
+ * column with min-height: 0 so this can grow.
+ */
+.module-scene-3d--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  gap: 0;
+}
+
 .module-scene-3d--empty {
   min-height: 120px;
   justify-content: center;
@@ -17,6 +28,24 @@
   text-align: center;
 }
 
+/* Overlay on canvas (studio) — does not steal vertical space */
+.module-scene-3d__hint--overlay {
+  position: absolute;
+  z-index: 2;
+  top: var(--space-2);
+  left: var(--space-2);
+  right: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  max-width: min(100%, 36rem);
+  text-align: left;
+  color: color-mix(in srgb, var(--text-muted, #94a3b8) 90%, #fff);
+  background: color-mix(in srgb, #0f1216 72%, transparent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  line-height: var(--leading-snug, 1.35);
+}
+
 .module-scene-3d__canvas-wrap {
   position: relative;
   height: 380px;
@@ -24,6 +53,14 @@
   overflow: hidden;
   border: 1px solid var(--border-default);
   background: var(--surface-sidebar);
+}
+
+.module-scene-3d--fill .module-scene-3d__canvas-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+  border: none;
 }
 
 .module-scene-3d__canvas-wrap--focusable {
@@ -105,7 +142,7 @@
 .measurement-label {
   background: var(--surface-card, #0f172a);
   color: #f59e0b;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: var(--weight-bold, 700);
   font-variant-numeric: tabular-nums;
   padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);

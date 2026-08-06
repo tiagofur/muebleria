@@ -36,6 +36,11 @@ export type HardwareDraft = {
   name: string;
   unit: HardwareUnit;
   costPerUnit: number;
+  /**
+   * Package size in the same unit (e.g. 4 for 4 m bars when unit is meter).
+   * Empty string = no packaging.
+   */
+  packageSize: string;
   /** Relative media path (F040/F042). */
   imageUrl: string;
   notes: string;
@@ -46,6 +51,7 @@ const emptyDraft = (): HardwareDraft => ({
   name: '',
   unit: 'piece',
   costPerUnit: 0,
+  packageSize: '',
   imageUrl: '',
   notes: '',
 });
@@ -56,6 +62,8 @@ function toDraft(item: Hardware): HardwareDraft {
     name: item.name,
     unit: item.unit,
     costPerUnit: item.costPerUnit,
+    packageSize:
+      item.packageSize !== undefined ? String(item.packageSize) : '',
     imageUrl: item.imageUrl ?? '',
     notes: item.notes ?? '',
   };
@@ -218,13 +226,22 @@ export function HardwareCatalog({
   return (
     <section className="catalog-page" aria-label="Catálogo de herrajes">
       <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Herrajes</h2>
+        <div>
+          <h2 className="catalog-page__title">Herrajes</h2>
+          <p className="page-header__subtitle">
+            Bisagras, correderas y demás del catálogo
+          </p>
+        </div>
         <div className="catalog-page__toolbar">
           {canMutate ? (
-          <button type="button" className="btn btn--primary" onClick={startCreate}>
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo herraje
-          </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={startCreate}
+            >
+              <Plus size={16} strokeWidth={1.5} aria-hidden />
+              Nuevo herraje
+            </button>
           ) : null}
         </div>
       </div>
@@ -301,6 +318,15 @@ export function HardwareCatalog({
                     {formatMoneyDisplay(row.costPerUnit)}
                   </span>
                 </div>
+                {row.packageSize !== undefined ? (
+                  <div className="catalog-row-detail__field">
+                    <span className="catalog-row-detail__label">Empaque</span>
+                    <span className="catalog-row-detail__value">
+                      {row.packageSize} {UNIT_LABELS[row.unit].toLowerCase()}
+                      {row.unit === 'meter' ? ' / barra' : ''}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="catalog-row-detail__field">
                   <span className="catalog-row-detail__label">Estado</span>
                   <span className="catalog-row-detail__value">
@@ -316,7 +342,7 @@ export function HardwareCatalog({
                 <div className="catalog-row-detail__actions">
                   <button
                     type="button"
-                    className="btn btn--small"
+                    className="btn btn--small btn--primary"
                     onClick={() => startEdit(row)}
                   >
                     <Pencil size={14} strokeWidth={1.5} aria-hidden />
@@ -325,7 +351,7 @@ export function HardwareCatalog({
                   {row.active ? (
                     <button
                       type="button"
-                      className="btn btn--small btn--danger"
+                      className="btn btn--small"
                       onClick={() => onDeactivate(row.id)}
                     >
                       <EyeOff size={14} strokeWidth={1.5} aria-hidden />
@@ -401,92 +427,133 @@ export function HardwareCatalog({
         <form id={formId} className="catalog-form" onSubmit={handleSubmit}>
           {error ? <p className="catalog-form__error">{error}</p> : null}
 
-          <div className="catalog-form__field">
-            <label htmlFor="hw-code">Código</label>
-            <input
-              id="hw-code"
-              value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              autoComplete="off"
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-name">Nombre</label>
-            <input
-              id="hw-name"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="catalog-form__field" data-testid="hardware-image-field">
-            <label htmlFor="hw-image">Foto</label>
-            <div className="catalog-form__image-row">
-              <CatalogImage
-                src={resolveImageUrl(draft.imageUrl || undefined)}
-                alt={draft.name || 'Herraje'}
-                size="md"
+          <fieldset
+            className="catalog-form__section"
+            data-testid="hardware-form-identity"
+          >
+            <legend className="catalog-form__section-title">Identidad</legend>
+            <div className="catalog-form__field">
+              <label htmlFor="hw-code">Código</label>
+              <input
+                id="hw-code"
+                value={draft.code}
+                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                autoComplete="off"
+                required
               />
-              {canMutate && onUploadImage ? (
-                <input
-                  id="hw-image"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void onUploadImage(file)
-                      .then((url) => setDraft({ ...draft, imageUrl: url }))
-                      .catch(() => {
-                        /* shell toasts */
-                      });
-                    e.target.value = '';
-                  }}
-                />
-              ) : (
-                <p className="catalog-form__hint">
-                  {draft.imageUrl ? 'Foto cargada' : 'Sin foto'}
-                </p>
-              )}
             </div>
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-unit">Unidad</label>
-            <select
-              id="hw-unit"
-              value={draft.unit}
-              onChange={(e) =>
-                setDraft({ ...draft, unit: e.target.value as HardwareUnit })
-              }
+            <div className="catalog-form__field">
+              <label htmlFor="hw-name">Nombre</label>
+              <input
+                id="hw-name"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                required
+              />
+            </div>
+            <div
+              className="catalog-form__field"
+              data-testid="hardware-image-field"
             >
-              <option value="piece">{UNIT_LABELS.piece}</option>
-              <option value="set">{UNIT_LABELS.set}</option>
-              <option value="meter">{UNIT_LABELS.meter}</option>
-            </select>
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-cost">Costo unitario</label>
-            <input
-              id="hw-cost"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.costPerUnit}
-              onChange={(e) =>
-                setDraft({ ...draft, costPerUnit: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-          <div className="catalog-form__field">
-            <label htmlFor="hw-notes">Notas</label>
-            <textarea
-              id="hw-notes"
-              value={draft.notes}
-              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-            />
-          </div>
+              <label htmlFor="hw-image">Foto</label>
+              <div className="catalog-form__image-row">
+                <CatalogImage
+                  src={resolveImageUrl(draft.imageUrl || undefined)}
+                  alt={draft.name || 'Herraje'}
+                  size="md"
+                />
+                {canMutate && onUploadImage ? (
+                  <input
+                    id="hw-image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      void onUploadImage(file)
+                        .then((url) => setDraft({ ...draft, imageUrl: url }))
+                        .catch(() => {
+                          /* shell toasts */
+                        });
+                      e.target.value = '';
+                    }}
+                  />
+                ) : (
+                  <p className="catalog-form__hint">
+                    {draft.imageUrl ? 'Foto cargada' : 'Sin foto'}
+                  </p>
+                )}
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset
+            className="catalog-form__section"
+            data-testid="hardware-form-purchase"
+          >
+            <legend className="catalog-form__section-title">Compra</legend>
+            <div className="catalog-form__field">
+              <label htmlFor="hw-unit">Unidad</label>
+              <select
+                id="hw-unit"
+                value={draft.unit}
+                onChange={(e) =>
+                  setDraft({ ...draft, unit: e.target.value as HardwareUnit })
+                }
+              >
+                <option value="piece">{UNIT_LABELS.piece}</option>
+                <option value="set">{UNIT_LABELS.set}</option>
+                <option value="meter">{UNIT_LABELS.meter}</option>
+              </select>
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="hw-cost">Costo unitario</label>
+              <input
+                id="hw-cost"
+                type="number"
+                min={0}
+                step="any"
+                value={draft.costPerUnit}
+                onChange={(e) =>
+                  setDraft({ ...draft, costPerUnit: Number(e.target.value) })
+                }
+                required
+              />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="hw-package">
+                Empaque (misma unidad)
+              </label>
+              <input
+                id="hw-package"
+                type="number"
+                min={0}
+                step="any"
+                value={draft.packageSize}
+                onChange={(e) =>
+                  setDraft({ ...draft, packageSize: e.target.value })
+                }
+                placeholder={
+                  draft.unit === 'meter'
+                    ? 'ej. 4 (barra de 4 m)'
+                    : 'Opcional'
+                }
+                data-testid="hardware-package-size"
+              />
+              <p className="catalog-form__hint">
+                La lista de compra redondea el consumo hacia arriba a paquetes
+                (ej. zoclo en barras de 4 m).
+              </p>
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="hw-notes">Notas</label>
+              <textarea
+                id="hw-notes"
+                value={draft.notes}
+                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+              />
+            </div>
+          </fieldset>
         </form>
       </Modal>
     </section>

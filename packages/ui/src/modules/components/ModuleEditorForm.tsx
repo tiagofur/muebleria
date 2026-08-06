@@ -1,5 +1,6 @@
 /**
- * Module create/edit form shell — tablist + editor panels.
+ * Module create/edit form shell — primary groups + composition sub-tabs.
+ * Fase 4 UI: General / Composición / Costo (reduces 6 equal tabs).
  */
 
 import type {
@@ -30,7 +31,12 @@ import { ModuleEditorHardwarePanel } from './ModuleEditorHardwarePanel';
 import { ModuleEditorMeasuresPanel } from './ModuleEditorMeasuresPanel';
 import { ModuleEditorStructurePanel } from './ModuleEditorStructurePanel';
 import {
-  MODULE_EDITOR_TABS,
+  DEFAULT_COMPOSITION_TAB,
+  isCompositionTab,
+  MODULE_EDITOR_COMPOSITION_TABS,
+  MODULE_EDITOR_PRIMARY_TABS,
+  primaryTabFor,
+  type ModuleEditorPrimaryTab,
   type ModuleEditorTab,
 } from './moduleEditorTabs';
 
@@ -70,12 +76,26 @@ export type ModuleEditorFormProps = {
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   /**
-   * F072: Board-first editor slot. When provided, replaces the Components tab
-   * content with the BoardEditor (canvas + properties panel). The shell
-   * (apps/web) constructs this from BoardEditor which has access to editorStore.
+   * Board-first editor slot (canvas + properties). When provided, it is shown
+   * **below** the Components instance list — never replaces “Agregar componente”.
    */
   readonly boardEditorSlot?: ReactNode;
+  /**
+   * When true (full-page editor with sticky cost aside), hide the Costo primary
+   * tab and the duplicate CostPreviewPanel — cost lives in the aside only.
+   */
+  readonly costAsideVisible?: boolean;
 };
+
+function compositionBadge(draft: ModuleDraft): string {
+  const parts: string[] = [];
+  if (draft.components.length > 0) parts.push(`${draft.components.length} comp.`);
+  if (draft.presets.length > 0) parts.push(`${draft.presets.length} med.`);
+  if (draft.hardwareLines.length > 0) {
+    parts.push(`${draft.hardwareLines.length} herr.`);
+  }
+  return parts.length > 0 ? ` (${parts.join(' · ')})` : '';
+}
 
 export function ModuleEditorForm({
   formId,
@@ -108,7 +128,22 @@ export function ModuleEditorForm({
   missingGroups,
   groupLabels,
   boardEditorSlot,
+  costAsideVisible = false,
 }: ModuleEditorFormProps): ReactNode {
+  const primary = primaryTabFor(editorTab);
+  const compositionActive = isCompositionTab(editorTab);
+  const primaryTabs = costAsideVisible
+    ? MODULE_EDITOR_PRIMARY_TABS.filter((t) => t.id !== 'cost')
+    : MODULE_EDITOR_PRIMARY_TABS;
+
+  const selectPrimary = (id: ModuleEditorPrimaryTab): void => {
+    if (id === 'general') setEditorTab('general');
+    else if (id === 'cost' && !costAsideVisible) setEditorTab('cost');
+    else if (id === 'composition' && !compositionActive) {
+      setEditorTab(DEFAULT_COMPOSITION_TAB);
+    }
+  };
+
   return (
     <form
       id={formId}
@@ -124,39 +159,86 @@ export function ModuleEditorForm({
         aria-label="Secciones del editor de mueble"
         data-testid="module-editor-tabs"
       >
-        {MODULE_EDITOR_TABS.map((tab) => {
-          const selected = editorTab === tab.id;
+        {primaryTabs.map((tab) => {
+          const selected =
+            tab.id === 'composition' ? compositionActive : primary === tab.id;
+          const tabId =
+            tab.id === 'general'
+              ? 'module-editor-tab-general'
+              : tab.id === 'cost'
+                ? 'module-editor-tab-cost'
+                : 'module-editor-tab-composition';
+          const controls =
+            tab.id === 'general'
+              ? 'module-editor-panel-general'
+              : tab.id === 'cost'
+                ? 'module-editor-panel-cost'
+                : 'module-editor-panel-structure';
           return (
             <button
               key={tab.id}
               type="button"
               role="tab"
-              id={`module-editor-tab-${tab.id}`}
+              id={tabId}
               aria-selected={selected}
-              aria-controls={`module-editor-panel-${tab.id}`}
+              aria-controls={controls}
               tabIndex={selected ? 0 : -1}
               className={
                 selected
                   ? 'module-editor__tab module-editor__tab--active'
                   : 'module-editor__tab'
               }
-              data-testid={`module-editor-tab-${tab.id}`}
-              onClick={() => setEditorTab(tab.id)}
+              data-testid={tabId}
+              onClick={() => selectPrimary(tab.id)}
             >
               {tab.label}
-              {tab.id === 'components' && draft.components.length > 0
-                ? ` (${draft.components.length})`
-                : ''}
-              {tab.id === 'measures' && draft.presets.length > 0
-                ? ` (${draft.presets.length})`
-                : ''}
-              {tab.id === 'hardware' && draft.hardwareLines.length > 0
-                ? ` (${draft.hardwareLines.length})`
-                : ''}
+              {tab.id === 'composition' ? compositionBadge(draft) : ''}
             </button>
           );
         })}
       </div>
+
+      {compositionActive ? (
+        <div
+          className="module-editor__subtabs"
+          role="tablist"
+          aria-label="Composición del mueble"
+          data-testid="module-editor-composition-tabs"
+        >
+          {MODULE_EDITOR_COMPOSITION_TABS.map((tab) => {
+            const selected = editorTab === tab.id;
+            let badge = '';
+            if (tab.id === 'components' && draft.components.length > 0) {
+              badge = ` (${draft.components.length})`;
+            } else if (tab.id === 'measures' && draft.presets.length > 0) {
+              badge = ` (${draft.presets.length})`;
+            } else if (tab.id === 'hardware' && draft.hardwareLines.length > 0) {
+              badge = ` (${draft.hardwareLines.length})`;
+            }
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`module-editor-tab-${tab.id}`}
+                aria-selected={selected}
+                aria-controls={`module-editor-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                className={
+                  selected
+                    ? 'module-editor__subtab module-editor__subtab--active'
+                    : 'module-editor__subtab'
+                }
+                data-testid={`module-editor-tab-${tab.id}`}
+                onClick={() => setEditorTab(tab.id)}
+              >
+                {tab.label}
+                {badge}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <ModuleEditorGeneralPanel
         draft={draft}
@@ -177,21 +259,23 @@ export function ModuleEditorForm({
         hidden={editorTab !== 'structure'}
       />
 
-      {/* F072: Board-first editor replaces Components tab when slot is provided. */}
+      <ModuleEditorComponentsPanel
+        draft={draft}
+        setDraft={setDraft}
+        catalogComponents={catalogComponents}
+        composedEnabled={composedEnabled}
+        onRequestAdd={onRequestAddComponent}
+        hidden={editorTab !== 'components'}
+      />
       {boardEditorSlot && editorTab === 'components' ? (
-        <div className="module-editor__board-slot" data-testid="module-editor-board-slot">
+        <div
+          className="module-editor__board-slot"
+          data-testid="module-editor-board-slot"
+          data-hybrid="true"
+        >
           {boardEditorSlot}
         </div>
-      ) : (
-        <ModuleEditorComponentsPanel
-          draft={draft}
-          setDraft={setDraft}
-          catalogComponents={catalogComponents}
-          composedEnabled={composedEnabled}
-          onRequestAdd={onRequestAddComponent}
-          hidden={editorTab !== 'components'}
-        />
-      )}
+      ) : null}
 
       <ModuleEditorMeasuresPanel
         draft={draft}
@@ -212,14 +296,26 @@ export function ModuleEditorForm({
         hidden={editorTab !== 'hardware'}
       />
 
-      <ModuleEditorCostPanel
-        editingId={editingId}
-        costPreview={costPreview}
-        previewBlocked={previewBlocked}
-        missingGroups={missingGroups}
-        groupLabels={groupLabels}
-        hidden={editorTab !== 'cost'}
-      />
+      {!costAsideVisible ? (
+        <ModuleEditorCostPanel
+          editingId={editingId}
+          costPreview={costPreview}
+          previewBlocked={previewBlocked}
+          missingGroups={missingGroups}
+          groupLabels={groupLabels}
+          hidden={editorTab !== 'cost'}
+        />
+      ) : editorTab === 'cost' ? (
+        <p
+          className="catalog-form__hint"
+          id="module-editor-panel-cost"
+          role="tabpanel"
+          aria-labelledby="module-editor-tab-cost"
+          data-testid="module-editor-panel-cost"
+        >
+          El costo y el desglose están en el panel lateral.
+        </p>
+      ) : null}
     </form>
   );
 }

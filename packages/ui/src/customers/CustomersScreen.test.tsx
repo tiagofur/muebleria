@@ -56,7 +56,7 @@ describe('CustomersScreen', () => {
 			/>
 		);
 
-		expect(screen.getByText('No hay clientes registrados')).toBeTruthy();
+		expect(screen.getByText('No hay clientes')).toBeTruthy();
 	});
 
 	it('opens modal and submits new customer draft', () => {
@@ -71,8 +71,10 @@ describe('CustomersScreen', () => {
 			/>
 		);
 
-		// Clic en Agregar cliente en el EmptyState
-		const newButton = screen.getAllByRole('button', { name: 'Agregar cliente' })[0] as HTMLElement;
+		// Clic en Nuevo cliente en el EmptyState / toolbar
+		const newButton = screen.getAllByRole('button', {
+			name: /Nuevo cliente/i,
+		})[0] as HTMLElement;
 		fireEvent.click(newButton);
 
 		// Llenar formulario
@@ -114,7 +116,7 @@ describe('CustomersScreen', () => {
 			/>,
 		);
 		fireEvent.click(
-			screen.getAllByRole('button', { name: 'Agregar cliente' })[0] as HTMLElement,
+			screen.getAllByRole('button', { name: /Nuevo cliente/i })[0] as HTMLElement,
 		);
 		fireEvent.change(screen.getByLabelText(/nombre completo/i), {
 			target: { value: 'Cliente Asignado' },

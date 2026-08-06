@@ -8,8 +8,11 @@ import type {
   ReactNode,
   SetStateAction,
 } from 'react';
-import type { OptionGroup, ResolvedBoardPart } from '@muebles/domain';
-import type { MaterialColorLookup } from '../../preview3d';
+import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
+import type {
+  MaterialColorLookup,
+  MaterialTextureLookup,
+} from '../../preview3d';
 import {
   COMPONENT_EDITOR_TABS,
   type ComponentDraft,
@@ -19,13 +22,13 @@ import { ComponentEditorEdgesPanel } from './ComponentEditorEdgesPanel';
 import { ComponentEditorGeneralPanel } from './ComponentEditorGeneralPanel';
 import { ComponentEditorGeometryPanel } from './ComponentEditorGeometryPanel';
 import { ComponentEditorOptionsPanel } from './ComponentEditorOptionsPanel';
-import { ComponentEditorPreviewPanel } from './ComponentEditorPreviewPanel';
 
 export type ComponentEditorFormProps = {
   readonly formId: string;
   readonly error: string | null;
   readonly onSubmit: (e: FormEvent) => void;
-  readonly onCancel: () => void;
+  /** @deprecated Footer moved to EntityEditorLayout chrome (Fase 5). */
+  readonly onCancel?: () => void;
   readonly editorTab: ComponentEditorTab;
   readonly setEditorTab: Dispatch<SetStateAction<ComponentEditorTab>>;
   readonly draft: ComponentDraft;
@@ -34,13 +37,17 @@ export type ComponentEditorFormProps = {
   readonly optionGroups: readonly OptionGroup[];
   readonly previewParts: readonly ResolvedBoardPart[];
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
+  readonly containerDims: PlacementDims;
+  readonly onContainerDimsChange: (dims: PlacementDims) => void;
+  readonly showInContext: boolean;
+  readonly onShowInContextChange: (v: boolean) => void;
 };
 
 export function ComponentEditorForm({
   formId,
   error,
   onSubmit,
-  onCancel,
   editorTab,
   setEditorTab,
   draft,
@@ -49,13 +56,18 @@ export function ComponentEditorForm({
   optionGroups,
   previewParts,
   materialColors,
+  materialTextures,
+  containerDims,
+  onContainerDimsChange,
+  showInContext,
+  onShowInContextChange,
 }: ComponentEditorFormProps): ReactNode {
   return (
     <form id={formId} onSubmit={onSubmit} className="catalog-form">
       {error ? (
-        <div className="alert alert--danger mb-4" data-testid="form-error">
+        <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
-        </div>
+        </p>
       ) : null}
 
       <div
@@ -63,12 +75,6 @@ export function ComponentEditorForm({
         role="tablist"
         aria-label="Secciones del editor de componente"
         data-testid="component-editor-tabs"
-        style={{
-          display: 'flex',
-          gap: '0.5rem',
-          borderBottom: '1px solid var(--border)',
-          marginBottom: '1.5rem',
-        }}
       >
         {COMPONENT_EDITOR_TABS.map((tab) => {
           const selected = editorTab === tab.id;
@@ -86,18 +92,6 @@ export function ComponentEditorForm({
                   ? 'module-editor__tab module-editor__tab--active'
                   : 'module-editor__tab'
               }
-              style={{
-                background: 'none',
-                border: 'none',
-                borderBottom: selected
-                  ? '2px solid var(--primary)'
-                  : '2px solid transparent',
-                color: selected ? 'var(--primary)' : 'var(--text-muted)',
-                padding: '0.75rem 1rem',
-                cursor: 'pointer',
-                fontWeight: selected ? '600' : '400',
-                transition: 'all 0.2s',
-              }}
               data-testid={`component-editor-tab-${tab.id}`}
               onClick={() => setEditorTab(tab.id)}
             >
@@ -120,6 +114,13 @@ export function ComponentEditorForm({
         draft={draft}
         setDraft={setDraft}
         hidden={editorTab !== 'geometry'}
+        previewParts={previewParts}
+        materialColors={materialColors}
+        materialTextures={materialTextures}
+        containerDims={containerDims}
+        onContainerDimsChange={onContainerDimsChange}
+        showInContext={showInContext}
+        onShowInContextChange={onShowInContextChange}
       />
 
       <ComponentEditorEdgesPanel
@@ -135,26 +136,6 @@ export function ComponentEditorForm({
         optionGroups={optionGroups}
         hidden={editorTab !== 'options'}
       />
-
-      <ComponentEditorPreviewPanel
-        draft={draft}
-        previewParts={previewParts}
-        hidden={editorTab !== 'preview3d'}
-        materialColors={materialColors}
-      />
-
-      <div className="modal__footer mt-6">
-        <button
-          type="button"
-          className="btn btn--secondary"
-          onClick={onCancel}
-        >
-          Cancelar
-        </button>
-        <button type="submit" className="btn btn--primary" data-testid="save-btn">
-          Guardar
-        </button>
-      </div>
     </form>
   );
 }

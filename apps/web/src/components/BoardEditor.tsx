@@ -6,8 +6,8 @@
  * Recibe un Module + catálogo, resuelve el BOM, carga el scratch space del
  * editorStore, y renderiza el canvas + panel lado a lado.
  *
- * Este es el componente que reemplazará al tab "Components" del ModuleEditorForm
- * en el slice 1.5.
+ * Slotted into the Module editor Components tab **below** the instance list
+ * (hybrid chrome — list + “Agregar” always remain available).
  */
 
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
@@ -21,6 +21,7 @@ import {
   Furniture3DViewer,
   boardPartsToVisuals,
   materialColorMap,
+  moduleCompositionKey,
 } from '@muebles/ui';
 import {
   useEditorStore,
@@ -37,6 +38,11 @@ export interface BoardEditorProps {
   readonly moduleWidth?: number;
   readonly moduleHeight?: number;
   readonly moduleDepth?: number;
+  /**
+   * Optional composition fingerprint from the **draft** (without transient
+   * boardOverrides). When omitted, derived from `module` via moduleCompositionKey.
+   */
+  readonly compositionKey?: string;
   /**
    * Gap #1: called whenever the user edits part poses/dimensions, with the
    * derived overrides keyed by componentId. The shell merges these into the
@@ -55,6 +61,7 @@ export function BoardEditor({
   moduleWidth,
   moduleHeight,
   moduleDepth,
+  compositionKey: compositionKeyProp,
   onOverridesChange,
 }: BoardEditorProps): ReactNode {
   const resolvedParts = useEditorStore((s) => s.resolvedParts);
@@ -71,6 +78,19 @@ export function BoardEditor({
 
   // Gap #1: snapshot the originally-resolved parts so we can diff on change.
   const originalPartsRef = useRef<readonly ResolvedBoardPart[]>([]);
+  // Always resolve the latest module when composition fingerprint changes
+  // (without reloading on every boardOverrides / pose-only prop update).
+  const moduleRef = useRef(module);
+  moduleRef.current = module;
+  const catalogRef = useRef(catalog);
+  catalogRef.current = catalog;
+  const optionChoicesRef = useRef(optionChoices);
+  optionChoicesRef.current = optionChoices;
+
+  const compositionKey = useMemo(
+    () => compositionKeyProp ?? moduleCompositionKey(module),
+    [compositionKeyProp, module],
+  );
 
   // F074: keyboard shortcuts (d=duplicate, r=rotate, del=remove, v=toggle).
   useBoardShortcuts(true);
@@ -81,22 +101,28 @@ export function BoardEditor({
     [catalog.materials],
   );
 
-  // Resolve BOM on mount or when module/catalog/preset changes.
+  // Resolve BOM when id or composition (structure / components / dims) changes.
   useEffect(() => {
+    const mod = moduleRef.current;
     try {
-      const bom = resolveBom(module, optionChoices, catalog, measurePresetId);
+      const bom = resolveBom(
+        mod,
+        optionChoicesRef.current,
+        catalogRef.current,
+        measurePresetId,
+      );
       originalPartsRef.current = bom.boardParts;
-      loadModule(module.id, bom.boardParts);
+      loadModule(mod.id, bom.boardParts);
     } catch {
       // Resolution may fail if options are incomplete — load empty.
       originalPartsRef.current = [];
-      loadModule(module.id, []);
+      loadModule(mod.id, []);
     }
     return () => {
       clearEditor();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [module.id, measurePresetId]);
+  }, [module.id, compositionKey, measurePresetId]);
 
   // Gap #1: when parts change, derive overrides and notify the shell.
   useEffect(() => {
@@ -151,6 +177,8 @@ export function BoardEditor({
             depth={moduleDepth ?? 580}
             materialColors={materialColors}
             className="board-editor__3d"
+            /* BoardEditor already has canvas selection + properties panel. */
+            showPartInspector={false}
           />
         ) : (
           <BoardCanvas

@@ -11,7 +11,7 @@ import (
 
 func (s *PostgresStore) loadStructureComponents(ctx context.Context, structureID string) ([]domain.ComponentInstance, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT component_id, quantity, placement_override
+		SELECT component_id, quantity, placement_override, overrides
 		FROM structure_components
 		WHERE structure_id = $1
 		ORDER BY created_at ASC;
@@ -23,14 +23,9 @@ func (s *PostgresStore) loadStructureComponents(ctx context.Context, structureID
 
 	var out []domain.ComponentInstance
 	for rows.Next() {
-		var ci domain.ComponentInstance
-		var placementOverride *string
-		if err := rows.Scan(&ci.ComponentID, &ci.Quantity, &placementOverride); err != nil {
+		ci, err := scanStructureComponent(rows)
+		if err != nil {
 			return nil, err
-		}
-		if placementOverride != nil && *placementOverride != "" {
-			p := domain.ComponentPlacement(*placementOverride)
-			ci.PlacementOverride = &p
 		}
 		out = append(out, ci)
 	}
@@ -38,6 +33,22 @@ func (s *PostgresStore) loadStructureComponents(ctx context.Context, structureID
 		out = []domain.ComponentInstance{}
 	}
 	return out, rows.Err()
+}
+
+// scanStructureComponent reads one structure_components row (incl. overrides JSONB).
+func scanStructureComponent(rows pgx.Rows) (domain.ComponentInstance, error) {
+	var ci domain.ComponentInstance
+	var placementOverride *string
+	var overridesJSON []byte
+	if err := rows.Scan(&ci.ComponentID, &ci.Quantity, &placementOverride, &overridesJSON); err != nil {
+		return ci, err
+	}
+	if placementOverride != nil && *placementOverride != "" {
+		p := domain.ComponentPlacement(*placementOverride)
+		ci.PlacementOverride = &p
+	}
+	ci.Overrides = parseComponentInstanceOverridesJSON(overridesJSON)
+	return ci, nil
 }
 
 func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID string) ([]domain.DimensionPreset, error) {
@@ -126,7 +137,7 @@ func structureRevisionSnapshot(revision int, st domain.Structure) ([]byte, error
 // component set inside the same tx before mutating it (#108 snapshot).
 func loadStructureComponentsTx(ctx context.Context, tx pgx.Tx, structureID string) ([]domain.ComponentInstance, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT component_id, quantity, placement_override
+		SELECT component_id, quantity, placement_override, overrides
 		FROM structure_components
 		WHERE structure_id = $1
 		ORDER BY created_at ASC;
@@ -138,14 +149,9 @@ func loadStructureComponentsTx(ctx context.Context, tx pgx.Tx, structureID strin
 
 	var out []domain.ComponentInstance
 	for rows.Next() {
-		var ci domain.ComponentInstance
-		var placementOverride *string
-		if err := rows.Scan(&ci.ComponentID, &ci.Quantity, &placementOverride); err != nil {
+		ci, err := scanStructureComponent(rows)
+		if err != nil {
 			return nil, err
-		}
-		if placementOverride != nil && *placementOverride != "" {
-			p := domain.ComponentPlacement(*placementOverride)
-			ci.PlacementOverride = &p
 		}
 		out = append(out, ci)
 	}
@@ -302,6 +308,14 @@ func nullIfEmpty(s string) interface{} {
 	return s
 }
 
+// nullIfZeroFloat stores NULL when value is 0 so "unset" tile size uses client default.
+func nullIfZeroFloat(v float64) interface{} {
+	if v == 0 {
+		return nil
+	}
+	return v
+}
+
 func placementOverrideArg(p *domain.ComponentPlacement) interface{} {
 	if p == nil {
 		return nil
@@ -349,10 +363,11 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	st.Active = active
 
 	for _, c := range st.Components {
+		overridesJSON := fullComponentInstanceOverridesJSON(c.Overrides)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override)
-			VALUES ($1,$2,$3,$4);
-		`, st.ID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride))
+			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override, overrides)
+			VALUES ($1,$2,$3,$4,$5);
+		`, st.ID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride), overridesJSON)
 		if err != nil {
 			return fmt.Errorf("error inserting structure component: %w", err)
 		}
@@ -477,10 +492,11 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	}
 
 	for _, c := range st.Components {
+		overridesJSON := fullComponentInstanceOverridesJSON(c.Overrides)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override)
-			VALUES ($1,$2,$3,$4);
-		`, id, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride))
+			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override, overrides)
+			VALUES ($1,$2,$3,$4,$5);
+		`, id, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride), overridesJSON)
 		if err != nil {
 			return fmt.Errorf("error replacing structure component: %w", err)
 		}

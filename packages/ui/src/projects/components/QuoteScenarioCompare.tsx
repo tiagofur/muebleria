@@ -195,7 +195,7 @@ export function QuoteScenarioCompare({
           <div className="scenario-compare__toggle">
             <button
               type="button"
-              className="btn btn--ghost btn--sm"
+              className="btn btn--ghost btn--small"
               onClick={() => setShowBreakdown((v) => !v)}
               data-testid="toggle-scenario-breakdown"
             >
@@ -260,7 +260,7 @@ export function QuoteScenarioCompare({
           {canApply ? (
             <button
               type="button"
-              className="btn btn--primary btn--sm"
+              className="btn btn--primary btn--small"
               onClick={() => onApplyB(role, choiceB)}
               data-testid="scenario-apply-b"
             >
@@ -270,7 +270,7 @@ export function QuoteScenarioCompare({
           {canDuplicate && onDuplicateWithB ? (
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--small"
               onClick={() => onDuplicateWithB(role, choiceB)}
               data-testid="scenario-duplicate-b"
             >
@@ -280,7 +280,7 @@ export function QuoteScenarioCompare({
           {onExportScenarioPdf ? (
             <button
               type="button"
-              className="btn btn--secondary btn--sm"
+              className="btn btn--small"
               onClick={() => onExportScenarioPdf(role, choiceB)}
               data-testid="scenario-export-pdf"
             >
@@ -289,7 +289,7 @@ export function QuoteScenarioCompare({
           ) : null}
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--small"
             onClick={() => setChoiceB('')}
             data-testid="scenario-discard-b"
           >

@@ -7,6 +7,8 @@
  */
 
 import type {
+  KitchenPlanUnderlay,
+  KitchenSpace,
   KitchenWall,
   PlacementElevation,
   ProjectItem,
@@ -14,8 +16,24 @@ import type {
   ProjectKitchenLayout,
 } from './types';
 
+/** Default space id for legacy single-space layouts. */
+export const DEFAULT_KITCHEN_SPACE_ID = 'space-main';
+export const DEFAULT_KITCHEN_SPACE_NAME = 'Cocina';
+
 /** Default height (mm) for wall-hung units in 3D when elevation is `wall`. */
 export const DEFAULT_WALL_CABINET_Z_MM = 1400;
+
+/**
+ * Default clearance under floor cabinets for plinth / legs (zoclo/patas), mm.
+ * Common workshop toe-kick height; overridable per plan or per placement.
+ */
+export const DEFAULT_BASE_CLEARANCE_MM = 100;
+
+/** Suggested zoclo/patas heights for UI chips (mm). */
+export const BASE_CLEARANCE_PRESETS_MM = [0, 80, 100, 120, 150] as const;
+
+/** Suggested wall-cabinet install heights (bottom of unit, mm). */
+export const WALL_CABINET_Z_PRESETS_MM = [1300, 1400, 1450, 1500, 1600] as const;
 
 export type KitchenFootprint = {
   readonly itemId: string;
@@ -47,6 +65,18 @@ export type KitchenPlacedModule = {
   readonly originX: number;
   readonly originY: number;
   readonly originZ: number;
+  /**
+   * Module yaw in degrees (workshop plan). Width aligns with wall direction;
+   * depth points into the room for axis-aligned L/U plans (v1).
+   * 0 = +X wall, 90 = +Y wall, 180 = −X, 270 = −Y.
+   */
+  readonly yawDeg: number;
+  /**
+   * Clearance under the cabinet used for originZ when on floor (zoclo/patas).
+   * 0 for wall-hung or when no plinth space.
+   */
+  readonly baseClearanceMm: number;
+  readonly elevation: PlacementElevation;
 };
 
 export type KitchenLayoutResult = {
@@ -59,7 +89,202 @@ export type KitchenLayoutResult = {
 };
 
 export function emptyKitchenLayout(): ProjectKitchenLayout {
-  return { walls: [], placements: [] };
+  return {
+    walls: [],
+    placements: [],
+    spaces: [
+      {
+        id: DEFAULT_KITCHEN_SPACE_ID,
+        name: DEFAULT_KITCHEN_SPACE_NAME,
+        walls: [],
+        placements: [],
+      },
+    ],
+    activeSpaceId: DEFAULT_KITCHEN_SPACE_ID,
+  };
+}
+
+function spacePlanFields(
+  source: {
+    readonly baseClearanceMm?: number;
+    readonly wallCabinetZMm?: number;
+    readonly showCountertop?: boolean;
+    readonly underlay?: KitchenPlanUnderlay;
+  },
+): Pick<
+  KitchenSpace,
+  'baseClearanceMm' | 'wallCabinetZMm' | 'showCountertop' | 'underlay'
+> {
+  return {
+    ...(source.baseClearanceMm === undefined
+      ? {}
+      : { baseClearanceMm: source.baseClearanceMm }),
+    ...(source.wallCabinetZMm === undefined
+      ? {}
+      : { wallCabinetZMm: source.wallCabinetZMm }),
+    ...(source.showCountertop === undefined
+      ? {}
+      : { showCountertop: source.showCountertop }),
+    ...(source.underlay === undefined ? {} : { underlay: source.underlay }),
+  };
+}
+
+function kitchenSpaceFromTopLevel(
+  layout: ProjectKitchenLayout,
+  id: string,
+  name: string,
+): KitchenSpace {
+  return {
+    id,
+    name,
+    walls: layout.walls,
+    placements: layout.placements,
+    ...spacePlanFields(layout),
+  };
+}
+
+function flattenActiveSpace(
+  spaces: readonly KitchenSpace[],
+  active: KitchenSpace,
+): ProjectKitchenLayout {
+  return {
+    walls: active.walls,
+    placements: active.placements,
+    ...spacePlanFields(active),
+    spaces,
+    activeSpaceId: active.id,
+  };
+}
+
+/**
+ * Ensure `spaces` + `activeSpaceId` exist. Legacy layouts (walls only) become
+ * a single "Cocina" space. When spaces exist they are source of truth; top-level
+ * walls/placements are re-mirrored from the active space.
+ *
+ * Edits to top-level must go through `syncActiveKitchenSpace` (or
+ * set/add/remove helpers) so the active space entry is updated first.
+ */
+export function ensureKitchenSpaces(
+  layout: ProjectKitchenLayout,
+): ProjectKitchenLayout {
+  if (layout.spaces && layout.spaces.length > 0) {
+    const activeId =
+      layout.activeSpaceId &&
+      layout.spaces.some((s) => s.id === layout.activeSpaceId)
+        ? layout.activeSpaceId
+        : layout.spaces[0]!.id;
+    const active =
+      layout.spaces.find((s) => s.id === activeId) ?? layout.spaces[0]!;
+    return flattenActiveSpace(layout.spaces, active);
+  }
+  const space = kitchenSpaceFromTopLevel(
+    layout,
+    DEFAULT_KITCHEN_SPACE_ID,
+    DEFAULT_KITCHEN_SPACE_NAME,
+  );
+  return flattenActiveSpace([space], space);
+}
+
+/**
+ * Write top-level content into the active space entry (keep other spaces).
+ * Does not re-mirror from spaces first — top-level edits are the source.
+ */
+export function syncActiveKitchenSpace(
+  layout: ProjectKitchenLayout,
+): ProjectKitchenLayout {
+  if (!layout.spaces || layout.spaces.length === 0) {
+    // Legacy: create spaces from current top-level.
+    return ensureKitchenSpaces(layout);
+  }
+  const activeId =
+    layout.activeSpaceId &&
+    layout.spaces.some((s) => s.id === layout.activeSpaceId)
+      ? layout.activeSpaceId
+      : layout.spaces[0]!.id;
+  const activeName =
+    layout.spaces.find((s) => s.id === activeId)?.name ??
+    DEFAULT_KITCHEN_SPACE_NAME;
+  const active = kitchenSpaceFromTopLevel(layout, activeId, activeName);
+  const spaces = layout.spaces.map((s) => (s.id === activeId ? active : s));
+  return flattenActiveSpace(spaces, active);
+}
+
+/** Switch active space; persists current top-level into previous active first. */
+export function setActiveKitchenSpace(
+  layout: ProjectKitchenLayout,
+  spaceId: string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  const next = synced.spaces!.find((s) => s.id === spaceId);
+  if (!next) return synced;
+  return flattenActiveSpace(synced.spaces!, next);
+}
+
+/** Add a named space and switch to it (empty walls/placements). */
+export function addKitchenSpace(
+  layout: ProjectKitchenLayout,
+  name: string,
+  newId: () => string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  const id = newId();
+  const trimmed = name.trim() || `Espacio ${synced.spaces!.length + 1}`;
+  const space: KitchenSpace = {
+    id,
+    name: trimmed,
+    walls: [],
+    placements: [],
+  };
+  const spaces = [...synced.spaces!, space];
+  return flattenActiveSpace(spaces, space);
+}
+
+/** Rename a space (does not switch). */
+export function renameKitchenSpace(
+  layout: ProjectKitchenLayout,
+  spaceId: string,
+  name: string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  const trimmed = name.trim();
+  if (!trimmed) return synced;
+  const spaces = synced.spaces!.map((s) =>
+    s.id === spaceId ? { ...s, name: trimmed } : s,
+  );
+  const active =
+    spaces.find((s) => s.id === synced.activeSpaceId) ?? spaces[0]!;
+  return flattenActiveSpace(spaces, active);
+}
+
+/**
+ * Remove a space. No-op when only one remains.
+ * Switches to the first remaining space if the active one was removed.
+ */
+export function removeKitchenSpace(
+  layout: ProjectKitchenLayout,
+  spaceId: string,
+): ProjectKitchenLayout {
+  const synced = syncActiveKitchenSpace(layout);
+  if (synced.spaces!.length <= 1) return synced;
+  const spaces = synced.spaces!.filter((s) => s.id !== spaceId);
+  if (spaces.length === synced.spaces!.length) return synced;
+  const activeId =
+    synced.activeSpaceId === spaceId
+      ? spaces[0]!.id
+      : (synced.activeSpaceId ?? spaces[0]!.id);
+  const active = spaces.find((s) => s.id === activeId) ?? spaces[0]!;
+  return flattenActiveSpace(spaces, active);
+}
+
+/** All placements across spaces (or top-level if no spaces). */
+export function allKitchenPlacements(
+  layout: ProjectKitchenLayout,
+): readonly ProjectItemPlacement[] {
+  if (layout.spaces && layout.spaces.length > 0) {
+    // Prefer spaces as source of truth after sync; include active mirror once.
+    return layout.spaces.flatMap((s) => s.placements);
+  }
+  return layout.placements;
 }
 
 /** Chain walls in order: each starts where the previous ends unless origin is set. */
@@ -101,6 +326,11 @@ export function resolveWallFrames(
   return out;
 }
 
+/** True when placement is a free island (not wall-anchored). */
+export function isFreePlacement(p: ProjectItemPlacement): boolean {
+  return p.mode === 'free';
+}
+
 /**
  * Soft validation warnings (Spanish). Does not throw.
  */
@@ -128,6 +358,21 @@ export function kitchenLayoutWarnings(
         `Índice de copia inválido para ítem ${p.itemId} (copia ${p.instanceIndex + 1}).`,
       );
     }
+    if (isFreePlacement(p)) {
+      if (
+        p.freeXMm !== undefined &&
+        !Number.isFinite(p.freeXMm)
+      ) {
+        warnings.push('Posición libre inválida (X).');
+      }
+      if (
+        p.freeYMm !== undefined &&
+        !Number.isFinite(p.freeYMm)
+      ) {
+        warnings.push('Posición libre inválida (Y).');
+      }
+      continue;
+    }
     const wall = wallById.get(p.wallId);
     if (!wall) {
       warnings.push(`Muro no encontrado para una colocación (${p.wallId}).`);
@@ -145,9 +390,10 @@ export function kitchenLayoutWarnings(
     }
   }
 
-  // Soft overlap on same wall (same elevation)
+  // Soft overlap on same wall (same elevation) — wall-anchored only
   const byWallElev = new Map<string, ProjectItemPlacement[]>();
   for (const p of layout.placements) {
+    if (isFreePlacement(p)) continue;
     if (!wallById.has(p.wallId)) continue;
     const key = `${p.wallId}|${p.elevation}`;
     const list = byWallElev.get(key) ?? [];
@@ -171,33 +417,262 @@ export function kitchenLayoutWarnings(
   return warnings;
 }
 
-/** Drop placements that no longer match items; keep walls. */
+function prunePlacementsInSpace(
+  walls: readonly KitchenWall[],
+  placements: readonly ProjectItemPlacement[],
+  itemById: Map<string, ProjectItem>,
+): ProjectItemPlacement[] {
+  const wallIds = new Set(walls.map((w) => w.id));
+  return placements.filter((p) => {
+    const item = itemById.get(p.itemId);
+    if (!item) return false;
+    if (p.instanceIndex < 0 || p.instanceIndex >= Math.max(1, item.quantity)) {
+      return false;
+    }
+    if (isFreePlacement(p)) return true;
+    return wallIds.has(p.wallId);
+  });
+}
+
+/** Drop placements that no longer match items; keep walls and plan defaults. */
 export function pruneKitchenLayout(
   layout: ProjectKitchenLayout,
   items: readonly ProjectItem[],
 ): ProjectKitchenLayout {
   const itemById = new Map(items.map((it) => [it.id, it]));
-  const wallIds = new Set(layout.walls.map((w) => w.id));
-  const placements = layout.placements.filter((p) => {
-    const item = itemById.get(p.itemId);
-    if (!item) return false;
-    if (!wallIds.has(p.wallId)) return false;
-    return p.instanceIndex >= 0 && p.instanceIndex < Math.max(1, item.quantity);
+  const placements = prunePlacementsInSpace(
+    layout.walls,
+    layout.placements,
+    itemById,
+  );
+  const base: ProjectKitchenLayout = {
+    walls: layout.walls,
+    placements,
+    ...spacePlanFields(layout),
+  };
+
+  if (!layout.spaces || layout.spaces.length === 0) {
+    return base;
+  }
+
+  const spaces = layout.spaces.map((s) => {
+    // Active space: use pruned top-level (may be more recent).
+    if (s.id === layout.activeSpaceId) {
+      return {
+        id: s.id,
+        name: s.name,
+        walls: layout.walls,
+        placements,
+        ...spacePlanFields(layout),
+      };
+    }
+    return {
+      ...s,
+      placements: prunePlacementsInSpace(s.walls, s.placements, itemById),
+    };
   });
-  return { walls: layout.walls, placements };
+
+  const activeId =
+    layout.activeSpaceId && spaces.some((s) => s.id === layout.activeSpaceId)
+      ? layout.activeSpaceId
+      : spaces[0]!.id;
+  const active = spaces.find((s) => s.id === activeId) ?? spaces[0]!;
+  return flattenActiveSpace(spaces, active);
+}
+
+/**
+ * Prune layout after quote item mutations. Returns `undefined` when both walls
+ * and placements are empty (same contract as project store clear).
+ */
+export function pruneKitchenLayoutOrClear(
+  layout: ProjectKitchenLayout | undefined,
+  items: readonly ProjectItem[],
+): ProjectKitchenLayout | undefined {
+  if (!layout) return undefined;
+  const pruned = pruneKitchenLayout(layout, items);
+  const hasAnyWalls =
+    pruned.walls.length > 0 ||
+    (pruned.spaces?.some((s) => s.walls.length > 0) ?? false);
+  const hasAnyPlacements =
+    pruned.placements.length > 0 ||
+    (pruned.spaces?.some((s) => s.placements.length > 0) ?? false);
+  if (!hasAnyWalls && !hasAnyPlacements) {
+    return undefined;
+  }
+  return pruned;
+}
+
+/**
+ * Snap wall angle to cardinal yaw so module width follows the wall and depth
+ * points into the room for the default L template (walls at 0° and 90°).
+ */
+export function wallDirectionYawDeg(angleDeg: number): number {
+  const a = ((angleDeg % 360) + 360) % 360;
+  if (a > 45 && a < 135) return 90;
+  if (a >= 135 && a <= 225) return 180;
+  if (a > 225 && a < 315) return 270;
+  return 0;
+}
+
+/** Axis-aligned footprint AABB after yaw (workshop mm). */
+export function placementAabb(
+  originX: number,
+  originY: number,
+  width: number,
+  depth: number,
+  yawDeg: number,
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  const y = wallDirectionYawDeg(yawDeg);
+  if (y === 90) {
+    return {
+      minX: originX - depth,
+      maxX: originX,
+      minY: originY,
+      maxY: originY + width,
+    };
+  }
+  if (y === 180) {
+    return {
+      minX: originX - width,
+      maxX: originX,
+      minY: originY - depth,
+      maxY: originY,
+    };
+  }
+  if (y === 270) {
+    return {
+      minX: originX,
+      maxX: originX + depth,
+      minY: originY - width,
+      maxY: originY,
+    };
+  }
+  return {
+    minX: originX,
+    maxX: originX + width,
+    minY: originY,
+    maxY: originY + depth,
+  };
+}
+
+/**
+ * Swap order of a placement on its wall, then re-pack offsets with gap.
+ * Unlike a blind offset swap, widths stay contiguous.
+ */
+export function reorderPlacementOnWall(
+  layout: ProjectKitchenLayout,
+  itemId: string,
+  instanceIndex: number,
+  dir: -1 | 1,
+  footprints: readonly KitchenFootprint[],
+  gapMm: number = 20,
+): ProjectKitchenLayout {
+  const target = layout.placements.find(
+    (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+  );
+  if (!target) return layout;
+  const onWall = layout.placements
+    .filter((p) => p.wallId === target.wallId)
+    .sort((a, b) => a.offsetMm - b.offsetMm);
+  const idx = onWall.findIndex(
+    (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+  );
+  const j = idx + dir;
+  if (idx < 0 || j < 0 || j >= onWall.length) return layout;
+
+  const reordered = [...onWall];
+  const tmp = reordered[idx]!;
+  reordered[idx] = reordered[j]!;
+  reordered[j] = tmp;
+
+  const fpByKey = new Map(
+    footprints.map((f) => [`${f.itemId}#${f.instanceIndex}`, f]),
+  );
+  const newOffset = new Map<string, number>();
+  let cursor = 0;
+  for (const p of reordered) {
+    const key = `${p.itemId}#${p.instanceIndex}`;
+    newOffset.set(key, cursor);
+    const w = fpByKey.get(key)?.width ?? 600;
+    cursor += w + gapMm;
+  }
+
+  return {
+    ...layout,
+    placements: layout.placements.map((p) => {
+      const key = `${p.itemId}#${p.instanceIndex}`;
+      const next = newOffset.get(key);
+      return next === undefined ? p : { ...p, offsetMm: next };
+    }),
+  };
+}
+
+/**
+ * Resolve plinth/legs clearance (mm) for a floor placement.
+ * Wall elevation → 0. Floor → placement override → layout default → domain default.
+ */
+export function resolveBaseClearanceMm(
+  layout: ProjectKitchenLayout | undefined,
+  placement?: Pick<ProjectItemPlacement, 'elevation' | 'baseClearanceMm'>,
+  options?: { readonly baseClearanceMm?: number },
+): number {
+  if (placement?.elevation === 'wall') return 0;
+  if (
+    placement?.baseClearanceMm !== undefined &&
+    Number.isFinite(placement.baseClearanceMm)
+  ) {
+    return Math.max(0, Math.round(placement.baseClearanceMm));
+  }
+  if (
+    layout?.baseClearanceMm !== undefined &&
+    Number.isFinite(layout.baseClearanceMm)
+  ) {
+    return Math.max(0, Math.round(layout.baseClearanceMm));
+  }
+  if (
+    options?.baseClearanceMm !== undefined &&
+    Number.isFinite(options.baseClearanceMm)
+  ) {
+    return Math.max(0, Math.round(options.baseClearanceMm));
+  }
+  return DEFAULT_BASE_CLEARANCE_MM;
+}
+
+/** Bottom Z (mm) for wall-hung units: layout override → options → default 1400. */
+export function resolveWallCabinetZMm(
+  layout: ProjectKitchenLayout | undefined,
+  options?: { readonly wallCabinetZMm?: number },
+): number {
+  if (
+    layout?.wallCabinetZMm !== undefined &&
+    Number.isFinite(layout.wallCabinetZMm)
+  ) {
+    return Math.max(0, Math.round(layout.wallCabinetZMm));
+  }
+  if (
+    options?.wallCabinetZMm !== undefined &&
+    Number.isFinite(options.wallCabinetZMm)
+  ) {
+    return Math.max(0, Math.round(options.wallCabinetZMm));
+  }
+  return DEFAULT_WALL_CABINET_Z_MM;
 }
 
 /**
  * Place modules using kitchen plan. Axis-aligned cabinets (v1):
- * - angle ~0°: along +X at wall originY
- * - angle ~90°: along +Y at wall originX
+ * - angle ~0°: along +X at wall originY, yaw 0
+ * - angle ~90°: along +Y at wall originX, yaw 90 (depth into −X / room)
+ * - floor units sit on baseClearanceMm (zoclo/patas); wall units at wallCabinetZMm
  */
 export function layoutKitchenPlacements(
   layout: ProjectKitchenLayout,
   footprints: readonly KitchenFootprint[],
-  options?: { readonly wallCabinetZMm?: number },
+  options?: {
+    readonly wallCabinetZMm?: number;
+    readonly baseClearanceMm?: number;
+  },
 ): KitchenLayoutResult {
-  const wallZ = options?.wallCabinetZMm ?? DEFAULT_WALL_CABINET_Z_MM;
+  const wallZ = resolveWallCabinetZMm(layout, options);
   const walls = resolveWallFrames(layout.walls);
   const wallById = new Map(walls.map((w) => [w.id, w]));
   const fpByKey = new Map(
@@ -219,35 +694,58 @@ export function layoutKitchenPlacements(
   let maxTopZ = 1;
 
   for (const p of layout.placements) {
-    const wall = wallById.get(p.wallId);
     const fp = fpByKey.get(`${p.itemId}#${p.instanceIndex}`);
-    if (!wall || !fp) continue;
+    if (!fp) continue;
 
     const elev: PlacementElevation = p.elevation === 'wall' ? 'wall' : 'floor';
-    const originZ = elev === 'wall' ? wallZ : 0;
-    const { originX, originY } = placementOriginsOnWall(
-      wall,
-      p.offsetMm,
-      fp.width,
-    );
+    const baseClearanceMm =
+      elev === 'wall'
+        ? 0
+        : resolveBaseClearanceMm(layout, p, options);
+    const originZ = elev === 'wall' ? wallZ : baseClearanceMm;
+
+    let originX: number;
+    let originY: number;
+    let yawDeg: number;
+    let wallId = p.wallId;
+
+    if (isFreePlacement(p)) {
+      originX = Number.isFinite(p.freeXMm) ? (p.freeXMm as number) : 0;
+      originY = Number.isFinite(p.freeYMm) ? (p.freeYMm as number) : 0;
+      yawDeg = wallDirectionYawDeg(
+        Number.isFinite(p.freeYawDeg) ? (p.freeYawDeg as number) : 0,
+      );
+      wallId = p.wallId || '';
+    } else {
+      const wall = wallById.get(p.wallId);
+      if (!wall) continue;
+      yawDeg = wallDirectionYawDeg(wall.angleDeg);
+      const origins = placementOriginsOnWall(wall, p.offsetMm, fp.width);
+      originX = origins.originX;
+      originY = origins.originY;
+    }
 
     placements.push({
       itemId: p.itemId,
       instanceIndex: p.instanceIndex,
       instanceKey: `${p.itemId}#${p.instanceIndex}`,
-      wallId: p.wallId,
+      wallId,
       width: fp.width,
       height: fp.height,
       depth: fp.depth,
       originX,
       originY,
       originZ,
+      yawDeg,
+      baseClearanceMm,
+      elevation: elev,
     });
 
-    minX = Math.min(minX, originX);
-    maxX = Math.max(maxX, originX + fp.width);
-    minY = Math.min(minY, originY);
-    maxY = Math.max(maxY, originY + fp.depth);
+    const box = placementAabb(originX, originY, fp.width, fp.depth, yawDeg);
+    minX = Math.min(minX, box.minX);
+    maxX = Math.max(maxX, box.maxX);
+    minY = Math.min(minY, box.minY);
+    maxY = Math.max(maxY, box.maxY);
     maxH = Math.max(maxH, fp.height);
     maxTopZ = Math.max(maxTopZ, originZ + fp.height);
   }
@@ -335,6 +833,124 @@ function placementOriginsOnWall(
   return {
     originX: wall.originXMm + offsetMm,
     originY: wall.originYMm,
+  };
+}
+
+/**
+ * Project a plan point (workshop X/Y mm) onto a wall axis → offset along wall.
+ * Clamped so the module footprint stays within the wall length.
+ */
+export function offsetMmFromPlanPoint(
+  wall: {
+    readonly originXMm: number;
+    readonly originYMm: number;
+    readonly angleDeg: number;
+    readonly lengthMm: number;
+  },
+  planXMm: number,
+  planYMm: number,
+  moduleWidthMm: number,
+): number {
+  const yaw = wallDirectionYawDeg(wall.angleDeg);
+  let offset: number;
+  if (yaw === 90) {
+    offset = planYMm - wall.originYMm;
+  } else if (yaw === 270) {
+    offset = wall.originYMm - planYMm;
+  } else if (yaw === 180) {
+    offset = wall.originXMm - planXMm;
+  } else {
+    offset = planXMm - wall.originXMm;
+  }
+  const width = Math.max(1, moduleWidthMm);
+  const maxOff = Math.max(0, wall.lengthMm - width);
+  return Math.max(0, Math.min(maxOff, Math.round(offset)));
+}
+
+export type WallOffsetPeer = {
+  readonly offsetMm: number;
+  readonly widthMm: number;
+};
+
+/**
+ * Snap an offset to wall ends or peer cabinet edges (same wall).
+ * Prefer gapMm between units when snapping to a peer.
+ */
+export function snapOffsetOnWall(params: {
+  readonly offsetMm: number;
+  readonly moduleWidthMm: number;
+  readonly wallLengthMm: number;
+  readonly peers?: readonly WallOffsetPeer[];
+  readonly thresholdMm?: number;
+  readonly gapMm?: number;
+}): number {
+  const width = Math.max(1, Math.round(params.moduleWidthMm));
+  const wallLen = Math.max(1, Math.round(params.wallLengthMm));
+  const threshold = Math.max(0, params.thresholdMm ?? 15);
+  const gap = Math.max(0, params.gapMm ?? 20);
+  const maxOff = Math.max(0, wallLen - width);
+  let offset = Math.max(0, Math.min(maxOff, Math.round(params.offsetMm)));
+
+  const targets: number[] = [0, maxOff];
+  for (const peer of params.peers ?? []) {
+    const pOff = Math.round(peer.offsetMm);
+    const pW = Math.max(1, Math.round(peer.widthMm));
+    // Align our left to peer right + gap
+    targets.push(pOff + pW + gap);
+    // Align our right to peer left - gap  → left = peerLeft - gap - width
+    targets.push(pOff - gap - width);
+    // Flush align left edges / right edges
+    targets.push(pOff);
+    targets.push(pOff + pW - width);
+  }
+
+  let best = offset;
+  let bestDist = threshold + 1;
+  for (const t of targets) {
+    const clamped = Math.max(0, Math.min(maxOff, t));
+    const d = Math.abs(clamped - offset);
+    if (d <= threshold && d < bestDist) {
+      bestDist = d;
+      best = clamped;
+    }
+  }
+  return best;
+}
+
+/**
+ * Re-pack all placements on a wall by current order (offset), with gap.
+ * Elevations are preserved; only offsetMm changes.
+ */
+export function repackPlacementsOnWall(
+  layout: ProjectKitchenLayout,
+  wallId: string,
+  footprints: readonly KitchenFootprint[],
+  gapMm: number = 20,
+): ProjectKitchenLayout {
+  const onWall = layout.placements
+    .filter((p) => p.wallId === wallId)
+    .sort((a, b) => a.offsetMm - b.offsetMm);
+  if (onWall.length === 0) return layout;
+
+  const fpByKey = new Map(
+    footprints.map((f) => [`${f.itemId}#${f.instanceIndex}`, f]),
+  );
+  const newOffset = new Map<string, number>();
+  let cursor = 0;
+  for (const p of onWall) {
+    const key = `${p.itemId}#${p.instanceIndex}`;
+    newOffset.set(key, cursor);
+    const w = fpByKey.get(key)?.width ?? 600;
+    cursor += w + gapMm;
+  }
+
+  return {
+    ...layout,
+    placements: layout.placements.map((p) => {
+      const key = `${p.itemId}#${p.instanceIndex}`;
+      const next = newOffset.get(key);
+      return next === undefined ? p : { ...p, offsetMm: next };
+    }),
   };
 }
 

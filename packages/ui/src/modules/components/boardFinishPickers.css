@@ -1,0 +1,41 @@
+/**
+ * Board finish pickers — 3D preview material overrides (Fase JD R2).
+ * Tokens only; no layout via inline styles.
+ */
+
+.board-finish-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--density-toolbar-gap, var(--space-2));
+  margin-bottom: var(--space-3);
+}
+
+.board-finish-pickers__intro {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.board-finish-pickers__field {
+  margin-bottom: 0;
+  min-width: 11rem;
+}
+
+.board-finish-pickers__control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.board-finish-pickers__swatch {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+}
+
+.board-finish-pickers__select {
+  flex: 1 1 auto;
+  min-width: 0;
+}

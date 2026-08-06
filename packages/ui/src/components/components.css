@@ -10,19 +10,17 @@
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--space-4);
   margin-top: var(--space-4);
+  list-style: none;
+  margin-block: var(--space-4) 0;
+  padding: 0;
 }
 
 /* Internal layout (entity-card base already sets cursor/border/bg). */
 .component-card {
   display: flex;
   flex-direction: column;
-  position: relative;
-}
-
-.component-card__summary {
-  display: flex;
-  flex-direction: column;
   gap: var(--space-2);
+  position: relative;
 }
 
 .component-card__meta {
@@ -33,6 +31,7 @@
 }
 
 .component-card__code {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-muted);
   background-color: var(--surface-muted);
@@ -179,4 +178,507 @@
   display: flex;
   flex-direction: column;
   gap: var(--density-page-gap);
+}
+
+/* —— ComponentEditorGeometryPanel —— */
+/* Grouped fields with semantic headings (dimensiones base / fórmulas / posición / rotación)
+   replace the previous flat stack of identical grids. */
+
+.component-geometry__group {
+  border: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+}
+
+.component-geometry__group-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  padding: 0;
+  margin-bottom: var(--space-3);
+}
+
+.component-geometry__group-hint {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+}
+
+/* Formula variables guide (migrated from inline styles). */
+.component-geometry__formula-guide {
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+}
+
+.component-geometry__formula-guide-title {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+}
+
+.component-geometry__formula-vars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.component-geometry__formula-vars > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.component-geometry__formula-vars code {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  color: var(--text-brand);
+}
+
+.component-geometry__formula-guide-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* —— Advanced disclosure (position + rotation) —— */
+/* Collapsed by default; the summary line in the header shows live state so a
+   first-time carpenter can tell at a glance whether anything is custom without
+   opening the panel. */
+
+.component-geometry__advanced {
+  margin: var(--space-2) 0 var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  overflow: hidden;
+}
+
+.component-geometry__advanced-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.component-geometry__advanced-header:hover {
+  background: var(--surface-hover);
+}
+
+.component-geometry__advanced-header:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.component-geometry__advanced-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.component-geometry__advanced-summary {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-geometry__advanced-content {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+}
+
+.component-geometry__advanced-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .component-geometry__advanced-header {
+    transition: none;
+  }
+}
+
+@media (max-width: 639px) {
+  /* On phone, the live summary wraps below the title instead of squeezing it. */
+  .component-geometry__advanced-summary {
+    margin-left: 0;
+    text-align: left;
+    flex-basis: 100%;
+  }
+}
+
+/* —— Embedded 3D preview (replaces the old "Vista 3D" tab) —— */
+
+.component-geometry__preview {
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+}
+
+.component-geometry__preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.component-geometry__container-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.component-geometry__container-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.component-geometry__container-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.component-geometry__container-field input {
+  width: 5rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+.component-geometry__container-field input:focus-visible {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.component-geometry__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.component-geometry__toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--brand-500);
+  cursor: pointer;
+}
+
+/* —— ComponentEditorEdgesPanel + PlankEdgeDiagram —— */
+
+.component-edges__intro {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.component-edges__intro strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.component-edges__fallback {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.component-edges__fallback > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+  font-weight: var(--weight-medium);
+}
+
+.component-edge-check__sub {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-left: var(--space-2);
+}
+
+/* Diagram container */
+.plank-edge-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.plank-edge-diagram__svg {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  display: block;
+}
+
+/* The plank body */
+.plank-edge-diagram__plank {
+  fill: var(--surface-input);
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+
+/* Each clickable edge: a thick polyline */
+.plank-edge-diagram__edge {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 10;
+  stroke-linecap: round;
+  cursor: pointer;
+  transition: stroke var(--duration-fast) var(--ease-out);
+}
+
+.plank-edge-diagram__edge:hover {
+  stroke: var(--brand-400);
+}
+
+.plank-edge-diagram__edge:focus-visible {
+  outline: none;
+  /* Simulate the focus ring via a drop-shadow on the stroke. */
+  filter: drop-shadow(0 0 0 var(--shadow-focus));
+}
+
+.plank-edge-diagram__edge--on {
+  stroke: var(--brand-500);
+}
+
+.plank-edge-diagram__edge--on:hover {
+  stroke: var(--brand-600);
+}
+
+.plank-edge-diagram__edge.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.plank-edge-diagram__edge.is-disabled:hover {
+  stroke: var(--border-strong);
+}
+
+/* Edge code labels (L1/L2/W1/W2) */
+.plank-edge-diagram__label {
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  fill: var(--text-muted);
+  user-select: none;
+}
+
+.plank-edge-diagram__label--on {
+  fill: var(--brand-600);
+}
+
+/* Dimension caption inside the plank */
+.plank-edge-diagram__caption {
+  font-size: 12px;
+  fill: var(--text-muted);
+  user-select: none;
+}
+
+/* Compact legend below the diagram */
+.plank-edge-diagram__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.plank-edge-diagram__legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.plank-edge-diagram__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.plank-edge-diagram__legend-dot--on {
+  border-color: var(--brand-500);
+  background: var(--brand-500);
+}
+
+.plank-edge-diagram__legend-code {
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.plank-edge-diagram__legend-sub {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plank-edge-diagram__edge {
+    transition: none;
+  }
+}
+
+/* —— P1-a: inline dimension validation (Geometría) —— */
+
+.catalog-form__field--error input {
+  border-color: var(--danger-500);
+}
+
+.catalog-form__field--error input:focus-visible {
+  border-color: var(--danger-500);
+  box-shadow: 0 0 0 3px hsla(0 72% 51% / 0.22);
+}
+
+.catalog-form__error-text {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--danger-700);
+}
+
+/* —— P1-b: placement contextual hint (General) —— */
+
+.component-general__placement-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+
+/* —— P2: option roles as toggle chips (Opciones) —— */
+
+.component-options__intro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.component-options__chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.component-options__chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.component-options__chip:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.component-options__chip:focus-visible {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.component-options__chip--on {
+  border-color: var(--brand-400);
+  background: var(--surface-selected);
+}
+
+.component-options__chip--on:hover {
+  background: var(--brand-50);
+}
+
+.component-options__chip-kind {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.component-options__chip-kind--board {
+  color: var(--brand-700);
+  background: var(--brand-50);
+}
+
+.component-options__chip-kind--hardware {
+  color: var(--warning-700);
+  background: var(--warning-50);
+}
+
+.component-options__chip-kind--edge {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.component-options__chip-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.component-options__chip-name {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-options__empty {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  padding: var(--space-3);
+  background: var(--surface-input);
+  border-radius: var(--radius-md);
 }

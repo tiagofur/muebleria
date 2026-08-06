@@ -179,6 +179,27 @@ describe('EmptyState', () => {
     await user.click(btn);
     expect(onAction).toHaveBeenCalledOnce();
   });
+
+  it('supports a secondary CTA that is never primary', async () => {
+    const onPrimary = vi.fn();
+    const onSecondary = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <EmptyState
+        title="Vacío"
+        actionLabel="Principal"
+        onAction={onPrimary}
+        secondaryActionLabel="Secundaria"
+        onSecondaryAction={onSecondary}
+        secondaryActionTestId="empty-secondary"
+      />,
+    );
+    const secondary = screen.getByTestId('empty-secondary');
+    expect(secondary.className).not.toMatch(/btn--primary/);
+    await user.click(secondary);
+    expect(onSecondary).toHaveBeenCalledOnce();
+    expect(onPrimary).not.toHaveBeenCalled();
+  });
 });
 
 describe('catalog list CSS guards (F020)', () => {
@@ -209,9 +230,10 @@ describe('catalog list CSS guards (F020)', () => {
     );
   });
 
-  it('materials catalog uses Modal size sm and StatusChips', () => {
+  it('materials catalog uses Modal MD form + StatusChips (Fase 3 UI)', () => {
     const src = read('../catalogs/MaterialsCatalog.tsx');
-    expect(src).toMatch(/size="sm"/);
+    expect(src).toMatch(/size="md"/);
+    expect(src).toMatch(/material-form-modal/);
     expect(src).toMatch(/StatusChips/);
     expect(src).toMatch(/EmptyState/);
     expect(src).toMatch(/useDebouncedValue/);

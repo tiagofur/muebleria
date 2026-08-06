@@ -57,13 +57,18 @@ export const IDS = {
   hwTornillo: 'hw-tornillo-4x50',
   hwCorredera: 'hw-corredera-500',
   hwSoporte: 'hw-soporte-entrepano',
+  /** Purchased plinth profile (plastic/aluminium look), unit meter. */
+  hwZocloPerfil: 'hw-zoclo-perfil-alu',
   ogInterior: 'og-interior',
   ogFrente: 'og-frente',
   ogFondo: 'og-fondo',
   ogBisagra: 'og-bisagra',
   ogCorredera: 'og-corredera',
+  ogZoclo: 'og-zoclo',
+  ogZocloPerfil: 'og-zoclo-perfil',
   modGab: 'mod-gab-01',
   modCaj: 'mod-caj-01',
+  modBajoZoclo: 'mod-bajo-zoclo-600',
   /** Seed customers referenced by plantilla / demo projects. */
   custPlantilla1: 'cust-plantilla-1',
   custPlantilla2: 'cust-plantilla-2',
@@ -206,6 +211,16 @@ export const plantillaCatalog: Catalog = {
       costPerUnit: 2,
       active: true,
     },
+    {
+      id: IDS.hwZocloPerfil,
+      code: 'HER-ZOC-ALU',
+      name: 'Zoclo perfil plástico aluminio',
+      unit: 'meter',
+      costPerUnit: 18,
+      packageSize: 4,
+      active: true,
+      notes: 'Barra comercial 4 m — lista de compra redondea a barras.',
+    },
   ],
   optionGroups: [
     {
@@ -247,6 +262,23 @@ export const plantillaCatalog: Catalog = {
       kind: 'hardware',
       required: true,
       optionIds: [IDS.hwCorredera],
+    },
+    {
+      id: IDS.ogZoclo,
+      code: 'ZOCLO',
+      name: 'Melamina de zoclo',
+      kind: 'board',
+      required: false,
+      // Front materials; if no choice, BOM falls back to FRENTE anyway.
+      optionIds: [IDS.matMaderado, IDS.matArauco],
+    },
+    {
+      id: IDS.ogZocloPerfil,
+      code: 'ZOCLO_PERFIL',
+      name: 'Zoclo perfil (ml)',
+      kind: 'hardware',
+      required: false,
+      optionIds: [IDS.hwZocloPerfil],
     },
   ],
   customers: [
@@ -396,6 +428,32 @@ export const seedComponentBase: Component = {
   active: true,
 };
 
+/**
+ * Frontal melamine plinth (zoclo). length along PW (W), height = B (plinth mm).
+ * Material role ZOCLO → falls back to FRENTE when no choice.
+ */
+export const seedComponentZoclo: Component = {
+  id: 'seed-comp-zoclo',
+  code: 'COM-ZOC-01',
+  name: 'Zoclo frontal',
+  placement: 'custom',
+  geometry: {
+    kind: 'rectangular_board',
+    lengthMm: 600,
+    widthMm: 100,
+    thicknessMm: 18,
+    lengthFormula: 'PW',
+    widthFormula: 'B',
+  },
+  defaultEdges: edgesAll(true, false, false, false),
+  optionRoles: ['ZOCLO'],
+  active: true,
+  xFormula: '0',
+  yFormula: '0',
+  zFormula: '0',
+  notes: 'Altura B desde Module.baseClearanceMm. En BOM solo si baseMode=plinth_board.',
+};
+
 // --- Parametric components for MOD-GAB-01 / MOD-CAJ-01 (Fase 2+3) ---
 // Geometry formulas reproduce the exact Excel dimensions at each module's
 // preset (W=width, H=height, D=depth in mm), so golden cost numbers are
@@ -415,10 +473,10 @@ const compGabCostado: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X).
+  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X, length on Z-up).
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compGabRespaldo: Component = {
   id: 'comp-gab-respaldo',
@@ -429,11 +487,12 @@ const compGabRespaldo: Component = {
   defaultEdges: edgesAll(false, false, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
+  // Min-corner anchor: left=T, back=0. [90,180,0] rotation; mesh offset handles −X.
   xFormula: 'T',
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const compGabPiso: Component = {
@@ -441,15 +500,16 @@ const compGabPiso: Component = {
   code: 'COM-GAB-PIS',
   name: 'Piso Gabinete',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 590, widthMm: 269, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 269, widthMm: 590, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compGabManguete: Component = {
@@ -478,11 +538,12 @@ const compGabPuerta: Component = {
   defaultEdges: edgesAll(true, true, true, true),
   optionRoles: ['FRENTE'],
   active: true,
+  // Min-corner overlay: left=2, depth=PD (thickness grows outside to PD+T).
   xFormula: '2',
   yFormula: 'PD',
   zFormula: '2',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const compGabEntrepano: Component = {
@@ -515,25 +576,26 @@ const compCajCostado: Component = {
   xFormula: 'i * (PW - T)',
   yFormula: '0',
   zFormula: '0',
-  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X).
+  // Match defaultPoseForPlacement laterals: vertical panel (thickness on X, length on Z-up).
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compCajPiso: Component = {
   id: 'comp-caj-piso',
   code: 'COM-CAJ-PIS',
   name: 'Piso Cajonera',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 590, widthMm: 469, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 469, widthMm: 590, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compCajRespaldo: Component = {
@@ -549,7 +611,7 @@ const compCajRespaldo: Component = {
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 /** Cajonera module-level components: drawer parts. */
@@ -566,7 +628,7 @@ const compCajFrente: Component = {
   yFormula: 'PD',
   zFormula: 'i * 175',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const compCajLateral: Component = {
@@ -672,6 +734,66 @@ export const seedComposedModule: Module = {
 };
 
 /**
+ * Inferior with melamine plinth (zoclo) demo — baseMode plinth_board + COM-ZOC-01.
+ * Material inherits FRENTE when ZOCLO is not chosen on the quote line.
+ */
+export const seedModBajoZoclo: Module = {
+  id: IDS.modBajoZoclo,
+  code: 'MOD-BAJO-ZOCLO-600',
+  name: 'Bajo 600 con zoclo melamina',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  furnitureType: 'inferior',
+  baseMode: 'plinth_board',
+  baseClearanceMm: 100,
+  structureId: 'seed-struct-test',
+  components: [
+    { componentId: 'seed-comp-puerta', quantity: 1 },
+    { componentId: 'seed-comp-zoclo', quantity: 1 },
+  ],
+  hardwareLines: [
+    { id: 'bz-h01', quantity: 2, optionRole: 'BISAGRA' },
+  ],
+  presets: [
+    {
+      id: 'bz-preset-600',
+      name: 'Ancho 600',
+      width: 600,
+      height: 720,
+      depth: 560,
+    },
+  ],
+  notes:
+    'Demo zoclo melamina: baseMode=plinth_board, B=100, componente COM-ZOC-01 (rol ZOCLO → fallback FRENTE).',
+};
+
+/**
+ * Same body with purchased plinth profile (ml) — no melamine zoclo piece.
+ */
+export const seedModBajoPerfil: Module = {
+  id: 'mod-bajo-perfil-600',
+  code: 'MOD-BAJO-PERFIL-600',
+  name: 'Bajo 600 con zoclo perfil (ml)',
+  externalDims: { width: 600, height: 720, depth: 560 },
+  furnitureType: 'inferior',
+  baseMode: 'plinth_strip',
+  baseClearanceMm: 100,
+  structureId: 'seed-struct-test',
+  components: [{ componentId: 'seed-comp-puerta', quantity: 1 }],
+  hardwareLines: [
+    { id: 'bp-h01', quantity: 2, optionRole: 'BISAGRA' },
+    {
+      id: 'bp-h-zoclo',
+      quantity: 1,
+      optionRole: 'ZOCLO_PERFIL',
+      hardwareId: IDS.hwZocloPerfil,
+      descriptionOverride: 'Zoclo perfil (ml frontal)',
+    },
+  ],
+  notes:
+    'Demo zoclo perfil: baseMode=plinth_strip; herraje HER-ZOC-ALU en ml = W/1000.',
+};
+
+/**
  * Valid structure fixture for seed/testing.
  *
  * Since F053 a Structure composes reusable Component instances instead of
@@ -713,23 +835,24 @@ const compAlacenaCostado: Component = {
   yFormula: '0',
   zFormula: '0',
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compAlacenaBase: Component = {
   id: 'comp-alacena-base',
   code: 'COM-ALA-BAS',
   name: 'Base Alacena',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 320, widthMm: 569, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 569, widthMm: 320, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compAlacenaRespaldo: Component = {
@@ -745,7 +868,7 @@ const compAlacenaRespaldo: Component = {
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const structAlacena: Structure = {
@@ -792,23 +915,24 @@ const compDespensaCostado: Component = {
   yFormula: '0',
   zFormula: '0',
   rotateX: 90,
-  rotateY: 90,
-  rotateZ: 0,
+  rotateY: 180,
+  rotateZ: 90,
 };
 const compDespensaBase: Component = {
   id: 'comp-despensa-base',
   code: 'COM-DES-BAS',
   name: 'Base Despensa',
   placement: 'base',
-  geometry: { kind: 'rectangular_board', lengthMm: 600, widthMm: 569, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 31' },
-  defaultEdges: edgesAll(false, false, true, true),
+  // L along PW (grain left→right); W along PD. Edges swapped with L/W.
+  geometry: { kind: 'rectangular_board', lengthMm: 569, widthMm: 600, thicknessMm: 18, lengthFormula: 'PW - 31', widthFormula: 'PD' },
+  defaultEdges: edgesAll(true, true, false, false),
   optionRoles: ['INTERIOR'],
   active: true,
   xFormula: 'T',
   yFormula: '0',
   zFormula: '0',
   rotateX: 0,
-  rotateY: 0,
+  rotateY: 90,
   rotateZ: 0,
 };
 const compDespensaRespaldo: Component = {
@@ -824,7 +948,7 @@ const compDespensaRespaldo: Component = {
   yFormula: '0',
   zFormula: 'T',
   rotateX: 90,
-  rotateY: 0,
+  rotateY: 180,
   rotateZ: 0,
 };
 const structDespensa: Structure = {
@@ -858,13 +982,22 @@ export const seedModDespensa: Module = {
 
 export const plantillaCatalogWithModules: Catalog = {
   ...plantillaCatalog,
-  modules: [modGab01, modCaj01, seedComposedModule, seedModAlacena, seedModDespensa],
+  modules: [
+    modGab01,
+    modCaj01,
+    seedComposedModule,
+    seedModBajoZoclo,
+    seedModBajoPerfil,
+    seedModAlacena,
+    seedModDespensa,
+  ],
   structures: [structGab01, structCaj01, SEED_STRUCTURE, structAlacena, structDespensa],
   components: [
     seedComponentPuerta,
     seedComponentEntrepano,
     seedComponentCostado,
     seedComponentBase,
+    seedComponentZoclo,
     compGabCostado,
     compGabRespaldo,
     compGabPiso,

@@ -483,6 +483,95 @@ describe('projectStore — addProjectItem / updateProjectItem / removeProjectIte
 
     expect(store.getState().projects[0]!.items).toHaveLength(0);
   });
+
+  it('removeProjectItem prunes kitchen placements for that item', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const keep: ProjectItem = {
+      id: 'keep',
+      moduleId: 'mod-1',
+      quantity: 1,
+      optionChoices: {},
+    };
+    const gone: ProjectItem = {
+      id: 'gone',
+      moduleId: 'mod-1',
+      quantity: 1,
+      optionChoices: {},
+    };
+    store.getState().setProjects([
+      makeProject({
+        items: [keep, gone],
+        kitchenLayout: {
+          walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+          placements: [
+            {
+              itemId: 'keep',
+              instanceIndex: 0,
+              wallId: 'w1',
+              offsetMm: 0,
+              elevation: 'floor',
+            },
+            {
+              itemId: 'gone',
+              instanceIndex: 0,
+              wallId: 'w1',
+              offsetMm: 620,
+              elevation: 'floor',
+            },
+          ],
+        },
+      }),
+    ]);
+
+    store.getState().removeProjectItem('proj-1', 'gone');
+
+    const layout = store.getState().projects[0]!.kitchenLayout;
+    expect(layout?.placements).toHaveLength(1);
+    expect(layout?.placements[0]!.itemId).toBe('keep');
+    expect(layout?.walls).toHaveLength(1);
+  });
+
+  it('updateProjectItem prunes placements when qty shrinks', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const item: ProjectItem = {
+      id: 'item-1',
+      moduleId: 'mod-1',
+      quantity: 3,
+      optionChoices: {},
+    };
+    store.getState().setProjects([
+      makeProject({
+        items: [item],
+        kitchenLayout: {
+          walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+          placements: [
+            {
+              itemId: 'item-1',
+              instanceIndex: 0,
+              wallId: 'w1',
+              offsetMm: 0,
+              elevation: 'floor',
+            },
+            {
+              itemId: 'item-1',
+              instanceIndex: 2,
+              wallId: 'w1',
+              offsetMm: 620,
+              elevation: 'floor',
+            },
+          ],
+        },
+      }),
+    ]);
+
+    store.getState().updateProjectItem('proj-1', { ...item, quantity: 1 });
+
+    const placements = store.getState().projects[0]!.kitchenLayout?.placements;
+    expect(placements).toHaveLength(1);
+    expect(placements![0]!.instanceIndex).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

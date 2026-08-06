@@ -1,6 +1,7 @@
 /**
- * Projects list view — toolbar + search + card grid + empty states.
+ * Projects list view — toolbar + search + status chips + card grid + empty states.
  * Extracted from ProjectsScreen.tsx renderList (F058c).
+ * Fase 2 UI: status chips + EmptyState secondary CTA (from template).
  */
 
 import type { ReactNode } from 'react';
@@ -15,8 +16,14 @@ import type { Customer, Project, ProjectTemplate } from '@muebles/domain';
 import {
   EmptyState,
   SearchInput,
+  StatusChips,
 } from '../../common';
-import { resolveCustomerName, formatIsoDate } from '../projectHelpers';
+import {
+  PROJECT_STATUS_FILTER_OPTIONS,
+  resolveCustomerName,
+  formatIsoDate,
+  type ProjectStatusFilter,
+} from '../projectHelpers';
 import { StatusBadge } from './StatusBadge';
 
 export interface ProjectsListViewProps {
@@ -25,6 +32,7 @@ export interface ProjectsListViewProps {
   readonly customers: readonly Customer[] | undefined;
   readonly projectTemplates: readonly ProjectTemplate[] | undefined;
   readonly search: string;
+  readonly statusFilter: ProjectStatusFilter;
   readonly isTrulyEmpty: boolean;
   readonly isFilterEmpty: boolean;
   readonly canMutate: boolean;
@@ -32,6 +40,8 @@ export interface ProjectsListViewProps {
   readonly hasDeleteTemplate: boolean;
   readonly estimateLabel: (projectId: string) => ReactNode;
   readonly onSearchChange: (value: string) => void;
+  readonly onStatusFilterChange: (value: ProjectStatusFilter) => void;
+  readonly onClearFilters: () => void;
   readonly onNewProject: () => void;
   readonly onFromTemplate: () => void;
   readonly onManageTemplates: () => void;
@@ -44,6 +54,7 @@ export function ProjectsListView({
   customers,
   projectTemplates,
   search,
+  statusFilter,
   isTrulyEmpty,
   isFilterEmpty,
   canMutate,
@@ -51,6 +62,8 @@ export function ProjectsListView({
   hasDeleteTemplate,
   estimateLabel,
   onSearchChange,
+  onStatusFilterChange,
+  onClearFilters,
   onNewProject,
   onFromTemplate,
   onManageTemplates,
@@ -58,6 +71,8 @@ export function ProjectsListView({
 }: ProjectsListViewProps): ReactNode {
   const hasTemplates =
     projectTemplates && projectTemplates.length > 0;
+  const showTemplateSecondary =
+    Boolean(canMutate && hasTemplates && hasCreateFromTemplate);
 
   return (
     <>
@@ -108,40 +123,43 @@ export function ProjectsListView({
             placeholder="Buscar cotizaciones o clientes…"
             aria-label="Buscar cotizaciones"
           />
+          <StatusChips
+            value={statusFilter}
+            onChange={onStatusFilterChange}
+            options={PROJECT_STATUS_FILTER_OPTIONS}
+            aria-label="Filtrar cotizaciones por estado"
+            data-testid="project-status-chips"
+          />
         </div>
       ) : null}
 
       {isTrulyEmpty ? (
-        <div>
-          <EmptyState
-            icon={FileText}
-            title="No hay cotizaciones"
-            description="Creá la primera cotización para un cliente y agregá muebles del catálogo."
-            actionLabel="Nueva cotización"
-            onAction={onNewProject}
-          />
-          {canMutate && hasTemplates && hasCreateFromTemplate ? (
-            <div style={{ textAlign: 'center', marginTop: 'var(--space-3)' }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={onFromTemplate}
-                data-testid="empty-from-template-btn"
-              >
-                <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
-                Crear desde plantilla
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No hay cotizaciones"
+          description="Creá la primera cotización para un cliente y agregá muebles del catálogo."
+          actionLabel={canMutate ? 'Nueva cotización' : undefined}
+          onAction={canMutate ? onNewProject : undefined}
+          secondaryActionLabel={
+            showTemplateSecondary ? 'Crear desde plantilla' : undefined
+          }
+          onSecondaryAction={
+            showTemplateSecondary ? onFromTemplate : undefined
+          }
+          secondaryActionTestId="empty-from-template-btn"
+        />
       ) : isFilterEmpty ? (
         <EmptyState
           variant="no-results"
           icon={SearchX}
           title="Sin resultados"
-          description="No hay cotizaciones que coincidan con la búsqueda."
+          description={
+            statusFilter !== 'all'
+              ? 'No hay cotizaciones con ese estado (ni que coincidan con la búsqueda).'
+              : 'No hay cotizaciones que coincidan con la búsqueda.'
+          }
           actionLabel="Limpiar filtros"
-          onAction={() => onSearchChange('')}
+          onAction={onClearFilters}
         />
       ) : (
         <ul className="project-card-grid" aria-label="Lista de cotizaciones">

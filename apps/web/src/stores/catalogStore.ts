@@ -68,11 +68,11 @@ export interface CatalogStoreDeps {
   readonly saveCatalog: (catalog: Catalog) => Promise<void>;
   /** Reads auth token for media helpers. */
   readonly getAuthToken: () => string | null;
-  /** Reads session for deleteStructure backend call gate. */
+  /** Reads session for hard-delete backend call gate. */
   readonly getSession: () => 'guest' | 'auth' | null;
   /** Reads draft projects count for #138 alert. */
   readonly getDraftProjectsCount: () => number;
-  /** Fetch impl for deleteStructure backend DELETE. */
+  /** Fetch impl for catalog hard-delete (structures, option groups, modules, categories). */
   readonly fetchImpl?: typeof fetch;
   /** Base URL of the backend API. */
   readonly baseUrl: string;
@@ -102,17 +102,23 @@ export interface CatalogState {
   // --- Option groups ---
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
   readonly updateOptionGroup: (id: string, draft: OptionGroupDraft) => void;
-  readonly deleteOptionGroup: (id: string) => void;
+  /** Auth: also DELETE /catalog/option-groups/{id} so the row does not reappear on refresh. */
+  readonly deleteOptionGroup: (id: string) => Promise<void>;
 
   // --- Categories ---
   readonly createCategory: (draft: CategoryDraft) => void;
   readonly updateCategory: (id: string, draft: CategoryDraft) => void;
-  readonly deleteCategory: (id: string) => void;
+  /** Auth: also DELETE /catalog/categories/{id}. */
+  readonly deleteCategory: (id: string) => Promise<void>;
 
   // --- Modules ---
   readonly createModule: (draft: ModuleDraft) => void;
   readonly updateModule: (id: string, draft: ModuleDraft) => void;
-  readonly deleteModule: (id: string, onModuleDeleted?: (id: string) => void) => void;
+  /** Auth: also DELETE /catalog/modules/{id}. */
+  readonly deleteModule: (
+    id: string,
+    onModuleDeleted?: (id: string) => void,
+  ) => Promise<void>;
   readonly duplicateModuleById: (id: string) => void;
 
   // --- Structures ---
@@ -175,25 +181,72 @@ export function createCatalogStore(options: InternalOptions) {
   const baseUrl = options.deps.baseUrl;
 
   /**
-   * Common patch: compute next catalog from updater, set state, persist
-   * fire-and-forget with toast on failure. Replaces App.tsx `patchCatalog`.
+   * Common patch: compute next catalog from updater, set state, persist.
+   * Returns the save promise so callers can toast success only after the
+   * server accepts the write (avoids "guardado" when tiles never hit DB).
    */
   function patch(
     set: (partial: Partial<CatalogState>) => void,
     get: () => CatalogState,
     updater: (catalog: Catalog) => Catalog,
-  ): void {
+  ): Promise<void> {
     const prev = get().catalog;
-    if (!prev) return;
+    if (!prev) return Promise.resolve();
     const nextCatalog = updater(prev);
     set({ catalog: nextCatalog });
-    saveCatalog(nextCatalog).catch((err) => {
-      console.error('Error al guardar catálogo:', err);
+    return saveCatalog(nextCatalog).then(
+      () => undefined,
+      (err: unknown) => {
+        console.error('Error al guardar catálogo:', err);
+        toast({
+          type: 'error',
+          message: 'Error de conexión al sincronizar cambios',
+        });
+        // Reject so callers do not toast "guardado" on failed sync.
+        return Promise.reject(err);
+      },
+    );
+  }
+
+  /**
+   * Hard-delete on the API when authenticated. Guest mode only needs the local
+   * catalog rewrite (saveCatalog); saveCatalog is upsert-only and never DELETEs
+   * missing rows, so auth deletes must hit the REST endpoint or the entity
+   * reappears after refresh.
+   *
+   * @returns false when the server delete failed (caller should not claim success).
+   */
+  async function hardDeleteOnAuth(path: string): Promise<boolean> {
+    if (getSession() !== 'auth') return true;
+    const token = getAuthToken();
+    if (!token) return true;
+    try {
+      const res = await fetchImpl(`${baseUrl}${path}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error(`Error deleting ${path}: ${res.status} ${text}`);
+        toast({
+          type: 'error',
+          message:
+            'Error al eliminar en el servidor (puede reaparecer al recargar)',
+        });
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error(`Error deleting ${path}:`, err);
       toast({
         type: 'error',
-        message: 'Error de conexión al sincronizar cambios',
+        message: 'Error de conexión al eliminar',
       });
-    });
+      return false;
+    }
   }
 
   return create<CatalogState>()((set, get) => ({
@@ -227,12 +280,30 @@ export function createCatalogStore(options: InternalOptions) {
         imageUrl: draft.imageUrl?.trim() || undefined,
         previewColor: draft.previewColor?.trim() || undefined,
         previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
+        previewTextureTileWidthMm:
+          draft.previewTextureTileWidthMm && draft.previewTextureTileWidthMm > 0
+            ? draft.previewTextureTileWidthMm
+            : undefined,
+        previewTextureTileLengthMm:
+          draft.previewTextureTileLengthMm &&
+          draft.previewTextureTileLengthMm > 0
+            ? draft.previewTextureTileLengthMm
+            : undefined,
         notes: optionalNotes(draft.notes),
         active: true,
       };
       if (!get().catalog) return;
-      patch(set, get, (c) => ({ ...c, materials: [...c.materials, item] }));
-      toast({ type: 'success', message: `✓ "${code}" creado` });
+      void patch(set, get, (c) => ({
+        ...c,
+        materials: [...c.materials, item],
+      })).then(
+        () => {
+          toast({ type: 'success', message: `✓ "${code}" creado` });
+        },
+        () => {
+          /* error toast already shown by patch */
+        },
+      );
     },
 
     updateMaterial: (id, draft) => {
@@ -249,7 +320,17 @@ export function createCatalogStore(options: InternalOptions) {
           prev.wastePercent !== draft.wastePercent ||
           Math.abs(prev.costPerM2 - costPerM2) > 1e-9);
 
-      patch(set, get, (c) => ({
+      const tileW =
+        draft.previewTextureTileWidthMm && draft.previewTextureTileWidthMm > 0
+          ? draft.previewTextureTileWidthMm
+          : undefined;
+      const tileL =
+        draft.previewTextureTileLengthMm &&
+        draft.previewTextureTileLengthMm > 0
+          ? draft.previewTextureTileLengthMm
+          : undefined;
+
+      void patch(set, get, (c) => ({
         ...c,
         materials: c.materials.map((m) =>
           m.id === id
@@ -268,25 +349,31 @@ export function createCatalogStore(options: InternalOptions) {
                 imageUrl: draft.imageUrl?.trim() || undefined,
                 previewColor: draft.previewColor?.trim() || undefined,
                 previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
+                previewTextureTileWidthMm: tileW,
+                previewTextureTileLengthMm: tileL,
                 notes: optionalNotes(draft.notes),
               }
             : m,
         ),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      })).then(
+        () => {
+          toast({ type: 'success', message: '✓ Cambios guardados' });
 
-      // #138: warn about draft quotes that may still use previous catalog prices.
-      // Pluralization note: "cotización" → "cotizaciones" (no tilde on plural).
-      // The legacy App.tsx had a typo "cotizaciónes" — fixed during migration.
-      if (priceChanged) {
-        const draftCount = getDraftProjectsCount();
-        if (draftCount > 0) {
-          toast({
-            type: 'info',
-            message: `Precio de material actualizado. ${draftCount} ${draftCount === 1 ? 'cotización' : 'cotizaciones'} en borrador usarán el nuevo catálogo al recalcular.`,
-          });
-        }
-      }
+          // #138: warn about draft quotes that may still use previous catalog prices.
+          if (priceChanged) {
+            const draftCount = getDraftProjectsCount();
+            if (draftCount > 0) {
+              toast({
+                type: 'info',
+                message: `Precio de material actualizado. ${draftCount} ${draftCount === 1 ? 'cotización' : 'cotizaciones'} en borrador usarán el nuevo catálogo al recalcular.`,
+              });
+            }
+          }
+        },
+        () => {
+          /* error toast already shown by patch */
+        },
+      );
     },
 
     setMaterialActive: (id, active) => {
@@ -361,12 +448,16 @@ export function createCatalogStore(options: InternalOptions) {
     // --- Hardware ---
     createHardware: (draft) => {
       const code = draft.code.trim();
+      const pkg = Number(draft.packageSize);
+      const packageSize =
+        Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
       const item: Hardware = {
         id: newId(),
         code,
         name: draft.name.trim(),
         unit: draft.unit,
         costPerUnit: draft.costPerUnit,
+        ...(packageSize === undefined ? {} : { packageSize }),
         imageUrl: draft.imageUrl?.trim() || undefined,
         notes: optionalNotes(draft.notes),
         active: true,
@@ -376,21 +467,28 @@ export function createCatalogStore(options: InternalOptions) {
     },
 
     updateHardware: (id, draft) => {
+      const pkg = Number(draft.packageSize);
+      const packageSize =
+        Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
       patch(set, get, (c) => ({
         ...c,
-        hardware: c.hardware.map((h) =>
-          h.id === id
-            ? {
-                ...h,
-                code: draft.code.trim(),
-                name: draft.name.trim(),
-                unit: draft.unit,
-                costPerUnit: draft.costPerUnit,
-                imageUrl: draft.imageUrl?.trim() || undefined,
-                notes: optionalNotes(draft.notes),
-              }
-            : h,
-        ),
+        hardware: c.hardware.map((h) => {
+          if (h.id !== id) return h;
+          const {
+            packageSize: _drop,
+            ...rest
+          } = h;
+          return {
+            ...rest,
+            code: draft.code.trim(),
+            name: draft.name.trim(),
+            unit: draft.unit,
+            costPerUnit: draft.costPerUnit,
+            ...(packageSize === undefined ? {} : { packageSize }),
+            imageUrl: draft.imageUrl?.trim() || undefined,
+            notes: optionalNotes(draft.notes),
+          };
+        }),
       }));
       toast({ type: 'success', message: '✓ Cambios guardados' });
     },
@@ -445,12 +543,15 @@ export function createCatalogStore(options: InternalOptions) {
       toast({ type: 'success', message: '✓ Cambios guardados' });
     },
 
-    deleteOptionGroup: (id) => {
+    deleteOptionGroup: async (id) => {
       patch(set, get, (c) => ({
         ...c,
         optionGroups: c.optionGroups.filter((g) => g.id !== id),
       }));
-      toast({ type: 'info', message: 'Grupo de opciones eliminado' });
+      const ok = await hardDeleteOnAuth(`/catalog/option-groups/${id}`);
+      if (ok) {
+        toast({ type: 'info', message: 'Grupo de opciones eliminado' });
+      }
     },
 
     // --- Categories ---
@@ -485,7 +586,7 @@ export function createCatalogStore(options: InternalOptions) {
       toast({ type: 'success', message: '✓ Categoría actualizada' });
     },
 
-    deleteCategory: (id) => {
+    deleteCategory: async (id) => {
       const cats = get().catalog?.categories ?? [];
       const hasChildren = cats.some((c) => c.parentId === id);
       if (hasChildren) {
@@ -502,7 +603,10 @@ export function createCatalogStore(options: InternalOptions) {
           m.categoryId === id ? { ...m, categoryId: undefined } : m,
         ),
       }));
-      toast({ type: 'info', message: 'Categoría eliminada' });
+      const ok = await hardDeleteOnAuth(`/catalog/categories/${id}`);
+      if (ok) {
+        toast({ type: 'info', message: 'Categoría eliminada' });
+      }
     },
 
     // --- Modules ---
@@ -520,13 +624,16 @@ export function createCatalogStore(options: InternalOptions) {
       toast({ type: 'success', message: '✓ Cambios guardados' });
     },
 
-    deleteModule: (id, onModuleDeleted) => {
+    deleteModule: async (id, onModuleDeleted) => {
       patch(set, get, (c) => ({
         ...c,
         modules: c.modules.filter((m) => m.id !== id),
       }));
-      onModuleDeleted?.(id);
-      toast({ type: 'info', message: 'Módulo eliminado' });
+      const ok = await hardDeleteOnAuth(`/catalog/modules/${id}`);
+      if (ok) {
+        onModuleDeleted?.(id);
+        toast({ type: 'info', message: 'Módulo eliminado' });
+      }
     },
 
     duplicateModuleById: (id) => {
@@ -578,23 +685,10 @@ export function createCatalogStore(options: InternalOptions) {
         ...c,
         structures: (c.structures ?? []).filter((s) => s.id !== id),
       }));
-      if (getSession() === 'auth') {
-        const token = getAuthToken();
-        if (token) {
-          try {
-            await fetchImpl(`${baseUrl}/catalog/structures/${id}`, {
-              method: 'DELETE',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-            });
-          } catch (err) {
-            console.error('Error deleting structure from backend:', err);
-          }
-        }
+      const ok = await hardDeleteOnAuth(`/catalog/structures/${id}`);
+      if (ok) {
+        toast({ type: 'info', message: 'Estructura eliminada' });
       }
-      toast({ type: 'info', message: 'Estructura eliminada' });
     },
 
     setStructureActive: (id, active) => {

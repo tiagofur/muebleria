@@ -12,7 +12,9 @@ export const HARDWARE_LIST_HEADERS = [
   'Código',
   'Descripción',
   'Unidad',
-  'Cantidad',
+  'Consumo',
+  'A comprar',
+  'Paquetes',
   'Costo unit.',
   'Costo total',
 ] as const;
@@ -44,7 +46,7 @@ const DATA_FONT: Partial<ExcelJS.Font> = {
   name: 'Calibri',
 };
 
-const COLUMN_WIDTHS = [14, 28, 10, 10, 12, 12];
+const COLUMN_WIDTHS = [14, 28, 10, 10, 12, 10, 12, 12];
 
 function unitLabel(unit: HardwareUnit): string {
   return UNIT_LABELS[unit];
@@ -94,6 +96,8 @@ export async function hardwareListExport(
       row.description,
       unitLabel(row.unit),
       row.quantity,
+      row.purchaseQuantity,
+      row.purchasePackages ?? '',
       row.costPerUnit,
       row.lineCost,
     ];
@@ -104,7 +108,7 @@ export async function hardwareListExport(
       cell.font = DATA_FONT;
       if (colIndex >= 3) {
         cell.alignment = { horizontal: 'right' };
-        if (colIndex >= 4) {
+        if (colIndex === 3 || colIndex === 4 || colIndex >= 6) {
           cell.numFmt = '0.00';
         }
       } else {
@@ -146,6 +150,8 @@ export function hardwareListExportCsv(
         csvEscape(row.description),
         csvEscape(unitLabel(row.unit)),
         csvEscape(row.quantity),
+        csvEscape(row.purchaseQuantity),
+        csvEscape(row.purchasePackages ?? ''),
         csvEscape(row.costPerUnit),
         csvEscape(row.lineCost),
       ].join(','),

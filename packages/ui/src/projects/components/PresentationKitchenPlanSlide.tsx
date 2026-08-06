@@ -13,7 +13,7 @@ import {
   pruneKitchenLayout,
   resolveWallFrames,
 } from '@muebles/domain';
-import { itemLabel, moduleWidth } from '../kitchenPlanHelpers';
+import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
 
 export type PresentationKitchenPlanSlideProps = {
   readonly project: Project;
@@ -43,6 +43,20 @@ export function PresentationKitchenPlanSlide({
 
   const hasLayout = layout.walls.length > 0;
   const hasPlacements = layout.placements.length > 0;
+  const fps = useMemo(
+    () => allFootprints(project, modules),
+    [project, modules],
+  );
+  const placedKeys = useMemo(
+    () =>
+      new Set(
+        layout.placements.map((p) => `${p.itemId}#${p.instanceIndex}`),
+      ),
+    [layout.placements],
+  );
+  const unplacedCount = fps.filter(
+    (f) => !placedKeys.has(`${f.itemId}#${f.instanceIndex}`),
+  ).length;
 
   if (!hasLayout) {
     return (
@@ -54,6 +68,29 @@ export function PresentationKitchenPlanSlide({
 
   return (
     <div className="presentation-kitchen-plan" data-testid="presentation-kitchen-plan">
+      {unplacedCount > 0 ? (
+        <p
+          className="presentation-kitchen-plan__warn"
+          data-testid="presentation-kitchen-unplaced"
+          style={{
+            margin: '0 0 var(--space-3)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--warning-800, hsl(30 70% 30%))',
+          }}
+        >
+          {unplacedCount} unidad{unplacedCount === 1 ? '' : 'es'} de la
+          cotización sin colocar en el plano (no aparecen en esta planta).
+        </p>
+      ) : null}
+      {!hasPlacements ? (
+        <p
+          className="catalog-empty"
+          style={{ marginBottom: 'var(--space-3)' }}
+          data-testid="presentation-kitchen-no-placements"
+        >
+          Hay muros, pero aún no se colocaron muebles en el plano.
+        </p>
+      ) : null}
       <svg
         width={svgW}
         height={svgH}

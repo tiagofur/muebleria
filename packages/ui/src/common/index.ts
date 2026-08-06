@@ -12,7 +12,11 @@ export {
 } from './DropdownMenu';
 export { Modal, type ModalProps, type ModalSize } from './Modal';
 export { SearchInput, type SearchInputProps } from './SearchInput';
-export { StatusChips, type StatusChipsProps } from './StatusChips';
+export {
+  StatusChips,
+  type StatusChipsProps,
+  type StatusChipOption,
+} from './StatusChips';
 export {
   EmptyState,
   type EmptyStateProps,

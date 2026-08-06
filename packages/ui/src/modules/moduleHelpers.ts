@@ -5,17 +5,19 @@
 import type {
   BoardPart,
   Component,
+  ComponentPlacement,
   EdgeAssignment,
   EdgeSide,
   FurnitureType,
   HardwareLine,
   Module,
+  ModuleBaseMode,
   ModuleCategory,
   OptionGroup,
   OptionGroupKind,
   Structure,
 } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import { childrenOf, isModuleBaseMode } from '@muebles/domain';
 import {
   matchesCodeOrName,
   normalizeCode,
@@ -85,6 +87,13 @@ export type ModuleDraft = {
   categoryId: string;
   /** Fundamental furniture type for project measure defaults (#109). */
   furnitureType: FurnitureType;
+  /**
+   * Floor base: none | plinth_board | plinth_strip | legs.
+   * Empty string treated as none.
+   */
+  baseMode: ModuleBaseMode | '';
+  /** Plinth/legs height B (mm) as string for the form. Empty = domain default. */
+  baseClearanceMm: string;
   externalWidth: string;
   externalHeight: string;
   externalDepth: string;
@@ -109,6 +118,8 @@ export function emptyModuleDraft(): ModuleDraft {
     notes: '',
     categoryId: '',
     furnitureType: 'inferior',
+    baseMode: '',
+    baseClearanceMm: '',
     externalWidth: '',
     externalHeight: '',
     externalDepth: '',
@@ -225,6 +236,9 @@ export function moduleToDraft(mod: Module): ModuleDraft {
     notes: mod.notes ?? '',
     categoryId: mod.categoryId ?? '',
     furnitureType: mod.furnitureType ?? 'inferior',
+    baseMode: mod.baseMode && isModuleBaseMode(mod.baseMode) ? mod.baseMode : '',
+    baseClearanceMm:
+      mod.baseClearanceMm !== undefined ? String(mod.baseClearanceMm) : '',
     externalWidth: mod.externalDims ? String(mod.externalDims.width) : '',
     externalHeight: mod.externalDims ? String(mod.externalDims.height) : '',
     externalDepth: mod.externalDims ? String(mod.externalDims.depth) : '',
@@ -237,6 +251,7 @@ export function moduleToDraft(mod: Module): ModuleDraft {
       componentId: c.componentId,
       quantity: c.quantity,
       placementOverride: c.placementOverride,
+      overrides: c.overrides,
     })),
     presets: (mod.presets ?? []).map((p) => ({
       id: p.id,
@@ -246,6 +261,268 @@ export function moduleToDraft(mod: Module): ModuleDraft {
       depth: p.depth,
     })),
   };
+}
+
+function optionalNotes(notes: string): string | undefined {
+  const trimmed = notes.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Map editor draft → domain Module (pure). Used by catalogStore on save and by
+ * the live BoardEditor so the canvas follows unsaved structure/components.
+ */
+export function draftToModule(id: string, draft: ModuleDraft): Module {
+  const width = parseOptionalNumber(draft.externalWidth);
+  const height = parseOptionalNumber(draft.externalHeight);
+  const depth = parseOptionalNumber(draft.externalDepth);
+  const hasDims =
+    width !== undefined || height !== undefined || depth !== undefined;
+
+  const baseMode =
+    draft.baseMode && isModuleBaseMode(draft.baseMode)
+      ? draft.baseMode
+      : undefined;
+  const baseClearanceMm = parseOptionalNumber(draft.baseClearanceMm);
+
+  return {
+    id,
+    code: draft.code.trim(),
+    name: draft.name.trim(),
+    notes: optionalNotes(draft.notes),
+    categoryId: draft.categoryId.trim() || undefined,
+    furnitureType: draft.furnitureType,
+    baseMode,
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+    baseLaborCost: parseOptionalNumber(draft.baseLaborCost),
+    imageUrl: draft.imageUrl.trim() || undefined,
+    externalDims: hasDims
+      ? {
+          width: width ?? 0,
+          height: height ?? 0,
+          depth: depth ?? 0,
+        }
+      : undefined,
+    hardwareLines: draft.hardwareLines.map((l) => ({
+      id: l.id,
+      quantity: l.quantity,
+      descriptionOverride: optionalNotes(l.descriptionOverride),
+      optionRole:
+        l.mode === 'fixed'
+          ? l.optionRole.trim() || 'FIXED'
+          : l.optionRole.trim(),
+      hardwareId:
+        l.mode === 'fixed' && l.hardwareId.trim()
+          ? l.hardwareId.trim()
+          : undefined,
+    })),
+    structureId: draft.structureId.trim() || undefined,
+    components: draft.components.map((c) => ({
+      componentId: c.componentId,
+      quantity: c.quantity,
+      placementOverride: c.placementOverride
+        ? (c.placementOverride as ComponentPlacement)
+        : undefined,
+      overrides: c.overrides,
+    })),
+    presets:
+      draft.presets.length > 0
+        ? draft.presets.map((p) => ({
+            id: p.id,
+            name: p.name.trim() || undefined,
+            width: p.width,
+            height: p.height,
+            depth: p.depth,
+          }))
+        : undefined,
+  };
+}
+
+/**
+ * Merge BoardEditor pose/dim overrides into draft components (by componentId).
+ * Used on save and when building the live preview Module.
+ */
+export function mergeBoardOverridesIntoDraft(
+  draft: ModuleDraft,
+  boardOverrides: Readonly<Record<string, unknown>> | undefined,
+): ModuleDraft {
+  if (!boardOverrides || Object.keys(boardOverrides).length === 0) {
+    return draft;
+  }
+  return {
+    ...draft,
+    components: draft.components.map((c) =>
+      boardOverrides[c.componentId]
+        ? {
+            ...c,
+            overrides: boardOverrides[
+              c.componentId
+            ] as ComponentInstanceDraft['overrides'],
+          }
+        : c,
+    ),
+  };
+}
+
+/**
+ * Fingerprint of one instance's formula/rotation overrides (stable string).
+ * Used by {@link moduleCompositionKey} so list-editor formula edits re-resolve
+ * BOM. Callers should compute the key from the **draft** module (without
+ * transient BoardEditor `boardOverrides`) so drag-induced pose overrides do
+ * not force a full re-resolve.
+ */
+export function instanceOverridesKey(
+  ov: ComponentInstanceDraft['overrides'] | undefined,
+): string {
+  if (!ov) return '';
+  return [
+    ov.lengthFormula ?? '',
+    ov.widthFormula ?? '',
+    ov.xFormula ?? '',
+    ov.yFormula ?? '',
+    ov.zFormula ?? '',
+    ov.rotateX ?? '',
+    ov.rotateY ?? '',
+    ov.rotateZ ?? '',
+  ].join('~');
+}
+
+/**
+ * Fingerprint of module fields that affect BOM / 3D composition.
+ * Includes per-instance formula/rotation overrides (list editor).
+ * Prefer computing this from the draft Module **without** transient
+ * boardOverrides so BoardEditor drags do not remount the scratch space.
+ */
+export function moduleCompositionKey(mod: Module): string {
+  const comps = (mod.components ?? [])
+    .map(
+      (c) =>
+        `${c.componentId}:${c.quantity}:${c.placementOverride ?? ''}:${instanceOverridesKey(c.overrides)}`,
+    )
+    .join(',');
+  const d = mod.externalDims;
+  const dims = d ? `${d.width}x${d.height}x${d.depth}` : '';
+  return `${mod.structureId ?? ''}|${comps}|${dims}`;
+}
+
+/** Drop empty override fields; return undefined when nothing remains. */
+export function cleanInstanceOverrides(
+  ov: ComponentInstanceDraft['overrides'] | undefined,
+): ComponentInstanceDraft['overrides'] | undefined {
+  if (!ov) return undefined;
+  const next: NonNullable<ComponentInstanceDraft['overrides']> = {
+    ...(ov.lengthFormula?.trim()
+      ? { lengthFormula: ov.lengthFormula.trim() }
+      : {}),
+    ...(ov.widthFormula?.trim()
+      ? { widthFormula: ov.widthFormula.trim() }
+      : {}),
+    ...(ov.xFormula?.trim() ? { xFormula: ov.xFormula.trim() } : {}),
+    ...(ov.yFormula?.trim() ? { yFormula: ov.yFormula.trim() } : {}),
+    ...(ov.zFormula?.trim() ? { zFormula: ov.zFormula.trim() } : {}),
+    ...(ov.rotateX !== undefined && Number.isFinite(ov.rotateX)
+      ? { rotateX: ov.rotateX }
+      : {}),
+    ...(ov.rotateY !== undefined && Number.isFinite(ov.rotateY)
+      ? { rotateY: ov.rotateY }
+      : {}),
+    ...(ov.rotateZ !== undefined && Number.isFinite(ov.rotateZ)
+      ? { rotateZ: ov.rotateZ }
+      : {}),
+  };
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+/** Merge a partial patch into instance overrides (empty strings clear fields). */
+export function patchInstanceOverrides(
+  current: ComponentInstanceDraft['overrides'] | undefined,
+  patch: {
+    readonly lengthFormula?: string;
+    readonly widthFormula?: string;
+    readonly xFormula?: string;
+    readonly yFormula?: string;
+    readonly zFormula?: string;
+    readonly rotateX?: number | null;
+    readonly rotateY?: number | null;
+    readonly rotateZ?: number | null;
+  },
+): ComponentInstanceDraft['overrides'] | undefined {
+  const base: {
+    lengthFormula?: string;
+    widthFormula?: string;
+    xFormula?: string;
+    yFormula?: string;
+    zFormula?: string;
+    rotateX?: number;
+    rotateY?: number;
+    rotateZ?: number;
+  } = { ...(current ?? {}) };
+
+  if ('lengthFormula' in patch) {
+    const v = patch.lengthFormula?.trim() ?? '';
+    if (v) base.lengthFormula = v;
+    else delete base.lengthFormula;
+  }
+  if ('widthFormula' in patch) {
+    const v = patch.widthFormula?.trim() ?? '';
+    if (v) base.widthFormula = v;
+    else delete base.widthFormula;
+  }
+  if ('xFormula' in patch) {
+    const v = patch.xFormula?.trim() ?? '';
+    if (v) base.xFormula = v;
+    else delete base.xFormula;
+  }
+  if ('yFormula' in patch) {
+    const v = patch.yFormula?.trim() ?? '';
+    if (v) base.yFormula = v;
+    else delete base.yFormula;
+  }
+  if ('zFormula' in patch) {
+    const v = patch.zFormula?.trim() ?? '';
+    if (v) base.zFormula = v;
+    else delete base.zFormula;
+  }
+  if ('rotateX' in patch) {
+    if (patch.rotateX === null || patch.rotateX === undefined) {
+      delete base.rotateX;
+    } else {
+      base.rotateX = patch.rotateX;
+    }
+  }
+  if ('rotateY' in patch) {
+    if (patch.rotateY === null || patch.rotateY === undefined) {
+      delete base.rotateY;
+    } else {
+      base.rotateY = patch.rotateY;
+    }
+  }
+  if ('rotateZ' in patch) {
+    if (patch.rotateZ === null || patch.rotateZ === undefined) {
+      delete base.rotateZ;
+    } else {
+      base.rotateZ = patch.rotateZ;
+    }
+  }
+
+  return cleanInstanceOverrides(base);
+}
+
+/** One-line summary for the advanced disclosure header. */
+export function instanceOverridesSummary(
+  ov: ComponentInstanceDraft['overrides'] | undefined,
+): string {
+  if (!ov) return 'automático';
+  const parts: string[] = [];
+  if (ov.lengthFormula) parts.push(`L=${ov.lengthFormula}`);
+  if (ov.widthFormula) parts.push(`W=${ov.widthFormula}`);
+  if (ov.xFormula) parts.push(`X=${ov.xFormula}`);
+  if (ov.yFormula) parts.push(`Y=${ov.yFormula}`);
+  if (ov.zFormula) parts.push(`Z=${ov.zFormula}`);
+  if (ov.rotateX !== undefined) parts.push(`rX=${ov.rotateX}°`);
+  if (ov.rotateY !== undefined) parts.push(`rY=${ov.rotateY}°`);
+  if (ov.rotateZ !== undefined) parts.push(`rZ=${ov.rotateZ}°`);
+  return parts.length > 0 ? parts.join(' · ') : 'automático';
 }
 
 /**
@@ -312,33 +589,30 @@ export function parseOptionalNumber(raw: string): number | undefined {
   return n;
 }
 
+/** Module shape needed to discover which option-group roles it uses. */
+export type ModuleRolesSource = {
+  readonly components?: readonly { readonly componentId: string }[];
+  readonly structureId?: string;
+  readonly hardwareLines?: readonly {
+    readonly optionRole: string;
+    readonly hardwareId?: string;
+  }[];
+};
+
 /**
- * Default option choices for cost preview: first member of each required group used by the module.
- * Pure selection helper — does not compute prices.
- *
- * Option roles come from the module's component instances (+ the components of
- * its referenced structure when structures are provided) and from hardware
- * lines. Modules no longer carry board parts directly.
+ * Option-group codes referenced by the module (component optionRoles +
+ * variable hardware lines). Pure — no pricing.
  */
-export function defaultOptionChoicesForModule(
-  module: {
-    readonly components?: readonly { readonly componentId: string }[];
-    readonly structureId?: string;
-    readonly hardwareLines: readonly {
-      readonly optionRole: string;
-      readonly hardwareId?: string;
-    }[];
-  },
-  optionGroups: readonly OptionGroup[],
+export function usedOptionRolesForModule(
+  module: ModuleRolesSource,
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
-): Record<string, string> {
+): Set<string> {
   const usedRoles = new Set<string>();
-  for (const line of module.hardwareLines) {
+  for (const line of module.hardwareLines ?? []) {
     if (line.hardwareId) continue;
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }
-  // Collect optionRoles from the module's component instances
   if (module.components && catalogComponents) {
     for (const inst of module.components) {
       const comp = catalogComponents.find((c) => c.id === inst.componentId);
@@ -349,7 +623,6 @@ export function defaultOptionChoicesForModule(
       }
     }
   }
-  // Collect optionRoles from the referenced structure's component instances
   if (module.structureId && catalogStructures && catalogComponents) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     if (structure) {
@@ -363,6 +636,24 @@ export function defaultOptionChoicesForModule(
       }
     }
   }
+  return usedRoles;
+}
+
+/**
+ * Default option choices for cost/3D preview: first member of each group used
+ * by the module. Pure selection helper — does not compute prices.
+ */
+export function defaultOptionChoicesForModule(
+  module: ModuleRolesSource,
+  optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
+): Record<string, string> {
+  const usedRoles = usedOptionRolesForModule(
+    module,
+    catalogComponents,
+    catalogStructures,
+  );
 
   const choices: Record<string, string> = {};
   for (const group of optionGroups) {
@@ -373,6 +664,74 @@ export function defaultOptionChoicesForModule(
     }
   }
   return choices;
+}
+
+/** One selectable material/finish for a board option group in 3D preview. */
+export type BoardFinishPickerOption = {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly previewColor?: string;
+  readonly grainDefault: boolean;
+};
+
+/** Board option group (INTERIOR, FRENTE, …) with its catalog members. */
+export type BoardFinishPickerGroup = {
+  readonly code: string;
+  readonly name: string;
+  readonly options: readonly BoardFinishPickerOption[];
+};
+
+/**
+ * Board finish groups used by the module, for 3D preview material pickers.
+ * Only `kind === 'board'` groups with at least one known material.
+ */
+export function boardFinishPickerGroupsForModule(
+  module: ModuleRolesSource,
+  optionGroups: readonly OptionGroup[],
+  materials: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly previewColor?: string;
+    readonly grainDefault: boolean;
+    readonly active?: boolean;
+  }[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
+): BoardFinishPickerGroup[] {
+  const usedRoles = usedOptionRolesForModule(
+    module,
+    catalogComponents,
+    catalogStructures,
+  );
+  const byId = new Map(materials.map((m) => [m.id, m]));
+  const result: BoardFinishPickerGroup[] = [];
+
+  for (const group of optionGroups) {
+    if (group.kind !== 'board') continue;
+    if (!usedRoles.has(group.code)) continue;
+    const options: BoardFinishPickerOption[] = [];
+    for (const id of group.optionIds) {
+      const mat = byId.get(id);
+      if (!mat) continue;
+      if (mat.active === false) continue;
+      options.push({
+        id: mat.id,
+        code: mat.code,
+        name: mat.name,
+        previewColor: mat.previewColor,
+        grainDefault: mat.grainDefault,
+      });
+    }
+    if (options.length === 0) continue;
+    result.push({
+      code: group.code,
+      name: group.name,
+      options,
+    });
+  }
+  return result;
 }
 
 export const SEED_MODULE_CODES = ['MOD-GAB-01', 'MOD-CAJ-01'] as const;

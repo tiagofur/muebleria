@@ -108,10 +108,15 @@ function roleLabel(role: string): string {
   return map[role] ?? role;
 }
 
+/** Optional IA subgroup within a section (Fase 6 UI — design.md §4.1). */
+export type NavItemGroup = 'composition' | 'catalogs';
+
 type NavItemDef = {
   readonly id: AppNavId;
   readonly label: string;
   readonly icon: LucideIcon;
+  /** Visual subgroup under the section label (e.g. Composición / Catálogos). */
+  readonly group?: NavItemGroup;
 };
 
 type NavSectionDef = {
@@ -124,6 +129,11 @@ const ADMIN_USERS_NAV: NavItemDef = {
   id: 'users',
   label: 'Usuarios',
   icon: ShieldCheck,
+};
+
+const NAV_GROUP_LABELS: Readonly<Record<NavItemGroup, string>> = {
+  composition: 'Composición',
+  catalogs: 'Catálogos',
 };
 
 /** Canonical sidebar sections — TRABAJO / INGENIERIA / CONFIG (design.md §4.1 + §3.7). */
@@ -148,14 +158,30 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: 'ingenieria',
     label: 'INGENIERÍA',
+    // design.md §4.1 order: composition first, then catalogs, Grupos last.
     items: [
-      { id: 'modules', label: 'Muebles', icon: Package },
-      { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
-      { id: 'components', label: 'Componentes', icon: Puzzle },
-      { id: 'materials', label: 'Materiales', icon: Layers },
-      { id: 'edges', label: 'Cantos', icon: Minus },
-      { id: 'hardware', label: 'Herrajes', icon: Settings2 },
-      { id: 'optionGroups', label: 'Grupos', icon: ToggleLeft },
+      { id: 'modules', label: 'Muebles', icon: Package, group: 'composition' },
+      {
+        id: 'structures',
+        label: 'Estructuras',
+        icon: LayoutGrid,
+        group: 'composition',
+      },
+      {
+        id: 'components',
+        label: 'Componentes',
+        icon: Puzzle,
+        group: 'composition',
+      },
+      { id: 'materials', label: 'Materiales', icon: Layers, group: 'catalogs' },
+      { id: 'edges', label: 'Cantos', icon: Minus, group: 'catalogs' },
+      { id: 'hardware', label: 'Herrajes', icon: Settings2, group: 'catalogs' },
+      {
+        id: 'optionGroups',
+        label: 'Grupos',
+        icon: ToggleLeft,
+        group: 'catalogs',
+      },
     ],
   },
   {
@@ -265,13 +291,18 @@ export function AppShell({
 
   const paletteItems = useMemo((): CommandPaletteItem[] => {
     const navItems: CommandPaletteItem[] = navSections.flatMap((section) =>
-      section.items.map((item) => ({
-        id: `nav:${item.id}`,
-        label: item.label,
-        group: 'Navegación',
-        keywords: section.label,
-        icon: item.icon,
-      })),
+      section.items.map((item) => {
+        const subgroup = item.group ? NAV_GROUP_LABELS[item.group] : '';
+        return {
+          id: `nav:${item.id}`,
+          label: item.label,
+          group: 'Navegación',
+          keywords: [section.label, subgroup, item.label]
+            .filter(Boolean)
+            .join(' '),
+          icon: item.icon,
+        };
+      }),
     );
     return [...navItems, ...commandItems];
   }, [navSections, commandItems]);
@@ -336,54 +367,79 @@ export function AppShell({
         </div>
 
         <nav className="app-sidebar__nav" aria-label="Secciones">
-          {navSections.map((section) => (
-            <div key={section.id} className="app-sidebar__section">
-              <p className="app-sidebar__section-label">{section.label}</p>
-              <ul className="app-sidebar__list">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = item.id === activeId;
-                  const className = active
-                    ? 'app-sidebar__item is-active'
-                    : 'app-sidebar__item';
-                  const content = (
-                    <>
-                      <Icon
-                        className="app-sidebar__icon"
-                        size={16}
-                        strokeWidth={1.5}
-                        aria-hidden
-                      />
-                      <span>{item.label}</span>
-                    </>
-                  );
-                  return (
-                    <li key={item.id}>
-                      {hrefForNav ? (
-                        <a
-                          href={hrefForNav(item.id)}
-                          className={className}
-                          aria-current={active ? 'page' : undefined}
-                          onClick={(e) => onNavClick(e, item.id)}
+          {navSections.map((section) => {
+            let lastGroup: NavItemGroup | undefined;
+            return (
+              <div key={section.id} className="app-sidebar__section">
+                <p className="app-sidebar__section-label">{section.label}</p>
+                <ul className="app-sidebar__list">
+                  {section.items.flatMap((item) => {
+                    const nodes: ReactNode[] = [];
+                    if (item.group && item.group !== lastGroup) {
+                      lastGroup = item.group;
+                      nodes.push(
+                        <li
+                          key={`group-${section.id}-${item.group}`}
+                          className="app-sidebar__group"
+                          role="presentation"
                         >
-                          {content}
-                        </a>
-                      ) : (
-                        <button
-                          type="button"
-                          className={className}
-                          aria-current={active ? 'page' : undefined}
-                          onClick={() => handleNavigate(item.id)}
-                        >
-                          {content}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                          <p
+                            className="app-sidebar__group-label"
+                            data-testid={`nav-group-${item.group}`}
+                          >
+                            {NAV_GROUP_LABELS[item.group]}
+                          </p>
+                        </li>,
+                      );
+                    }
+                    const Icon = item.icon;
+                    const active = item.id === activeId;
+                    const baseClass = active
+                      ? 'app-sidebar__item is-active'
+                      : 'app-sidebar__item';
+                    const className = item.group
+                      ? `${baseClass} app-sidebar__item--nested`
+                      : baseClass;
+                    const content = (
+                      <>
+                        <Icon
+                          className="app-sidebar__icon"
+                          size={16}
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
+                        <span>{item.label}</span>
+                      </>
+                    );
+                    nodes.push(
+                      <li key={item.id}>
+                        {hrefForNav ? (
+                          <a
+                            href={hrefForNav(item.id)}
+                            className={className}
+                            aria-current={active ? 'page' : undefined}
+                            onClick={(e) => onNavClick(e, item.id)}
+                          >
+                            {content}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className={className}
+                            aria-current={active ? 'page' : undefined}
+                            onClick={() => handleNavigate(item.id)}
+                          >
+                            {content}
+                          </button>
+                        )}
+                      </li>,
+                    );
+                    return nodes;
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
       </aside>
 

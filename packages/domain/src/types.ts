@@ -46,6 +46,17 @@ export interface MaterialBoard {
    * Optional texture map for 3D (relative media URL). Color-only mode ignores this.
    */
   readonly previewTextureUrl?: string;
+  /**
+   * Physical size (mm) of one full texture image across the board **width**
+   * (local X / U). Used to UV-scale photo textures so pattern density matches
+   * the real melamine sample. Omit/0 → default tile (~280 mm).
+   */
+  readonly previewTextureTileWidthMm?: number;
+  /**
+   * Physical size (mm) of one full texture image along board **length** / veta
+   * (local Z / V). Omit/0 → default tile (~280 mm).
+   */
+  readonly previewTextureTileLengthMm?: number;
   readonly notes?: string;
   readonly active: boolean;
 }
@@ -66,6 +77,12 @@ export interface Hardware {
   readonly name: string;
   readonly unit: HardwareUnit;
   readonly costPerUnit: number;
+  /**
+   * Commercial package size in the same unit as `unit`.
+   * Example: unit `meter` + packageSize `4` → barras de 4 m.
+   * Used by the hardware purchase list to ceil consumption to packages.
+   */
+  readonly packageSize?: number;
   /** Relative media URL (F040). */
   readonly imageUrl?: string;
   readonly notes?: string;
@@ -183,6 +200,19 @@ export interface ExternalDims {
  */
 export type FurnitureType = 'inferior' | 'superior' | 'alto';
 
+/**
+ * How the floor cabinet meets the floor (zoclo / patas).
+ * - none: no base BOM (wall units, or carcass only)
+ * - plinth_board: melamine plinth component(s), role ZOCLO (material fallback FRENTE)
+ * - plinth_strip: purchased profile by linear meter, role ZOCLO_PERFIL
+ * - legs: hardware feet/levelers, role PATAS
+ */
+export type ModuleBaseMode =
+  | 'none'
+  | 'plinth_board'
+  | 'plinth_strip'
+  | 'legs';
+
 export interface Module {
   readonly id: string;
   readonly code: string;
@@ -197,6 +227,15 @@ export interface Module {
   readonly externalDims?: ExternalDims;
   /** Fundamental furniture type for project measure defaults (#109). */
   readonly furnitureType?: FurnitureType;
+  /**
+   * Floor base treatment (zoclo board / strip / legs). Omit → none.
+   */
+  readonly baseMode?: ModuleBaseMode;
+  /**
+   * Default zoclo/patas height B (mm) for formulas and 3D clearance.
+   * Omit → domain default (100) when baseMode needs a height.
+   */
+  readonly baseClearanceMm?: number;
   /**
    * Commercial measure options offered to sales (H09 / #104).
    * Source of truth for sellable sizes — not Structure.presets.
@@ -372,24 +411,121 @@ export interface KitchenWall {
   readonly originYMm?: number;
 }
 
+/** How a quote unit is anchored in the kitchen plan. Default `wall`. */
+export type PlacementMode = 'wall' | 'free';
+
 /**
- * Placement of one copy of a quote line on a wall.
- * Does not affect BOM — presentation/obra only (#133).
+ * Placement of one copy of a quote line on a wall or free (island).
+ * Does not affect BOM — presentation/obra only (#133 / free-place icebox).
  */
 export interface ProjectItemPlacement {
   readonly itemId: string;
   /** 0-based index when ProjectItem.quantity > 1. */
   readonly instanceIndex: number;
+  /**
+   * Wall id when mode is `wall` (or omitted). Empty / ignored when mode is `free`.
+   */
   readonly wallId: string;
-  /** Distance along the wall from the wall start (mm). */
+  /** Distance along the wall from the wall start (mm). Ignored when free. */
   readonly offsetMm: number;
   readonly elevation: PlacementElevation;
+  /**
+   * Clearance under this unit for plinth/legs (zoclo/patas), mm.
+   * Only used when elevation is `floor`. Omit to inherit layout default.
+   */
+  readonly baseClearanceMm?: number;
+  /**
+   * `free` = island / free place on the floor plane (not snapped to a wall).
+   * Omit or `wall` = classic wall-run placement.
+   */
+  readonly mode?: PlacementMode;
+  /** Plan X (mm) when mode is free. */
+  readonly freeXMm?: number;
+  /** Plan Y / depth (mm) when mode is free. */
+  readonly freeYMm?: number;
+  /** Plan yaw (degrees) when mode is free. 0 = face +Y depth into room convention. */
+  readonly freeYawDeg?: number;
+}
+
+/**
+ * Background plan image (PDF page exported as PNG/JPG, photo of blueprint, etc.).
+ * Presentation only — not BOM. Used to trace walls in Proyectar.
+ */
+export interface KitchenPlanUnderlay {
+  /** Media path or data URL of the plan image. */
+  readonly imageUrl: string;
+  /** Horizontal span of the image in workshop mm. */
+  readonly widthMm: number;
+  /** Vertical span of the image in workshop mm. */
+  readonly heightMm: number;
+  /** Min-corner of the image in plan coords (default 0). */
+  readonly originXMm?: number;
+  readonly originYMm?: number;
+  /** 0–1; default ~0.45 in UI. */
+  readonly opacity?: number;
+  /** Original file name for UI. */
+  readonly fileName?: string;
+}
+
+/**
+ * One named environment (cocina, baño, living…) inside a kitchen plan.
+ * Walls + placements are local to the space. Presentation only — not BOM.
+ */
+export interface KitchenSpace {
+  readonly id: string;
+  readonly name: string;
+  readonly walls: readonly KitchenWall[];
+  readonly placements: readonly ProjectItemPlacement[];
+  readonly baseClearanceMm?: number;
+  readonly wallCabinetZMm?: number;
+  readonly showCountertop?: boolean;
+  /** Optional floor-plan underlay for this space. */
+  readonly underlay?: KitchenPlanUnderlay;
+}
+
+/**
+ * Soft lock: who is editing the kitchen plan (Proyectar).
+ * Expires if not renewed — prevents silent multi-user overwrite without OT.
+ */
+export interface ProjectPlanEditSession {
+  readonly userId: string;
+  readonly userName: string;
+  /** ISO-8601 expiry; after this the session is free. */
+  readonly expiresAt: string;
 }
 
 /** Optional kitchen plan attached to a project. */
 export interface ProjectKitchenLayout {
+  /**
+   * Active space content (mirrored from `spaces[active]` when multi-ambiente).
+   * Existing consumers (3D, prune, studio) read these fields.
+   */
   readonly walls: readonly KitchenWall[];
   readonly placements: readonly ProjectItemPlacement[];
+  /**
+   * Default clearance under floor cabinets for plinth/legs (zoclo/patas), mm.
+   * Typical workshop values: 80–150. Omit → domain default (100).
+   */
+  readonly baseClearanceMm?: number;
+  /**
+   * Bottom height of wall-hung units (alacenas), mm from floor.
+   * Typical 1400–1500. Omit → domain default (1400).
+   */
+  readonly wallCabinetZMm?: number;
+  /**
+   * When true, 3D shows a simple visual countertop on floor cabinets.
+   * Presentation only — not BOM. Omit → true (obra look).
+   */
+  readonly showCountertop?: boolean;
+  /**
+   * Named spaces (multi-ambiente). When omitted, the top-level walls/placements
+   * are treated as a single default space ("Cocina").
+   */
+  readonly spaces?: readonly KitchenSpace[];
+  /** Id of the active space; mirrored into top-level walls/placements. */
+  readonly activeSpaceId?: string;
+  /** Underlay of the active space (mirrored). */
+  readonly underlay?: KitchenPlanUnderlay;
 }
 
 /** Simple installation checklist item (#139). */
@@ -469,6 +605,11 @@ export interface Project {
    * Optional kitchen plan (walls + placements). Omitted = linear 3D run only.
    */
   readonly kitchenLayout?: ProjectKitchenLayout;
+  /**
+   * Soft lock for Proyectar multi-user collaboration.
+   * When present and not expired, another editor should open read-only.
+   */
+  readonly planEditSession?: ProjectPlanEditSession;
   /**
    * Optional installation checklist for obra (#139).
    */
@@ -704,8 +845,19 @@ export interface HardwarePurchaseRow {
   readonly code: string;
   readonly description: string;
   readonly unit: HardwareUnit;
+  /** Net consumption in catalog unit (e.g. meters from BOM). */
   readonly quantity: number;
+  /**
+   * Quantity to buy in catalog unit after package rounding.
+   * Equals `quantity` when the hardware has no packageSize.
+   */
+  readonly purchaseQuantity: number;
+  /** Packages to buy (ceil); only set when packageSize is defined. */
+  readonly purchasePackages?: number;
+  /** Echo of Hardware.packageSize when applied. */
+  readonly packageSize?: number;
   readonly costPerUnit: number;
+  /** Cost of purchaseQuantity (not raw quantity). */
   readonly lineCost: number;
 }
 

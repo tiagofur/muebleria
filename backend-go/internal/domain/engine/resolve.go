@@ -322,7 +322,8 @@ func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	}
 	clean := strings.ReplaceAll(trimmed, " ", "")
 	for _, r := range clean {
-		if unicode.IsDigit(r) || r == 'W' || r == 'H' || r == 'D' ||
+		// Allow '.' for decimal literals (e.g. "1.5", "W * 1.5") — parser already handles them.
+		if unicode.IsDigit(r) || r == '.' || r == 'W' || r == 'H' || r == 'D' ||
 			r == 'P' || r == 'T' || r == 'L' || r == 'i' ||
 			r == '+' || r == '-' || r == '*' || r == '/' || r == '(' || r == ')' {
 			continue

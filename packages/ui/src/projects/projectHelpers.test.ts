@@ -14,6 +14,7 @@ import {
   emptyAddItemDraft,
   emptyProjectDraft,
   filterProjectsByQuery,
+  filterProjectsList,
   formatProjectMoney,
   groupsForModuleItem,
   optionsForGroup,
@@ -376,6 +377,16 @@ describe('filterProjectsByQuery / formatProjectMoney (F022)', () => {
     expect(filterProjectsByQuery(list, 'bruno', customers)).toEqual([list[1]]);
     expect(filterProjectsByQuery(list, 'ana lópez', customers)).toEqual([list[0]]);
     expect(filterProjectsByQuery(list, 'zzz', customers)).toEqual([]);
+  });
+
+  it('filterProjectsList applies status chip after text query', () => {
+    expect(filterProjectsList(list, '', 'all', customers)).toHaveLength(2);
+    expect(filterProjectsList(list, '', 'draft', customers)).toEqual([list[0]]);
+    expect(filterProjectsList(list, '', 'quoted', customers)).toEqual([list[1]]);
+    expect(filterProjectsList(list, 'dorm', 'quoted', customers)).toEqual([
+      list[1],
+    ]);
+    expect(filterProjectsList(list, 'dorm', 'draft', customers)).toEqual([]);
   });
 
   it('falls back to raw customerId when customers catalog is empty', () => {

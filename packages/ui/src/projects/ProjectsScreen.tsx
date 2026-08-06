@@ -39,6 +39,7 @@ import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
 import { ProjectPresentationMode } from './components/ProjectPresentationMode';
+import { ProjectSpatialStudio } from './components/ProjectSpatialStudio';
 import { ProjectDetailView } from './components/ProjectDetailView';
 import { ProjectAddItemModal } from './components/ProjectAddItemModal';
 import { ProjectConfirmDeleteModal } from './components/ProjectConfirmDeleteModal';
@@ -50,7 +51,8 @@ import { ProjectTemplatesManagementModal } from './components/ProjectTemplatesMa
 import { ProjectsListView } from './components/ProjectsListView';
 import {
   emptyProjectDraft,
-  filterProjectsByQuery,
+  filterProjectsList,
+  type ProjectStatusFilter,
   formatProjectMoney,
   projectToDraft,
   setItemOptionChoice,
@@ -123,6 +125,16 @@ export interface ProjectsScreenProps {
     projectId: string,
     layout: import('@muebles/domain').ProjectKitchenLayout,
   ) => void;
+  /**
+   * Soft lock for multi-user Proyectar (auth). When omitted, no lock protocol.
+   */
+  readonly planActor?: {
+    readonly userId: string;
+    readonly userName: string;
+  };
+  readonly onAcquirePlanEdit?: (projectId: string) => boolean;
+  readonly onRenewPlanEdit?: (projectId: string) => boolean;
+  readonly onReleasePlanEdit?: (projectId: string) => void;
   /** Apply A/B scenario B role choice to all lines (#137). Draft only. */
   readonly onApplyScenarioB?: (
     projectId: string,
@@ -255,6 +267,8 @@ export interface ProjectsScreenProps {
    * project id (used by ?present=projectId URL sharing).
    */
   readonly autoPresentId?: string | null;
+  /** Auth-aware media URL resolver for 3D textures. */
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
 export function ProjectsScreen({
@@ -284,6 +298,10 @@ export function ProjectsScreen({
   onRemoveItem,
   onReorderItems,
   onUpdateKitchenLayout,
+  planActor,
+  onAcquirePlanEdit,
+  onRenewPlanEdit,
+  onReleasePlanEdit,
   onApplyScenarioB,
   onDuplicateWithScenarioB,
   onExportScenarioPdf,
@@ -323,9 +341,12 @@ export function ProjectsScreen({
   onRestoreVersion,
   showCosts = true,
   autoPresentId = null,
+  resolveImageUrl = (u) => u,
 }: ProjectsScreenProps): ReactNode {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
+  const [statusFilter, setStatusFilter] =
+    useState<ProjectStatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
@@ -341,6 +362,11 @@ export function ProjectsScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
+  const [showSpatialStudio, setShowSpatialStudio] = useState(false);
+  const [spatialBootstrap, setSpatialBootstrap] = useState<{
+    listFilter?: 'all' | 'unplaced' | 'placed';
+    selectKey?: string | null;
+  } | null>(null);
 
   // Fase 3 slice 3.5: auto-open presentation when autoPresentId matches.
   useEffect(() => {
@@ -393,8 +419,9 @@ export function ProjectsScreen({
   );
 
   const filtered = useMemo(
-    () => filterProjectsByQuery(projects, debouncedSearch, customers),
-    [projects, debouncedSearch, customers],
+    () =>
+      filterProjectsList(projects, debouncedSearch, statusFilter, customers),
+    [projects, debouncedSearch, statusFilter, customers],
   );
 
   const selectedProject =
@@ -541,6 +568,11 @@ export function ProjectsScreen({
     if (!selectedId) return;
     onAddItem(selectedId, payload);
     closeAddItemModal();
+    // Bridge to Proyectar: open studio focused on unplaced units after add.
+    if (onUpdateKitchenLayout && canMutate) {
+      setSpatialBootstrap({ listFilter: 'unplaced' });
+      setShowSpatialStudio(true);
+    }
   };
 
   const updateItemMeasurePreset = (item: ProjectItem, measurePresetId: string) => {
@@ -749,6 +781,7 @@ export function ProjectsScreen({
       customers={customers}
       projectTemplates={projectTemplates}
       search={search}
+      statusFilter={statusFilter}
       isTrulyEmpty={isTrulyEmpty}
       isFilterEmpty={isFilterEmpty}
       canMutate={canMutate}
@@ -756,6 +789,11 @@ export function ProjectsScreen({
       hasDeleteTemplate={!!onDeleteTemplate}
       estimateLabel={estimateLabel}
       onSearchChange={setSearch}
+      onStatusFilterChange={setStatusFilter}
+      onClearFilters={() => {
+        setSearch('');
+        setStatusFilter('all');
+      }}
       onNewProject={startCreate}
       onFromTemplate={startFromTemplate}
       onManageTemplates={() => setTemplatesManagementOpen(true)}
@@ -780,6 +818,8 @@ export function ProjectsScreen({
           modules={modules}
           optionGroups={optionGroups}
           catalogs={catalogs}
+          catalogComponents={catalogComponents}
+          catalogStructures={catalogStructures}
           customers={customers}
           ownerLabels={ownerLabels}
           breakdown={breakdown}
@@ -839,6 +879,14 @@ export function ProjectsScreen({
           onOpenAddItemModal={openAddItemModal}
           onBackToList={backToList}
           onOpenPresentation={() => setShowPresentation(true)}
+          onOpenSpatialStudio={
+            onUpdateKitchenLayout
+              ? () => {
+                  setSpatialBootstrap(null);
+                  setShowSpatialStudio(true);
+                }
+              : undefined
+          }
           onEditMeta={startEditMeta}
           onDuplicate={onDuplicate}
           onSaveAsTemplate={
@@ -891,6 +939,8 @@ export function ProjectsScreen({
         categories={categories}
         optionGroups={optionGroups}
         catalogs={catalogs}
+        catalogComponents={catalogComponents}
+        catalogStructures={catalogStructures}
         projectLevelChoices={selectedProject?.projectLevelChoices ?? {}}
         measureDefaults={selectedProject?.measureDefaults}
       />
@@ -939,7 +989,54 @@ export function ProjectsScreen({
               : null)
           }
           workshopName={workshopSettings?.workshopName}
+          resolveMediaUrl={resolveImageUrl}
           onClose={() => setShowPresentation(false)}
+        />
+      ) : null}
+
+      {selectedProject && onUpdateKitchenLayout ? (
+        <ProjectSpatialStudio
+          open={showSpatialStudio}
+          project={selectedProject}
+          modules={modules}
+          catalog={project3dCatalog}
+          canEdit={canMutate && selectedProject.status === 'draft'}
+          resolveMediaUrl={resolveImageUrl}
+          quoteSalePrice={
+            breakdown?.salePrice ??
+            (typeof projectEstimates[selectedProject.id] === 'number'
+              ? (projectEstimates[selectedProject.id] as number)
+              : null)
+          }
+          bootstrap={spatialBootstrap}
+          planActor={planActor}
+          onAcquirePlanEdit={
+            planActor && onAcquirePlanEdit
+              ? () => onAcquirePlanEdit(selectedProject.id)
+              : undefined
+          }
+          onRenewPlanEdit={
+            planActor && onRenewPlanEdit
+              ? () => onRenewPlanEdit(selectedProject.id)
+              : undefined
+          }
+          onReleasePlanEdit={
+            planActor && onReleasePlanEdit
+              ? () => onReleasePlanEdit(selectedProject.id)
+              : undefined
+          }
+          onClose={() => {
+            setShowSpatialStudio(false);
+            setSpatialBootstrap(null);
+          }}
+          onChangeLayout={(layout) =>
+            onUpdateKitchenLayout(selectedProject.id, layout)
+          }
+          onUpdateItem={
+            canMutate
+              ? (item) => onUpdateItem(selectedProject.id, item)
+              : undefined
+          }
         />
       ) : null}
 
@@ -947,6 +1044,7 @@ export function ProjectsScreen({
         open={show3DModal}
         project={selectedProject}
         catalog={project3dCatalog}
+        resolveMediaUrl={resolveImageUrl}
         focus={
           viewerQuoteRun || !viewerItem
             ? null

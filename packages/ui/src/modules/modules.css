@@ -208,6 +208,48 @@
   background: var(--surface-hover);
 }
 
+/* Secondary composition tabs (Fase 4 UI) */
+.module-editor__subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+  padding: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.module-editor__subtab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: var(--transition-colors);
+  white-space: nowrap;
+  border-radius: 0;
+}
+
+.module-editor__subtab:hover {
+  color: var(--text-primary);
+}
+
+.module-editor__subtab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.module-editor__subtab--active {
+  color: var(--text-brand);
+  border-bottom-color: var(--brand-500);
+  font-weight: var(--weight-semibold);
+}
+
 /* Grid keyboard capture (#39): stronger focus ring on numeric fields */
 .module-editor__section .catalog-form__field input:focus-visible,
 .module-editor__section .catalog-form__field select:focus-visible {
@@ -232,6 +274,21 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/* Board-first canvas under the component instance list (hybrid Components tab). */
+.module-editor__board-slot {
+  display: flex;
+  flex-direction: column;
+  min-height: 20rem;
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.module-editor__board-slot[data-hybrid='true'] {
+  /* Keeps canvas readable below the list on tall editors */
+  min-height: 24rem;
 }
 
 /* .module-editor__section moved to common/surfaceCard.css (F1 UI 1b). */

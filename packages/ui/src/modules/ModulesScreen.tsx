@@ -44,11 +44,14 @@ import {
 } from '../common';
 import '../catalogs/catalogs.css';
 import {
+  draftToModule,
   emptyCategoryDraft,
   emptyHardwareLineDraft,
   emptyModuleDraft,
   filterModulesByQuery,
   flattenCategoriesForSelect,
+  mergeBoardOverridesIntoDraft,
+  moduleCompositionKey,
   moduleHardwareGridInputId,
   moduleToDraft,
   nextGridEnterTarget,
@@ -144,11 +147,19 @@ export interface ModulesScreenProps {
   /** Resolve media path for preview. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
   /**
-   * F072: Board-first editor slot. When provided, the Components tab shows
-   * the BoardEditor instead of the legacy components panel. The shell
-   * constructs this from BoardEditor (apps/web).
+   * Static board slot (tests / legacy). Prefer `renderBoardEditor` so the
+   * canvas follows the live draft (structure + components before save).
    */
   readonly boardEditorSlot?: ReactNode;
+  /**
+   * Board-first editor for the **current draft** Module. Called on each
+   * Components-tab render with a live module + draft-only composition key
+   * (so formula edits re-resolve without remounting on BoardEditor drags).
+   */
+  readonly renderBoardEditor?: (args: {
+    readonly module: Module;
+    readonly compositionKey: string;
+  }) => ReactNode;
   /**
    * Gap #1: overrides derived from the BoardEditor, keyed by componentId.
    * Merged into the module draft on save so board edits persist.
@@ -188,6 +199,7 @@ export function ModulesScreen({
   onUploadImage,
   resolveImageUrl = (u) => u,
   boardEditorSlot,
+  renderBoardEditor,
   boardOverrides,
 }: ModulesScreenProps): ReactNode {
   const formId = useId();
@@ -417,12 +429,11 @@ export function ModulesScreen({
   }, [openModuleId, openModuleEditId, modules]);
 
   /**
-   * Sync edit mode from shell URL (`/modules/:id/edit` — Fase 3 UI).
-   * - `'new'` sentinel: open create-new editor (still uses the existing modal
-   *   in this sub-fase; will become inline in 3a.2).
-   * - Real id: open edit on that module. For 3a.1 we still route through the
-   *   modal to preserve behavior; the inline layout lands in 3a.2.
-   * - null / '': close the editor.
+   * Sync edit mode from shell URL (`/modules/:id/edit`).
+   * Opens full-page editor (Fase 4 UI — no Modal LG).
+   * - `'new'` → empty draft create.
+   * - Real id → edit that module.
+   * - null / '' → close the editor.
    */
   useEffect(() => {
     if (openModuleEditId == null || openModuleEditId === '') {
@@ -598,6 +609,42 @@ export function ModulesScreen({
     }));
   };
 
+  /** Draft-only module (no transient boardOverrides) — composition fingerprint. */
+  const draftBoardModule = useMemo(
+    () => draftToModule(editingId ?? 'module-draft', draft),
+    [editingId, draft],
+  );
+
+  /** Live Module for resolveBom: draft + BoardEditor pose overrides. */
+  const liveBoardModule = useMemo(
+    () =>
+      draftToModule(
+        editingId ?? 'module-draft',
+        mergeBoardOverridesIntoDraft(draft, boardOverrides),
+      ),
+    [editingId, draft, boardOverrides],
+  );
+
+  const boardCompositionKey = useMemo(
+    () => moduleCompositionKey(draftBoardModule),
+    [draftBoardModule],
+  );
+
+  const resolvedBoardEditorSlot = useMemo(() => {
+    if (renderBoardEditor) {
+      return renderBoardEditor({
+        module: liveBoardModule,
+        compositionKey: boardCompositionKey,
+      });
+    }
+    return boardEditorSlot;
+  }, [
+    renderBoardEditor,
+    liveBoardModule,
+    boardCompositionKey,
+    boardEditorSlot,
+  ]);
+
   const validate = (): string | null => {
     const codeErr = validateModuleCode(
       draft.code,
@@ -668,21 +715,14 @@ export function ModulesScreen({
       return;
     }
     setError(null);
+    const draftWithOverrides = mergeBoardOverridesIntoDraft(
+      draft,
+      boardOverrides,
+    );
     if (editingId) {
-      // Gap #1: merge BoardEditor overrides into the draft's components.
-      const draftWithOverrides: ModuleDraft = boardOverrides
-        ? {
-            ...draft,
-            components: draft.components.map((c) =>
-              boardOverrides[c.componentId]
-                ? { ...c, overrides: boardOverrides[c.componentId] as ModuleDraft['components'][number]['overrides'] }
-                : c,
-            ),
-          }
-        : draft;
       onUpdate(editingId, draftWithOverrides);
     } else {
-      onCreate(draft);
+      onCreate(draftWithOverrides);
     }
     // Use forceCloseEditor: we just saved, no dirty-discard warn.
     forceCloseEditor();
@@ -796,11 +836,9 @@ export function ModulesScreen({
     );
   }
 
-  // Fase 3 UI 3a.2: when `openModuleEditId` is active and the shell wires
-  // `onRequestEdit`, render the editor inline (no Modal LG) with a sticky
-  // chrome + main/aside layout. Otherwise fall back to the legacy modal flow
-  // (used by tests / older code paths).
-  const inlineEditMode = !!openModuleEditId && !!onRequestEdit;
+  // Fase 4 UI: always full-page workspace editor (sticky chrome + cost aside).
+  // Modal LG is no longer used for create/edit — board canvas needs the width.
+  const inlineEditMode = modalOpen;
 
   return (
     <EntityEditorLayout
@@ -809,7 +847,7 @@ export function ModulesScreen({
       editorBackTestId="module-editor-back"
       discardConfirmTestId="module-editor-discard-confirm"
       modalTestId="module-modal"
-      modalSize="lg" /* size="lg" */
+      modalSize="lg"
       createTitle="Nuevo mueble"
       editTitle="Editar mueble"
       draftCode={draft.code}
@@ -923,7 +961,8 @@ export function ModulesScreen({
             previewBlocked={previewBlocked}
             missingGroups={missingGroups}
             groupLabels={groupLabels}
-            boardEditorSlot={boardEditorSlot}
+            boardEditorSlot={resolvedBoardEditorSlot}
+            costAsideVisible={inlineEditMode}
           />
         );
 
@@ -934,6 +973,7 @@ export function ModulesScreen({
               <aside
                 className="module-editor-page__aside"
                 aria-label="Vista previa de costo"
+                data-testid="module-editor-cost-aside"
               >
                 <CostPreviewPanel
                   costPreview={costPreview}
@@ -1046,6 +1086,7 @@ export function ModulesScreen({
             open={show3DModal}
             module={viewerModule}
             catalog={module3dCatalog}
+            resolveMediaUrl={resolveImageUrl}
             onClose={() => {
               setShow3DModal(false);
               setViewerModule(null);

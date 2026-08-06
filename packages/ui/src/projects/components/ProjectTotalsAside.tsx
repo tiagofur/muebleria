@@ -228,7 +228,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
               {canMutate && onImportNesting ? (
                 <div style={{ marginTop: '0.75rem' }}>
                   <label
-                    className="btn btn--secondary btn--sm"
+                    className="btn btn--small"
                     style={{ cursor: 'pointer' }}
                   >
                     Importar nesting (CSV)

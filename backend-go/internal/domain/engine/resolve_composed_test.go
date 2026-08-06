@@ -44,6 +44,28 @@ func TestEvaluatePartFormula(t *testing.T) {
 	if v != 302 {
 		t.Fatalf("PW/2+i got %d want 302", v)
 	}
+	// Decimal literals (whitelist must allow '.' — used for half-thickness etc.)
+	v, err = evaluatePartFormula("1.5", formulaDims{W: 600, H: 720, D: 560})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 2 {
+		t.Fatalf("1.5 got %d want 2 (rounded mm)", v)
+	}
+	v, err = evaluatePartFormula("T*1.5", formulaDims{W: 600, H: 720, D: 560, T: 18})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 27 {
+		t.Fatalf("T*1.5 got %d want 27", v)
+	}
+	v, err = evaluatePartFormula("W*0.5", formulaDims{W: 600, H: 720, D: 560})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 300 {
+		t.Fatalf("W*0.5 got %d want 300", v)
+	}
 }
 
 func TestResolveBom_ComposedModule(t *testing.T) {

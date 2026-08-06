@@ -15,12 +15,14 @@ import {
   layoutKitchenPlacements,
   resolveBom,
   resolveModuleMeasurePreset,
+  type ResolvedWallFrame,
 } from '@muebles/domain';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   DEFAULT_MODULE_FOOTPRINT_MM,
   layoutProjectRun,
+  PROJECT_RUN_GAP_MM,
   type PlacedModuleFootprint,
 } from './project3dLayout';
 
@@ -36,6 +38,13 @@ export type ProjectModule3DInstance = {
   readonly originX: number;
   readonly originY: number;
   readonly originZ: number;
+  /** Workshop plan yaw (degrees). Width follows wall; 0 = straight run. */
+  readonly yawDeg: number;
+  /** Plinth/legs clearance under floor units (mm); 0 if none / wall-hung. */
+  readonly baseClearanceMm: number;
+  readonly elevation: 'floor' | 'wall';
+  /** Visual countertop slab (floor units only, presentation). */
+  readonly showCountertop: boolean;
   readonly error: string | null;
 };
 
@@ -46,6 +55,14 @@ export type Project3DPreviewResult = {
   readonly totalDepth: number;
   readonly empty: boolean;
   readonly errors: readonly string[];
+  /** How modules were positioned. */
+  readonly layoutMode: 'linear' | 'kitchen';
+  /** Count of instances anchored on walls (kitchen mode only). */
+  readonly placedCount: number;
+  /** Count of quote instances not on the plan (shown as linear tail when kitchen). */
+  readonly unplacedCount: number;
+  /** Resolved wall frames when layoutMode is kitchen (shifted to +X/+Y). */
+  readonly walls: readonly ResolvedWallFrame[];
 };
 
 function dimsForModule(
@@ -151,6 +168,16 @@ function resolveItemBom(
 export type ResolveProject3DOptions = {
   /** If set, only this line item (and its quantity copies). */
   readonly itemId?: string;
+  /**
+   * When kitchen plan is active: `tail` appends unplaced units as a linear run
+   * (quote preview). `hide` only shows wall placements (spatial studio).
+   */
+  readonly unplacedPolicy?: 'tail' | 'hide';
+  /**
+   * Use kitchen framing when walls exist even if no placements yet
+   * (empty room for spatial studio).
+   */
+  readonly kitchenWallsOnly?: boolean;
 };
 
 /**
@@ -161,6 +188,7 @@ export function resolveProject3DPreview(
   catalogInput: Module3DCatalogInput,
   options: ResolveProject3DOptions = {},
 ): Project3DPreviewResult {
+  const unplacedPolicy = options.unplacedPolicy ?? 'tail';
   const items = options.itemId
     ? project.items.filter((it) => it.id === options.itemId)
     : project.items;
@@ -209,15 +237,20 @@ export function resolveProject3DPreview(
     !options.itemId &&
     kitchen &&
     kitchen.walls.length > 0 &&
-    kitchen.placements.length > 0;
+    (kitchen.placements.length > 0 || Boolean(options.kitchenWallsOnly));
 
   let modules: ProjectModule3DInstance[];
   let totalWidth: number;
   let totalHeight: number;
   let totalDepth: number;
+  let layoutMode: 'linear' | 'kitchen' = 'linear';
+  let placedCount = 0;
+  let unplacedCount = 0;
+  let walls: readonly ResolvedWallFrame[] = [];
   const layoutWarnings: string[] = [];
 
   if (useKitchen && kitchen) {
+    layoutMode = 'kitchen';
     const fps = kitchen.placements.map((p) => {
       const row = byItemId.get(p.itemId);
       return {
@@ -229,27 +262,121 @@ export function resolveProject3DPreview(
       };
     });
     const layout = layoutKitchenPlacements(kitchen, fps);
+    walls = layout.walls;
     layoutWarnings.push(...layout.warnings);
-    modules = layout.placements.map((place) => {
-      const row = byItemId.get(place.itemId);
-      return {
-        instanceKey: place.instanceKey,
-        itemId: place.itemId,
-        moduleId: row?.module?.id ?? row?.item.moduleId ?? place.itemId,
-        label: row?.label ?? place.itemId,
-        parts: row?.parts ?? [],
-        width: place.width,
-        height: place.height,
-        depth: place.depth,
-        originX: place.originX,
-        originY: place.originY,
-        originZ: place.originZ,
-        error: row?.error ?? null,
-      };
-    });
-    totalWidth = layout.totalWidth;
-    totalHeight = layout.totalHeight;
-    totalDepth = layout.totalDepth;
+    const showCountertop = kitchen.showCountertop !== false;
+    const placedModules: ProjectModule3DInstance[] = layout.placements.map(
+      (place) => {
+        const row = byItemId.get(place.itemId);
+        return {
+          instanceKey: place.instanceKey,
+          itemId: place.itemId,
+          moduleId: row?.module?.id ?? row?.item.moduleId ?? place.itemId,
+          label: row?.label ?? place.itemId,
+          parts: row?.parts ?? [],
+          width: place.width,
+          height: place.height,
+          depth: place.depth,
+          originX: place.originX,
+          originY: place.originY,
+          originZ: place.originZ,
+          yawDeg: place.yawDeg,
+          baseClearanceMm: place.baseClearanceMm,
+          elevation: place.elevation,
+          showCountertop:
+            showCountertop && place.elevation === 'floor',
+          error: row?.error ?? null,
+        };
+      },
+    );
+    placedCount = placedModules.length;
+
+    // Count unplaced instances (always); optionally append as linear tail.
+    const placedKeys = new Set(placedModules.map((m) => m.instanceKey));
+    const unplacedFootprints: {
+      id: string;
+      width: number;
+      height: number;
+      depth: number;
+      quantity: number;
+      instanceIndex: number;
+    }[] = [];
+    for (const row of rows) {
+      const qty = Math.max(1, Math.floor(row.item.quantity) || 1);
+      for (let i = 0; i < qty; i++) {
+        const key = `${row.item.id}#${i}`;
+        if (placedKeys.has(key)) continue;
+        unplacedFootprints.push({
+          id: row.item.id,
+          width: row.width,
+          height: row.height,
+          depth: row.depth,
+          quantity: 1,
+          instanceIndex: i,
+        });
+      }
+    }
+    unplacedCount = unplacedFootprints.length;
+    if (unplacedCount > 0 && unplacedPolicy === 'tail') {
+      layoutWarnings.push(
+        `${unplacedCount} unidad${unplacedCount === 1 ? '' : 'es'} sin colocar en el plano (se muestran al final de la vista).`,
+      );
+    } else if (unplacedCount > 0 && unplacedPolicy === 'hide') {
+      layoutWarnings.push(
+        `${unplacedCount} unidad${unplacedCount === 1 ? '' : 'es'} sin colocar — elegilas en la lista.`,
+      );
+    }
+
+    let tailModules: ProjectModule3DInstance[] = [];
+    if (unplacedPolicy === 'tail' && unplacedFootprints.length > 0) {
+      const tailLayout = layoutProjectRun(
+        unplacedFootprints.map((f) => ({
+          id: `${f.id}#${f.instanceIndex}`,
+          width: f.width,
+          height: f.height,
+          depth: f.depth,
+          quantity: 1,
+        })),
+      );
+      const tailStartX = layout.totalWidth + PROJECT_RUN_GAP_MM;
+      tailModules = tailLayout.placements.map((place: PlacedModuleFootprint) => {
+        // place.id is itemId#instanceIndex from synthetic footprints
+        const hash = place.id.lastIndexOf('#');
+        const itemId = hash >= 0 ? place.id.slice(0, hash) : place.id;
+        const instanceIndex =
+          hash >= 0 ? Number(place.id.slice(hash + 1)) || 0 : 0;
+        const row = byItemId.get(itemId)!;
+        return {
+          instanceKey: `${itemId}#${instanceIndex}`,
+          itemId,
+          moduleId: row.module?.id ?? row.item.moduleId,
+          label: row.label,
+          parts: row.parts,
+          width: place.width,
+          height: place.height,
+          depth: place.depth,
+          originX: place.originX + tailStartX,
+          originY: place.originY,
+          originZ: place.originZ,
+          yawDeg: 0,
+          baseClearanceMm: 0,
+          elevation: 'floor' as const,
+          showCountertop: false,
+          error: row.error,
+        };
+      });
+      totalWidth =
+        tailStartX +
+        (tailLayout.placements.length > 0 ? tailLayout.totalWidth : 0);
+      totalHeight = Math.max(layout.totalHeight, tailLayout.totalHeight);
+      totalDepth = Math.max(layout.totalDepth, tailLayout.totalDepth);
+    } else {
+      totalWidth = layout.totalWidth;
+      totalHeight = Math.max(layout.totalHeight, 2400);
+      totalDepth = layout.totalDepth;
+    }
+
+    modules = [...placedModules, ...tailModules];
   } else {
     const footprints = rows.map((row) => ({
       id: row.item.id,
@@ -273,12 +400,19 @@ export function resolveProject3DPreview(
         originX: place.originX,
         originY: place.originY,
         originZ: place.originZ,
+        yawDeg: 0,
+        baseClearanceMm: 0,
+        elevation: 'floor' as const,
+        showCountertop: false,
         error: row.error,
       };
     });
     totalWidth = layout.totalWidth;
     totalHeight = layout.totalHeight;
     totalDepth = layout.totalDepth;
+    placedCount = 0;
+    unplacedCount = modules.length;
+    walls = [];
   }
 
   const errors = [
@@ -291,13 +425,21 @@ export function resolveProject3DPreview(
   ];
 
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
+  const empty =
+    layoutMode === 'kitchen'
+      ? modules.length === 0 && walls.length === 0
+      : !hasAnyParts;
 
   return {
     modules,
     totalWidth,
     totalHeight,
     totalDepth,
-    empty: !hasAnyParts,
+    layoutMode,
+    placedCount,
+    unplacedCount,
+    walls,
+    empty,
     errors,
   };
 }

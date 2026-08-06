@@ -1712,6 +1712,7 @@ describe('generateHardwareList', () => {
     );
 
     // GAB hardware lines: bisagra×2, jaladera×1, pata×4, tornillo×40, soporte×4
+    // purchaseQuantity === quantity when no packageSize.
     expect(rows).toEqual([
       {
         hardwareId: IDS.hwBisagra,
@@ -1719,6 +1720,7 @@ describe('generateHardwareList', () => {
         description: 'Bisagra Cierre Lento',
         unit: 'piece',
         quantity: 2,
+        purchaseQuantity: 2,
         costPerUnit: 35,
         lineCost: 70,
       },
@@ -1728,6 +1730,7 @@ describe('generateHardwareList', () => {
         description: 'Jaladera Acero Inox',
         unit: 'piece',
         quantity: 1,
+        purchaseQuantity: 1,
         costPerUnit: 45,
         lineCost: 45,
       },
@@ -1737,6 +1740,7 @@ describe('generateHardwareList', () => {
         description: 'Pata Regulable Plastica',
         unit: 'piece',
         quantity: 4,
+        purchaseQuantity: 4,
         costPerUnit: 15,
         lineCost: 60,
       },
@@ -1746,6 +1750,7 @@ describe('generateHardwareList', () => {
         description: 'Soporte de Entrepaño',
         unit: 'piece',
         quantity: 4,
+        purchaseQuantity: 4,
         costPerUnit: 2,
         lineCost: 8,
       },
@@ -1755,6 +1760,7 @@ describe('generateHardwareList', () => {
         description: 'Tornillo 4x50 mm',
         unit: 'piece',
         quantity: 40,
+        purchaseQuantity: 40,
         costPerUnit: 0.5,
         lineCost: 20,
       },
@@ -1865,6 +1871,30 @@ describe('generateHardwareList', () => {
       /no hay herrajes para exportar/i,
     );
   });
+
+  it('ceils meter hardware to package bars (zoclo perfil 4 m)', () => {
+    const project: Project = {
+      ...gabOnlyProject,
+      items: [
+        {
+          id: 'item-perfil',
+          moduleId: 'mod-bajo-perfil-600',
+          quantity: 1,
+          optionChoices: plantillaChoices,
+        },
+      ],
+    };
+    const rows = generateHardwareList(project, plantillaCatalogWithModules);
+    const zoclo = rows.find((r) => r.code === 'HER-ZOC-ALU');
+    expect(zoclo).toBeTruthy();
+    // 600 mm → 0.6 m consumption
+    expect(zoclo!.quantity).toBe(0.6);
+    expect(zoclo!.packageSize).toBe(4);
+    expect(zoclo!.purchasePackages).toBe(1);
+    expect(zoclo!.purchaseQuantity).toBe(4);
+    // Cost for 4 m purchased, not 0.6 m consumed
+    expect(zoclo!.lineCost).toBe(4 * 18);
+  });
 });
 
 describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
@@ -1908,6 +1938,15 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
 
     it('rounds results to nearest millimeter', () => {
       expect(evaluatePartFormula('W / 3', dims)).toBe(167); // 500 / 3 = 166.67 -> 167
+    });
+
+    it('accepts decimal literals in formulas', () => {
+      expect(evaluatePartFormula('1.5', dims)).toBe(2); // rounds to nearest mm
+      expect(evaluatePartFormula('T * 1.5', { ...dims, T: 18 })).toBe(27);
+      expect(evaluatePartFormula('W * 0.5', dims)).toBe(250);
+      expect(evaluatePartFormula('.5', dims)).toBe(1); // 0.5 → 1 mm
+      expect(evaluatePartFormula('B', { ...dims, B: 100 })).toBe(100);
+      expect(evaluatePartFormula('H - B', { ...dims, B: 100 })).toBe(620);
     });
 
     it('throws ValidationError for invalid characters or injection attempts', () => {
@@ -2701,13 +2740,15 @@ describe('3D Component spatial positioning & CAD variables', () => {
       code: 'C-PIS',
       name: 'Piso',
       placement: 'base',
-      geometry: { kind: 'rectangular_board', lengthMm: 560, widthMm: 464, thicknessMm: 18, lengthFormula: 'PD', widthFormula: 'PW - 2*T' },
+      // L along PW (grain L→R); W along PD.
+      geometry: { kind: 'rectangular_board', lengthMm: 464, widthMm: 560, thicknessMm: 18, lengthFormula: 'PW - 2*T', widthFormula: 'PD' },
       defaultEdges: MOCK_TEST_EDGES,
       optionRoles: ['board_base'],
       active: true,
       xFormula: 'T',
-      yFormula: '0',
+      yFormula: '0', // min-corner back edge (anchor offsets −Z from rotY 90)
       zFormula: '0',
+      rotateY: 90,
     };
 
     const catalog = {
@@ -2750,13 +2791,14 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(cost2.z).toBe(0);
     expect(cost2.rotateY).toBe(90);
 
-    // Piso
+    // Piso: L = PW - 2*T (grain along cabinet width), W = PD
     const piso = result.boardParts[2]!;
-    expect(piso.widthMm).toBe(600 - 2*15); // PW - 2*T = 570
-    expect(piso.lengthMm).toBe(560);
+    expect(piso.lengthMm).toBe(600 - 2 * 15); // PW - 2*T = 570
+    expect(piso.widthMm).toBe(560); // PD
     expect(piso.x).toBe(15); // T
-    expect(piso.y).toBe(0);
+    expect(piso.y).toBe(0); // min-corner back (mesh offset handles Ry90 −Z)
     expect(piso.z).toBe(0);
+    expect(piso.rotateY).toBe(90);
   });
 
   it('uses placement defaults when component has no x/y/z formulas', () => {
@@ -2803,11 +2845,11 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(result.boardParts).toHaveLength(2);
     expect(result.boardParts[0]!.x).toBe(0);
     expect(result.boardParts[0]!.rotateX).toBe(90);
-    expect(result.boardParts[0]!.rotateY).toBe(90);
+    expect(result.boardParts[0]!.rotateY).toBe(180);
     // mat-a thickness 15 → PW - T = 585
     expect(result.boardParts[1]!.x).toBe(585);
     expect(result.boardParts[1]!.rotateX).toBe(90);
-    expect(result.boardParts[1]!.rotateY).toBe(90);
+    expect(result.boardParts[1]!.rotateY).toBe(180);
   });
 
   it('keeps placement axes when only one spatial formula is set', () => {
@@ -2818,11 +2860,11 @@ describe('3D Component spatial positioning & CAD variables', () => {
       placement: 'base',
       geometry: {
         kind: 'rectangular_board',
-        lengthMm: 560,
-        widthMm: 564,
+        lengthMm: 564,
+        widthMm: 560,
         thicknessMm: 18,
-        lengthFormula: 'PD',
-        widthFormula: 'PW - 2*T',
+        lengthFormula: 'PW - 2*T',
+        widthFormula: 'PD',
       },
       defaultEdges: MOCK_TEST_EDGES,
       optionRoles: ['board_base'],
@@ -2848,10 +2890,11 @@ describe('3D Component spatial positioning & CAD variables', () => {
       optionChoices: { board_base: 'mat-a' },
     });
     const part = result.boardParts[0]!;
-    // placement base: x = T (15), y = 0; only z overridden
+    // placement base (min-corner): x = T (15), y = 0; only z overridden
     expect(part.x).toBe(15);
     expect(part.y).toBe(0);
     expect(part.z).toBe(100);
+    expect(part.rotateY).toBe(90);
   });
 });
 

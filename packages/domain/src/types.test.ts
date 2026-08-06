@@ -297,6 +297,7 @@ describe('domain entity types', () => {
       description: 'Bisagra Cierre Lento',
       unit: 'piece',
       quantity: 2,
+      purchaseQuantity: 2,
       costPerUnit: 35,
       lineCost: 70,
     };

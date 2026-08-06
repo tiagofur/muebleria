@@ -6,9 +6,20 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module, Project, ProjectItem } from '@muebles/domain';
 import { Modal } from '../../common';
-import { FurnitureScene3D, canUseWebGL, materialColorMap, type BoardColorMode } from '../../preview3d';
+import {
+  FurnitureScene3D,
+  PaintModeField,
+  MaterialSurfaceModeField,
+  canUseWebGL,
+  materialColorMap,
+  materialTextureMap,
+  DEFAULT_MATERIAL_SURFACE_MODE,
+  type BoardColorMode,
+  type MaterialSurfaceMode,
+} from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
+import '../../common/furniture3dViewer.css';
 
 export type Project3DModalProps = {
   readonly open: boolean;
@@ -20,6 +31,8 @@ export type Project3DModalProps = {
    * When null, preview the whole quote run.
    */
   readonly focus?: { item: ProjectItem; module: Module } | null;
+  /** Auth-aware media URL resolver for TextureLoader. */
+  readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
 };
 
 export function Project3DModal({
@@ -28,9 +41,14 @@ export function Project3DModal({
   catalog,
   onClose,
   focus = null,
+  resolveMediaUrl,
 }: Project3DModalProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
+  const [surfaceMode, setSurfaceMode] = useState<MaterialSurfaceMode>(
+    DEFAULT_MATERIAL_SURFACE_MODE,
+  );
+  const [showOutlines, setShowOutlines] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -48,6 +66,10 @@ export function Project3DModal({
     () => materialColorMap(catalog.materials),
     [catalog.materials],
   );
+  const materialTextures = useMemo(
+    () => materialTextureMap(catalog.materials, resolveMediaUrl),
+    [catalog.materials, resolveMediaUrl],
+  );
 
   const title = !project
     ? 'Vista 3D'
@@ -64,48 +86,56 @@ export function Project3DModal({
       dataTestId="project-3d-modal"
     >
       {project && preview ? (
-        <div data-testid="project-3d-modal-body">
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '0.75rem',
-              marginBottom: '0.75rem',
-              alignItems: 'flex-end',
-            }}
-          >
-            {!focus && preview.modules.length > 1 ? (
-              <p
-                className="catalog-empty"
-                style={{ margin: 0, flex: '1 1 100%' }}
-                data-testid="project-3d-run-hint"
-              >
-                Vista en línea de la cotización ({preview.modules.length}{' '}
-                unidades). Colocación en L/isla llega en un siguiente paso.
-              </p>
-            ) : null}
-            <div className="catalog-form__field" style={{ marginBottom: 0 }}>
-              <label htmlFor="project-3d-color-mode">Colores</label>
-              <select
+        <div
+          className="viewer-3d-modal-body"
+          data-testid="project-3d-modal-body"
+        >
+          {!focus && preview.modules.length > 0 ? (
+            <p className="catalog-empty" data-testid="project-3d-run-hint">
+              {preview.layoutMode === 'kitchen'
+                ? `Según plano de cocina (${preview.placedCount} colocad${preview.placedCount === 1 ? 'a' : 'as'}${
+                    preview.unplacedCount > 0
+                      ? `, ${preview.unplacedCount} sin colocar al final`
+                      : ''
+                  }).`
+                : `Vista en línea de la cotización (${preview.modules.length} unidad${
+                    preview.modules.length === 1 ? '' : 'es'
+                  }). Abrí «Plan de cocina» en Herramientas para armar L/U.`}
+            </p>
+          ) : null}
+
+          <div className="viewer-3d-chrome">
+            <label className="furniture-3d-viewer__check">
+              <input
+                type="checkbox"
+                checked={showOutlines}
+                onChange={(e) => setShowOutlines(e.target.checked)}
+                data-testid="project-3d-outlines-checkbox"
+              />
+              Contornos
+            </label>
+            <div className="catalog-form__field">
+              <PaintModeField
                 id="project-3d-color-mode"
                 value={colorMode}
-                onChange={(e) =>
-                  setColorMode(e.target.value as BoardColorMode)
-                }
-                data-testid="project-3d-color-mode"
-              >
-                <option value="material">Material (rápido)</option>
-                <option value="role">Por rol (taller)</option>
-              </select>
+                onChange={setColorMode}
+                testId="project-3d-color-mode"
+                hint="Los acabados (blanco, maderado…) vienen de las opciones de cada línea de la cotización. Acá solo elegís cómo se pintan: material real o colores por rol de taller."
+              />
+            </div>
+            <div className="catalog-form__field">
+              <MaterialSurfaceModeField
+                id="project-3d-surface-mode"
+                value={surfaceMode}
+                onChange={setSurfaceMode}
+                testId="project-3d-surface-mode"
+                visible={colorMode === 'material'}
+              />
             </div>
           </div>
 
           {preview.errors.length > 0 ? (
-            <ul
-              className="catalog-form__error"
-              data-testid="project-3d-errors"
-              style={{ listStyle: 'disc', paddingLeft: '1.25rem' }}
-            >
+            <ul className="catalog-form__error" data-testid="project-3d-errors">
               {preview.errors.map((err) => (
                 <li key={err}>{err}</li>
               ))}
@@ -128,6 +158,9 @@ export function Project3DModal({
                 originX: m.originX,
                 originY: m.originY,
                 originZ: m.originZ,
+                yawDeg: m.yawDeg,
+                baseClearanceMm: m.baseClearanceMm,
+                showCountertop: m.showCountertop,
                 showOuterGhost: true,
               }))}
               totalWidth={preview.totalWidth}
@@ -137,6 +170,9 @@ export function Project3DModal({
               testId="project-scene-3d"
               colorMode={colorMode}
               materialColors={materialColors}
+              materialTextures={materialTextures}
+              surfaceMode={surfaceMode}
+              showOutlines={showOutlines}
             />
           ) : (
             <div

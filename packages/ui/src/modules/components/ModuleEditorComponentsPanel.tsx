@@ -7,6 +7,7 @@ import type { Component } from '@muebles/domain';
 import { Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import type { ModuleDraft } from '../moduleHelpers';
+import { InstanceOverridesEditor } from './InstanceOverridesEditor';
 
 export type ModuleEditorComponentsPanelProps = {
   readonly draft: ModuleDraft;
@@ -45,7 +46,7 @@ export function ModuleEditorComponentsPanel({
           onClick={onRequestAdd}
           data-testid="add-component-btn"
         >
-          <Plus size={14} className="mr-1" /> Agregar componente
+          <Plus size={14} /> Agregar componente
         </button>
       </div>
       <p className="catalog-empty" style={{ marginTop: 0 }}>
@@ -143,6 +144,18 @@ export function ModuleEditorComponentsPanel({
                     </select>
                   </div>
                 </div>
+                <InstanceOverridesEditor
+                  overrides={comp.overrides}
+                  testIdSuffix={String(idx)}
+                  onChange={(next) => {
+                    setDraft((prev) => ({
+                      ...prev,
+                      components: prev.components.map((c, i) =>
+                        i === idx ? { ...c, overrides: next } : c,
+                      ),
+                    }));
+                  }}
+                />
               </div>
             );
           })}

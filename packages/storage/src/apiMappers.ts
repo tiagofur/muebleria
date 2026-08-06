@@ -56,6 +56,8 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
     default_edge_band_id: m.defaultEdgeBandId ?? '',
     preview_color: m.previewColor ?? '',
     preview_texture_url: m.previewTextureUrl ?? '',
+    preview_texture_tile_width_mm: m.previewTextureTileWidthMm ?? 0,
+    preview_texture_tile_length_mm: m.previewTextureTileLengthMm ?? 0,
     notes: m.notes ?? '',
     active: m.active,
   };
@@ -68,6 +70,14 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     str(raw.preview_color ?? raw.previewColor) || undefined;
   const previewTextureUrl =
     str(raw.preview_texture_url ?? raw.previewTextureUrl) || undefined;
+  const tileW = num(
+    raw.preview_texture_tile_width_mm ?? raw.previewTextureTileWidthMm,
+    0,
+  );
+  const tileL = num(
+    raw.preview_texture_tile_length_mm ?? raw.previewTextureTileLengthMm,
+    0,
+  );
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -83,6 +93,8 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     defaultEdgeBandId: defaultEdge,
     previewColor,
     previewTextureUrl,
+    previewTextureTileWidthMm: tileW > 0 ? tileW : undefined,
+    previewTextureTileLengthMm: tileL > 0 ? tileL : undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
   };
@@ -123,6 +135,8 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     name: h.name,
     unit: h.unit,
     cost_per_unit: h.costPerUnit,
+    package_size:
+      h.packageSize === undefined ? null : h.packageSize,
     image_url: h.imageUrl ?? '',
     notes: h.notes ?? '',
     active: h.active,
@@ -131,12 +145,20 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
 
 export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
   const unit = str(raw.unit, 'piece');
+  const pkgRaw = raw.package_size ?? raw.packageSize;
+  const packageSize =
+    pkgRaw === null || pkgRaw === undefined || pkgRaw === ''
+      ? undefined
+      : Math.max(0, num(pkgRaw));
   return {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
     unit: (unit === 'set' || unit === 'meter' ? unit : 'piece') as Hardware['unit'],
     costPerUnit: num(raw.cost_per_unit ?? raw.costPerUnit),
+    ...(packageSize !== undefined && packageSize > 0
+      ? { packageSize }
+      : {}),
     imageUrl: str(raw.image_url ?? raw.imageUrl) || undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
@@ -246,6 +268,8 @@ function hardwareLineFromApi(raw: Record<string, unknown>): HardwareLine {
   };
 }
 
+const BASE_MODES = new Set(['none', 'plinth_board', 'plinth_strip', 'legs']);
+
 export function moduleToApi(m: Module): Record<string, unknown> {
   return {
     id: m.id,
@@ -258,6 +282,9 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     categoryId: m.categoryId ?? '',
     structure_id: m.structureId ?? '',
     furniture_type: m.furnitureType ?? '',
+    base_mode: m.baseMode ?? '',
+    base_clearance_mm:
+      m.baseClearanceMm === undefined ? null : m.baseClearanceMm,
     components: (m.components ?? []).map(componentInstanceToApi),
     presets: (m.presets ?? []).map(presetToApi),
     image_url: m.imageUrl ?? '',
@@ -280,6 +307,15 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const furnitureType = FURNITURE_TYPES.has(furnitureTypeRaw)
     ? (furnitureTypeRaw as Module['furnitureType'])
     : undefined;
+  const baseModeRaw = str(raw.base_mode ?? raw.baseMode);
+  const baseMode = BASE_MODES.has(baseModeRaw)
+    ? (baseModeRaw as Module['baseMode'])
+    : undefined;
+  const bcRaw = raw.base_clearance_mm ?? raw.baseClearanceMm;
+  const baseClearanceMm =
+    bcRaw === null || bcRaw === undefined || bcRaw === ''
+      ? undefined
+      : Math.max(0, Math.round(num(bcRaw)));
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
   const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
   const componentsRaw = raw.components;
@@ -294,6 +330,8 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     categoryId: categoryId || undefined,
     structureId: structureId || undefined,
     furnitureType,
+    baseMode,
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
     components: Array.isArray(componentsRaw)
       ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
       : undefined,
@@ -676,27 +714,207 @@ export function customerFromApi(raw: Record<string, unknown>): Customer {
 
 // --- Projects ---
 
+function kitchenWallToApi(w: {
+  id: string;
+  name?: string;
+  lengthMm: number;
+  angleDeg: number;
+  originXMm?: number;
+  originYMm?: number;
+}): Record<string, unknown> {
+  return {
+    id: w.id,
+    name: w.name ?? '',
+    length_mm: w.lengthMm,
+    angle_deg: w.angleDeg,
+    origin_x_mm: w.originXMm ?? null,
+    origin_y_mm: w.originYMm ?? null,
+  };
+}
+
+function kitchenPlacementToApi(p: {
+  itemId: string;
+  instanceIndex: number;
+  wallId: string;
+  offsetMm: number;
+  elevation: string;
+  baseClearanceMm?: number;
+  mode?: string;
+  freeXMm?: number;
+  freeYMm?: number;
+  freeYawDeg?: number;
+}): Record<string, unknown> {
+  return {
+    item_id: p.itemId,
+    instance_index: p.instanceIndex,
+    wall_id: p.wallId,
+    offset_mm: p.offsetMm,
+    elevation: p.elevation,
+    base_clearance_mm:
+      p.baseClearanceMm === undefined ? null : p.baseClearanceMm,
+    mode: p.mode ?? 'wall',
+    free_x_mm: p.freeXMm === undefined ? null : p.freeXMm,
+    free_y_mm: p.freeYMm === undefined ? null : p.freeYMm,
+    free_yaw_deg: p.freeYawDeg === undefined ? null : p.freeYawDeg,
+  };
+}
+
+function kitchenUnderlayToApi(
+  u: NonNullable<Project['kitchenLayout']>['underlay'],
+): Record<string, unknown> | null {
+  if (!u) return null;
+  return {
+    image_url: u.imageUrl,
+    width_mm: u.widthMm,
+    height_mm: u.heightMm,
+    origin_x_mm: u.originXMm ?? null,
+    origin_y_mm: u.originYMm ?? null,
+    opacity: u.opacity ?? null,
+    file_name: u.fileName ?? null,
+  };
+}
+
+function kitchenUnderlayFromApi(
+  raw: unknown,
+): NonNullable<Project['kitchenLayout']>['underlay'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const row = raw as Record<string, unknown>;
+  const imageUrl = str(row.image_url ?? row.imageUrl);
+  if (!imageUrl) return undefined;
+  const widthMm = Math.max(1, Math.round(num(row.width_mm ?? row.widthMm, 5000)));
+  const heightMm = Math.max(
+    1,
+    Math.round(num(row.height_mm ?? row.heightMm, 4000)),
+  );
+  const ox = row.origin_x_mm ?? row.originXMm;
+  const oy = row.origin_y_mm ?? row.originYMm;
+  const op = row.opacity;
+  const fileName = str(row.file_name ?? row.fileName) || undefined;
+  return {
+    imageUrl,
+    widthMm,
+    heightMm,
+    ...(ox === null || ox === undefined || ox === ''
+      ? {}
+      : { originXMm: num(ox) }),
+    ...(oy === null || oy === undefined || oy === ''
+      ? {}
+      : { originYMm: num(oy) }),
+    ...(op === null || op === undefined || op === ''
+      ? {}
+      : { opacity: Math.min(1, Math.max(0, num(op))) }),
+    ...(fileName ? { fileName } : {}),
+  };
+}
+
 function kitchenLayoutToApi(
   layout: Project['kitchenLayout'],
 ): Record<string, unknown> | null {
   if (!layout) return null;
   return {
-    walls: layout.walls.map((w) => ({
-      id: w.id,
-      name: w.name ?? '',
-      length_mm: w.lengthMm,
-      angle_deg: w.angleDeg,
-      origin_x_mm: w.originXMm ?? null,
-      origin_y_mm: w.originYMm ?? null,
-    })),
-    placements: layout.placements.map((p) => ({
-      item_id: p.itemId,
-      instance_index: p.instanceIndex,
-      wall_id: p.wallId,
-      offset_mm: p.offsetMm,
-      elevation: p.elevation,
-    })),
+    walls: layout.walls.map(kitchenWallToApi),
+    placements: layout.placements.map(kitchenPlacementToApi),
+    base_clearance_mm:
+      layout.baseClearanceMm === undefined ? null : layout.baseClearanceMm,
+    wall_cabinet_z_mm:
+      layout.wallCabinetZMm === undefined ? null : layout.wallCabinetZMm,
+    show_countertop:
+      layout.showCountertop === undefined ? null : layout.showCountertop,
+    underlay: kitchenUnderlayToApi(layout.underlay),
+    active_space_id: layout.activeSpaceId ?? null,
+    spaces: layout.spaces?.length
+      ? layout.spaces.map((s) => ({
+          id: s.id,
+          name: s.name,
+          walls: s.walls.map(kitchenWallToApi),
+          placements: s.placements.map(kitchenPlacementToApi),
+          base_clearance_mm:
+            s.baseClearanceMm === undefined ? null : s.baseClearanceMm,
+          wall_cabinet_z_mm:
+            s.wallCabinetZMm === undefined ? null : s.wallCabinetZMm,
+          show_countertop:
+            s.showCountertop === undefined ? null : s.showCountertop,
+          underlay: kitchenUnderlayToApi(s.underlay),
+        }))
+      : null,
   };
+}
+
+function kitchenWallFromApi(w: unknown): {
+  id: string;
+  name?: string;
+  lengthMm: number;
+  angleDeg: number;
+  originXMm?: number;
+  originYMm?: number;
+} {
+  const wr = w as Record<string, unknown>;
+  const ox = wr.origin_x_mm ?? wr.originXMm;
+  const oy = wr.origin_y_mm ?? wr.originYMm;
+  return {
+    id: str(wr.id),
+    name: str(wr.name) || undefined,
+    lengthMm: num(wr.length_mm ?? wr.lengthMm, 1),
+    angleDeg: num(wr.angle_deg ?? wr.angleDeg),
+    originXMm:
+      ox === null || ox === undefined || ox === '' ? undefined : num(ox),
+    originYMm:
+      oy === null || oy === undefined || oy === '' ? undefined : num(oy),
+  };
+}
+
+function kitchenPlacementFromApi(p: unknown): {
+  itemId: string;
+  instanceIndex: number;
+  wallId: string;
+  offsetMm: number;
+  elevation: 'floor' | 'wall';
+  baseClearanceMm?: number;
+  mode?: 'free';
+  freeXMm?: number;
+  freeYMm?: number;
+  freeYawDeg?: number;
+} {
+  const pr = p as Record<string, unknown>;
+  const elev = str(pr.elevation, 'floor');
+  const bcRaw = pr.base_clearance_mm ?? pr.baseClearanceMm;
+  const baseClearanceMm =
+    bcRaw === null || bcRaw === undefined || bcRaw === ''
+      ? undefined
+      : Math.max(0, Math.round(num(bcRaw)));
+  const modeRaw = str(pr.mode, 'wall');
+  const mode = modeRaw === 'free' ? ('free' as const) : ('wall' as const);
+  const fx = pr.free_x_mm ?? pr.freeXMm;
+  const fy = pr.free_y_mm ?? pr.freeYMm;
+  const fyaw = pr.free_yaw_deg ?? pr.freeYawDeg;
+  return {
+    itemId: str(pr.item_id ?? pr.itemId),
+    instanceIndex: Math.max(
+      0,
+      Math.floor(num(pr.instance_index ?? pr.instanceIndex)),
+    ),
+    wallId: str(pr.wall_id ?? pr.wallId),
+    offsetMm: num(pr.offset_mm ?? pr.offsetMm),
+    elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
+    ...(mode === 'free' ? { mode: 'free' as const } : {}),
+    ...(fx === null || fx === undefined || fx === ''
+      ? {}
+      : { freeXMm: num(fx) }),
+    ...(fy === null || fy === undefined || fy === ''
+      ? {}
+      : { freeYMm: num(fy) }),
+    ...(fyaw === null || fyaw === undefined || fyaw === ''
+      ? {}
+      : { freeYawDeg: num(fyaw) }),
+  };
+}
+
+function optionalPlanMm(
+  raw: unknown,
+): number | undefined {
+  if (raw === null || raw === undefined || raw === '') return undefined;
+  return Math.max(0, Math.round(num(raw)));
 }
 
 function kitchenLayoutFromApi(
@@ -706,38 +924,67 @@ function kitchenLayoutFromApi(
   const row = raw as Record<string, unknown>;
   const wallsRaw = Array.isArray(row.walls) ? row.walls : [];
   const placementsRaw = Array.isArray(row.placements) ? row.placements : [];
-  const walls = wallsRaw.map((w) => {
-    const wr = w as Record<string, unknown>;
-    const ox = wr.origin_x_mm ?? wr.originXMm;
-    const oy = wr.origin_y_mm ?? wr.originYMm;
+  const walls = wallsRaw.map(kitchenWallFromApi);
+  const placements = placementsRaw.map(kitchenPlacementFromApi);
+
+  const spacesRaw = Array.isArray(row.spaces) ? row.spaces : [];
+  const spaces = spacesRaw.map((s) => {
+    const sr = s as Record<string, unknown>;
+    const sWalls = Array.isArray(sr.walls) ? sr.walls.map(kitchenWallFromApi) : [];
+    const sPlacements = Array.isArray(sr.placements)
+      ? sr.placements.map(kitchenPlacementFromApi)
+      : [];
+    const sBc = optionalPlanMm(sr.base_clearance_mm ?? sr.baseClearanceMm);
+    const sWz = optionalPlanMm(sr.wall_cabinet_z_mm ?? sr.wallCabinetZMm);
+    const sCt = sr.show_countertop ?? sr.showCountertop;
+    const sUnderlay = kitchenUnderlayFromApi(sr.underlay);
     return {
-      id: str(wr.id),
-      name: str(wr.name) || undefined,
-      lengthMm: num(wr.length_mm ?? wr.lengthMm, 1),
-      angleDeg: num(wr.angle_deg ?? wr.angleDeg),
-      originXMm:
-        ox === null || ox === undefined || ox === ''
-          ? undefined
-          : num(ox),
-      originYMm:
-        oy === null || oy === undefined || oy === ''
-          ? undefined
-          : num(oy),
+      id: str(sr.id),
+      name: str(sr.name) || 'Espacio',
+      walls: sWalls,
+      placements: sPlacements,
+      ...(sBc === undefined ? {} : { baseClearanceMm: sBc }),
+      ...(sWz === undefined ? {} : { wallCabinetZMm: sWz }),
+      ...(sCt === null || sCt === undefined || sCt === ''
+        ? {}
+        : { showCountertop: Boolean(sCt) }),
+      ...(sUnderlay ? { underlay: sUnderlay } : {}),
     };
   });
-  const placements = placementsRaw.map((p) => {
-    const pr = p as Record<string, unknown>;
-    const elev = str(pr.elevation, 'floor');
-    return {
-      itemId: str(pr.item_id ?? pr.itemId),
-      instanceIndex: Math.max(0, Math.floor(num(pr.instance_index ?? pr.instanceIndex))),
-      wallId: str(pr.wall_id ?? pr.wallId),
-      offsetMm: num(pr.offset_mm ?? pr.offsetMm),
-      elevation: (elev === 'wall' ? 'wall' : 'floor') as 'floor' | 'wall',
-    };
-  });
-  if (walls.length === 0 && placements.length === 0) return undefined;
-  return { walls, placements };
+
+  const hasSpaces = spaces.length > 0;
+  const hasTop = walls.length > 0 || placements.length > 0;
+  if (!hasSpaces && !hasTop) return undefined;
+
+  const layoutBc = optionalPlanMm(row.base_clearance_mm ?? row.baseClearanceMm);
+  const wallCabinetZMm = optionalPlanMm(
+    row.wall_cabinet_z_mm ?? row.wallCabinetZMm,
+  );
+  const ctRaw = row.show_countertop ?? row.showCountertop;
+  const showCountertop =
+    ctRaw === null || ctRaw === undefined || ctRaw === ''
+      ? undefined
+      : Boolean(ctRaw);
+  const activeSpaceIdRaw = row.active_space_id ?? row.activeSpaceId;
+  const activeSpaceId =
+    activeSpaceIdRaw === null ||
+    activeSpaceIdRaw === undefined ||
+    activeSpaceIdRaw === ''
+      ? undefined
+      : str(activeSpaceIdRaw);
+
+  const underlay = kitchenUnderlayFromApi(row.underlay);
+
+  return {
+    walls,
+    placements,
+    ...(layoutBc === undefined ? {} : { baseClearanceMm: layoutBc }),
+    ...(wallCabinetZMm === undefined ? {} : { wallCabinetZMm }),
+    ...(showCountertop === undefined ? {} : { showCountertop }),
+    ...(underlay ? { underlay } : {}),
+    ...(hasSpaces ? { spaces } : {}),
+    ...(activeSpaceId ? { activeSpaceId } : {}),
+  };
 }
 
 const MEASURE_DEFAULT_TYPES = new Set(['inferior', 'superior', 'alto']);
@@ -817,6 +1064,13 @@ export function projectToApi(p: Project): Record<string, unknown> {
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     measure_defaults: measureDefaultsToApi(p.measureDefaults),
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
+    plan_edit_session: p.planEditSession
+      ? {
+          user_id: p.planEditSession.userId,
+          user_name: p.planEditSession.userName,
+          expires_at: p.planEditSession.expiresAt,
+        }
+      : null,
     nesting_import: p.nestingImport
       ? {
           imported_at: p.nestingImport.importedAt,
@@ -883,6 +1137,22 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     kitchenLayout: kitchenLayoutFromApi(
       raw.kitchen_layout ?? raw.kitchenLayout,
     ),
+    planEditSession: (() => {
+      const rawSes = raw.plan_edit_session ?? raw.planEditSession;
+      if (!rawSes || typeof rawSes !== 'object' || Array.isArray(rawSes)) {
+        return undefined;
+      }
+      const s = rawSes as Record<string, unknown>;
+      const userId = str(s.user_id ?? s.userId);
+      const userName = str(s.user_name ?? s.userName);
+      const expiresAt = str(s.expires_at ?? s.expiresAt);
+      if (!userId || !expiresAt) return undefined;
+      return {
+        userId,
+        userName: userName || 'Usuario',
+        expiresAt,
+      };
+    })(),
     nestingImport: (() => {
       const rawNest = raw.nesting_import ?? raw.nestingImport;
       if (!rawNest || typeof rawNest !== 'object' || Array.isArray(rawNest)) return undefined;

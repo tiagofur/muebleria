@@ -90,11 +90,17 @@ type MaterialBoard struct {
 	// PreviewColor is #RRGGBB for 3D / color-only client preview.
 	PreviewColor string `json:"preview_color,omitempty"`
 	// PreviewTextureURL optional relative media path for textured 3D (color mode ignores it).
-	PreviewTextureURL string    `json:"preview_texture_url,omitempty"`
-	Notes             string    `json:"notes,omitempty"`
-	Active            bool      `json:"active"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	PreviewTextureURL string `json:"preview_texture_url,omitempty"`
+	// PreviewTextureTileWidthMm is the real-world mm of one texture image across
+	// board width (U). 0 = use client default tile.
+	PreviewTextureTileWidthMm float64 `json:"preview_texture_tile_width_mm,omitempty"`
+	// PreviewTextureTileLengthMm is the real-world mm of one texture image along
+	// grain / board length (V). 0 = use client default tile.
+	PreviewTextureTileLengthMm float64   `json:"preview_texture_tile_length_mm,omitempty"`
+	Notes                      string    `json:"notes,omitempty"`
+	Active                     bool      `json:"active"`
+	CreatedAt                  time.Time `json:"created_at"`
+	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
 type EdgeBand struct {
@@ -115,6 +121,9 @@ type Hardware struct {
 	Name        string       `json:"name"`
 	Unit        HardwareUnit `json:"unit"`
 	CostPerUnit float64      `json:"cost_per_unit"`
+	// PackageSize is commercial pack size in the same unit (e.g. 4 for 4 m bars).
+	// Nil = no purchase rounding.
+	PackageSize *float64 `json:"package_size,omitempty"`
 	// ImageURL relative media path (F040).
 	ImageURL  string    `json:"image_url,omitempty"`
 	Notes     string    `json:"notes,omitempty"`
@@ -186,6 +195,11 @@ type Module struct {
 	// defaults (#109 / H14): "inferior" | "superior" | "alto". Empty = inferior
 	// (legacy default).
 	FurnitureType string `json:"furniture_type,omitempty"`
+	// BaseMode: none | plinth_board | plinth_strip | legs (zoclo / patas).
+	// Empty = none.
+	BaseMode string `json:"base_mode,omitempty"`
+	// BaseClearanceMm is default plinth/legs height B (mm). Nil = domain default.
+	BaseClearanceMm *int `json:"base_clearance_mm,omitempty"`
 	// Presets are commercial measure options for sales (H09 / #104).
 	Presets []DimensionPreset `json:"presets,omitempty"`
 	// Components are module-level component instances (doors, shelves, …) for
@@ -353,6 +367,9 @@ type Project struct {
 	MeasureDefaults json.RawMessage `json:"measure_defaults,omitempty"`
 	// KitchenLayout is optional walls+placements plan (#133). JSON object or null.
 	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
+	// PlanEditSession soft-locks Proyectar for multi-user collaboration.
+	// Shape: { "user_id", "user_name", "expires_at" }.
+	PlanEditSession json.RawMessage `json:"plan_edit_session,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	Notes         string          `json:"notes,omitempty"`

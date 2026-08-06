@@ -270,6 +270,7 @@ describe('ProjectsScreen F022', () => {
             description: 'Bisagra',
             unit: 'piece',
             quantity: 4,
+            purchaseQuantity: 4,
             costPerUnit: 10,
             lineCost: 40,
           },
@@ -298,13 +299,38 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-detail-chrome')).toBeTruthy();
     expect(screen.getByTestId('project-detail-total')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
-    expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
+    // Draft: Optimizer lives in Más (not a disabled chrome CTA).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
 
-    await user.click(screen.getByRole('button', { name: /^Lista$/i }));
+    await user.click(
+      screen.getByRole('button', { name: /Volver a la lista|^Lista$/i }),
+    );
     expect(screen.queryByTestId('project-detail')).toBeNull();
     expect(screen.getByLabelText('Lista de cotizaciones')).toBeTruthy();
     expect(onSelectionChange).toHaveBeenCalledWith(null);
+  });
+
+  it('draft chrome has a single primary (Enviar) and advanced tools collapsed', async () => {
+    const user = userEvent.setup();
+    renderScreen({ onChangeStatus: vi.fn() });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    const chrome = screen.getByTestId('project-detail-chrome');
+    const primaries = chrome.querySelectorAll('.btn--primary');
+    expect(primaries.length).toBe(1);
+    expect(screen.getByTestId('project-send-quote')).toBeTruthy();
+    // Draft: Optimizer is not a chrome button (lives under Más until plant-ready).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    // Advanced tools start closed — kitchen plan not in DOM until toggle.
+    expect(screen.getByTestId('project-quote-tools')).toBeTruthy();
+    expect(screen.queryByTestId('project-tools-panel-kitchen')).toBeNull();
+    await user.click(screen.getByTestId('project-tools-kitchen'));
+    expect(screen.getByTestId('project-tools-panel-kitchen')).toBeTruthy();
+    expect(
+      screen.getByTestId('project-tools-kitchen').getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 
   it('opens Modal MD for new project metadata with customer picker', async () => {
@@ -451,8 +477,8 @@ describe('ProjectsScreen F022', () => {
     const totals = screen.getByLabelText('Totales de cotización');
     expect(within(totals).getByText('Precio de venta')).toBeTruthy();
     expect(within(totals).getByText('$202.50 MXN')).toBeTruthy();
-    // Export lives in sticky workspace chrome (issue #50)
-    expect(screen.getByTestId('project-chrome-export')).toBeTruthy();
+    // Draft fixture: Optimizer is under Más until accepted/produced.
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(screen.getByTestId('project-detail-total').textContent).toMatch(
       /\$202\.50 MXN/,
     );
@@ -486,7 +512,7 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getAllByText('$202.50 MXN').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('disables export and shows message when preview blocked', async () => {
+  it('shows export-blocked message when preview blocked (draft keeps export out of chrome)', async () => {
     const user = userEvent.setup();
     renderScreen({
       breakdown: null,
@@ -495,10 +521,8 @@ describe('ProjectsScreen F022', () => {
     });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    const exportBtn = screen.getByRole('button', {
-      name: /Exportar Optimizer/i,
-    }) as HTMLButtonElement;
-    expect((exportBtn as HTMLButtonElement).disabled).toBe(true);
+    // Draft: Optimizer is not a chrome button (under Más until plant-ready).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(
       screen.getByText(/completá las opciones obligatorias/i),
     ).toBeTruthy();
@@ -510,6 +534,27 @@ describe('ProjectsScreen F022', () => {
     expect(
       screen.getAllByRole('button', { name: /Nueva cotización/i }).length,
     ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filters the list by status chips (Fase 2 UI)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    expect(screen.getByTestId('project-status-chips')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /^Borrador$/i }));
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /^Cotizado$/i }));
+    expect(screen.queryByTestId('project-card-prj-1')).toBeNull();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /^Todos$/i }));
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
   });
 
   it('opens detail from openProjectId prop (Dashboard handoff)', () => {
@@ -596,22 +641,41 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByRole('heading', { name: 'Nueva cotización' })).toBeTruthy();
   });
 
-  it('opens SM confirm modal before delete', async () => {
+  it('opens SM confirm modal before delete (Eliminar under Más)', async () => {
     const user = userEvent.setup();
     const { onDelete } = renderScreen();
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    await user.click(screen.getByRole('button', { name: /^Eliminar$/i }));
+    // Wave 4: destructive action is under Más, not a permanent chrome danger btn.
+    expect(
+      screen.queryByRole('button', { name: /^Eliminar$/i }),
+    ).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Eliminar$/i }));
     const dialog = screen.getByRole('dialog');
     expect(
       within(dialog).getByRole('heading', { name: 'Eliminar cotización' }),
     ).toBeTruthy();
     expect(within(dialog).getByText(/Cocina Ana/)).toBeTruthy();
-    // Toolbar still has "Eliminar"; confirm is the danger button in the dialog.
     await user.click(
       within(dialog).getByRole('button', { name: /^Eliminar$/i }),
     );
     expect(onDelete).toHaveBeenCalledWith('prj-1');
+  });
+
+  it('chrome keeps Presentar + Editar visible and parks overflow in Más', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.getByTestId('project-chrome-actions')).toBeTruthy();
+    expect(screen.getByTestId('project-chrome-present')).toBeTruthy();
+    expect(screen.getByTestId('project-chrome-edit')).toBeTruthy();
+    // Draft: no permanent Optimizer chrome button.
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.getByRole('menuitem', { name: /^Duplicar$/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /^Eliminar$/i })).toBeTruthy();
   });
 });
 
@@ -856,23 +920,31 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(draft.customerId).toBe('cust-ana');
   });
 
-  it('empty state shows "Crear desde plantilla" when templates exist', () => {
+  it('empty state shows "Crear desde plantilla" as secondary inside EmptyState', () => {
     renderScreen({
       projects: [],
       projectTemplates: [sampleTemplate],
     });
-    expect(screen.getByTestId('empty-from-template-btn')).toBeTruthy();
+    const empty = screen.getByTestId('empty-state');
+    const secondary = screen.getByTestId('empty-from-template-btn');
+    expect(empty.contains(secondary)).toBe(true);
+    expect(secondary.className).not.toMatch(/btn--primary/);
+    // Header primary only — EmptyState primary + secondary without dual primary.
+    const emptyPrimaries = empty.querySelectorAll('.btn--primary');
+    expect(emptyPrimaries.length).toBe(1);
   });
 
-  it('chrome shows "Guardar como plantilla" on draft projects and saves', async () => {
+  it('chrome shows "Guardar como plantilla" under Más and saves', async () => {
     const user = userEvent.setup();
     const { onSaveAsTemplate } = renderScreen({
       projectTemplates: [sampleTemplate],
     });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    const saveBtn = screen.getByTestId('save-as-template-btn-prj-1');
-    await user.click(saveBtn);
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(
+      screen.getByRole('menuitem', { name: /Guardar como plantilla/i }),
+    );
 
     const nameInput = screen.getByTestId(
       'save-as-template-name',
