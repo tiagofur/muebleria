@@ -34,6 +34,8 @@ export type {
   Component,
   ModuleComponentInstance,
   ProjectItem,
+  ItemFloorStatus,
+  ProjectProductionState,
   Project,
   ProjectVersion,
   ProjectTemplate,
@@ -307,6 +309,32 @@ export {
   type ProductionUnplacedUnit,
   type ProductionElevationsResult,
 } from './productionElevations';
+
+export {
+  ITEM_FLOOR_STATUSES,
+  ITEM_FLOOR_STATUS_LABELS_ES,
+  isItemFloorStatus,
+  normalizeItemFloorStatus,
+  nextItemFloorStatus,
+  setProjectItemFloorStatus,
+  countFloorStatuses,
+} from './productionFloor';
+
+export {
+  computeProductionDesignFingerprint,
+  ensureProductionRevision,
+  recordProductionExport,
+  getProductionStaleInfo,
+  type ProductionStaleInfo,
+} from './productionRevision';
+
+export {
+  buildCncPilotDocument,
+  cncPilotDocumentToJson,
+  type CncPilotDocument,
+  type CncPilotPiece,
+  type CncPilotOutline,
+} from './cncPilot';
 
 export {
   projectWithRoleChoice,

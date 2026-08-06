@@ -4,6 +4,7 @@
  */
 
 import type {
+  ItemFloorStatus,
   Module,
   Project,
   ProjectItem,
@@ -12,6 +13,7 @@ import type {
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
+  normalizeItemFloorStatus,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
 
@@ -31,6 +33,8 @@ export type ProductionModuleRow = {
   readonly unplaced: boolean;
   /** Cut rows linked to this module (by moduleCode when available). */
   readonly pieceCount: number;
+  /** Shop-floor status (PROD-3.1). */
+  readonly floorStatus: ItemFloorStatus;
 };
 
 function measuresForItem(
@@ -188,6 +192,7 @@ export function buildProductionModuleRows(
       placementLabel: place.label,
       unplaced: place.unplaced,
       pieceCount: pieceCountForModule(moduleCode, cutRows),
+      floorStatus: normalizeItemFloorStatus(item.floorStatus),
     });
   }
 

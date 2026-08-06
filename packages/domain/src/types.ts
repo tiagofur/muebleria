@@ -375,6 +375,17 @@ export interface ModuleComponentInstance {
 
 // --- Project / quotation ---
 
+/**
+ * Shop-floor pipeline status per line item (PROD-3.1 / #226).
+ * Factory-only; does not affect BOM, price, or design.
+ */
+export type ItemFloorStatus =
+  | 'pending'
+  | 'cut'
+  | 'edged'
+  | 'assembled'
+  | 'installed';
+
 export interface ProjectItem {
   readonly id: string;
   readonly moduleId: string;
@@ -391,6 +402,26 @@ export interface ProjectItem {
    * frozen BOM. Re-resolving uses `resolveStructureRevision(structure, pin)`.
    */
   readonly structureRevisionPin?: number;
+  /**
+   * Floor progress (PROD-3.1). Omitted = pending.
+   */
+  readonly floorStatus?: ItemFloorStatus;
+}
+
+/**
+ * Factory OP tracking (PROD-3.2 / #227).
+ * Revision + fingerprints for stale-export warnings; independent of quote `version`.
+ */
+export interface ProjectProductionState {
+  /** Monotonic OP revision (starts at 1 when plant-ready). */
+  readonly revision: number;
+  readonly revisionAt: string;
+  /** Design fingerprint at last revision freeze. */
+  readonly fingerprint?: string;
+  readonly lastExportRevision?: number;
+  readonly lastExportAt?: string;
+  /** Design fingerprint when last factory export was generated. */
+  readonly lastExportFingerprint?: string;
 }
 
 /** Floor base vs wall-hung elevation for kitchen plan (#133). */
@@ -626,6 +657,10 @@ export interface Project {
       readonly areaM2?: number;
     }[];
   };
+  /**
+   * Factory OP revision / export tracking (PROD-3.2 / #227).
+   */
+  readonly production?: ProjectProductionState;
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

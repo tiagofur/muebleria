@@ -1099,7 +1099,20 @@ export function projectToApi(p: Project): Record<string, unknown> {
       // but we still emit it verbatim if someone sets it; the resolver rejects
       // unknown pins loudly rather than silently degrading.
       structure_revision_pin: item.structureRevisionPin ?? null,
+      // PROD-3.1 — shop-floor status (omit when pending/undefined)
+      floor_status: item.floorStatus ?? null,
     })),
+    // PROD-3.2 — factory OP revision tracking
+    production: p.production
+      ? {
+          revision: p.production.revision,
+          revision_at: p.production.revisionAt,
+          fingerprint: p.production.fingerprint ?? '',
+          last_export_revision: p.production.lastExportRevision ?? null,
+          last_export_at: p.production.lastExportAt ?? '',
+          last_export_fingerprint: p.production.lastExportFingerprint ?? '',
+        }
+      : null,
   };
 }
 
@@ -1177,6 +1190,28 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         rows,
       };
     })(),
+    production: (() => {
+      const rawProd = raw.production;
+      if (!rawProd || typeof rawProd !== 'object' || Array.isArray(rawProd)) {
+        return undefined;
+      }
+      const p = rawProd as Record<string, unknown>;
+      const revision = Math.max(0, Math.floor(num(p.revision, 0)));
+      if (revision < 1) return undefined;
+      const lastExpRev = p.last_export_revision ?? p.lastExportRevision;
+      return {
+        revision,
+        revisionAt: str(p.revision_at ?? p.revisionAt, new Date().toISOString()),
+        fingerprint: str(p.fingerprint) || undefined,
+        lastExportRevision:
+          lastExpRev === null || lastExpRev === undefined || lastExpRev === ''
+            ? undefined
+            : Math.max(0, Math.floor(num(lastExpRev))),
+        lastExportAt: str(p.last_export_at ?? p.lastExportAt) || undefined,
+        lastExportFingerprint:
+          str(p.last_export_fingerprint ?? p.lastExportFingerprint) || undefined,
+      };
+    })(),
     installationChecklist: (() => {
       const rawList =
         raw.installation_checklist ?? raw.installationChecklist;
@@ -1201,6 +1236,15 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
       const pinRaw = row.structure_revision_pin ?? row.structureRevisionPin;
       const structureRevisionPin =
         typeof pinRaw === 'number' && Number.isFinite(pinRaw) ? pinRaw : undefined;
+      const floorRaw = str(row.floor_status ?? row.floorStatus);
+      const floorStatus =
+        floorRaw === 'pending' ||
+        floorRaw === 'cut' ||
+        floorRaw === 'edged' ||
+        floorRaw === 'assembled' ||
+        floorRaw === 'installed'
+          ? (floorRaw as ProjectItem['floorStatus'])
+          : undefined;
       return {
         id: str(row.id),
         moduleId: str(row.module_id ?? row.moduleId),
@@ -1213,6 +1257,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         // #108 — undefined when null/absent (live revision). Only finite numbers
         // survive; that's what `resolveStructureRevision` expects.
         structureRevisionPin,
+        floorStatus: floorStatus === 'pending' ? undefined : floorStatus,
       };
     }),
   };

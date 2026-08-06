@@ -6,8 +6,10 @@
 import type { ReactNode } from 'react';
 import type {
   HardwarePurchaseRow,
+  ItemFloorStatus,
   Module,
   ProductionCutRow,
+  ProductionStaleInfo,
   Project,
 } from '@muebles/domain';
 import {
@@ -17,6 +19,7 @@ import {
   ExternalLink,
   Factory,
   FileSpreadsheet,
+  FileText,
   LayoutGrid,
   Package,
   Tags,
@@ -83,6 +86,13 @@ export type ProductionOrderHubProps = {
   readonly elevationsAvailable?: boolean;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
+  readonly onSetFloorStatus?: (
+    itemId: string,
+    status: ItemFloorStatus,
+  ) => void;
+  readonly canSetFloorStatus?: boolean;
+  readonly staleInfo?: ProductionStaleInfo | null;
+  readonly onExportCncPilot?: () => void | Promise<void>;
 };
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -174,6 +184,10 @@ export function ProductionOrderHub({
   elevationsAvailable = false,
   onImportNesting,
   canImportNesting = false,
+  onSetFloorStatus,
+  canSetFloorStatus = false,
+  staleInfo = null,
+  onExportCncPilot,
 }: ProductionOrderHubProps): ReactNode {
   const documents: readonly ProductionDocumentItem[] = [
     {
@@ -231,6 +245,14 @@ export function ProductionOrderHub({
       reason: 'Sin piezas de tablero',
       onDownload: () => onTabChange('despiece'),
     },
+    {
+      id: 'cnc-pilot',
+      label: 'CNC pilot (JSON)',
+      hint: 'Metadatos rectangulares por pieza — no reemplaza Optimizer (#111)',
+      available: readiness.materialsResolved && Boolean(onExportCncPilot),
+      reason: 'Requiere piezas de tablero',
+      onDownload: onExportCncPilot,
+    },
   ];
 
   return (
@@ -270,6 +292,16 @@ export function ProductionOrderHub({
                 ·
               </span>
               Actualizado {formatIsoDate(project.updatedAt)}
+              {project.production?.revision ? (
+                <>
+                  <span className="prod-hub__dot" aria-hidden>
+                    ·
+                  </span>
+                  <span data-testid="prod-hub-revision">
+                    OP rev. {project.production.revision}
+                  </span>
+                </>
+              ) : null}
               {salePrice != null ? (
                 <>
                   <span className="prod-hub__dot" aria-hidden>
@@ -281,6 +313,16 @@ export function ProductionOrderHub({
             </p>
           </div>
         </div>
+
+        {staleInfo?.stale && staleInfo.messageEs ? (
+          <p
+            className="prod-hub__ready-banner prod-hub__ready-banner--blocked"
+            data-testid="prod-hub-stale-warning"
+            role="status"
+          >
+            {staleInfo.messageEs}
+          </p>
+        ) : null}
 
         <div className="prod-hub__chrome-actions">
           <button
@@ -467,6 +509,8 @@ export function ProductionOrderHub({
             project={project}
             modules={modules}
             cutRows={cutRows}
+            onSetFloorStatus={onSetFloorStatus}
+            canSetFloorStatus={canSetFloorStatus}
           />
         ) : null}
 
@@ -604,6 +648,21 @@ export function ProductionOrderHub({
                 >
                   <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
                   Cut-list CSV
+                </button>
+              ) : null}
+              {onExportCncPilot ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={exportBusy || !readiness.materialsResolved}
+                  onClick={() => {
+                    void onExportCncPilot();
+                  }}
+                  data-testid="prod-hub-exports-cnc"
+                  title="JSON piloto CNC — no reemplaza Optimizer"
+                >
+                  <FileText size={16} strokeWidth={1.5} aria-hidden />
+                  CNC pilot JSON
                 </button>
               ) : null}
             </div>

@@ -1,12 +1,18 @@
 /**
- * Production hub — modules inventory (PROD-0.4). Read-only.
+ * Production hub — modules inventory (PROD-0.4) + floor status (PROD-3.1).
+ * Design remains read-only; floor status is factory-only mutation.
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
 import type {
+  ItemFloorStatus,
   Module,
   Project,
   ProductionCutRow,
+} from '@muebles/domain';
+import {
+  ITEM_FLOOR_STATUSES,
+  ITEM_FLOOR_STATUS_LABELS_ES,
 } from '@muebles/domain';
 import { Search } from 'lucide-react';
 import { buildProductionModuleRows } from './productionModuleRows';
@@ -15,12 +21,20 @@ export type ProductionOrderModulesPanelProps = {
   readonly project: Project;
   readonly modules: readonly Module[];
   readonly cutRows: readonly ProductionCutRow[] | null;
+  /** Factory roles only — mutates floorStatus, not design. */
+  readonly onSetFloorStatus?: (
+    itemId: string,
+    status: ItemFloorStatus,
+  ) => void;
+  readonly canSetFloorStatus?: boolean;
 };
 
 export function ProductionOrderModulesPanel({
   project,
   modules,
   cutRows,
+  onSetFloorStatus,
+  canSetFloorStatus = false,
 }: ProductionOrderModulesPanelProps): ReactNode {
   const [query, setQuery] = useState('');
   const rows = useMemo(
@@ -87,6 +101,7 @@ export function ProductionOrderModulesPanel({
                 <th scope="col">Medidas</th>
                 <th scope="col">Ubicación</th>
                 <th scope="col">Piezas</th>
+                <th scope="col">Piso</th>
               </tr>
             </thead>
             <tbody>
@@ -125,6 +140,32 @@ export function ProductionOrderModulesPanel({
                       <span className="prod-modulos__muted">—</span>
                     )}
                   </td>
+                  <td>
+                    {canSetFloorStatus && onSetFloorStatus ? (
+                      <select
+                        className="prod-modulos__floor-select"
+                        value={row.floorStatus}
+                        aria-label={`Estado de piso ${row.factoryCode}`}
+                        data-testid={`prod-floor-status-${row.itemId}`}
+                        onChange={(e) => {
+                          onSetFloorStatus(
+                            row.itemId,
+                            e.target.value as ItemFloorStatus,
+                          );
+                        }}
+                      >
+                        {ITEM_FLOOR_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {ITEM_FLOOR_STATUS_LABELS_ES[s]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span data-testid={`prod-floor-label-${row.itemId}`}>
+                        {ITEM_FLOOR_STATUS_LABELS_ES[row.floorStatus]}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -133,8 +174,8 @@ export function ProductionOrderModulesPanel({
       )}
 
       <p className="prod-modulos__footnote">
-        Solo lectura. Para cambiar medidas, cantidad u opciones, usá «Ver
-        cotización / diseño».
+        Medidas y opciones: solo lectura (editar en cotización). Estado de piso:
+        progreso de fábrica, no cambia el BOM.
       </p>
     </div>
   );
