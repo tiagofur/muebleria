@@ -350,7 +350,8 @@ function ProjectDetailViewInner(): ReactNode {
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
 
-    // PROD-0.2: plant-ready + workspace → prefer hub entry in Más before loose exports.
+    // Only navigation into the factory workspace — no factory file exports here.
+    // Optimizer / herrajes / etiquetas / pack live exclusively in Producción.
     if (hasOpenInProduction && productionExportOk && onOpenInProduction) {
       sections.push({
         id: 'production-hub',
@@ -361,45 +362,6 @@ function ProjectDetailViewInner(): ReactNode {
             label: 'Abrir en Producción',
             hint: 'Pack, corte, checklist de fábrica',
             onSelect: () => onOpenInProduction(project.id),
-          },
-        ],
-      });
-    }
-
-    // When export is not yet plant-ready, park Optimizer in Más (not a disabled chrome CTA).
-    if (onExport && !productionExportOk) {
-      sections.push({
-        id: 'export-early',
-        label: 'Producción',
-        items: [
-          {
-            id: 'export-optimizer',
-            label: exportBusy ? 'Exportando…' : 'Exportar Optimizer',
-            hint: exportTitle,
-            disabled: true,
-            onSelect: () => {
-              /* disabled until accepted / produced */
-            },
-          },
-        ],
-      });
-    }
-
-    // When workspace is wired and plant-ready, also park Optimizer under Más
-    // (secondary path; primary path is the hub).
-    if (onExport && productionExportOk && hasOpenInProduction) {
-      sections.push({
-        id: 'export-secondary',
-        label: 'Exports rápidos',
-        items: [
-          {
-            id: 'export-optimizer',
-            label: exportBusy ? 'Exportando…' : 'Exportar Optimizer',
-            hint: 'También en la orden de Producción',
-            disabled: productionExportDisabled,
-            onSelect: () => {
-              void onExport();
-            },
           },
         ],
       });
@@ -457,17 +419,13 @@ function ProjectDetailViewInner(): ReactNode {
     canDelete,
     canMutate,
     canReopen,
-    exportBusy,
     exportMenu.sections,
-    exportTitle,
     hasOpenInProduction,
     onDuplicate,
-    onExport,
     onOpenInProduction,
     onRequestDelete,
     onRequestReopen,
     onSaveAsTemplate,
-    productionExportDisabled,
     productionExportOk,
     project.id,
     project.status,

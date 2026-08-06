@@ -299,7 +299,7 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-detail-chrome')).toBeTruthy();
     expect(screen.getByTestId('project-detail-total')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
-    // Draft: Optimizer lives in Más (not a disabled chrome CTA).
+    // Draft: factory export is not a chrome CTA (lives in Producción when plant-ready).
     expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
 
@@ -321,7 +321,7 @@ describe('ProjectsScreen F022', () => {
     const primaries = chrome.querySelectorAll('.btn--primary');
     expect(primaries.length).toBe(1);
     expect(screen.getByTestId('project-send-quote')).toBeTruthy();
-    // Draft: Optimizer is not a chrome button (lives under Más until plant-ready).
+    // Draft: Optimizer is not a chrome button (factory path is Producción).
     expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     // Advanced tools start closed — kitchen plan not in DOM until toggle.
     expect(screen.getByTestId('project-quote-tools')).toBeTruthy();
@@ -477,7 +477,7 @@ describe('ProjectsScreen F022', () => {
     const totals = screen.getByLabelText('Totales de cotización');
     expect(within(totals).getByText('Precio de venta')).toBeTruthy();
     expect(within(totals).getByText('$202.50 MXN')).toBeTruthy();
-    // Draft fixture: Optimizer is under Más until accepted/produced.
+    // Draft fixture: Optimizer is not a quote chrome action.
     expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(screen.getByTestId('project-detail-total').textContent).toMatch(
       /\$202\.50 MXN/,
@@ -521,9 +521,8 @@ describe('ProjectsScreen F022', () => {
     });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    // Draft: Optimizer is not a chrome button (under Más until plant-ready).
-    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
-    expect(
+    // Draft: Optimizer is not a chrome button (factory path is Producción).
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();    expect(
       screen.getByText(/completá las opciones obligatorias/i),
     ).toBeTruthy();
   });
@@ -957,7 +956,7 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(onSaveAsTemplate).toHaveBeenCalledWith('prj-1', 'Mi plantilla');
   });
 
-  it('PROD-0.2: plant-ready chrome prefers Abrir en Producción over factory exports', async () => {
+  it('PROD-0.2: plant-ready chrome prefers Abrir en Producción; factory exports leave quote Más', async () => {
     const user = userEvent.setup();
     const onOpenInProduction = vi.fn();
     const onMarkProduced = vi.fn();
@@ -974,6 +973,8 @@ describe('ProjectsScreen project templates (#110)', () => {
       onMarkProduced,
       canMarkProduced: true,
       onExportProductionPack: vi.fn(),
+      onExportHardware: vi.fn(),
+      onExportPieceLabels: vi.fn(),
     });
 
     await user.click(screen.getByTestId('project-card-prj-acc'));
@@ -987,14 +988,23 @@ describe('ProjectsScreen project templates (#110)', () => {
     await user.click(openBtn);
     expect(onOpenInProduction).toHaveBeenCalledWith('prj-acc');
 
-    // Secondary path: exports still reachable under Más.
+    // Quote Más: hub entry only — no Optimizer / herrajes / etiquetas / pack.
     await user.click(screen.getByRole('button', { name: /^Más$/i }));
     expect(
       screen.getByRole('menuitem', { name: /Abrir en Producción/i }),
     ).toBeTruthy();
     expect(
-      screen.getByRole('menuitem', { name: /Exportar Optimizer/i }),
-    ).toBeTruthy();
+      screen.queryByRole('menuitem', { name: /Exportar Optimizer/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('menuitem', { name: /Lista de herrajes/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('menuitem', { name: /Etiquetas/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('menuitem', { name: /Pack producción/i }),
+    ).toBeNull();
   });
 
   it('management modal lists templates with a delete button', async () => {
