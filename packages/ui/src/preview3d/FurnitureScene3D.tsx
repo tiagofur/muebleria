@@ -4,15 +4,18 @@
 
 import {
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type ReactNode,
 } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Bounds, ContactShadows, OrbitControls, PerspectiveCamera, OrthographicCamera, Edges } from '@react-three/drei';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import * as THREE from 'three';
+import { offsetMmFromPlanPoint, type ResolvedBoardPart } from '@muebles/domain';
 import {
   boardPartsToVisuals,
   sceneFraming,
@@ -104,6 +107,25 @@ export type FurnitureScene3DProps = {
   readonly selectedModuleKey?: string | null;
   /** Click a module (or empty) to select. Prefer over part pick when set. */
   readonly onSelectModule?: (moduleKey: string | null) => void;
+  /**
+   * Drag cabinets along kitchen walls (spatial studio). Keys = module.instanceKey.
+   * Workshop mm frames must match the displayed (shifted) layout.
+   */
+  readonly wallDragByKey?: Readonly<
+    Record<
+      string,
+      {
+        readonly originXMm: number;
+        readonly originYMm: number;
+        readonly angleDeg: number;
+        readonly lengthMm: number;
+        readonly moduleWidthMm: number;
+      }
+    >
+  >;
+  readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
+  /** When true, pointer-drag on a module updates offset along its wall. */
+  readonly wallDragEnabled?: boolean;
 };
 
 function BoardMesh({
@@ -264,6 +286,11 @@ function ModuleGroup({
   onSelectPart,
   moduleSelected,
   onSelectModule,
+  wallDrag,
+  wallDragEnabled,
+  onModuleWallOffset,
+  controlsRef,
+  setOrbitSuppressed,
 }: {
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
@@ -277,7 +304,88 @@ function ModuleGroup({
   readonly onSelectPart?: (partId: string) => void;
   readonly moduleSelected?: boolean;
   readonly onSelectModule?: (moduleKey: string) => void;
+  readonly wallDrag?: {
+    readonly originXMm: number;
+    readonly originYMm: number;
+    readonly angleDeg: number;
+    readonly lengthMm: number;
+    readonly moduleWidthMm: number;
+  };
+  readonly wallDragEnabled?: boolean;
+  readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
+  readonly controlsRef: React.RefObject<any>;
+  readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
+  const { camera, gl } = useThree();
+  const dragging = useRef(false);
+  const floorPlane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    [],
+  );
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const hit = useMemo(() => new THREE.Vector3(), []);
+  const ndc = useMemo(() => new THREE.Vector2(), []);
+
+  const applyDragFromClient = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!wallDrag || !onModuleWallOffset) return;
+      const rect = gl.domElement.getBoundingClientRect();
+      ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, camera);
+      if (!raycaster.ray.intersectPlane(floorPlane, hit)) return;
+      // Three (x,y,z) → workshop (x, y_plan=z)
+      const offset = offsetMmFromPlanPoint(
+        {
+          originXMm: wallDrag.originXMm,
+          originYMm: wallDrag.originYMm,
+          angleDeg: wallDrag.angleDeg,
+          lengthMm: wallDrag.lengthMm,
+        },
+        hit.x,
+        hit.z,
+        wallDrag.moduleWidthMm,
+      );
+      onModuleWallOffset(mod.key, offset);
+    },
+    [
+      wallDrag,
+      onModuleWallOffset,
+      gl.domElement,
+      ndc,
+      raycaster,
+      camera,
+      floorPlane,
+      hit,
+      mod.key,
+    ],
+  );
+
+  const endDrag = useCallback(() => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setOrbitSuppressed(false);
+    if (controlsRef.current) controlsRef.current.enabled = true;
+    document.body.style.cursor = '';
+  }, [controlsRef, setOrbitSuppressed]);
+
+  useEffect(() => {
+    if (!wallDragEnabled || !wallDrag) return;
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      applyDragFromClient(e.clientX, e.clientY);
+    };
+    const onUp = () => endDrag();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [wallDragEnabled, wallDrag, applyDragFromClient, endDrag]);
+
   const visuals = useMemo(
     () =>
       boardPartsToVisuals(mod.parts, {
@@ -297,6 +405,7 @@ function ModuleGroup({
   const yawRad = ((mod.yawDeg ?? 0) * Math.PI) / 180;
   const groupRot: [number, number, number] = [0, yawRad, 0];
   const hasSelection = Boolean(selectedPartId);
+  const canWallDrag = Boolean(wallDragEnabled && wallDrag && onModuleWallOffset);
 
   return (
     <group
@@ -307,6 +416,20 @@ function ModuleGroup({
           ? (e) => {
               e.stopPropagation();
               onSelectModule(mod.key);
+            }
+          : undefined
+      }
+      onPointerDown={
+        canWallDrag
+          ? (e) => {
+              e.stopPropagation();
+              (e.target as Element).setPointerCapture?.(e.pointerId);
+              dragging.current = true;
+              setOrbitSuppressed(true);
+              if (controlsRef.current) controlsRef.current.enabled = false;
+              document.body.style.cursor = 'grabbing';
+              onSelectModule?.(mod.key);
+              applyDragFromClient(e.clientX, e.clientY);
             }
           : undefined
       }
@@ -418,6 +541,9 @@ function SceneContent({
   onSelectPart,
   selectedModuleKey,
   onSelectModule,
+  wallDragByKey,
+  onModuleWallOffset,
+  wallDragEnabled,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -442,7 +568,11 @@ function SceneContent({
   readonly onSelectPart?: (partId: string) => void;
   readonly selectedModuleKey?: string | null;
   readonly onSelectModule?: (moduleKey: string | null) => void;
+  readonly wallDragByKey?: FurnitureScene3DProps['wallDragByKey'];
+  readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
+  readonly wallDragEnabled?: boolean;
 }): ReactNode {
+  const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
@@ -514,6 +644,11 @@ function SceneContent({
                     }
                   : undefined
               }
+              wallDrag={wallDragByKey?.[mod.key]}
+              wallDragEnabled={wallDragEnabled}
+              onModuleWallOffset={onModuleWallOffset}
+              controlsRef={controlsRef}
+              setOrbitSuppressed={setOrbitSuppressed}
             />
           ))}
         </group>
@@ -531,7 +666,8 @@ function SceneContent({
         scale={framing.maxDim * 2.2}
         blur={2.2}
         far={framing.maxDim}
-      />      <OrbitControls
+      />
+      <OrbitControls
         ref={controlsRef}
         makeDefault
         enableDamping
@@ -539,7 +675,7 @@ function SceneContent({
         minDistance={framing.maxDim * 0.3}
         maxDistance={framing.maxDim * 5}
         target={framing.center as any}
-        enabled={!measurementMode}
+        enabled={!measurementMode && !orbitSuppressed}
       />
 
       <MeasurementTool active={measurementMode ?? false} />
@@ -585,6 +721,9 @@ export function FurnitureScene3D({
   walls = [],
   selectedModuleKey = null,
   onSelectModule,
+  wallDragByKey,
+  onModuleWallOffset,
+  wallDragEnabled = false,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -636,6 +775,9 @@ export function FurnitureScene3D({
         Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para desplazar (pan)
         · ← → ↑ ↓ para navegar con teclado · + − para zoom
         {selectionEnabled ? ' · click en una pieza para inspeccionar' : ''}
+        {wallDragEnabled
+          ? ' · arrastrá un mueble sobre el piso para deslizarlo en el muro'
+          : ''}
       </p>
       <div
         className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
@@ -737,6 +879,9 @@ export function FurnitureScene3D({
                   ? onSelectModule
                   : undefined
               }
+              wallDragByKey={wallDragByKey}
+              onModuleWallOffset={onModuleWallOffset}
+              wallDragEnabled={wallDragEnabled && !measurementMode}
             />
           </Suspense>          </Canvas>
         </Suspense>

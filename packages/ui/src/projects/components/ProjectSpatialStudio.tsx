@@ -268,6 +268,35 @@ export function ProjectSpatialStudio({
     [catalog.materials, catalog.edges, catalog.hardware],
   );
 
+  /** Wall frames in displayed (shifted) space for 3D drag along wall. */
+  const wallDragByKey = useMemo(() => {
+    const wallById = new Map(preview.walls.map((w) => [w.id, w]));
+    const out: Record<
+      string,
+      {
+        originXMm: number;
+        originYMm: number;
+        angleDeg: number;
+        lengthMm: number;
+        moduleWidthMm: number;
+      }
+    > = {};
+    for (const p of layout.placements) {
+      const wall = wallById.get(p.wallId);
+      if (!wall) continue;
+      const key = `${p.itemId}#${p.instanceIndex}`;
+      const modInstance = preview.modules.find((m) => m.instanceKey === key);
+      out[key] = {
+        originXMm: wall.originXMm,
+        originYMm: wall.originYMm,
+        angleDeg: wall.angleDeg,
+        lengthMm: wall.lengthMm,
+        moduleWidthMm: modInstance?.width ?? 600,
+      };
+    }
+    return out;
+  }, [layout.placements, preview.walls, preview.modules]);
+
   if (!open) return null;
 
   const commit = (next: ProjectKitchenLayout) => {
@@ -400,6 +429,15 @@ export function ProjectSpatialStudio({
     endYMm: w.endYMm,
     heightMm: 2400,
   }));
+
+  const handleModuleWallOffset = (moduleKey: string, offsetMm: number) => {
+    if (!canEdit) return;
+    const hash = moduleKey.lastIndexOf('#');
+    if (hash < 0) return;
+    const itemId = moduleKey.slice(0, hash);
+    const instanceIndex = Number(moduleKey.slice(hash + 1)) || 0;
+    patchPlacement(itemId, instanceIndex, { offsetMm });
+  };
 
   return (
     <div
@@ -613,7 +651,13 @@ export function ProjectSpatialStudio({
                 surfaceMode={DEFAULT_MATERIAL_SURFACE_MODE}
                 showOutlines
                 selectedModuleKey={selectedKey}
-                onSelectModule={setSelectedKey}
+                onSelectModule={(key) => {
+                  setSelectedKey(key);
+                  if (key) setInspectorTab('position');
+                }}
+                wallDragEnabled={canEdit}
+                wallDragByKey={wallDragByKey}
+                onModuleWallOffset={handleModuleWallOffset}
               />
             </Suspense>
           ) : (
@@ -958,8 +1002,8 @@ export function ProjectSpatialStudio({
           )}
 
           <p className="spatial-studio__phase-note">
-            Medidas = presets del catálogo (como lista de talles en Promob). A×H×P
-            libre mm vendrá después para no romper el precio Go/TS.
+            Medidas = presets del catálogo. En el 3D: arrastrá un mueble para
+            deslizarlo a lo largo del muro (órbita con arrastre en el vacío).
           </p>
         </aside>
       </div>

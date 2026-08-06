@@ -222,6 +222,7 @@ export {
   wallDirectionYawDeg,
   placementAabb,
   reorderPlacementOnWall,
+  offsetMmFromPlanPoint,
   layoutKitchenPlacements,
   nextOffsetOnWall,
   createDefaultLWalls,

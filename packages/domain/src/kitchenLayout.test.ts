@@ -9,6 +9,7 @@ import {
   resolveWallFrames,
   kitchenLayoutWarnings,
   wallDirectionYawDeg,
+  offsetMmFromPlanPoint,
 } from './kitchenLayout';
 import type { ProjectItem, ProjectKitchenLayout } from './types';
 
@@ -91,6 +92,26 @@ describe('kitchenLayout', () => {
     expect(wallDirectionYawDeg(180)).toBe(180);
     expect(wallDirectionYawDeg(270)).toBe(270);
     expect(wallDirectionYawDeg(-10)).toBe(0);
+  });
+
+  it('projects plan points to wall offset with clamp', () => {
+    const wallX = {
+      originXMm: 0,
+      originYMm: 0,
+      angleDeg: 0,
+      lengthMm: 3000,
+    };
+    expect(offsetMmFromPlanPoint(wallX, 620, 10, 600)).toBe(620);
+    expect(offsetMmFromPlanPoint(wallX, -50, 0, 600)).toBe(0);
+    expect(offsetMmFromPlanPoint(wallX, 5000, 0, 600)).toBe(2400);
+
+    const wallY = {
+      originXMm: 3000,
+      originYMm: 0,
+      angleDeg: 90,
+      lengthMm: 2500,
+    };
+    expect(offsetMmFromPlanPoint(wallY, 3000, 400, 600)).toBe(400);
   });
 
   it('warns when module overhangs wall', () => {

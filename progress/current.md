@@ -17,7 +17,8 @@ Botón **Proyectar** en chrome de cotización → fullscreen `ProjectSpatialStud
 | 3D: muros + yaw + select módulo | ✅ |
 | unplacedPolicy hide en studio | ✅ |
 | Propiedades Promob (presets + acabados) | ✅ | tabs Mueble / Posición; onUpdateItem |
-| A×H×P libre mm | ⏳ | requiere measureDims domain TS+Go |
+| Drag 3D a lo largo del muro | ✅ | floor raycast → offsetMm, clamp |
+| A×H×P libre mm | ❌ no por ahora | solo presets del mueble |
 
 ### Key files
 - `packages/ui/src/projects/components/ProjectSpatialStudio.tsx`

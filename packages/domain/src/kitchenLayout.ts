@@ -468,6 +468,37 @@ function placementOriginsOnWall(
   };
 }
 
+/**
+ * Project a plan point (workshop X/Y mm) onto a wall axis → offset along wall.
+ * Clamped so the module footprint stays within the wall length.
+ */
+export function offsetMmFromPlanPoint(
+  wall: {
+    readonly originXMm: number;
+    readonly originYMm: number;
+    readonly angleDeg: number;
+    readonly lengthMm: number;
+  },
+  planXMm: number,
+  planYMm: number,
+  moduleWidthMm: number,
+): number {
+  const yaw = wallDirectionYawDeg(wall.angleDeg);
+  let offset: number;
+  if (yaw === 90) {
+    offset = planYMm - wall.originYMm;
+  } else if (yaw === 270) {
+    offset = wall.originYMm - planYMm;
+  } else if (yaw === 180) {
+    offset = wall.originXMm - planXMm;
+  } else {
+    offset = planXMm - wall.originXMm;
+  }
+  const width = Math.max(1, moduleWidthMm);
+  const maxOff = Math.max(0, wall.lengthMm - width);
+  return Math.max(0, Math.min(maxOff, Math.round(offset)));
+}
+
 /** Suggest next offset on a wall (pack after last placement). */
 export function nextOffsetOnWall(
   layout: ProjectKitchenLayout,
