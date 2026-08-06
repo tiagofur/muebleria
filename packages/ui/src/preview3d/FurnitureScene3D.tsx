@@ -131,6 +131,9 @@ export type FurnitureScene3DProps = {
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
   /** When true, pointer-drag on a module updates offset along its wall. */
   readonly wallDragEnabled?: boolean;
+  /** Highlight and click-select walls (set active wall in Proyectar). */
+  readonly selectedWallId?: string | null;
+  readonly onSelectWall?: (wallId: string) => void;
   /**
    * Fill parent height/width (Proyectar studio). Default embedded preview
    * keeps a fixed ~380px canvas for modals/editors.
@@ -283,7 +286,15 @@ function PlinthMesh({
   );
 }
 
-function WallMesh({ wall }: { readonly wall: FurnitureSceneWall }): ReactNode {
+function WallMesh({
+  wall,
+  selected = false,
+  onSelect,
+}: {
+  readonly wall: FurnitureSceneWall;
+  readonly selected?: boolean;
+  readonly onSelect?: (wallId: string) => void;
+}): ReactNode {
   const h = wall.heightMm ?? 2400;
   const dx = wall.endXMm - wall.originXMm;
   const dy = wall.endYMm - wall.originYMm;
@@ -291,21 +302,43 @@ function WallMesh({ wall }: { readonly wall: FurnitureSceneWall }): ReactNode {
   const midX = (wall.originXMm + wall.endXMm) / 2;
   const midY = (wall.originYMm + wall.endYMm) / 2;
   const yaw = Math.atan2(dy, dx);
-  const thickness = 40;
+  const thickness = selected ? 48 : 40;
   // Workshop → Three: [x, z, y]; wall sits on floor, long axis along length.
   return (
     <mesh
       position={[midX, h / 2, midY]}
       rotation={[0, -yaw, 0]}
       userData={{ wallId: wall.id }}
+      onClick={
+        onSelect
+          ? (e) => {
+              e.stopPropagation();
+              onSelect(wall.id);
+            }
+          : undefined
+      }
+      onPointerOver={
+        onSelect
+          ? () => {
+              document.body.style.cursor = 'pointer';
+            }
+          : undefined
+      }
+      onPointerOut={
+        onSelect
+          ? () => {
+              document.body.style.cursor = '';
+            }
+          : undefined
+      }
     >
       <boxGeometry args={[length, h, thickness]} />
       <meshStandardMaterial
-        color="#8b9098"
+        color={selected ? '#5b9fd4' : '#8b9098'}
         roughness={0.9}
         metalness={0.05}
         transparent
-        opacity={0.55}
+        opacity={selected ? 0.72 : 0.55}
       />
     </mesh>
   );
@@ -589,6 +622,8 @@ function SceneContent({
   wallDragByKey,
   onModuleWallOffset,
   wallDragEnabled,
+  selectedWallId,
+  onSelectWall,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -616,6 +651,8 @@ function SceneContent({
   readonly wallDragByKey?: FurnitureScene3DProps['wallDragByKey'];
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
   readonly wallDragEnabled?: boolean;
+  readonly selectedWallId?: string | null;
+  readonly onSelectWall?: (wallId: string) => void;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const framing = useMemo(
@@ -666,7 +703,12 @@ function SceneContent({
             </mesh>
           ) : null}
           {walls.map((w) => (
-            <WallMesh key={w.id} wall={w} />
+            <WallMesh
+              key={w.id}
+              wall={w}
+              selected={selectedWallId === w.id}
+              onSelect={onSelectWall}
+            />
           ))}
           {modules.map((mod) => (
             <ModuleGroup
@@ -771,6 +813,8 @@ export function FurnitureScene3D({
   wallDragEnabled = false,
   fillViewport = false,
   showHint = true,
+  selectedWallId = null,
+  onSelectWall,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -949,6 +993,8 @@ export function FurnitureScene3D({
               wallDragByKey={wallDragByKey}
               onModuleWallOffset={onModuleWallOffset}
               wallDragEnabled={wallDragEnabled && !measurementMode}
+              selectedWallId={selectedWallId}
+              onSelectWall={onSelectWall}
             />
           </Suspense>          </Canvas>
         </Suspense>

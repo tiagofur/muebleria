@@ -98,6 +98,61 @@ describe('ProjectSpatialStudio', () => {
     expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
   });
 
+  it('filters list and places on double-click', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-filter-unplaced'));
+    expect(screen.getByTestId('spatial-studio-unplaced-it-a-0')).toBeTruthy();
+    fireEvent.doubleClick(screen.getByTestId('spatial-studio-unplaced-it-a-0'));
+    expect(onChangeLayout).toHaveBeenCalled();
+    const next = onChangeLayout.mock.calls.at(-1)![0];
+    expect(next.placements).toHaveLength(1);
+    expect(next.placements[0]!.itemId).toBe('it-a');
+  });
+
+  it('collapses list to rail with unplaced badge', () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-collapse-list'));
+    expect(screen.getByTestId('spatial-studio-list-rail')).toBeTruthy();
+    expect(screen.getByTestId('spatial-studio-rail-unplaced').textContent).toBe(
+      '1',
+    );
+  });
+
   it('shows scene toolbar and can toggle plan mini', async () => {
     const projectWithWalls: Project = {
       ...project,
