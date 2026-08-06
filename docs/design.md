@@ -632,10 +632,10 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Cuerpo en **2 columnas** (`.project-detail__body`): columna principal (`.project-detail__main` = opciones de proyecto opcionales + ítems/muebles) | panel sticky de desglose (`.project-totals`). Nunca más de dos hijos directos del grid o el layout se rompe.
 - **Chrome — agrupación de acciones (wave 4 density + PROD-0.2):**
   - **Exactamente un `btn--primary` de ciclo de vida** por status: Enviar (draft) · Aceptar (quoted) · **Abrir en Producción** (accepted/produced si el shell pasa `onOpenInProduction`) · si no hay workspace de fábrica: Marcar en producción / Exportar Optimizer.
-  - **Sin muro de fábrica en cotización:** con `onOpenInProduction`, Optimizer / pack / herrajes / etiquetas / marcar producido **no** son primarios del chrome; viven en **Producción** (hub) y como secundarios bajo **Más** (hint «También en Producción»).
-  - **Exportar Optimizer** en chrome solo si plant-ready **y** no hay `onOpenInProduction`; si no, bajo **Más**.
+  - **Sin exports de fábrica en cotización:** con `onOpenInProduction`, Optimizer / pack / herrajes / etiquetas / marcar producido **no** aparecen en el chrome ni en **Más** de cotización. Solo viven en el workspace **Producción** (hub / cola). En cotización queda como máximo la navegación **Abrir en Producción**.
+  - **Exportar Optimizer** en chrome de cotización solo si plant-ready **y** no hay `onOpenInProduction` (shell legacy sin workspace de fábrica).
   - **Presentar** + **Editar** (si `canMutate`) como secundarios en chrome.
-  - **Más ▾** (`DropdownMenu`): Abrir en Producción (si aplica) + exports rápidos + Comercial + Duplicar / Guardar plantilla / Reabrir / **Eliminar**.
+  - **Más ▾** (`DropdownMenu`): Abrir en Producción (si aplica, solo nav) + **Comercial** (cotización xlsx / PDF) + Duplicar / Guardar plantilla / Reabrir / **Eliminar**.
   - Mobile: total y actions full-width debajo del lead (`.project-detail` + workspace-chrome).
 - **Cliente:** picker de clientes activos + acción «Nuevo cliente» (alta inline o navegación a Clientes según wiring del shell)
 - **Plantillas (#110):** toolbar con «Desde plantilla» (picker) y «Plantillas» (gestión); chrome con «Guardar como plantilla» desde un proyecto

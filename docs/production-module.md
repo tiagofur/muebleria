@@ -121,7 +121,7 @@ Inventario **ya implementado** (no reabrir issues cerrados como “nuevo trabajo
 |-----------|--------|------------|
 | Cola producción (`accepted` → export → `produced`) | ✅ | `ProductionQueue`, F038 |
 | Workspace Producción (nav + hub OP + rutas) | ✅ PROD-0.1/0.3 | `#215` `#217` · `ProductionWorkspace` |
-| Desacople exports de fábrica del chrome de cotización | ✅ PROD-0.2 | `#216` · `ProjectDetailView` + Más |
+| Desacople exports de fábrica del chrome de cotización | ✅ PROD-0.2 | `#216` · chrome primary + Más sin exports de fábrica (solo nav a hub) |
 | Módulos + planta/3D read-only en hub | ✅ PROD-0.4 | `#218` · tabs `modulos` / `vistas` |
 | Elevaciones PDF por muro | ✅ PROD-1.1 | `#219` · `buildProductionElevations` + PDF |
 | Pack ZIP ampliado | ✅ PROD-1.2 | `#220` · carátula + elevaciones + despiece |
@@ -197,7 +197,7 @@ Producción                          ← sección de nav (no sub-tab de un proye
 En detalle de proyecto `accepted` | `produced`:
 
 - CTA primaria de fábrica: **“Abrir en Producción”** (navega al hub de esa obra en el workspace Producción).
-- Exports sueltos en proyecto: **secundarios o menú “Más”**, no competir con cotizar/diseñar.
+- Exports de fábrica (Optimizer, herrajes, etiquetas, pack): **solo en Producción** — no en chrome ni en **Más** de cotización. En cotización queda como máximo la nav al hub.
 - En `draft` | `quoted`: **no** mostrar el workspace de fábrica como destino principal; copy: “Disponible al aceptar la cotización”.
 
 ### 5.3 Modelo mental: Proyecto vs Orden de producción

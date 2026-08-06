@@ -201,16 +201,17 @@ export interface ProjectsScreenProps {
    */
   readonly onExport?: () => void | Promise<void>;
   /**
-   * Hardware purchase-list export (F013 / EXP-08).
-   * Shell owns validate → aggregate → xlsx → download.
+   * @deprecated Not shown in quote UI — factory exports live in Producción.
+   * Kept optional so older shells can still pass the prop without breaking.
    */
   readonly onExportHardware?: () => void | Promise<void>;
   /**
-   * Piece labels PDF with edge-banding instruction (F046 / #96).
-   * Shell owns validate → labels → PDF → download.
+   * @deprecated Not shown in quote UI — factory exports live in Producción.
    */
   readonly onExportPieceLabels?: () => void | Promise<void>;
-  /** Pack ZIP: Optimizer + herrajes + etiquetas (#134). */
+  /**
+   * @deprecated Not shown in quote UI — pack lives in Producción hub/queue.
+   */
   readonly onExportProductionPack?: () => void | Promise<void>;
   /**
    * Open factory workspace for the selected plant-ready project (PROD-0.1).
@@ -324,8 +325,6 @@ export function ProjectsScreen({
   missingGroups = [],
   groupLabels,
   onExport,
-  onExportHardware,
-  onExportPieceLabels,
   onExportProductionPack,
   onOpenInProduction,
   onExportCommercialQuote,
@@ -687,10 +686,9 @@ export function ProjectsScreen({
   const productionExportDisabled = exportDisabled || !productionExportOk;
 
   /**
-   * Build the "Más exports ▾" menu sections from available callbacks (Fase 2 UI).
-   * Items render only when their prop is defined; the shell decides which
-   * exports apply per role (production-only exports are undefined for
-   * vendedor; commercial exports are undefined for produccion).
+   * Quote "Más" commercial exports only.
+   * Factory exports (Optimizer, herrajes, etiquetas, pack) live exclusively
+   * in the Producción workspace (PROD-0.2 strengthened).
    */
   const exportMenu = useMemo<{
     readonly sections: readonly DropdownMenuSection[];
@@ -698,42 +696,6 @@ export function ProjectsScreen({
   }>(() => {
     if (!selectedProject) return { sections: [] };
     const itemsEmpty = selectedProject.items.length === 0;
-
-    /** PROD-0.2: factory exports stay available as secondary under Más. */
-    const factorySecondaryHint = onOpenInProduction
-      ? 'También en Producción'
-      : undefined;
-    const productionItems = [
-      onExportHardware
-        ? {
-            id: 'hardware',
-            label: 'Lista de herrajes',
-            hint: factorySecondaryHint ?? 'Para compras (.xlsx)',
-            disabled: productionExportDisabled,
-            onSelect: () => void onExportHardware(),
-          }
-        : null,
-      onExportPieceLabels
-        ? {
-            id: 'labels',
-            label: 'Etiquetas',
-            hint: factorySecondaryHint ?? 'Pieza + encintado (PDF)',
-            disabled: productionExportDisabled,
-            onSelect: () => void onExportPieceLabels(),
-          }
-        : null,
-      onExportProductionPack
-        ? {
-            id: 'pack',
-            label: 'Pack producción',
-            hint:
-              factorySecondaryHint ??
-              'ZIP (Optimizer + herrajes + etiquetas + resumen)',
-            disabled: productionExportDisabled,
-            onSelect: () => void onExportProductionPack(),
-          }
-        : null,
-    ].filter((x): x is NonNullable<typeof x> => x !== null);
 
     const commercialItems = [
       onExportCommercialQuote
@@ -765,31 +727,20 @@ export function ProjectsScreen({
         : null,
     ].filter((x): x is NonNullable<typeof x> => x !== null);
 
-    const sections: DropdownMenuSection[] = [];
-    if (productionItems.length > 0) {
-      sections.push({
-        id: 'production',
-        label: 'Producción',
-        items: productionItems,
-      });
-    }
-    if (commercialItems.length > 0) {
-      sections.push({
-        id: 'commercial',
-        label: 'Comercial',
-        items: commercialItems,
-      });
-    }
-    return { sections };
+    if (commercialItems.length === 0) return { sections: [] };
+    return {
+      sections: [
+        {
+          id: 'commercial',
+          label: 'Comercial',
+          items: commercialItems,
+        },
+      ],
+    };
   }, [
     selectedProject,
-    onExportHardware,
-    onExportPieceLabels,
-    onExportProductionPack,
-    onOpenInProduction,
     onExportCommercialQuote,
     onExportCommercialQuotePdf,
-    productionExportDisabled,
     exportBusy,
     exportBlocked,
   ]);
