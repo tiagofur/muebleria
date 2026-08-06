@@ -41,6 +41,7 @@ export type {
   PlacementMode,
   KitchenWall,
   ProjectItemPlacement,
+  KitchenPlanUnderlay,
   KitchenSpace,
   ProjectKitchenLayout,
   InstallationChecklistItem,
@@ -253,6 +254,15 @@ export type {
   KitchenPlacedModule,
   KitchenLayoutResult,
 } from './kitchenLayout';
+
+export {
+  parseDxfToKitchenWalls,
+  createPlanUnderlay,
+  scalePlanUnderlay,
+  DEFAULT_UNDERLAY_WIDTH_MM,
+  DEFAULT_UNDERLAY_HEIGHT_MM,
+} from './planImport';
+export type { DxfImportResult, ParseDxfOptions } from './planImport';
 
 export { estimateBoardSheets } from './boardSheetEstimate';
 export type { BoardSheetEstimate } from './boardSheetEstimate';

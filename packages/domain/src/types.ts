@@ -420,6 +420,26 @@ export interface ProjectItemPlacement {
 }
 
 /**
+ * Background plan image (PDF page exported as PNG/JPG, photo of blueprint, etc.).
+ * Presentation only — not BOM. Used to trace walls in Proyectar.
+ */
+export interface KitchenPlanUnderlay {
+  /** Media path or data URL of the plan image. */
+  readonly imageUrl: string;
+  /** Horizontal span of the image in workshop mm. */
+  readonly widthMm: number;
+  /** Vertical span of the image in workshop mm. */
+  readonly heightMm: number;
+  /** Min-corner of the image in plan coords (default 0). */
+  readonly originXMm?: number;
+  readonly originYMm?: number;
+  /** 0–1; default ~0.45 in UI. */
+  readonly opacity?: number;
+  /** Original file name for UI. */
+  readonly fileName?: string;
+}
+
+/**
  * One named environment (cocina, baño, living…) inside a kitchen plan.
  * Walls + placements are local to the space. Presentation only — not BOM.
  */
@@ -431,6 +451,8 @@ export interface KitchenSpace {
   readonly baseClearanceMm?: number;
   readonly wallCabinetZMm?: number;
   readonly showCountertop?: boolean;
+  /** Optional floor-plan underlay for this space. */
+  readonly underlay?: KitchenPlanUnderlay;
 }
 
 /** Optional kitchen plan attached to a project. */
@@ -463,6 +485,8 @@ export interface ProjectKitchenLayout {
   readonly spaces?: readonly KitchenSpace[];
   /** Id of the active space; mirrored into top-level walls/placements. */
   readonly activeSpaceId?: string;
+  /** Underlay of the active space (mirrored). */
+  readonly underlay?: KitchenPlanUnderlay;
 }
 
 /** Simple installation checklist item (#139). */

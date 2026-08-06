@@ -7,6 +7,7 @@
  */
 
 import type {
+  KitchenPlanUnderlay,
   KitchenSpace,
   KitchenWall,
   PlacementElevation,
@@ -108,10 +109,11 @@ function spacePlanFields(
     readonly baseClearanceMm?: number;
     readonly wallCabinetZMm?: number;
     readonly showCountertop?: boolean;
+    readonly underlay?: KitchenPlanUnderlay;
   },
 ): Pick<
   KitchenSpace,
-  'baseClearanceMm' | 'wallCabinetZMm' | 'showCountertop'
+  'baseClearanceMm' | 'wallCabinetZMm' | 'showCountertop' | 'underlay'
 > {
   return {
     ...(source.baseClearanceMm === undefined
@@ -123,6 +125,7 @@ function spacePlanFields(
     ...(source.showCountertop === undefined
       ? {}
       : { showCountertop: source.showCountertop }),
+    ...(source.underlay === undefined ? {} : { underlay: source.underlay }),
   };
 }
 

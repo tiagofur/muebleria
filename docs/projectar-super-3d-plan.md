@@ -182,7 +182,7 @@ Cada parte es entregable autónomo, testeable, idealmente PR &lt; 400 líneas cu
 |------|--------|
 | **Islas / free place** | **Hecho** — `mode: 'free'` + `freeXMm`/`freeYMm`/`freeYawDeg`; layout 3D; drag en piso; botón «Isla» / inspector |
 | **Multi-ambiente** | **Hecho** — `KitchenSpace[]` + `activeSpaceId`; mirror top-level; tabs en Proyectar; unplaced global |
-| Import plano PDF/DXF | Pendiente |
+| **Import plano PDF/DXF** | **Hecho (v1)** — DXF LINE/LWPOLYLINE → muros; PNG/JPG underlay + escala mm; PDF → exportá a imagen |
 | Zoclo como pieza real en BOM / patas como herraje automático | Pendiente |
 | Luces / materiales PBR | Pendiente |
 | Colaboración multi-usuario en el plano | Pendiente |

@@ -26,6 +26,7 @@ import {
   allKitchenPlacements,
   BASE_CLEARANCE_PRESETS_MM,
   createDefaultLWalls,
+  createPlanUnderlay,
   DEFAULT_BASE_CLEARANCE_MM,
   DEFAULT_WALL_CABINET_Z_MM,
   defaultMeasurePresetId,
@@ -34,6 +35,7 @@ import {
   isFreePlacement,
   kitchenLayoutWarnings,
   nextOffsetOnWall,
+  parseDxfToKitchenWalls,
   pruneKitchenLayout,
   removeKitchenSpace,
   renameKitchenSpace,
@@ -43,6 +45,7 @@ import {
   resolveModuleMeasurePreset,
   resolveWallCabinetZMm,
   resolveWallFrames,
+  scalePlanUnderlay,
   setActiveKitchenSpace,
   snapOffsetOnWall,
   syncActiveKitchenSpace,
@@ -56,6 +59,7 @@ import {
   Box,
   Eye,
   EyeOff,
+  FileUp,
   Lock,
   Map as MapIcon,
   Move3d,
@@ -210,8 +214,10 @@ export function ProjectSpatialStudio({
   const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
   const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
   const [showFloorGrid, setShowFloorGrid] = useState(true);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const wallDragSession = useRef(false);
   const appliedBootstrap = useRef(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -466,7 +472,12 @@ export function ProjectSpatialStudio({
   );
 
   const planMini = useMemo(() => {
-    if (planFrames.length === 0 && layout.placements.every((p) => !isFreePlacement(p))) {
+    const underlay = layout.underlay;
+    if (
+      planFrames.length === 0 &&
+      layout.placements.every((p) => !isFreePlacement(p)) &&
+      !underlay
+    ) {
       return null;
     }
     let minX = Infinity;
@@ -488,6 +499,14 @@ export function ProjectSpatialStudio({
       maxX = Math.max(maxX, fx + 600);
       maxY = Math.max(maxY, fy + 400);
     }
+    if (underlay) {
+      const ox = underlay.originXMm ?? 0;
+      const oy = underlay.originYMm ?? 0;
+      minX = Math.min(minX, ox);
+      minY = Math.min(minY, oy);
+      maxX = Math.max(maxX, ox + underlay.widthMm);
+      maxY = Math.max(maxY, oy + underlay.heightMm);
+    }
     if (!Number.isFinite(minX)) return null;
     const pad = 24;
     const spanX = Math.max(maxX - minX, 1);
@@ -495,7 +514,7 @@ export function ProjectSpatialStudio({
     const size = 200;
     const scale = (size - pad * 2) / Math.max(spanX, spanY);
     return { minX, minY, pad, scale, size };
-  }, [planFrames, layout.placements]);
+  }, [planFrames, layout.placements, layout.underlay]);
 
   if (!open) return null;
 
@@ -560,6 +579,92 @@ export function ProjectSpatialStudio({
     commit(removeKitchenSpace(layout, activeSpaceId));
     setSelectedKey(null);
     setTargetWallId(null);
+  };
+
+  const handleImportPlanFile = async (file: File) => {
+    if (!canEdit) return;
+    setImportMessage(null);
+    const name = file.name || 'plano';
+    const lower = name.toLowerCase();
+
+    if (lower.endsWith('.pdf')) {
+      setImportMessage(
+        'PDF: exportá la 1.ª página como PNG/JPG e importala, o usá un DXF con muros.',
+      );
+      return;
+    }
+
+    if (lower.endsWith('.dxf')) {
+      try {
+        const text = await readFileAsText(file);
+        const result = parseDxfToKitchenWalls(text, { newId });
+        if (result.walls.length === 0) {
+          setImportMessage(
+            result.warnings[0] ??
+              'No se pudieron leer muros del DXF. ¿Unidades en metros?',
+          );
+          return;
+        }
+        commit({
+          ...layout,
+          walls: result.walls,
+          // Keep existing placements; user can re-place if walls moved.
+        });
+        setShowPlan2d(true);
+        setImportMessage(
+          `DXF: ${result.walls.length} muro(s) importado(s)${
+            result.warnings[0] ? ` · ${result.warnings[0]}` : ''
+          }.`,
+        );
+      } catch {
+        setImportMessage('No se pudo leer el archivo DXF.');
+      }
+      return;
+    }
+
+    if (
+      !lower.endsWith('.png') &&
+      !lower.endsWith('.jpg') &&
+      !lower.endsWith('.jpeg') &&
+      !lower.endsWith('.webp') &&
+      !file.type.startsWith('image/')
+    ) {
+      setImportMessage('Formato no soportado. Usá DXF, PNG, JPG o WEBP.');
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const size = await loadImageSize(dataUrl);
+      const underlay = createPlanUnderlay({
+        imageUrl: dataUrl,
+        pixelWidth: size.width,
+        pixelHeight: size.height,
+        fileName: name,
+      });
+      commit({ ...layout, underlay });
+      setShowPlan2d(true);
+      setImportMessage(
+        `Plano «${name}» cargado como fondo. Ajustá el ancho real (mm) abajo.`,
+      );
+    } catch {
+      setImportMessage('No se pudo cargar la imagen del plano.');
+    }
+  };
+
+  const handleScaleUnderlay = (widthMm: number) => {
+    if (!canEdit || !layout.underlay) return;
+    if (!Number.isFinite(widthMm) || widthMm < 100) return;
+    commit({
+      ...layout,
+      underlay: scalePlanUnderlay(layout.underlay, widthMm),
+    });
+  };
+
+  const handleClearUnderlay = () => {
+    if (!canEdit) return;
+    commit({ ...layout, underlay: undefined });
+    setImportMessage(null);
   };
 
   const undoPlan = () => {
@@ -1230,6 +1335,84 @@ export function ProjectSpatialStudio({
                 ambiente
               </button>
             ) : null}
+
+            {canEdit ? (
+              <div className="spatial-studio__import">
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".dxf,.png,.jpg,.jpeg,.webp,.pdf,image/*"
+                  className="spatial-studio__import-input"
+                  data-testid="spatial-studio-import-input"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) void handleImportPlanFile(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={() => importInputRef.current?.click()}
+                  title="Importar DXF (muros) o imagen de plano (fondo)"
+                  data-testid="spatial-studio-import-plan"
+                >
+                  <FileUp size={14} strokeWidth={1.5} aria-hidden /> Importar
+                  plano
+                </button>
+                {layout.underlay ? (
+                  <>
+                    <label className="spatial-studio__field">
+                      <span>
+                        Ancho real del plano (mm)
+                        {layout.underlay.fileName
+                          ? ` · ${layout.underlay.fileName}`
+                          : ''}
+                      </span>
+                      <input
+                        type="number"
+                        min={100}
+                        step={50}
+                        value={Math.round(layout.underlay.widthMm)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v)) handleScaleUnderlay(v);
+                        }}
+                        data-testid="spatial-studio-underlay-width"
+                      />
+                    </label>
+                    <p className="spatial-studio__hint">
+                      Alto efectivo:{' '}
+                      {Math.round(layout.underlay.heightMm)} mm · opacity{' '}
+                      {Math.round((layout.underlay.opacity ?? 0.45) * 100)}%
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={handleClearUnderlay}
+                      data-testid="spatial-studio-clear-underlay"
+                    >
+                      Quitar fondo
+                    </button>
+                  </>
+                ) : (
+                  <p className="spatial-studio__hint">
+                    DXF → muros · PNG/JPG → fondo para trazar. PDF: exportá a
+                    imagen.
+                  </p>
+                )}
+                {importMessage ? (
+                  <p
+                    className="spatial-studio__import-msg"
+                    data-testid="spatial-studio-import-msg"
+                    role="status"
+                  >
+                    {importMessage}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             {layout.walls.length === 0 ? (
               <div className="spatial-studio__empty-walls">
                 <p className="spatial-studio__hint">
@@ -1827,6 +2010,29 @@ export function ProjectSpatialStudio({
                 className="spatial-studio__plan-svg"
                 aria-hidden
               >
+                {layout.underlay ? (
+                  <image
+                    href={
+                      resolveMediaUrl?.(layout.underlay.imageUrl) ??
+                      layout.underlay.imageUrl
+                    }
+                    x={
+                      planMini.pad +
+                      ((layout.underlay.originXMm ?? 0) - planMini.minX) *
+                        planMini.scale
+                    }
+                    y={
+                      planMini.pad +
+                      ((layout.underlay.originYMm ?? 0) - planMini.minY) *
+                        planMini.scale
+                    }
+                    width={layout.underlay.widthMm * planMini.scale}
+                    height={layout.underlay.heightMm * planMini.scale}
+                    opacity={layout.underlay.opacity ?? 0.45}
+                    preserveAspectRatio="none"
+                    data-testid="spatial-studio-underlay-image"
+                  />
+                ) : null}
                 {planFrames.map((f) => {
                   const x1 =
                     planMini.pad + (f.originXMm - planMini.minX) * planMini.scale;
@@ -2542,4 +2748,43 @@ export function ProjectSpatialStudio({
       </div>
     </div>
   );
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('read failed'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsText(file);
+  });
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('read failed'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageSize(
+  src: string,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () =>
+      resolve({
+        width: img.naturalWidth || img.width || 1,
+        height: img.naturalHeight || img.height || 1,
+      });
+    img.onerror = () => reject(new Error('image load failed'));
+    img.src = src;
+  });
 }

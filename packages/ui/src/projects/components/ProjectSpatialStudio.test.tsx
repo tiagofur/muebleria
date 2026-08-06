@@ -156,6 +156,94 @@ describe('ProjectSpatialStudio', () => {
     expect(next.placements[0]!.itemId).toBe('it-a');
   });
 
+  it('imports DXF walls into the active space', async () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    const input = screen.getByTestId(
+      'spatial-studio-import-input',
+    ) as HTMLInputElement;
+    const dxf = `0
+SECTION
+2
+ENTITIES
+0
+LINE
+10
+0
+20
+0
+11
+3000
+21
+0
+0
+ENDSEC
+0
+EOF
+`;
+    const file = new File([dxf], 'plano.dxf', { type: 'application/dxf' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await vi.waitFor(() => {
+      expect(onChangeLayout).toHaveBeenCalled();
+      expect(screen.getByTestId('spatial-studio-import-msg').textContent).toMatch(
+        /DXF/i,
+      );
+    });
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      walls: Array<{ lengthMm: number }>;
+    };
+    expect(next.walls.length).toBeGreaterThanOrEqual(1);
+    expect(next.walls[0]!.lengthMm).toBe(3000);
+  });
+
+  it('shows PDF guidance without mutating layout', async () => {
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={{
+          ...project,
+          kitchenLayout: { walls: [], placements: [] },
+        }}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    const input = screen.getByTestId(
+      'spatial-studio-import-input',
+    ) as HTMLInputElement;
+    const file = new File(['%PDF-1.4'], 'plano.pdf', {
+      type: 'application/pdf',
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('spatial-studio-import-msg').textContent).toMatch(
+        /PDF/i,
+      );
+    });
+    expect(onChangeLayout).not.toHaveBeenCalled();
+  });
+
   it('adds a second environment (multi-ambiente)', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {

@@ -733,6 +733,54 @@ function kitchenPlacementToApi(p: {
   };
 }
 
+function kitchenUnderlayToApi(
+  u: NonNullable<Project['kitchenLayout']>['underlay'],
+): Record<string, unknown> | null {
+  if (!u) return null;
+  return {
+    image_url: u.imageUrl,
+    width_mm: u.widthMm,
+    height_mm: u.heightMm,
+    origin_x_mm: u.originXMm ?? null,
+    origin_y_mm: u.originYMm ?? null,
+    opacity: u.opacity ?? null,
+    file_name: u.fileName ?? null,
+  };
+}
+
+function kitchenUnderlayFromApi(
+  raw: unknown,
+): NonNullable<Project['kitchenLayout']>['underlay'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const row = raw as Record<string, unknown>;
+  const imageUrl = str(row.image_url ?? row.imageUrl);
+  if (!imageUrl) return undefined;
+  const widthMm = Math.max(1, Math.round(num(row.width_mm ?? row.widthMm, 5000)));
+  const heightMm = Math.max(
+    1,
+    Math.round(num(row.height_mm ?? row.heightMm, 4000)),
+  );
+  const ox = row.origin_x_mm ?? row.originXMm;
+  const oy = row.origin_y_mm ?? row.originYMm;
+  const op = row.opacity;
+  const fileName = str(row.file_name ?? row.fileName) || undefined;
+  return {
+    imageUrl,
+    widthMm,
+    heightMm,
+    ...(ox === null || ox === undefined || ox === ''
+      ? {}
+      : { originXMm: num(ox) }),
+    ...(oy === null || oy === undefined || oy === ''
+      ? {}
+      : { originYMm: num(oy) }),
+    ...(op === null || op === undefined || op === ''
+      ? {}
+      : { opacity: Math.min(1, Math.max(0, num(op))) }),
+    ...(fileName ? { fileName } : {}),
+  };
+}
+
 function kitchenLayoutToApi(
   layout: Project['kitchenLayout'],
 ): Record<string, unknown> | null {
@@ -746,6 +794,7 @@ function kitchenLayoutToApi(
       layout.wallCabinetZMm === undefined ? null : layout.wallCabinetZMm,
     show_countertop:
       layout.showCountertop === undefined ? null : layout.showCountertop,
+    underlay: kitchenUnderlayToApi(layout.underlay),
     active_space_id: layout.activeSpaceId ?? null,
     spaces: layout.spaces?.length
       ? layout.spaces.map((s) => ({
@@ -759,6 +808,7 @@ function kitchenLayoutToApi(
             s.wallCabinetZMm === undefined ? null : s.wallCabinetZMm,
           show_countertop:
             s.showCountertop === undefined ? null : s.showCountertop,
+          underlay: kitchenUnderlayToApi(s.underlay),
         }))
       : null,
   };
@@ -861,6 +911,7 @@ function kitchenLayoutFromApi(
     const sBc = optionalPlanMm(sr.base_clearance_mm ?? sr.baseClearanceMm);
     const sWz = optionalPlanMm(sr.wall_cabinet_z_mm ?? sr.wallCabinetZMm);
     const sCt = sr.show_countertop ?? sr.showCountertop;
+    const sUnderlay = kitchenUnderlayFromApi(sr.underlay);
     return {
       id: str(sr.id),
       name: str(sr.name) || 'Espacio',
@@ -871,6 +922,7 @@ function kitchenLayoutFromApi(
       ...(sCt === null || sCt === undefined || sCt === ''
         ? {}
         : { showCountertop: Boolean(sCt) }),
+      ...(sUnderlay ? { underlay: sUnderlay } : {}),
     };
   });
 
@@ -895,12 +947,15 @@ function kitchenLayoutFromApi(
       ? undefined
       : str(activeSpaceIdRaw);
 
+  const underlay = kitchenUnderlayFromApi(row.underlay);
+
   return {
     walls,
     placements,
     ...(layoutBc === undefined ? {} : { baseClearanceMm: layoutBc }),
     ...(wallCabinetZMm === undefined ? {} : { wallCabinetZMm }),
     ...(showCountertop === undefined ? {} : { showCountertop }),
+    ...(underlay ? { underlay } : {}),
     ...(hasSpaces ? { spaces } : {}),
     ...(activeSpaceId ? { activeSpaceId } : {}),
   };

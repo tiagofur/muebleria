@@ -273,6 +273,42 @@ describe('apiMappers', () => {
     });
   });
 
+  it('round-trips kitchen plan underlay', () => {
+    const p: Project = {
+      id: 'pr-underlay',
+      name: 'Con plano',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+        underlay: {
+          imageUrl: '/api/media/plan.png',
+          widthMm: 5000,
+          heightMm: 4000,
+          originXMm: 0,
+          originYMm: 0,
+          opacity: 0.4,
+          fileName: 'plan.png',
+        },
+      },
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    const u = kl.underlay as Record<string, unknown>;
+    expect(u.image_url).toBe('/api/media/plan.png');
+    expect(u.width_mm).toBe(5000);
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.kitchenLayout?.underlay?.imageUrl).toBe('/api/media/plan.png');
+    expect(round.kitchenLayout?.underlay?.heightMm).toBe(4000);
+  });
+
   it('round-trips multi-space kitchen layouts', () => {
     const p: Project = {
       id: 'pr-multi',
