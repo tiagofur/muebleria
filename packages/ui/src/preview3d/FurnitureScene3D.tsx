@@ -13,7 +13,15 @@ import {
   type ReactNode,
 } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Bounds, ContactShadows, OrbitControls, PerspectiveCamera, OrthographicCamera, Edges } from '@react-three/drei';
+import {
+  Bounds,
+  ContactShadows,
+  Environment,
+  OrbitControls,
+  PerspectiveCamera,
+  OrthographicCamera,
+  Edges,
+} from '@react-three/drei';
 import * as THREE from 'three';
 import { offsetMmFromPlanPoint, type ResolvedBoardPart } from '@muebles/domain';
 import {
@@ -29,9 +37,16 @@ import { BoardMeshMaterial } from './BoardMeshMaterial';
 import { MeasurementTool } from './MeasurementTool';
 import { KeyboardNav } from './KeyboardNav';
 import { ModelExporter, type ModelFormat } from './ModelExporter';
+import {
+  DEFAULT_SCENE_LIGHTING_MODE,
+  planSceneLighting,
+  type SceneLightingMode,
+} from './sceneLighting';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
+
+export type { SceneLightingMode } from './sceneLighting';
 
 export type FurnitureSceneModule = {
   readonly key: string;
@@ -165,6 +180,11 @@ export type FurnitureScene3DProps = {
   readonly showHint?: boolean;
   /** Subtle floor grid in mm (obra look). */
   readonly showFloorGrid?: boolean;
+  /**
+   * Scene lighting + material response preset.
+   * present = multi-light + env + glossier melamine (default for Proyectar).
+   */
+  readonly lightingMode?: SceneLightingMode;
 };
 
 function BoardMesh({
@@ -174,6 +194,7 @@ function BoardMesh({
   selected = false,
   dimmed = false,
   onSelect,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
 }: {
   readonly visual: BoardPartVisual;
   readonly showWireframe?: boolean;
@@ -181,6 +202,7 @@ function BoardMesh({
   readonly selected?: boolean;
   readonly dimmed?: boolean;
   readonly onSelect?: (partId: string) => void;
+  readonly lightingMode?: SceneLightingMode;
 }): ReactNode {
   const [w, t, l] = visual.size;
   const transparent = showWireframe || dimmed;
@@ -236,17 +258,18 @@ function BoardMesh({
               transparent={transparent}
               opacity={opacity}
               depthWrite={!transparent}
-              roughness={0.72}
+              roughness={0.55}
               metalness={0.04}
             />
           }
         >
           <BoardMeshMaterial
-            key={`${visual.id}:${visual.textureUrl ?? ''}:${visual.grain}:${visual.color}`}
+            key={`${visual.id}:${visual.textureUrl ?? ''}:${visual.grain}:${visual.color}:${lightingMode}`}
             visual={visual}
             selected={selected}
             transparent={transparent}
             opacity={opacity}
+            lightingMode={lightingMode}
           />
         </Suspense>
         {showEdges ? (
@@ -445,6 +468,7 @@ function ModuleGroup({
   onModuleFreeMove,
   onModuleFreeDragStart,
   onModuleFreeDragEnd,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   controlsRef,
   setOrbitSuppressed,
 }: {
@@ -460,6 +484,7 @@ function ModuleGroup({
   readonly onSelectPart?: (partId: string) => void;
   readonly moduleSelected?: boolean;
   readonly onSelectModule?: (moduleKey: string) => void;
+  readonly lightingMode?: SceneLightingMode;
   readonly wallDrag?: {
     readonly originXMm: number;
     readonly originYMm: number;
@@ -669,6 +694,7 @@ function ModuleGroup({
             selected={selected}
             dimmed={dimmed}
             onSelect={onSelectPart}
+            lightingMode={lightingMode}
           />
         );
       })}
@@ -768,6 +794,7 @@ function SceneContent({
   selectedWallId,
   onSelectWall,
   showFloorGrid,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -805,25 +832,73 @@ function SceneContent({
   readonly selectedWallId?: string | null;
   readonly onSelectWall?: (wallId: string) => void;
   readonly showFloorGrid?: boolean;
+  readonly lightingMode?: SceneLightingMode;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
   );
+  const lighting = useMemo(
+    () =>
+      planSceneLighting(
+        lightingMode ?? DEFAULT_SCENE_LIGHTING_MODE,
+        framing.maxDim,
+      ),
+    [lightingMode, framing.maxDim],
+  );
+  const lightMode = lightingMode ?? DEFAULT_SCENE_LIGHTING_MODE;
 
   return (
     <>
-      <color attach="background" args={['#1a1c1e']} />
-      <ambientLight intensity={0.55} />
-      <directionalLight
-        position={[framing.maxDim, framing.maxDim * 1.4, framing.maxDim * 0.6]}
-        intensity={1.05}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+      <color attach="background" args={[lighting.background]} />
+      <ambientLight intensity={lighting.ambient} />
+      <hemisphereLight
+        args={[lighting.hemiSky, lighting.hemiGround, lighting.hemiIntensity]}
       />
-      <hemisphereLight args={['#f0f4f8', '#3d3a35', 0.35]} />
+      <directionalLight
+        position={[...lighting.key.pos]}
+        intensity={lighting.key.intensity}
+        color={lighting.key.color ?? '#ffffff'}
+        castShadow={lighting.key.castShadow}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-bias={-0.00015}
+        shadow-normalBias={0.6}
+      />
+      {lighting.fill ? (
+        <directionalLight
+          position={[...lighting.fill.pos]}
+          intensity={lighting.fill.intensity}
+          color={lighting.fill.color ?? '#ffffff'}
+        />
+      ) : null}
+      {lighting.rim ? (
+        <directionalLight
+          position={[...lighting.rim.pos]}
+          intensity={lighting.rim.intensity}
+          color={lighting.rim.color ?? '#ffffff'}
+        />
+      ) : null}
+      {lighting.spot ? (
+        <spotLight
+          position={[...lighting.spot.pos]}
+          intensity={lighting.spot.intensity}
+          angle={lighting.spot.angle}
+          penumbra={lighting.spot.penumbra}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+        />
+      ) : null}
+      {lighting.useEnvironment ? (
+        <Suspense fallback={null}>
+          <Environment
+            preset="warehouse"
+            environmentIntensity={lighting.environmentIntensity}
+          />
+        </Suspense>
+      ) : null}
 
       <Bounds fit margin={1.25}>
         <group
@@ -896,6 +971,7 @@ function SceneContent({
               onModuleFreeMove={onModuleFreeMove}
               onModuleFreeDragStart={onModuleFreeDragStart}
               onModuleFreeDragEnd={onModuleFreeDragEnd}
+              lightingMode={lightMode}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
             />
@@ -985,6 +1061,7 @@ export function FurnitureScene3D({
   selectedWallId = null,
   onSelectWall,
   showFloorGrid = false,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -1177,6 +1254,7 @@ export function FurnitureScene3D({
               selectedWallId={selectedWallId}
               onSelectWall={onSelectWall}
               showFloorGrid={showFloorGrid}
+              lightingMode={lightingMode}
             />
           </Suspense>          </Canvas>
         </Suspense>

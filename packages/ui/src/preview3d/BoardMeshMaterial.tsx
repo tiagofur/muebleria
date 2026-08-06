@@ -20,6 +20,10 @@ import {
   type BoardPartVisual,
 } from './boardPartVisual';
 import { createGrainCanvas } from './grainTexture';
+import {
+  boardPhysicalResponse,
+  type SceneLightingMode,
+} from './sceneLighting';
 
 type SharedMatProps = {
   readonly color: string;
@@ -28,6 +32,7 @@ type SharedMatProps = {
   readonly transparent: boolean;
   readonly opacity: number;
   readonly depthWrite: boolean;
+  readonly lightingMode: SceneLightingMode;
 };
 
 /**
@@ -83,8 +88,14 @@ function PhotoTextureMaterial({
     applyUv(map, widthMm, lengthMm, tileWidthMm, tileLengthMm);
   }, [map, widthMm, lengthMm, tileWidthMm, tileLengthMm]);
 
+  const phys = boardPhysicalResponse({
+    hasMap: true,
+    hasGrain: false,
+    lightingMode: shared.lightingMode,
+  });
+
   return (
-    <meshStandardMaterial
+    <meshPhysicalMaterial
       key={`photo:${url}`}
       map={map}
       // White so the photo shows true colors (map * color).
@@ -94,8 +105,11 @@ function PhotoTextureMaterial({
       transparent={shared.transparent}
       opacity={shared.opacity}
       depthWrite={shared.depthWrite}
-      roughness={0.7}
-      metalness={0.02}
+      roughness={phys.roughness}
+      metalness={phys.metalness}
+      clearcoat={phys.clearcoat}
+      clearcoatRoughness={phys.clearcoatRoughness}
+      envMapIntensity={phys.envMapIntensity}
     />
   );
 }
@@ -130,9 +144,14 @@ function SolidOrGrainMaterial({
 
   // Remount when switching solid ↔ grain so Three drops the previous map.
   const matKey = grain === 1 && map ? `grain:${color}` : `solid:${color}`;
+  const phys = boardPhysicalResponse({
+    hasMap: Boolean(map),
+    hasGrain: grain === 1,
+    lightingMode: shared.lightingMode,
+  });
 
   return (
-    <meshStandardMaterial
+    <meshPhysicalMaterial
       key={matKey}
       map={map ?? null}
       // Map already carries the base color; keep white to avoid double-tint.
@@ -142,8 +161,11 @@ function SolidOrGrainMaterial({
       transparent={shared.transparent}
       opacity={shared.opacity}
       depthWrite={shared.depthWrite}
-      roughness={map ? 0.85 : 0.55}
-      metalness={0.04}
+      roughness={phys.roughness}
+      metalness={phys.metalness}
+      clearcoat={phys.clearcoat}
+      clearcoatRoughness={phys.clearcoatRoughness}
+      envMapIntensity={phys.envMapIntensity}
     />
   );
 }
@@ -156,11 +178,13 @@ export function BoardMeshMaterial({
   selected,
   transparent,
   opacity,
+  lightingMode = 'present',
 }: {
   readonly visual: BoardPartVisual;
   readonly selected: boolean;
   readonly transparent: boolean;
   readonly opacity: number;
+  readonly lightingMode?: SceneLightingMode;
 }): ReactNode {
   const [w, , l] = visual.size;
   const shared: SharedMatProps = {
@@ -170,6 +194,7 @@ export function BoardMeshMaterial({
     transparent,
     opacity,
     depthWrite: !transparent,
+    lightingMode,
   };
 
   // Outer key forces full material swap between surface modes.

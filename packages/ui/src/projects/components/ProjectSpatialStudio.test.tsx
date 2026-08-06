@@ -324,6 +324,32 @@ EOF
     expect(typeof next.placements[0]!.freeYMm).toBe('number');
   });
 
+  it('exposes lighting mode selector for 3D scene', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={{
+          ...project,
+          kitchenLayout: {
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [],
+          },
+        }}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    const sel = screen.getByTestId(
+      'spatial-studio-lighting',
+    ) as HTMLSelectElement;
+    expect(sel.value).toBe('present');
+    fireEvent.change(sel, { target: { value: 'workshop' } });
+    expect(sel.value).toBe('workshop');
+  });
+
   it('shows free-mode inspector for island placement', () => {
     const projectIsland: Project = {
       ...project,

@@ -78,6 +78,8 @@ import {
   materialColorMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
+  DEFAULT_SCENE_LIGHTING_MODE,
+  type SceneLightingMode,
 } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
@@ -214,6 +216,9 @@ export function ProjectSpatialStudio({
   const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
   const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
   const [showFloorGrid, setShowFloorGrid] = useState(true);
+  const [lightingMode, setLightingMode] = useState<SceneLightingMode>(
+    DEFAULT_SCENE_LIGHTING_MODE,
+  );
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const wallDragSession = useRef(false);
   const appliedBootstrap = useRef(false);
@@ -1930,6 +1935,24 @@ export function ProjectSpatialStudio({
               >
                 Grilla
               </button>
+              <label
+                className="spatial-studio__lighting-field"
+                title="Iluminación de la escena 3D"
+              >
+                <span className="spatial-studio__sr-only">Iluminación</span>
+                <select
+                  value={lightingMode}
+                  onChange={(e) =>
+                    setLightingMode(e.target.value as SceneLightingMode)
+                  }
+                  data-testid="spatial-studio-lighting"
+                  aria-label="Modo de iluminación"
+                >
+                  <option value="present">Luz: Presentación</option>
+                  <option value="workshop">Luz: Taller</option>
+                  <option value="soft">Luz: Suave</option>
+                </select>
+              </label>
             </div>
           </div>
 
@@ -1957,6 +1980,7 @@ export function ProjectSpatialStudio({
                 materialColors={materialColors}
                 materialTextures={materialTextures}
                 surfaceMode={DEFAULT_MATERIAL_SURFACE_MODE}
+                lightingMode={lightingMode}
                 showOutlines={showOutlines}
                 showWireframe={showWireframe}
                 showFloorGrid={showFloorGrid}

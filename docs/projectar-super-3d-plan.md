@@ -185,7 +185,8 @@ Cada parte es entregable autónomo, testeable, idealmente PR &lt; 400 líneas cu
 | **Import plano PDF/DXF** | **Hecho (v1)** — DXF LINE/LWPOLYLINE → muros; PNG/JPG underlay + escala mm; PDF → exportá a imagen |
 | **Zoclo en BOM** | **Hecho (v1)** — `baseMode` + `B`; board `ZOCLO` (fallback FRENTE); strip `ZOCLO_PERFIL` ml; `PATAS` |
 | **Empaque herrajes (barras)** | **Hecho** — `Hardware.packageSize` + lista compra ceil + export Consumo/A comprar/Paquetes |
-| Luces / materiales PBR | Pendiente |
+| **Luces / materiales PBR** | **Hecho (v1 liviano)** — presets present/workshop/soft; meshPhysical + clearcoat; Environment warehouse en present |
+| Colaboración multi-usuario en el plano | Pendiente |
 | Colaboración multi-usuario en el plano | Pendiente |
 
 ---

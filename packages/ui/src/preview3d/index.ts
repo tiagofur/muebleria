@@ -8,7 +8,13 @@ export {
   type FurnitureScene3DProps,
   type FurnitureSceneModule,
   type FurnitureSceneWall,
+  type SceneLightingMode,
 } from './FurnitureScene3D';
+export {
+  DEFAULT_SCENE_LIGHTING_MODE,
+  planSceneLighting,
+  boardPhysicalResponse,
+} from './sceneLighting';
 export {
   PartInspector,
   type PartInspectorProps,
