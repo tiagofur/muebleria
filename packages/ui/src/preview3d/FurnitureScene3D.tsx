@@ -136,6 +136,8 @@ export type FurnitureScene3DProps = {
    * keeps a fixed ~380px canvas for modals/editors.
    */
   readonly fillViewport?: boolean;
+  /** When false, hide orbit/help hint (studio toolbar replaces it). Default true. */
+  readonly showHint?: boolean;
 };
 
 function BoardMesh({
@@ -768,6 +770,7 @@ export function FurnitureScene3D({
   onModuleWallOffset,
   wallDragEnabled = false,
   fillViewport = false,
+  showHint = true,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -827,7 +830,7 @@ export function FurnitureScene3D({
 
   return (
     <div className={rootClass} style={style} data-testid={testId}>
-      {!fillViewport ? (
+      {showHint && !fillViewport ? (
         <p className="module-scene-3d__hint">{hintText}</p>
       ) : null}
       <div
@@ -835,7 +838,7 @@ export function FurnitureScene3D({
         tabIndex={0}
         aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
       >
-        {fillViewport ? (
+        {showHint && fillViewport ? (
           <p className="module-scene-3d__hint module-scene-3d__hint--overlay">
             {hintText}
           </p>

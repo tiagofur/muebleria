@@ -8,7 +8,8 @@
 
 - Plan: `docs/projectar-super-3d-plan.md` (Parte 0–6)
 - **Parte 0 Viewport hero ✅:** `fillViewport` en FurnitureScene3D; CSS `--fill` sin 380px; hint overlay; chrome más denso
-- **Siguiente:** Parte 1 Tooling escena (toolbar cámara / planta toggle)
+- **Parte 1 Tooling escena ✅:** toolbar flotante (vistas, contornos, rayos X, plano mini 2D, mode pill)
+- **Siguiente:** Parte 2 Lista / colocación más Promob
 
 ## Proyectar — place & move 3D (Fase A)
 

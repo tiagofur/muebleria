@@ -32,6 +32,7 @@ import {
   reorderPlacementOnWall,
   resolveBaseClearanceMm,
   resolveModuleMeasurePreset,
+  resolveWallFrames,
 } from '@muebles/domain';
 import {
   ArrowDown,
@@ -39,7 +40,13 @@ import {
   ArrowRight,
   ArrowUp,
   Box,
+  Eye,
+  EyeOff,
   Lock,
+  Map as MapIcon,
+  Move3d,
+  RefreshCw,
+  Scan,
   X,
 } from 'lucide-react';
 import {
@@ -140,6 +147,13 @@ export function ProjectSpatialStudio({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [targetWallId, setTargetWallId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('props');
+  const [showOutlines, setShowOutlines] = useState(true);
+  const [showWireframe, setShowWireframe] = useState(false);
+  const [showPlan2d, setShowPlan2d] = useState(false);
+  const [cameraView, setCameraView] = useState<{
+    readonly type: 'front' | 'top' | 'side' | 'isometric';
+    readonly ts: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -300,7 +314,36 @@ export function ProjectSpatialStudio({
     return out;
   }, [layout.placements, preview.walls, preview.modules]);
 
+  const planFrames = useMemo(
+    () => resolveWallFrames(layout.walls),
+    [layout.walls],
+  );
+
+  const planMini = useMemo(() => {
+    if (planFrames.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const f of planFrames) {
+      minX = Math.min(minX, f.originXMm, f.endXMm);
+      minY = Math.min(minY, f.originYMm, f.endYMm);
+      maxX = Math.max(maxX, f.originXMm, f.endXMm);
+      maxY = Math.max(maxY, f.originYMm, f.endYMm);
+    }
+    const pad = 24;
+    const spanX = Math.max(maxX - minX, 1);
+    const spanY = Math.max(maxY - minY, 1);
+    const size = 200;
+    const scale = (size - pad * 2) / Math.max(spanX, spanY);
+    return { minX, minY, pad, scale, size };
+  }, [planFrames]);
+
   if (!open) return null;
+
+  const fireCamera = (type: 'front' | 'top' | 'side' | 'isometric') => {
+    setCameraView({ type, ts: Date.now() });
+  };
 
   const commit = (next: ProjectKitchenLayout) => {
     onChangeLayout(pruneKitchenLayout(next, project.items));
@@ -717,6 +760,114 @@ export function ProjectSpatialStudio({
         </aside>
 
         <main className="spatial-studio__viewport" data-testid="spatial-studio-viewport">
+          <div
+            className="spatial-studio__scene-toolbar"
+            role="toolbar"
+            aria-label="Herramientas de escena 3D"
+            data-testid="spatial-studio-scene-toolbar"
+          >
+            <span className="spatial-studio__mode-pill" data-testid="spatial-studio-mode-pill">
+              <Move3d size={14} strokeWidth={1.5} aria-hidden />
+              Mueble = arrastrar · vacío = orbitar
+            </span>
+            <div className="spatial-studio__toolbar-group" role="group" aria-label="Cámara">
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => fireCamera('isometric')}
+                title="Vista 3/4"
+                data-testid="spatial-studio-cam-iso"
+              >
+                3/4
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => fireCamera('front')}
+                title="Vista frontal"
+                data-testid="spatial-studio-cam-front"
+              >
+                Frente
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => fireCamera('top')}
+                title="Vista planta"
+                data-testid="spatial-studio-cam-top"
+              >
+                Planta
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => fireCamera('side')}
+                title="Vista lateral"
+                data-testid="spatial-studio-cam-side"
+              >
+                Lateral
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => fireCamera('isometric')}
+                title="Reset vista"
+                data-testid="spatial-studio-cam-reset"
+              >
+                <RefreshCw size={14} strokeWidth={1.5} aria-hidden />
+              </button>
+            </div>
+            <div className="spatial-studio__toolbar-group" role="group" aria-label="Visualización">
+              <button
+                type="button"
+                className={
+                  showOutlines
+                    ? 'btn btn--small spatial-studio__tool--on'
+                    : 'btn btn--small'
+                }
+                aria-pressed={showOutlines}
+                onClick={() => setShowOutlines((v) => !v)}
+                title="Contornos de piezas"
+                data-testid="spatial-studio-toggle-outlines"
+              >
+                <Scan size={14} strokeWidth={1.5} aria-hidden /> Contornos
+              </button>
+              <button
+                type="button"
+                className={
+                  showWireframe
+                    ? 'btn btn--small spatial-studio__tool--on'
+                    : 'btn btn--small'
+                }
+                aria-pressed={showWireframe}
+                onClick={() => setShowWireframe((v) => !v)}
+                title="Rayos X (ver interior)"
+                data-testid="spatial-studio-toggle-xray"
+              >
+                {showWireframe ? (
+                  <EyeOff size={14} strokeWidth={1.5} aria-hidden />
+                ) : (
+                  <Eye size={14} strokeWidth={1.5} aria-hidden />
+                )}{' '}
+                Rayos X
+              </button>
+              <button
+                type="button"
+                className={
+                  showPlan2d
+                    ? 'btn btn--small spatial-studio__tool--on'
+                    : 'btn btn--small'
+                }
+                aria-pressed={showPlan2d}
+                onClick={() => setShowPlan2d((v) => !v)}
+                title="Mostrar planta 2D"
+                data-testid="spatial-studio-toggle-plan2d"
+              >
+                <MapIcon size={14} strokeWidth={1.5} aria-hidden /> Plano
+              </button>
+            </div>
+          </div>
+
           {useR3f ? (
             <Suspense
               fallback={
@@ -734,12 +885,15 @@ export function ProjectSpatialStudio({
                 totalDepth={preview.totalDepth}
                 showFloor
                 fillViewport
+                showHint={false}
+                cameraView={cameraView}
                 testId="spatial-studio-scene"
                 colorMode="material"
                 materialColors={materialColors}
                 materialTextures={materialTextures}
                 surfaceMode={DEFAULT_MATERIAL_SURFACE_MODE}
-                showOutlines
+                showOutlines={showOutlines}
+                showWireframe={showWireframe}
                 selectedModuleKey={selectedKey}
                 onSelectModule={(key) => {
                   setSelectedKey(key);
@@ -755,6 +909,129 @@ export function ProjectSpatialStudio({
               WebGL no disponible. Usá un navegador con aceleración 3D.
             </p>
           )}
+
+          {showPlan2d && planMini ? (
+            <div
+              className="spatial-studio__plan-mini"
+              data-testid="spatial-studio-plan-mini"
+            >
+              <div className="spatial-studio__plan-mini-head">
+                <span>Planta 2D</span>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => setShowPlan2d(false)}
+                  aria-label="Cerrar planta"
+                >
+                  <X size={14} strokeWidth={1.5} aria-hidden />
+                </button>
+              </div>
+              <svg
+                width={planMini.size}
+                height={planMini.size}
+                viewBox={`0 0 ${planMini.size} ${planMini.size}`}
+                className="spatial-studio__plan-svg"
+                aria-hidden
+              >
+                {planFrames.map((f) => {
+                  const x1 =
+                    planMini.pad + (f.originXMm - planMini.minX) * planMini.scale;
+                  const y1 =
+                    planMini.pad + (f.originYMm - planMini.minY) * planMini.scale;
+                  const x2 =
+                    planMini.pad + (f.endXMm - planMini.minX) * planMini.scale;
+                  const y2 =
+                    planMini.pad + (f.endYMm - planMini.minY) * planMini.scale;
+                  const active = f.id === activeWallId;
+                  return (
+                    <g key={f.id}>
+                      <line
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke={
+                          active
+                            ? 'var(--accent-500, #3b82f6)'
+                            : 'var(--text-primary, #e2e8f0)'
+                        }
+                        strokeWidth={active ? 5 : 3}
+                        strokeLinecap="square"
+                      />
+                    </g>
+                  );
+                })}
+                {layout.placements.map((p) => {
+                  const wall = planFrames.find((f) => f.id === p.wallId);
+                  if (!wall) return null;
+                  const angle = ((wall.angleDeg % 360) + 360) % 360;
+                  const w = moduleWidth(
+                    project.items.find((i) => i.id === p.itemId) ?? {
+                      id: p.itemId,
+                      moduleId: '',
+                      quantity: 1,
+                      optionChoices: {},
+                    },
+                    modules,
+                  );
+                  let rx =
+                    planMini.pad +
+                    (wall.originXMm - planMini.minX) * planMini.scale;
+                  let ry =
+                    planMini.pad +
+                    (wall.originYMm - planMini.minY) * planMini.scale;
+                  let rw = Math.max(6, w * planMini.scale);
+                  let rh = 10;
+                  if (angle > 45 && angle < 135) {
+                    rx =
+                      planMini.pad +
+                      (wall.originXMm - planMini.minX) * planMini.scale -
+                      5;
+                    ry =
+                      planMini.pad +
+                      (wall.originYMm + p.offsetMm - planMini.minY) *
+                        planMini.scale;
+                    rw = 10;
+                    rh = Math.max(6, w * planMini.scale);
+                  } else {
+                    rx =
+                      planMini.pad +
+                      (wall.originXMm + p.offsetMm - planMini.minX) *
+                        planMini.scale;
+                    ry =
+                      planMini.pad +
+                      (wall.originYMm - planMini.minY) * planMini.scale -
+                      5;
+                  }
+                  const key = `${p.itemId}#${p.instanceIndex}`;
+                  const selected = selectedKey === key;
+                  return (
+                    <rect
+                      key={key}
+                      x={rx}
+                      y={ry}
+                      width={rw}
+                      height={rh}
+                      fill={
+                        selected
+                          ? 'var(--accent-500, #3b82f6)'
+                          : p.elevation === 'wall'
+                            ? '#64748b'
+                            : '#22c55e'
+                      }
+                      opacity={0.85}
+                      rx={1}
+                      onClick={() => {
+                        setSelectedKey(key);
+                        setInspectorTab('position');
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  );
+                })}
+              </svg>
+            </div>
+          ) : null}
         </main>
 
         <aside

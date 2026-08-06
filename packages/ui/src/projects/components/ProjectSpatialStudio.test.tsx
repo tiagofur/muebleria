@@ -98,6 +98,42 @@ describe('ProjectSpatialStudio', () => {
     expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
   });
 
+  it('shows scene toolbar and can toggle plan mini', async () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [
+          { id: 'w1', lengthMm: 3000, angleDeg: 0, originXMm: 0, originYMm: 0 },
+          {
+            id: 'w2',
+            lengthMm: 2500,
+            angleDeg: 90,
+            originXMm: 3000,
+            originYMm: 0,
+          },
+        ],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    expect(
+      await screen.findByTestId('spatial-studio-scene-toolbar'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('spatial-studio-mode-pill')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('spatial-studio-toggle-plan2d'));
+    expect(screen.getByTestId('spatial-studio-plan-mini')).toBeTruthy();
+  });
+
   it('uses fillViewport studio layout class for hero 3D', async () => {
     const projectWithWalls: Project = {
       ...project,
