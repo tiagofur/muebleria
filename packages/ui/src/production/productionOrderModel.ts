@@ -6,7 +6,10 @@
 import type { Project, ProductionCutRow } from '@muebles/domain';
 import { isProductionQueueStatus } from './productionHelpers';
 
-/** Sub-views of a production order hub (docs/production-module.md §5.1). */
+/**
+ * Sub-views of a production order hub (docs/production-module.md §5.1).
+ * Documentos owns all factory downloads — former `exports` tab is an alias.
+ */
 export const PRODUCTION_ORDER_TABS = [
   'resumen',
   'modulos',
@@ -16,7 +19,6 @@ export const PRODUCTION_ORDER_TABS = [
   'vistas',
   'optimizacion',
   'documentos',
-  'exports',
 ] as const;
 
 export type ProductionOrderTab = (typeof PRODUCTION_ORDER_TABS)[number];
@@ -33,25 +35,13 @@ export const PRODUCTION_ORDER_TAB_LABELS: Readonly<
   vistas: 'Vistas',
   optimizacion: 'Optimización',
   documentos: 'Documentos',
-  exports: 'Exports',
 };
 
 /**
- * Tabs fully implemented in this slice. Others render a placeholder
- * pointing at the roadmap issue (no silent empty screens).
+ * Tabs fully implemented. (Kept for call sites that gate on readiness.)
  */
 export const PRODUCTION_ORDER_TABS_READY: ReadonlySet<ProductionOrderTab> =
-  new Set([
-    'resumen',
-    'modulos',
-    'piso',
-    'despiece',
-    'herrajes',
-    'vistas',
-    'optimizacion',
-    'documentos',
-    'exports',
-  ]);
+  new Set(PRODUCTION_ORDER_TABS);
 
 export function isProductionOrderTab(value: string): value is ProductionOrderTab {
   return (PRODUCTION_ORDER_TABS as readonly string[]).includes(value);
@@ -60,6 +50,8 @@ export function isProductionOrderTab(value: string): value is ProductionOrderTab
 export function parseProductionOrderTab(
   value: string | null | undefined,
 ): ProductionOrderTab {
+  // Legacy URL: /produccion/:id/exports → Documentos
+  if (value === 'exports') return 'documentos';
   if (value && isProductionOrderTab(value)) return value;
   return 'resumen';
 }
