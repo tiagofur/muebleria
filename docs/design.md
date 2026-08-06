@@ -699,14 +699,14 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Paths:**
   - `/produccion` — cola de trabajo
   - `/produccion/:projectId` — hub de orden (OP)
-  - `/produccion/:projectId/:tab` — sub-vista (`resumen`, `exports`, …)
+  - `/produccion/:projectId/:tab` — sub-vista (`resumen`, `documentos`, …; legacy `exports` → documentos)
 - **Código:** `ProductionWorkspace` → `ProductionQueue` | `ProductionOrderHub` (`packages/ui/src/production/`)
 - **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
 - **Patrón:** workspace de fábrica (no editor de cotización)
 - **Contenido:**
-  - Cola: tabs accepted / produced; CTA primario **Abrir orden**
-  - Hub tabs: Resumen · Módulos · **Despiece** · **Herrajes** · **Vistas** (planta + elevaciones + 3D) · **Optimización** (L0 estimado / L1 preview / L2 import nesting) · **Documentos** · Exports
-  - Optimización: capas etiquetadas; Optimizer Excel sigue siendo plan de corte oficial; CSV cut-list genérico en Despiece/Documentos/Exports
+  - Cola: tabs accepted / produced; CTA primario **Abrir orden**; Pack y Marcar en planta secundarios. **Sin** muro Optimizer/herrajes/etiquetas en la card (viven en el hub)
+  - Hub tabs: Resumen · Módulos · **Piso** · **Despiece** · **Herrajes** · **Vistas** · **Optimización** · **Documentos** (única pestaña de descargas; URL legacy `…/exports` redirige acá)
+  - Optimización: capas L0/L1/L2; Optimizer Excel = plan de corte oficial
   - Módulos: estado de **piso** (pendiente→cortado→encintado→armado→instalado) — solo fábrica (PROD-3.1)
   - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint)
   - Export piloto CNC JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
@@ -718,9 +718,9 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Hub Despiece: cut-list agrupable (material/módulo); misma población que Optimizer
   - Hub Herrajes: picking list + export
   - Hub Vistas: planta + elevaciones SVG + PDF elevaciones + 3D (sin gizmos de diseño)
-  - Hub Documentos: regenerar pack / Optimizer / herrajes / etiquetas / elevaciones
+  - Hub Documentos: pack / Optimizer / herrajes / etiquetas / elevaciones / armado / CNC pilot
   - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas + resumen + despiece + elevaciones (si hay muros)
-  - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome)
+  - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome ni Más)
 - **RBAC nav:** `roleCanAccessProductionNav` (= roles de export producción F041).  
   Filtro de lista de cotizaciones a solo plant-ready sigue siendo `roleUsesProductionQueue` (**solo** `produccion`).
 - **Icono:** `Factory`

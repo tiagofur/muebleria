@@ -32,8 +32,6 @@ describe('ProductionQueue (F038)', () => {
   it('lists accepted jobs and marks produced', async () => {
     const user = userEvent.setup();
     const onMark = vi.fn();
-    const onOpt = vi.fn();
-    const onHw = vi.fn();
     const onOpen = vi.fn();
     render(
       <ProductionQueue
@@ -45,8 +43,6 @@ describe('ProductionQueue (F038)', () => {
         customerLabelFor={() => 'Ana'}
         salePriceFor={() => 1000}
         onOpenOrder={onOpen}
-        onExportOptimizer={onOpt}
-        onExportHardware={onHw}
         onMarkProduced={onMark}
       />,
     );
@@ -56,8 +52,9 @@ describe('ProductionQueue (F038)', () => {
 
     await user.click(screen.getByTestId('prod-open-order-p1'));
     expect(onOpen).toHaveBeenCalledWith('p1');
-    await user.click(screen.getByTestId('prod-export-opt-p1'));
-    expect(onOpt).toHaveBeenCalledWith('p1');
+    // Hub wired: factory exports leave the queue card.
+    expect(screen.queryByTestId('prod-export-opt-p1')).toBeNull();
+    expect(screen.queryByTestId('prod-export-hw-p1')).toBeNull();
     await user.click(screen.getByTestId('prod-mark-p1'));
     expect(onMark).toHaveBeenCalledWith('p1');
   });
@@ -72,8 +69,7 @@ describe('ProductionQueue (F038)', () => {
         ]}
         customerLabelFor={() => 'Cliente'}
         salePriceFor={() => null}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
+        onOpenOrder={vi.fn()}
         onMarkProduced={vi.fn()}
       />,
     );
@@ -86,11 +82,12 @@ describe('ProductionQueue (F038)', () => {
     );
     expect(screen.getByText('Living hecho')).toBeTruthy();
     expect(screen.queryByTestId('prod-mark-p3')).toBeNull();
-    expect(screen.getByTestId('prod-export-opt-p3')).toBeTruthy();
+    expect(screen.getByTestId('prod-open-order-p3')).toBeTruthy();
   });
 
-  it('shows board view toggle when cutRowsFor is wired (gap #2)', async () => {
+  it('legacy queue (no hub) keeps Optimizer and board preview', async () => {
     const user = userEvent.setup();
+    const onOpt = vi.fn();
     const cutRowsFor = vi.fn(
       () =>
         [
@@ -117,33 +114,29 @@ describe('ProductionQueue (F038)', () => {
         projects={[project('p1', 'accepted', 'Cocina Ana')]}
         customerLabelFor={() => 'Ana'}
         salePriceFor={() => 1000}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
+        onExportOptimizer={onOpt}
         onMarkProduced={vi.fn()}
         cutRowsFor={cutRowsFor}
       />,
     );
-    // Toggle is present because cutRowsFor is wired.
+    await user.click(screen.getByTestId('prod-export-opt-p1'));
+    expect(onOpt).toHaveBeenCalledWith('p1');
     const toggle = screen.getByTestId('prod-board-toggle-p1');
     expect(toggle.textContent).toContain('Ver tablero');
-    // Board view not rendered yet.
-    expect(screen.queryByTestId('production-board-view')).toBeNull();
-    // Expand → board view renders and calls cutRowsFor with the project id.
     await user.click(toggle);
     expect(cutRowsFor).toHaveBeenCalledWith('p1');
     expect(screen.getByTestId('production-board-view')).toBeTruthy();
-    expect(toggle.textContent).toContain('Ocultar tablero');
   });
 
-  it('hides board toggle when cutRowsFor is not provided', () => {
+  it('hides board toggle when hub is wired even if cutRowsFor exists', () => {
     render(
       <ProductionQueue
         projects={[project('p1', 'accepted', 'Cocina Ana')]}
         customerLabelFor={() => 'Ana'}
         salePriceFor={() => 1000}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
+        onOpenOrder={vi.fn()}
         onMarkProduced={vi.fn()}
+        cutRowsFor={() => []}
       />,
     );
     expect(screen.queryByTestId('prod-board-toggle-p1')).toBeNull();

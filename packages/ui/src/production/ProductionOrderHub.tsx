@@ -19,11 +19,8 @@ import {
   ExternalLink,
   Factory,
   FileSpreadsheet,
-  FileText,
   LayoutGrid,
   Package,
-  Tags,
-  Wrench,
   AlertTriangle,
 } from 'lucide-react';
 import {
@@ -36,8 +33,6 @@ import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   PRODUCTION_ORDER_TABS,
   PRODUCTION_ORDER_TAB_LABELS,
-  PRODUCTION_ORDER_TABS_READY,
-  PRODUCTION_ORDER_TAB_ROADMAP,
   type ProductionOrderReadiness,
   type ProductionOrderTab,
 } from './productionOrderModel';
@@ -139,27 +134,6 @@ function CheckRow({
         {detail ? <p className="prod-hub__check-detail">{detail}</p> : null}
       </div>
     </li>
-  );
-}
-
-function PlaceholderTab({
-  tab,
-}: {
-  readonly tab: ProductionOrderTab;
-}): ReactNode {
-  const roadmap = PRODUCTION_ORDER_TAB_ROADMAP[tab];
-  return (
-    <div className="prod-hub__placeholder" data-testid={`prod-hub-placeholder-${tab}`}>
-      <p className="prod-hub__placeholder-title">
-        {PRODUCTION_ORDER_TAB_LABELS[tab]} — próximo
-      </p>
-      <p className="prod-hub__placeholder-body">
-        Esta vista forma parte del módulo Producción y se implementa en el
-        roadmap
-        {roadmap ? ` (${roadmap})` : ''}. El diseño de la obra no se edita
-        desde aquí.
-      </p>
-    </div>
   );
 }
 
@@ -637,102 +611,6 @@ export function ProductionOrderHub({
           />
         ) : null}
 
-        {activeTab === 'exports' ? (
-          <div className="prod-hub__exports" data-testid="prod-hub-exports">
-            <h3 className="prod-hub__section-title">Exports de fábrica</h3>
-            <p className="prod-hub__exports-hint">
-              Solo lectura del diseño. Estos archivos no cambian medidas ni
-              opciones.
-            </p>
-            <div className="prod-hub__export-actions">
-              {onExportProductionPack ? (
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  disabled={exportBusy || !readiness.packGenerable}
-                  onClick={() => {
-                    void onExportProductionPack();
-                  }}
-                  data-testid="prod-hub-exports-pack"
-                >
-                  <Package size={16} strokeWidth={1.5} aria-hidden />
-                  Pack de producción
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="btn"
-                disabled={exportBusy || !readiness.optimizerGenerable}
-                onClick={() => {
-                  void onExportOptimizer();
-                }}
-                data-testid="prod-hub-exports-opt"
-              >
-                <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                Exportar corte (Optimizer)
-              </button>
-              <button
-                type="button"
-                className="btn"
-                disabled={exportBusy}
-                onClick={() => {
-                  void onExportHardware();
-                }}
-                data-testid="prod-hub-exports-hw"
-              >
-                <Wrench size={16} strokeWidth={1.5} aria-hidden />
-                Herrajes
-              </button>
-              {onExportPieceLabels ? (
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={exportBusy}
-                  onClick={() => {
-                    void onExportPieceLabels();
-                  }}
-                  data-testid="prod-hub-exports-labels"
-                >
-                  <Tags size={16} strokeWidth={1.5} aria-hidden />
-                  Etiquetas
-                </button>
-              ) : null}
-              {onExportCutListCsv ? (
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={exportBusy || !readiness.materialsResolved}
-                  onClick={() => {
-                    void onExportCutListCsv();
-                  }}
-                  data-testid="prod-hub-exports-csv"
-                >
-                  <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                  Cut-list CSV
-                </button>
-              ) : null}
-              {onExportCncPilot ? (
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={exportBusy || !readiness.materialsResolved}
-                  onClick={() => {
-                    void onExportCncPilot();
-                  }}
-                  data-testid="prod-hub-exports-cnc"
-                  title="JSON piloto CNC — no reemplaza Optimizer"
-                >
-                  <FileText size={16} strokeWidth={1.5} aria-hidden />
-                  CNC pilot JSON
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {!PRODUCTION_ORDER_TABS_READY.has(activeTab) ? (
-          <PlaceholderTab tab={activeTab} />
-        ) : null}
       </div>
     </section>
   );

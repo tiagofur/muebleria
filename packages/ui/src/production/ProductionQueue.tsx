@@ -1,6 +1,6 @@
 /**
  * Production home — listos para fabricar (F038).
- * Presentation only; export / mark produced owned by shell.
+ * Presentation only; factory file exports live in the OP hub (not the queue).
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
@@ -11,8 +11,6 @@ import {
   Factory,
   FileSpreadsheet,
   LayoutGrid,
-  Tags,
-  Wrench,
 } from 'lucide-react';
 import { EmptyState, InlineLoading } from '../common';
 import { ProductionBoardView } from './ProductionBoardView';
@@ -40,18 +38,23 @@ export type ProductionQueueProps = {
   readonly salePriceFor: (projectId: string) => number | null;
   /** Open production order hub (PROD-0.1). Primary path into the OP. */
   readonly onOpenOrder?: (projectId: string) => void;
-  readonly onExportOptimizer: (projectId: string) => void | Promise<void>;
-  readonly onExportHardware: (projectId: string) => void | Promise<void>;
-  /** Piece labels PDF with edge banding (F046 / #96). */
+  /**
+   * Legacy: Optimizer from the queue when hub is not wired.
+   * With `onOpenOrder`, cut/herrajes/etiquetas live only in the OP hub.
+   */
+  readonly onExportOptimizer?: (projectId: string) => void | Promise<void>;
+  /** @deprecated Queue no longer shows herrajes when hub is wired. */
+  readonly onExportHardware?: (projectId: string) => void | Promise<void>;
+  /** @deprecated Queue no longer shows etiquetas when hub is wired. */
   readonly onExportPieceLabels?: (projectId: string) => void | Promise<void>;
-  /** ZIP pack: Optimizer + herrajes + etiquetas (#134). */
+  /** ZIP pack shortcut from the queue (optional). */
   readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
   readonly onMarkProduced: (projectId: string) => void;
   readonly exportBusy?: boolean;
   readonly loading?: boolean;
   /**
-   * Fase 4 slice 4.1: cut rows for the board view. When provided for a
-   * project, the card shows an expand toggle to view the board plan.
+   * Optional cut-board preview on the card.
+   * Prefer OP hub → Optimización when `onOpenOrder` is available.
    */
   readonly cutRowsFor?: (
     projectId: string,
@@ -75,8 +78,6 @@ export function ProductionQueue({
   salePriceFor,
   onOpenOrder,
   onExportOptimizer,
-  onExportHardware,
-  onExportPieceLabels,
   onExportProductionPack,
   onMarkProduced,
   exportBusy = false,
@@ -85,6 +86,10 @@ export function ProductionQueue({
 }: ProductionQueueProps): ReactNode {
   const [tab, setTab] = useState<ProductionQueueTab>('accepted');
   const [expandedBoard, setExpandedBoard] = useState<string | null>(null);
+  /** Hub is the primary workspace: queue cards stay triage-only. */
+  const hubWired = Boolean(onOpenOrder);
+  /** Board preview on cards only when no hub (legacy) or explicit cutRows. */
+  const showBoardToggle = Boolean(cutRowsFor) && !hubWired;
 
   const rows = useMemo(
     () => filterProductionQueue(projects, tab),
@@ -103,8 +108,8 @@ export function ProductionQueue({
     tab === 'accepted' ? 'Para fabricar' : 'Ya en planta';
   const subtitle =
     tab === 'accepted'
-      ? 'Aceptadas por el cliente. Abrí la orden para pack, despiece, elevaciones y piso — sin editar el diseño aquí.'
-      : 'Marcadas en planta. Reabrí la orden para reexportar, ver avance de piso o regenerar docs.';
+      ? 'Pedidos aceptados. Abrí la orden para pack, despiece y piso — acá solo elegís la obra.'
+      : 'Ya marcadas en planta. Reabrí la orden para reexportar o ver el avance.';
 
   return (
     <section className="prod-queue" aria-label="Cola de producción">
@@ -169,12 +174,12 @@ export function ProductionQueue({
           title={
             tab === 'accepted'
               ? 'No hay cotizaciones aceptadas'
-              : 'Todavía no hay nada marcado en producción'
+              : 'Todavía no hay nada en planta'
           }
           description={
             tab === 'accepted'
-              ? 'Cuando ventas acepte un pedido, va a aparecer acá para cortar.'
-              : 'Las cotizaciones que marques «En producción» se listan acá.'
+              ? 'Cuando ventas acepte un pedido, aparece acá para abrir la orden de fábrica.'
+              : 'Las obras que marques «En planta» se listan en esta pestaña.'
           }
         />
       ) : (
@@ -183,118 +188,104 @@ export function ProductionQueue({
             const sale = salePriceFor(project.id);
             return (
               <li key={project.id} className="prod-queue-card">
-                <div className="prod-queue-card__main">
-                  <div className="prod-queue-card__top">
-                    <h3 className="prod-queue-card__name">{project.name}</h3>
-                    <StatusBadge status={project.status} />
+                <div className="prod-queue-card__row">
+                  <div className="prod-queue-card__main">
+                    <div className="prod-queue-card__top">
+                      <h3 className="prod-queue-card__name">{project.name}</h3>
+                      <StatusBadge status={project.status} />
+                    </div>
+                    <p className="prod-queue-card__client">
+                      {customerLabelFor(project.customerId) || '—'}
+                    </p>
+                    <p className="prod-queue-card__meta">
+                      Actualizado {formatIsoDate(project.updatedAt)}
+                      <span className="prod-queue-card__dot" aria-hidden>
+                        ·
+                      </span>
+                      {project.items.length}{' '}
+                      {project.items.length === 1 ? 'mueble' : 'muebles'}
+                      {sale != null ? (
+                        <>
+                          <span className="prod-queue-card__dot" aria-hidden>
+                            ·
+                          </span>
+                          {formatMoneyDisplay(sale, {
+                            currency: project.currency,
+                          })}
+                        </>
+                      ) : null}
+                    </p>
                   </div>
-                  <p className="prod-queue-card__client">
-                    {customerLabelFor(project.customerId) || '—'}
-                  </p>
-                  <p className="prod-queue-card__meta">
-                    Actualizado {formatIsoDate(project.updatedAt)}
-                    <span className="prod-queue-card__dot" aria-hidden>
-                      ·
-                    </span>
-                    {project.items.length}{' '}
-                    {project.items.length === 1 ? 'mueble' : 'muebles'}
-                    {sale != null ? (
-                      <>
-                        <span className="prod-queue-card__dot" aria-hidden>
-                          ·
-                        </span>
-                        {formatMoneyDisplay(sale, {
-                          currency: project.currency,
-                        })}
-                      </>
+                  <div className="prod-queue-card__actions">
+                    {onOpenOrder ? (
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        onClick={() => onOpenOrder(project.id)}
+                        data-testid={`prod-open-order-${project.id}`}
+                      >
+                        <Factory size={16} strokeWidth={1.5} aria-hidden />
+                        Abrir orden
+                      </button>
                     ) : null}
-                  </p>
+                    {onExportProductionPack ? (
+                      <button
+                        type="button"
+                        className={onOpenOrder ? 'btn' : 'btn btn--primary'}
+                        disabled={exportBusy}
+                        title="ZIP con Optimizer, herrajes, etiquetas y docs de taller"
+                        onClick={() => {
+                          void onExportProductionPack(project.id);
+                        }}
+                        data-testid={`prod-export-pack-${project.id}`}
+                      >
+                        <FileSpreadsheet
+                          size={16}
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
+                        Pack
+                      </button>
+                    ) : null}
+                    {/* Legacy path: no hub — keep Optimizer as primary plant action. */}
+                    {!hubWired && onExportOptimizer ? (
+                      <button
+                        type="button"
+                        className={
+                          onExportProductionPack ? 'btn' : 'btn btn--primary'
+                        }
+                        disabled={exportBusy}
+                        onClick={() => {
+                          void onExportOptimizer(project.id);
+                        }}
+                        data-testid={`prod-export-opt-${project.id}`}
+                      >
+                        <FileSpreadsheet
+                          size={16}
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
+                        {exportBusy ? 'Exportando…' : 'Exportar corte'}
+                      </button>
+                    ) : null}
+                    {project.status === 'accepted' ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => onMarkProduced(project.id)}
+                        data-testid={`prod-mark-${project.id}`}
+                      >
+                        <CheckCircle2
+                          size={16}
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
+                        Marcar en planta
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="prod-queue-card__actions">
-                  {/* Primary: open OP hub when wired (PROD-0.1). */}
-                  {onOpenOrder ? (
-                    <button
-                      type="button"
-                      className="btn btn--primary"
-                      onClick={() => onOpenOrder(project.id)}
-                      data-testid={`prod-open-order-${project.id}`}
-                    >
-                      <Factory size={16} strokeWidth={1.5} aria-hidden />
-                      Abrir orden
-                    </button>
-                  ) : null}
-                  {/* Pack: primary only when hub open is not available. */}
-                  {onExportProductionPack ? (
-                    <button
-                      type="button"
-                      className={onOpenOrder ? 'btn' : 'btn btn--primary'}
-                      disabled={exportBusy}
-                      title="ZIP con Optimizer, herrajes, etiquetas y resumen de pliegos"
-                      onClick={() => {
-                        void onExportProductionPack(project.id);
-                      }}
-                      data-testid={`prod-export-pack-${project.id}`}
-                    >
-                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                      Pack producción
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={
-                      onOpenOrder || onExportProductionPack
-                        ? 'btn'
-                        : 'btn btn--primary'
-                    }
-                    disabled={exportBusy}
-                    onClick={() => {
-                      void onExportOptimizer(project.id);
-                    }}
-                    data-testid={`prod-export-opt-${project.id}`}
-                  >
-                    <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                    {exportBusy ? 'Exportando…' : 'Exportar corte'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={exportBusy}
-                    onClick={() => {
-                      void onExportHardware(project.id);
-                    }}
-                    data-testid={`prod-export-hw-${project.id}`}
-                  >
-                    <Wrench size={16} strokeWidth={1.5} aria-hidden />
-                    Herrajes
-                  </button>
-                  {onExportPieceLabels ? (
-                    <button
-                      type="button"
-                      className="btn"
-                      disabled={exportBusy}
-                      title="Etiquetas de pieza con instrucción de encintado"
-                      onClick={() => {
-                        void onExportPieceLabels(project.id);
-                      }}
-                      data-testid={`prod-export-labels-${project.id}`}
-                    >
-                      <Tags size={16} strokeWidth={1.5} aria-hidden />
-                      Etiquetas
-                    </button>
-                  ) : null}
-                  {project.status === 'accepted' ? (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => onMarkProduced(project.id)}
-                      data-testid={`prod-mark-${project.id}`}
-                    >
-                      <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
-                      Marcar en producción
-                    </button>
-                  ) : null}
-                </div>
-                {cutRowsFor ? (
+                {showBoardToggle ? (
                   <div className="prod-queue-card__board-toggle">
                     <button
                       type="button"
@@ -313,7 +304,9 @@ export function ProductionQueue({
                     </button>
                   </div>
                 ) : null}
-                {expandedBoard === project.id && cutRowsFor ? (
+                {showBoardToggle &&
+                expandedBoard === project.id &&
+                cutRowsFor ? (
                   <div className="prod-queue-card__board">
                     <ProductionBoardView rows={cutRowsFor(project.id) ?? []} />
                   </div>

@@ -46,9 +46,12 @@ describe('productionOrderModel (PROD-0.1 / 0.3)', () => {
   it('parses tabs and defaults to resumen', () => {
     expect(isProductionOrderTab('despiece')).toBe(true);
     expect(isProductionOrderTab('nope')).toBe(false);
+    expect(isProductionOrderTab('exports')).toBe(false);
     expect(parseProductionOrderTab('vistas')).toBe('vistas');
+    expect(parseProductionOrderTab('exports')).toBe('documentos');
     expect(parseProductionOrderTab('x')).toBe('resumen');
     expect(PRODUCTION_ORDER_TABS[0]).toBe('resumen');
+    expect(PRODUCTION_ORDER_TABS).not.toContain('exports');
   });
 
   it('allows production order only for accepted|produced', () => {

@@ -56,7 +56,8 @@ export function ProductionOrderDocumentsPanel({
     <div className="prod-docs" data-testid="prod-hub-documentos">
       <h3 className="prod-hub__section-title">Documentos de taller</h3>
       <p className="prod-hub__exports-hint">
-        Regenerá PDFs y exports con la misma resolución de BOM de esta orden.
+        Pack, Optimizer, herrajes, etiquetas y PDFs — misma resolución de BOM
+        de esta orden. No cambia el diseño.
       </p>
       <ul className="prod-docs__list">
         {documents.map((doc) => {
