@@ -189,6 +189,51 @@ describe('ProjectSpatialStudio', () => {
     expect(screen.getByTestId('spatial-studio-add-space')).toBeTruthy();
   });
 
+  it('does not re-acquire soft lock when parent re-renders with new callbacks', () => {
+    const onAcquire = vi.fn(() => true);
+    const onRelease = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    const { rerender } = render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        planActor={{ userId: 'u-me', userName: 'Yo' }}
+        onAcquirePlanEdit={onAcquire}
+        onReleasePlanEdit={onRelease}
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    expect(onAcquire).toHaveBeenCalledTimes(1);
+
+    // Simulate parent re-render with brand-new callback identities (inline arrows).
+    rerender(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        planActor={{ userId: 'u-me', userName: 'Yo' }}
+        onAcquirePlanEdit={() => onAcquire()}
+        onReleasePlanEdit={() => onRelease()}
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    expect(onAcquire).toHaveBeenCalledTimes(1);
+    expect(onRelease).not.toHaveBeenCalled();
+  });
+
   it('filters list and places on double-click', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {

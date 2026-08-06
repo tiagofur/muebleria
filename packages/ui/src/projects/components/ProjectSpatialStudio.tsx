@@ -236,6 +236,14 @@ export function ProjectSpatialStudio({
   const wallDragSession = useRef(false);
   const appliedBootstrap = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  // Soft-lock handlers often re-created each parent render. Keep them in refs
+  // so the lock effect does not re-run → acquire → store patch → loop.
+  const onAcquirePlanEditRef = useRef(onAcquirePlanEdit);
+  const onRenewPlanEditRef = useRef(onRenewPlanEdit);
+  const onReleasePlanEditRef = useRef(onReleasePlanEdit);
+  onAcquirePlanEditRef.current = onAcquirePlanEdit;
+  onRenewPlanEditRef.current = onRenewPlanEdit;
+  onReleasePlanEditRef.current = onReleasePlanEdit;
 
   useEffect(() => {
     if (!open) return;
@@ -263,31 +271,24 @@ export function ProjectSpatialStudio({
   }, [open, bootstrap]);
 
   // Multi-user soft lock for Proyectar.
+  // Deps are ONLY open/status/actor/project — never callback identity.
   useEffect(() => {
-    if (!open || !statusCanEdit || !planActor || !onAcquirePlanEdit) {
+    if (!open || !statusCanEdit || !planActor || !onAcquirePlanEditRef.current) {
       setPlanLockBlocked(false);
       return;
     }
-    const ok = onAcquirePlanEdit();
+    const ok = onAcquirePlanEditRef.current();
     setPlanLockBlocked(!ok);
     if (!ok) return;
     const interval = window.setInterval(() => {
-      const renewed = onRenewPlanEdit?.() ?? true;
+      const renewed = onRenewPlanEditRef.current?.() ?? true;
       if (!renewed) setPlanLockBlocked(true);
     }, 45_000);
     return () => {
       window.clearInterval(interval);
-      onReleasePlanEdit?.();
+      onReleasePlanEditRef.current?.();
     };
-  }, [
-    open,
-    statusCanEdit,
-    planActor?.userId,
-    project.id,
-    onAcquirePlanEdit,
-    onRenewPlanEdit,
-    onReleasePlanEdit,
-  ]);
+  }, [open, statusCanEdit, planActor?.userId, project.id]);
 
   useEffect(() => {
     if (!open) return;
