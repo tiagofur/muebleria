@@ -194,6 +194,19 @@ export interface ExternalDims {
  */
 export type FurnitureType = 'inferior' | 'superior' | 'alto';
 
+/**
+ * How the floor cabinet meets the floor (zoclo / patas).
+ * - none: no base BOM (wall units, or carcass only)
+ * - plinth_board: melamine plinth component(s), role ZOCLO (material fallback FRENTE)
+ * - plinth_strip: purchased profile by linear meter, role ZOCLO_PERFIL
+ * - legs: hardware feet/levelers, role PATAS
+ */
+export type ModuleBaseMode =
+  | 'none'
+  | 'plinth_board'
+  | 'plinth_strip'
+  | 'legs';
+
 export interface Module {
   readonly id: string;
   readonly code: string;
@@ -208,6 +221,15 @@ export interface Module {
   readonly externalDims?: ExternalDims;
   /** Fundamental furniture type for project measure defaults (#109). */
   readonly furnitureType?: FurnitureType;
+  /**
+   * Floor base treatment (zoclo board / strip / legs). Omit → none.
+   */
+  readonly baseMode?: ModuleBaseMode;
+  /**
+   * Default zoclo/patas height B (mm) for formulas and 3D clearance.
+   * Omit → domain default (100) when baseMode needs a height.
+   */
+  readonly baseClearanceMm?: number;
   /**
    * Commercial measure options offered to sales (H09 / #104).
    * Source of truth for sellable sizes — not Structure.presets.

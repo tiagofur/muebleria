@@ -44,6 +44,7 @@ export type {
   KitchenPlanUnderlay,
   KitchenSpace,
   ProjectKitchenLayout,
+  ModuleBaseMode,
   InstallationChecklistItem,
   QuotePriceSnapshot,
   Catalog,
@@ -263,6 +264,23 @@ export {
   DEFAULT_UNDERLAY_HEIGHT_MM,
 } from './planImport';
 export type { DxfImportResult, ParseDxfOptions } from './planImport';
+
+export {
+  ZOCLO_BOARD_ROLE,
+  ZOCLO_STRIP_ROLE,
+  PATAS_ROLE,
+  ZOCLO_BOARD_FALLBACK_ROLE,
+  isModuleBaseMode,
+  resolveModuleBaseMode,
+  resolveModuleBaseClearanceMm,
+  resolveBoardOptionChoiceId,
+  plinthStripMeters,
+  filterComponentInstancesForBaseMode,
+  applyBaseModeToHardwareLines,
+  isZocloBoardRole,
+  isZocloStripRole,
+  isPatasRole,
+} from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';
 export type { BoardSheetEstimate } from './boardSheetEstimate';

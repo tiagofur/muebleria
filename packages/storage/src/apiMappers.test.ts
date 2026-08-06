@@ -215,6 +215,24 @@ describe('apiMappers', () => {
     expect(projectFromApi(api as Record<string, unknown>).customerId).toBe('c1');
   });
 
+  it('round-trips module baseMode + baseClearanceMm (zoclo)', () => {
+    const mod: Module = {
+      id: 'mod-z',
+      code: 'BAJO-Z',
+      name: 'Bajo con zoclo',
+      furnitureType: 'inferior',
+      baseMode: 'plinth_board',
+      baseClearanceMm: 120,
+      hardwareLines: [],
+    };
+    const api = moduleToApi(mod);
+    expect(api.base_mode).toBe('plinth_board');
+    expect(api.base_clearance_mm).toBe(120);
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.baseMode).toBe('plinth_board');
+    expect(round.baseClearanceMm).toBe(120);
+  });
+
   it('round-trips module furnitureType (snake + camel read) (#109)', () => {
     const mod: Module = {
       id: 'mod1',

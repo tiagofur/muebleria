@@ -70,11 +70,22 @@ export function hasAnyEdgeEnabled(edges: readonly EdgeAssignment[]): boolean {
 export type { Grain };
 
 /**
- * Safely evaluates simple math formulas involving W, H, D, T, PW, PH, PD variables and numbers.
+ * Safely evaluates simple math formulas involving W, H, D, T, B, PW, PH, PD variables and numbers.
+ * B = plinth / toe-kick height (zoclo), mm.
  */
 export function evaluatePartFormula(
   formula: string,
-  dims: { W: number; H: number; D: number; PW?: number; PH?: number; PD?: number; T?: number; i?: number },
+  dims: {
+    W: number;
+    H: number;
+    D: number;
+    PW?: number;
+    PH?: number;
+    PD?: number;
+    T?: number;
+    B?: number;
+    i?: number;
+  },
   contextInfo?: { structureCode: string; partDescription: string; field: 'length' | 'width' | 'x' | 'y' | 'z' }
 ): number {
   const trimmed = formula.trim();
@@ -85,11 +96,11 @@ export function evaluatePartFormula(
     });
   }
 
-  // Validate allowed characters: digits, decimal point, W/H/D/P/T/L/i, operators, whitespace.
+  // Validate allowed characters: digits, decimal point, W/H/D/P/T/B/L/i, operators, whitespace.
   // Decimal point is required for literals like "1.5" or "W * 1.5" (half-thickness, margins, etc.).
   const clean = trimmed.replace(/\s+/g, '');
-  if (!/^[0-9.WHDTPLi+\-*/()]+$/.test(clean)) {
-    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, L, i y operadores (+, -, *, /, paréntesis).`, {
+  if (!/^[0-9.WHDTPBLi+\-*/()]+$/.test(clean)) {
+    throw new ValidationError(`La fórmula "${formula}" contiene caracteres no válidos. Solo se permiten números (con decimal), W, H, D, P, T, B, L, i y operadores (+, -, *, /, paréntesis).`, {
       ...contextInfo,
       field: contextInfo?.field,
     });
@@ -100,8 +111,9 @@ export function evaluatePartFormula(
   const ph = dims.PH !== undefined ? dims.PH : dims.H;
   const pd = dims.PD !== undefined ? dims.PD : dims.D;
   const t = dims.T !== undefined ? dims.T : 0;
+  const b = dims.B !== undefined ? dims.B : 0;
 
-  // Substitute variables
+  // Substitute variables (multi-letter tokens before single letters)
   const expr = clean
     .replace(/PW/g, String(pw))
     .replace(/PH/g, String(ph))
@@ -111,6 +123,7 @@ export function evaluatePartFormula(
     .replace(/D/g, String(dims.D))
     .replace(/L/g, String(dims.D))
     .replace(/T/g, String(t))
+    .replace(/B/g, String(b))
     .replace(/i/g, String(dims.i ?? 0));
 
   try {

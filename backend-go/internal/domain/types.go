@@ -192,6 +192,11 @@ type Module struct {
 	// defaults (#109 / H14): "inferior" | "superior" | "alto". Empty = inferior
 	// (legacy default).
 	FurnitureType string `json:"furniture_type,omitempty"`
+	// BaseMode: none | plinth_board | plinth_strip | legs (zoclo / patas).
+	// Empty = none.
+	BaseMode string `json:"base_mode,omitempty"`
+	// BaseClearanceMm is default plinth/legs height B (mm). Nil = domain default.
+	BaseClearanceMm *int `json:"base_clearance_mm,omitempty"`
 	// Presets are commercial measure options for sales (H09 / #104).
 	Presets []DimensionPreset `json:"presets,omitempty"`
 	// Components are module-level component instances (doors, shelves, …) for

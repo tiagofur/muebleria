@@ -1915,6 +1915,8 @@ describe('evaluatePartFormula & resolveStructure (F050 / H05)', () => {
       expect(evaluatePartFormula('T * 1.5', { ...dims, T: 18 })).toBe(27);
       expect(evaluatePartFormula('W * 0.5', dims)).toBe(250);
       expect(evaluatePartFormula('.5', dims)).toBe(1); // 0.5 → 1 mm
+      expect(evaluatePartFormula('B', { ...dims, B: 100 })).toBe(100);
+      expect(evaluatePartFormula('H - B', { ...dims, B: 100 })).toBe(620);
     });
 
     it('throws ValidationError for invalid characters or injection attempts', () => {

@@ -10,6 +10,15 @@ import { ResolutionError, ValidationError } from '../errors';
 import {
   resolveModuleMeasurePreset,
 } from '../measurePresets';
+import {
+  applyBaseModeToHardwareLines,
+  filterComponentInstancesForBaseMode,
+  resolveBoardOptionChoiceId,
+  resolveModuleBaseClearanceMm,
+  resolveModuleBaseMode,
+  ZOCLO_BOARD_FALLBACK_ROLE,
+  ZOCLO_BOARD_ROLE,
+} from '../plinth';
 import { defaultPoseForPlacement } from '../spatialPlacement';
 import { resolveStructureForPin } from '../structures/versioning';
 import type {
@@ -138,11 +147,16 @@ function requireMaterialChoice(
   moduleCode: string,
 ): MaterialBoard {
   const group = findOptionGroup(catalog, part.optionRole);
-  const choiceId = optionChoices[part.optionRole];
+  const choiceId = resolveBoardOptionChoiceId(part.optionRole, optionChoices);
 
   if (!choiceId) {
     const required = group?.required !== false;
-    if (required) {
+    // ZOCLO without choice is not required if FRENTE can supply — already tried.
+    const zocloHint =
+      part.optionRole === ZOCLO_BOARD_ROLE
+        ? ` (ni fallback ${ZOCLO_BOARD_FALLBACK_ROLE})`
+        : '';
+    if (required && part.optionRole !== ZOCLO_BOARD_ROLE) {
       throw new ResolutionError(
         `Missing required option choice for role "${part.optionRole}" on part ${part.code ?? part.id}`,
         {
@@ -155,7 +169,7 @@ function requireMaterialChoice(
       );
     }
     throw new ResolutionError(
-      `Missing material choice for role "${part.optionRole}" on part ${part.code ?? part.id}`,
+      `Missing material choice for role "${part.optionRole}" on part ${part.code ?? part.id}${zocloHint}`,
       {
         moduleCode,
         partId: part.id,
@@ -335,7 +349,7 @@ function getComponentThickness(
 ): number {
   const role = component.optionRoles[0];
   if (role) {
-    const choiceId = optionChoices[role];
+    const choiceId = resolveBoardOptionChoiceId(role, optionChoices);
     if (choiceId) {
       const material = catalog.materials.find((m) => m.id === choiceId);
       if (material) {
@@ -354,10 +368,13 @@ function expandComponentInstances(
   idPrefix: string,
   dims: { width: number; height: number; depth: number },
   optionChoices?: OptionChoices,
+  /** Plinth height B (mm) for formulas. */
+  baseClearanceMm = 0,
 ): BoardPart[] {
   const PW = dims.width;
   const PD = dims.depth;
   const PH = dims.height;
+  const B = Math.max(0, baseClearanceMm);
 
   const parts: BoardPart[] = [];
   for (const instance of instances) {
@@ -380,8 +397,8 @@ function expandComponentInstances(
     // Resolve component material thickness
     const T = getComponentThickness(component, optionChoices ?? {}, catalog);
 
-    // Context for geometry evaluation (only parent dims + T are available)
-    const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T };
+    // Context for geometry evaluation (parent dims + T + B zoclo)
+    const geomDims = { W: PW, H: PH, D: PD, PW, PH, PD, T, B };
 
     // Resolve dimensions (W and D of component)
     let lengthMm = 0; // component depth (D)
@@ -417,7 +434,7 @@ function expandComponentInstances(
       instance.placementOverride?.trim() || component.placement || 'custom';
 
     for (let i = 0; i < instance.quantity; i++) {
-      const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, i };
+      const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, B, i };
       const placementPose = defaultPoseForPlacement(
         placement,
         { PW, PH, PD, T },
@@ -486,6 +503,11 @@ export interface ComposedModuleInput {
   readonly catalog: Catalog;
   readonly dims: { width: number; height: number; depth: number };
   readonly optionChoices?: OptionChoices;
+  /** When set, filters zoclo components and supplies B to formulas. */
+  readonly module?: Pick<
+    Module,
+    'baseMode' | 'baseClearanceMm' | 'furnitureType'
+  >;
 }
 
 export interface ComposedModuleResult {
@@ -496,29 +518,47 @@ export interface ComposedModuleResult {
 export function resolveComposedModule(
   input: ComposedModuleInput,
 ): ComposedModuleResult {
-  const { structure, componentInstances, catalog, dims, optionChoices } = input;
+  const { structure, componentInstances, catalog, dims, optionChoices, module } =
+    input;
 
   // Validate the selected dims against presets/externalDims (throws on mismatch).
   resolveStructure(structure, dims);
 
+  const baseMode = module ? resolveModuleBaseMode(module) : 'none';
+  const B = module
+    ? resolveModuleBaseClearanceMm(module)
+    : 0;
+
+  const structureInstances = filterComponentInstancesForBaseMode(
+    structure.components ?? [],
+    catalog.components,
+    baseMode,
+  );
+  const moduleInstances = filterComponentInstancesForBaseMode(
+    componentInstances,
+    catalog.components,
+    baseMode,
+  );
+
   // Structure component instances + module component instances, expanded.
   const structureParts = expandComponentInstances(
-    structure.components ?? [],
+    structureInstances,
     catalog,
     '',
     dims,
     optionChoices,
+    B,
   );
   const moduleParts = expandComponentInstances(
-    componentInstances,
+    moduleInstances,
     catalog,
     '',
     dims,
     optionChoices,
+    B,
   );
   const allParts = [...structureParts, ...moduleParts];
 
-  // Hardware lines deferred from MVP.
   return {
     boardParts: allParts,
     hardwareLines: [],
@@ -610,16 +650,48 @@ export function resolveBom(
       catalog,
       dims,
       optionChoices,
+      module,
     });
     allParts = [...composed.boardParts];
     composedHardware = [...composed.hardwareLines];
-  } else {
-    // Fixed / non-composed path: still validate measurePresetId if presets exist.
-    resolveModuleMeasurePreset(module, measurePresetId);
+
+    // Apply base mode to module hardware (zoclo strip ml, legs qty).
+    const baseMode = resolveModuleBaseMode(module);
+    const widthMm = dims.width;
+    composedHardware = applyBaseModeToHardwareLines(
+      [...composedHardware, ...module.hardwareLines],
+      baseMode,
+      widthMm,
+    );
+
+    for (const part of allParts) validateBoardPart(part, module.code);
+    for (const line of composedHardware) validateHardwareLine(line, module.code);
+
+    return resolveBoardPartsAndHardware(
+      allParts,
+      composedHardware,
+      optionChoices,
+      catalog,
+      module.code,
+    );
   }
 
-  // Merge composed parts/hardware with the module's own hardware lines.
-  const allHardware = [...composedHardware, ...module.hardwareLines];
+  // Fixed / non-composed path: still validate measurePresetId if presets exist.
+  resolveModuleMeasurePreset(module, measurePresetId);
+
+  // No structure: only hardware lines (still apply base mode filters).
+  const dimsFallback = module.externalDims
+    ? {
+        width: module.externalDims.width,
+        height: module.externalDims.height,
+        depth: module.externalDims.depth,
+      }
+    : { width: 600, height: 720, depth: 560 };
+  const allHardware = applyBaseModeToHardwareLines(
+    module.hardwareLines,
+    resolveModuleBaseMode(module),
+    dimsFallback.width,
+  );
 
   for (const part of allParts) validateBoardPart(part, module.code);
   for (const line of allHardware) validateHardwareLine(line, module.code);

@@ -258,6 +258,8 @@ function hardwareLineFromApi(raw: Record<string, unknown>): HardwareLine {
   };
 }
 
+const BASE_MODES = new Set(['none', 'plinth_board', 'plinth_strip', 'legs']);
+
 export function moduleToApi(m: Module): Record<string, unknown> {
   return {
     id: m.id,
@@ -270,6 +272,9 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     categoryId: m.categoryId ?? '',
     structure_id: m.structureId ?? '',
     furniture_type: m.furnitureType ?? '',
+    base_mode: m.baseMode ?? '',
+    base_clearance_mm:
+      m.baseClearanceMm === undefined ? null : m.baseClearanceMm,
     components: (m.components ?? []).map(componentInstanceToApi),
     presets: (m.presets ?? []).map(presetToApi),
     image_url: m.imageUrl ?? '',
@@ -292,6 +297,15 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const furnitureType = FURNITURE_TYPES.has(furnitureTypeRaw)
     ? (furnitureTypeRaw as Module['furnitureType'])
     : undefined;
+  const baseModeRaw = str(raw.base_mode ?? raw.baseMode);
+  const baseMode = BASE_MODES.has(baseModeRaw)
+    ? (baseModeRaw as Module['baseMode'])
+    : undefined;
+  const bcRaw = raw.base_clearance_mm ?? raw.baseClearanceMm;
+  const baseClearanceMm =
+    bcRaw === null || bcRaw === undefined || bcRaw === ''
+      ? undefined
+      : Math.max(0, Math.round(num(bcRaw)));
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
   const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
   const componentsRaw = raw.components;
@@ -306,6 +320,8 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     categoryId: categoryId || undefined,
     structureId: structureId || undefined,
     furnitureType,
+    baseMode,
+    ...(baseClearanceMm === undefined ? {} : { baseClearanceMm }),
     components: Array.isArray(componentsRaw)
       ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
       : undefined,
