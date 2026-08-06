@@ -5,6 +5,7 @@
 
 import JSZip from 'jszip';
 import {
+  buildProductionElevations,
   collectExportIssues,
   generateCutRows,
   generateHardwareList,
@@ -20,6 +21,9 @@ import {
   hardwareListExport,
   pieceLabelsPdfExport,
   materialSummaryPdfExport,
+  wallElevationsPdfExport,
+  productionDespiecePdfExport,
+  productionCoverPdfExport,
 } from '@muebles/excel';
 
 export type ExportProductionPackResult =
@@ -87,11 +91,59 @@ export async function buildProductionPackExport(
       customerName,
     });
 
+    // 5. Cover PDF (PROD-1.2)
+    const moduleUnitCount = project.items.reduce(
+      (s, it) => s + (it.quantity > 0 ? it.quantity : 0),
+      0,
+    );
+    const coverBuffer = await productionCoverPdfExport({
+      projectName: project.name,
+      customerName,
+      status: project.status,
+      moduleUnitCount,
+      cutRowCount: cutRows.length,
+      readyToCut: cutRows.length > 0,
+      notes: project.notes,
+    });
+
+    // 6. Despiece PDF
+    const despieceBuffer = await productionDespiecePdfExport({
+      projectName: project.name,
+      customerName,
+      rows: cutRows,
+    });
+
+    // 7. Elevations PDF when layout has walls (best-effort)
+    let elevationsBuffer: Uint8Array | null = null;
+    const elevations = buildProductionElevations(
+      project,
+      catalog.modules ?? [],
+    );
+    if (elevations.walls.length > 0) {
+      try {
+        elevationsBuffer = await wallElevationsPdfExport({
+          project,
+          modules: catalog.modules ?? [],
+          customerName,
+        });
+      } catch {
+        elevationsBuffer = null;
+      }
+    }
+
     const zip = new JSZip();
+    zip.file(`caratula_${baseName}.pdf`, toUint8Array(coverBuffer));
     zip.file(`optimizer_${baseName}.xlsx`, toUint8Array(optimizerBuffer));
     zip.file(`herrajes_${baseName}.xlsx`, toUint8Array(hardwareBuffer));
     zip.file(`etiquetas_${baseName}.pdf`, toUint8Array(labelsBuffer));
     zip.file(`resumen_materiales_${baseName}.pdf`, toUint8Array(summaryBuffer));
+    zip.file(`despiece_${baseName}.pdf`, toUint8Array(despieceBuffer));
+    if (elevationsBuffer) {
+      zip.file(
+        `elevaciones_${baseName}.pdf`,
+        toUint8Array(elevationsBuffer),
+      );
+    }
 
     const zipContent = await zip.generateAsync({ type: 'uint8array' });
 

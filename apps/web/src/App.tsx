@@ -41,6 +41,7 @@ import {
   calcMaterialCostPerM2,
   calcProjectBreakdown,
   generateCutRows,
+  generateHardwareList,
   generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
@@ -126,6 +127,7 @@ import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import { buildPieceLabelsExport } from './exportPieceLabels';
 import { buildProductionPackExport } from './exportProductionPack';
+import { buildWallElevationsExport } from './exportWallElevations';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
 import {
   buildOptimizerExport,
@@ -1341,6 +1343,61 @@ function AppContent({
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
   );
 
+  const handleExportElevations = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildWallElevationsExport(
+          project,
+          catalog,
+          resolveCustomerName(project.customerId, customers),
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          toast({
+            type: 'error',
+            message:
+              result.issues[0]?.message ??
+              'No se pudo exportar elevaciones (¿hay muros en el layout?)',
+          });
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+  );
+
   const handleExportProductionPack = useCallback(
     async (projectId?: string) => {
       const project =
@@ -1697,6 +1754,9 @@ function AppContent({
           onExportProductionPack={(id) => {
             void handleExportProductionPack(id);
           }}
+          onExportElevations={(id) => {
+            void handleExportElevations(id);
+          }}
           onMarkProduced={markProjectProduced}
           exportBusy={exportBusy}
           cutRowsFor={
@@ -1708,6 +1768,27 @@ function AppContent({
                     return generateCutRows(project, catalog);
                   } catch {
                     return undefined;
+                  }
+                }
+              : undefined
+          }
+          resolveHardware={
+            catalog
+              ? (projectId) => {
+                  const project = projects.find((p) => p.id === projectId);
+                  if (!project) {
+                    return { rows: null, error: 'Proyecto no encontrado' };
+                  }
+                  try {
+                    return { rows: generateHardwareList(project, catalog) };
+                  } catch (err) {
+                    return {
+                      rows: null,
+                      error:
+                        err instanceof Error
+                          ? err.message
+                          : 'Error al resolver herrajes',
+                    };
                   }
                 }
               : undefined
@@ -1727,6 +1808,7 @@ function AppContent({
               : null
           }
           resolveMediaUrl={resolveMediaUrl}
+          hideHardwareCosts={!showCosts}
         />
       ) : null}
       {navId === 'materials' ? (

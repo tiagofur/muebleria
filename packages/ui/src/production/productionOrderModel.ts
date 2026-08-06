@@ -39,7 +39,15 @@ export const PRODUCTION_ORDER_TAB_LABELS: Readonly<
  * pointing at the roadmap issue (no silent empty screens).
  */
 export const PRODUCTION_ORDER_TABS_READY: ReadonlySet<ProductionOrderTab> =
-  new Set(['resumen', 'modulos', 'vistas', 'exports']);
+  new Set([
+    'resumen',
+    'modulos',
+    'despiece',
+    'herrajes',
+    'vistas',
+    'documentos',
+    'exports',
+  ]);
 
 export function isProductionOrderTab(value: string): value is ProductionOrderTab {
   return (PRODUCTION_ORDER_TABS as readonly string[]).includes(value);
@@ -171,8 +179,5 @@ export function buildProductionOrderReadiness(input: {
 export const PRODUCTION_ORDER_TAB_ROADMAP: Readonly<
   Partial<Record<ProductionOrderTab, string>>
 > = {
-  despiece: 'PROD-1.3 / #221',
-  herrajes: 'PROD-1.4 / #222',
   optimizacion: 'PROD-2.3 / #225',
-  documentos: 'PROD-1.4 / #222',
 };

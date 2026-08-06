@@ -297,6 +297,15 @@ export {
 } from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';
+
+export {
+  buildProductionElevations,
+  hasProductionElevations,
+  type ProductionElevationUnit,
+  type ProductionWallElevation,
+  type ProductionUnplacedUnit,
+  type ProductionElevationsResult,
+} from './productionElevations';
 export type { BoardSheetEstimate } from './boardSheetEstimate';
 
 export {
