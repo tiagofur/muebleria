@@ -107,6 +107,7 @@ export {
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,
+  roleCanAccessProductionNav,
   type CostVisibilityOptions,
 } from './rbac';
 

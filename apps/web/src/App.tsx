@@ -64,6 +64,7 @@ import {
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,
+  roleCanAccessProductionNav,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -76,8 +77,9 @@ import {
   ModuleShowcase,
   OptionGroupsScreen,
   ProjectsScreen,
-  ProductionQueue,
+  ProductionWorkspace,
   filterProductionVisible,
+  parseProductionOrderTab,
   Dashboard,
   LoginScreen,
   RegisterScreen,
@@ -139,6 +141,8 @@ import {
   moduleEditPath,
   navFromPath,
   pathForNav,
+  productionOrderFromPath,
+  productionOrderPath,
   projectPath,
   structureEditIdFromPath,
   type EntitySection,
@@ -544,8 +548,12 @@ function AppContent({
     session === 'guest' || roleCanExportProduction(actorRole);
   const canViewPortfolioDashboard =
     session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
-  const useProductionQueue =
+  /** F038: producción role only sees plant-ready quotes in project list. */
+  const filterProjectsToPlant =
     session === 'auth' && roleUsesProductionQueue(actorRole);
+  /** PROD-0.1: factory workspace nav (export roles). */
+  const useProductionWorkspace =
+    session === 'auth' && roleCanAccessProductionNav(actorRole);
   const repository = useMemo(
     () => getRepository(),
     [getRepository],
@@ -601,6 +609,12 @@ function AppContent({
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
   const routeStructureId = navId === 'structures' ? routeEntityId : null;
   const routeComponentId = navId === 'components' ? routeEntityId : null;
+  const productionOrderRoute =
+    navId === 'production' ? productionOrderFromPath(location.pathname) : null;
+  const routeProductionOrderId = productionOrderRoute?.projectId ?? null;
+  const routeProductionOrderTab = parseProductionOrderTab(
+    productionOrderRoute?.tab ?? 'resumen',
+  );
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
   const routeModuleEditId =
     navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;
@@ -682,8 +696,8 @@ function AppContent({
   /** F038: producción only works accepted/produced quotes. */
   const projectsForRole = useMemo(
     () =>
-      useProductionQueue ? filterProductionVisible(projects) : projects,
-    [useProductionQueue, projects],
+      filterProjectsToPlant ? filterProductionVisible(projects) : projects,
+    [filterProjectsToPlant, projects],
   );
   const workshopSettings = resolveWorkshopSettings(workspace?.settings);
   /** Guest/local: full costs; auth uses COST-01 + COST-02 flag (F039/F044). */
@@ -1627,13 +1641,50 @@ function AppContent({
           }
         />
       ) : null}
-      {navId === 'production' && useProductionQueue ? (
-        <ProductionQueue
-          projects={projects}
+      {navId === 'production' && useProductionWorkspace ? (
+        <ProductionWorkspace
+          projects={
+            filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)
+          }
+          orderProjectId={routeProductionOrderId}
+          orderTab={routeProductionOrderTab}
+          onOrderTabChange={(tab) => {
+            if (!routeProductionOrderId) return;
+            const target = productionOrderPath(routeProductionOrderId, tab);
+            if (location.pathname !== target) navigate(target);
+          }}
+          onOpenOrder={(id) => {
+            const target = productionOrderPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
+          onBackToQueue={() => {
+            const target = pathForNav('production');
+            if (location.pathname !== target) navigate(target);
+          }}
+          onOpenDesign={(id) => {
+            const target = projectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
           customerLabelFor={(customerId) =>
             resolveCustomerName(customerId, customers)
           }
           salePriceFor={(id) => projectEstimates[id] ?? null}
+          resolveCutRows={(projectId) => {
+            if (!catalog) {
+              return { rows: null, error: 'Catálogo no disponible' };
+            }
+            const project = projects.find((p) => p.id === projectId);
+            if (!project) {
+              return { rows: null, error: 'Proyecto no encontrado' };
+            }
+            try {
+              return { rows: generateCutRows(project, catalog) };
+            } catch (err) {
+              const message =
+                err instanceof Error ? err.message : 'Error al resolver despiece';
+              return { rows: null, error: message };
+            }
+          }}
           onExportOptimizer={(id) => {
             void handleExportOptimizer(id);
           }}
@@ -1651,9 +1702,6 @@ function AppContent({
           cutRowsFor={
             catalog
               ? (projectId) => {
-                  // Resolve cut rows for the board view. generateCutRows throws
-                  // when the project has no board parts or a missing catalog
-                  // ref — return undefined so the toggle simply doesn't show.
                   const project = projects.find((p) => p.id === projectId);
                   if (!project) return undefined;
                   try {
@@ -1664,6 +1712,21 @@ function AppContent({
                 }
               : undefined
           }
+          modules={modules}
+          catalog3d={
+            catalog
+              ? {
+                  modules,
+                  structures,
+                  components,
+                  materials,
+                  edges,
+                  hardware,
+                  optionGroups,
+                }
+              : null
+          }
+          resolveMediaUrl={resolveMediaUrl}
         />
       ) : null}
       {navId === 'materials' ? (
@@ -1946,11 +2009,19 @@ function AppContent({
                 }
               : undefined
           }
+          onOpenInProduction={
+            useProductionWorkspace
+              ? (projectId) => {
+                  const target = productionOrderPath(projectId);
+                  if (location.pathname !== target) navigate(target);
+                }
+              : undefined
+          }
           onExportCommercialQuote={
-            useProductionQueue ? undefined : handleExportCommercialQuote
+            filterProjectsToPlant ? undefined : handleExportCommercialQuote
           }
           onExportCommercialQuotePdf={
-            useProductionQueue
+            filterProjectsToPlant
               ? undefined
               : (variant) => {
                   void handleExportCommercialQuotePdf(variant);
