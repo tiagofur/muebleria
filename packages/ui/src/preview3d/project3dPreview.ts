@@ -15,6 +15,7 @@ import {
   layoutKitchenPlacements,
   resolveBom,
   resolveModuleMeasurePreset,
+  type ResolvedWallFrame,
 } from '@muebles/domain';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
@@ -55,6 +56,8 @@ export type Project3DPreviewResult = {
   readonly placedCount: number;
   /** Count of quote instances not on the plan (shown as linear tail when kitchen). */
   readonly unplacedCount: number;
+  /** Resolved wall frames when layoutMode is kitchen (shifted to +X/+Y). */
+  readonly walls: readonly ResolvedWallFrame[];
 };
 
 function dimsForModule(
@@ -160,6 +163,16 @@ function resolveItemBom(
 export type ResolveProject3DOptions = {
   /** If set, only this line item (and its quantity copies). */
   readonly itemId?: string;
+  /**
+   * When kitchen plan is active: `tail` appends unplaced units as a linear run
+   * (quote preview). `hide` only shows wall placements (spatial studio).
+   */
+  readonly unplacedPolicy?: 'tail' | 'hide';
+  /**
+   * Use kitchen framing when walls exist even if no placements yet
+   * (empty room for spatial studio).
+   */
+  readonly kitchenWallsOnly?: boolean;
 };
 
 /**
@@ -170,6 +183,7 @@ export function resolveProject3DPreview(
   catalogInput: Module3DCatalogInput,
   options: ResolveProject3DOptions = {},
 ): Project3DPreviewResult {
+  const unplacedPolicy = options.unplacedPolicy ?? 'tail';
   const items = options.itemId
     ? project.items.filter((it) => it.id === options.itemId)
     : project.items;
@@ -218,7 +232,7 @@ export function resolveProject3DPreview(
     !options.itemId &&
     kitchen &&
     kitchen.walls.length > 0 &&
-    kitchen.placements.length > 0;
+    (kitchen.placements.length > 0 || Boolean(options.kitchenWallsOnly));
 
   let modules: ProjectModule3DInstance[];
   let totalWidth: number;
@@ -227,6 +241,7 @@ export function resolveProject3DPreview(
   let layoutMode: 'linear' | 'kitchen' = 'linear';
   let placedCount = 0;
   let unplacedCount = 0;
+  let walls: readonly ResolvedWallFrame[] = [];
   const layoutWarnings: string[] = [];
 
   if (useKitchen && kitchen) {
@@ -242,6 +257,7 @@ export function resolveProject3DPreview(
       };
     });
     const layout = layoutKitchenPlacements(kitchen, fps);
+    walls = layout.walls;
     layoutWarnings.push(...layout.warnings);
     const placedModules: ProjectModule3DInstance[] = layout.placements.map(
       (place) => {
@@ -265,8 +281,7 @@ export function resolveProject3DPreview(
     );
     placedCount = placedModules.length;
 
-    // Policy A: unplaced quote instances append as a linear tail so the full
-    // quote remains visible in 3D (with an explicit warning).
+    // Count unplaced instances (always); optionally append as linear tail.
     const placedKeys = new Set(placedModules.map((m) => m.instanceKey));
     const unplacedFootprints: {
       id: string;
@@ -292,14 +307,18 @@ export function resolveProject3DPreview(
       }
     }
     unplacedCount = unplacedFootprints.length;
-    if (unplacedCount > 0) {
+    if (unplacedCount > 0 && unplacedPolicy === 'tail') {
       layoutWarnings.push(
         `${unplacedCount} unidad${unplacedCount === 1 ? '' : 'es'} sin colocar en el plano (se muestran al final de la vista).`,
+      );
+    } else if (unplacedCount > 0 && unplacedPolicy === 'hide') {
+      layoutWarnings.push(
+        `${unplacedCount} unidad${unplacedCount === 1 ? '' : 'es'} sin colocar — elegilas en la lista.`,
       );
     }
 
     let tailModules: ProjectModule3DInstance[] = [];
-    if (unplacedFootprints.length > 0) {
+    if (unplacedPolicy === 'tail' && unplacedFootprints.length > 0) {
       const tailLayout = layoutProjectRun(
         unplacedFootprints.map((f) => ({
           id: `${f.id}#${f.instanceIndex}`,
@@ -340,7 +359,7 @@ export function resolveProject3DPreview(
       totalDepth = Math.max(layout.totalDepth, tailLayout.totalDepth);
     } else {
       totalWidth = layout.totalWidth;
-      totalHeight = layout.totalHeight;
+      totalHeight = Math.max(layout.totalHeight, 2400);
       totalDepth = layout.totalDepth;
     }
 
@@ -377,6 +396,7 @@ export function resolveProject3DPreview(
     totalDepth = layout.totalDepth;
     placedCount = 0;
     unplacedCount = modules.length;
+    walls = [];
   }
 
   const errors = [
@@ -389,6 +409,10 @@ export function resolveProject3DPreview(
   ];
 
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
+  const empty =
+    layoutMode === 'kitchen'
+      ? modules.length === 0 && walls.length === 0
+      : !hasAnyParts;
 
   return {
     modules,
@@ -398,7 +422,8 @@ export function resolveProject3DPreview(
     layoutMode,
     placedCount,
     unplacedCount,
-    empty: !hasAnyParts,
+    walls,
+    empty,
     errors,
   };
 }

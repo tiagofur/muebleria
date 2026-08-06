@@ -7,6 +7,7 @@ export {
   FurnitureScene3D,
   type FurnitureScene3DProps,
   type FurnitureSceneModule,
+  type FurnitureSceneWall,
 } from './FurnitureScene3D';
 export {
   PartInspector,

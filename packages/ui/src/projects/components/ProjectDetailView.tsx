@@ -21,6 +21,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import type {
+  Component,
   Customer,
   ExportIssue,
   FurnitureType,
@@ -32,6 +33,7 @@ import type {
   ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
+  Structure,
 } from '@muebles/domain';
 
 import {
@@ -102,6 +104,9 @@ export interface ProjectDetailViewProps {
   readonly modules: readonly Module[];
   readonly optionGroups: readonly OptionGroup[];
   readonly catalogs: ProjectDetailCatalogs;
+  /** Needed so line pickers resolve INTERIOR/FRENTE from structure components. */
+  readonly catalogComponents?: readonly Component[];
+  readonly catalogStructures?: readonly Structure[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
 
@@ -163,6 +168,7 @@ export interface ProjectDetailViewProps {
   // --- Navigation / chrome action handlers ---
   readonly onBackToList: () => void;
   readonly onOpenPresentation: () => void;
+  readonly onOpenSpatialStudio?: () => void;
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
@@ -265,6 +271,7 @@ function ProjectDetailViewInner(): ReactNode {
     onExport,
     onBackToList,
     onOpenPresentation,
+    onOpenSpatialStudio,
     onEditMeta,
     onDuplicate,
     onSaveAsTemplate,
@@ -370,12 +377,23 @@ function ProjectDetailViewInner(): ReactNode {
         onSelect: () => onRequestReopen(),
       });
     }
+    // Destructive action lives in Más (wave 4 chrome density) — not a permanent
+    // danger button that steals visual weight from the stage primary.
+    if (canDelete) {
+      metaItems.push({
+        id: 'delete',
+        label: 'Eliminar',
+        icon: <Trash2 size={16} strokeWidth={1.5} aria-hidden />,
+        onSelect: () => onRequestDelete(),
+      });
+    }
     if (metaItems.length > 0) {
       sections.push({ id: 'meta', label: 'Cotización', items: metaItems });
     }
 
     return sections;
   }, [
+    canDelete,
     canMutate,
     canReopen,
     exportBusy,
@@ -383,6 +401,7 @@ function ProjectDetailViewInner(): ReactNode {
     exportTitle,
     onDuplicate,
     onExport,
+    onRequestDelete,
     onRequestReopen,
     onSaveAsTemplate,
     productionExportOk,
@@ -399,7 +418,12 @@ function ProjectDetailViewInner(): ReactNode {
       {/* Sticky tool chrome — at most ONE .btn--primary in the action group */}
       <header className="workspace-chrome" data-testid="project-detail-chrome">
         <div className="workspace-chrome__lead">
-          <button type="button" className="btn btn--ghost btn--small" onClick={onBackToList}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--small"
+            onClick={onBackToList}
+            aria-label="Volver a la lista"
+          >
             <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
             Lista
           </button>
@@ -429,7 +453,10 @@ function ProjectDetailViewInner(): ReactNode {
             {chromeSale == null ? '—' : formatProjectMoney(chromeSale, project.currency)}
           </span>
         </div>
-        <div className="workspace-chrome__actions">
+        <div
+          className="workspace-chrome__actions project-detail__chrome-actions"
+          data-testid="project-chrome-actions"
+        >
           {primary === 'send' && onChangeStatus ? (
             <button
               type="button"
@@ -459,7 +486,8 @@ function ProjectDetailViewInner(): ReactNode {
               onClick={() => onMarkProduced(project.id)}
               data-testid="project-mark-produced"
             >
-              <Factory size={16} strokeWidth={1.5} aria-hidden /> Marcar en producción
+              <Factory size={16} strokeWidth={1.5} aria-hidden /> Marcar en
+              producción
             </button>
           ) : null}
 
@@ -488,8 +516,25 @@ function ProjectDetailViewInner(): ReactNode {
             Presentar
           </button>
 
+          {onOpenSpatialStudio ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={onOpenSpatialStudio}
+              data-testid="project-chrome-projectar"
+              title="Estudio 3D: colocar y mover muebles en el ambiente"
+            >
+              Proyectar
+            </button>
+          ) : null}
+
           {canMutate ? (
-            <button type="button" className="btn" onClick={() => onEditMeta(project)}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => onEditMeta(project)}
+              data-testid="project-chrome-edit"
+            >
               <Pencil size={16} strokeWidth={1.5} aria-hidden /> Editar
             </button>
           ) : null}
@@ -498,18 +543,17 @@ function ProjectDetailViewInner(): ReactNode {
             <DropdownMenu
               ariaLabel="Más acciones de la cotización"
               triggerLabel={exportBusy ? 'Trabajando…' : 'Más'}
-              triggerIcon={<MoreHorizontal size={16} strokeWidth={1.5} aria-hidden />}
+              triggerIcon={
+                <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden />
+              }
               triggerClassName="btn"
-              disabled={exportBusy && moreSections.every((s) => s.items.every((i) => i.disabled))}
+              disabled={
+                exportBusy &&
+                moreSections.every((s) => s.items.every((i) => i.disabled))
+              }
               sections={moreSections}
               onClose={exportMenu.onClose}
             />
-          ) : null}
-
-          {canDelete ? (
-            <button type="button" className="btn btn--danger" onClick={onRequestDelete}>
-              <Trash2 size={16} strokeWidth={1.5} aria-hidden /> Eliminar
-            </button>
           ) : null}
         </div>
       </header>
@@ -686,6 +730,8 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     modules: props.modules,
     optionGroups: props.optionGroups,
     catalogs: props.catalogs,
+    catalogComponents: props.catalogComponents ?? [],
+    catalogStructures: props.catalogStructures ?? [],
     customers: props.customers,
     ownerLabels: props.ownerLabels,
     breakdown: props.breakdown ?? null,
@@ -715,6 +761,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onOpenAddItemModal: props.onOpenAddItemModal,
     onBackToList: props.onBackToList,
     onOpenPresentation: props.onOpenPresentation,
+    onOpenSpatialStudio: props.onOpenSpatialStudio,
     onEditMeta: props.onEditMeta,
     onDuplicate: props.onDuplicate,
     onSaveAsTemplate: props.onSaveAsTemplate,

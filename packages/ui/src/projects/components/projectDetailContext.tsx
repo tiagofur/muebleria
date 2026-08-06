@@ -8,6 +8,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 import type {
+  Component,
   Customer,
   EdgeBand,
   ExportIssue,
@@ -22,6 +23,7 @@ import type {
   ProjectMaterialSummary,
   ProjectTemplate,
   QuoteBreakdown,
+  Structure,
 } from '@muebles/domain';
 import type { DropdownMenuSection } from '../../common';
 
@@ -78,6 +80,12 @@ export interface ProjectDetailContextValue {
   readonly modules: readonly Module[];
   readonly optionGroups: readonly OptionGroup[];
   readonly catalogs: ProjectDetailCatalogs;
+  /**
+   * Required for board/edge option roles on composed modules (structure +
+   * components). Without these, pickers only show hardware groups.
+   */
+  readonly catalogComponents: readonly Component[];
+  readonly catalogStructures: readonly Structure[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
 
@@ -137,6 +145,8 @@ export interface ProjectDetailContextValue {
   // --- Navigation / chrome ---
   readonly onBackToList: () => void;
   readonly onOpenPresentation: () => void;
+  /** Full-screen spatial studio (place/move on walls). */
+  readonly onOpenSpatialStudio?: () => void;
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;

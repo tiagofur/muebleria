@@ -48,6 +48,17 @@ export type FurnitureSceneModule = {
   readonly showOuterGhost?: boolean;
 };
 
+/** Simple room wall segment in workshop mm (plan X/Y). */
+export type FurnitureSceneWall = {
+  readonly id: string;
+  readonly originXMm: number;
+  readonly originYMm: number;
+  readonly endXMm: number;
+  readonly endYMm: number;
+  /** Wall height mm (default 2400). */
+  readonly heightMm?: number;
+};
+
 export type FurnitureScene3DProps = {
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
@@ -87,6 +98,12 @@ export type FurnitureScene3DProps = {
   readonly onSelectPart?: (partId: string | null) => void;
   /** When true and a part is selected, dim other meshes. */
   readonly isolateSelected?: boolean;
+  /** Kitchen / room wall segments (workshop plan). */
+  readonly walls?: readonly FurnitureSceneWall[];
+  /** Selected module instance key (highlight whole cabinet). */
+  readonly selectedModuleKey?: string | null;
+  /** Click a module (or empty) to select. Prefer over part pick when set. */
+  readonly onSelectModule?: (moduleKey: string | null) => void;
 };
 
 function BoardMesh({
@@ -183,10 +200,12 @@ function OuterGhost({
   width,
   height,
   depth,
+  highlighted = false,
 }: {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+  readonly highlighted?: boolean;
 }): ReactNode {
   const W = Math.max(width, 1);
   const H = Math.max(height, 1);
@@ -195,10 +214,38 @@ function OuterGhost({
     <mesh position={[W / 2, H / 2, D / 2]}>
       <boxGeometry args={[W, H, D]} />
       <meshBasicMaterial
-        color="#6b7280"
+        color={highlighted ? '#f5c542' : '#6b7280'}
         wireframe
         transparent
-        opacity={0.18}
+        opacity={highlighted ? 0.45 : 0.18}
+      />
+    </mesh>
+  );
+}
+
+function WallMesh({ wall }: { readonly wall: FurnitureSceneWall }): ReactNode {
+  const h = wall.heightMm ?? 2400;
+  const dx = wall.endXMm - wall.originXMm;
+  const dy = wall.endYMm - wall.originYMm;
+  const length = Math.max(1, Math.hypot(dx, dy));
+  const midX = (wall.originXMm + wall.endXMm) / 2;
+  const midY = (wall.originYMm + wall.endYMm) / 2;
+  const yaw = Math.atan2(dy, dx);
+  const thickness = 40;
+  // Workshop → Three: [x, z, y]; wall sits on floor, long axis along length.
+  return (
+    <mesh
+      position={[midX, h / 2, midY]}
+      rotation={[0, -yaw, 0]}
+      userData={{ wallId: wall.id }}
+    >
+      <boxGeometry args={[length, h, thickness]} />
+      <meshStandardMaterial
+        color="#8b9098"
+        roughness={0.9}
+        metalness={0.05}
+        transparent
+        opacity={0.55}
       />
     </mesh>
   );
@@ -215,6 +262,8 @@ function ModuleGroup({
   selectedPartId,
   isolateSelected,
   onSelectPart,
+  moduleSelected,
+  onSelectModule,
 }: {
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
@@ -226,6 +275,8 @@ function ModuleGroup({
   readonly selectedPartId?: string | null;
   readonly isolateSelected?: boolean;
   readonly onSelectPart?: (partId: string) => void;
+  readonly moduleSelected?: boolean;
+  readonly onSelectModule?: (moduleKey: string) => void;
 }): ReactNode {
   const visuals = useMemo(
     () =>
@@ -248,16 +299,28 @@ function ModuleGroup({
   const hasSelection = Boolean(selectedPartId);
 
   return (
-    <group position={groupPos} rotation={groupRot}>
-      {mod.showOuterGhost !== false ? (
+    <group
+      position={groupPos}
+      rotation={groupRot}
+      onClick={
+        onSelectModule
+          ? (e) => {
+              e.stopPropagation();
+              onSelectModule(mod.key);
+            }
+          : undefined
+      }
+    >
+      {mod.showOuterGhost !== false || moduleSelected ? (
         <OuterGhost
           width={mod.width}
           height={mod.height}
           depth={mod.depth}
+          highlighted={moduleSelected}
         />
       ) : null}
       {visuals.map((v) => {
-        const selected = selectedPartId === v.id;
+        const selected = selectedPartId === v.id || Boolean(moduleSelected);
         const dimmed =
           Boolean(isolateSelected) && hasSelection && !selected;
         return (
@@ -265,7 +328,7 @@ function ModuleGroup({
             key={`${mod.key}-${v.id}`}
             visual={v}
             showWireframe={showWireframe}
-            showOutlines={showOutlines}
+            showOutlines={showOutlines || moduleSelected}
             selected={selected}
             dimmed={dimmed}
             onSelect={onSelectPart}
@@ -333,6 +396,7 @@ function CameraViewSetter({
 
 function SceneContent({
   modules,
+  walls,
   totalWidth,
   totalHeight,
   totalDepth,
@@ -352,8 +416,11 @@ function SceneContent({
   selectedPartId,
   isolateSelected,
   onSelectPart,
+  selectedModuleKey,
+  onSelectModule,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
+  readonly walls: readonly FurnitureSceneWall[];
   readonly totalWidth: number;
   readonly totalHeight: number;
   readonly totalDepth: number;
@@ -373,6 +440,8 @@ function SceneContent({
   readonly selectedPartId?: string | null;
   readonly isolateSelected?: boolean;
   readonly onSelectPart?: (partId: string) => void;
+  readonly selectedModuleKey?: string | null;
+  readonly onSelectModule?: (moduleKey: string | null) => void;
 }): ReactNode {
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
@@ -393,7 +462,15 @@ function SceneContent({
       <hemisphereLight args={['#f0f4f8', '#3d3a35', 0.35]} />
 
       <Bounds fit margin={1.25}>
-        <group>
+        <group
+          onClick={
+            onSelectModule
+              ? () => {
+                  onSelectModule(null);
+                }
+              : undefined
+          }
+        >
           {!showFloor ? (
             <axesHelper args={[framing.maxDim * 0.75]} />
           ) : null}
@@ -413,6 +490,9 @@ function SceneContent({
               />
             </mesh>
           ) : null}
+          {walls.map((w) => (
+            <WallMesh key={w.id} wall={w} />
+          ))}
           {modules.map((mod) => (
             <ModuleGroup
               key={mod.key}
@@ -426,6 +506,14 @@ function SceneContent({
               selectedPartId={selectedPartId}
               isolateSelected={isolateSelected}
               onSelectPart={onSelectPart}
+              moduleSelected={selectedModuleKey === mod.key}
+              onSelectModule={
+                onSelectModule
+                  ? (key) => {
+                      onSelectModule(key);
+                    }
+                  : undefined
+              }
             />
           ))}
         </group>
@@ -494,14 +582,39 @@ export function FurnitureScene3D({
   selectedPartId = null,
   onSelectPart,
   isolateSelected = false,
+  walls = [],
+  selectedModuleKey = null,
+  onSelectModule,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
   const sceneModules = modules;
-  const selectionEnabled = Boolean(onSelectPart) && !measurementMode;
+  const selectionEnabled =
+    (Boolean(onSelectPart) || Boolean(onSelectModule)) && !measurementMode;
+  const hasWalls = walls.length > 0;
 
-  if (sceneModules.length === 0 || (!hasAnyParts && sceneModules.every((m) => m.showOuterGhost === false))) {
+  if (
+    sceneModules.length === 0 &&
+    !hasWalls
+  ) {
+    return (
+      <div
+        className={`module-scene-3d module-scene-3d--empty ${className ?? ''}`}
+        style={style}
+        data-testid={`${testId}-empty`}
+      >
+        <p className="catalog-empty">Sin piezas para la vista 3D.</p>
+      </div>
+    );
+  }
+
+  if (
+    sceneModules.length > 0 &&
+    !hasAnyParts &&
+    sceneModules.every((m) => m.showOuterGhost === false) &&
+    !hasWalls
+  ) {
     return (
       <div
         className={`module-scene-3d module-scene-3d--empty ${className ?? ''}`}
@@ -596,6 +709,7 @@ export function FurnitureScene3D({
           <Suspense fallback={null}>
              <SceneContent
               modules={sceneModules}
+              walls={walls}
               totalWidth={totalWidth}
               totalHeight={totalHeight}
               totalDepth={totalDepth}
@@ -614,7 +728,15 @@ export function FurnitureScene3D({
               exportProjectName={exportProjectName}
               selectedPartId={selectedPartId}
               isolateSelected={isolateSelected}
-              onSelectPart={selectionEnabled ? onSelectPart : undefined}
+              onSelectPart={
+                selectionEnabled && onSelectPart ? onSelectPart : undefined
+              }
+              selectedModuleKey={selectedModuleKey}
+              onSelectModule={
+                selectionEnabled && onSelectModule
+                  ? onSelectModule
+                  : undefined
+              }
             />
           </Suspense>          </Canvas>
         </Suspense>

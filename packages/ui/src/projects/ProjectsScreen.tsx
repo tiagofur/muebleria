@@ -39,6 +39,7 @@ import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
 import { ProjectPresentationMode } from './components/ProjectPresentationMode';
+import { ProjectSpatialStudio } from './components/ProjectSpatialStudio';
 import { ProjectDetailView } from './components/ProjectDetailView';
 import { ProjectAddItemModal } from './components/ProjectAddItemModal';
 import { ProjectConfirmDeleteModal } from './components/ProjectConfirmDeleteModal';
@@ -347,6 +348,7 @@ export function ProjectsScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
+  const [showSpatialStudio, setShowSpatialStudio] = useState(false);
 
   // Fase 3 slice 3.5: auto-open presentation when autoPresentId matches.
   useEffect(() => {
@@ -793,6 +795,8 @@ export function ProjectsScreen({
           modules={modules}
           optionGroups={optionGroups}
           catalogs={catalogs}
+          catalogComponents={catalogComponents}
+          catalogStructures={catalogStructures}
           customers={customers}
           ownerLabels={ownerLabels}
           breakdown={breakdown}
@@ -852,6 +856,11 @@ export function ProjectsScreen({
           onOpenAddItemModal={openAddItemModal}
           onBackToList={backToList}
           onOpenPresentation={() => setShowPresentation(true)}
+          onOpenSpatialStudio={
+            onUpdateKitchenLayout
+              ? () => setShowSpatialStudio(true)
+              : undefined
+          }
           onEditMeta={startEditMeta}
           onDuplicate={onDuplicate}
           onSaveAsTemplate={
@@ -904,6 +913,8 @@ export function ProjectsScreen({
         categories={categories}
         optionGroups={optionGroups}
         catalogs={catalogs}
+        catalogComponents={catalogComponents}
+        catalogStructures={catalogStructures}
         projectLevelChoices={selectedProject?.projectLevelChoices ?? {}}
         measureDefaults={selectedProject?.measureDefaults}
       />
@@ -954,6 +965,21 @@ export function ProjectsScreen({
           workshopName={workshopSettings?.workshopName}
           resolveMediaUrl={resolveImageUrl}
           onClose={() => setShowPresentation(false)}
+        />
+      ) : null}
+
+      {selectedProject && onUpdateKitchenLayout ? (
+        <ProjectSpatialStudio
+          open={showSpatialStudio}
+          project={selectedProject}
+          modules={modules}
+          catalog={project3dCatalog}
+          canEdit={canMutate && selectedProject.status === 'draft'}
+          resolveMediaUrl={resolveImageUrl}
+          onClose={() => setShowSpatialStudio(false)}
+          onChangeLayout={(layout) =>
+            onUpdateKitchenLayout(selectedProject.id, layout)
+          }
         />
       ) : null}
 

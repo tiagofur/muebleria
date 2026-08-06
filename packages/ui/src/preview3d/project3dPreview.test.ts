@@ -215,6 +215,7 @@ describe('resolveProject3DPreview', () => {
     expect(preview.placedCount).toBe(2);
     expect(preview.unplacedCount).toBe(1);
     expect(preview.modules).toHaveLength(3);
+    expect(preview.walls.length).toBe(2);
 
     const onW1 = preview.modules.find((m) => m.instanceKey === 'it-a#0')!;
     const onW2 = preview.modules.find((m) => m.instanceKey === 'it-b#0')!;
@@ -226,5 +227,39 @@ describe('resolveProject3DPreview', () => {
     expect(
       preview.errors.some((e) => e.includes('sin colocar')),
     ).toBe(true);
+  });
+
+  it('studio mode hides unplaced tail but keeps walls', () => {
+    const withPlan: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [
+          {
+            id: 'w1',
+            lengthMm: 3000,
+            angleDeg: 0,
+            originXMm: 0,
+            originYMm: 0,
+          },
+        ],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    const preview = resolveProject3DPreview(withPlan, catalog, {
+      unplacedPolicy: 'hide',
+      kitchenWallsOnly: true,
+    });
+    expect(preview.layoutMode).toBe('kitchen');
+    expect(preview.modules).toHaveLength(1);
+    expect(preview.unplacedCount).toBe(2); // it-b × 2
+    expect(preview.walls.length).toBe(1);
   });
 });

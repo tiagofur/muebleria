@@ -1,8 +1,35 @@
-# Sesión actual — Muebles: slices 1–5 (auditoría perfecta)
+# Sesión actual — Proyectar (spatial studio) Fase A
 
 - **Carpeta canónica:** `/Users/tiagofur/dev/carpinteria/muebles`
 - **Branch:** `wip/jd-w3-lateral-rotation-fix`
-- **Inicio:** 2026-08-05
+- **Inicio:** 2026-08-06
+
+## Proyectar — place & move 3D (Fase A)
+
+Botón **Proyectar** en chrome de cotización → fullscreen `ProjectSpatialStudio`.
+
+| Slice | Estado |
+|-------|--------|
+| Shell + botón chrome | ✅ |
+| Lista sin colocar / colocado + crear L | ✅ |
+| Colocar en muro activo + elevación default | ✅ |
+| Inspector: offset, nudge ±50, reorder, elevación, sacar | ✅ |
+| 3D: muros + yaw + select módulo | ✅ |
+| unplacedPolicy hide en studio | ✅ |
+| Medidas en ambiente | ⏳ Fase B |
+
+### Key files
+- `packages/ui/src/projects/components/ProjectSpatialStudio.tsx`
+- `projectSpatialStudio.css`
+- `FurnitureScene3D` walls + selectedModuleKey
+- `project3dPreview` unplacedPolicy / kitchenWallsOnly / walls[]
+
+### Prev: kitchen layout hardening
+Commit `a77fb67` pushed (yaw, prune, tail policy A).
+
+---
+
+# WIP previo — Muebles: slices 1–5 (auditoría perfecta)
 
 ## Slices (auditoría muebles) — TODOS ✅
 
@@ -66,6 +93,89 @@ moduleHelpers, InstanceOverridesEditor, ModulesScreen, StructuresScreen, typeche
 ## Contornos 3D ✅
 - Check **Contornos** (default ON): Edges en cada pieza sin transparencia.
 - Separado de **Rayos X**. En Furniture3DViewer, cotización, presentación, editor de componente.
+
+## Fix persistencia textura X/Y
+- Toast “guardado” solo **después** de `saveCatalog` OK (antes mentía).
+- Upsert API lanza error si PUT falla (no traga el fallo).
+- DB tiene columnas; storage + handler decodifican tiles (tests de integración OK).
+- **Reiniciar backend** obligatorio para que el PUT escriba en Postgres.
+
+## Auditoría UI completa (2026-08-05)
+Revisión de todas las superficies product en `packages/ui`.
+
+**Waves**
+1. ✅ Components detail + `EngineeringDetailLayout` shell
+2. ✅ Structures detail (reusa shell)
+3. ✅ Modules detail polish
+4. ✅ Projects chrome density
+5. ✅ Catalogs/OptionGroups consistency
+
+## Cierre de pendientes critique (2026-08-05) ✅
+- Borrado `StructureEditor3DPanel` (muerto) + export
+- Preset 3D solo en Componentes (no en Presets)
+- Component/Structure editor: CSS propio tabs/grid (sin dual module-editor)
+
+## Module editor polish pack (2026-08-05) ✅
+- Sticky primary + composition subtabs; keyboard arrows
+- Badge `!` sin estructura (Composición + subtab Estructura)
+- Código bloqueado al editar + hint; form-error testid
+- CTA agregar componente primary; sin inline styles en hints
+
+## Structure editor critique fixes (2026-08-05) ✅
+Critique 22/40 → fixes:
+- Tabs: General → Componentes → Presets; sin tab Vista 3D (3D sticky en Componentes)
+- Badge `!` si 0 componentes; save salta a Componentes
+- Presets: labels, blur validation, copiar desde exterior
+- Hint código + exterior vs presets; tabs sticky + teclado
+
+## Component editor critique fixes (2026-08-05) ✅
+Critique 27/40 → fixes P1–P3:
+- Geometry: workspace form | **3D sticky** (≥56rem)
+- Formula guide **colapsada** por default (+ focus en fórmula)
+- Options: badge `!` si sin roles; save salta a tab Opciones
+- Tabs sticky + flechas teclado; hint código bloqueado; convención de ubicación
+- Tests ComponentsScreen 18 OK
+
+## Wave 5 — Catálogos consistencia (2026-08-05) ✅
+- Forms: sections Identidad / Medida|Compra|Miembros en Edges, Hardware, OptionGroups
+- Expand: Editar primary; row-detail denser card
+- CSS: section titles sentence-case; price-preview-gate tokens
+- `docs/design.md` §6.4
+
+## Wave 4 — Projects chrome (2026-08-05) ✅
+- Eliminar movido a **Más** (sin danger permanente)
+- Chrome: lifecycle primary · Optimizer (plant) · Presentar · Editar · Más
+- CSS mobile: total + actions full-width; title ellipsis
+- `docs/design.md` §6.2; tests delete via Más + chrome density
+
+## Wave 3 — Module detail (2026-08-05) ✅
+- `ModuleDetailView` + `EngineeringDetailLayout`
+- Chrome: Precio est. · Vista 3D · Editar · **Más** (Duplicar/Eliminar)
+- Primary: costo + componentes; secondary: estructura/medidas + herrajes + presets comerciales
+- Prop `structures` para resumen de cuerpo; `docs/design.md` §6.3
+
+## Wave 2 — Structure detail (2026-08-05) ✅
+- `StructureDetailView` sobre `EngineeringDetailLayout`
+- Chrome métrica Exterior A×H×P + Vista 3D + Editar
+- Primary: dims + lista instancias; secondary: presets + historial en disclosure
+- Primitivas nuevas: `.eng-detail__instance-*`, `.eng-detail__kv-*`
+- `docs/design.md` §6.8; test detail workspace
+
+## Wave 1 — Component detail (2026-08-05) ✅
+- `EngineeringDetailLayout` + `engineeringDetail.css` (2-col, defs, chips, disclosure)
+- `ComponentDetailView`: métrica Placa en chrome, geometría + PlankEdgeDiagram RO, pose en `<details>`, roles chips
+- Export CSS en package + `main.tsx`; `docs/design.md` §6.9
+- Tests: metric/diagram/pose + suite ComponentsScreen OK
+
+## Rediseño UI/UX — Vitrina (2026-08-05) ✅
+- Critique Impeccable: **20/40**, 3×P1 (fotos thumb, CTA en toda card, detalle vacío).
+- **Rediseño full** `ModuleShowcase`:
+  - Grid foto-first `minmax(~264px)`, media **4:3**, nombre dominante, código muted + badge categoría.
+  - CTA «Usar en cotización» **solo en modal detalle** (LG, hero 16:10 / 4:3).
+  - CSS chips arreglado; focus-visible; reduced-motion.
+  - Tests: browse-only cards, CTA solo en detalle.
+- Snapshot: `.impeccable/critique/…moduleshowcase…`
+- `docs/design.md` §6.6 actualizado.
 
 ## Rediseño UI/UX — INGENIERÍA
 - **Fase 1 completada:** Reordenamiento semántico del menú lateral en `AppShell.tsx`:
