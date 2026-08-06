@@ -90,10 +90,17 @@ export function Project3DModal({
           className="viewer-3d-modal-body"
           data-testid="project-3d-modal-body"
         >
-          {!focus && preview.modules.length > 1 ? (
+          {!focus && preview.modules.length > 0 ? (
             <p className="catalog-empty" data-testid="project-3d-run-hint">
-              Vista en línea de la cotización ({preview.modules.length}{' '}
-              unidades). Colocación en L/isla llega en un siguiente paso.
+              {preview.layoutMode === 'kitchen'
+                ? `Según plano de cocina (${preview.placedCount} colocad${preview.placedCount === 1 ? 'a' : 'as'}${
+                    preview.unplacedCount > 0
+                      ? `, ${preview.unplacedCount} sin colocar al final`
+                      : ''
+                  }).`
+                : `Vista en línea de la cotización (${preview.modules.length} unidad${
+                    preview.modules.length === 1 ? '' : 'es'
+                  }). Abrí «Plan de cocina» en Herramientas para armar L/U.`}
             </p>
           ) : null}
 
@@ -151,6 +158,7 @@ export function Project3DModal({
                 originX: m.originX,
                 originY: m.originY,
                 originZ: m.originZ,
+                yawDeg: m.yawDeg,
                 showOuterGhost: true,
               }))}
               totalWidth={preview.totalWidth}

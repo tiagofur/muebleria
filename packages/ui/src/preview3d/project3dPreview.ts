@@ -21,6 +21,7 @@ import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   DEFAULT_MODULE_FOOTPRINT_MM,
   layoutProjectRun,
+  PROJECT_RUN_GAP_MM,
   type PlacedModuleFootprint,
 } from './project3dLayout';
 
@@ -36,6 +37,8 @@ export type ProjectModule3DInstance = {
   readonly originX: number;
   readonly originY: number;
   readonly originZ: number;
+  /** Workshop plan yaw (degrees). Width follows wall; 0 = straight run. */
+  readonly yawDeg: number;
   readonly error: string | null;
 };
 
@@ -46,6 +49,12 @@ export type Project3DPreviewResult = {
   readonly totalDepth: number;
   readonly empty: boolean;
   readonly errors: readonly string[];
+  /** How modules were positioned. */
+  readonly layoutMode: 'linear' | 'kitchen';
+  /** Count of instances anchored on walls (kitchen mode only). */
+  readonly placedCount: number;
+  /** Count of quote instances not on the plan (shown as linear tail when kitchen). */
+  readonly unplacedCount: number;
 };
 
 function dimsForModule(
@@ -215,9 +224,13 @@ export function resolveProject3DPreview(
   let totalWidth: number;
   let totalHeight: number;
   let totalDepth: number;
+  let layoutMode: 'linear' | 'kitchen' = 'linear';
+  let placedCount = 0;
+  let unplacedCount = 0;
   const layoutWarnings: string[] = [];
 
   if (useKitchen && kitchen) {
+    layoutMode = 'kitchen';
     const fps = kitchen.placements.map((p) => {
       const row = byItemId.get(p.itemId);
       return {
@@ -230,26 +243,108 @@ export function resolveProject3DPreview(
     });
     const layout = layoutKitchenPlacements(kitchen, fps);
     layoutWarnings.push(...layout.warnings);
-    modules = layout.placements.map((place) => {
-      const row = byItemId.get(place.itemId);
-      return {
-        instanceKey: place.instanceKey,
-        itemId: place.itemId,
-        moduleId: row?.module?.id ?? row?.item.moduleId ?? place.itemId,
-        label: row?.label ?? place.itemId,
-        parts: row?.parts ?? [],
-        width: place.width,
-        height: place.height,
-        depth: place.depth,
-        originX: place.originX,
-        originY: place.originY,
-        originZ: place.originZ,
-        error: row?.error ?? null,
-      };
-    });
-    totalWidth = layout.totalWidth;
-    totalHeight = layout.totalHeight;
-    totalDepth = layout.totalDepth;
+    const placedModules: ProjectModule3DInstance[] = layout.placements.map(
+      (place) => {
+        const row = byItemId.get(place.itemId);
+        return {
+          instanceKey: place.instanceKey,
+          itemId: place.itemId,
+          moduleId: row?.module?.id ?? row?.item.moduleId ?? place.itemId,
+          label: row?.label ?? place.itemId,
+          parts: row?.parts ?? [],
+          width: place.width,
+          height: place.height,
+          depth: place.depth,
+          originX: place.originX,
+          originY: place.originY,
+          originZ: place.originZ,
+          yawDeg: place.yawDeg,
+          error: row?.error ?? null,
+        };
+      },
+    );
+    placedCount = placedModules.length;
+
+    // Policy A: unplaced quote instances append as a linear tail so the full
+    // quote remains visible in 3D (with an explicit warning).
+    const placedKeys = new Set(placedModules.map((m) => m.instanceKey));
+    const unplacedFootprints: {
+      id: string;
+      width: number;
+      height: number;
+      depth: number;
+      quantity: number;
+      instanceIndex: number;
+    }[] = [];
+    for (const row of rows) {
+      const qty = Math.max(1, Math.floor(row.item.quantity) || 1);
+      for (let i = 0; i < qty; i++) {
+        const key = `${row.item.id}#${i}`;
+        if (placedKeys.has(key)) continue;
+        unplacedFootprints.push({
+          id: row.item.id,
+          width: row.width,
+          height: row.height,
+          depth: row.depth,
+          quantity: 1,
+          instanceIndex: i,
+        });
+      }
+    }
+    unplacedCount = unplacedFootprints.length;
+    if (unplacedCount > 0) {
+      layoutWarnings.push(
+        `${unplacedCount} unidad${unplacedCount === 1 ? '' : 'es'} sin colocar en el plano (se muestran al final de la vista).`,
+      );
+    }
+
+    let tailModules: ProjectModule3DInstance[] = [];
+    if (unplacedFootprints.length > 0) {
+      const tailLayout = layoutProjectRun(
+        unplacedFootprints.map((f) => ({
+          id: `${f.id}#${f.instanceIndex}`,
+          width: f.width,
+          height: f.height,
+          depth: f.depth,
+          quantity: 1,
+        })),
+      );
+      const tailStartX = layout.totalWidth + PROJECT_RUN_GAP_MM;
+      tailModules = tailLayout.placements.map((place: PlacedModuleFootprint) => {
+        // place.id is itemId#instanceIndex from synthetic footprints
+        const hash = place.id.lastIndexOf('#');
+        const itemId = hash >= 0 ? place.id.slice(0, hash) : place.id;
+        const instanceIndex =
+          hash >= 0 ? Number(place.id.slice(hash + 1)) || 0 : 0;
+        const row = byItemId.get(itemId)!;
+        return {
+          instanceKey: `${itemId}#${instanceIndex}`,
+          itemId,
+          moduleId: row.module?.id ?? row.item.moduleId,
+          label: row.label,
+          parts: row.parts,
+          width: place.width,
+          height: place.height,
+          depth: place.depth,
+          originX: place.originX + tailStartX,
+          originY: place.originY,
+          originZ: place.originZ,
+          yawDeg: 0,
+          error: row.error,
+        };
+      });
+      totalWidth =
+        tailStartX +
+        (tailLayout.placements.length > 0 ? tailLayout.totalWidth : 0);
+      totalHeight = Math.max(layout.totalHeight, tailLayout.totalHeight);
+      totalDepth = Math.max(layout.totalDepth, tailLayout.totalDepth);
+    } else {
+      totalWidth = layout.totalWidth;
+      totalHeight = layout.totalHeight;
+      totalDepth = layout.totalDepth;
+    }
+
+    modules = [...placedModules, ...tailModules];
   } else {
     const footprints = rows.map((row) => ({
       id: row.item.id,
@@ -273,12 +368,15 @@ export function resolveProject3DPreview(
         originX: place.originX,
         originY: place.originY,
         originZ: place.originZ,
+        yawDeg: 0,
         error: row.error,
       };
     });
     totalWidth = layout.totalWidth;
     totalHeight = layout.totalHeight;
     totalDepth = layout.totalDepth;
+    placedCount = 0;
+    unplacedCount = modules.length;
   }
 
   const errors = [
@@ -297,6 +395,9 @@ export function resolveProject3DPreview(
     totalWidth,
     totalHeight,
     totalDepth,
+    layoutMode,
+    placedCount,
+    unplacedCount,
     empty: !hasAnyParts,
     errors,
   };

@@ -4,8 +4,11 @@ import {
   layoutKitchenPlacements,
   nextOffsetOnWall,
   pruneKitchenLayout,
+  pruneKitchenLayoutOrClear,
+  reorderPlacementOnWall,
   resolveWallFrames,
   kitchenLayoutWarnings,
+  wallDirectionYawDeg,
 } from './kitchenLayout';
 import type { ProjectItem, ProjectKitchenLayout } from './types';
 
@@ -75,9 +78,19 @@ describe('kitchenLayout', () => {
     expect(result.placements).toHaveLength(3);
     expect(result.placements[0]!.originX).toBe(0);
     expect(result.placements[0]!.originZ).toBe(0);
+    expect(result.placements[0]!.yawDeg).toBe(0);
     expect(result.placements[1]!.originX).toBe(620);
     expect(result.placements[2]!.originY).toBe(100);
     expect(result.placements[2]!.originZ).toBe(1400);
+    expect(result.placements[2]!.yawDeg).toBe(90);
+  });
+
+  it('snaps wall angles to cardinal yaw', () => {
+    expect(wallDirectionYawDeg(0)).toBe(0);
+    expect(wallDirectionYawDeg(90)).toBe(90);
+    expect(wallDirectionYawDeg(180)).toBe(180);
+    expect(wallDirectionYawDeg(270)).toBe(270);
+    expect(wallDirectionYawDeg(-10)).toBe(0);
   });
 
   it('warns when module overhangs wall', () => {
@@ -129,6 +142,74 @@ describe('kitchenLayout', () => {
     const pruned = pruneKitchenLayout(layout, items);
     expect(pruned.placements).toHaveLength(1);
     expect(pruned.placements[0]!.itemId).toBe('keep');
+  });
+
+  it('prunes invalid instanceIndex when qty shrinks', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'i1',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+        {
+          itemId: 'i1',
+          instanceIndex: 2,
+          wallId: 'w1',
+          offsetMm: 620,
+          elevation: 'floor',
+        },
+      ],
+    };
+    const items: ProjectItem[] = [
+      { id: 'i1', moduleId: 'm1', quantity: 2, optionChoices: {} },
+    ];
+    const pruned = pruneKitchenLayout(layout, items);
+    expect(pruned.placements).toHaveLength(1);
+    expect(pruned.placements[0]!.instanceIndex).toBe(0);
+  });
+
+  it('pruneKitchenLayoutOrClear clears empty layout', () => {
+    expect(
+      pruneKitchenLayoutOrClear(
+        { walls: [], placements: [] },
+        [],
+      ),
+    ).toBeUndefined();
+  });
+
+  it('reorders on wall by re-packing offsets', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'a',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+        {
+          itemId: 'b',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 620,
+          elevation: 'floor',
+        },
+      ],
+    };
+    const fps = [
+      { itemId: 'a', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+      { itemId: 'b', instanceIndex: 0, width: 400, height: 720, depth: 560 },
+    ];
+    const next = reorderPlacementOnWall(layout, 'a', 0, 1, fps, 20);
+    const a = next.placements.find((p) => p.itemId === 'a')!;
+    const b = next.placements.find((p) => p.itemId === 'b')!;
+    expect(b.offsetMm).toBe(0);
+    expect(a.offsetMm).toBe(400 + 20);
   });
 
   it('suggests next offset after last on wall', () => {

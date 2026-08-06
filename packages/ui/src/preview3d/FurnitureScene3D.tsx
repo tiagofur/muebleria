@@ -40,6 +40,11 @@ export type FurnitureSceneModule = {
   readonly originX: number;
   readonly originY: number;
   readonly originZ: number;
+  /**
+   * Workshop plan yaw (degrees) around vertical. Applied as Three Y rotation
+   * so cabinet width follows the wall (kitchen layout).
+   */
+  readonly yawDeg?: number;
   readonly showOuterGhost?: boolean;
 };
 
@@ -238,10 +243,12 @@ function ModuleGroup({
     mod.originZ,
     mod.originY,
   ];
+  const yawRad = ((mod.yawDeg ?? 0) * Math.PI) / 180;
+  const groupRot: [number, number, number] = [0, yawRad, 0];
   const hasSelection = Boolean(selectedPartId);
 
   return (
-    <group position={groupPos}>
+    <group position={groupPos} rotation={groupRot}>
       {mod.showOuterGhost !== false ? (
         <OuterGhost
           width={mod.width}

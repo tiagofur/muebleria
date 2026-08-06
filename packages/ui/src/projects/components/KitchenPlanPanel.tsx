@@ -22,10 +22,20 @@ import {
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   pruneKitchenLayout,
+  reorderPlacementOnWall,
   resolveWallFrames,
 } from '@muebles/domain';
+import type { PlacementElevation } from '@muebles/domain';
 import { Lock } from 'lucide-react';
 import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
+
+function defaultElevationForModule(
+  module: Module | undefined,
+): PlacementElevation {
+  const t = module?.furnitureType;
+  if (t === 'superior' || t === 'alto') return 'wall';
+  return 'floor';
+}
 
 export type KitchenPlanPanelProps = {
   readonly project: Project;
@@ -114,12 +124,16 @@ export function KitchenPlanPanel({
   ) => {
     const base = ensureLayout();
     const offset = nextOffsetOnWall(base, wallId, footprints, 20);
+    const item = project.items.find((it) => it.id === itemId);
+    const mod = item
+      ? modules.find((m) => m.id === item.moduleId)
+      : undefined;
     const placement: ProjectItemPlacement = {
       itemId,
       instanceIndex,
       wallId,
       offsetMm: offset,
-      elevation: 'floor',
+      elevation: defaultElevationForModule(mod),
     };
     commit({
       ...base,
@@ -156,33 +170,16 @@ export function KitchenPlanPanel({
     instanceIndex: number,
     dir: -1 | 1,
   ) => {
-    const wallId = layout.placements.find(
-      (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
-    )?.wallId;
-    if (!wallId) return;
-    const onWall = layout.placements
-      .filter((p) => p.wallId === wallId)
-      .sort((a, b) => a.offsetMm - b.offsetMm);
-    const idx = onWall.findIndex(
-      (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+    commit(
+      reorderPlacementOnWall(
+        layout,
+        itemId,
+        instanceIndex,
+        dir,
+        footprints,
+        20,
+      ),
     );
-    const j = idx + dir;
-    if (idx < 0 || j < 0 || j >= onWall.length) return;
-    const a = onWall[idx]!;
-    const b = onWall[j]!;
-    // swap offsets
-    commit({
-      ...layout,
-      placements: layout.placements.map((p) => {
-        if (p.itemId === a.itemId && p.instanceIndex === a.instanceIndex) {
-          return { ...p, offsetMm: b.offsetMm };
-        }
-        if (p.itemId === b.itemId && p.instanceIndex === b.instanceIndex) {
-          return { ...p, offsetMm: a.offsetMm };
-        }
-        return p;
-      }),
-    });
   };
 
 
@@ -231,7 +228,9 @@ export function KitchenPlanPanel({
         modules,
       );
       const angle = ((wall.angleDeg % 360) + 360) % 360;
-      const isVertical = angle > 45 && angle < 135;
+      // Walls along ±Y (90° / 270°) drag on the vertical SVG axis.
+      const isVertical =
+        (angle > 45 && angle < 135) || (angle > 225 && angle < 315);
       dragRef.current = {
         itemId: p.itemId,
         instanceIndex: p.instanceIndex,
@@ -423,11 +422,23 @@ export function KitchenPlanPanel({
               let rw = Math.max(8, w * scale);
               let rh = 14;
               if (angle > 45 && angle < 135) {
+                // +Y wall: offset increases SVG Y
                 rx = pad + wall.originXMm * scale - 7;
                 ry = pad + (wall.originYMm + p.offsetMm) * scale;
                 rw = 14;
                 rh = Math.max(8, w * scale);
+              } else if (angle > 225 && angle < 315) {
+                // −Y wall: offset decreases plan Y
+                rx = pad + wall.originXMm * scale - 7;
+                ry = pad + (wall.originYMm - p.offsetMm - w) * scale;
+                rw = 14;
+                rh = Math.max(8, w * scale);
+              } else if (angle >= 135 && angle <= 225) {
+                // −X wall: offset decreases plan X
+                rx = pad + (wall.originXMm - p.offsetMm - w) * scale;
+                ry = pad + wall.originYMm * scale - 7;
               } else {
+                // +X wall
                 rx = pad + (wall.originXMm + p.offsetMm) * scale;
                 ry = pad + wall.originYMm * scale - 7;
               }

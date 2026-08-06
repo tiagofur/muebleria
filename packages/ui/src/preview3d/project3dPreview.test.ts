@@ -153,7 +153,9 @@ describe('resolveProject3DPreview', () => {
     expect(preview.empty).toBe(false);
     // 1 + 2 copies
     expect(preview.modules).toHaveLength(3);
+    expect(preview.layoutMode).toBe('linear');
     expect(preview.modules[0]!.originX).toBe(0);
+    expect(preview.modules[0]!.yawDeg).toBe(0);
     expect(preview.modules[1]!.originX).toBe(600 + PROJECT_RUN_GAP_MM);
     expect(preview.modules[2]!.originX).toBe(
       600 + PROJECT_RUN_GAP_MM + 400 + PROJECT_RUN_GAP_MM,
@@ -167,5 +169,62 @@ describe('resolveProject3DPreview', () => {
     });
     expect(preview.modules).toHaveLength(2);
     expect(preview.modules.every((m) => m.itemId === 'it-b')).toBe(true);
+  });
+
+  it('uses kitchen plan with yaw and keeps unplaced as linear tail', () => {
+    const withPlan: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [
+          {
+            id: 'w1',
+            lengthMm: 3000,
+            angleDeg: 0,
+            originXMm: 0,
+            originYMm: 0,
+          },
+          {
+            id: 'w2',
+            lengthMm: 2500,
+            angleDeg: 90,
+            originXMm: 3000,
+            originYMm: 0,
+          },
+        ],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+          {
+            itemId: 'it-b',
+            instanceIndex: 0,
+            wallId: 'w2',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+          // it-b#1 intentionally unplaced (qty 2)
+        ],
+      },
+    };
+    const preview = resolveProject3DPreview(withPlan, catalog);
+    expect(preview.layoutMode).toBe('kitchen');
+    expect(preview.placedCount).toBe(2);
+    expect(preview.unplacedCount).toBe(1);
+    expect(preview.modules).toHaveLength(3);
+
+    const onW1 = preview.modules.find((m) => m.instanceKey === 'it-a#0')!;
+    const onW2 = preview.modules.find((m) => m.instanceKey === 'it-b#0')!;
+    const tail = preview.modules.find((m) => m.instanceKey === 'it-b#1')!;
+    expect(onW1.yawDeg).toBe(0);
+    expect(onW2.yawDeg).toBe(90);
+    expect(tail.yawDeg).toBe(0);
+    expect(tail.originX).toBeGreaterThan(onW1.originX);
+    expect(
+      preview.errors.some((e) => e.includes('sin colocar')),
+    ).toBe(true);
   });
 });

@@ -638,6 +638,7 @@ export function ProjectPresentationMode({
                     originX: m.originX,
                     originY: m.originY,
                     originZ: m.originZ,
+                    yawDeg: m.yawDeg,
                     showOuterGhost: true,
                   }))}
                   totalWidth={preview.totalWidth}

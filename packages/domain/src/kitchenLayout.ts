@@ -47,6 +47,12 @@ export type KitchenPlacedModule = {
   readonly originX: number;
   readonly originY: number;
   readonly originZ: number;
+  /**
+   * Module yaw in degrees (workshop plan). Width aligns with wall direction;
+   * depth points into the room for axis-aligned L/U plans (v1).
+   * 0 = +X wall, 90 = +Y wall, 180 = −X, 270 = −Y.
+   */
+  readonly yawDeg: number;
 };
 
 export type KitchenLayoutResult = {
@@ -188,9 +194,130 @@ export function pruneKitchenLayout(
 }
 
 /**
+ * Prune layout after quote item mutations. Returns `undefined` when both walls
+ * and placements are empty (same contract as project store clear).
+ */
+export function pruneKitchenLayoutOrClear(
+  layout: ProjectKitchenLayout | undefined,
+  items: readonly ProjectItem[],
+): ProjectKitchenLayout | undefined {
+  if (!layout) return undefined;
+  const pruned = pruneKitchenLayout(layout, items);
+  if (pruned.walls.length === 0 && pruned.placements.length === 0) {
+    return undefined;
+  }
+  return pruned;
+}
+
+/**
+ * Snap wall angle to cardinal yaw so module width follows the wall and depth
+ * points into the room for the default L template (walls at 0° and 90°).
+ */
+export function wallDirectionYawDeg(angleDeg: number): number {
+  const a = ((angleDeg % 360) + 360) % 360;
+  if (a > 45 && a < 135) return 90;
+  if (a >= 135 && a <= 225) return 180;
+  if (a > 225 && a < 315) return 270;
+  return 0;
+}
+
+/** Axis-aligned footprint AABB after yaw (workshop mm). */
+export function placementAabb(
+  originX: number,
+  originY: number,
+  width: number,
+  depth: number,
+  yawDeg: number,
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  const y = wallDirectionYawDeg(yawDeg);
+  if (y === 90) {
+    return {
+      minX: originX - depth,
+      maxX: originX,
+      minY: originY,
+      maxY: originY + width,
+    };
+  }
+  if (y === 180) {
+    return {
+      minX: originX - width,
+      maxX: originX,
+      minY: originY - depth,
+      maxY: originY,
+    };
+  }
+  if (y === 270) {
+    return {
+      minX: originX,
+      maxX: originX + depth,
+      minY: originY - width,
+      maxY: originY,
+    };
+  }
+  return {
+    minX: originX,
+    maxX: originX + width,
+    minY: originY,
+    maxY: originY + depth,
+  };
+}
+
+/**
+ * Swap order of a placement on its wall, then re-pack offsets with gap.
+ * Unlike a blind offset swap, widths stay contiguous.
+ */
+export function reorderPlacementOnWall(
+  layout: ProjectKitchenLayout,
+  itemId: string,
+  instanceIndex: number,
+  dir: -1 | 1,
+  footprints: readonly KitchenFootprint[],
+  gapMm: number = 20,
+): ProjectKitchenLayout {
+  const target = layout.placements.find(
+    (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+  );
+  if (!target) return layout;
+  const onWall = layout.placements
+    .filter((p) => p.wallId === target.wallId)
+    .sort((a, b) => a.offsetMm - b.offsetMm);
+  const idx = onWall.findIndex(
+    (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
+  );
+  const j = idx + dir;
+  if (idx < 0 || j < 0 || j >= onWall.length) return layout;
+
+  const reordered = [...onWall];
+  const tmp = reordered[idx]!;
+  reordered[idx] = reordered[j]!;
+  reordered[j] = tmp;
+
+  const fpByKey = new Map(
+    footprints.map((f) => [`${f.itemId}#${f.instanceIndex}`, f]),
+  );
+  const newOffset = new Map<string, number>();
+  let cursor = 0;
+  for (const p of reordered) {
+    const key = `${p.itemId}#${p.instanceIndex}`;
+    newOffset.set(key, cursor);
+    const w = fpByKey.get(key)?.width ?? 600;
+    cursor += w + gapMm;
+  }
+
+  return {
+    ...layout,
+    placements: layout.placements.map((p) => {
+      const key = `${p.itemId}#${p.instanceIndex}`;
+      const next = newOffset.get(key);
+      return next === undefined ? p : { ...p, offsetMm: next };
+    }),
+  };
+}
+
+/**
  * Place modules using kitchen plan. Axis-aligned cabinets (v1):
- * - angle ~0°: along +X at wall originY
- * - angle ~90°: along +Y at wall originX
+ * - angle ~0°: along +X at wall originY, yaw 0
+ * - angle ~90°: along +Y at wall originX, yaw 90 (depth into −X / room)
  */
 export function layoutKitchenPlacements(
   layout: ProjectKitchenLayout,
@@ -225,6 +352,7 @@ export function layoutKitchenPlacements(
 
     const elev: PlacementElevation = p.elevation === 'wall' ? 'wall' : 'floor';
     const originZ = elev === 'wall' ? wallZ : 0;
+    const yawDeg = wallDirectionYawDeg(wall.angleDeg);
     const { originX, originY } = placementOriginsOnWall(
       wall,
       p.offsetMm,
@@ -242,12 +370,14 @@ export function layoutKitchenPlacements(
       originX,
       originY,
       originZ,
+      yawDeg,
     });
 
-    minX = Math.min(minX, originX);
-    maxX = Math.max(maxX, originX + fp.width);
-    minY = Math.min(minY, originY);
-    maxY = Math.max(maxY, originY + fp.depth);
+    const box = placementAabb(originX, originY, fp.width, fp.depth, yawDeg);
+    minX = Math.min(minX, box.minX);
+    maxX = Math.max(maxX, box.maxX);
+    minY = Math.min(minY, box.minY);
+    maxY = Math.max(maxY, box.maxY);
     maxH = Math.max(maxH, fp.height);
     maxTopZ = Math.max(maxTopZ, originZ + fp.height);
   }

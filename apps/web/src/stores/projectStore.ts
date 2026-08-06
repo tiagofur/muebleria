@@ -34,6 +34,7 @@ import {
   createProjectFromTemplate,
   duplicateProject as deepCopyProject,
   projectToTemplate,
+  pruneKitchenLayoutOrClear,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   transitionProjectStatus,
@@ -597,30 +598,32 @@ export function createProjectStore(options: InternalOptions) {
     updateProjectItem: (projectId, item) => {
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
-        ps.map((p) =>
-          p.id === projectId
-            ? {
-                ...p,
-                items: p.items.map((i) => (i.id === item.id ? item : i)),
-                updatedAt: now,
-              }
-            : p,
-        ),
+        ps.map((p) => {
+          if (p.id !== projectId) return p;
+          const items = p.items.map((i) => (i.id === item.id ? item : i));
+          return {
+            ...p,
+            items,
+            kitchenLayout: pruneKitchenLayoutOrClear(p.kitchenLayout, items),
+            updatedAt: now,
+          };
+        }),
       );
     },
 
     removeProjectItem: (projectId, itemId) => {
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
-        ps.map((p) =>
-          p.id === projectId
-            ? {
-                ...p,
-                items: p.items.filter((i) => i.id !== itemId),
-                updatedAt: now,
-              }
-            : p,
-        ),
+        ps.map((p) => {
+          if (p.id !== projectId) return p;
+          const items = p.items.filter((i) => i.id !== itemId);
+          return {
+            ...p,
+            items,
+            kitchenLayout: pruneKitchenLayoutOrClear(p.kitchenLayout, items),
+            updatedAt: now,
+          };
+        }),
       );
     },
 

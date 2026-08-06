@@ -59,6 +59,7 @@ import { ProjectItemsSection } from './ProjectItemsSection';
 import { ProjectOptionsSection } from './ProjectOptionsSection';
 import { ProjectMeasureDefaults } from './ProjectMeasureDefaults';
 import { ProjectTotalsAside } from './ProjectTotalsAside';
+import { allFootprints } from '../kitchenPlanHelpers';
 import {
   formatProjectMoney,
   resolveCustomerName,
@@ -284,6 +285,19 @@ function ProjectDetailViewInner(): ReactNode {
 
   const chromeSale = breakdown?.salePrice ?? null;
   const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
+
+  const kitchenUnplacedCount = useMemo(() => {
+    const fps = allFootprints(project, modules);
+    const layout = project.kitchenLayout;
+    if (!layout || layout.walls.length === 0) {
+      return fps.length > 0 ? fps.length : 0;
+    }
+    const placed = new Set(
+      layout.placements.map((p) => `${p.itemId}#${p.instanceIndex}`),
+    );
+    return fps.filter((f) => !placed.has(`${f.itemId}#${f.instanceIndex}`))
+      .length;
+  }, [project, modules]);
 
   const primary = resolveChromePrimary({
     status: project.status,
@@ -541,6 +555,15 @@ function ProjectDetailViewInner(): ReactNode {
                   onClick={() => toggleTools('kitchen')}
                 >
                   Plan de cocina
+                  {kitchenUnplacedCount > 0 ? (
+                    <span
+                      className="project-detail__tools-badge"
+                      data-testid="project-tools-kitchen-unplaced"
+                      title={`${kitchenUnplacedCount} sin colocar en el plano`}
+                    >
+                      {kitchenUnplacedCount}
+                    </span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
