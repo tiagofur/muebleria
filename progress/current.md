@@ -1,24 +1,31 @@
-# Sesión actual — QA de campo #251
+# Sesión — QA de campo #251 CERRADO
 
-- **Issue:** [#251](https://github.com/tiagofur/muebleria/issues/251)
-- **PR fixes:** [#252](https://github.com/tiagofur/muebleria/pull/252) **MERGED** → `main` @ `628cbcc`
-- **Inicio:** 2026-08-07
+- **Issue:** [#251](https://github.com/tiagofur/muebleria/issues/251) closed 2026-08-07
+- **Fixes mergeados:** #252, #253 → `main`
 
-## Hecho
+## Smoke browser (usuario)
 
-- Smoke auto domain/ui/web + typecheck
-- 7 bugs multi-space / OP / free-only (ver issue)
-- Checklist browser ampliado (Proyectar + Producción §5.4)
+| Paso | OK |
+|------|-----|
+| Wipe multi-ambiente | ✅ |
+| Isla Proyectar | ✅ |
+| Elevaciones por ambiente | ✅ |
+| Filtro despiece | ✅ |
+| Pack ZIP | ✅ |
+| Estados / En planta | ✅ |
+| Presentar + Proyectar RO accepted | ✅ |
 
-## Pendiente (ojo humano)
+## Residual (abrir en issues)
 
-1. Proyectar: regresión +Ambiente vacío + soft lock 2 users  
-2. Producción: elevaciones 2 ambientes + filtro despiece  
-3. Cerrar #251 cuando §5 manual esté tildado (o aceptar residual)
+| Issue | Tema |
+|-------|------|
+| #256 | Planta/3D multi-ambiente |
+| #255 | Islas en planta + ficha |
+| #254 | Polish elevaciones/PDF |
+| #257 | Lifecycle freeze + Aceptar confirm + status fuera Editar |
 
-## Comandos
+## Siguiente (prioridad sugerida)
 
-```bash
-pnpm --filter @muebles/domain test
-pnpm --filter @muebles/ui test -- project3dPreview productionModuleRows
-```
+1. **#257** lifecycle (reglas de taller / RBAC UX)  
+2. **#256** vistas multi-ambiente  
+3. #255 islas dibujadas  
