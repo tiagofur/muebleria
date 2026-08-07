@@ -241,6 +241,8 @@ export function ProjectSpatialStudio({
     DEFAULT_SCENE_LIGHTING_MODE,
   );
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  /** Read-only space navigation — must not persist layout / activeSpaceId. */
+  const [viewSpaceId, setViewSpaceId] = useState<string | null>(null);
   const wallDragSession = useRef(false);
   const appliedBootstrap = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -307,7 +309,7 @@ export function ProjectSpatialStudio({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const layout = useMemo(
+  const baseLayout = useMemo(
     () =>
       ensureKitchenSpaces(
         pruneKitchenLayout(
@@ -326,6 +328,17 @@ export function ProjectSpatialStudio({
   // Shadow canEdit for the rest of the component: mutations + edit UI respect
   // soft lock. statusCanEdit remains for frozen-project chrome only.
   const canEdit = statusCanEdit && !editBlocked;
+
+  // Clear view-only space override when editing becomes available or project changes.
+  useEffect(() => {
+    if (canEdit) setViewSpaceId(null);
+  }, [canEdit, project.id]);
+
+  const layout = useMemo(() => {
+    if (canEdit || !viewSpaceId) return baseLayout;
+    if (viewSpaceId === baseLayout.activeSpaceId) return baseLayout;
+    return setActiveKitchenSpace(baseLayout, viewSpaceId);
+  }, [baseLayout, canEdit, viewSpaceId]);
   const lockHolderName =
     heldByOther && project.planEditSession?.userName?.trim()
       ? project.planEditSession.userName.trim()
@@ -610,14 +623,9 @@ export function ProjectSpatialStudio({
   };
 
   const switchSpace = (spaceId: string) => {
-    if (!canEdit && spaceId !== activeSpaceId) {
-      // Read-only: still allow navigating spaces without history.
-      onChangeLayout(
-        pruneKitchenLayout(
-          setActiveKitchenSpace(layout, spaceId),
-          project.items,
-        ),
-      );
+    if (!canEdit) {
+      // Read-only: local view only — never persist activeSpaceId on frozen OP.
+      setViewSpaceId(spaceId);
       setSelectedKey(null);
       setTargetWallId(null);
       return;

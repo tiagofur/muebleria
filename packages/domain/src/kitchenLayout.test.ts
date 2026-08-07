@@ -5,6 +5,7 @@ import {
   nextOffsetOnWall,
   pruneKitchenLayout,
   pruneKitchenLayoutOrClear,
+  isKitchenLayoutEmpty,
   reorderPlacementOnWall,
   resolveWallFrames,
   kitchenLayoutWarnings,
@@ -471,6 +472,26 @@ describe('kitchenLayout', () => {
         [],
       ),
     ).toBeUndefined();
+  });
+
+  it('isKitchenLayoutEmpty is false when only inactive space has content', () => {
+    expect(
+      isKitchenLayoutEmpty({
+        walls: [],
+        placements: [],
+        activeSpaceId: 'b',
+        spaces: [
+          {
+            id: 'a',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [],
+          },
+          { id: 'b', name: 'Baño', walls: [], placements: [] },
+        ],
+      }),
+    ).toBe(false);
+    expect(isKitchenLayoutEmpty({ walls: [], placements: [] })).toBe(true);
   });
 
   it('ensureKitchenSpaces wraps legacy layout as Cocina', () => {

@@ -123,4 +123,35 @@ describe('buildProductionModuleRows (PROD-0.4)', () => {
     expect(rows[0]!.pieceCount).toBe(3);
     expect(rows[1]!.pieceCount).toBe(0);
   });
+
+  it('splits pieceCount proportionally when same module code is on two lines', () => {
+    const cut: ProductionCutRow[] = [
+      {
+        quantity: 4,
+        lengthMm: 700,
+        widthMm: 500,
+        description: 'Lat',
+        materialName: 'Blanco',
+        grain: 0,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+        moduleCode: 'GAB-01',
+      },
+    ];
+    const rows = buildProductionModuleRows(
+      project({
+        items: [
+          { id: 'a', moduleId: 'm1', quantity: 1, optionChoices: {} },
+          { id: 'b', moduleId: 'm1', quantity: 1, optionChoices: {} },
+        ],
+      }),
+      modules,
+      cut,
+    );
+    // 4 pieces total, qty 1+1 → 2 each (not 4+4)
+    expect(rows[0]!.pieceCount).toBe(2);
+    expect(rows[1]!.pieceCount).toBe(2);
+  });
 });

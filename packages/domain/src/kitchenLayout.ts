@@ -481,6 +481,23 @@ export function pruneKitchenLayout(
 }
 
 /**
+ * True when neither top-level nor any KitchenSpace has walls or placements.
+ * Empty active space alone must NOT count as empty (multi-ambiente).
+ */
+export function isKitchenLayoutEmpty(
+  layout: ProjectKitchenLayout | undefined | null,
+): boolean {
+  if (!layout) return true;
+  const hasAnyWalls =
+    layout.walls.length > 0 ||
+    (layout.spaces?.some((s) => s.walls.length > 0) ?? false);
+  const hasAnyPlacements =
+    layout.placements.length > 0 ||
+    (layout.spaces?.some((s) => s.placements.length > 0) ?? false);
+  return !hasAnyWalls && !hasAnyPlacements;
+}
+
+/**
  * Prune layout after quote item mutations. Returns `undefined` when both walls
  * and placements are empty (same contract as project store clear).
  */
@@ -490,13 +507,7 @@ export function pruneKitchenLayoutOrClear(
 ): ProjectKitchenLayout | undefined {
   if (!layout) return undefined;
   const pruned = pruneKitchenLayout(layout, items);
-  const hasAnyWalls =
-    pruned.walls.length > 0 ||
-    (pruned.spaces?.some((s) => s.walls.length > 0) ?? false);
-  const hasAnyPlacements =
-    pruned.placements.length > 0 ||
-    (pruned.spaces?.some((s) => s.placements.length > 0) ?? false);
-  if (!hasAnyWalls && !hasAnyPlacements) {
+  if (isKitchenLayoutEmpty(pruned)) {
     return undefined;
   }
   return pruned;

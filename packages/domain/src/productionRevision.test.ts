@@ -81,6 +81,100 @@ describe('productionRevision (PROD-3.2)', () => {
     expect(next.production?.fingerprint).toBeTruthy();
   });
 
+  it('fingerprint includes free-place coords (islands)', () => {
+    const base = project({
+      kitchenLayout: {
+        walls: [],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: '',
+            offsetMm: 0,
+            elevation: 'floor',
+            mode: 'free',
+            freeXMm: 1000,
+            freeYMm: 500,
+            freeYawDeg: 0,
+          },
+        ],
+      },
+    });
+    const moved = project({
+      kitchenLayout: {
+        walls: [],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: '',
+            offsetMm: 0,
+            elevation: 'floor',
+            mode: 'free',
+            freeXMm: 1400,
+            freeYMm: 500,
+            freeYawDeg: 0,
+          },
+        ],
+      },
+    });
+    expect(computeProductionDesignFingerprint(base)).not.toBe(
+      computeProductionDesignFingerprint(moved),
+    );
+  });
+
+  it('fingerprint ignores activeSpaceId-only changes', () => {
+    const a = project({
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'i1',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+        activeSpaceId: 'space-a',
+        spaces: [
+          {
+            id: 'space-a',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [
+              {
+                itemId: 'i1',
+                instanceIndex: 0,
+                wallId: 'w1',
+                offsetMm: 0,
+                elevation: 'floor',
+              },
+            ],
+          },
+          {
+            id: 'space-b',
+            name: 'Baño',
+            walls: [],
+            placements: [],
+          },
+        ],
+      },
+    });
+    const b = {
+      ...a,
+      kitchenLayout: {
+        ...a.kitchenLayout!,
+        activeSpaceId: 'space-b',
+        walls: [],
+        placements: [],
+      },
+    };
+    expect(computeProductionDesignFingerprint(a)).toBe(
+      computeProductionDesignFingerprint(b),
+    );
+  });
+
   it('detects stale export after design change', () => {
     let p = ensureProductionRevision(project(), '2026-03-01T00:00:00.000Z');
     p = recordProductionExport(p, '2026-03-01T01:00:00.000Z');

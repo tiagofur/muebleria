@@ -5,23 +5,57 @@
  * Export is stale when last export fingerprint ≠ current design fingerprint.
  */
 
-import type { Project, ProjectItem, ProjectProductionState } from './types';
+import type {
+  Project,
+  ProjectItem,
+  ProjectItemPlacement,
+  ProjectProductionState,
+} from './types';
+import { ensureKitchenSpaces, isFreePlacement } from './kitchenLayout';
 
 function stableChoices(choices: ProjectItem['optionChoices']): string {
   const keys = Object.keys(choices).sort();
   return keys.map((k) => `${k}=${choices[k] ?? ''}`).join('&');
 }
 
+function placementToken(p: ProjectItemPlacement): string {
+  if (isFreePlacement(p)) {
+    return `${p.itemId}#${p.instanceIndex}@free:${p.freeXMm ?? 0}:${p.freeYMm ?? 0}:${p.freeYawDeg ?? 0}`;
+  }
+  return `${p.itemId}#${p.instanceIndex}@${p.wallId}:${p.offsetMm}:${p.elevation}:${p.mode ?? 'wall'}`;
+}
+
+/**
+ * Design fingerprint for kitchen plan. Covers all spaces + free coords.
+ * Ignores activeSpaceId (view-only; not a design change).
+ */
 function placementFingerprint(project: Project): string {
   const layout = project.kitchenLayout;
   if (!layout) return '';
-  const placements = [...(layout.placements ?? [])]
-    .map(
-      (p) =>
-        `${p.itemId}#${p.instanceIndex}@${p.wallId}:${p.offsetMm}:${p.elevation}:${p.mode ?? 'wall'}`,
-    )
+  const ensured = ensureKitchenSpaces(layout);
+  const spaces = ensured.spaces ?? [];
+
+  if (spaces.length > 0) {
+    const spaceParts = spaces
+      .map((space) => {
+        const walls = [...space.walls]
+          .map((w) => `${w.id}:${w.lengthMm}:${w.angleDeg}`)
+          .sort()
+          .join('|');
+        const placements = [...space.placements]
+          .map((p) => placementToken(p))
+          .sort()
+          .join('|');
+        return `${space.id}{w=${walls};p=${placements}}`;
+      })
+      .sort();
+    return spaceParts.join(';');
+  }
+
+  const placements = [...(ensured.placements ?? [])]
+    .map((p) => placementToken(p))
     .sort();
-  const walls = [...(layout.walls ?? [])]
+  const walls = [...(ensured.walls ?? [])]
     .map((w) => `${w.id}:${w.lengthMm}:${w.angleDeg}`)
     .sort();
   return `w=${walls.join('|')};p=${placements.join('|')}`;

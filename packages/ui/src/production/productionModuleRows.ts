@@ -142,7 +142,8 @@ function placementSummary(
   return { label: unique.join(', '), unplaced: false };
 }
 
-function pieceCountForModule(
+/** Total board pieces for a module code across the cut list. */
+function totalPiecesForModuleCode(
   moduleCode: string,
   cutRows: readonly ProductionCutRow[] | null,
 ): number {
@@ -153,8 +154,23 @@ function pieceCountForModule(
       n += row.quantity > 0 ? row.quantity : 1;
     }
   }
-  // Fallback: if no moduleCode on rows, do not invent per-line counts.
   return n;
+}
+
+/**
+ * Attribute cut pieces to a quote line when the same module code appears more
+ * than once (proportional by quantity — cut rows have no itemId).
+ */
+function pieceCountForItemLine(
+  moduleCode: string,
+  itemQuantity: number,
+  totalQtySameCode: number,
+  cutRows: readonly ProductionCutRow[] | null,
+): number {
+  const total = totalPiecesForModuleCode(moduleCode, cutRows);
+  if (total === 0 || totalQtySameCode <= 0) return 0;
+  if (totalQtySameCode === itemQuantity) return total;
+  return Math.round((total * itemQuantity) / totalQtySameCode);
 }
 
 /**
@@ -169,6 +185,17 @@ export function buildProductionModuleRows(
   const codeCounts = new Map<string, number>();
   const rows: ProductionModuleRow[] = [];
 
+  // Total quote qty per module code (for proportional piece attribution).
+  const qtyByCode = new Map<string, number>();
+  for (const item of project.items) {
+    const mod = modules.find((m) => m.id === item.moduleId);
+    const moduleCode = mod?.code?.trim() || item.moduleId.slice(0, 8);
+    qtyByCode.set(
+      moduleCode,
+      (qtyByCode.get(moduleCode) ?? 0) + Math.max(1, item.quantity),
+    );
+  }
+
   for (const item of project.items) {
     const mod = modules.find((m) => m.id === item.moduleId);
     const moduleCode = mod?.code?.trim() || item.moduleId.slice(0, 8);
@@ -178,6 +205,7 @@ export function buildProductionModuleRows(
     const factoryCode = seen === 1 ? moduleCode : `${moduleCode}-L${seen}`;
     const measures = measuresForItem(item, modules);
     const place = placementSummary(project, item.id);
+    const itemQty = Math.max(1, item.quantity);
 
     rows.push({
       itemId: item.id,
@@ -191,7 +219,12 @@ export function buildProductionModuleRows(
       measuresLabel: measures.label,
       placementLabel: place.label,
       unplaced: place.unplaced,
-      pieceCount: pieceCountForModule(moduleCode, cutRows),
+      pieceCount: pieceCountForItemLine(
+        moduleCode,
+        itemQty,
+        qtyByCode.get(moduleCode) ?? itemQty,
+        cutRows,
+      ),
       floorStatus: normalizeItemFloorStatus(item.floorStatus),
     });
   }
