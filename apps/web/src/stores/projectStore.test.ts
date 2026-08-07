@@ -681,6 +681,45 @@ describe('projectStore — importNestingResult / updateKitchenLayout', () => {
     });
     expect(store.getState().projects[0]!.kitchenLayout?.walls).toHaveLength(1);
   });
+
+  it('updateKitchenLayout keeps other spaces when active top-level is empty', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject()]);
+
+    store.getState().updateKitchenLayout('proj-1', {
+      walls: [],
+      placements: [],
+      activeSpaceId: 'space-bano',
+      spaces: [
+        {
+          id: 'space-cocina',
+          name: 'Cocina',
+          walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+          placements: [
+            {
+              itemId: 'item-1',
+              instanceIndex: 0,
+              wallId: 'w1',
+              offsetMm: 0,
+              elevation: 'floor',
+            },
+          ],
+        },
+        {
+          id: 'space-bano',
+          name: 'Baño',
+          walls: [],
+          placements: [],
+        },
+      ],
+    });
+
+    const layout = store.getState().projects[0]!.kitchenLayout;
+    expect(layout).toBeDefined();
+    expect(layout!.spaces).toHaveLength(2);
+    expect(layout!.spaces![0]!.walls).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

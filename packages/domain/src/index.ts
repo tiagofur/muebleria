@@ -240,6 +240,7 @@ export {
   kitchenLayoutWarnings,
   pruneKitchenLayout,
   pruneKitchenLayoutOrClear,
+  isKitchenLayoutEmpty,
   wallDirectionYawDeg,
   placementAabb,
   reorderPlacementOnWall,

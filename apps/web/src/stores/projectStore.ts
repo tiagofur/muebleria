@@ -36,6 +36,7 @@ import {
   createProjectFromTemplate,
   duplicateProject as deepCopyProject,
   ensureProductionRevision as ensureProductionRevisionDomain,
+  isKitchenLayoutEmpty,
   projectToTemplate,
   pruneKitchenLayoutOrClear,
   recordProductionExport as recordProductionExportDomain,
@@ -706,11 +707,10 @@ export function createProjectStore(options: InternalOptions) {
           p.id === projectId
             ? {
                 ...p,
-                kitchenLayout:
-                  kitchenLayout.walls.length === 0 &&
-                  kitchenLayout.placements.length === 0
-                    ? undefined
-                    : kitchenLayout,
+                // Multi-space: empty active space must NOT wipe other ambientes.
+                kitchenLayout: isKitchenLayoutEmpty(kitchenLayout)
+                  ? undefined
+                  : kitchenLayout,
                 updatedAt: now,
               }
             : p,

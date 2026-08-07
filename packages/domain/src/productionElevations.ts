@@ -4,14 +4,21 @@
  */
 
 import type {
+  KitchenWall,
   Module,
   PlacementElevation,
   Project,
   ProjectItem,
   ProjectItemPlacement,
+  ProjectKitchenLayout,
 } from './types';
 import { defaultMeasurePresetId, resolveModuleMeasurePreset } from './measurePresets';
-import { emptyKitchenLayout, pruneKitchenLayout } from './kitchenLayout';
+import {
+  emptyKitchenLayout,
+  ensureKitchenSpaces,
+  isFreePlacement,
+  pruneKitchenLayout,
+} from './kitchenLayout';
 
 export type ProductionElevationUnit = {
   readonly itemId: string;
@@ -99,8 +106,51 @@ function unitLabel(
 }
 
 /**
+ * Flatten multi-space layouts so factory elevations cover every ambiente,
+ * not only the active space mirrored at top-level.
+ */
+function wallsAndPlacementsForElevations(
+  layout: ProjectKitchenLayout,
+): {
+  readonly walls: readonly KitchenWall[];
+  readonly placements: readonly ProjectItemPlacement[];
+} {
+  const ensured = ensureKitchenSpaces(layout);
+  const spaces = ensured.spaces ?? [];
+  if (spaces.length <= 1) {
+    return { walls: ensured.walls, placements: ensured.placements };
+  }
+
+  const walls: KitchenWall[] = [];
+  const placements: ProjectItemPlacement[] = [];
+  for (const space of spaces) {
+    const spaceName = space.name?.trim() || 'Ambiente';
+    for (const wall of space.walls) {
+      const wallLabel = wall.name?.trim() || `Muro ${wall.lengthMm} mm`;
+      walls.push({
+        ...wall,
+        id: `${space.id}::${wall.id}`,
+        name: `${spaceName} — ${wallLabel}`,
+      });
+    }
+    for (const p of space.placements) {
+      if (isFreePlacement(p)) {
+        placements.push(p);
+      } else {
+        placements.push({
+          ...p,
+          wallId: `${space.id}::${p.wallId}`,
+        });
+      }
+    }
+  }
+  return { walls, placements };
+}
+
+/**
  * Build wall elevations + unplaced/free lists from project kitchen layout.
  * Does not invent positions for unplaced units on walls.
+ * Multi-space: includes walls/placements from every KitchenSpace.
  */
 export function buildProductionElevations(
   project: Project,
@@ -111,11 +161,14 @@ export function buildProductionElevations(
     project.items,
   );
 
+  const { walls: elevWalls, placements: elevPlacements } =
+    wallsAndPlacementsForElevations(layout);
+
   const wallCabinetsZ = layout.wallCabinetZMm ?? 1400;
   const defaultBaseClearance = layout.baseClearanceMm ?? 100;
 
-  const walls: ProductionWallElevation[] = layout.walls.map((wall) => {
-    const wallPlacements = layout.placements.filter(
+  const walls: ProductionWallElevation[] = elevWalls.map((wall) => {
+    const wallPlacements = elevPlacements.filter(
       (p) =>
         p.wallId === wall.id &&
         (p.mode === undefined || p.mode === 'wall'),
@@ -166,12 +219,12 @@ export function buildProductionElevations(
   });
 
   const placedKeys = new Set(
-    layout.placements
+    elevPlacements
       .filter((p) => p.mode === undefined || p.mode === 'wall')
       .map((p) => `${p.itemId}#${p.instanceIndex}`),
   );
   const freeKeys = new Set(
-    layout.placements
+    elevPlacements
       .filter((p) => p.mode === 'free')
       .map((p) => `${p.itemId}#${p.instanceIndex}`),
   );

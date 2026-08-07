@@ -233,11 +233,16 @@ export function resolveProject3DPreview(
 
   const byItemId = new Map(rows.map((r) => [r.item.id, r]));
   const kitchen = project.kitchenLayout;
+  const hasFreeOnlyKitchen =
+    Boolean(kitchen) &&
+    kitchen!.walls.length === 0 &&
+    kitchen!.placements.some((p) => p.mode === 'free');
   const useKitchen =
     !options.itemId &&
     kitchen &&
-    kitchen.walls.length > 0 &&
-    (kitchen.placements.length > 0 || Boolean(options.kitchenWallsOnly));
+    ((kitchen.walls.length > 0 &&
+      (kitchen.placements.length > 0 || Boolean(options.kitchenWallsOnly))) ||
+      hasFreeOnlyKitchen);
 
   let modules: ProjectModule3DInstance[];
   let totalWidth: number;

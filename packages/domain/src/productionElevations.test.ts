@@ -125,4 +125,55 @@ describe('buildProductionElevations (PROD-1.1)', () => {
     expect(r.freePlace.map((u) => u.moduleCode)).toContain('ALT-01');
     expect(r.unplaced).toHaveLength(0);
   });
+
+  it('includes walls from every multi-space ambiente (not only active top-level)', () => {
+    // Top-level mirrors active space (real store shape after setActiveKitchenSpace).
+    const banoWall = { id: 'w2', lengthMm: 2000, angleDeg: 0, name: 'Muro B' };
+    const banoPlacement = {
+      itemId: 'i2',
+      instanceIndex: 0,
+      wallId: 'w2',
+      offsetMm: 50,
+      elevation: 'wall' as const,
+    };
+    const r = buildProductionElevations(
+      baseProject({
+        kitchenLayout: {
+          walls: [banoWall],
+          placements: [banoPlacement],
+          activeSpaceId: 'space-bano',
+          spaces: [
+            {
+              id: 'space-cocina',
+              name: 'Cocina',
+              walls: [{ id: 'w1', lengthMm: 3200, angleDeg: 0, name: 'Muro A' }],
+              placements: [
+                {
+                  itemId: 'i1',
+                  instanceIndex: 0,
+                  wallId: 'w1',
+                  offsetMm: 100,
+                  elevation: 'floor',
+                },
+              ],
+            },
+            {
+              id: 'space-bano',
+              name: 'Baño',
+              walls: [banoWall],
+              placements: [banoPlacement],
+            },
+          ],
+        },
+      }),
+      modules,
+    );
+    expect(r.walls).toHaveLength(2);
+    expect(r.walls.map((w) => w.wallName).join('|')).toContain('Cocina');
+    expect(r.walls.map((w) => w.wallName).join('|')).toContain('Baño');
+    const allCodes = r.walls.flatMap((w) => w.units.map((u) => u.moduleCode));
+    expect(allCodes).toContain('GAB-01');
+    expect(allCodes).toContain('ALT-01');
+    expect(r.unplaced).toHaveLength(0);
+  });
 });

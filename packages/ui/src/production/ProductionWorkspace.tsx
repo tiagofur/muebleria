@@ -15,6 +15,8 @@ import type {
 import {
   buildProductionElevations,
   ensureProductionRevision,
+  generateCutRows,
+  generateHardwareList,
   getProductionStaleInfo,
   listProductionSpaceOptions,
   PRODUCTION_SCOPE_ALL,
@@ -166,29 +168,47 @@ export function ProductionWorkspace({
       productionScopeId,
     );
 
-    // Cut/hardware resolved on full project for export truth; views use scoped.
-    // For filtered UI lists, resolve cut rows on scoped project via domain later
-    // by filtering cut rows client-side when scope is set.
+    // Full-project cut for export readiness path; scoped UI recomputes from items.
     const cut = resolveCutRows(orderProject.id);
-    const scopedCutRows =
-      productionScopeId === PRODUCTION_SCOPE_ALL || !cut.rows
-        ? cut.rows
-        : cut.rows.filter((r) =>
-            scopedProject.items.some(
-              (it) =>
-                modules.find((m) => m.id === it.moduleId)?.code === r.moduleCode ||
-                !r.moduleCode,
-            ),
-          );
+    let scopedCutRows = cut.rows;
+    let scopedCutError = cut.error;
+    if (
+      productionScopeId !== PRODUCTION_SCOPE_ALL &&
+      catalog &&
+      scopedProject.items.length >= 0
+    ) {
+      try {
+        scopedCutRows = generateCutRows(scopedProject, catalog);
+        scopedCutError = null;
+      } catch (err) {
+        scopedCutRows = null;
+        scopedCutError =
+          err instanceof Error ? err.message : 'Error al resolver despiece';
+      }
+    }
 
     const readiness = buildProductionOrderReadiness({
       project: scopedProject,
       cutRows: scopedCutRows,
-      cutListError: cut.error,
+      cutListError: scopedCutError,
     });
-    const hardware = resolveHardware
+    let hardware: {
+      readonly rows: readonly HardwarePurchaseRow[] | null;
+      readonly error?: string | null;
+    } = resolveHardware
       ? resolveHardware(orderProject.id)
-      : { rows: null as readonly HardwarePurchaseRow[] | null, error: null };
+      : { rows: null, error: null };
+    if (productionScopeId !== PRODUCTION_SCOPE_ALL && catalog) {
+      try {
+        hardware = { rows: generateHardwareList(scopedProject, catalog), error: null };
+      } catch (err) {
+        hardware = {
+          rows: null,
+          error:
+            err instanceof Error ? err.message : 'Error al resolver herrajes',
+        };
+      }
+    }
     const elevations = buildProductionElevations(scopedProject, modules);
     // Ensure OP revision exists for plant-ready projects (display only; persist via store on export/floor).
     const projectForHubBase =
