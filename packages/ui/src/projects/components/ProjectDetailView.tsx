@@ -222,6 +222,7 @@ export interface ProjectDetailViewProps {
   readonly canMutate: boolean;
   readonly canDelete: boolean;
   readonly canReopen: boolean;
+  readonly canForceReopenClosed?: boolean;
   readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
 }
@@ -282,6 +283,8 @@ const CONFIRM_ACCEPT =
   '¿Aceptar esta cotización?\n\nEl pedido pasa a fábrica. Después de aceptar no se puede volver a borrador: solo ver y producir.';
 const CONFIRM_REOPEN =
   '¿Reabrir a borrador?\n\nSe descongelan los precios y vuelve a ser editable. Usalo si el cliente pidió cambios antes de aceptar.';
+const CONFIRM_REOPEN_FORCE =
+  '¿Reabrir a borrador una cotización ya aceptada/en producción?\n\nEsto es una excepción de admin/gerente. Se descongelan precios y el diseño vuelve a ser editable.';
 
 function ProjectDetailViewInner(): ReactNode {
   const ctx = useProjectDetail();
@@ -317,6 +320,7 @@ function ProjectDetailViewInner(): ReactNode {
     canMutate,
     canDelete,
     canReopen,
+    canForceReopenClosed,
     canMarkProduced,
   } = ctx;
 
@@ -427,14 +431,19 @@ function ProjectDetailViewInner(): ReactNode {
         onSelect: () => requestStatus('accepted', CONFIRM_ACCEPT),
       });
     }
-    // #257: reopen only while quoted (before accept → production). Vendedor OK.
-    if (canReopen && project.status === 'quoted' && onRequestReopen) {
+    // #257: quoted → any canReopen (vendedor+); accepted/produced → admin/gerente only.
+    const reopenQuoted = canReopen && project.status === 'quoted';
+    const reopenClosed =
+      canForceReopenClosed &&
+      (project.status === 'accepted' || project.status === 'produced');
+    if ((reopenQuoted || reopenClosed) && onRequestReopen) {
       metaItems.push({
         id: 'reopen',
         label: 'Reabrir a borrador…',
         icon: <RotateCcw size={16} strokeWidth={1.5} aria-hidden />,
         onSelect: () => {
-          if (typeof window !== 'undefined' && !window.confirm(CONFIRM_REOPEN)) {
+          const msg = reopenClosed ? CONFIRM_REOPEN_FORCE : CONFIRM_REOPEN;
+          if (typeof window !== 'undefined' && !window.confirm(msg)) {
             return;
           }
           onRequestReopen();
@@ -460,6 +469,7 @@ function ProjectDetailViewInner(): ReactNode {
     canDelete,
     canMutate,
     canReopen,
+    canForceReopenClosed,
     exportMenu.sections,
     hasOpenInProduction,
     onChangeStatus,
@@ -858,6 +868,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       props.canMutate && props.project.status === 'draft',
     canDelete: props.canDelete,
     canReopen: props.canReopen,
+    canForceReopenClosed: Boolean(props.canForceReopenClosed),
     canMarkProduced: props.canMarkProduced,
     onRestoreVersion: props.onRestoreVersion,
     projectTemplates: props.projectTemplates,

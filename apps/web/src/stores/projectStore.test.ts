@@ -701,17 +701,19 @@ describe('projectStore — importNestingResult / updateKitchenLayout', () => {
     expect(store.getState().projects[0]!.items).toHaveLength(0);
   });
 
-  it('reopenProject only from quoted, not accepted (#257)', () => {
+  it('reopenProject: vendedor cannot force accepted; admin can (#257)', () => {
     const { deps } = makeDeps();
     const store = createProjectStore({ deps });
-    const catalog = { materials: [], edges: [], hardware: [], optionGroups: [], modules: [], structures: [], components: [], customers: [] };
 
     store.getState().setProjects([makeProject({ status: 'accepted' })]);
-    store.getState().reopenProject('proj-1', catalog as never);
+    store.getState().reopenProject('proj-1', seedCatalog(), 'vendedor');
     expect(store.getState().projects[0]!.status).toBe('accepted');
 
+    store.getState().reopenProject('proj-1', seedCatalog(), 'admin');
+    expect(store.getState().projects[0]!.status).toBe('draft');
+
     store.getState().setProjects([makeProject({ status: 'quoted' })]);
-    store.getState().reopenProject('proj-1', catalog as never);
+    store.getState().reopenProject('proj-1', seedCatalog(), 'vendedor');
     expect(store.getState().projects[0]!.status).toBe('draft');
   });
 

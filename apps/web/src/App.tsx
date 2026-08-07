@@ -547,6 +547,11 @@ function AppContent({
     session === 'guest' || roleCanDeleteProject(actorRole);
   const canReopenProjects =
     session === 'guest' || roleCanReopenProject(actorRole);
+  /** accepted/produced → draft: admin + gerente only (vendedor never). */
+  const canForceReopenClosed =
+    session === 'guest' ||
+    actorRole === 'admin' ||
+    actorRole === 'gerente_ventas';
   const canMarkProduced =
     session === 'guest' || roleCanMarkProduced(actorRole);
   const canExportProduction =
@@ -1070,9 +1075,12 @@ function AppContent({
   const reopenProject = useCallback(
     (id: string) => {
       if (!catalog) return;
-      projectActions.reopenProject(id, catalog);
+      // Guest shell acts as full admin for local demo.
+      const role =
+        session === 'guest' ? 'admin' : (authUser?.role ?? null);
+      projectActions.reopenProject(id, catalog, role);
     },
-    [projectActions, catalog],
+    [projectActions, catalog, session, authUser?.role],
   );
   const restoreProjectVersion = useCallback(
     (id: string, version: number) => {
@@ -2327,6 +2335,7 @@ function AppContent({
           canMutate={canMutateProjects}
           canDelete={canDeleteProjects}
           canReopen={canReopenProjects}
+          canForceReopenClosed={canForceReopenClosed}
           canMarkProduced={canMarkProduced}
           onMarkProduced={markProjectProduced}
           onChangeStatus={changeProjectStatus}

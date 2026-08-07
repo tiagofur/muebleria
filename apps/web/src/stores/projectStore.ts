@@ -195,7 +195,11 @@ export interface ProjectState {
     status: ProjectStatus,
     catalog: Catalog,
   ) => void;
-  readonly reopenProject: (id: string, catalog: Catalog) => void;
+  readonly reopenProject: (
+    id: string,
+    catalog: Catalog,
+    actorRole?: string | null,
+  ) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;
 
   // --- Templates ---
@@ -518,18 +522,20 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     /**
-     * #257: only quoted → draft (client wants changes before accept).
-     * accepted/produced cannot reopen.
+     * #257: quoted → draft (vendedor OK); accepted/produced → draft only if
+     * role is admin/gerente (pass actor via optional 3rd arg; store uses workspace).
      */
-    reopenProject: (id, catalog) => {
+    reopenProject: (id, catalog, actorRole?: string | null) => {
       const project = get().projects.find((p) => p.id === id);
       if (!project) return;
       if (project.status === 'draft') return;
-      if (!projectAllowsReopenToDraft(project.status)) {
+      if (!projectAllowsReopenToDraft(project.status, actorRole)) {
         toast({
           type: 'error',
           message:
-            'Solo se puede reabrir una cotización enviada (antes de aceptar).',
+            project.status === 'quoted'
+              ? 'No se pudo reabrir la cotización.'
+              : 'Después de aceptar, solo admin/gerente puede reabrir a borrador.',
         });
         return;
       }

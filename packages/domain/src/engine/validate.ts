@@ -331,12 +331,18 @@ export function projectAllowsContentMutation(
 }
 
 /**
- * Reopen to draft is only allowed while **quoted** (enviada al cliente).
- * After accept → production path: no volver a borrador (#257 refinement).
- * If the client asks for changes before accept, vendedor reabre quoted → draft.
+ * Who may reopen which status → draft (#257).
+ * - **quoted**: vendedor / gerente / admin (client wants changes before accept)
+ * - **accepted | produced**: only **admin** (and gerente) emergency override —
+ *   vendedor never after accept. Admin “can do everything”.
  */
 export function projectAllowsReopenToDraft(
   status: ProjectStatus | string | null | undefined,
+  role?: string | null,
 ): boolean {
-  return status === 'quoted';
+  if (status === 'quoted') return true;
+  if (status === 'accepted' || status === 'produced') {
+    return role === 'admin' || role === 'gerente_ventas';
+  }
+  return false;
 }
