@@ -10,10 +10,21 @@ import { useProjectDetail } from './projectDetailContext';
 import { optionsForGroup } from '../projectHelpers';
 
 export const ProjectOptionsSection = memo(function ProjectOptionsSection(): ReactNode {
-  const { project, optionGroups, catalogs, updateProjectLevelChoice, onUpdateProjectLevelChoices } =
-    useProjectDetail();
+  const {
+    project,
+    optionGroups,
+    catalogs,
+    updateProjectLevelChoice,
+    onUpdateProjectLevelChoices,
+    canEditContent,
+  } = useProjectDetail();
 
   if (optionGroups.length === 0 || !onUpdateProjectLevelChoices) {
+    return null;
+  }
+
+  // Closed quotes: hide project-level option editor (view-only).
+  if (!canEditContent) {
     return null;
   }
 

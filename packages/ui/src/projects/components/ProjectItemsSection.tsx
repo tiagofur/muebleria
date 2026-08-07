@@ -35,6 +35,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     itemError,
     addItemModalOpen,
     onOpenAddItemModal,
+    canEditContent,
   } = useProjectDetail();
 
   // ─── Drag & drop state ────────────────────────────────────────────────
@@ -133,9 +134,16 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
               <Box size={14} strokeWidth={1.5} aria-hidden /> Vista 3D cotización
             </button>
           ) : null}
-          <button type="button" className="btn btn--primary btn--small" onClick={onOpenAddItemModal} disabled={modules.length === 0}>
-            <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar mueble
-          </button>
+          {canEditContent ? (
+            <button
+              type="button"
+              className="btn btn--primary btn--small"
+              onClick={onOpenAddItemModal}
+              disabled={modules.length === 0}
+            >
+              <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar mueble
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -171,7 +179,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                 key={item.id}
                 className={cardClasses}
                 data-testid={`project-item-${item.id}`}
-                draggable={!!itemHandlers.onReorderItems}
+                draggable={canEditContent && !!itemHandlers.onReorderItems}
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => handleDragOver(e, index)}
@@ -208,7 +216,8 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                         <Box size={14} strokeWidth={1.5} aria-hidden /> 3D
                       </button>
                     )}
-                    {removeConfirm.confirmRemoveItemId === item.id ? (
+                    {canEditContent ? (
+                      removeConfirm.confirmRemoveItemId === item.id ? (
                       <span className="project-inline-confirm">
                         <span className="project-inline-confirm__text">¿Quitar?</span>
                         <button type="button" className="btn btn--small btn--danger" onClick={() => removeConfirm.onConfirmRemoveItem(project.id, item.id)}>Confirmar</button>
@@ -216,22 +225,44 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                       </span>
                     ) : (
                       <button type="button" className="btn btn--small btn--danger" onClick={() => removeConfirm.onRequestRemoveItem(item.id)}>Quitar</button>
-                    )}
+                    )
+                    ) : null}
                   </div>
                 </div>
 
                 <div className="project-editor__grid">
                   <div className="catalog-form__field">
                     <label htmlFor={`item-qty-${item.id}`}>Cantidad</label>
-                    <input id={`item-qty-${item.id}`} type="number" min={1} step={1} value={item.quantity}
-                      onChange={(e) => itemHandlers.onUpdateItemQuantity(item, Number(e.target.value))} />
+                    <input
+                      id={`item-qty-${item.id}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={item.quantity}
+                      disabled={!canEditContent}
+                      onChange={(e) =>
+                        itemHandlers.onUpdateItemQuantity(
+                          item,
+                          Number(e.target.value),
+                        )
+                      }
+                    />
                   </div>
                   {mod && (mod.presets?.length ?? 0) > 0 ? (
                     <div className="catalog-form__field">
                       <label htmlFor={`item-measure-${item.id}`}>Medida</label>
-                      <select id={`item-measure-${item.id}`} value={item.measurePresetId ?? ''}
-                        onChange={(e) => itemHandlers.onUpdateItemMeasurePreset(item, e.target.value)}
-                        data-testid={`item-measure-preset-${item.id}`}>
+                      <select
+                        id={`item-measure-${item.id}`}
+                        value={item.measurePresetId ?? ''}
+                        disabled={!canEditContent}
+                        onChange={(e) =>
+                          itemHandlers.onUpdateItemMeasurePreset(
+                            item,
+                            e.target.value,
+                          )
+                        }
+                        data-testid={`item-measure-preset-${item.id}`}
+                      >
                         <option value="">Elegí medida…</option>
                         {mod.presets!.map((pr) => (
                           <option key={pr.id} value={pr.id}>
@@ -263,9 +294,19 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                               <span className="project-choice-override-badge" title="Esta línea overridea el default del proyecto">Override</span>
                             ) : null}
                           </label>
-                          <select id={`choice-${item.id}-${group.code}`} value={lineValue}
-                            onChange={(e) => itemHandlers.onUpdateItemChoice(item, group.code, e.target.value)}
-                            data-testid={`item-choice-${item.id}-${group.code}`}>
+                          <select
+                            id={`choice-${item.id}-${group.code}`}
+                            value={lineValue}
+                            disabled={!canEditContent}
+                            onChange={(e) =>
+                              itemHandlers.onUpdateItemChoice(
+                                item,
+                                group.code,
+                                e.target.value,
+                              )
+                            }
+                            data-testid={`item-choice-${item.id}-${group.code}`}
+                          >
                             <option value="">{inheritLabel}</option>
                             {options.map((opt) => (
                               <option key={opt.id} value={opt.id}>{opt.name} — {opt.code}</option>

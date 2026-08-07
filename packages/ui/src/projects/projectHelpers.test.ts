@@ -7,6 +7,7 @@ import type {
   ProjectItem,
 } from '@muebles/domain';
 import {
+  canEditQuoteContent,
   canShowProjectPricePreview,
   countItemsWithModule,
   customersForProjectPicker,
@@ -309,6 +310,13 @@ describe('project drafts and validation', () => {
     expect(projectStatusLabel('quoted')).toBe('Cotizado');
     expect(projectStatusLabel('accepted')).toBe('Aceptado');
     expect(projectStatusLabel('produced')).toBe('En producción');
+  });
+
+  it('canEditQuoteContent only draft + role (#257)', () => {
+    expect(canEditQuoteContent(true, 'draft')).toBe(true);
+    expect(canEditQuoteContent(true, 'quoted')).toBe(false);
+    expect(canEditQuoteContent(true, 'accepted')).toBe(false);
+    expect(canEditQuoteContent(false, 'draft')).toBe(false);
   });
 
   it('projectStatusBadgeClass maps design.md §5.2 classes', () => {

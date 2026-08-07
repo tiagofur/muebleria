@@ -318,3 +318,14 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
 export function isProjectClosed(status: ProjectStatus): boolean {
   return status === 'quoted' || status === 'accepted' || status === 'produced';
 }
+
+/**
+ * Design / items / kitchen layout / commercial meta may only change in draft.
+ * quoted / accepted / produced are view-only for content (workflow buttons change status).
+ * Issue #257 — taller freeze rules.
+ */
+export function projectAllowsContentMutation(
+  status: ProjectStatus | string | null | undefined,
+): boolean {
+  return status === 'draft';
+}

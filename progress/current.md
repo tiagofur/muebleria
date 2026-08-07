@@ -1,31 +1,21 @@
-# Sesión — QA de campo #251 CERRADO
+# Sesión — #257 Ciclo de vida cotización (reglas de taller)
 
-- **Issue:** [#251](https://github.com/tiagofur/muebleria/issues/251) closed 2026-08-07
-- **Fixes mergeados:** #252, #253 → `main`
+- **Issue:** [#257](https://github.com/tiagofur/muebleria/issues/257)
+- **Branch:** `feat/257-quote-lifecycle-freeze`
+- **Inicio:** 2026-08-07
 
-## Smoke browser (usuario)
+## Plan
 
-| Paso | OK |
-|------|-----|
-| Wipe multi-ambiente | ✅ |
-| Isla Proyectar | ✅ |
-| Elevaciones por ambiente | ✅ |
-| Filtro despiece | ✅ |
-| Pack ZIP | ✅ |
-| Estados / En planta | ✅ |
-| Presentar + Proyectar RO accepted | ✅ |
+1. Domain `projectAllowsContentMutation` (solo draft)
+2. Status readonly en meta modal (sin select)
+3. Confirm en Enviar / Aceptar / Reabrir
+4. Freeze UI content: items, kitchen, edit button
+5. Store no-op mutations if closed
+6. Copy En planta → En producción
+7. Tests + PR
 
-## Residual (abrir en issues)
+## Hecho
 
-| Issue | Tema |
-|-------|------|
-| #256 | Planta/3D multi-ambiente |
-| #255 | Islas en planta + ficha |
-| #254 | Polish elevaciones/PDF |
-| #257 | Lifecycle freeze + Aceptar confirm + status fuera Editar |
-
-## Siguiente (prioridad sugerida)
-
-1. **#257** lifecycle (reglas de taller / RBAC UX)  
-2. **#256** vistas multi-ambiente  
-3. #255 islas dibujadas  
+- Domain + store gates + UI chrome confirm + freeze content
+- Mark produced preferido en hub Producción (no quote cuando hub wired)
+- Tests domain/ui/web verdes

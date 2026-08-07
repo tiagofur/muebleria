@@ -14,6 +14,7 @@ export {
 export {
   PROJECT_STATUSES,
   statusOptionsForRole,
+  canEditQuoteContent,
   canShowProjectPricePreview,
   countItemsWithModule,
   customersForProjectPicker,

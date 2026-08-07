@@ -27,6 +27,7 @@ import {
   generatePieceLabels,
   generateProjectMaterialSummary,
   isProjectClosed,
+  projectAllowsContentMutation,
   resolveBom,
   transitionProjectStatus,
   validateCatalogEntityCodes,
@@ -699,6 +700,13 @@ describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
     expect(isProjectClosed('quoted')).toBe(true);
     expect(isProjectClosed('accepted')).toBe(true);
     expect(isProjectClosed('produced')).toBe(true);
+  });
+
+  it('projectAllowsContentMutation only for draft (#257)', () => {
+    expect(projectAllowsContentMutation('draft')).toBe(true);
+    expect(projectAllowsContentMutation('quoted')).toBe(false);
+    expect(projectAllowsContentMutation('accepted')).toBe(false);
+    expect(projectAllowsContentMutation('produced')).toBe(false);
   });
 
   it('draft plantilla project has live salePrice; close freezes it', () => {

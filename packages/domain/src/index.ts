@@ -181,6 +181,7 @@ export {
   calcLineCost,
   calcProjectBreakdown,
   isProjectClosed,
+  projectAllowsContentMutation,
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,

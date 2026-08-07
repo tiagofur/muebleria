@@ -90,7 +90,11 @@ export const PROJECT_STATUSES: readonly ProjectStatus[] = [
   'produced',
 ] as const;
 
-/** Status options for the meta form, filtered by role capabilities (F036). */
+/**
+ * Status options for role capabilities (F036).
+ * @deprecated #257 — status no longer lives in ProjectMetaModal; workflow
+ * buttons + confirm drive transitions. Kept for tests / legacy callers.
+ */
 export function statusOptionsForRole(opts: {
   readonly current: ProjectStatus;
   readonly canMutate: boolean;
@@ -118,6 +122,17 @@ export function statusOptionsForRole(opts: {
     out.add('draft');
   }
   return PROJECT_STATUSES.filter((s) => out.has(s));
+}
+
+/**
+ * Quote content (items, layout, meta comercial) only while draft + role allows.
+ * #257 — freeze quoted / accepted / produced for design edits.
+ */
+export function canEditQuoteContent(
+  canMutateRole: boolean,
+  status: ProjectStatus,
+): boolean {
+  return canMutateRole && status === 'draft';
 }
 
 export function projectStatusLabel(status: ProjectStatus): string {

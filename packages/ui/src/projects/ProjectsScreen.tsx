@@ -1007,7 +1007,7 @@ export function ProjectsScreen({
             onUpdateKitchenLayout(selectedProject.id, layout)
           }
           onUpdateItem={
-            canMutate
+            canMutate && selectedProject.status === 'draft'
               ? (item) => onUpdateItem(selectedProject.id, item)
               : undefined
           }
