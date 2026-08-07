@@ -329,3 +329,14 @@ export function projectAllowsContentMutation(
 ): boolean {
   return status === 'draft';
 }
+
+/**
+ * Reopen to draft is only allowed while **quoted** (enviada al cliente).
+ * After accept → production path: no volver a borrador (#257 refinement).
+ * If the client asks for changes before accept, vendedor reabre quoted → draft.
+ */
+export function projectAllowsReopenToDraft(
+  status: ProjectStatus | string | null | undefined,
+): boolean {
+  return status === 'quoted';
+}

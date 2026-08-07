@@ -182,6 +182,7 @@ export {
   calcProjectBreakdown,
   isProjectClosed,
   projectAllowsContentMutation,
+  projectAllowsReopenToDraft,
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,

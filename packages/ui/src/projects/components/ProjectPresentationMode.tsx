@@ -1,8 +1,7 @@
 /**
  * Client-facing presentation mode for a quote (#136).
- * Enhanced: 4 slides (Resumen → Plano 2D → Opciones → Vista 3D).
- * Fullscreen: name, commercial list, sale total, 3D — no costs/exports.
- * Branding: workshop name in header.
+ * 4 slides: Resumen → Planta → Opciones → Vista 3D.
+ * Client chrome by default; workshop tools behind "Modo taller".
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -15,9 +14,20 @@ import type {
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
+  ensureKitchenSpaces,
+  projectScopedToProductionSpace,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
-import { Camera, Download, Keyboard, Link2, Palette, Ruler, X } from 'lucide-react';
+import {
+  Camera,
+  Download,
+  Keyboard,
+  Link2,
+  Palette,
+  Ruler,
+  Settings2,
+  X,
+} from 'lucide-react';
 import { formatMoneyDisplay } from '../../common';
 import {
   canUseWebGL,
@@ -98,16 +108,22 @@ export function ProjectPresentationMode({
 }: ProjectPresentationModeProps): ReactNode {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [useR3f, setUseR3f] = useState(false);
+  /** Workshop tools (explode, roles, measure, export) — off for client pitch. */
+  const [workshopTools, setWorkshopTools] = useState(false);
   const [explodeFactor, setExplodeFactor] = useState(0);
   const [colorMode, setColorMode] = useState<BoardColorMode>('material');
   const [surfaceMode, setSurfaceMode] = useState<MaterialSurfaceMode>(
     DEFAULT_MATERIAL_SURFACE_MODE,
   );
-  const [showOutlines, setShowOutlines] = useState(true);
+  const [showOutlines, setShowOutlines] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
   const [exportFormat, setExportFormat] = useState<ModelFormat | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  /** Selected KitchenSpace for planta + 3D (multi-ambiente). */
+  const [presentationSpaceId, setPresentationSpaceId] = useState<
+    string | undefined
+  >(undefined);
   const touchStartX = useRef<number | null>(null);
 
   const goNext = useCallback(() => {
@@ -121,20 +137,50 @@ export function ProjectPresentationMode({
   useEffect(() => {
     if (!open) return;
     setUseR3f(canUseWebGL());
+    setWorkshopTools(false);
     setExplodeFactor(0);
     setColorMode('material');
     setSurfaceMode(DEFAULT_MATERIAL_SURFACE_MODE);
-    setShowOutlines(true);
+    setShowOutlines(false);
     setMeasureMode(false);
     setExportFormat(null);
     setExportMenuOpen(false);
     setShowShortcuts(false);
     setCurrentSlide(0);
-    // Show shortcuts overlay briefly on first open
-    const timer = setTimeout(() => setShowShortcuts(true), 500);
-    const hide = setTimeout(() => setShowShortcuts(false), 4000);
-    return () => { clearTimeout(timer); clearTimeout(hide); };
-  }, [open]);
+    // Default ambient: active space when multi-ambiente.
+    if (project.kitchenLayout) {
+      const ensured = ensureKitchenSpaces(project.kitchenLayout);
+      setPresentationSpaceId(ensured.activeSpaceId ?? ensured.spaces?.[0]?.id);
+    } else {
+      setPresentationSpaceId(undefined);
+    }
+  }, [open, project.kitchenLayout]);
+
+  const setClientMode = useCallback(() => {
+    setWorkshopTools(false);
+    setExplodeFactor(0);
+    setColorMode('material');
+    setShowOutlines(false);
+    setMeasureMode(false);
+    setExportFormat(null);
+    setExportMenuOpen(false);
+  }, []);
+
+  const toggleWorkshopTools = useCallback(() => {
+    setWorkshopTools((on) => {
+      if (on) {
+        // Leaving workshop → reset client-safe defaults.
+        setExplodeFactor(0);
+        setColorMode('material');
+        setShowOutlines(false);
+        setMeasureMode(false);
+        setExportFormat(null);
+        setExportMenuOpen(false);
+        return false;
+      }
+      return true;
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -171,9 +217,36 @@ export function ProjectPresentationMode({
   const customerName =
     customers.find((c) => c.id === project.customerId)?.name ?? '';
 
+  /**
+   * Multi-ambiente: planta and 3D share the same selected space so the
+   * client sees one ambient at a time (coordinate systems stay coherent).
+   * Single-space / legacy: full project.
+   */
+  const presentationProject = useMemo((): Project => {
+    const layout = project.kitchenLayout;
+    if (!layout || !presentationSpaceId) return project;
+    const ensured = ensureKitchenSpaces(layout);
+    const spaces = ensured.spaces ?? [];
+    if (spaces.length < 2) return project;
+    if (!spaces.some((s) => s.id === presentationSpaceId)) return project;
+    return projectScopedToProductionSpace(project, presentationSpaceId);
+  }, [project, presentationSpaceId]);
+
+  const presentationSpaces = useMemo(() => {
+    if (!project.kitchenLayout) return [] as { id: string; name: string }[];
+    const spaces = ensureKitchenSpaces(project.kitchenLayout).spaces ?? [];
+    if (spaces.length < 2) return [];
+    return spaces.map((s) => ({
+      id: s.id,
+      name: s.name?.trim() || 'Ambiente',
+    }));
+  }, [project.kitchenLayout]);
+
+  const multiSpacePresentation = presentationSpaces.length > 1;
+
   const preview = useMemo(
-    () => resolveProject3DPreview(project, catalog),
-    [project, catalog],
+    () => resolveProject3DPreview(presentationProject, catalog),
+    [presentationProject, catalog],
   );
 
   // Apply explode factor: scale each part's position away from module center.
@@ -333,6 +406,36 @@ export function ProjectPresentationMode({
         </button>
       </header>
 
+      {multiSpacePresentation ? (
+        <div
+          className="project-presentation__space-tabs"
+          role="tablist"
+          aria-label="Ambiente en presentación"
+          data-testid="presentation-space-tabs"
+        >
+          {presentationSpaces.map((s) => {
+            const active = s.id === presentationSpaceId;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={
+                  active
+                    ? 'project-presentation__space-tab project-presentation__space-tab--active'
+                    : 'project-presentation__space-tab'
+                }
+                onClick={() => setPresentationSpaceId(s.id)}
+                data-testid={`presentation-space-tab-${s.id}`}
+              >
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       <div
         className="project-presentation__slides"
         data-testid="presentation-slides"
@@ -375,7 +478,7 @@ export function ProjectPresentationMode({
           </section>
         </div>
 
-        {/* Slide 1: Plano 2D */}
+        {/* Slide 1: Planta 2D */}
         <div
           className={`project-presentation__slide${
             currentSlide === 1 ? ' project-presentation__slide--active' : ''
@@ -385,14 +488,14 @@ export function ProjectPresentationMode({
         >
           <section
             className="project-presentation__plan"
-            aria-label="Plano de cocina"
+            aria-label="Planta"
           >
-            <h2 className="project-presentation__section-title">
-              Plano de cocina
-            </h2>
+            <h2 className="project-presentation__section-title">Planta</h2>
             <PresentationKitchenPlanSlide
               project={project}
               modules={modules}
+              selectedSpaceId={presentationSpaceId}
+              onSelectedSpaceIdChange={setPresentationSpaceId}
             />
           </section>
         </div>
@@ -439,120 +542,32 @@ export function ProjectPresentationMode({
                 className="project-presentation__controls"
                 role="toolbar"
                 aria-label="Controles de vista 3D"
+                data-testid="presentation-client-toolbar"
               >
-                <div className="project-presentation__control-group">
-                  <label
-                    htmlFor="explode-slider"
-                    className="project-presentation__control-label"
-                  >
-                    Vista explosionada
-                  </label>
-                  <input
-                    id="explode-slider"
-                    type="range"
-                    min={0}
-                    max={3}
-                    step={0.1}
-                    value={explodeFactor}
-                    onChange={(e) =>
-                      setExplodeFactor(Number(e.target.value))
-                    }
-                    className="project-presentation__slider"
-                    data-testid="presentation-explode-slider"
-                    aria-valuemin={0}
-                    aria-valuemax={3}
-                    aria-valuenow={explodeFactor}
-                    aria-valuetext={`${explodeFactor.toFixed(1)} de factor de explosión`}
-                  />
-                </div>
+                {/* Client actions — always visible */}
                 <div
                   className="project-presentation__control-group"
                   role="group"
-                  aria-label="Cómo se pinta la vista 3D"
+                  aria-label="Acciones para el cliente"
                 >
-                  <Palette size={16} strokeWidth={1.5} aria-hidden />
-                  <button
-                    type="button"
-                    className={
-                      colorMode === 'material'
-                        ? 'btn btn--small btn--primary'
-                        : 'btn btn--small'
+                  <select
+                    value={surfaceMode}
+                    onChange={(e) =>
+                      setSurfaceMode(e.target.value as MaterialSurfaceMode)
                     }
-                    onClick={() => setColorMode('material')}
-                    data-testid="presentation-color-material"
-                    aria-pressed={colorMode === 'material'}
-                    aria-label="Pintar con acabados del material"
-                    title="Color, veta y textura del material de cada pieza"
+                    className="project-presentation__surface-select"
+                    data-testid="presentation-surface-mode"
+                    aria-label="Vista del acabado"
+                    title="Solo color, color con veta, o textura foto"
+                    disabled={colorMode !== 'material'}
                   >
-                    Acabados
-                  </button>
+                    <option value="color">Solo color</option>
+                    <option value="grain">Color + veta</option>
+                    <option value="texture">Textura</option>
+                  </select>
                   <button
                     type="button"
-                    className={
-                      colorMode === 'role'
-                        ? 'btn btn--small btn--primary'
-                        : 'btn btn--small'
-                    }
-                    onClick={() => setColorMode('role')}
-                    data-testid="presentation-color-role"
-                    aria-pressed={colorMode === 'role'}
-                    aria-label="Pintar solo por rol de pieza (taller)"
-                    title="Tintes fijos por INTERIOR/FRENTE — no muestra el material real"
-                  >
-                    Roles taller
-                  </button>
-                  {colorMode === 'material' ? (
-                    <select
-                      value={surfaceMode}
-                      onChange={(e) =>
-                        setSurfaceMode(e.target.value as MaterialSurfaceMode)
-                      }
-                      data-testid="presentation-surface-mode"
-                      aria-label="Vista del acabado"
-                      title="Solo color, color con veta, o textura foto"
-                      style={{
-                        padding: '0.25rem 0.5rem',
-                        fontSize: 'var(--text-xs)',
-                        borderRadius: 'var(--radius-sm, 4px)',
-                        border: '1px solid var(--border, #ccc)',
-                        background: 'var(--surface-input)',
-                      }}
-                    >
-                      <option value="color">Solo color</option>
-                      <option value="grain">Color + veta</option>
-                      <option value="texture">Textura</option>
-                    </select>
-                  ) : null}
-                  <label
-                    className="catalog-form__row-check"
-                    style={{ margin: 0, gap: '0.35rem' }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={showOutlines}
-                      onChange={(e) => setShowOutlines(e.target.checked)}
-                      data-testid="presentation-outlines-checkbox"
-                    />
-                    <span>Contornos</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={`btn btn--small${measureMode ? ' btn--primary' : ''}`}
-                    onClick={() => setMeasureMode((v) => !v)}
-                    data-testid="presentation-toggle-measure"
-                    aria-pressed={measureMode}
-                    aria-label={
-                      measureMode
-                        ? 'Desactivar herramienta de medición'
-                        : 'Activar herramienta de medición'
-                    }
-                  >
-                    <Ruler size={14} strokeWidth={1.5} aria-hidden />
-                    Medir
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--small"
+                    className="btn btn--small btn--primary"
                     onClick={handleCapturePng}
                     data-testid="presentation-capture-png"
                     aria-label="Guardar captura PNG de la vista 3D"
@@ -575,48 +590,168 @@ export function ProjectPresentationMode({
                     <Link2 size={14} strokeWidth={1.5} aria-hidden />
                     {linkCopied ? '¡Copiado!' : 'Compartir'}
                   </button>
-                  <div className="project-presentation__export-wrap">
-                    <button
-                      type="button"
-                      className="btn btn--small"
-                      onClick={() => setExportMenuOpen((v) => !v)}
-                      data-testid="presentation-export-toggle"
-                      aria-expanded={exportMenuOpen}
-                      aria-haspopup="menu"
-                      aria-label="Exportar modelo 3D"
-                    >
-                      <Download size={14} strokeWidth={1.5} aria-hidden />
-                      Exportar
-                    </button>
-                    {exportMenuOpen ? (
-                      <div
-                        className="project-presentation__export-menu"
-                        role="menu"
-                        aria-label="Formatos de exportación"
-                      >
-                        {(['glb', 'obj', 'stl'] as const).map((fmt) => (
-                          <button
-                            key={fmt}
-                            type="button"
-                            className="project-presentation__export-menu-item"
-                            role="menuitem"
-                            data-testid={`presentation-export-${fmt}`}
-                            onClick={() => {
-                              setExportFormat(fmt);
-                              setExportMenuOpen(false);
-                            }}
-                          >
-                            {fmt.toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  <button
+                    type="button"
+                    className={`btn btn--small btn--ghost${
+                      workshopTools ? ' btn--primary' : ''
+                    }`}
+                    onClick={toggleWorkshopTools}
+                    data-testid="presentation-workshop-toggle"
+                    aria-pressed={workshopTools}
+                    aria-label={
+                      workshopTools
+                        ? 'Salir del modo taller'
+                        : 'Abrir herramientas de taller'
+                    }
+                    title="Herramientas técnicas del taller (no visibles al cliente por defecto)"
+                  >
+                    <Settings2 size={14} strokeWidth={1.5} aria-hidden />
+                    {workshopTools ? 'Salir taller' : 'Modo taller'}
+                  </button>
                 </div>
+
+                {/* Workshop tools — opt-in only */}
+                {workshopTools ? (
+                  <div
+                    className="project-presentation__workshop-panel"
+                    data-testid="presentation-workshop-panel"
+                  >
+                    <div className="project-presentation__control-group">
+                      <label
+                        htmlFor="explode-slider"
+                        className="project-presentation__control-label"
+                      >
+                        Vista explosionada
+                      </label>
+                      <input
+                        id="explode-slider"
+                        type="range"
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        value={explodeFactor}
+                        onChange={(e) =>
+                          setExplodeFactor(Number(e.target.value))
+                        }
+                        className="project-presentation__slider"
+                        data-testid="presentation-explode-slider"
+                        aria-valuemin={0}
+                        aria-valuemax={3}
+                        aria-valuenow={explodeFactor}
+                        aria-valuetext={`${explodeFactor.toFixed(1)} de factor de explosión`}
+                      />
+                    </div>
+                    <div
+                      className="project-presentation__control-group"
+                      role="group"
+                      aria-label="Cómo se pinta la vista 3D"
+                    >
+                      <Palette size={16} strokeWidth={1.5} aria-hidden />
+                      <button
+                        type="button"
+                        className={
+                          colorMode === 'material'
+                            ? 'btn btn--small btn--primary'
+                            : 'btn btn--small'
+                        }
+                        onClick={() => setColorMode('material')}
+                        data-testid="presentation-color-material"
+                        aria-pressed={colorMode === 'material'}
+                        aria-label="Pintar con acabados del material"
+                      >
+                        Acabados
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          colorMode === 'role'
+                            ? 'btn btn--small btn--primary'
+                            : 'btn btn--small'
+                        }
+                        onClick={() => setColorMode('role')}
+                        data-testid="presentation-color-role"
+                        aria-pressed={colorMode === 'role'}
+                        aria-label="Pintar solo por rol de pieza (taller)"
+                        title="Tintes fijos por INTERIOR/FRENTE — no muestra el material real"
+                      >
+                        Roles taller
+                      </button>
+                      <label className="project-presentation__check">
+                        <input
+                          type="checkbox"
+                          checked={showOutlines}
+                          onChange={(e) => setShowOutlines(e.target.checked)}
+                          data-testid="presentation-outlines-checkbox"
+                        />
+                        <span>Contornos</span>
+                      </label>
+                      <button
+                        type="button"
+                        className={`btn btn--small${measureMode ? ' btn--primary' : ''}`}
+                        onClick={() => setMeasureMode((v) => !v)}
+                        data-testid="presentation-toggle-measure"
+                        aria-pressed={measureMode}
+                        aria-label={
+                          measureMode
+                            ? 'Desactivar herramienta de medición'
+                            : 'Activar herramienta de medición'
+                        }
+                      >
+                        <Ruler size={14} strokeWidth={1.5} aria-hidden />
+                        Medir
+                      </button>
+                      <div className="project-presentation__export-wrap">
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={() => setExportMenuOpen((v) => !v)}
+                          data-testid="presentation-export-toggle"
+                          aria-expanded={exportMenuOpen}
+                          aria-haspopup="menu"
+                          aria-label="Exportar modelo 3D"
+                        >
+                          <Download size={14} strokeWidth={1.5} aria-hidden />
+                          Exportar
+                        </button>
+                        {exportMenuOpen ? (
+                          <div
+                            className="project-presentation__export-menu"
+                            role="menu"
+                            aria-label="Formatos de exportación"
+                          >
+                            {(['glb', 'obj', 'stl'] as const).map((fmt) => (
+                              <button
+                                key={fmt}
+                                type="button"
+                                className="project-presentation__export-menu-item"
+                                role="menuitem"
+                                data-testid={`presentation-export-${fmt}`}
+                                onClick={() => {
+                                  setExportFormat(fmt);
+                                  setExportMenuOpen(false);
+                                }}
+                              >
+                                {fmt.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn--small btn--ghost"
+                        onClick={setClientMode}
+                        data-testid="presentation-client-mode"
+                      >
+                        Volver a cliente
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {preview.empty ? (
-              <p className="catalog-empty">Sin vista 3D disponible.</p>
+              <p className="project-presentation__empty">Sin vista 3D disponible.</p>
             ) : useR3f ? (
               <Suspense
                 fallback={
@@ -661,18 +796,10 @@ export function ProjectPresentationMode({
               </Suspense>
             ) : (
               <div
-                className="catalog-empty"
-                style={{
-                  padding: 'var(--space-6)',
-                  textAlign: 'center',
-                  backgroundColor: 'var(--surface-card)',
-                  border: '1px solid var(--danger-500)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--danger-700)',
-                }}
+                className="project-presentation__webgl-required"
                 data-testid="presentation-webgl-required"
               >
-                <h4>⚠️ WebGL requerido</h4>
+                <h4>WebGL requerido</h4>
                 <p>
                   La vista 3D necesita WebGL (Three.js / React Three Fiber).
                   Verificá que tu navegador lo soporte y no esté bloqueado.
@@ -761,10 +888,15 @@ export function ProjectPresentationMode({
               </button>
             </div>
             <ul className="project-presentation__shortcuts-list">
-              <li><kbd>→</kbd> <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Navegar diapositivas</li>
-              <li><kbd>+</kbd> <kbd>−</kbd> Zoom en vista 3D</li>
-              <li><kbd>?</kbd> Mostrar / ocultar esta ayuda</li>
-              <li><kbd>Esc</kbd> Salir de la presentación</li>
+              <li>
+                <kbd>→</kbd> <kbd>←</kbd> Navegar diapositivas
+              </li>
+              <li>
+                <kbd>?</kbd> Mostrar / ocultar esta ayuda
+              </li>
+              <li>
+                <kbd>Esc</kbd> Salir de la presentación
+              </li>
               <li>Deslizá izquierda / derecha para cambiar diapositiva</li>
             </ul>
           </div>

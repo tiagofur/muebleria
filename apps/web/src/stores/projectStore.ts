@@ -38,6 +38,7 @@ import {
   ensureProductionRevision as ensureProductionRevisionDomain,
   isKitchenLayoutEmpty,
   projectAllowsContentMutation,
+  projectAllowsReopenToDraft,
   projectToTemplate,
   pruneKitchenLayoutOrClear,
   recordProductionExport as recordProductionExportDomain,
@@ -516,10 +517,22 @@ export function createProjectStore(options: InternalOptions) {
       toast({ type: 'success', message: label });
     },
 
-    /** F036: closed → draft; clears price snapshot. */
+    /**
+     * #257: only quoted → draft (client wants changes before accept).
+     * accepted/produced cannot reopen.
+     */
     reopenProject: (id, catalog) => {
       const project = get().projects.find((p) => p.id === id);
-      if (!project || project.status === 'draft') return;
+      if (!project) return;
+      if (project.status === 'draft') return;
+      if (!projectAllowsReopenToDraft(project.status)) {
+        toast({
+          type: 'error',
+          message:
+            'Solo se puede reabrir una cotización enviada (antes de aceptar).',
+        });
+        return;
+      }
       const now = new Date().toISOString();
       const withTransition = transitionProjectStatus(project, 'draft', catalog, now);
       const updated = snapshotOnStatusChange(withTransition, 'draft');

@@ -701,6 +701,20 @@ describe('projectStore — importNestingResult / updateKitchenLayout', () => {
     expect(store.getState().projects[0]!.items).toHaveLength(0);
   });
 
+  it('reopenProject only from quoted, not accepted (#257)', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const catalog = { materials: [], edges: [], hardware: [], optionGroups: [], modules: [], structures: [], components: [], customers: [] };
+
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+    store.getState().reopenProject('proj-1', catalog as never);
+    expect(store.getState().projects[0]!.status).toBe('accepted');
+
+    store.getState().setProjects([makeProject({ status: 'quoted' })]);
+    store.getState().reopenProject('proj-1', catalog as never);
+    expect(store.getState().projects[0]!.status).toBe('draft');
+  });
+
   it('updateKitchenLayout keeps other spaces when active top-level is empty', () => {
     const { deps } = makeDeps();
     const store = createProjectStore({ deps });

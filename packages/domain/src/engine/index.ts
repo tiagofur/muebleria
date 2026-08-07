@@ -17,6 +17,7 @@ export { evaluatePartFormula } from './shared';
 export {
   isProjectClosed,
   projectAllowsContentMutation,
+  projectAllowsReopenToDraft,
   validateBoardPart,
   validateCatalogEntityCodes,
   validateComponent,

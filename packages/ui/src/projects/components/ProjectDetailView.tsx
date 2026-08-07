@@ -277,11 +277,11 @@ function resolveChromePrimary(args: {
 }
 
 const CONFIRM_SEND =
-  '¿Enviar cotización al cliente?\n\nSe congelan precios y el diseño queda en solo lectura hasta reabrir.';
+  '¿Enviar cotización al cliente?\n\nSe congelan precios y el diseño queda en solo lectura. Si el cliente pide cambios, podés reabrir a borrador antes de aceptar.';
 const CONFIRM_ACCEPT =
-  '¿Aceptar esta cotización?\n\nEl diseño y los precios quedan congelados. Nadie podrá editar ítems ni el plano hasta que un gerente reabra a borrador.';
+  '¿Aceptar esta cotización?\n\nEl pedido pasa a fábrica. Después de aceptar no se puede volver a borrador: solo ver y producir.';
 const CONFIRM_REOPEN =
-  '¿Reabrir a borrador?\n\nSe descongelan los precios y vuelve a ser editable. Solo gerente/admin debería hacer esto.';
+  '¿Reabrir a borrador?\n\nSe descongelan los precios y vuelve a ser editable. Usalo si el cliente pidió cambios antes de aceptar.';
 
 function ProjectDetailViewInner(): ReactNode {
   const ctx = useProjectDetail();
@@ -427,13 +427,8 @@ function ProjectDetailViewInner(): ReactNode {
         onSelect: () => requestStatus('accepted', CONFIRM_ACCEPT),
       });
     }
-    if (
-      canReopen &&
-      (project.status === 'quoted' ||
-        project.status === 'accepted' ||
-        project.status === 'produced') &&
-      onRequestReopen
-    ) {
+    // #257: reopen only while quoted (before accept → production). Vendedor OK.
+    if (canReopen && project.status === 'quoted' && onRequestReopen) {
       metaItems.push({
         id: 'reopen',
         label: 'Reabrir a borrador…',

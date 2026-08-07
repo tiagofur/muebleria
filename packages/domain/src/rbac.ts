@@ -72,9 +72,18 @@ export function roleCanDeleteProject(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_ventas';
 }
 
-/** Reopen closed quote to draft (clears snapshot). Admin / gerente only (F036). */
+/**
+ * Reopen **quoted** → draft (client wants changes before accept).
+ * Vendedor (own portfolio) + gerente + admin. Not after accepted/produced
+ * (that gate is status-based: `projectAllowsReopenToDraft`).
+ * #257 refinement — previously gerente-only for all closed statuses.
+ */
 export function roleCanReopenProject(role: string | null | undefined): boolean {
-  return role === 'admin' || role === 'gerente_ventas';
+  return (
+    role === 'admin' ||
+    role === 'gerente_ventas' ||
+    role === 'vendedor'
+  );
 }
 
 /**

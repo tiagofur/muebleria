@@ -14,21 +14,51 @@ import {
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
 
-/** Resolve the width (mm) of a project item based on its module preset or external dims. */
-export function moduleWidth(
+function moduleDims(
   item: ProjectItem,
   modules: readonly Module[],
-): number {
+): { width: number; height: number; depth: number } {
   const mod = modules.find((m) => m.id === item.moduleId);
-  if (!mod) return 600;
+  if (!mod) return { width: 600, height: 720, depth: 560 };
   try {
     const preset = resolveModuleMeasurePreset(
       mod,
       item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
     );
-    if (preset) return preset.width;
-  } catch { /* fall through */ }
-  return mod.externalDims?.width ?? 600;
+    if (preset) {
+      return {
+        width: preset.width,
+        height: preset.height,
+        depth: preset.depth,
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  if (mod.externalDims) {
+    return {
+      width: mod.externalDims.width,
+      height: mod.externalDims.height,
+      depth: mod.externalDims.depth,
+    };
+  }
+  return { width: 600, height: 720, depth: 560 };
+}
+
+/** Resolve the width (mm) of a project item based on its module preset or external dims. */
+export function moduleWidth(
+  item: ProjectItem,
+  modules: readonly Module[],
+): number {
+  return moduleDims(item, modules).width;
+}
+
+/** Resolve depth (mm) for free/island plan footprints. */
+export function moduleDepth(
+  item: ProjectItem,
+  modules: readonly Module[],
+): number {
+  return moduleDims(item, modules).depth;
 }
 
 /** Compute all footprints (instances) for a project's items. */

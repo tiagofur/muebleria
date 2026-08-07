@@ -115,10 +115,8 @@ export function statusOptionsForRole(opts: {
   if (canMarkProduced && (current === 'accepted' || current === 'produced')) {
     out.add('produced');
   }
-  if (
-    canReopen &&
-    (current === 'quoted' || current === 'accepted' || current === 'produced')
-  ) {
+  // #257: reopen only from quoted (not accepted/produced).
+  if (canReopen && current === 'quoted') {
     out.add('draft');
   }
   return PROJECT_STATUSES.filter((s) => out.has(s));
