@@ -262,4 +262,38 @@ describe('resolveProject3DPreview', () => {
     expect(preview.unplacedCount).toBe(2); // it-b × 2
     expect(preview.walls.length).toBe(1);
   });
+
+  it('uses kitchen mode for free-only islands (no walls)', () => {
+    const freeOnly: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: '',
+            offsetMm: 0,
+            elevation: 'floor',
+            mode: 'free',
+            freeXMm: 1200,
+            freeYMm: 800,
+            freeYawDeg: 90, // free yaw is snapped to cardinals (wallDirectionYawDeg)
+          },
+        ],
+      },
+    };
+    const preview = resolveProject3DPreview(freeOnly, catalog, {
+      unplacedPolicy: 'hide',
+    });
+    expect(preview.layoutMode).toBe('kitchen');
+    const island = preview.modules.find((m) => m.instanceKey === 'it-a#0');
+    expect(island).toBeDefined();
+    // Plan mm: freeX → originX, freeY → originY; originZ is height (zócalo).
+    expect(island!.originX).toBe(1200);
+    expect(island!.originY).toBe(800);
+    expect(island!.yawDeg).toBe(90);
+    // Must not fall back to linear run at origin 0.
+    expect(island!.originX).not.toBe(0);
+  });
 });

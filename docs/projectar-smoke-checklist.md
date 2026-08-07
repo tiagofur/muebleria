@@ -3,8 +3,8 @@
 **Alcance:** solo diseño espacial y preview 3D (Proyectar + dominio kitchen/plinth + soft lock).  
 **No incluye:** módulo Producción, exports fábrica, OP hub.
 
-**Última corrida:** 2026-08-06  
-**Rama:** `main` @ post-#230  
+**Última corrida:** 2026-08-07  
+**Rama:** `main` @ post-#252 (QA #251 multi-space / free-only)  
 **Modo:** automatizado (CI-local) + ítems que requieren ojo humano en browser
 
 ---
@@ -89,6 +89,8 @@ Correr con: app web + backend si usás auth; proyecto **draft**.
 - [ ] Drag a lo largo del muro; undo/redo
 - [ ] Isla (free place) + rotación en inspector
 - [ ] Segundo **Ambiente**, colocar algo, volver a Cocina (contenido no se pisa)
+- [ ] **Regresión #251:** +Ambiente vacío → cerrar/reabrir proyecto → Cocina **sigue** con muros/muebles
+- [ ] Solo islas (sin muros): free place se ve en 3D (no corrida lineal)
 - [ ] Import **DXF** de prueba (muros); import imagen underlay + escala
 - [ ] Zoclo: clearance / mesada / altura alacena
 - [ ] Preset de medida + acabado en inspector sin salir de Proyectar
@@ -105,8 +107,20 @@ Correr con: app web + backend si usás auth; proyecto **draft**.
 - [ ] Proyecto **sin** `kitchenLayout` → Vista 3D / Presentar: corrida lineal OK
 - [ ] Con plano + unplaced → aviso / cola sin perder unidades
 - [ ] Status no-draft → “Plano congelado”, no muta layout
+- [ ] **Regresión #251:** proyecto accepted/quoted, cambiar tab de ambiente en Proyectar → **no** pisa layout en servidor
 
-### 5.4 Preview 3D ingeniería (módulo / componente)
+### 5.4 Producción (post-#214 / #251) — browser
+
+Proyecto **accepted** con **2 ambientes** y muebles en ambos.
+
+- [ ] `/produccion` → hub de la obra
+- [ ] Tab Vistas / elevaciones: aparecen muros de **ambos** ambientes (nombres con prefijo)
+- [ ] Filtro ambiente: despiece y herrajes bajan a ítems de ese espacio (no qty completa por moduleCode)
+- [ ] Módulos: `pieceCount` no se duplica si el mismo código está en dos líneas
+- [ ] Mover una isla en draft → export → accepted: stale OP / fingerprint reacciona
+- [ ] Pack ZIP abre elevaciones coherentes
+
+### 5.5 Preview 3D ingeniería (módulo / componente)
 
 - [ ] Módulo: showcase / Vista 3D abre y no crashea
 - [ ] Componente: geometry preview con rotación lateral correcta (JD-W3)
@@ -118,9 +132,10 @@ Correr con: app web + backend si usás auth; proyecto **draft**.
 
 | Capa | Estado |
 |------|--------|
-| Automatizado (domain + UI + typecheck) | **PASS — listo** |
-| Ojo humano browser (WebGL, tiempo L, soft lock 2 users) | **Pendiente de sesión visual** |
+| Automatizado (domain + UI + typecheck) | **PASS** — 2026-08-07 (#251 fixes en #252) |
+| Multi-space wipe / elev / fingerprint / scope | **Cubierto por tests** (domain + store + module rows) |
+| Ojo humano browser (WebGL, soft lock 2 users, §5.1–5.4) | **Pendiente de sesión visual** |
 
-**Conclusión 3D:** no hay regresión de tests del programa SUPER 3D / icebox v1. El riesgo residual es solo UX visual/WebGL en browser real, no “feature a medias en código”.
+**Conclusión:** bugs de campo multi-ambiente/OP encontrados en auditoría ya mergeados (#252). Residual: solo UX WebGL / dogfood de taller en browser.
 
 Cuando completes §5, marcá checkboxes aquí o anotá bugs en issues con label `frontend` + mención “Proyectar smoke”.
