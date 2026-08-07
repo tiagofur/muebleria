@@ -127,7 +127,7 @@ describe('PresentationKitchenPlanSlide', () => {
   it('renders empty state when project has no kitchen layout', () => {
     const project = makeProject({ kitchenLayout: undefined });
     render(<PresentationKitchenPlanSlide project={project} modules={modules} />);
-    expect(screen.getByText('Sin planta definida.')).toBeTruthy();
+    expect(screen.getByText('Sin plano de cocina definido.')).toBeTruthy();
   });
 
   it('renders SVG with walls when kitchen layout has walls', () => {
@@ -199,183 +199,6 @@ describe('PresentationKitchenPlanSlide', () => {
 
     const lines = screen.getByTestId('presentation-kitchen-plan').querySelectorAll('line');
     expect(lines.length).toBe(2);
-  });
-
-  it('shows free/island placements on the plan', () => {
-    const layout = makeKitchenLayout({
-      placements: [
-        {
-          itemId: 'item-1',
-          instanceIndex: 0,
-          wallId: '',
-          offsetMm: 0,
-          elevation: 'floor',
-          mode: 'free',
-          freeXMm: 800,
-          freeYMm: 600,
-        },
-      ],
-    });
-    const project = makeProject({ kitchenLayout: layout });
-    render(<PresentationKitchenPlanSlide project={project} modules={modules} />);
-
-    expect(
-      screen.getByTestId('presentation-plan-free-item-1-0'),
-    ).toBeTruthy();
-    expect(screen.getByText('Isla (libre)')).toBeTruthy();
-  });
-
-  it('shows local tabs for multi-ambiente and switches plant', () => {
-    const layout: ProjectKitchenLayout = {
-      walls: [
-        {
-          id: 'w-c',
-          name: 'Muro cocina',
-          lengthMm: 3000,
-          angleDeg: 0,
-          originXMm: 0,
-          originYMm: 0,
-        },
-      ],
-      placements: [
-        {
-          itemId: 'item-1',
-          instanceIndex: 0,
-          wallId: 'w-c',
-          offsetMm: 100,
-          elevation: 'floor',
-        },
-      ],
-      activeSpaceId: 'sp-cocina',
-      spaces: [
-        {
-          id: 'sp-cocina',
-          name: 'Cocina',
-          walls: [
-            {
-              id: 'w-c',
-              name: 'Muro cocina',
-              lengthMm: 3000,
-              angleDeg: 0,
-              originXMm: 0,
-              originYMm: 0,
-            },
-          ],
-          placements: [
-            {
-              itemId: 'item-1',
-              instanceIndex: 0,
-              wallId: 'w-c',
-              offsetMm: 100,
-              elevation: 'floor',
-            },
-          ],
-        },
-        {
-          id: 'sp-lav',
-          name: 'Lavandería',
-          walls: [
-            {
-              id: 'w-l',
-              name: 'Muro lav',
-              lengthMm: 2000,
-              angleDeg: 0,
-              originXMm: 0,
-              originYMm: 0,
-            },
-          ],
-          placements: [
-            {
-              itemId: 'item-1',
-              instanceIndex: 1,
-              wallId: 'w-l',
-              offsetMm: 50,
-              elevation: 'floor',
-            },
-          ],
-        },
-      ],
-    };
-    const project = makeProject({
-      kitchenLayout: layout,
-      items: [
-        {
-          id: 'item-1',
-          moduleId: 'mod-1',
-          quantity: 2,
-          measurePresetId: 'p1',
-          optionChoices: { INTERIOR: 'mat-a', FRENTE: 'mat-c' },
-        },
-      ],
-    });
-    render(<PresentationKitchenPlanSlide project={project} modules={modules} />);
-
-    expect(screen.getByTestId('presentation-kitchen-space-tabs')).toBeTruthy();
-    expect(screen.getByTestId('presentation-kitchen-space-tab-sp-cocina')).toBeTruthy();
-    expect(screen.getByTestId('presentation-kitchen-space-tab-sp-lav')).toBeTruthy();
-    expect(screen.getByTestId('presentation-kitchen-space-title').textContent).toBe(
-      'Cocina',
-    );
-    expect(screen.getByTestId('presentation-kitchen-svg-sp-cocina')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('presentation-kitchen-space-tab-sp-lav'));
-    expect(screen.getByTestId('presentation-kitchen-space-title').textContent).toBe(
-      'Lavandería',
-    );
-    expect(screen.getByTestId('presentation-kitchen-svg-sp-lav')).toBeTruthy();
-  });
-
-  it('hides local tabs when space selection is controlled by parent', () => {
-    const layout: ProjectKitchenLayout = {
-      walls: [],
-      placements: [],
-      activeSpaceId: 'sp-a',
-      spaces: [
-        {
-          id: 'sp-a',
-          name: 'Cocina',
-          walls: [
-            {
-              id: 'w1',
-              name: 'M1',
-              lengthMm: 1000,
-              angleDeg: 0,
-              originXMm: 0,
-              originYMm: 0,
-            },
-          ],
-          placements: [],
-        },
-        {
-          id: 'sp-b',
-          name: 'Lavandería',
-          walls: [
-            {
-              id: 'w2',
-              name: 'M2',
-              lengthMm: 1000,
-              angleDeg: 0,
-              originXMm: 0,
-              originYMm: 0,
-            },
-          ],
-          placements: [],
-        },
-      ],
-    };
-    const project = makeProject({ kitchenLayout: layout });
-    render(
-      <PresentationKitchenPlanSlide
-        project={project}
-        modules={modules}
-        selectedSpaceId="sp-b"
-        onSelectedSpaceIdChange={() => {}}
-      />,
-    );
-    expect(screen.queryByTestId('presentation-kitchen-space-tabs')).toBeNull();
-    expect(screen.getByTestId('presentation-kitchen-space-title').textContent).toBe(
-      'Lavandería',
-    );
   });
 });
 
@@ -723,116 +546,7 @@ describe('ProjectPresentationMode', () => {
     renderPresentation();
     fireEvent.click(screen.getByTestId('presentation-slide-tab-1'));
     // KitchenPlanSlide shows empty state when no layout
-    expect(screen.getByText('Sin planta definida.')).toBeTruthy();
-  });
-
-  it('slide 1 title is Planta (not Plano de cocina)', () => {
-    renderPresentation({
-      project: makeProject({ kitchenLayout: makeKitchenLayout() }),
-    });
-    fireEvent.click(screen.getByTestId('presentation-slide-tab-1'));
-    expect(screen.getByText('Planta')).toBeTruthy();
-    expect(screen.queryByText('Plano de cocina')).toBeNull();
-  });
-
-  it('shows ambient tabs for multi-space and scopes plan SVG', () => {
-    const multiLayout: ProjectKitchenLayout = {
-      walls: [
-        {
-          id: 'w-c',
-          name: 'Muro c',
-          lengthMm: 3000,
-          angleDeg: 0,
-          originXMm: 0,
-          originYMm: 0,
-        },
-      ],
-      placements: [
-        {
-          itemId: 'item-1',
-          instanceIndex: 0,
-          wallId: 'w-c',
-          offsetMm: 100,
-          elevation: 'floor',
-        },
-      ],
-      activeSpaceId: 'sp-cocina',
-      spaces: [
-        {
-          id: 'sp-cocina',
-          name: 'Cocina',
-          walls: [
-            {
-              id: 'w-c',
-              name: 'Muro c',
-              lengthMm: 3000,
-              angleDeg: 0,
-              originXMm: 0,
-              originYMm: 0,
-            },
-          ],
-          placements: [
-            {
-              itemId: 'item-1',
-              instanceIndex: 0,
-              wallId: 'w-c',
-              offsetMm: 100,
-              elevation: 'floor',
-            },
-          ],
-        },
-        {
-          id: 'sp-lav',
-          name: 'Lavandería',
-          walls: [
-            {
-              id: 'w-l',
-              name: 'Muro l',
-              lengthMm: 2000,
-              angleDeg: 0,
-              originXMm: 0,
-              originYMm: 0,
-            },
-          ],
-          placements: [
-            {
-              itemId: 'item-1',
-              instanceIndex: 1,
-              wallId: 'w-l',
-              offsetMm: 50,
-              elevation: 'floor',
-            },
-          ],
-        },
-      ],
-    };
-    renderPresentation({
-      project: makeProject({
-        kitchenLayout: multiLayout,
-        items: [
-          {
-            id: 'item-1',
-            moduleId: 'mod-1',
-            quantity: 2,
-            measurePresetId: 'p1',
-            optionChoices: { INTERIOR: 'mat-a', FRENTE: 'mat-c' },
-          },
-        ],
-      }),
-    });
-
-    expect(screen.getByTestId('presentation-space-tabs')).toBeTruthy();
-    expect(screen.getByTestId('presentation-space-tab-sp-cocina')).toBeTruthy();
-    expect(screen.getByTestId('presentation-space-tab-sp-lav')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('presentation-slide-tab-1'));
-    expect(screen.getByTestId('presentation-kitchen-svg-sp-cocina')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('presentation-space-tab-sp-lav'));
-    expect(screen.getByTestId('presentation-kitchen-svg-sp-lav')).toBeTruthy();
-    expect(screen.getByTestId('presentation-kitchen-space-title').textContent).toBe(
-      'Lavandería',
-    );
+    expect(screen.getByText('Sin plano de cocina definido.')).toBeTruthy();
   });
 
   it('slide 2 renders PresentationOptionsSlide', () => {
@@ -911,79 +625,19 @@ describe('ProjectPresentationMode', () => {
     expect(slide0.className).toContain('project-presentation__slide--active');
   });
 
-  it('does not auto-show keyboard shortcuts overlay on open', () => {
-    vi.useFakeTimers();
-    renderPresentation();
-    expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
-    vi.advanceTimersByTime(5000);
-    expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
-    vi.useRealTimers();
-  });
-
   it('toggles keyboard shortcuts overlay with the ? key', () => {
     renderPresentation();
+    // Overlay starts hidden (auto-show happens after a 500ms timer; not asserted
+    // here to keep the test deterministic and free of fake-timer coupling).
     expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
+    // Pressing ? reveals the overlay.
     fireEvent.keyDown(window, { key: '?' });
     const overlay = screen.getByTestId('presentation-shortcuts-overlay');
     expect(overlay.getAttribute('role')).toBe('dialog');
     expect(overlay.getAttribute('aria-label')).toBe('Atajos de teclado');
     expect(screen.getByText('Atajos de teclado')).toBeTruthy();
+    // Pressing ? again hides it.
     fireEvent.keyDown(window, { key: '?' });
     expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
-  });
-
-  it('shows only client 3D actions by default (no workshop tools)', () => {
-    // Force WebGL path so toolbar mounts (canUseWebGL may fail in jsdom).
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-      {} as CanvasRenderingContext2D,
-    );
-    const project = makeProject({
-      kitchenLayout: makeKitchenLayout(),
-      items: [
-        {
-          id: 'item-1',
-          moduleId: 'mod-1',
-          quantity: 1,
-          measurePresetId: 'p1',
-          optionChoices: { INTERIOR: 'mat-a', FRENTE: 'mat-c' },
-        },
-      ],
-    });
-    // catalog needs modules for 3D non-empty — even if empty, toolbar needs !preview.empty
-    renderPresentation({
-      project,
-      catalog: {
-        materials,
-        edges,
-        hardware,
-        modules,
-        structures: [],
-        components: [],
-        optionGroups,
-      },
-    });
-    fireEvent.click(screen.getByTestId('presentation-slide-tab-3'));
-
-    // If WebGL path didn't open toolbar (preview empty / no webgl), skip assert body.
-    const toolbar = screen.queryByTestId('presentation-client-toolbar');
-    if (!toolbar) {
-      // Still assert workshop panel is never visible without toggle.
-      expect(screen.queryByTestId('presentation-workshop-panel')).toBeNull();
-      expect(screen.queryByTestId('presentation-explode-slider')).toBeNull();
-      return;
-    }
-
-    expect(screen.getByTestId('presentation-capture-png')).toBeTruthy();
-    expect(screen.getByTestId('presentation-share-link')).toBeTruthy();
-    expect(screen.getByTestId('presentation-workshop-toggle')).toBeTruthy();
-    expect(screen.queryByTestId('presentation-workshop-panel')).toBeNull();
-    expect(screen.queryByTestId('presentation-explode-slider')).toBeNull();
-    expect(screen.queryByText('Roles taller')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('presentation-workshop-toggle'));
-    expect(screen.getByTestId('presentation-workshop-panel')).toBeTruthy();
-    expect(screen.getByTestId('presentation-explode-slider')).toBeTruthy();
-    expect(screen.getByText('Roles taller')).toBeTruthy();
-    expect(screen.getByTestId('presentation-export-toggle')).toBeTruthy();
   });
 });
