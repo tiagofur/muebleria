@@ -152,7 +152,7 @@ export function ProductionWorkspace({
             variant="empty"
             icon={Factory}
             title="Aún no está en fábrica"
-            description="La orden de producción se habilita cuando la cotización está aceptada o ya en planta."
+            description="La orden de producción se habilita cuando la cotización está aceptada o ya en producción."
             actionLabel="Ver cotización / diseño"
             onAction={() => onOpenDesign(orderProject.id)}
             secondaryActionLabel="Volver a la cola"

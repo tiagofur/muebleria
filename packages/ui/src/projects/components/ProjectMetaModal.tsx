@@ -22,7 +22,6 @@ import { Modal } from '../../common';
 import {
   customersForProjectPicker,
   projectStatusLabel,
-  statusOptionsForRole,
   validateProjectDraft,
   type ProjectDraft,
 } from '../projectHelpers';
@@ -48,10 +47,13 @@ export interface ProjectMetaModalProps {
   }[];
   /** F039: hide margin/cost fields. */
   readonly showCosts: boolean;
-  /** Status <option> set depends on role caps (F035 / F036). */
-  readonly canMutate: boolean;
-  readonly canReopen: boolean;
-  readonly canMarkProduced: boolean;
+  /**
+   * @deprecated #257 — status is workflow-only (chrome buttons). Kept optional
+   * so call sites need not pass reopen/produced caps into meta.
+   */
+  readonly canMutate?: boolean;
+  readonly canReopen?: boolean;
+  readonly canMarkProduced?: boolean;
 }
 
 export function ProjectMetaModal({
@@ -64,9 +66,6 @@ export function ProjectMetaModal({
   canAssignOwner,
   assignableOwners,
   showCosts,
-  canMutate,
-  canReopen,
-  canMarkProduced,
 }: ProjectMetaModalProps): ReactNode {
   const formId = useId();
   const [draft, setDraft] = useState<ProjectDraft>(initialDraft);
@@ -248,29 +247,21 @@ export function ProjectMetaModal({
               </div>
             </>
           ) : null}
+          {/* #257: status is never edited here — workflow chrome + confirm. */}
           <div className="catalog-form__field">
-            <label htmlFor="prj-status">Estado</label>
-            <select
-              id="prj-status"
-              value={draft.status}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  status: e.target.value as ProjectDraft['status'],
-                })
-              }
+            <span className="catalog-form__label-text">Estado</span>
+            <p
+              className="catalog-form__readonly"
+              data-testid="project-meta-status-readonly"
             >
-              {statusOptionsForRole({
-                current: draft.status,
-                canMutate,
-                canReopen,
-                canMarkProduced,
-              }).map((s) => (
-                <option key={s} value={s}>
-                  {projectStatusLabel(s)}
-                </option>
-              ))}
-            </select>
+              {projectStatusLabel(draft.status)}
+              {editingId ? (
+                <span className="catalog-form__hint">
+                  {' '}
+                  — usá Aceptar / Enviar / Reabrir en el detalle
+                </span>
+              ) : null}
+            </p>
           </div>
         </div>
         {canAssignOwner && assignableOwners.length > 0 ? (

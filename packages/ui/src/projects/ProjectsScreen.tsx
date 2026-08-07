@@ -258,6 +258,8 @@ export interface ProjectsScreenProps {
   readonly canDelete?: boolean;
   /** F036: reopen closed quote → draft (clears snapshot). */
   readonly canReopen?: boolean;
+  /** Admin/gerente: reopen accepted|produced → draft (#257). */
+  readonly canForceReopenClosed?: boolean;
   /** F036: mark accepted → produced (click-only). */
   readonly canMarkProduced?: boolean;
   /** Shell applies status transition (snapshot rules). */
@@ -340,6 +342,7 @@ export function ProjectsScreen({
   canMutate = true,
   canDelete = true,
   canReopen = false,
+  canForceReopenClosed = false,
   canMarkProduced = false,
   onMarkProduced,
   onChangeStatus,
@@ -889,6 +892,7 @@ export function ProjectsScreen({
           canDelete={canDelete}
           onRestoreVersion={onRestoreVersion ? (version) => onRestoreVersion(selectedProject.id, version) : undefined}
           canReopen={canReopen}
+          canForceReopenClosed={canForceReopenClosed}
           canMarkProduced={canMarkProduced}
           projectTemplates={projectTemplates}
         />
@@ -971,6 +975,14 @@ export function ProjectsScreen({
           workshopName={workshopSettings?.workshopName}
           resolveMediaUrl={resolveImageUrl}
           onClose={() => setShowPresentation(false)}
+          onGoToProyectar={
+            onUpdateKitchenLayout
+              ? () => {
+                  setShowPresentation(false);
+                  setShowSpatialStudio(true);
+                }
+              : undefined
+          }
         />
       ) : null}
 
@@ -1007,7 +1019,7 @@ export function ProjectsScreen({
             onUpdateKitchenLayout(selectedProject.id, layout)
           }
           onUpdateItem={
-            canMutate
+            canMutate && selectedProject.status === 'draft'
               ? (item) => onUpdateItem(selectedProject.id, item)
               : undefined
           }

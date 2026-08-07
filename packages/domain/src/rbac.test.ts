@@ -87,7 +87,8 @@ describe('rbac (F035)', () => {
 
   it('reopen and mark produced permissions (F036)', () => {
     expect(roleCanReopenProject('gerente_ventas')).toBe(true);
-    expect(roleCanReopenProject('vendedor')).toBe(false);
+    expect(roleCanReopenProject('vendedor')).toBe(true); // quoted→draft only (status gate)
+    expect(roleCanReopenProject('produccion')).toBe(false);
     expect(roleCanMarkProduced('produccion')).toBe(true);
     expect(roleCanMarkProduced('ingeniero')).toBe(true);
     expect(roleCanMarkProduced('vendedor')).toBe(false);

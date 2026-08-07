@@ -385,7 +385,7 @@ export function ProductionOrderHub({
                 data-testid="prod-hub-mark-produced"
               >
                 <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
-                Marcar en planta
+                Marcar en producción
               </button>
             ) : null}
           </div>

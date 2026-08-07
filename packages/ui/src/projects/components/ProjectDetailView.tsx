@@ -222,6 +222,7 @@ export interface ProjectDetailViewProps {
   readonly canMutate: boolean;
   readonly canDelete: boolean;
   readonly canReopen: boolean;
+  readonly canForceReopenClosed?: boolean;
   readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
 }
@@ -247,6 +248,8 @@ function resolveChromePrimary(args: {
     hasExport,
     hasOpenInProduction,
   } = args;
+  // #257: mark-produced never primary on quote when factory hub exists.
+  // Prefer open-production; produced only from Producción for plant roles.
   if (status === 'draft' && canMutate && hasChangeStatus) return 'send';
   if (status === 'quoted' && canMutate && hasChangeStatus) return 'accept';
   if (
@@ -255,7 +258,14 @@ function resolveChromePrimary(args: {
   ) {
     return 'open-production';
   }
-  if (status === 'accepted' && canMarkProduced && hasMarkProduced) {
+  // Legacy: only when Producción nav is not wired — and never for vendedor
+  // (canMarkProduced already false for vendedor).
+  if (
+    status === 'accepted' &&
+    canMarkProduced &&
+    hasMarkProduced &&
+    !hasOpenInProduction
+  ) {
     return 'mark-produced';
   }
   if (
@@ -266,6 +276,15 @@ function resolveChromePrimary(args: {
   }
   return null;
 }
+
+const CONFIRM_SEND =
+  '¿Enviar cotización al cliente?\n\nSe congelan precios y el diseño queda en solo lectura. Si el cliente pide cambios, podés reabrir a borrador antes de aceptar.';
+const CONFIRM_ACCEPT =
+  '¿Aceptar esta cotización?\n\nEl pedido pasa a fábrica. Después de aceptar no se puede volver a borrador: solo ver y producir.';
+const CONFIRM_REOPEN =
+  '¿Reabrir a borrador?\n\nSe descongelan los precios y vuelve a ser editable. Usalo si el cliente pidió cambios antes de aceptar.';
+const CONFIRM_REOPEN_FORCE =
+  '¿Reabrir a borrador una cotización ya aceptada/en producción?\n\nEsto es una excepción de admin/gerente. Se descongelan precios y el diseño vuelve a ser editable.';
 
 function ProjectDetailViewInner(): ReactNode {
   const ctx = useProjectDetail();
@@ -301,6 +320,7 @@ function ProjectDetailViewInner(): ReactNode {
     canMutate,
     canDelete,
     canReopen,
+    canForceReopenClosed,
     canMarkProduced,
   } = ctx;
 
@@ -321,6 +341,8 @@ function ProjectDetailViewInner(): ReactNode {
   }, [project, modules]);
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
+  /** #257: design/meta/items only while draft. */
+  const canEditContent = canMutate && project.status === 'draft';
   const primary = resolveChromePrimary({
     status: project.status,
     canMutate,
@@ -341,11 +363,21 @@ function ProjectDetailViewInner(): ReactNode {
    */
   const showExportInChrome =
     Boolean(onExport) && productionExportOk && !hasOpenInProduction;
-  /** Mark-produced lives in OP hub when factory workspace is available. */
+  /**
+   * #257: never mark produced from quote when Producción hub is available.
+   * Vendedor never has canMarkProduced.
+   */
   const showMarkProducedInChrome =
     primary === 'mark-produced' &&
     Boolean(onMarkProduced) &&
+    canMarkProduced &&
     !hasOpenInProduction;
+
+  const requestStatus = (next: ProjectStatus, message: string) => {
+    if (!onChangeStatus) return;
+    if (typeof window !== 'undefined' && !window.confirm(message)) return;
+    onChangeStatus(project.id, next);
+  };
 
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
@@ -370,6 +402,7 @@ function ProjectDetailViewInner(): ReactNode {
     sections.push(...exportMenu.sections);
 
     const metaItems: DropdownMenuItem[] = [];
+    // Duplicate / template allowed for closed quotes (copy, not edit source).
     if (canMutate && onDuplicate) {
       metaItems.push({
         id: 'duplicate',
@@ -387,17 +420,34 @@ function ProjectDetailViewInner(): ReactNode {
       });
     }
     if (
-      canReopen &&
-      (project.status === 'quoted' ||
-        project.status === 'accepted' ||
-        project.status === 'produced') &&
-      onRequestReopen
+      project.status === 'draft' &&
+      canMutate &&
+      onChangeStatus
     ) {
       metaItems.push({
+        id: 'accept-direct',
+        label: 'Aceptar cotización…',
+        icon: <Check size={16} strokeWidth={1.5} aria-hidden />,
+        onSelect: () => requestStatus('accepted', CONFIRM_ACCEPT),
+      });
+    }
+    // #257: quoted → any canReopen (vendedor+); accepted/produced → admin/gerente only.
+    const reopenQuoted = canReopen && project.status === 'quoted';
+    const reopenClosed =
+      canForceReopenClosed &&
+      (project.status === 'accepted' || project.status === 'produced');
+    if ((reopenQuoted || reopenClosed) && onRequestReopen) {
+      metaItems.push({
         id: 'reopen',
-        label: 'Reabrir a borrador',
+        label: 'Reabrir a borrador…',
         icon: <RotateCcw size={16} strokeWidth={1.5} aria-hidden />,
-        onSelect: () => onRequestReopen(),
+        onSelect: () => {
+          const msg = reopenClosed ? CONFIRM_REOPEN_FORCE : CONFIRM_REOPEN;
+          if (typeof window !== 'undefined' && !window.confirm(msg)) {
+            return;
+          }
+          onRequestReopen();
+        },
       });
     }
     // Destructive action lives in Más (wave 4 chrome density) — not a permanent
@@ -419,8 +469,10 @@ function ProjectDetailViewInner(): ReactNode {
     canDelete,
     canMutate,
     canReopen,
+    canForceReopenClosed,
     exportMenu.sections,
     hasOpenInProduction,
+    onChangeStatus,
     onDuplicate,
     onOpenInProduction,
     onRequestDelete,
@@ -483,9 +535,9 @@ function ProjectDetailViewInner(): ReactNode {
             <button
               type="button"
               className="btn btn--primary"
-              onClick={() => onChangeStatus(project.id, 'quoted')}
+              onClick={() => requestStatus('quoted', CONFIRM_SEND)}
               data-testid="project-send-quote"
-              title="Cambia el estado a Enviada y congela los precios"
+              title="Envía al cliente y congela precios (confirmación)"
             >
               <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
             </button>
@@ -494,9 +546,9 @@ function ProjectDetailViewInner(): ReactNode {
             <button
               type="button"
               className="btn btn--primary"
-              onClick={() => onChangeStatus(project.id, 'accepted')}
+              onClick={() => requestStatus('accepted', CONFIRM_ACCEPT)}
               data-testid="project-accept-quote"
-              title="Marca la cotización como aceptada por el cliente"
+              title="Acepta y congela diseño y precios (confirmación)"
             >
               <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar cotización
             </button>
@@ -563,12 +615,13 @@ function ProjectDetailViewInner(): ReactNode {
             </button>
           ) : null}
 
-          {canMutate ? (
+          {canEditContent ? (
             <button
               type="button"
               className="btn"
               onClick={() => onEditMeta(project)}
               data-testid="project-chrome-edit"
+              title="Editar nombre, cliente y datos comerciales (solo borrador)"
             >
               <Pencil size={16} strokeWidth={1.5} aria-hidden /> Editar
             </button>
@@ -688,11 +741,7 @@ function ProjectDetailViewInner(): ReactNode {
                 <KitchenPlanPanel
                   project={project}
                   modules={modules}
-                  canEdit={Boolean(
-                    canMutate &&
-                      project.status === 'draft' &&
-                      onUpdateKitchenLayout,
-                  )}
+                  canEdit={Boolean(canEditContent && onUpdateKitchenLayout)}
                   onChange={(layout) => {
                     onUpdateKitchenLayout?.(project.id, layout);
                   }}
@@ -716,7 +765,7 @@ function ProjectDetailViewInner(): ReactNode {
                   }}
                   optionGroups={optionGroups}
                   canApply={Boolean(
-                    canMutate && project.status === 'draft' && onApplyScenarioB,
+                    canEditContent && onApplyScenarioB,
                   )}
                   canDuplicate={Boolean(canMutate && onDuplicateWithScenarioB)}
                   currency={project.currency}
@@ -740,7 +789,9 @@ function ProjectDetailViewInner(): ReactNode {
               >
                 <InstallationChecklistPanel
                   project={project}
-                  canEdit={Boolean(canMutate && onUpdateInstallationChecklist)}
+                  canEdit={Boolean(
+                    canEditContent && onUpdateInstallationChecklist,
+                  )}
                   onChange={(items) => {
                     onUpdateInstallationChecklist?.(project.id, items);
                   }}
@@ -813,8 +864,11 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onImportNesting: props.onImportNesting,
     onUpdateProjectLevelChoices: props.onUpdateProjectLevelChoices,
     canMutate: props.canMutate,
+    canEditContent:
+      props.canMutate && props.project.status === 'draft',
     canDelete: props.canDelete,
     canReopen: props.canReopen,
+    canForceReopenClosed: Boolean(props.canForceReopenClosed),
     canMarkProduced: props.canMarkProduced,
     onRestoreVersion: props.onRestoreVersion,
     projectTemplates: props.projectTemplates,

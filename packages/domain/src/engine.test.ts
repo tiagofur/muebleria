@@ -27,6 +27,8 @@ import {
   generatePieceLabels,
   generateProjectMaterialSummary,
   isProjectClosed,
+  projectAllowsContentMutation,
+  projectAllowsReopenToDraft,
   resolveBom,
   transitionProjectStatus,
   validateCatalogEntityCodes,
@@ -699,6 +701,24 @@ describe('quote snapshot — Escenario B (PRD §6.2 / §7.4)', () => {
     expect(isProjectClosed('quoted')).toBe(true);
     expect(isProjectClosed('accepted')).toBe(true);
     expect(isProjectClosed('produced')).toBe(true);
+  });
+
+  it('projectAllowsContentMutation only for draft (#257)', () => {
+    expect(projectAllowsContentMutation('draft')).toBe(true);
+    expect(projectAllowsContentMutation('quoted')).toBe(false);
+    expect(projectAllowsContentMutation('accepted')).toBe(false);
+    expect(projectAllowsContentMutation('produced')).toBe(false);
+  });
+
+  it('projectAllowsReopenToDraft: quoted any role; accepted only admin/gerente (#257)', () => {
+    expect(projectAllowsReopenToDraft('draft')).toBe(false);
+    expect(projectAllowsReopenToDraft('quoted')).toBe(true);
+    expect(projectAllowsReopenToDraft('quoted', 'vendedor')).toBe(true);
+    expect(projectAllowsReopenToDraft('accepted')).toBe(false);
+    expect(projectAllowsReopenToDraft('accepted', 'vendedor')).toBe(false);
+    expect(projectAllowsReopenToDraft('accepted', 'admin')).toBe(true);
+    expect(projectAllowsReopenToDraft('produced', 'gerente_ventas')).toBe(true);
+    expect(projectAllowsReopenToDraft('produced', 'vendedor')).toBe(false);
   });
 
   it('draft plantilla project has live salePrice; close freezes it', () => {

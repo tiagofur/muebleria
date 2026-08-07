@@ -37,6 +37,8 @@ import {
   duplicateProject as deepCopyProject,
   ensureProductionRevision as ensureProductionRevisionDomain,
   isKitchenLayoutEmpty,
+  projectAllowsContentMutation,
+  projectAllowsReopenToDraft,
   projectToTemplate,
   pruneKitchenLayoutOrClear,
   recordProductionExport as recordProductionExportDomain,
@@ -193,7 +195,11 @@ export interface ProjectState {
     status: ProjectStatus,
     catalog: Catalog,
   ) => void;
-  readonly reopenProject: (id: string, catalog: Catalog) => void;
+  readonly reopenProject: (
+    id: string,
+    catalog: Catalog,
+    actorRole?: string | null,
+  ) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;
 
   // --- Templates ---
@@ -398,6 +404,14 @@ export function createProjectStore(options: InternalOptions) {
 
       const existing = get().projects.find((p) => p.id === id);
       if (!existing) return;
+      // #257: commercial meta only while draft (status via workflow buttons).
+      if (!projectAllowsContentMutation(existing.status)) {
+        toast({
+          type: 'error',
+          message: 'Cotización cerrada: no se puede editar. Reabrí a borrador (gerente).',
+        });
+        return;
+      }
 
       const withMeta: Project = {
         ...existing,
@@ -407,6 +421,7 @@ export function createProjectStore(options: InternalOptions) {
         marginFactor: meta.marginFactor,
         laborFixedCost: meta.laborFixedCost,
         notes: meta.notes,
+        // Keep existing status — meta form no longer changes lifecycle (#257).
         ownerUserId: resolveOwnerOnUpdate(
           actor.role,
           existing.ownerUserId,
@@ -414,15 +429,17 @@ export function createProjectStore(options: InternalOptions) {
         ),
         updatedAt: now,
       };
-      // Status change captures or clears priceSnapshot (PRD §7.4).
+      // Status stays draft; no transition via meta.
       const withTransition = transitionProjectStatus(
         withMeta,
-        meta.status,
+        existing.status,
         updatedCatalog,
         now,
       );
-      // Auto-snapshot on status change (#200).
-      const updatedProject = snapshotOnStatusChange(withTransition, meta.status);
+      const updatedProject = snapshotOnStatusChange(
+        withTransition,
+        existing.status,
+      );
 
       // F062 bug fix: persist customers via catalogStore.
       getCatalogStoreState().upsertCustomers(resolved.customers);
@@ -504,10 +521,24 @@ export function createProjectStore(options: InternalOptions) {
       toast({ type: 'success', message: label });
     },
 
-    /** F036: closed → draft; clears price snapshot. */
-    reopenProject: (id, catalog) => {
+    /**
+     * #257: quoted → draft (vendedor OK); accepted/produced → draft only if
+     * role is admin/gerente (pass actor via optional 3rd arg; store uses workspace).
+     */
+    reopenProject: (id, catalog, actorRole?: string | null) => {
       const project = get().projects.find((p) => p.id === id);
-      if (!project || project.status === 'draft') return;
+      if (!project) return;
+      if (project.status === 'draft') return;
+      if (!projectAllowsReopenToDraft(project.status, actorRole)) {
+        toast({
+          type: 'error',
+          message:
+            project.status === 'quoted'
+              ? 'No se pudo reabrir la cotización.'
+              : 'Después de aceptar, solo admin/gerente puede reabrir a borrador.',
+        });
+        return;
+      }
       const now = new Date().toISOString();
       const withTransition = transitionProjectStatus(project, 'draft', catalog, now);
       const updated = snapshotOnStatusChange(withTransition, 'draft');
@@ -607,8 +638,10 @@ export function createProjectStore(options: InternalOptions) {
       toast({ type: 'info', message: '↓ Plantilla eliminada' });
     },
 
-    // --- Item mutations ---
+    // --- Item mutations (draft only — #257) ---
     addProjectItem: (projectId, input) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       const item: ProjectItem = {
         id: newId(),
@@ -627,6 +660,8 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     updateProjectItem: (projectId, item) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) => {
@@ -643,6 +678,8 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     removeProjectItem: (projectId, itemId) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) => {
@@ -659,6 +696,8 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     updateProjectLevelChoices: (projectId, choices) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) =>
@@ -675,6 +714,8 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     updateMeasureDefaults: (projectId, defaults) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) =>
@@ -686,6 +727,9 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     updateInstallationChecklist: (projectId, installationChecklist) => {
+      // Installation checklist is commercial prep — draft only (#257).
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) =>
@@ -701,6 +745,8 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     updateKitchenLayout: (projectId, kitchenLayout) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
       const now = new Date().toISOString();
       patch(set, get, (ps) =>
         ps.map((p) =>

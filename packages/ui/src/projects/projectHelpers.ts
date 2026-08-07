@@ -90,7 +90,11 @@ export const PROJECT_STATUSES: readonly ProjectStatus[] = [
   'produced',
 ] as const;
 
-/** Status options for the meta form, filtered by role capabilities (F036). */
+/**
+ * Status options for role capabilities (F036).
+ * @deprecated #257 — status no longer lives in ProjectMetaModal; workflow
+ * buttons + confirm drive transitions. Kept for tests / legacy callers.
+ */
 export function statusOptionsForRole(opts: {
   readonly current: ProjectStatus;
   readonly canMutate: boolean;
@@ -111,13 +115,22 @@ export function statusOptionsForRole(opts: {
   if (canMarkProduced && (current === 'accepted' || current === 'produced')) {
     out.add('produced');
   }
-  if (
-    canReopen &&
-    (current === 'quoted' || current === 'accepted' || current === 'produced')
-  ) {
+  // #257: reopen only from quoted (not accepted/produced).
+  if (canReopen && current === 'quoted') {
     out.add('draft');
   }
   return PROJECT_STATUSES.filter((s) => out.has(s));
+}
+
+/**
+ * Quote content (items, layout, meta comercial) only while draft + role allows.
+ * #257 — freeze quoted / accepted / produced for design edits.
+ */
+export function canEditQuoteContent(
+  canMutateRole: boolean,
+  status: ProjectStatus,
+): boolean {
+  return canMutateRole && status === 'draft';
 }
 
 export function projectStatusLabel(status: ProjectStatus): string {
@@ -419,6 +432,50 @@ export function optionLabelForId(
   return opt ? `${opt.name} — ${opt.code}` : optionId;
 }
 
+/** Visual chip swatch for presentation options (board finishes). */
+export type OptionSwatch =
+  | { readonly kind: 'color'; readonly color: string }
+  | { readonly kind: 'image'; readonly src: string }
+  | { readonly kind: 'edge' }
+  | { readonly kind: 'hardware' }
+  | null;
+
+/**
+ * Resolve a presentation swatch for a chosen option id.
+ * Boards: previewColor or imageUrl; edges/hardware: typed marker.
+ */
+export function optionSwatchForId(
+  optionId: string,
+  group: OptionGroup,
+  catalogs: {
+    readonly materials: readonly MaterialBoard[];
+    readonly edges: readonly EdgeBand[];
+    readonly hardware: readonly Hardware[];
+  },
+  resolveMediaUrl?: (url: string | undefined) => string | undefined,
+): OptionSwatch {
+  if (group.kind === 'board') {
+    const mat = catalogs.materials.find((m) => m.id === optionId);
+    if (!mat) return null;
+    const color = mat.previewColor?.trim();
+    if (color) return { kind: 'color', color };
+    const img = resolveMediaUrl
+      ? resolveMediaUrl(mat.imageUrl)
+      : mat.imageUrl?.trim() || undefined;
+    if (img) return { kind: 'image', src: img };
+    return null;
+  }
+  if (group.kind === 'edge') {
+    return catalogs.edges.some((e) => e.id === optionId) ? { kind: 'edge' } : null;
+  }
+  if (group.kind === 'hardware') {
+    return catalogs.hardware.some((h) => h.id === optionId)
+      ? { kind: 'hardware' }
+      : null;
+  }
+  return null;
+}
+
 /**
  * Approximate sale price for a single quote line (item × qty).
  * Uses domain calc with laborFixedCost=0 so the line is comparable in the
@@ -542,4 +599,20 @@ export function furnitureTypeLabel(type: FurnitureType | undefined): string {
     case 'alto':
       return 'Alto';
   }
+}
+
+/**
+ * Share URL for client presentation (`?present=projectId`).
+ * Preserves pathname (incl. Vite base path) and other query params; sets/replaces `present`.
+ */
+export function buildPresentationShareUrl(
+  projectId: string,
+  location: Pick<Location, 'origin' | 'pathname' | 'search' | 'hash'> = window.location,
+): string {
+  const id = projectId.trim();
+  const params = new URLSearchParams(location.search);
+  params.set('present', id);
+  const qs = params.toString();
+  const hash = location.hash ?? '';
+  return `${location.origin}${location.pathname}${qs ? `?${qs}` : ''}${hash}`;
 }

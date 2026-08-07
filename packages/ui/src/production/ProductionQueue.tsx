@@ -105,11 +105,11 @@ export function ProductionQueue({
   }
 
   const title =
-    tab === 'accepted' ? 'Para fabricar' : 'Ya en planta';
+    tab === 'accepted' ? 'Para fabricar' : 'Ya en producción';
   const subtitle =
     tab === 'accepted'
       ? 'Pedidos aceptados. Abrí la orden para pack, despiece y piso — acá solo elegís la obra.'
-      : 'Ya marcadas en planta. Reabrí la orden para reexportar o ver el avance.';
+      : 'Ya marcadas en producción. Reabrí la orden para reexportar o ver el avance.';
 
   return (
     <section className="prod-queue" aria-label="Cola de producción">
@@ -163,7 +163,7 @@ export function ProductionQueue({
           data-testid="prod-tab-produced"
         >
           <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
-          Ya en planta
+          Ya en producción
         </button>
       </div>
 
@@ -174,12 +174,12 @@ export function ProductionQueue({
           title={
             tab === 'accepted'
               ? 'No hay cotizaciones aceptadas'
-              : 'Todavía no hay nada en planta'
+              : 'Todavía no hay nada en producción'
           }
           description={
             tab === 'accepted'
               ? 'Cuando ventas acepte un pedido, aparece acá para abrir la orden de fábrica.'
-              : 'Las obras que marques «En planta» se listan en esta pestaña.'
+              : 'Las obras que marques «En producción» se listan en esta pestaña.'
           }
         />
       ) : (
@@ -280,7 +280,7 @@ export function ProductionQueue({
                           strokeWidth={1.5}
                           aria-hidden
                         />
-                        Marcar en planta
+                        Marcar en producción
                       </button>
                     ) : null}
                   </div>

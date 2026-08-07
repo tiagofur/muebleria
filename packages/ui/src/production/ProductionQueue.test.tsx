@@ -78,7 +78,7 @@ describe('ProductionQueue (F038)', () => {
     );
     await user.click(screen.getByTestId('prod-tab-produced'));
     expect(screen.getByTestId('prod-queue-title').textContent).toBe(
-      'Ya en planta',
+      'Ya en producción',
     );
     expect(screen.getByText('Living hecho')).toBeTruthy();
     expect(screen.queryByTestId('prod-mark-p3')).toBeNull();

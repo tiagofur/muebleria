@@ -196,9 +196,17 @@ export interface ProjectDetailContextValue {
   readonly onRestoreVersion?: (version: number) => void;
 
   // --- Permissions ---
+  /** Role can mutate projects (vendedor/gerente/admin). */
   readonly canMutate: boolean;
+  /**
+   * Content edits (items, options, meta comercial): draft only + canMutate.
+   * #257 freeze.
+   */
+  readonly canEditContent: boolean;
   readonly canDelete: boolean;
   readonly canReopen: boolean;
+  /** Admin/gerente: reopen accepted|produced (#257). */
+  readonly canForceReopenClosed: boolean;
   readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
 }

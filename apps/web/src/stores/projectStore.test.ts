@@ -682,6 +682,41 @@ describe('projectStore — importNestingResult / updateKitchenLayout', () => {
     expect(store.getState().projects[0]!.kitchenLayout?.walls).toHaveLength(1);
   });
 
+  it('updateKitchenLayout / addProjectItem no-op when accepted (#257 freeze)', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+
+    store.getState().updateKitchenLayout('proj-1', {
+      walls: [{ id: 'w1', lengthMm: 1000, angleDeg: 0 }],
+      placements: [],
+    });
+    store.getState().addProjectItem('proj-1', {
+      moduleId: 'm1',
+      quantity: 1,
+      optionChoices: {},
+    });
+
+    expect(store.getState().projects[0]!.kitchenLayout).toBeUndefined();
+    expect(store.getState().projects[0]!.items).toHaveLength(0);
+  });
+
+  it('reopenProject: vendedor cannot force accepted; admin can (#257)', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+    store.getState().reopenProject('proj-1', seedCatalog(), 'vendedor');
+    expect(store.getState().projects[0]!.status).toBe('accepted');
+
+    store.getState().reopenProject('proj-1', seedCatalog(), 'admin');
+    expect(store.getState().projects[0]!.status).toBe('draft');
+
+    store.getState().setProjects([makeProject({ status: 'quoted' })]);
+    store.getState().reopenProject('proj-1', seedCatalog(), 'vendedor');
+    expect(store.getState().projects[0]!.status).toBe('draft');
+  });
+
   it('updateKitchenLayout keeps other spaces when active top-level is empty', () => {
     const { deps } = makeDeps();
     const store = createProjectStore({ deps });
