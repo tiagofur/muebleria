@@ -37,6 +37,7 @@ import {
   useDebouncedValue,
   useRoutableEntitySelection,
 } from '../common';
+import { consumeRequestCreateKey } from '../common/consumeRequestCreateKey';
 import {
   filterCatalogItems,
   type CatalogStatusFilter,
@@ -318,8 +319,10 @@ export function MaterialsCatalog({
     setModalOpen(true);
   };
 
+  // Consume once per key bump so remount with the same key does not re-open
+  // create (JD R4-W sticky create — same pattern as ModulesScreen).
   useEffect(() => {
-    if (!requestCreateKey) return;
+    if (!consumeRequestCreateKey('materials', requestCreateKey)) return;
     startCreate();
     // Intentionally only when shell bumps the key (Dashboard handoff).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startCreate is stable enough per bump
