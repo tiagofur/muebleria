@@ -96,11 +96,19 @@ type MaterialBoard struct {
 	PreviewTextureTileWidthMm float64 `json:"preview_texture_tile_width_mm,omitempty"`
 	// PreviewTextureTileLengthMm is the real-world mm of one texture image along
 	// grain / board length (V). 0 = use client default tile.
-	PreviewTextureTileLengthMm float64   `json:"preview_texture_tile_length_mm,omitempty"`
-	Notes                      string    `json:"notes,omitempty"`
-	Active                     bool      `json:"active"`
-	CreatedAt                  time.Time `json:"created_at"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	PreviewTextureTileLengthMm float64 `json:"preview_texture_tile_length_mm,omitempty"`
+	// PreviewRoughness is an optional 0..1 PBR override for the 3D preview.
+	// nil = fall back to the lighting-mode value (see resolveBoardPhysicalResponse).
+	// NOT stored via nullIfZeroFloat — 0.0 is a valid value.
+	PreviewRoughness *float64 `json:"preview_roughness,omitempty"`
+	// PreviewMetalness is the metal/dielectric BRDF selector (1 = metal, 0 = dielectric).
+	PreviewMetalness *float64 `json:"preview_metalness,omitempty"`
+	// PreviewClearcoat is an optional 0..1 lacquer-layer strength override.
+	PreviewClearcoat *float64  `json:"preview_clearcoat,omitempty"`
+	Notes            string    `json:"notes,omitempty"`
+	Active           bool      `json:"active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type EdgeBand struct {
@@ -204,7 +212,7 @@ type Module struct {
 	Presets []DimensionPreset `json:"presets,omitempty"`
 	// Components are module-level component instances (doors, shelves, …) for
 	// composed modules, beyond those inherited from StructureID.
-	Components   []ComponentInstance `json:"components,omitempty"`
+	Components []ComponentInstance `json:"components,omitempty"`
 	// ImageURL relative media path for sales showcase (F040).
 	ImageURL      string         `json:"image_url,omitempty"`
 	BoardParts    []BoardPart    `json:"board_parts"`
@@ -268,8 +276,8 @@ type StructureRevision struct {
 
 // ComponentInstance is a reference to a reusable component placed in a structure or module.
 type ComponentInstance struct {
-	ComponentID       string             `json:"componentId"`
-	Quantity          int                `json:"quantity"`
+	ComponentID       string              `json:"componentId"`
+	Quantity          int                 `json:"quantity"`
 	PlacementOverride *ComponentPlacement `json:"placementOverride,omitempty"`
 	// Overrides allow per-instance edge/formula overrides (mirrors TS overrides).
 	Overrides *ComponentInstanceOverrides `json:"overrides,omitempty"`
@@ -372,13 +380,13 @@ type Project struct {
 	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
 	// PlanEditSession soft-locks Proyectar for multi-user collaboration.
 	// Shape: { "user_id", "user_name", "expires_at" }.
-	PlanEditSession json.RawMessage `json:"plan_edit_session,omitempty"`
+	PlanEditSession       json.RawMessage `json:"plan_edit_session,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
 	// Shape: { revision, revision_at, fingerprint, last_export_* }.
-	Production json.RawMessage `json:"production,omitempty"`
-	Notes         string          `json:"notes,omitempty"`
+	Production    json.RawMessage     `json:"production,omitempty"`
+	Notes         string              `json:"notes,omitempty"`
 	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
 	CreatedAt     time.Time           `json:"created_at"`
 	UpdatedAt     time.Time           `json:"updated_at"`
@@ -389,21 +397,21 @@ type Project struct {
 // desde plantilla" clones a fresh draft Project from one of these (the clone
 // logic lives in the TS domain; Go only persists CRUD).
 type ProjectTemplate struct {
-	ID                string        `json:"id"`
-	Name              string        `json:"name"`
-	Currency          string        `json:"currency"`
-	MarginFactor      float64       `json:"margin_factor"`
-	LaborFixedCost    float64       `json:"labor_fixed_cost"`
-	Items             []ProjectItem `json:"items"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Currency            string            `json:"currency"`
+	MarginFactor        float64           `json:"margin_factor"`
+	LaborFixedCost      float64           `json:"labor_fixed_cost"`
+	Items               []ProjectItem     `json:"items"`
 	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
 	// MeasureDefaults / KitchenLayout / InstallationChecklist are JSON blobs
 	// mirroring the Project fields of the same names.
-	MeasureDefaults        json.RawMessage `json:"measure_defaults,omitempty"`
-	KitchenLayout          json.RawMessage `json:"kitchen_layout,omitempty"`
-	InstallationChecklist  json.RawMessage `json:"installation_checklist,omitempty"`
-	Notes                  string          `json:"notes,omitempty"`
-	CreatedAt              time.Time       `json:"created_at"`
-	UpdatedAt              time.Time       `json:"updated_at"`
+	MeasureDefaults       json.RawMessage `json:"measure_defaults,omitempty"`
+	KitchenLayout         json.RawMessage `json:"kitchen_layout,omitempty"`
+	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
+	Notes                 string          `json:"notes,omitempty"`
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
 }
 
 type QuoteBreakdown struct {
@@ -435,7 +443,6 @@ type Catalog struct {
 	Categories   []ModuleCategory `json:"categories,omitempty"`
 	Components   []Component      `json:"components,omitempty"`
 }
-
 
 // WorkshopSettings is taller-wide defaults (F031 + F044 COST-02).
 type WorkshopSettings struct {
