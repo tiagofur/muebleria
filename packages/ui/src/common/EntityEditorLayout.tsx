@@ -12,6 +12,7 @@
 
 import type { ReactNode } from 'react';
 import { Modal, type ModalSize } from './Modal';
+import './entityEditorPage.css';
 
 export interface EntityEditorLayoutProps {
   /** Page / container test id (e.g. "components-screen") */

@@ -123,6 +123,7 @@
 
 .dashboard-stat__value {
   margin: 0;
+  font-family: var(--font-mono);
   font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
   color: var(--text-primary);
