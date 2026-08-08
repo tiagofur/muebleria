@@ -6,14 +6,23 @@
 import { ValidationError } from '../errors';
 import { validateModulePresets } from '../measurePresets';
 import type {
+  AmbientMaterial,
+  AmbientSurfaceType,
   BoardPart,
   Catalog,
   Component,
   HardwareLine,
+  KitchenSpace,
   Module,
   ProjectStatus,
   Structure,
 } from '../types';
+
+/** Valid ambient surface types (spec #4148). Runtime guard for untrusted input. */
+const AMBIENT_SURFACE_TYPES: ReadonlySet<AmbientSurfaceType> = new Set([
+  'floor',
+  'wall',
+]);
 
 /** VAL-01, VAL-04 (structure), basic part integrity at resolution time. */
 export function validateBoardPart(
@@ -312,6 +321,115 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
   for (const st of catalog.structures ?? []) {
     validateStructure(st);
   }
+  // Ambient materials (spec #4148): presentation-only, separate code namespace.
+  const seenAmbientCodes = new Set<string>();
+  for (const a of catalog.ambientMaterials ?? []) {
+    if (!a.code?.trim() || !a.name?.trim()) {
+      throw new ValidationError(
+        'Ambient material code and name must not be empty',
+        { ambientMaterialId: a.id, field: 'code/name' },
+      );
+    }
+    if (!AMBIENT_SURFACE_TYPES.has(a.surfaceType)) {
+      throw new ValidationError(
+        `Ambient material surfaceType must be 'floor' or 'wall' (got '${a.surfaceType}')`,
+        {
+          ambientMaterialId: a.id,
+          ambientMaterialCode: a.code,
+          field: 'surfaceType',
+          surfaceType: a.surfaceType,
+        },
+      );
+    }
+    if (seenAmbientCodes.has(a.code)) {
+      throw new ValidationError(
+        `Ambient material code must be unique within the collection (duplicate '${a.code}')`,
+        {
+          ambientMaterialId: a.id,
+          ambientMaterialCode: a.code,
+          field: 'code',
+        },
+      );
+    }
+    seenAmbientCodes.add(a.code);
+  }
+}
+
+/**
+ * Validate KitchenSpace ambient refs (spec #4148 / design #4151).
+ *
+ * For each space, `floorMaterialId` must resolve to an ACTIVE ambient material
+ * with `surfaceType === 'floor'`; `wallMaterialId` must resolve to an ACTIVE
+ * ambient material with `surfaceType === 'wall'`. Mismatched surfaceType,
+ * inactive, or unknown id produce a ValidationError.
+ *
+ * Returns a collected array (does NOT throw) so the project-validation path can
+ * surface all ref errors at once. Separate from `validateCatalogEntityCodes`
+ * because refs live on KitchenSpace, not Catalog.
+ */
+export function validateAmbientRefs(
+  ambientMaterials: readonly AmbientMaterial[],
+  spaces: readonly KitchenSpace[],
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  for (const sp of spaces) {
+    if (sp.floorMaterialId) {
+      const err = resolveAmbientRef(
+        ambientMaterials,
+        sp.floorMaterialId,
+        'floor',
+        sp.id,
+        'floorMaterialId',
+      );
+      if (err) errors.push(err);
+    }
+    if (sp.wallMaterialId) {
+      const err = resolveAmbientRef(
+        ambientMaterials,
+        sp.wallMaterialId,
+        'wall',
+        sp.id,
+        'wallMaterialId',
+      );
+      if (err) errors.push(err);
+    }
+  }
+  return errors;
+}
+
+function resolveAmbientRef(
+  ambientMaterials: readonly AmbientMaterial[],
+  materialId: string,
+  expectedSurface: AmbientSurfaceType,
+  spaceId: string,
+  field: string,
+): ValidationError | undefined {
+  const found = ambientMaterials.find((a) => a.id === materialId);
+  if (!found) {
+    return new ValidationError(
+      `Ambient material ref '${field}' points to an unknown id '${materialId}'`,
+      { spaceId, field, materialId },
+    );
+  }
+  if (!found.active) {
+    return new ValidationError(
+      `Ambient material ref '${field}' points to an inactive material '${materialId}'`,
+      { spaceId, field, materialId },
+    );
+  }
+  if (found.surfaceType !== expectedSurface) {
+    return new ValidationError(
+      `Ambient material ref '${field}' must resolve to a '${expectedSurface}' surface (got '${found.surfaceType}')`,
+      {
+        spaceId,
+        field,
+        materialId,
+        expectedSurfaceType: expectedSurface,
+        actualSurfaceType: found.surfaceType,
+      },
+    );
+  }
+  return undefined;
 }
 
 /** PRD §7.4 — quoted/accepted freeze catalog unit prices. */
