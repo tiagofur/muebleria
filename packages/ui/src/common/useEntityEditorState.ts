@@ -71,7 +71,7 @@ export function useEntityEditorState<Draft, Tab extends string>(
 ): EntityEditorState<Draft, Tab> {
   const { draftKey, emptyDraft, defaultTab, onEditorClose, currentSelectionId } = options;
 
-  const [draft, setDraft, clearDraft] = useDraftSession<Draft>(
+  const [draft, setDraft, clearDraft, setDraftLocal] = useDraftSession<Draft>(
     draftKey,
     emptyDraft(),
   );
@@ -86,17 +86,26 @@ export function useEntityEditorState<Draft, Tab extends string>(
     initialDraft != null &&
     JSON.stringify(draft) !== JSON.stringify(initialDraft);
 
+  // clearDraft first, then setDraftLocal: never re-persist empty under the
+  // entity key after session clear (JD R4-C1 race with setDraft+clearDraft).
   const forceCloseEditor = useCallback(() => {
     setModalOpen(false);
     setEditingId(null);
-    setDraft(emptyDraft());
+    clearDraft();
+    setDraftLocal(emptyDraft());
     setInitialDraft(null);
     setEditorTab(defaultTab);
     setError(null);
     setConfirmDiscard(false);
-    clearDraft();
     onEditorClose?.(currentSelectionId);
-  }, [emptyDraft, defaultTab, clearDraft, onEditorClose, currentSelectionId, setDraft]);
+  }, [
+    emptyDraft,
+    defaultTab,
+    clearDraft,
+    onEditorClose,
+    currentSelectionId,
+    setDraftLocal,
+  ]);
 
   const closeModal = useCallback(() => {
     if (isDraftDirty) {

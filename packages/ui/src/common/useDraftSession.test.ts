@@ -5,7 +5,11 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useDraftSession } from './useDraftSession';
+import {
+  readDraftSession,
+  seedEditorDraftFromBaseline,
+  useDraftSession,
+} from './useDraftSession';
 
 afterEach(() => {
   sessionStorage.clear();
@@ -57,6 +61,55 @@ describe('useDraftSession', () => {
     expect(sessionStorage.getItem('clear')).toBeNull();
     // State value is left as-is; the caller decides whether to reset.
     expect(result.current[0]).toEqual({ name: 'dirty' });
+  });
+
+  it('setDraftLocal resets React state without re-persisting after clearDraft (R4-C1)', () => {
+    const { result } = renderHook(() =>
+      useDraftSession<{ name: string }>('component-draft:c1', {
+        name: 'init',
+      }),
+    );
+    // Mid-edit: dirty draft is in session under the entity key.
+    act(() => result.current[1]({ name: 'in-progress' }));
+    expect(sessionStorage.getItem('component-draft:c1')).toContain(
+      'in-progress',
+    );
+
+    // forceClose pattern: clear session, then reset React without write.
+    act(() => {
+      result.current[2](); // clearDraft
+      result.current[3]({ name: '' }); // setDraftLocal(empty)
+    });
+
+    expect(sessionStorage.getItem('component-draft:c1')).toBeNull();
+    expect(result.current[0]).toEqual({ name: '' });
+
+    // Re-open seed path: session absent → seedEditorDraftFromBaseline writes entity.
+    const drafts: unknown[] = [];
+    const baseline = { name: 'entity-name' };
+    seedEditorDraftFromBaseline(
+      'component-draft:c1',
+      baseline,
+      (d) => drafts.push(d),
+      () => {},
+    );
+    expect(drafts).toEqual([baseline]);
+  });
+
+  it('setDraft after clear would re-stick empty (documents why setDraftLocal exists)', () => {
+    // Regression guard: the OLD forceClose order (setDraft then clearDraft)
+    // left a sticky empty under the entity key when setDraft's updater flushed
+    // after clear. setDraft alone after clear still writes — callers must use
+    // setDraftLocal on close.
+    const { result } = renderHook(() =>
+      useDraftSession<{ name: string }>('sticky-empty', { name: 'init' }),
+    );
+    act(() => result.current[1]({ name: 'dirty' }));
+    act(() => {
+      result.current[2](); // clear
+      result.current[1]({ name: '' }); // setDraft (persists) — wrong for close
+    });
+    expect(sessionStorage.getItem('sticky-empty')).toContain('"name":""');
   });
 
   it('handles unparseable sessionStorage gracefully (returns initial)', () => {
@@ -117,5 +170,42 @@ describe('useDraftSession', () => {
     // Switch to a key with no persisted value: should use the fresh initial.
     rerender({ key: 'module-draft:mod-3' });
     expect(result.current[0]).toEqual({ name: 'fresh' });
+  });
+});
+
+describe('seedEditorDraftFromBaseline (R3-C1)', () => {
+  it('sets draft + initialDraft when session is empty', () => {
+    const drafts: unknown[] = [];
+    const initials: unknown[] = [];
+    const baseline = { name: 'entity' };
+    seedEditorDraftFromBaseline(
+      'component-draft:c1',
+      baseline,
+      (d) => drafts.push(d),
+      (d) => initials.push(d),
+    );
+    expect(drafts).toEqual([baseline]);
+    expect(initials).toEqual([baseline]);
+  });
+
+  it('does not overwrite draft when session already has a value', () => {
+    sessionStorage.setItem(
+      'component-draft:c1',
+      JSON.stringify({ name: 'session-restored' }),
+    );
+    const drafts: unknown[] = [];
+    const initials: unknown[] = [];
+    const baseline = { name: 'entity' };
+    seedEditorDraftFromBaseline(
+      'component-draft:c1',
+      baseline,
+      (d) => drafts.push(d),
+      (d) => initials.push(d),
+    );
+    expect(drafts).toEqual([]);
+    expect(initials).toEqual([baseline]);
+    expect(readDraftSession('component-draft:c1')).toEqual({
+      name: 'session-restored',
+    });
   });
 });
