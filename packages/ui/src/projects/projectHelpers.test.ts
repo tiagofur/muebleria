@@ -27,6 +27,8 @@ import {
   setProjectLevelChoice,
   validateItemQuantity,
   validateProjectDraft,
+  buildPresentationShareUrl,
+  optionSwatchForId,
 } from './projectHelpers';
 
 const groups: OptionGroup[] = [
@@ -709,5 +711,42 @@ describe('setItemOptionChoice / setProjectLevelChoice (F029)', () => {
     expect(
       setProjectLevelChoice({ INTERIOR: 'mat-a' }, 'INTERIOR', ''),
     ).toEqual({});
+  });
+});
+
+
+describe('buildPresentationShareUrl', () => {
+  it('sets present query on path with base path', () => {
+    const url = buildPresentationShareUrl('prj-99', {
+      origin: 'https://app.example.com',
+      pathname: '/muebles/projects/prj-99',
+      search: '',
+      hash: '',
+    });
+    expect(url).toBe(
+      'https://app.example.com/muebles/projects/prj-99?present=prj-99',
+    );
+  });
+});
+
+describe('optionSwatchForId', () => {
+  it('returns color swatch for board with previewColor', () => {
+    const group = {
+      id: 'g1', code: 'INTERIOR', name: 'Interior', kind: 'board' as const,
+      required: true, optionIds: ['mat-a'],
+    };
+    const catalogs = {
+      materials: [{
+        id: 'mat-a', code: 'TAB-A', name: 'Blanco',
+        widthMm: 1830, lengthMm: 2440, thicknessMm: 18,
+        grainDefault: false, boardPrice: 1, costPerM2: 1, wastePercent: 0, active: true,
+        previewColor: '#ffffff',
+      }],
+      edges: [],
+      hardware: [],
+    };
+    expect(optionSwatchForId('mat-a', group, catalogs)).toEqual({
+      kind: 'color', color: '#ffffff',
+    });
   });
 });
