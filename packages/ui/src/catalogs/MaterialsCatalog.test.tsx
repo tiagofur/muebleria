@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MaterialBoard } from '@muebles/domain';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
@@ -186,5 +186,44 @@ describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
     await user.click(screen.getByRole('button', { name: /^Editar$/i }));
     expect(screen.getByTestId('material-preview-3d-body')).toBeTruthy();
     expect(screen.getByTestId('material-preview-color-input')).toBeTruthy();
+  });
+
+  it('allows selecting PBR finish presets and submitting roughness/clearcoat/metalness', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+      />,
+    );
+
+    await user.click(screen.getByText('MAT-01'));
+    await user.click(screen.getByRole('button', { name: /^Editar$/i }));
+    await user.click(screen.getByTestId('material-preview-3d-toggle'));
+    expect(screen.getByTestId('material-pbr-section')).toBeTruthy();
+
+    // Click "Alto Brillo / Laca" preset
+    await user.click(screen.getByTestId('material-pbr-preset-gloss'));
+    expect((screen.getByTestId('material-pbr-roughness-input') as HTMLInputElement).value).toBe('0.08');
+    expect((screen.getByTestId('material-pbr-clearcoat-input') as HTMLInputElement).value).toBe('0.85');
+
+    // Submit form
+    const form = screen.getByTestId('material-form-modal').querySelector('form');
+    fireEvent.submit(form!);
+    expect(onUpdate).toHaveBeenCalledWith(
+      'mat-1',
+      expect.objectContaining({
+        previewRoughness: 0.08,
+        previewClearcoat: 0.85,
+        previewMetalness: 0,
+      }),
+    );
   });
 });

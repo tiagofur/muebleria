@@ -97,6 +97,9 @@ type MaterialBoard struct {
 	// PreviewTextureTileLengthMm is the real-world mm of one texture image along
 	// grain / board length (V). 0 = use client default tile.
 	PreviewTextureTileLengthMm float64   `json:"preview_texture_tile_length_mm,omitempty"`
+	PreviewRoughness           *float64  `json:"preview_roughness,omitempty"`
+	PreviewMetalness           *float64  `json:"preview_metalness,omitempty"`
+	PreviewClearcoat           *float64  `json:"preview_clearcoat,omitempty"`
 	Notes                      string    `json:"notes,omitempty"`
 	Active                     bool      `json:"active"`
 	CreatedAt                  time.Time `json:"created_at"`

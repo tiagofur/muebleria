@@ -33,6 +33,9 @@ type SharedMatProps = {
   readonly opacity: number;
   readonly depthWrite: boolean;
   readonly lightingMode: SceneLightingMode;
+  readonly previewRoughness?: number;
+  readonly previewMetalness?: number;
+  readonly previewClearcoat?: number;
 };
 
 /**
@@ -92,6 +95,9 @@ function PhotoTextureMaterial({
     hasMap: true,
     hasGrain: false,
     lightingMode: shared.lightingMode,
+    previewRoughness: shared.previewRoughness,
+    previewMetalness: shared.previewMetalness,
+    previewClearcoat: shared.previewClearcoat,
   });
 
   return (
@@ -148,6 +154,9 @@ function SolidOrGrainMaterial({
     hasMap: Boolean(map),
     hasGrain: grain === 1,
     lightingMode: shared.lightingMode,
+    previewRoughness: shared.previewRoughness,
+    previewMetalness: shared.previewMetalness,
+    previewClearcoat: shared.previewClearcoat,
   });
 
   return (
@@ -195,6 +204,9 @@ export function BoardMeshMaterial({
     opacity,
     depthWrite: !transparent,
     lightingMode,
+    previewRoughness: visual.previewRoughness,
+    previewMetalness: visual.previewMetalness,
+    previewClearcoat: visual.previewClearcoat,
   };
 
   // Outer key forces full material swap between surface modes.

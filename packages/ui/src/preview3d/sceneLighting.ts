@@ -167,32 +167,48 @@ export function boardPhysicalResponse(params: {
   readonly hasMap: boolean;
   readonly hasGrain: boolean;
   readonly lightingMode?: SceneLightingMode;
+  readonly previewRoughness?: number;
+  readonly previewMetalness?: number;
+  readonly previewClearcoat?: number;
 }): BoardPhysicalResponse {
   const present = isGlossyLightingMode(params.lightingMode);
+  let base: BoardPhysicalResponse;
   if (params.hasMap) {
-    return {
+    base = {
       roughness: present ? 0.52 : 0.62,
       metalness: 0.03,
       clearcoat: present ? 0.15 : 0.08,
       clearcoatRoughness: 0.35,
       envMapIntensity: present ? 0.40 : 0.2,
     };
-  }
-  if (params.hasGrain) {
-    return {
+  } else if (params.hasGrain) {
+    base = {
       roughness: present ? 0.68 : 0.78,
       metalness: 0.02,
       clearcoat: present ? 0.08 : 0.04,
       clearcoatRoughness: 0.55,
       envMapIntensity: present ? 0.25 : 0.12,
     };
+  } else {
+    // Solid color lacquer-ish
+    base = {
+      roughness: present ? 0.44 : 0.52,
+      metalness: 0.04,
+      clearcoat: present ? 0.28 : 0.15,
+      clearcoatRoughness: 0.28,
+      envMapIntensity: present ? 0.48 : 0.25,
+    };
   }
-  // Solid color lacquer-ish
+
+  const roughness = params.previewRoughness ?? base.roughness;
   return {
-    roughness: present ? 0.44 : 0.52,
-    metalness: 0.04,
-    clearcoat: present ? 0.28 : 0.15,
-    clearcoatRoughness: 0.28,
-    envMapIntensity: present ? 0.48 : 0.25,
+    roughness,
+    metalness: params.previewMetalness ?? base.metalness,
+    clearcoat: params.previewClearcoat ?? base.clearcoat,
+    clearcoatRoughness:
+      params.previewRoughness !== undefined
+        ? Math.min(0.8, roughness * 0.8)
+        : base.clearcoatRoughness,
+    envMapIntensity: base.envMapIntensity,
   };
 }

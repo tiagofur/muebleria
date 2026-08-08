@@ -57,6 +57,18 @@ export interface MaterialBoard {
    * (local Z / V). Omit/0 → default tile (~280 mm).
    */
   readonly previewTextureTileLengthMm?: number;
+  /**
+   * Surface roughness (0..1). 0.05 = high gloss / lacquer, 0.9 = matte.
+   */
+  readonly previewRoughness?: number;
+  /**
+   * Metallic property (0..1). 0 = wood/melamine/paint, 1 = metal.
+   */
+  readonly previewMetalness?: number;
+  /**
+   * Clearcoat lacquer layer (0..1). 0 = standard finish, 0.85 = high gloss lacquer.
+   */
+  readonly previewClearcoat?: number;
   readonly notes?: string;
   readonly active: boolean;
 }

@@ -60,6 +60,9 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
     preview_texture_url: m.previewTextureUrl ?? '',
     preview_texture_tile_width_mm: m.previewTextureTileWidthMm ?? 0,
     preview_texture_tile_length_mm: m.previewTextureTileLengthMm ?? 0,
+    preview_roughness: m.previewRoughness ?? null,
+    preview_metalness: m.previewMetalness ?? null,
+    preview_clearcoat: m.previewClearcoat ?? null,
     notes: m.notes ?? '',
     active: m.active,
   };
@@ -97,6 +100,9 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     previewTextureUrl,
     previewTextureTileWidthMm: tileW > 0 ? tileW : undefined,
     previewTextureTileLengthMm: tileL > 0 ? tileL : undefined,
+    previewRoughness: optionalNum(raw.preview_roughness ?? raw.previewRoughness),
+    previewMetalness: optionalNum(raw.preview_metalness ?? raw.previewMetalness),
+    previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
   };
