@@ -53,6 +53,7 @@ export function ModuleEditorGeneralPanel({
       data-testid="module-editor-panel-general"
     >
       <h4 className="module-editor__section-title">Datos generales</h4>
+
       <div className="module-editor__grid">
         <div className="catalog-form__field">
           <label htmlFor="mod-code">Código</label>
@@ -66,16 +67,6 @@ export function ModuleEditorGeneralPanel({
             data-testid="input-code"
             aria-describedby={editingId ? 'mod-code-hint' : undefined}
           />
-          {editingId ? (
-            <p
-              id="mod-code-hint"
-              className="module-editor__hint"
-              data-testid="module-code-hint"
-            >
-              El código no se cambia al editar (identifica el mueble en el
-              catálogo y en cotizaciones).
-            </p>
-          ) : null}
         </div>
         <div className="catalog-form__field">
           <label htmlFor="mod-name">Nombre</label>
@@ -100,66 +91,74 @@ export function ModuleEditorGeneralPanel({
             placeholder="Opcional"
           />
         </div>
-        <div className="catalog-form__field" data-testid="module-image-field">
-          <label htmlFor="mod-image">Foto (vitrina)</label>
-          <div className="module-editor__image-row">
-            <CatalogImage
-              src={resolveImageUrl(draft.imageUrl || undefined)}
-              alt={draft.name || 'Mueble'}
-              size="md"
-            />
-            {onUploadImage ? (
-              <input
-                id="mod-image"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  void onUploadImage(file)
-                    .then((url) => setDraft({ ...draft, imageUrl: url }))
-                    .catch(() => {
-                      /* shell toasts */
-                    });
-                  e.target.value = '';
-                }}
-              />
-            ) : (
-              <p className="module-editor__hint">
-                {draft.imageUrl ? draft.imageUrl : 'Sin imagen'}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="catalog-form__field" data-testid="module-furniture-type-field">
-        <label htmlFor="mod-furniture-type">Tipo de mueble</label>
-        <select
-          id="mod-furniture-type"
-          value={draft.furnitureType}
-          onChange={(e) =>
-            setDraft({
-              ...draft,
-              furnitureType: e.target.value as ModuleDraft['furnitureType'],
-            })
-          }
-          data-testid="module-furniture-type"
-        >
-          <option value="inferior">Inferior (gabinete)</option>
-          <option value="superior">Superior (alacena)</option>
-          <option value="alto">Alto (despensa)</option>
-        </select>
-        <p className="module-editor__hint">
-          Define el tipo fundamental. Los defaults de medida del proyecto se
-          aplican por tipo al agregar el mueble a una cotización.
-        </p>
       </div>
 
-      <div
-        className="module-editor__grid module-editor__grid--spaced"
-        data-testid="module-base-mode-field"
-      >
+      {editingId ? (
+        <p
+          id="mod-code-hint"
+          className="module-editor__hint module-editor__hint--full"
+          data-testid="module-code-hint"
+        >
+          El código no se cambia al editar (identifica el mueble en el catálogo y en cotizaciones).
+        </p>
+      ) : null}
+
+      <div className="catalog-form__field catalog-form__field--spaced" data-testid="module-image-field">
+        <label htmlFor="mod-image">Foto (vitrina)</label>
+        <div className="module-editor__image-row">
+          <CatalogImage
+            src={resolveImageUrl(draft.imageUrl || undefined)}
+            alt={draft.name || 'Mueble'}
+            size="md"
+          />
+          {onUploadImage ? (
+            <input
+              id="mod-image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                void onUploadImage(file)
+                  .then((url) => setDraft({ ...draft, imageUrl: url }))
+                  .catch(() => {
+                    /* shell toasts */
+                  });
+                e.target.value = '';
+              }}
+            />
+          ) : (
+            <p className="module-editor__hint">
+              {draft.imageUrl ? draft.imageUrl : 'Sin imagen'}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="module-editor__grid module-editor__grid--spaced" data-testid="module-furniture-type-field">
         <div className="catalog-form__field">
+          <label htmlFor="mod-furniture-type">Tipo de mueble</label>
+          <select
+            id="mod-furniture-type"
+            value={draft.furnitureType}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                furnitureType: e.target.value as ModuleDraft['furnitureType'],
+              })
+            }
+            data-testid="module-furniture-type"
+          >
+            <option value="inferior">Inferior (gabinete)</option>
+            <option value="superior">Superior (alacena)</option>
+            <option value="alto">Alto (despensa)</option>
+          </select>
+          <p className="module-editor__hint">
+            Define el tipo fundamental. Los defaults de medida del proyecto se aplican por tipo al agregar el mueble a una cotización.
+          </p>
+        </div>
+
+        <div className="catalog-form__field" data-testid="module-base-mode-field">
           <label htmlFor="mod-base-mode">Base (zoclo / patas)</label>
           <select
             id="mod-base-mode"
@@ -184,11 +183,10 @@ export function ModuleEditorGeneralPanel({
             <option value="legs">Patas / niveladores</option>
           </select>
           <p className="module-editor__hint">
-            Melamina: componentes con rol ZOCLO (material hereda FRENTE si no
-            hay choice). Perfil: herraje ZOCLO_PERFIL en metro lineal. Patas:
-            herraje PATAS.
+            Melamina: componentes con rol ZOCLO (material hereda FRENTE si no hay choice). Perfil: herraje ZOCLO_PERFIL en metro lineal. Patas: herraje PATAS.
           </p>
         </div>
+
         {(draft.baseMode && draft.baseMode !== 'none') ||
         draft.baseClearanceMm.trim() ? (
           <div className="catalog-form__field">
@@ -206,8 +204,7 @@ export function ModuleEditorGeneralPanel({
               data-testid="module-base-clearance"
             />
             <p className="module-editor__hint">
-              Altura de zoclo o pata. Entra en fórmulas de pieza como variable{' '}
-              <code>B</code> y en el clearance 3D del plano.
+              Altura de zoclo o pata. Entra en fórmulas de pieza como variable <code>B</code> y en el clearance 3D del plano.
             </p>
           </div>
         ) : null}
@@ -267,12 +264,14 @@ export function ModuleEditorGeneralPanel({
           </div>
         ) : null}
       </div>
+
       <div className="catalog-form__field catalog-form__field--spaced">
         <label htmlFor="mod-notes">Notas</label>
         <input
           id="mod-notes"
           value={draft.notes}
           onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+          placeholder="Notas adicionales opcionales..."
         />
       </div>
     </div>

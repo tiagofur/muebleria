@@ -10,7 +10,7 @@ import {
   type CategoryFilterId,
 } from '@muebles/domain';
 import { Layers, Package, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
-import { EmptyState, SearchInput } from '../../common';
+import { CatalogImage, EmptyState, SearchInput } from '../../common';
 import { formatModuleMoney } from '../moduleHelpers';
 
 export type ModuleCategoryFilterCounts = {
@@ -35,6 +35,8 @@ export type ModuleListViewProps = {
   readonly onStartCreate: () => void;
   readonly onOpenDetail: (mod: Module) => void;
   readonly onCreateCategory?: unknown;
+  /** Resolve relative /api/media paths for card thumbnails. */
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 };
 
 function estimateLabel(
@@ -142,6 +144,7 @@ export function ModuleListView({
   onStartCreate,
   onOpenDetail,
   onCreateCategory,
+  resolveImageUrl = (u) => u,
 }: ModuleListViewProps): ReactNode {
   return (
     <>
@@ -286,6 +289,17 @@ export function ModuleListView({
                     onClick={() => onOpenDetail(mod)}
                     data-testid={`module-card-${mod.id}`}
                   >
+                    <div
+                      className="module-card__media"
+                      data-testid={`module-card-media-${mod.id}`}
+                    >
+                      <CatalogImage
+                        src={resolveImageUrl(mod.imageUrl)}
+                        alt={mod.name}
+                        size="lg"
+                        className="module-card__img"
+                      />
+                    </div>
                     <span className="module-card__code">{mod.code}</span>
                     <h3 className="module-card__name">{mod.name}</h3>
                     <div className="module-card__stats">

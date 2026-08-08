@@ -18,6 +18,7 @@ import type {
   OptionGroup,
   QuoteBreakdown,
 } from '@muebles/domain';
+import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
 import { ModulesScreen } from './ModulesScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -170,6 +171,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
+  resetRequestCreateKeyConsumers();
 });
 
 describe('ModulesScreen structure (F021)', () => {
@@ -195,6 +198,36 @@ describe('ModulesScreen structure (F021)', () => {
 
     const card2 = screen.getByTestId('module-card-mod-2');
     expect(within(card2).getByText('Sin estimado')).toBeTruthy();
+  });
+
+  it('shows photo thumbnail or Sin foto placeholder on each card', () => {
+    renderScreen({
+      modules: [
+        { ...modules[0]!, imageUrl: '/api/media/mod1.png' },
+        modules[1]!,
+      ],
+      resolveImageUrl: (u) => (u ? `https://cdn${u}` : undefined),
+    });
+    const media1 = screen.getByTestId('module-card-media-mod-1');
+    const img = within(media1).getByTestId('catalog-image');
+    expect(img.getAttribute('src')).toBe('https://cdn/api/media/mod1.png');
+
+    const media2 = screen.getByTestId('module-card-media-mod-2');
+    expect(within(media2).getByTestId('catalog-image-placeholder')).toBeTruthy();
+    expect(within(media2).getByText(/Sin foto/i)).toBeTruthy();
+  });
+
+  it('shows detail thumbnail with photo or Sin foto', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      modules: [{ ...modules[0]!, imageUrl: '/api/media/mod1.png' }],
+      resolveImageUrl: (u) => (u ? `https://cdn${u}` : undefined),
+    });
+    await user.click(screen.getByTestId('module-card-mod-1'));
+    const thumb = screen.getByTestId('module-detail-thumb');
+    expect(within(thumb).getByTestId('catalog-image').getAttribute('src')).toBe(
+      'https://cdn/api/media/mod1.png',
+    );
   });
 
   it('shows EmptyState when there are no modules', () => {
@@ -472,6 +505,62 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     const page = screen.getByTestId('module-editor-page');
     expect(within(page).getByText('Nuevo mueble')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not re-open create on remount with same requestCreateKey (R4-W)', () => {
+    const baseProps: ComponentProps<typeof ModulesScreen> = {
+      modules,
+      optionGroups,
+      hardware,
+      categories,
+      onCreate: vi.fn(),
+      onUpdate: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+      catalogComponents,
+      requestCreateKey: 1,
+    };
+    const { unmount } = render(<ModulesScreen {...baseProps} />);
+    expect(screen.getByTestId('module-editor-page')).toBeTruthy();
+
+    // Leave Modules (unmount) and return with the same sticky shell key.
+    unmount();
+    render(<ModulesScreen {...baseProps} />);
+    expect(screen.queryByTestId('module-editor-page')).toBeNull();
+  });
+
+  it('resets editor tab to general on requestCreateKey (R3-C2)', async () => {
+    const user = userEvent.setup();
+    const baseProps: ComponentProps<typeof ModulesScreen> = {
+      modules,
+      optionGroups,
+      hardware,
+      categories,
+      onCreate: vi.fn(),
+      onUpdate: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+      catalogComponents,
+      requestCreateKey: 1,
+    };
+    const { rerender } = render(<ModulesScreen {...baseProps} />);
+
+    // Leave general via Composición primary tab.
+    await user.click(screen.getByTestId('module-editor-tab-composition'));
+    expect(
+      screen
+        .getByTestId('module-editor-tab-composition')
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+
+    // Bump requestCreateKey — must reopen create on general tab.
+    rerender(<ModulesScreen {...baseProps} requestCreateKey={2} />);
+
+    expect(
+      screen
+        .getByTestId('module-editor-tab-general')
+        .getAttribute('aria-selected'),
+    ).toBe('true');
   });
 
   it('returns to list from sticky chrome and shows total', async () => {
