@@ -633,6 +633,11 @@
   min-width: 0;
 }
 
+.catalog-form__inline-actions--wrap {
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
 /* —— Workspace chrome moved to common/workspaceChrome.css (F1 UI sub-fase 1a). —— */
 
 

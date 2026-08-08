@@ -84,6 +84,12 @@ export type MaterialDraft = {
    * 0 = default client tile.
    */
   previewTextureTileLengthMm: number;
+  /** Surface roughness (0..1). Omit/empty = default */
+  previewRoughness?: number | '';
+  /** Metallic property (0..1). Omit/empty = default */
+  previewMetalness?: number | '';
+  /** Clearcoat lacquer layer (0..1). Omit/empty = default */
+  previewClearcoat?: number | '';
   notes: string;
 };
 
@@ -111,6 +117,9 @@ const emptyDraft = (): MaterialDraft => ({
   previewTextureUrl: '',
   previewTextureTileWidthMm: 0,
   previewTextureTileLengthMm: 0,
+  previewRoughness: '',
+  previewMetalness: '',
+  previewClearcoat: '',
   notes: '',
 });
 
@@ -131,6 +140,9 @@ function toDraft(item: MaterialBoard): MaterialDraft {
     previewTextureUrl: item.previewTextureUrl ?? '',
     previewTextureTileWidthMm: item.previewTextureTileWidthMm ?? 0,
     previewTextureTileLengthMm: item.previewTextureTileLengthMm ?? 0,
+    previewRoughness: item.previewRoughness ?? '',
+    previewMetalness: item.previewMetalness ?? '',
+    previewClearcoat: item.previewClearcoat ?? '',
     notes: item.notes ?? '',
   };
 }
@@ -149,7 +161,10 @@ function hasPreview3dConfig(d: MaterialDraft): boolean {
     d.previewColor.trim() ||
       d.previewTextureUrl.trim() ||
       d.previewTextureTileWidthMm > 0 ||
-      d.previewTextureTileLengthMm > 0,
+      d.previewTextureTileLengthMm > 0 ||
+      (typeof d.previewRoughness === 'number' && Number.isFinite(d.previewRoughness)) ||
+      (typeof d.previewMetalness === 'number' && Number.isFinite(d.previewMetalness)) ||
+      (typeof d.previewClearcoat === 'number' && Number.isFinite(d.previewClearcoat)),
   );
 }
 
@@ -422,6 +437,9 @@ export function MaterialsCatalog({
       wastePercent: draft.wastePercent,
     });
     const normalizedColor = normalizePreviewColor(draft.previewColor);
+    const parsePbr = (v: number | '' | undefined) =>
+      typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined;
+
     const finalDraft = {
       ...draft,
       costPerM2: calculatedCost,
@@ -435,6 +453,9 @@ export function MaterialsCatalog({
         draft.previewTextureTileLengthMm > 0
           ? draft.previewTextureTileLengthMm
           : 0,
+      previewRoughness: parsePbr(draft.previewRoughness),
+      previewMetalness: parsePbr(draft.previewMetalness),
+      previewClearcoat: parsePbr(draft.previewClearcoat),
     };
 
     if (editingId) {
@@ -1158,6 +1179,137 @@ export function MaterialsCatalog({
                   Tamaño real de una imagen completa de textura (mm). Vacío =
                   280 mm. Más mm = textura más grande en la pieza.
                 </p>
+                <div className="catalog-form__field" data-testid="material-pbr-section">
+                  <label>Acabado y Brillo 3D (PBR)</label>
+                  <div
+                    className="catalog-form__inline-actions catalog-form__inline-actions--wrap"
+                  >
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          previewRoughness: 0.85,
+                          previewClearcoat: 0,
+                          previewMetalness: 0,
+                        }))
+                      }
+                      data-testid="material-pbr-preset-mate"
+                    >
+                      Mate
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          previewRoughness: 0.5,
+                          previewClearcoat: 0.15,
+                          previewMetalness: 0,
+                        }))
+                      }
+                      data-testid="material-pbr-preset-satin"
+                    >
+                      Satinado
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          previewRoughness: 0.08,
+                          previewClearcoat: 0.85,
+                          previewMetalness: 0,
+                        }))
+                      }
+                      data-testid="material-pbr-preset-gloss"
+                    >
+                      Alto Brillo / Laca
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          previewRoughness: 0.3,
+                          previewClearcoat: 0,
+                          previewMetalness: 0.85,
+                        }))
+                      }
+                      data-testid="material-pbr-preset-metallic"
+                    >
+                      Metálico
+                    </button>
+                  </div>
+                  <div className="catalog-form__field-row">
+                    <div className="catalog-form__field catalog-form__field--grow">
+                      <label htmlFor="mat-pbr-roughness">
+                        Rugosidad / Mate (0..1)
+                      </label>
+                      <input
+                        id="mat-pbr-roughness"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step="0.05"
+                        value={draft.previewRoughness ?? ''}
+                        placeholder="Estándar (~0.44-0.68)"
+                        onChange={(e) => {
+                          const val =
+                            e.target.value === '' ? '' : Number(e.target.value);
+                          setDraft({ ...draft, previewRoughness: val });
+                        }}
+                        data-testid="material-pbr-roughness-input"
+                      />
+                    </div>
+                    <div className="catalog-form__field catalog-form__field--grow">
+                      <label htmlFor="mat-pbr-clearcoat">
+                        Capa Laca / Brillo (0..1)
+                      </label>
+                      <input
+                        id="mat-pbr-clearcoat"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step="0.05"
+                        value={draft.previewClearcoat ?? ''}
+                        placeholder="Estándar (~0.08-0.28)"
+                        onChange={(e) => {
+                          const val =
+                            e.target.value === '' ? '' : Number(e.target.value);
+                          setDraft({ ...draft, previewClearcoat: val });
+                        }}
+                        data-testid="material-pbr-clearcoat-input"
+                      />
+                    </div>
+                    <div className="catalog-form__field catalog-form__field--grow">
+                      <label htmlFor="mat-pbr-metalness">Metálico (0..1)</label>
+                      <input
+                        id="mat-pbr-metalness"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step="0.05"
+                        value={draft.previewMetalness ?? ''}
+                        placeholder="0.00"
+                        onChange={(e) => {
+                          const val =
+                            e.target.value === '' ? '' : Number(e.target.value);
+                          setDraft({ ...draft, previewMetalness: val });
+                        }}
+                        data-testid="material-pbr-metalness-input"
+                      />
+                    </div>
+                  </div>
+                  <p className="catalog-form__hint">
+                    Opcional. Permite diferenciar superficies mates de alto
+                    brillo/laca o metálicas en el visor 3D.
+                  </p>
+                </div>
               </div>
             ) : null}
           </div>

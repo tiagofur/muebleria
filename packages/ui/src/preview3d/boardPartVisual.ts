@@ -38,6 +38,12 @@ export type BoardPartVisual = {
   readonly textureTileWidthMm?: number;
   /** Physical mm of one texture image on part length / veta (V). */
   readonly textureTileLengthMm?: number;
+  /** Surface roughness override (0..1) from catalog material */
+  readonly previewRoughness?: number;
+  /** Metallic override (0..1) from catalog material */
+  readonly previewMetalness?: number;
+  /** Clearcoat lacquer override (0..1) from catalog material */
+  readonly previewClearcoat?: number;
 };
 
 /** How to pick mesh colors in the 3D viewer. */
@@ -141,6 +147,42 @@ export function materialTextureMap(
   return map;
 }
 
+/** One material's PBR finish properties (roughness, metalness, clearcoat). */
+export type MaterialPhysicalEntry = {
+  readonly previewRoughness?: number;
+  readonly previewMetalness?: number;
+  readonly previewClearcoat?: number;
+};
+
+/** materialId → optional PBR finish entry. */
+export type MaterialPhysicalLookup = Readonly<
+  Record<string, MaterialPhysicalEntry | undefined>
+>;
+
+/** Build materialId → PBR finish properties from catalog materials. */
+export function materialPhysicalMap(
+  materials: readonly Pick<
+    MaterialBoard,
+    'id' | 'previewRoughness' | 'previewMetalness' | 'previewClearcoat'
+  >[],
+): MaterialPhysicalLookup {
+  const map: Record<string, MaterialPhysicalEntry | undefined> = {};
+  for (const m of materials) {
+    if (
+      m.previewRoughness !== undefined ||
+      m.previewMetalness !== undefined ||
+      m.previewClearcoat !== undefined
+    ) {
+      map[m.id] = {
+        previewRoughness: m.previewRoughness,
+        previewMetalness: m.previewMetalness,
+        previewClearcoat: m.previewClearcoat,
+      };
+    }
+  }
+  return map;
+}
+
 export function colorForMaterialId(
   materialId: string,
   colors: MaterialColorLookup | undefined,
@@ -169,6 +211,7 @@ export type BoardPartToVisualOptions = {
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
+  readonly materialPhysicals?: MaterialPhysicalLookup;
   /** Surface look when painting by material. Ignored in role mode. */
   readonly surfaceMode?: MaterialSurfaceMode;
 };
@@ -249,6 +292,10 @@ export function boardPartToVisual(
     ? resolveMaterialSurface(part, surfaceMode, options.materialTextures)
     : { grain: 0 as const };
 
+  const physEntry = useMaterialLook
+    ? options.materialPhysicals?.[part.materialId]
+    : undefined;
+
   return {
     id: part.id,
     description: part.description,
@@ -271,6 +318,9 @@ export function boardPartToVisual(
     textureUrl: surface.textureUrl,
     textureTileWidthMm: surface.textureTileWidthMm,
     textureTileLengthMm: surface.textureTileLengthMm,
+    previewRoughness: physEntry?.previewRoughness,
+    previewMetalness: physEntry?.previewMetalness,
+    previewClearcoat: physEntry?.previewClearcoat,
   };
 }
 

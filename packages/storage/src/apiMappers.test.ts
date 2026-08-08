@@ -58,6 +58,47 @@ describe('apiMappers', () => {
     });
   });
 
+  it('round-trips PBR finish properties (roughness, metalness, clearcoat)', () => {
+    const m: MaterialBoard = {
+      id: 'm-pbr',
+      code: 'TAB-GLOSS',
+      name: 'Blanco Alto Brillo',
+      widthMm: 1830,
+      lengthMm: 2440,
+      thicknessMm: 18,
+      grainDefault: false,
+      boardPrice: 150,
+      wastePercent: 10,
+      costPerM2: 35,
+      previewColor: '#ffffff',
+      previewRoughness: 0.08,
+      previewMetalness: 0.1,
+      previewClearcoat: 0.85,
+      active: true,
+    };
+    const api = materialToApi(m);
+    expect(api.preview_roughness).toBe(0.08);
+    expect(api.preview_metalness).toBe(0.1);
+    expect(api.preview_clearcoat).toBe(0.85);
+
+    const round = materialFromApi(api as Record<string, unknown>);
+    expect(round.previewRoughness).toBe(0.08);
+    expect(round.previewMetalness).toBe(0.1);
+    expect(round.previewClearcoat).toBe(0.85);
+
+    // Test zero values are preserved (e.g. 0 roughness for perfect mirror)
+    const mZero: MaterialBoard = {
+      ...m,
+      previewRoughness: 0,
+      previewMetalness: 0,
+      previewClearcoat: 0,
+    };
+    const roundZero = materialFromApi(materialToApi(mZero) as Record<string, unknown>);
+    expect(roundZero.previewRoughness).toBe(0);
+    expect(roundZero.previewMetalness).toBe(0);
+    expect(roundZero.previewClearcoat).toBe(0);
+  });
+
   it('round-trips texture tile size X/Y mm', () => {
     const m: MaterialBoard = {
       id: 'm2',
