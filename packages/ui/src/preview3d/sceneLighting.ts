@@ -196,3 +196,52 @@ export function boardPhysicalResponse(params: {
     envMapIntensity: present ? 0.48 : 0.25,
   };
 }
+
+/**
+ * Per-material PBR override for the 3D preview. Each scalar is an optional
+ * semantic [0,1] value; undefined ⇒ the lighting-mode-derived base applies.
+ */
+export type MaterialPbr = {
+  readonly roughness?: number;
+  readonly metalness?: number;
+  readonly clearcoat?: number;
+};
+
+/**
+ * Resolve one PBR scalar: clamp a finite input to [0,1]; fall back to the
+ * lighting-mode base for NaN, ±Infinity, or non-number (PBR-04). Never throws.
+ */
+function resolvePbr(
+  materialValue: number | undefined,
+  baseValue: number,
+): number {
+  if (typeof materialValue !== 'number' || !Number.isFinite(materialValue)) {
+    return baseValue;
+  }
+  return Math.min(1, Math.max(0, materialValue));
+}
+
+/**
+ * Merge a per-material PBR override onto the lighting-mode-derived physical
+ * response. Each of {roughness, metalness, clearcoat} is overridden (clamped to
+ * [0,1]) only when the material supplies a finite number; otherwise the base
+ * value from {@link boardPhysicalResponse} is kept. `clearcoatRoughness` and
+ * `envMapIntensity` always come from the base (design D1). With an undefined
+ * `materialPbr` the result deep-equals `boardPhysicalResponse(...)` (PBR-03).
+ * Pure — no React/three imports.
+ */
+export function resolveBoardPhysicalResponse(params: {
+  readonly hasMap: boolean;
+  readonly hasGrain: boolean;
+  readonly lightingMode?: SceneLightingMode;
+  readonly materialPbr?: MaterialPbr;
+}): BoardPhysicalResponse {
+  const base = boardPhysicalResponse(params);
+  const pbr = params.materialPbr;
+  return {
+    ...base,
+    roughness: resolvePbr(pbr?.roughness, base.roughness),
+    metalness: resolvePbr(pbr?.metalness, base.metalness),
+    clearcoat: resolvePbr(pbr?.clearcoat, base.clearcoat),
+  };
+}

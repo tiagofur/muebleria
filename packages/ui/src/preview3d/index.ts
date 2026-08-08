@@ -15,6 +15,8 @@ export {
   CATALOG_PHOTO_BACKGROUND,
   planSceneLighting,
   boardPhysicalResponse,
+  resolveBoardPhysicalResponse,
+  type MaterialPbr,
 } from './sceneLighting';
 export {
   PartInspector,
