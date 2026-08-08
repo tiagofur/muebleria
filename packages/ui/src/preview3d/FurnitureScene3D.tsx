@@ -24,7 +24,11 @@ import {
   Edges,
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { offsetMmFromPlanPoint, type ResolvedBoardPart } from '@muebles/domain';
+import {
+  offsetMmFromPlanPoint,
+  type AmbientMaterial,
+  type ResolvedBoardPart,
+} from '@muebles/domain';
 import {
   boardPartsToVisuals,
   cameraPositionForView,
@@ -44,6 +48,15 @@ import {
   planSceneLighting,
   type SceneLightingMode,
 } from './sceneLighting';
+import {
+  BackWallMesh,
+  BaseboardMesh,
+  CeilingMesh,
+  FloorAmbientMesh,
+  ROOM_WALL_HEIGHT_MM,
+  WallAmbientMesh,
+  planAmbientScene,
+} from './AmbientMeshes';
 import { isPastDragThreshold } from './moduleDragGesture';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
@@ -193,6 +206,25 @@ export type FurnitureScene3DProps = {
    * present = multi-light + env + glossier melamine (default for Proyectar).
    */
   readonly lightingMode?: SceneLightingMode;
+  /**
+   * Ambient (presentation-only) floor material. When set AND
+   * `lightingMode !== 'catalog'` AND `showFloor`, the floor renders the ambient
+   * material (texture/color) instead of the hardcoded #2a2d31. Caller resolves
+   * `KitchenSpace.floorMaterialId` → AmbientMaterial via the catalog.
+   */
+  readonly ambientFloor?: AmbientMaterial;
+  /**
+   * Ambient (presentation-only) wall material. When set AND
+   * `lightingMode !== 'catalog'`, wall segments render the ambient material
+   * instead of the hardcoded #8b9098.
+   */
+  readonly ambientWall?: AmbientMaterial;
+  /**
+   * Show the ceiling mesh (room box). Opt-in; default OFF to preserve the
+   * current open feel. Only rendered when an ambient material is present and
+   * `lightingMode !== 'catalog'`.
+   */
+  readonly showCeiling?: boolean;
 };
 
 function BoardMesh({
@@ -844,6 +876,9 @@ function SceneContent({
   onSelectWall,
   showFloorGrid,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  ambientFloor,
+  ambientWall,
+  showCeiling,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -883,6 +918,9 @@ function SceneContent({
   readonly onSelectWall?: (wallId: string) => void;
   readonly showFloorGrid?: boolean;
   readonly lightingMode?: SceneLightingMode;
+  readonly ambientFloor?: AmbientMaterial;
+  readonly ambientWall?: AmbientMaterial;
+  readonly showCeiling?: boolean;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const framing = useMemo(
@@ -898,6 +936,27 @@ function SceneContent({
     [lightingMode, framing.maxDim],
   );
   const lightMode = lightingMode ?? DEFAULT_SCENE_LIGHTING_MODE;
+  // Ambient (floor/wall/room-box) rendering plan — pure decision layer
+  // (AmbientMeshes.tsx). Gated by lighting mode + material presence; absent
+  // materials → all false → byte-identical to today's hardcoded scene.
+  const ambientPlan = useMemo(
+    () =>
+      planAmbientScene({
+        lightMode,
+        ambientFloor,
+        ambientWall,
+        showCeiling,
+        showFloor,
+      }),
+    [lightMode, ambientFloor, ambientWall, showCeiling, showFloor],
+  );
+  // Room-box geometry derives from the floor-plane bounds + 2400mm height
+  // (design #4151). Back wall spans the plane width at the back depth edge.
+  const backWallWidth = totalWidth * 1.4;
+  const backWallZ = framing.center[2] + (totalDepth * 1.6) / 2;
+  const ceilingY = ROOM_WALL_HEIGHT_MM;
+  const ceilingZ = framing.center[2];
+  const ceilingX = framing.center[0];
 
   return (
     <>
@@ -969,32 +1028,53 @@ function SceneContent({
             <axesHelper args={[framing.maxDim * 0.75]} />
           ) : null}
           {showFloor ? (
-            <mesh
-              rotation={[-Math.PI / 2, 0, 0]}
-              position={[framing.center[0], -1, framing.center[2]]}
-              receiveShadow
-            >
-              <planeGeometry
-                args={[totalWidth * 1.4, totalDepth * 1.6]}
+            ambientPlan.ambientFloor && ambientFloor ? (
+              <FloorAmbientMesh
+                material={ambientFloor}
+                widthMm={totalWidth}
+                depthMm={totalDepth}
+                position={[framing.center[0], -1, framing.center[2]]}
+                lightingMode={lightMode}
               />
-              <meshStandardMaterial
-                color="#2a2d31"
-                roughness={0.95}
-                metalness={0}
-              />
-            </mesh>
+            ) : (
+              <mesh
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[framing.center[0], -1, framing.center[2]]}
+                receiveShadow
+              >
+                <planeGeometry
+                  args={[totalWidth * 1.4, totalDepth * 1.6]}
+                />
+                <meshStandardMaterial
+                  color="#2a2d31"
+                  roughness={0.95}
+                  metalness={0}
+                />
+              </mesh>
+            )
           ) : null}
           {showFloor && showFloorGrid ? (
             <FloorGrid totalWidth={totalWidth} totalDepth={totalDepth} />
           ) : null}
-          {walls.map((w) => (
-            <WallMesh
-              key={w.id}
-              wall={w}
-              selected={selectedWallId === w.id}
-              onSelect={onSelectWall}
-            />
-          ))}
+          {walls.map((w) =>
+            ambientPlan.ambientWall && ambientWall ? (
+              <WallAmbientMesh
+                key={w.id}
+                material={ambientWall}
+                wall={w}
+                selected={selectedWallId === w.id}
+                onSelect={onSelectWall}
+                lightingMode={lightMode}
+              />
+            ) : (
+              <WallMesh
+                key={w.id}
+                wall={w}
+                selected={selectedWallId === w.id}
+                onSelect={onSelectWall}
+              />
+            ),
+          )}
           {modules.map((mod) => (
             <ModuleGroup
               key={mod.key}
@@ -1031,6 +1111,45 @@ function SceneContent({
               setOrbitSuppressed={setOrbitSuppressed}
             />
           ))}
+          {/* Ambient room box: back wall + per-wall baseboards + optional
+              ceiling. Only when an ambient material is present and not in
+              catalog mode (spec #4149 room box + lighting gating). */}
+          {ambientPlan.roomBox ? (
+            <>
+              <BackWallMesh
+                material={ambientWall ?? ambientFloor}
+                widthMm={backWallWidth}
+                position={[framing.center[0], ROOM_WALL_HEIGHT_MM / 2, backWallZ]}
+                lightingMode={lightMode}
+              />
+              {walls.map((w) => {
+                const wdx = w.endXMm - w.originXMm;
+                const wdy = w.endYMm - w.originYMm;
+                const wlen = Math.max(1, Math.hypot(wdx, wdy));
+                const wmidX = (w.originXMm + w.endXMm) / 2;
+                const wmidY = (w.originYMm + w.endYMm) / 2;
+                const wyaw = Math.atan2(wdy, wdx);
+                return (
+                  <BaseboardMesh
+                    key={`baseboard-${w.id}`}
+                    material={ambientWall}
+                    lengthMm={wlen}
+                    position={[wmidX, 50, wmidY]}
+                    rotationY={-wyaw}
+                  />
+                );
+              })}
+            </>
+          ) : null}
+          {ambientPlan.ceiling ? (
+            <CeilingMesh
+              material={ambientWall ?? ambientFloor}
+              widthMm={totalWidth * 1.4}
+              depthMm={totalDepth * 1.6}
+              position={[ceilingX, ceilingY, ceilingZ]}
+              lightingMode={lightMode}
+            />
+          ) : null}
         </group>
         <CameraViewSetter
           cameraView={cameraView}
@@ -1041,11 +1160,14 @@ function SceneContent({
       </Bounds>
 
       {/* Soft ground disk under the unit. Catalog product stills omit it so
-          the still is furniture-on-studio-backdrop only (no gray floor band). */}
-      {lightMode !== 'catalog' ? (
+          the still is furniture-on-studio-backdrop only (no gray floor band).
+          Opacity/color adapt to the floor luminance when an ambient floor is
+          present (spec #4149 ContactShadows tuning); absent → 0.32 default. */}
+      {ambientPlan.contactShadow ? (
         <ContactShadows
           position={[framing.center[0], 0.5, framing.center[2]]}
-          opacity={0.32}
+          opacity={ambientPlan.contactShadow.opacity}
+          color={ambientPlan.contactShadow.color}
           scale={framing.maxDim * 2.2}
           blur={2.2}
           far={framing.maxDim}
@@ -1125,6 +1247,9 @@ export function FurnitureScene3D({
   onSelectWall,
   showFloorGrid = false,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  ambientFloor,
+  ambientWall,
+  showCeiling,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -1325,6 +1450,9 @@ export function FurnitureScene3D({
               onSelectWall={onSelectWall}
               showFloorGrid={showFloorGrid}
               lightingMode={lightingMode}
+              ambientFloor={ambientFloor}
+              ambientWall={ambientWall}
+              showCeiling={showCeiling}
             />
           </Suspense>
           </Canvas>
