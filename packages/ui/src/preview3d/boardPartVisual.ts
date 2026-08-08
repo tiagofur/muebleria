@@ -301,3 +301,33 @@ export function sceneFraming(
     cameraDistance: maxDim * 1.85,
   };
 }
+
+export type SceneCameraViewType = 'front' | 'top' | 'side' | 'isometric';
+
+/**
+ * Absolute camera position for preset views (mm). Used by both the default
+ * Canvas camera and CameraViewSetter so open ≈ button 3/4.
+ */
+export function cameraPositionForView(
+  type: SceneCameraViewType,
+  center: readonly [number, number, number],
+  maxDim: number,
+): readonly [number, number, number] {
+  const dist = Math.max(maxDim, 1) * 1.85;
+  const d = Math.max(maxDim, 1);
+  if (type === 'top') {
+    return [center[0], center[1] + dist, center[2]];
+  }
+  if (type === 'front') {
+    return [center[0], center[1], center[2] + dist];
+  }
+  if (type === 'side') {
+    return [center[0] + dist, center[1], center[2]];
+  }
+  // isometric 3/4 — elevated so the room is seen from above-front, not underfloor
+  return [
+    center[0] + d * 0.55,
+    center[1] + d * 0.9,
+    center[2] + d * 1.8,
+  ];
+}

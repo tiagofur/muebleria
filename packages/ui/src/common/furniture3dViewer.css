@@ -210,6 +210,14 @@
   min-width: 12rem;
 }
 
+.viewer-3d-chrome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--density-toolbar-gap, var(--space-2));
+  margin-left: auto;
+}
+
 .viewer-3d-modal-body {
   display: flex;
   flex-direction: column;
