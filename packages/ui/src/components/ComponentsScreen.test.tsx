@@ -43,7 +43,10 @@ const mockComponents: Component[] = [
 ];
 
 describe('ComponentsScreen', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    sessionStorage.clear();
+  });
 
   it('renders list of active components by default', () => {
     render(
@@ -213,7 +216,7 @@ describe('ComponentsScreen', () => {
     expect(searchInput.value).toBe('ZZZZ');
   });
 
-  it('toggles active/inactive via button', () => {
+  it('requires inline confirm before desactivar (C4)', () => {
     const onToggleActive = vi.fn();
     render(
       <ComponentsScreen
@@ -226,12 +229,14 @@ describe('ComponentsScreen', () => {
       />,
     );
 
-    // Open detail view by clicking the component name
-    fireEvent.click(screen.getAllByText('Puerta')[0]!);
-    // Detail view exposes toggle via a button (no longer a row action)
+    fireEvent.click(screen.getByTestId('component-card-COM-PUE-01'));
+    // First click only opens inline confirm — does not toggle yet.
     const toggleBtn = screen.getByRole('button', { name: /Desactivar/i });
     fireEvent.click(toggleBtn);
+    expect(onToggleActive).not.toHaveBeenCalled();
+    expect(screen.getByTestId('component-deactivate-confirm')).toBeTruthy();
 
+    fireEvent.click(screen.getByTestId('component-deactivate-confirm-yes'));
     expect(onToggleActive).toHaveBeenCalledWith('c1');
   });
 
@@ -266,7 +271,7 @@ describe('ComponentsScreen', () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByText('Puerta')[0]!);
+    fireEvent.click(screen.getByTestId('component-card-COM-PUE-01'));
     expect(screen.getByTestId('component-detail')).toBeTruthy();
     expect(screen.getByTestId('component-detail-metric').textContent).toMatch(
       /717/,
@@ -293,7 +298,7 @@ describe('ComponentsScreen', () => {
     );
 
     // Open detail view
-    fireEvent.click(screen.getAllByText('Puerta')[0]!);
+    fireEvent.click(screen.getByTestId('component-card-COM-PUE-01'));
     expect(screen.getByTestId('component-detail-edit')).toBeTruthy();
 
     // Rerender with canMutate=false
@@ -592,5 +597,358 @@ describe('ComponentsScreen', () => {
       'c1',
       expect.objectContaining({ optionRoles: expect.stringContaining('FRENTE') }),
     );
+  });
+
+  it('does not wipe draft when components prop identity changes while editing (C1)', () => {
+    const { rerender } = render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+      />,
+    );
+
+    const nameInput = screen.getByTestId('input-name') as HTMLInputElement;
+    expect(nameInput.value).toBe('Puerta');
+    fireEvent.change(nameInput, { target: { value: 'Puerta en progreso' } });
+    expect(nameInput.value).toBe('Puerta en progreso');
+
+    // Same data, new array identity — must not re-seed draft.
+    rerender(
+      <ComponentsScreen
+        components={[...mockComponents]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+      />,
+    );
+
+    expect(
+      (screen.getByTestId('input-name') as HTMLInputElement).value,
+    ).toBe('Puerta en progreso');
+  });
+
+  it('does not wipe session-restored draft on remount / F5 (R3-C1)', () => {
+    const props = {
+      components: mockComponents,
+      optionGroups: mockOptionGroups,
+      onCreate: vi.fn(),
+      onUpdate: vi.fn(),
+      onToggleActive: vi.fn(),
+      canMutate: true,
+      openComponentEditId: 'c1' as const,
+    };
+
+    const { unmount } = render(<ComponentsScreen {...props} />);
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Borrador de sesión' },
+    });
+    expect(
+      (screen.getByTestId('input-name') as HTMLInputElement).value,
+    ).toBe('Borrador de sesión');
+    // Session must hold the in-progress name before remount.
+    expect(sessionStorage.getItem('component-draft:c1')).toContain(
+      'Borrador de sesión',
+    );
+    unmount();
+
+    // Remount with same edit id (F5 / re-enter): seed must not overwrite session.
+    render(<ComponentsScreen {...props} />);
+    expect(
+      (screen.getByTestId('input-name') as HTMLInputElement).value,
+    ).toBe('Borrador de sesión');
+  });
+
+  it('after save/forceClose, re-open seeds from entity and session is absent (R4-C1)', () => {
+    const onUpdate = vi.fn();
+    const onRequestEdit = vi.fn();
+    const { rerender, unmount } = render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'WIP sticky empty bug' },
+    });
+    expect(sessionStorage.getItem('component-draft:c1')).toContain(
+      'WIP sticky empty bug',
+    );
+
+    // Save triggers forceCloseEditor (clearDraft + setDraftLocal).
+    fireEvent.click(screen.getByTestId('save-btn'));
+    expect(onUpdate).toHaveBeenCalled();
+    expect(sessionStorage.getItem('component-draft:c1')).toBeNull();
+
+    // Parent clears edit route; leave editor.
+    rerender(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId={null}
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+    unmount();
+
+    // Re-open same id: must seed entity baseline, not sticky empty draft.
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+        onRequestEdit={onRequestEdit}
+      />,
+    );
+    expect(
+      (screen.getByTestId('input-name') as HTMLInputElement).value,
+    ).toBe('Puerta');
+    // Session must be absent OR equal entity baseline — never sticky empty/WIP.
+    const reopened = sessionStorage.getItem('component-draft:c1');
+    if (reopened !== null) {
+      expect(JSON.parse(reopened).name).toBe('Puerta');
+    }
+    expect(reopened).not.toContain('WIP sticky empty bug');
+  });
+
+  it('switches to geometry tab when dim validation fails on submit (R3-S4)', () => {
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'COM-DIM-0' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Sin dims' },
+    });
+    // Stay on general; leave length/width/thickness at 0.
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(screen.getByTestId('form-error').textContent).toMatch(
+      /dimensiones/i,
+    );
+    expect(
+      screen.getByTestId('component-editor-tab-geometry').getAttribute(
+        'aria-selected',
+      ),
+    ).toBe('true');
+  });
+
+  it('preserves perforations on the draft when editing (C2)', () => {
+    const withPerf: Component = {
+      ...mockComponents[0]!,
+      perforations: [
+        {
+          id: 'perf-1',
+          type: 'shelf_pin',
+          diameterMm: 5,
+          depthMm: 12,
+          relativePosition: { xPercent: 0.1, yPercent: 0.2 },
+        },
+      ],
+    };
+    const onUpdate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={[withPerf]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Puerta con perfs' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        name: 'Puerta con perfs',
+        perforations: withPerf.perforations,
+      }),
+    );
+  });
+
+  it('blocks save when a formula is invalid (C3)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    fireEvent.change(screen.getByTestId('input-length-formula'), {
+      target: { value: 'PW + !!!' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(screen.getByTestId('form-error').textContent).toMatch(
+      /fórmula de largo/i,
+    );
+  });
+
+  it('allows base length/width 0 when formulas are set (C8)', () => {
+    const onCreate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'COM-FORM-01' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Con fórmulas' },
+    });
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    // Leave length/width base at 0; set formulas + thickness.
+    fireEvent.change(screen.getByTestId('input-length-formula'), {
+      target: { value: 'PW' },
+    });
+    fireEvent.change(screen.getByTestId('input-width-formula'), {
+      target: { value: 'PD' },
+    });
+    fireEvent.change(screen.getByTestId('input-thickness'), {
+      target: { value: '18' },
+    });
+    fireEvent.click(screen.getByTestId('component-editor-tab-options'));
+    fireEvent.click(screen.getByTestId('option-role-FRENTE'));
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'COM-FORM-01',
+        lengthMm: 0,
+        widthMm: 0,
+        thicknessMm: 18,
+        lengthFormula: 'PW',
+        widthFormula: 'PD',
+      }),
+    );
+  });
+
+  it('filters list by placement (C7)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    expect(screen.getByText('COM-PUE-01')).toBeTruthy();
+    // Only active by default — c2 is inactive interno.
+    fireEvent.click(screen.getByText('Todos'));
+    expect(screen.getByText('COM-ENT-01')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('component-placement-filter'), {
+      target: { value: 'puerta' },
+    });
+    expect(screen.getByText('COM-PUE-01')).toBeTruthy();
+    expect(screen.queryByText('COM-ENT-01')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('component-placement-filter'), {
+      target: { value: 'interno' },
+    });
+    expect(screen.queryByText('COM-PUE-01')).toBeNull();
+    expect(screen.getByText('COM-ENT-01')).toBeTruthy();
+  });
+
+  it('shows 0° when rotate is explicitly zero in pose summary (C5)', () => {
+    const withZeroRot: Component = {
+      ...mockComponents[0]!,
+      rotateX: 0,
+      rotateY: 90,
+    };
+    render(
+      <ComponentsScreen
+        components={[withZeroRot]}
+        optionGroups={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    const pose = screen.getByTestId('component-detail-pose');
+    expect(pose.textContent).toMatch(/Rx 0°/);
+    expect(pose.textContent).toMatch(/Ry 90°/);
+  });
+
+  it('mounts 3D only on the geometry tab (C6)', () => {
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentEditId="c1"
+      />,
+    );
+
+    // General tab first — no 3D canvas.
+    expect(screen.queryByTestId('component-geometry-3d')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    expect(screen.getByTestId('component-geometry-3d')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('component-editor-tab-general'));
+    expect(screen.queryByTestId('component-geometry-3d')).toBeNull();
   });
 });

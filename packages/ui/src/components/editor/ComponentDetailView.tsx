@@ -4,7 +4,7 @@
  * perforations. Chrome carries plate metric + edit actions.
  */
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Component, EdgeSide } from '@muebles/domain';
 import { ChevronLeft, Eye, EyeOff, Pencil } from 'lucide-react';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
@@ -46,17 +46,15 @@ function edgesToStates(edges: Component['defaultEdges']): EdgeStates {
   return next;
 }
 
+/** Plate chrome metric — formula-aware so parametric pieces are not 0×0. */
 function plateMetric(c: Component): string | null {
-  const g = c.geometry?.kind === 'rectangular_board' ? c.geometry : null;
-  if (!g) return null;
-  return `${g.lengthMm} × ${g.widthMm} × ${g.thicknessMm} mm`;
+  if (c.geometry?.kind !== 'rectangular_board') return null;
+  return geometrySummary(c);
 }
 
+/** null/undefined = placement auto; 0 is a valid explicit rotation (C5). */
 function poseHasCustom(c: Component): boolean {
-  const rot =
-    (c.rotateX != null && c.rotateX !== 0) ||
-    (c.rotateY != null && c.rotateY !== 0) ||
-    (c.rotateZ != null && c.rotateZ !== 0);
+  const rot = c.rotateX != null || c.rotateY != null || c.rotateZ != null;
   const formulas = Boolean(c.xFormula || c.yFormula || c.zFormula);
   return rot || formulas;
 }
@@ -64,9 +62,9 @@ function poseHasCustom(c: Component): boolean {
 function poseSummary(c: Component): string {
   if (!poseHasCustom(c)) return 'Por defecto del placement';
   const parts: string[] = [];
-  if (c.rotateX) parts.push(`Rx ${c.rotateX}°`);
-  if (c.rotateY) parts.push(`Ry ${c.rotateY}°`);
-  if (c.rotateZ) parts.push(`Rz ${c.rotateZ}°`);
+  if (c.rotateX != null) parts.push(`Rx ${c.rotateX}°`);
+  if (c.rotateY != null) parts.push(`Ry ${c.rotateY}°`);
+  if (c.rotateZ != null) parts.push(`Rz ${c.rotateZ}°`);
   if (c.xFormula || c.yFormula || c.zFormula) parts.push('fórmulas XYZ');
   return parts.join(' · ') || 'Personalizada';
 }
@@ -82,6 +80,11 @@ export function ComponentDetailView({
   onToggleActive,
   canMutate,
 }: ComponentDetailViewProps): ReactNode {
+  const [confirmToggle, setConfirmToggle] = useState(false);
+  useEffect(() => {
+    setConfirmToggle(false);
+  }, [c.id]);
+
   const geometry =
     c.geometry?.kind === 'rectangular_board' ? c.geometry : null;
   const edges = edgesToStates(c.defaultEdges);
@@ -151,24 +154,55 @@ export function ComponentDetailView({
               Editar
             </button>
             {onToggleActive ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => onToggleActive(c)}
-                title={c.active === false ? 'Reactivar' : 'Desactivar'}
-              >
-                {c.active === false ? (
-                  <>
-                    <Eye size={16} strokeWidth={1.5} aria-hidden />
-                    Reactivar
-                  </>
-                ) : (
-                  <>
-                    <EyeOff size={16} strokeWidth={1.5} aria-hidden />
-                    Desactivar
-                  </>
-                )}
-              </button>
+              confirmToggle ? (
+                <span
+                  className="component-detail-inline-confirm"
+                  data-testid="component-deactivate-confirm"
+                >
+                  <span className="component-detail-inline-confirm__text">
+                    {c.active === false ? '¿Reactivar?' : '¿Desactivar?'}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn--small btn--danger"
+                    onClick={() => {
+                      onToggleActive(c);
+                      setConfirmToggle(false);
+                    }}
+                    data-testid="component-deactivate-confirm-yes"
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={() => setConfirmToggle(false)}
+                    data-testid="component-deactivate-confirm-no"
+                  >
+                    Cancelar
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setConfirmToggle(true)}
+                  title={c.active === false ? 'Reactivar' : 'Desactivar'}
+                  data-testid="component-detail-toggle-active"
+                >
+                  {c.active === false ? (
+                    <>
+                      <Eye size={16} strokeWidth={1.5} aria-hidden />
+                      Reactivar
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff size={16} strokeWidth={1.5} aria-hidden />
+                      Desactivar
+                    </>
+                  )}
+                </button>
+              )
             ) : null}
           </>
         ) : null}
@@ -196,9 +230,8 @@ export function ComponentDetailView({
           >
             <div>
               <dt>Largo × Ancho × Espesor</dt>
-              <dd>
-                {geometry.lengthMm} × {geometry.widthMm} ×{' '}
-                {geometry.thicknessMm} mm
+              <dd data-testid="component-detail-geometry-dims">
+                {geometrySummary(c)}
               </dd>
             </div>
             {geometry.lengthFormula ? (

@@ -5,6 +5,7 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   type Dispatch,
   type FormEvent,
@@ -71,6 +72,13 @@ export function ComponentEditorForm({
   const roleCount = countOptionRoles(draft.optionRoles);
   const optionsMissing = roleCount === 0;
 
+  useEffect(() => {
+    const tabsEl = tabRefs.current[0]?.parentElement;
+    if (tabsEl && typeof tabsEl.scrollIntoView === 'function') {
+      tabsEl.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, [editorTab]);
+
   const focusTab = useCallback((index: number) => {
     const tab = COMPONENT_EDITOR_TABS[index];
     if (!tab) return;
@@ -99,7 +107,7 @@ export function ComponentEditorForm({
   };
 
   return (
-    <form id={formId} onSubmit={onSubmit} className="catalog-form component-editor">
+    <form id={formId} onSubmit={onSubmit} className="catalog-form component-editor" noValidate>
       {error ? (
         <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
@@ -177,6 +185,8 @@ export function ComponentEditorForm({
         draft={draft}
         setDraft={setDraft}
         hidden={editorTab !== 'edges'}
+        previewLengthMm={previewParts[0]?.lengthMm}
+        previewWidthMm={previewParts[0]?.widthMm}
       />
 
       <ComponentEditorOptionsPanel

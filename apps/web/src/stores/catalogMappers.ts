@@ -78,6 +78,11 @@ export function draftToComponent(id: string, draft: ComponentDraft): Component {
       widthFormula: draft.widthFormula.trim() || undefined,
     },
     defaultEdges: edgesFromFlags(draft.edgeL1, draft.edgeL2, draft.edgeW1, draft.edgeW2),
+    // Preserve perforations round-tripped via draft (no CNC editor yet — C2).
+    perforations:
+      draft.perforations && draft.perforations.length > 0
+        ? draft.perforations
+        : undefined,
     optionRoles: draft.optionRoles.split(',').map((s) => s.trim()).filter(Boolean),
     notes: optionalNotes(draft.notes),
     active: draft.active !== false,
