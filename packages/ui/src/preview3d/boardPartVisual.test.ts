@@ -5,6 +5,7 @@ import {
   colorForMaterialId,
   colorForOptionRole,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   resolvePartColor,
   cameraPositionForView,
@@ -182,5 +183,66 @@ describe('boardPartVisual', () => {
         surfaceMode: 'grain',
       }).grain,
     ).toBe(1);
+  });
+
+  it('threads per-material PBR fields into the visual in material mode', () => {
+    const physical = materialPhysicalMap([
+      {
+        id: 'mat-white',
+        previewRoughness: 0.35,
+        previewMetalness: 1,
+        previewClearcoat: 0.6,
+      },
+    ]);
+    const v = boardPartToVisual(basePart, {
+      colorMode: 'material',
+      materialPhysical: physical,
+    });
+    expect(v.previewRoughness).toBe(0.35);
+    expect(v.previewMetalness).toBe(1);
+    expect(v.previewClearcoat).toBe(0.6);
+  });
+
+  it('leaves PBR visual fields undefined when the material has no entry', () => {
+    const physical = materialPhysicalMap([
+      { id: 'other', previewRoughness: 0.4 },
+    ]);
+    const v = boardPartToVisual(basePart, {
+      colorMode: 'material',
+      materialPhysical: physical,
+    });
+    expect(v.previewRoughness).toBeUndefined();
+    expect(v.previewMetalness).toBeUndefined();
+    expect(v.previewClearcoat).toBeUndefined();
+  });
+
+  it('leaves PBR visual fields undefined in role mode', () => {
+    const physical = materialPhysicalMap([
+      {
+        id: 'mat-white',
+        previewRoughness: 0.35,
+        previewMetalness: 1,
+        previewClearcoat: 0.6,
+      },
+    ]);
+    const v = boardPartToVisual(basePart, {
+      colorMode: 'role',
+      materialPhysical: physical,
+    });
+    expect(v.previewRoughness).toBeUndefined();
+    expect(v.previewMetalness).toBeUndefined();
+    expect(v.previewClearcoat).toBeUndefined();
+  });
+
+  it('omits materials with no finite PBR field in materialPhysicalMap', () => {
+    const physical = materialPhysicalMap([
+      { id: 'empty' },
+      { id: 'has-one', previewMetalness: 0.8 },
+      { id: 'nan-only', previewRoughness: Number.NaN },
+    ]);
+    expect(physical.get('empty')).toBeUndefined();
+    expect(physical.get('has-one')?.metalness).toBe(0.8);
+    expect(physical.get('has-one')?.roughness).toBeUndefined();
+    expect(physical.get('nan-only')).toBeUndefined();
   });
 });

@@ -21,6 +21,7 @@ import {
 import type { PlacementDims, ResolvedBoardPart } from '@muebles/domain';
 import type {
   MaterialColorLookup,
+  MaterialPhysicalLookup,
   MaterialTextureLookup,
 } from '../../preview3d';
 import { FurnitureScene3D } from '../../preview3d';
@@ -34,6 +35,7 @@ export type ComponentEditorGeometryPanelProps = {
   readonly previewParts: readonly ResolvedBoardPart[];
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
+  readonly materialPhysical?: MaterialPhysicalLookup;
   readonly containerDims: PlacementDims;
   readonly onContainerDimsChange: (dims: PlacementDims) => void;
   readonly showInContext: boolean;
@@ -86,6 +88,7 @@ export function ComponentEditorGeometryPanel({
   previewParts,
   materialColors,
   materialTextures,
+  materialPhysical,
   containerDims,
   onContainerDimsChange,
   showInContext,
@@ -226,6 +229,7 @@ export function ComponentEditorGeometryPanel({
           colorMode="material"
           materialColors={materialColors}
           materialTextures={materialTextures}
+          materialPhysical={materialPhysical}
           showOutlines={showOutlines}
           testId="component-geometry-3d"
         />

@@ -78,6 +78,7 @@ import {
 import {
   canUseWebGL,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   DEFAULT_SCENE_LIGHTING_MODE,
@@ -466,6 +467,10 @@ export function ProjectSpatialStudio({
   const materialTextures = useMemo(
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
+  );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(catalog.materials),
+    [catalog.materials],
   );
 
   const selectedRef = useMemo(() => {
@@ -2175,6 +2180,7 @@ export function ProjectSpatialStudio({
                 colorMode={colorMode}
                 materialColors={materialColors}
                 materialTextures={materialTextures}
+                materialPhysical={materialPhysical}
                 surfaceMode={surfaceMode}
                 lightingMode={lightingMode}
                 showOutlines={showOutlines}

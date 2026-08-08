@@ -35,7 +35,7 @@ import {
 import { ComponentDetailView } from './editor/ComponentDetailView';
 import { ComponentEditorForm } from './editor/ComponentEditorForm';
 import { ComponentListView } from './editor/ComponentListView';
-import { materialColorMap, materialTextureMap } from '../preview3d';
+import { materialColorMap, materialPhysicalMap, materialTextureMap } from '../preview3d';
 import './components.css';
 
 export type { ComponentDraft };
@@ -137,6 +137,10 @@ export function ComponentsScreen({
   );
   const materialTextures = useMemo(
     () => materialTextureMap(materials),
+    [materials],
+  );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(materials),
     [materials],
   );
 
@@ -502,6 +506,7 @@ export function ComponentsScreen({
           previewParts={previewParts}
           materialColors={materialColors}
           materialTextures={materialTextures}
+          materialPhysical={materialPhysical}
           containerDims={containerDims}
           onContainerDimsChange={setContainerDims}
           showInContext={showInContext}

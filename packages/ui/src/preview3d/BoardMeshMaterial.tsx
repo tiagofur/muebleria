@@ -21,7 +21,7 @@ import {
 } from './boardPartVisual';
 import { createGrainCanvas } from './grainTexture';
 import {
-  boardPhysicalResponse,
+  resolveBoardPhysicalResponse,
   type SceneLightingMode,
 } from './sceneLighting';
 
@@ -33,6 +33,14 @@ type SharedMatProps = {
   readonly opacity: number;
   readonly depthWrite: boolean;
   readonly lightingMode: SceneLightingMode;
+  /**
+   * Per-material PBR override (semantic [0,1]) from the visual bridge.
+   * Undefined when the material has no PBR entry or colorMode is role;
+   * the resolver then keeps the lighting-mode base (byte-identical render).
+   */
+  readonly previewRoughness?: number;
+  readonly previewMetalness?: number;
+  readonly previewClearcoat?: number;
 };
 
 /**
@@ -88,10 +96,15 @@ function PhotoTextureMaterial({
     applyUv(map, widthMm, lengthMm, tileWidthMm, tileLengthMm);
   }, [map, widthMm, lengthMm, tileWidthMm, tileLengthMm]);
 
-  const phys = boardPhysicalResponse({
+  const phys = resolveBoardPhysicalResponse({
     hasMap: true,
     hasGrain: false,
     lightingMode: shared.lightingMode,
+    materialPbr: {
+      roughness: shared.previewRoughness,
+      metalness: shared.previewMetalness,
+      clearcoat: shared.previewClearcoat,
+    },
   });
 
   return (
@@ -144,10 +157,15 @@ function SolidOrGrainMaterial({
 
   // Remount when switching solid ↔ grain so Three drops the previous map.
   const matKey = grain === 1 && map ? `grain:${color}` : `solid:${color}`;
-  const phys = boardPhysicalResponse({
+  const phys = resolveBoardPhysicalResponse({
     hasMap: Boolean(map),
     hasGrain: grain === 1,
     lightingMode: shared.lightingMode,
+    materialPbr: {
+      roughness: shared.previewRoughness,
+      metalness: shared.previewMetalness,
+      clearcoat: shared.previewClearcoat,
+    },
   });
 
   return (
@@ -195,6 +213,9 @@ export function BoardMeshMaterial({
     opacity,
     depthWrite: !transparent,
     lightingMode,
+    previewRoughness: visual.previewRoughness,
+    previewMetalness: visual.previewMetalness,
+    previewClearcoat: visual.previewClearcoat,
   };
 
   // Outer key forces full material swap between surface modes.

@@ -16,6 +16,7 @@ import {
 import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
 import type {
   MaterialColorLookup,
+  MaterialPhysicalLookup,
   MaterialTextureLookup,
 } from '../../preview3d';
 import {
@@ -44,6 +45,7 @@ export type ComponentEditorFormProps = {
   readonly previewParts: readonly ResolvedBoardPart[];
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
+  readonly materialPhysical?: MaterialPhysicalLookup;
   readonly containerDims: PlacementDims;
   readonly onContainerDimsChange: (dims: PlacementDims) => void;
   readonly showInContext: boolean;
@@ -63,6 +65,7 @@ export function ComponentEditorForm({
   previewParts,
   materialColors,
   materialTextures,
+  materialPhysical,
   containerDims,
   onContainerDimsChange,
   showInContext,
@@ -175,6 +178,7 @@ export function ComponentEditorForm({
         previewParts={previewParts}
         materialColors={materialColors}
         materialTextures={materialTextures}
+        materialPhysical={materialPhysical}
         containerDims={containerDims}
         onContainerDimsChange={onContainerDimsChange}
         showInContext={showInContext}

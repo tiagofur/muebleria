@@ -27,7 +27,7 @@ func scanDefaultEdgeID(src *string) string {
 
 func (s *PostgresStore) GetMaterialBoardByID(ctx context.Context, id string) (*domain.MaterialBoard, error) {
 	query := `
-		SELECT id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, cost_per_m2, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, notes, active, created_at, updated_at
+		SELECT id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, cost_per_m2, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, notes, active, created_at, updated_at
 		FROM material_boards
 		WHERE id = $1;
 	`
@@ -40,7 +40,8 @@ func (s *PostgresStore) GetMaterialBoardByID(ctx context.Context, id string) (*d
 	var previewTexture *string
 	var tileW *float64
 	var tileL *float64
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.WidthMm, &m.LengthMm, &m.ThicknessMm, &m.GrainDefault, &m.BoardPrice, &m.WastePercent, &m.CostPerM2, &defaultEdge, &imageURL, &previewColor, &previewTexture, &tileW, &tileL, &notes, &m.Active, &m.CreatedAt, &m.UpdatedAt)
+	var pRough, pMet, pClear *float64
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.WidthMm, &m.LengthMm, &m.ThicknessMm, &m.GrainDefault, &m.BoardPrice, &m.WastePercent, &m.CostPerM2, &defaultEdge, &imageURL, &previewColor, &previewTexture, &tileW, &tileL, &pRough, &pMet, &pClear, &notes, &m.Active, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +61,9 @@ func (s *PostgresStore) GetMaterialBoardByID(ctx context.Context, id string) (*d
 	if tileL != nil {
 		m.PreviewTextureTileLengthMm = *tileL
 	}
+	m.PreviewRoughness = pRough
+	m.PreviewMetalness = pMet
+	m.PreviewClearcoat = pClear
 	if notes != nil {
 		m.Notes = *notes
 	}
@@ -70,11 +74,11 @@ func (s *PostgresStore) CreateMaterialBoard(ctx context.Context, m *domain.Mater
 	// Prefer client-provided UUID so FE id stays stable across upserts.
 	if m.ID != "" {
 		query := `
-			INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, notes, active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, notes, active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 			RETURNING cost_per_m2, created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, m.ID, m.Code, m.Name, m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.Notes, m.Active).
+		err := s.Pool.QueryRow(ctx, query, m.ID, m.Code, m.Name, m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), nullableFloat64Ptr(m.PreviewRoughness), nullableFloat64Ptr(m.PreviewMetalness), nullableFloat64Ptr(m.PreviewClearcoat), m.Notes, m.Active).
 			Scan(&m.CostPerM2, &m.CreatedAt, &m.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating material board: %w", err)
@@ -82,11 +86,11 @@ func (s *PostgresStore) CreateMaterialBoard(ctx context.Context, m *domain.Mater
 		return nil
 	}
 	query := `
-		INSERT INTO material_boards (code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, notes, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		INSERT INTO material_boards (code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, notes, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		RETURNING id, cost_per_m2, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, m.Code, m.Name, m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.Notes, m.Active).
+	err := s.Pool.QueryRow(ctx, query, m.Code, m.Name, m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), nullableFloat64Ptr(m.PreviewRoughness), nullableFloat64Ptr(m.PreviewMetalness), nullableFloat64Ptr(m.PreviewClearcoat), m.Notes, m.Active).
 		Scan(&m.ID, &m.CostPerM2, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating material board: %w", err)
@@ -97,11 +101,11 @@ func (s *PostgresStore) CreateMaterialBoard(ctx context.Context, m *domain.Mater
 func (s *PostgresStore) UpdateMaterialBoard(ctx context.Context, id string, m *domain.MaterialBoard) error {
 	query := `
 		UPDATE material_boards
-		SET code = $1, name = $2, width_mm = $3, length_mm = $4, thickness_mm = $5, grain_default = $6, board_price = $7, waste_percent = $8, default_edge_band_id = $9, image_url = $10, preview_color = $11, preview_texture_url = $12, preview_texture_tile_width_mm = $13, preview_texture_tile_length_mm = $14, notes = $15, active = $16, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $17
+		SET code = $1, name = $2, width_mm = $3, length_mm = $4, thickness_mm = $5, grain_default = $6, board_price = $7, waste_percent = $8, default_edge_band_id = $9, image_url = $10, preview_color = $11, preview_texture_url = $12, preview_texture_tile_width_mm = $13, preview_texture_tile_length_mm = $14, preview_roughness = $15, preview_metalness = $16, preview_clearcoat = $17, notes = $18, active = $19, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $20
 		RETURNING cost_per_m2, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, m.Code, m.Name, m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.Notes, m.Active, id).
+	err := s.Pool.QueryRow(ctx, query, m.Code, m.Name, m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), nullableFloat64Ptr(m.PreviewRoughness), nullableFloat64Ptr(m.PreviewMetalness), nullableFloat64Ptr(m.PreviewClearcoat), m.Notes, m.Active, id).
 		Scan(&m.CostPerM2, &m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -115,7 +119,7 @@ func (s *PostgresStore) UpdateMaterialBoard(ctx context.Context, id string, m *d
 
 func (s *PostgresStore) ListMaterialBoards(ctx context.Context) ([]domain.MaterialBoard, error) {
 	query := `
-		SELECT id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, cost_per_m2, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, notes, active, created_at, updated_at
+		SELECT id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, cost_per_m2, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, notes, active, created_at, updated_at
 		FROM material_boards
 		ORDER BY name ASC;
 	`
@@ -135,7 +139,8 @@ func (s *PostgresStore) ListMaterialBoards(ctx context.Context) ([]domain.Materi
 		var previewTexture *string
 		var tileW *float64
 		var tileL *float64
-		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.WidthMm, &m.LengthMm, &m.ThicknessMm, &m.GrainDefault, &m.BoardPrice, &m.WastePercent, &m.CostPerM2, &defaultEdge, &imageURL, &previewColor, &previewTexture, &tileW, &tileL, &notes, &m.Active, &m.CreatedAt, &m.UpdatedAt)
+		var pRough, pMet, pClear *float64
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.WidthMm, &m.LengthMm, &m.ThicknessMm, &m.GrainDefault, &m.BoardPrice, &m.WastePercent, &m.CostPerM2, &defaultEdge, &imageURL, &previewColor, &previewTexture, &tileW, &tileL, &pRough, &pMet, &pClear, &notes, &m.Active, &m.CreatedAt, &m.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -155,6 +160,9 @@ func (s *PostgresStore) ListMaterialBoards(ctx context.Context) ([]domain.Materi
 		if tileL != nil {
 			m.PreviewTextureTileLengthMm = *tileL
 		}
+		m.PreviewRoughness = pRough
+		m.PreviewMetalness = pMet
+		m.PreviewClearcoat = pClear
 		if notes != nil {
 			m.Notes = *notes
 		}

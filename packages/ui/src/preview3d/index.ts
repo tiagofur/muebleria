@@ -15,6 +15,8 @@ export {
   CATALOG_PHOTO_BACKGROUND,
   planSceneLighting,
   boardPhysicalResponse,
+  resolveBoardPhysicalResponse,
+  type MaterialPbr,
 } from './sceneLighting';
 export {
   PartInspector,
@@ -30,6 +32,7 @@ export {
   colorForMaterialId,
   colorForOptionRole,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   resolveMaterialSurface,
   resolvePartColor,
@@ -40,6 +43,8 @@ export {
   type BoardColorMode,
   type BoardPartVisual,
   type MaterialColorLookup,
+  type MaterialPhysicalEntry,
+  type MaterialPhysicalLookup,
   type MaterialSurfaceMode,
   type MaterialTextureEntry,
   type MaterialTextureLookup,

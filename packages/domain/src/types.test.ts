@@ -86,6 +86,47 @@ describe('domain entity types', () => {
     expect(optionGroup.kind).toBe('board');
   });
 
+  it('round-trips optional MaterialBoard PBR fields for the 3D preview', () => {
+    // PBR-01 — a material carrying the three optional scalars reloads equal.
+    const withPbr: MaterialBoard = {
+      id: '11111111-1111-4111-8111-111111111112',
+      code: 'TAB-STEEL',
+      name: 'Steel look board',
+      widthMm: 1830,
+      lengthMm: 2440,
+      thicknessMm: 15,
+      grainDefault: false,
+      boardPrice: 1500,
+      wastePercent: 10,
+      costPerM2: 400,
+      previewRoughness: 0.35,
+      previewMetalness: 1,
+      previewClearcoat: 0,
+      active: true,
+    };
+    expect(withPbr.previewRoughness).toBe(0.35);
+    expect(withPbr.previewMetalness).toBe(1);
+    expect(withPbr.previewClearcoat).toBe(0);
+
+    // Additive, non-breaking: a material omitting the fields still constructs.
+    const withoutPbr: MaterialBoard = {
+      id: '11111111-1111-4111-8111-111111111113',
+      code: 'TAB-PLAIN',
+      name: 'Plain board',
+      widthMm: 1830,
+      lengthMm: 2440,
+      thicknessMm: 15,
+      grainDefault: false,
+      boardPrice: 1200,
+      wastePercent: 10,
+      costPerM2: 320.5,
+      active: true,
+    };
+    expect(withoutPbr.previewRoughness).toBeUndefined();
+    expect(withoutPbr.previewMetalness).toBeUndefined();
+    expect(withoutPbr.previewClearcoat).toBeUndefined();
+  });
+
   it('constructs Module with BoardPart and HardwareLine', () => {
     const boardPart: BoardPart = {
       id: '55555555-5555-4555-8555-555555555555',

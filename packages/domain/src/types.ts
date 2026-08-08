@@ -57,6 +57,14 @@ export interface MaterialBoard {
    * (local Z / V). Omit/0 → default tile (~280 mm).
    */
   readonly previewTextureTileLengthMm?: number;
+  /**
+   * Optional per-material PBR override for the 3D preview (semantic range [0,1]).
+   * Omit/undefined ⇒ fall back to the lighting-mode-derived physical response.
+   * `previewMetalness` is the metal/dielectric BRDF selector (1 = metal).
+   */
+  readonly previewRoughness?: number;
+  readonly previewMetalness?: number;
+  readonly previewClearcoat?: number;
   readonly notes?: string;
   readonly active: boolean;
 }

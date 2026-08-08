@@ -32,6 +32,7 @@ import {
   type BoardColorMode,
   type BoardPartVisual,
   type MaterialColorLookup,
+  type MaterialPhysicalLookup,
   type MaterialSurfaceMode,
   type MaterialTextureLookup,
 } from './boardPartVisual';
@@ -108,6 +109,8 @@ export type FurnitureScene3DProps = {
   readonly materialColors?: MaterialColorLookup;
   /** Optional catalog texture URLs (material.previewTextureUrl). */
   readonly materialTextures?: MaterialTextureLookup;
+  /** Optional per-material PBR overrides (material.previewRoughness/Metalness/Clearcoat). */
+  readonly materialPhysical?: MaterialPhysicalLookup;
   /** Color / grain / texture look when colorMode is material. */
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly cameraType?: 'perspective' | 'orthographic';
@@ -458,6 +461,7 @@ function ModuleGroup({
   colorMode,
   materialColors,
   materialTextures,
+  materialPhysical,
   surfaceMode,
   showWireframe,
   showOutlines,
@@ -484,6 +488,7 @@ function ModuleGroup({
   readonly colorMode: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
+  readonly materialPhysical?: MaterialPhysicalLookup;
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly showWireframe?: boolean;
   readonly showOutlines?: boolean;
@@ -672,9 +677,10 @@ function ModuleGroup({
         colorMode,
         materialColors,
         materialTextures,
+        materialPhysical,
         surfaceMode,
       }),
-    [mod.parts, colorMode, materialColors, materialTextures, surfaceMode],
+    [mod.parts, colorMode, materialColors, materialTextures, materialPhysical, surfaceMode],
   );
   // Workshop → Three Y-up: [x, z, y]
   const groupPos: [number, number, number] = [
@@ -816,6 +822,7 @@ function SceneContent({
   colorMode,
   materialColors,
   materialTextures,
+  materialPhysical,
   surfaceMode,
   cameraView,
   showWireframe,
@@ -855,6 +862,7 @@ function SceneContent({
   readonly colorMode: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
+  readonly materialPhysical?: MaterialPhysicalLookup;
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly cameraView?: CameraViewType | null;
   readonly showWireframe?: boolean;
@@ -1002,6 +1010,7 @@ function SceneContent({
               colorMode={colorMode}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              materialPhysical={materialPhysical}
               surfaceMode={surfaceMode}
               showWireframe={showWireframe}
               showOutlines={showOutlines}
@@ -1094,6 +1103,7 @@ export function FurnitureScene3D({
   colorMode = 'material',
   materialColors,
   materialTextures,
+  materialPhysical,
   surfaceMode,
   cameraView,
   cameraType = 'perspective',
@@ -1291,6 +1301,7 @@ export function FurnitureScene3D({
               colorMode={colorMode}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              materialPhysical={materialPhysical}
               surfaceMode={surfaceMode}
               cameraView={cameraView}
               showWireframe={showWireframe}

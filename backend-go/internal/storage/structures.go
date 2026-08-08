@@ -316,6 +316,16 @@ func nullIfZeroFloat(v float64) interface{} {
 	return v
 }
 
+// nullableFloat64Ptr stores NULL when the pointer is nil, else the pointed-to
+// value. Used for PBR scalars where 0.0 is a VALID value (e.g. metalness=0 is
+// dielectric) and must NOT be erased — unlike nullIfZeroFloat.
+func nullableFloat64Ptr(v *float64) interface{} {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
 func placementOverrideArg(p *domain.ComponentPlacement) interface{} {
 	if p == nil {
 		return nil

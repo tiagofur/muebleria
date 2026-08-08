@@ -12,6 +12,7 @@ import {
   MaterialSurfaceModeField,
   canUseWebGL,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   type BoardColorMode,
@@ -74,6 +75,10 @@ export function Project3DModal({
   const materialTextures = useMemo(
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
+  );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(catalog.materials),
+    [catalog.materials],
   );
 
   const title = !project
@@ -178,6 +183,7 @@ export function Project3DModal({
               colorMode={colorMode}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              materialPhysical={materialPhysical}
               surfaceMode={surfaceMode}
               showOutlines={showOutlines}
             />
