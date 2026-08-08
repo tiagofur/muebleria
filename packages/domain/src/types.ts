@@ -61,6 +61,35 @@ export interface MaterialBoard {
   readonly active: boolean;
 }
 
+/**
+ * Surface an ambient material is intended for in the 3D room scene.
+ * Presentation-only — never quoted, never in BOM/cost/export (spec #4148).
+ */
+export type AmbientSurfaceType = 'floor' | 'wall';
+
+/**
+ * Presentation-only material (floor tiles, wall porcelain, paint) used to
+ * texture the 3D room scene. Clean separation from `MaterialBoard` (no
+ * `ambientOnly` flag) is the primary leak guarantee: this type carries NO
+ * pricing/BOM fields (widthMm/lengthMm/thicknessMm/boardPrice/wastePercent/
+ * costPerM2/defaultEdgeBandId/grainDefault). Reuses only the `preview*` field
+ * shape from MaterialBoard (spec #4148 / design #4151).
+ */
+export interface AmbientMaterial {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly active: boolean;
+  readonly surfaceType: AmbientSurfaceType;
+  readonly previewColor?: string;
+  readonly previewTextureUrl?: string;
+  readonly previewTextureTileWidthMm?: number;
+  readonly previewTextureTileLengthMm?: number;
+  readonly previewRoughness?: number;
+  readonly previewMetalness?: number;
+  readonly previewClearcoat?: number;
+}
+
 export interface EdgeBand {
   readonly id: string;
   readonly code: string;
@@ -510,6 +539,18 @@ export interface KitchenSpace {
   readonly baseClearanceMm?: number;
   readonly wallCabinetZMm?: number;
   readonly showCountertop?: boolean;
+  /**
+   * Ambient floor material for the 3D room scene (presentation-only, #4148).
+   * Resolves against `Catalog.ambientMaterials` (surfaceType 'floor'). Omit = none.
+   */
+  readonly floorMaterialId?: string;
+  /**
+   * Ambient wall material for the 3D room scene (presentation-only, #4148).
+   * Resolves against `Catalog.ambientMaterials` (surfaceType 'wall'). Omit = none.
+   */
+  readonly wallMaterialId?: string;
+  /** Show the room ceiling in the 3D scene (Q1, #4151). Default undefined = OFF. */
+  readonly showCeiling?: boolean;
   /** Optional floor-plan underlay for this space. */
   readonly underlay?: KitchenPlanUnderlay;
 }
@@ -745,6 +786,12 @@ export interface Catalog {
   readonly structures?: readonly Structure[];
   /** Hierarchical module categories (MOD-09). Empty/omitted = no taxonomy. */
   readonly categories?: readonly ModuleCategory[];
+  /**
+   * Ambient materials catalog (presentation-only, #4148). Omitted/undefined
+   * treated as [] for older workspaces. Codes are unique within this collection
+   * (NOT shared namespace with `materials` board codes).
+   */
+  readonly ambientMaterials?: readonly AmbientMaterial[];
   readonly customers?: readonly Customer[];
   /** Reusable components catalog (F049 / H07). */
   readonly components?: readonly Component[];
