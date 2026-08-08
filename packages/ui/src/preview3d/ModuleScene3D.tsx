@@ -9,6 +9,7 @@ import { FurnitureScene3D } from './FurnitureScene3D';
 import type {
   BoardColorMode,
   MaterialColorLookup,
+  MaterialPhysicalLookup,
   MaterialSurfaceMode,
   MaterialTextureLookup,
 } from './boardPartVisual';
@@ -25,6 +26,7 @@ export type ModuleScene3DProps = {
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
+  readonly materialPhysical?: MaterialPhysicalLookup;
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly cameraView?: { readonly type: 'front' | 'top' | 'side' | 'isometric'; readonly ts: number } | null;
   readonly cameraType?: 'perspective' | 'orthographic';
@@ -70,6 +72,7 @@ export function ModuleScene3D({
   colorMode = 'material',
   materialColors,
   materialTextures,
+  materialPhysical,
   surfaceMode,
   cameraView,
   cameraType,
@@ -108,6 +111,7 @@ export function ModuleScene3D({
       colorMode={colorMode}
       materialColors={materialColors}
       materialTextures={materialTextures}
+      materialPhysical={materialPhysical}
       surfaceMode={surfaceMode}
       cameraView={cameraView}
       cameraType={cameraType}
