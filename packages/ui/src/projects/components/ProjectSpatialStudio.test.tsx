@@ -112,6 +112,104 @@ describe('ProjectSpatialStudio', () => {
     );
   });
 
+  it('re-applies bootstrap filter when bootstrap prop changes while open', () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    const { rerender } = render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        bootstrap={{ listFilter: 'all' }}
+      />,
+    );
+    expect(screen.getByTestId('spatial-studio-filter-all').className).toMatch(
+      /filter--on/,
+    );
+
+    rerender(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        bootstrap={{ listFilter: 'unplaced', selectKey: null }}
+      />,
+    );
+    expect(
+      screen.getByTestId('spatial-studio-filter-unplaced').className,
+    ).toMatch(/filter--on/);
+  });
+
+  it('seeds default L walls when open with empty kitchen layout', () => {
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={project}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    expect(onChangeLayout).toHaveBeenCalled();
+    const seeded = onChangeLayout.mock.calls[0]![0] as {
+      walls: { name?: string }[];
+    };
+    expect(seeded.walls).toHaveLength(2);
+    expect(seeded.walls.map((w) => w.name)).toEqual(['Muro A', 'Muro B']);
+    expect(screen.getByTestId('spatial-studio-default-walls-msg').textContent).toMatch(
+      /Ambiente en L por defecto/,
+    );
+  });
+
+  it('calls onRequestAddItem from sidebar Agregar button', () => {
+    const onRequestAddItem = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onRequestAddItem={onRequestAddItem}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-add-item'));
+    expect(onRequestAddItem).toHaveBeenCalledTimes(1);
+  });
+
   it('does not render when closed', () => {
     render(
       <ProjectSpatialStudio
@@ -322,12 +420,16 @@ EOF
 
   it('shows PDF guidance without mutating layout', async () => {
     const onChangeLayout = vi.fn();
+    // Pre-seeded walls so open-effect default L seed does not fire.
     render(
       <ProjectSpatialStudio
         open
         project={{
           ...project,
-          kitchenLayout: { walls: [], placements: [] },
+          kitchenLayout: {
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [],
+          },
         }}
         modules={[modA]}
         catalog={catalog}
@@ -348,6 +450,7 @@ EOF
         /PDF/i,
       );
     });
+    // PDF is guidance only — never commits walls/underlay.
     expect(onChangeLayout).not.toHaveBeenCalled();
   });
 

@@ -52,6 +52,7 @@ export type ProjectPresentationModeProps = {
   readonly salePrice: number | null;
   readonly workshopName?: string;
   readonly onClose: () => void;
+  readonly onGoToProyectar?: () => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
 };
 

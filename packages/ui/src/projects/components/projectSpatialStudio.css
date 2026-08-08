@@ -1,5 +1,6 @@
 /* Spatial studio — full-screen quote design (Proyectar) */
 
+/* Fullscreen design mode. Nested dialogs (Agregar mueble) use --z-modal-dialog. */
 .spatial-studio {
   position: fixed;
   inset: 0;
@@ -258,6 +259,12 @@
   justify-content: space-between;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
+}
+
+.spatial-studio__sidebar-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .spatial-studio__filter-row {

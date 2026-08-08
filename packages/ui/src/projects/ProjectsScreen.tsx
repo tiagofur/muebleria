@@ -36,6 +36,7 @@ import {
   PageLoading,
   useDebouncedValue,
 } from '../common';
+import { consumeRequestCreateKey } from '../common/consumeRequestCreateKey';
 import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { Project3DModal } from './components/Project3DModal';
@@ -376,6 +377,8 @@ export function ProjectsScreen({
     listFilter?: 'all' | 'unplaced' | 'placed';
     selectKey?: string | null;
   } | null>(null);
+  /** Cue on quote detail after add — never auto-open Proyectar. */
+  const [postAddPlaceCue, setPostAddPlaceCue] = useState(false);
 
   // Fase 3 slice 3.5: auto-open presentation when autoPresentId matches.
   useEffect(() => {
@@ -478,9 +481,10 @@ export function ProjectsScreen({
     setMetaModalOpen(false);
   }, [openProjectId, projects]);
 
-  // Open create modal from shell (Dashboard quick action)
+  // Open create once per requestCreateKey bump (Dashboard handoff).
+  // Module-scoped consume survives remount (JD R4-W sticky create key).
   useEffect(() => {
-    if (!requestCreateKey) return;
+    if (!consumeRequestCreateKey('projects', requestCreateKey)) return;
     setMetaEditingId(null);
     setMetaDraft(emptyProjectDraft(workshopSettings));
     setMetaModalOpen(true);
@@ -554,6 +558,7 @@ export function ProjectsScreen({
   };
 
   const backToList = () => {
+    setPostAddPlaceCue(false);
     setSelectedId(null);
     setConfirmDelete(false);
     setConfirmRemoveItemId(null);
@@ -591,11 +596,21 @@ export function ProjectsScreen({
     if (!selectedId) return;
     onAddItem(selectedId, payload);
     closeAddItemModal();
-    // Bridge to Proyectar: open studio focused on unplaced units after add.
+    // Cotizar ≠ Proyectar: never force-open studio after add.
+    // If studio is already open, refresh unplaced focus; else show quote cue.
     if (onUpdateKitchenLayout && canMutate) {
-      setSpatialBootstrap({ listFilter: 'unplaced' });
-      setShowSpatialStudio(true);
+      if (showSpatialStudio) {
+        setSpatialBootstrap({ listFilter: 'unplaced', selectKey: null });
+      } else {
+        setPostAddPlaceCue(true);
+      }
     }
+  };
+
+  const openSpatialStudioUnplaced = () => {
+    setPostAddPlaceCue(false);
+    setSpatialBootstrap({ listFilter: 'unplaced', selectKey: null });
+    setShowSpatialStudio(true);
   };
 
   const updateItemMeasurePreset = (item: ProjectItem, measurePresetId: string) => {
@@ -865,10 +880,16 @@ export function ProjectsScreen({
           onOpenSpatialStudio={
             onUpdateKitchenLayout
               ? () => {
+                  setPostAddPlaceCue(false);
                   setSpatialBootstrap(null);
                   setShowSpatialStudio(true);
                 }
               : undefined
+          }
+          postAddPlaceCue={postAddPlaceCue}
+          onDismissPostAddPlaceCue={() => setPostAddPlaceCue(false)}
+          onOpenSpatialStudioUnplaced={
+            onUpdateKitchenLayout ? openSpatialStudioUnplaced : undefined
           }
           onEditMeta={startEditMeta}
           onDuplicate={onDuplicate}
@@ -1001,6 +1022,11 @@ export function ProjectsScreen({
               : null)
           }
           bootstrap={spatialBootstrap}
+          onRequestAddItem={
+            canMutate && selectedProject.status === 'draft'
+              ? openAddItemModal
+              : undefined
+          }
           planActor={planActor}
           onAcquirePlanEdit={
             planActor && onAcquirePlanEdit ? handleAcquirePlanEdit : undefined
