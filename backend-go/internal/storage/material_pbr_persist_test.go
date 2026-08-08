@@ -31,7 +31,9 @@ func TestMaterialBoard_PersistsPBR(t *testing.T) {
 	if err != nil {
 		t.Skipf("no db: %v", err)
 	}
-	defer pool.Close()
+	// Register pool close FIRST so it runs LAST (t.Cleanup is LIFO); the
+	// row-deletion cleanups registered below must execute before the pool closes.
+	t.Cleanup(func() { pool.Close() })
 	store := &storage.PostgresStore{Pool: pool}
 
 	// Case 1: create with NO PBR fields -> all stay nil (NULL = undefined).
@@ -107,14 +109,13 @@ func newPBRTestBoard() *domain.MaterialBoard {
 	}
 }
 
-// registerPBRCleanup clears the three PBR fields so the inert row left behind is
-// harmless. Captures the board pointer so it always resets regardless of test
-// mutations.
+// registerPBRCleanup hard-deletes the row this test created (Postgres generated
+// its id via uuid_generate_v4). The store exposes no material hard-delete API,
+// so we delete via the pool to avoid leaving residue rows in the catalog between
+// runs (unlike material_tile_persist_test, which mutates an existing row and
+// restores it — this test creates its own and must clean it fully).
 func registerPBRCleanup(t *testing.T, ctx context.Context, store *storage.PostgresStore, b *domain.MaterialBoard) {
 	t.Cleanup(func() {
-		b.PreviewRoughness = nil
-		b.PreviewMetalness = nil
-		b.PreviewClearcoat = nil
-		_ = store.UpdateMaterialBoard(ctx, b.ID, b)
+		_, _ = store.Pool.Exec(ctx, "DELETE FROM material_boards WHERE id = $1", b.ID)
 	})
 }
