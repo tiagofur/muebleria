@@ -4,6 +4,8 @@
  */
 
 import type {
+  AmbientMaterial,
+  AmbientSurfaceType,
   BoardPart,
   Catalog,
   Component,
@@ -97,6 +99,72 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     previewTextureTileLengthMm: tileL > 0 ? tileL : undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
+  };
+}
+
+// --- Ambient materials (#4150) ---
+
+/**
+ * Read an optional finite number; returns undefined for null/absent/non-finite.
+ * Preserves 0 (valid PBR value) — unlike `num(..., 0)` which can't tell 0 from
+ * "missing". Used for nullable REAL preview_* fields.
+ */
+function optionalNum(v: unknown): number | undefined {
+  if (v === null || v === undefined || v === '') return undefined;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  return typeof v === 'string' && Number.isFinite(Number(v))
+    ? Number(v)
+    : undefined;
+}
+
+export function ambientMaterialToApi(
+  m: AmbientMaterial,
+): Record<string, unknown> {
+  return {
+    id: m.id,
+    code: m.code,
+    name: m.name,
+    active: m.active,
+    surface_type: m.surfaceType,
+    preview_color: m.previewColor ?? null,
+    preview_texture_url: m.previewTextureUrl ?? null,
+    preview_texture_tile_width_mm: m.previewTextureTileWidthMm ?? null,
+    preview_texture_tile_length_mm: m.previewTextureTileLengthMm ?? null,
+    preview_roughness: m.previewRoughness ?? null,
+    preview_metalness: m.previewMetalness ?? null,
+    preview_clearcoat: m.previewClearcoat ?? null,
+  };
+}
+
+export function ambientMaterialFromApi(
+  raw: Record<string, unknown>,
+): AmbientMaterial {
+  // Defensively coalesce surfaceType (legacy/typo rows → floor), mirroring the
+  // module mapper's furnitureType handling.
+  const surfaceRaw = str(raw.surface_type ?? raw.surfaceType);
+  const surfaceType: AmbientSurfaceType = surfaceRaw === 'wall' ? 'wall' : 'floor';
+  const tileW = num(
+    raw.preview_texture_tile_width_mm ?? raw.previewTextureTileWidthMm,
+    0,
+  );
+  const tileL = num(
+    raw.preview_texture_tile_length_mm ?? raw.previewTextureTileLengthMm,
+    0,
+  );
+  return {
+    id: str(raw.id),
+    code: str(raw.code),
+    name: str(raw.name),
+    active: bool(raw.active, true),
+    surfaceType,
+    previewColor: str(raw.preview_color ?? raw.previewColor) || undefined,
+    previewTextureUrl:
+      str(raw.preview_texture_url ?? raw.previewTextureUrl) || undefined,
+    previewTextureTileWidthMm: tileW > 0 ? tileW : undefined,
+    previewTextureTileLengthMm: tileL > 0 ? tileL : undefined,
+    previewRoughness: optionalNum(raw.preview_roughness ?? raw.previewRoughness),
+    previewMetalness: optionalNum(raw.preview_metalness ?? raw.previewMetalness),
+    previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
   };
 }
 
@@ -834,6 +902,9 @@ function kitchenLayoutToApi(
             s.wallCabinetZMm === undefined ? null : s.wallCabinetZMm,
           show_countertop:
             s.showCountertop === undefined ? null : s.showCountertop,
+          floor_material_id: s.floorMaterialId ?? null,
+          wall_material_id: s.wallMaterialId ?? null,
+          show_ceiling: s.showCeiling === undefined ? null : s.showCeiling,
           underlay: kitchenUnderlayToApi(s.underlay),
         }))
       : null,
@@ -937,6 +1008,9 @@ function kitchenLayoutFromApi(
     const sBc = optionalPlanMm(sr.base_clearance_mm ?? sr.baseClearanceMm);
     const sWz = optionalPlanMm(sr.wall_cabinet_z_mm ?? sr.wallCabinetZMm);
     const sCt = sr.show_countertop ?? sr.showCountertop;
+    const sFloorM = str(sr.floor_material_id ?? sr.floorMaterialId);
+    const sWallM = str(sr.wall_material_id ?? sr.wallMaterialId);
+    const sCeil = sr.show_ceiling ?? sr.showCeiling;
     const sUnderlay = kitchenUnderlayFromApi(sr.underlay);
     return {
       id: str(sr.id),
@@ -948,6 +1022,11 @@ function kitchenLayoutFromApi(
       ...(sCt === null || sCt === undefined || sCt === ''
         ? {}
         : { showCountertop: Boolean(sCt) }),
+      ...(sFloorM ? { floorMaterialId: sFloorM } : {}),
+      ...(sWallM ? { wallMaterialId: sWallM } : {}),
+      ...(sCeil === null || sCeil === undefined || sCeil === ''
+        ? {}
+        : { showCeiling: Boolean(sCeil) }),
       ...(sUnderlay ? { underlay: sUnderlay } : {}),
     };
   });
@@ -1419,6 +1498,8 @@ export function catalogFromApi(parts: {
   categories: unknown;
   customers: unknown;
   components?: unknown;
+  ambientMaterials?: unknown;
+  ambient_materials?: unknown;
 }): Catalog {
   const asRows = (v: unknown): Record<string, unknown>[] =>
     Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -1433,6 +1514,9 @@ export function catalogFromApi(parts: {
     categories: asRows(parts.categories).map(categoryFromApi),
     customers: asRows(parts.customers).map(customerFromApi),
     components: asRows(parts.components).map(componentFromApi),
+    ambientMaterials: asRows(parts.ambient_materials ?? parts.ambientMaterials).map(
+      ambientMaterialFromApi,
+    ),
   };
 }
 
