@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ambientMaterialFromApi,
+  ambientMaterialToApi,
+  catalogFromApi,
   materialToApi,
   materialFromApi,
   moduleToApi,
@@ -17,6 +20,7 @@ import {
   structureFromApi,
 } from './apiMappers';
 import type {
+  AmbientMaterial,
   Component,
   MaterialBoard,
   Module,
@@ -862,5 +866,209 @@ describe('apiMappers — project templates (#110)', () => {
     } as Record<string, unknown>);
     expect(fromCamel.measureDefaults).toEqual({ alto: { height: 2100 } });
     expect(fromCamel.marginFactor).toBe(1.5);
+  });
+});
+
+describe('ambient material + kitchen space refs mappers (#4150)', () => {
+  it('round-trips an AmbientMaterial with all preview fields', () => {
+    const m: AmbientMaterial = {
+      id: 'amb-1',
+      code: 'CERAM-1',
+      name: 'Cerámica blanca',
+      active: true,
+      surfaceType: 'floor',
+      previewColor: '#eeeeee',
+      previewTextureUrl: '/api/media/ceram.webp',
+      previewTextureTileWidthMm: 400,
+      previewTextureTileLengthMm: 400,
+      previewRoughness: 0.6,
+      previewMetalness: 0.1,
+      previewClearcoat: 0.2,
+    };
+    const api = ambientMaterialToApi(m);
+    // snake_case emission (spec #4150)
+    expect(api.surface_type).toBe('floor');
+    expect(api.preview_color).toBe('#eeeeee');
+    expect(api.preview_texture_url).toBe('/api/media/ceram.webp');
+    expect(api.preview_texture_tile_width_mm).toBe(400);
+    expect(api.preview_roughness).toBe(0.6);
+    expect(api.preview_clearcoat).toBe(0.2);
+
+    const round = ambientMaterialFromApi(api as Record<string, unknown>);
+    expect(round).toEqual(m);
+  });
+
+  it('emits null for omitted preview fields and round-trips to undefined', () => {
+    const m: AmbientMaterial = {
+      id: 'amb-2',
+      code: 'PINT-N',
+      name: 'Pared neutra',
+      active: false,
+      surfaceType: 'wall',
+    };
+    const api = ambientMaterialToApi(m);
+    expect(api.preview_color).toBeNull();
+    expect(api.preview_texture_tile_width_mm).toBeNull();
+    expect(api.preview_roughness).toBeNull();
+
+    expect(ambientMaterialFromApi(api as Record<string, unknown>)).toEqual(m);
+  });
+
+  it('preserves previewRoughness === 0 (valid value, not undefined)', () => {
+    const m: AmbientMaterial = {
+      id: 'amb-0',
+      code: 'GLOSS',
+      name: 'Gloss',
+      active: true,
+      surfaceType: 'wall',
+      previewRoughness: 0,
+    };
+    const round = ambientMaterialFromApi(
+      ambientMaterialToApi(m) as Record<string, unknown>,
+    );
+    expect(round.previewRoughness).toBe(0);
+  });
+
+  it('accepts camelCase keys on read (dual-key in)', () => {
+    const round = ambientMaterialFromApi({
+      id: 'amb-3',
+      code: 'WOOD-1',
+      name: 'Madera',
+      active: true,
+      surfaceType: 'floor',
+      previewColor: '#3a2a1a',
+      previewTextureTileWidthMm: 200,
+    });
+    expect(round.surfaceType).toBe('floor');
+    expect(round.previewColor).toBe('#3a2a1a');
+    expect(round.previewTextureTileWidthMm).toBe(200);
+  });
+
+  it('catalogFromApi composes ambientMaterials from the part payload', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      ambientMaterials: [
+        {
+          id: 'amb-x',
+          code: 'C',
+          name: 'Cotto',
+          active: true,
+          surface_type: 'floor',
+          preview_color: '#aa8866',
+        },
+      ],
+    });
+    expect(cat.ambientMaterials).toHaveLength(1);
+    expect(cat.ambientMaterials?.[0]?.surfaceType).toBe('floor');
+    expect(cat.ambientMaterials?.[0]?.previewColor).toBe('#aa8866');
+  });
+
+  it('catalogFromApi also reads the snake ambient_materials part key', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      ambient_materials: [
+        { id: 'a', code: 'X', name: 'Y', active: true, surface_type: 'wall' },
+      ],
+    });
+    expect(cat.ambientMaterials).toHaveLength(1);
+    expect(cat.ambientMaterials?.[0]?.surfaceType).toBe('wall');
+  });
+
+  it('catalogFromApi resolves ambientMaterials to [] on legacy payloads', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+    });
+    expect(cat.ambientMaterials).toEqual([]);
+  });
+
+  it('round-trips kitchen space ambient refs (floor/wall/showCeiling)', () => {
+    const p: Project = {
+      id: 'pr-amb',
+      name: 'Cocina con piso',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+        activeSpaceId: 'sp-1',
+        spaces: [
+          {
+            id: 'sp-1',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [],
+            floorMaterialId: 'amb-floor',
+            wallMaterialId: 'amb-wall',
+            showCeiling: true,
+          },
+        ],
+      },
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    const space = (kl.spaces as Record<string, unknown>[])[0]!;
+    expect(space.floor_material_id).toBe('amb-floor');
+    expect(space.wall_material_id).toBe('amb-wall');
+    expect(space.show_ceiling).toBe(true);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.kitchenLayout?.spaces?.[0]?.floorMaterialId).toBe('amb-floor');
+    expect(round.kitchenLayout?.spaces?.[0]?.wallMaterialId).toBe('amb-wall');
+    expect(round.kitchenLayout?.spaces?.[0]?.showCeiling).toBe(true);
+  });
+
+  it('legacy kitchen layout without ambient refs loads as undefined (no crash)', () => {
+    const p: Project = {
+      id: 'pr-legacy',
+      name: 'Legacy',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+        spaces: [
+          {
+            id: 'sp-1',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            placements: [],
+          },
+        ],
+      },
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const round = projectFromApi(projectToApi(p) as Record<string, unknown>);
+    expect(round.kitchenLayout?.spaces?.[0]?.floorMaterialId).toBeUndefined();
+    expect(round.kitchenLayout?.spaces?.[0]?.wallMaterialId).toBeUndefined();
+    expect(round.kitchenLayout?.spaces?.[0]?.showCeiling).toBeUndefined();
   });
 });
