@@ -84,6 +84,15 @@ export type MaterialDraft = {
    * 0 = default client tile.
    */
   previewTextureTileLengthMm: number;
+  /**
+   * Optional 0..1 PBR roughness override for the 3D preview.
+   * undefined = fall back to the lighting-mode value (0 is a valid value).
+   */
+  previewRoughness?: number;
+  /** Optional 0..1 metalness (1 = metal, 0 = dielectric). undefined = fallback. */
+  previewMetalness?: number;
+  /** Optional 0..1 clearcoat (lacquer layer). undefined = fallback. */
+  previewClearcoat?: number;
   notes: string;
 };
 
@@ -131,6 +140,9 @@ function toDraft(item: MaterialBoard): MaterialDraft {
     previewTextureUrl: item.previewTextureUrl ?? '',
     previewTextureTileWidthMm: item.previewTextureTileWidthMm ?? 0,
     previewTextureTileLengthMm: item.previewTextureTileLengthMm ?? 0,
+    previewRoughness: item.previewRoughness,
+    previewMetalness: item.previewMetalness,
+    previewClearcoat: item.previewClearcoat,
     notes: item.notes ?? '',
   };
 }
@@ -149,9 +161,38 @@ function hasPreview3dConfig(d: MaterialDraft): boolean {
     d.previewColor.trim() ||
       d.previewTextureUrl.trim() ||
       d.previewTextureTileWidthMm > 0 ||
-      d.previewTextureTileLengthMm > 0,
+      d.previewTextureTileLengthMm > 0 ||
+      d.previewRoughness != null ||
+      d.previewMetalness != null ||
+      d.previewClearcoat != null,
   );
 }
+
+/**
+ * Clamp a PBR scalar to [0,1]. undefined / NaN / ±Infinity → undefined (so the
+ * preview falls back to the lighting-mode value). 0 is preserved (valid value).
+ */
+function clampPbr(v: number | undefined): number | undefined {
+  if (v == null || !Number.isFinite(v)) return undefined;
+  return Math.min(1, Math.max(0, v));
+}
+
+/**
+ * Finish presets (decision D2: UI-only — they just set the three numbers).
+ * Ordered: roughness / metalness / clearcoat.
+ */
+const PBR_PRESETS: ReadonlyArray<{
+  readonly id: string;
+  readonly label: string;
+  readonly roughness: number;
+  readonly metalness: number;
+  readonly clearcoat: number;
+}> = [
+  { id: 'mate', label: 'Mate', roughness: 0.9, metalness: 0, clearcoat: 0 },
+  { id: 'satinado', label: 'Satinado', roughness: 0.55, metalness: 0, clearcoat: 0.25 },
+  { id: 'brillante', label: 'Brillante', roughness: 0.25, metalness: 0, clearcoat: 0.7 },
+  { id: 'metalico', label: 'Metálico', roughness: 0.35, metalness: 1, clearcoat: 0 },
+];
 
 export interface MaterialsCatalogProps {
   readonly materials: readonly MaterialBoard[];
@@ -435,6 +476,9 @@ export function MaterialsCatalog({
         draft.previewTextureTileLengthMm > 0
           ? draft.previewTextureTileLengthMm
           : 0,
+      previewRoughness: clampPbr(draft.previewRoughness),
+      previewMetalness: clampPbr(draft.previewMetalness),
+      previewClearcoat: clampPbr(draft.previewClearcoat),
     };
 
     if (editingId) {
@@ -1158,6 +1202,118 @@ export function MaterialsCatalog({
                   Tamaño real de una imagen completa de textura (mm). Vacío =
                   280 mm. Más mm = textura más grande en la pieza.
                 </p>
+                <div
+                  className="catalog-form__field"
+                  data-testid="material-pbr-field"
+                >
+                  <label>Acabado PBR (3D)</label>
+                  <div
+                    className="catalog-form__inline-actions"
+                    role="group"
+                    aria-label="Acabados predefinidos"
+                  >
+                    {PBR_PRESETS.map((preset) => {
+                      const active =
+                        draft.previewRoughness === preset.roughness &&
+                        draft.previewMetalness === preset.metalness &&
+                        draft.previewClearcoat === preset.clearcoat;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={`btn btn--small${active ? ' btn--active' : ''}`}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              previewRoughness: preset.roughness,
+                              previewMetalness: preset.metalness,
+                              previewClearcoat: preset.clearcoat,
+                            })
+                          }
+                          aria-pressed={active}
+                          data-testid={`material-pbr-preset-${preset.id}`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="catalog-form__field-row">
+                    <div className="catalog-form__field catalog-form__field--grow">
+                      <label htmlFor="mat-pbr-roughness">Rugosidad (3D)</label>
+                      <input
+                        id="mat-pbr-roughness"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={draft.previewRoughness ?? ''}
+                        placeholder="0–1"
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            previewRoughness:
+                              e.target.value === ''
+                                ? undefined
+                                : Number(e.target.value),
+                          })
+                        }
+                        data-testid="material-pbr-roughness"
+                      />
+                    </div>
+                    <div className="catalog-form__field catalog-form__field--grow">
+                      <label htmlFor="mat-pbr-metalness">
+                        Metalicidad (3D)
+                      </label>
+                      <input
+                        id="mat-pbr-metalness"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={draft.previewMetalness ?? ''}
+                        placeholder="0–1"
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            previewMetalness:
+                              e.target.value === ''
+                                ? undefined
+                                : Number(e.target.value),
+                          })
+                        }
+                        data-testid="material-pbr-metalness"
+                      />
+                    </div>
+                    <div className="catalog-form__field catalog-form__field--grow">
+                      <label htmlFor="mat-pbr-clearcoat">Barniz (3D)</label>
+                      <input
+                        id="mat-pbr-clearcoat"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={draft.previewClearcoat ?? ''}
+                        placeholder="0–1"
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            previewClearcoat:
+                              e.target.value === ''
+                                ? undefined
+                                : Number(e.target.value),
+                          })
+                        }
+                        data-testid="material-pbr-clearcoat"
+                      />
+                    </div>
+                  </div>
+                  <p className="catalog-form__hint">
+                    Rugosidad, metalicidad y barniz para el render 3D (0–1).
+                    Vacío = valor por modo de luz. Metálico = acero; Barniz =
+                    lacado brillante.
+                  </p>
+                </div>
               </div>
             ) : null}
           </div>
