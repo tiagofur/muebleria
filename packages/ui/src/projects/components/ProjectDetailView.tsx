@@ -173,6 +173,9 @@ export interface ProjectDetailViewProps {
   readonly onBackToList: () => void;
   readonly onOpenPresentation: () => void;
   readonly onOpenSpatialStudio?: () => void;
+  readonly postAddPlaceCue?: boolean;
+  readonly onDismissPostAddPlaceCue?: () => void;
+  readonly onOpenSpatialStudioUnplaced?: () => void;
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
@@ -305,6 +308,7 @@ function ProjectDetailViewInner(): ReactNode {
     onBackToList,
     onOpenPresentation,
     onOpenSpatialStudio,
+    onOpenSpatialStudioUnplaced,
     onEditMeta,
     onDuplicate,
     onSaveAsTemplate,
@@ -686,7 +690,7 @@ function ProjectDetailViewInner(): ReactNode {
                   data-testid="project-tools-kitchen"
                   onClick={() => toggleTools('kitchen')}
                 >
-                  Plan de cocina
+                  Plano / ambiente
                   {kitchenUnplacedCount > 0 ? (
                     <span
                       className="project-detail__tools-badge"
@@ -738,14 +742,42 @@ function ProjectDetailViewInner(): ReactNode {
                 className="project-detail__tools-panel"
                 data-testid="project-tools-panel-kitchen"
               >
-                <KitchenPlanPanel
-                  project={project}
-                  modules={modules}
-                  canEdit={Boolean(canEditContent && onUpdateKitchenLayout)}
-                  onChange={(layout) => {
-                    onUpdateKitchenLayout?.(project.id, layout);
-                  }}
-                />
+                <p className="project-detail__tools-hint">
+                  El diseño del ambiente vive en Proyectar (3D + planta).
+                </p>
+                {onOpenSpatialStudio || onOpenSpatialStudioUnplaced ? (
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--small"
+                    data-testid="project-tools-open-projectar"
+                    onClick={() => {
+                      if (
+                        kitchenUnplacedCount > 0 &&
+                        onOpenSpatialStudioUnplaced
+                      ) {
+                        onOpenSpatialStudioUnplaced();
+                        return;
+                      }
+                      onOpenSpatialStudio?.();
+                    }}
+                  >
+                    Abrir Proyectar
+                  </button>
+                ) : null}
+                <details
+                  className="project-detail__kitchen-advanced"
+                  data-testid="project-tools-kitchen-advanced"
+                >
+                  <summary>Edición 2D rápida (avanzado)</summary>
+                  <KitchenPlanPanel
+                    project={project}
+                    modules={modules}
+                    canEdit={Boolean(canEditContent && onUpdateKitchenLayout)}
+                    onChange={(layout) => {
+                      onUpdateKitchenLayout?.(project.id, layout);
+                    }}
+                  />
+                </details>
               </div>
             ) : null}
 
@@ -849,6 +881,9 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onBackToList: props.onBackToList,
     onOpenPresentation: props.onOpenPresentation,
     onOpenSpatialStudio: props.onOpenSpatialStudio,
+    postAddPlaceCue: props.postAddPlaceCue ?? false,
+    onDismissPostAddPlaceCue: props.onDismissPostAddPlaceCue,
+    onOpenSpatialStudioUnplaced: props.onOpenSpatialStudioUnplaced,
     onEditMeta: props.onEditMeta,
     onDuplicate: props.onDuplicate,
     onSaveAsTemplate: props.onSaveAsTemplate,

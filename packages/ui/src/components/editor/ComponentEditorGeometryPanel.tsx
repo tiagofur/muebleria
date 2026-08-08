@@ -6,6 +6,7 @@
  */
 
 import {
+  useEffect,
   useState,
   type Dispatch,
   type ReactNode,
@@ -105,6 +106,21 @@ export function ComponentEditorGeometryPanel({
     }));
   };
 
+  // Clear stale length/width dim errors once a formula replaces the base (R3-S3).
+  useEffect(() => {
+    if (!draft.lengthFormula.trim()) return;
+    setDimErrors((prev) =>
+      prev.length ? { ...prev, length: undefined } : prev,
+    );
+  }, [draft.lengthFormula]);
+
+  useEffect(() => {
+    if (!draft.widthFormula.trim()) return;
+    setDimErrors((prev) =>
+      prev.width ? { ...prev, width: undefined } : prev,
+    );
+  }, [draft.widthFormula]);
+
   const openGuideOnFormulaFocus = () => {
     setGuideOpen(true);
   };
@@ -187,30 +203,33 @@ export function ComponentEditorGeometryPanel({
       <p className="component-geometry__viewport-hint">
         Referencia solo para el preview (no se guarda en el componente).
       </p>
-      <FurnitureScene3D
-        modules={[
-          {
-            key: 'component-preview',
-            parts: previewParts,
-            width: containerDims.PW,
-            height: containerDims.PH,
-            depth: containerDims.PD,
-            originX: 0,
-            originY: 0,
-            originZ: 0,
-            showOuterGhost: showInContext,
-          },
-        ]}
-        totalWidth={containerDims.PW}
-        totalHeight={containerDims.PH}
-        totalDepth={containerDims.PD}
-        showFloor={false}
-        colorMode="material"
-        materialColors={materialColors}
-        materialTextures={materialTextures}
-        showOutlines={showOutlines}
-        testId="component-geometry-3d"
-      />
+      {/* Unmount WebGL when the geometry tab is hidden (C6). */}
+      {!hidden ? (
+        <FurnitureScene3D
+          modules={[
+            {
+              key: 'component-preview',
+              parts: previewParts,
+              width: containerDims.PW,
+              height: containerDims.PH,
+              depth: containerDims.PD,
+              originX: 0,
+              originY: 0,
+              originZ: 0,
+              showOuterGhost: showInContext,
+            },
+          ]}
+          totalWidth={containerDims.PW}
+          totalHeight={containerDims.PH}
+          totalDepth={containerDims.PD}
+          showFloor={false}
+          colorMode="material"
+          materialColors={materialColors}
+          materialTextures={materialTextures}
+          showOutlines={showOutlines}
+          testId="component-geometry-3d"
+        />
+      ) : null}
     </div>
   );
 
@@ -297,9 +316,13 @@ export function ComponentEditorGeometryPanel({
                       lengthMm: Number(e.target.value) || 0,
                     }))
                   }
-                  onBlur={() => validateDim('length', 'largo', draft.lengthMm)}
+                  onBlur={() => {
+                    if (!draft.lengthFormula.trim()) {
+                      validateDim('length', 'largo', draft.lengthMm);
+                    }
+                  }}
                   aria-invalid={dimErrors.length ? true : undefined}
-                  required
+                  required={!draft.lengthFormula.trim()}
                   data-testid="input-length"
                 />
                 {dimErrors.length ? (
@@ -326,9 +349,13 @@ export function ComponentEditorGeometryPanel({
                       widthMm: Number(e.target.value) || 0,
                     }))
                   }
-                  onBlur={() => validateDim('width', 'ancho', draft.widthMm)}
+                  onBlur={() => {
+                    if (!draft.widthFormula.trim()) {
+                      validateDim('width', 'ancho', draft.widthMm);
+                    }
+                  }}
                   aria-invalid={dimErrors.width ? true : undefined}
-                  required
+                  required={!draft.widthFormula.trim()}
                   data-testid="input-width"
                 />
                 {dimErrors.width ? (

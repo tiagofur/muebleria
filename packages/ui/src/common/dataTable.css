@@ -119,6 +119,15 @@
   border-bottom: none;
 }
 
+/* —— Tabular numeric cells (prices, dimensions, codes) —— */
+.data-table .num,
+.data-table-num,
+.catalog-table__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* —— Row state modifiers (clickable / selected / inactive) —— */
 .catalog-table__row.is-inactive,
 .users-table__row.is-inactive {

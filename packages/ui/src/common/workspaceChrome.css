@@ -43,7 +43,7 @@
 .workspace-chrome__code {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   line-height: var(--leading-tight);
 }
 

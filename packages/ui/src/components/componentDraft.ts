@@ -2,7 +2,7 @@
  * Component catalog draft helpers and shared placement labels.
  */
 
-import type { Component } from '@muebles/domain';
+import type { Component, Perforation } from '@muebles/domain';
 
 /** Shared placement options for components and structure/module instances. */
 export const COMPONENT_PLACEMENTS: {
@@ -163,6 +163,11 @@ export interface ComponentDraft {
   optionRoles: string;
   notes: string;
   active: boolean;
+  /**
+   * Round-trip only — no CNC editor yet. Preserved so update does not wipe
+   * existing perforations on the entity (C2).
+   */
+  perforations?: readonly Perforation[];
 }
 
 export function emptyComponentDraft(): ComponentDraft {
@@ -226,12 +231,21 @@ export function componentToDraft(item: Component): ComponentDraft {
     optionRoles: item.optionRoles.join(', '),
     notes: item.notes ?? '',
     active: item.active,
+    perforations: item.perforations,
   };
 }
 
+/**
+ * Compact geometry label for list/detail chrome.
+ * When length/width formulas exist, show the formula text instead of a 0×0 base
+ * so parametric pieces stay scannable (JD R3-S1).
+ */
 export function geometrySummary(item: Component): string {
   if (item.geometry.kind === 'rectangular_board') {
-    return `${item.geometry.lengthMm}×${item.geometry.widthMm}×${item.geometry.thicknessMm} mm`;
+    const g = item.geometry;
+    const lengthPart = g.lengthFormula?.trim() || String(g.lengthMm);
+    const widthPart = g.widthFormula?.trim() || String(g.widthMm);
+    return `${lengthPart}×${widthPart}×${g.thicknessMm} mm`;
   }
   return '—';
 }

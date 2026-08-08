@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
+import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
 import type {
   Customer,
   EdgeBand,
@@ -232,6 +233,7 @@ function renderScreen(
 
 afterEach(() => {
   cleanup();
+  resetRequestCreateKeyConsumers();
 });
 
 describe('ProjectsScreen F022', () => {
@@ -1017,5 +1019,32 @@ describe('ProjectsScreen project templates (#110)', () => {
     await user.click(screen.getByTestId('delete-template-tmpl-test'));
 
     expect(onDeleteTemplate).toHaveBeenCalledWith('tmpl-test');
+  });
+
+  it('does not auto-open Proyectar after add; shows place cue banner', async () => {
+    const user = userEvent.setup();
+    const onUpdateKitchenLayout = vi.fn();
+    renderScreen({ onUpdateKitchenLayout });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.getByTestId('project-detail')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /Agregar mueble/i }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Agregar' }));
+
+    // Studio must stay closed — cotizar ≠ proyectar.
+    expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
+    expect(screen.getByTestId('project-detail')).toBeTruthy();
+
+    const cue = screen.getByTestId('project-post-add-place-cue');
+    expect(cue.getAttribute('role')).toBe('status');
+    expect(cue.textContent).toMatch(/Mueble agregado a la cotización/i);
+
+    await user.click(screen.getByTestId('project-post-add-place-cue-open'));
+    expect(screen.getByTestId('project-spatial-studio')).toBeTruthy();
+    expect(
+      screen.getByTestId('spatial-studio-filter-unplaced').className,
+    ).toMatch(/filter--on/);
   });
 });

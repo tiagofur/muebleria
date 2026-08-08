@@ -10,11 +10,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MaterialBoard } from '@muebles/domain';
+import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
 import { MaterialsCatalog } from './MaterialsCatalog';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  resetRequestCreateKeyConsumers();
+});
 
 const sampleMaterial: MaterialBoard = {
   id: 'mat-1',

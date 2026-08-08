@@ -15,6 +15,12 @@ export type ComponentEditorEdgesPanelProps = {
   readonly draft: ComponentDraft;
   readonly setDraft: Dispatch<SetStateAction<ComponentDraft>>;
   readonly hidden: boolean;
+  /**
+   * Resolved/preview board dims (formulas evaluated). When formulas drive size,
+   * base mm may be 0 — prefer these so the diagram is never 0×0 (JD R3-S2).
+   */
+  readonly previewLengthMm?: number;
+  readonly previewWidthMm?: number;
 };
 
 const EDGE_KEYS = ['edgeL1', 'edgeL2', 'edgeW1', 'edgeW2'] as const;
@@ -23,6 +29,8 @@ export function ComponentEditorEdgesPanel({
   draft,
   setDraft,
   hidden,
+  previewLengthMm,
+  previewWidthMm,
 }: ComponentEditorEdgesPanelProps): ReactNode {
   const edgeStates: EdgeStates = {
     L1: draft.edgeL1,
@@ -35,6 +43,16 @@ export function ComponentEditorEdgesPanel({
     const key = `edge${side}` as (typeof EDGE_KEYS)[number];
     setDraft((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Prefer resolved preview dims when base is 0 / formulas present (R3-S2).
+  const lengthMm =
+    previewLengthMm != null && previewLengthMm > 0
+      ? previewLengthMm
+      : draft.lengthMm;
+  const widthMm =
+    previewWidthMm != null && previewWidthMm > 0
+      ? previewWidthMm
+      : draft.widthMm;
 
   return (
     <div
@@ -53,8 +71,8 @@ export function ComponentEditorEdgesPanel({
       <PlankEdgeDiagram
         edges={edgeStates}
         onToggle={toggle}
-        lengthMm={draft.lengthMm}
-        widthMm={draft.widthMm}
+        lengthMm={lengthMm}
+        widthMm={widthMm}
       />
 
       <details className="component-edges__fallback">

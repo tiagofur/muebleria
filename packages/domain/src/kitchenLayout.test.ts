@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createDefaultLWalls,
+  seedDefaultLWallsIfEmpty,
   layoutKitchenPlacements,
   nextOffsetOnWall,
   pruneKitchenLayout,
@@ -40,6 +41,22 @@ describe('kitchenLayout', () => {
     expect(frames[0]!.endXMm).toBe(3000);
     expect(frames[1]!.angleDeg).toBe(90);
     expect(frames[1]!.endYMm).toBe(2500);
+  });
+
+  it('seedDefaultLWallsIfEmpty seeds only when active walls are empty', () => {
+    let n = 0;
+    const newId = () => `w${++n}`;
+    const empty = ensureKitchenSpaces({ walls: [], placements: [] });
+    const seeded = seedDefaultLWallsIfEmpty(empty, newId);
+    expect(seeded.walls).toHaveLength(2);
+    expect(seeded.walls[0]!.name).toBe('Muro A');
+    expect(seeded.walls[1]!.name).toBe('Muro B');
+    // Active space mirrored
+    expect(seeded.spaces?.[0]?.walls).toHaveLength(2);
+
+    const again = seedDefaultLWallsIfEmpty(seeded, newId);
+    expect(again.walls).toEqual(seeded.walls);
+    expect(again.walls[0]!.id).toBe(seeded.walls[0]!.id);
   });
 
   it('places modules on walls with floor/wall elevation', () => {

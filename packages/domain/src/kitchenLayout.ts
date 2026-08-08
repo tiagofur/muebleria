@@ -1006,3 +1006,20 @@ export function createDefaultLWalls(newId: () => string): KitchenWall[] {
     },
   ];
 }
+
+/**
+ * Seed default L walls (Muro A + Muro B) when the active space has no walls.
+ * No-op when walls already exist. Multi-space safe via ensureKitchenSpaces +
+ * syncActiveKitchenSpace.
+ */
+export function seedDefaultLWallsIfEmpty(
+  layout: ProjectKitchenLayout,
+  newId: () => string,
+): ProjectKitchenLayout {
+  const ensured = ensureKitchenSpaces(layout);
+  if (ensured.walls.length > 0) return ensured;
+  return syncActiveKitchenSpace({
+    ...ensured,
+    walls: createDefaultLWalls(newId),
+  });
+}

@@ -4,14 +4,18 @@
  * inline editors (Fase 3 follow-up).
  *
  * Contract:
- *   const [draft, setDraft, clearDraft] = useDraftSession(key, initialDraft);
+ *   const [draft, setDraft, clearDraft, setDraftLocal] =
+ *     useDraftSession(key, initialDraft);
  *
  * - On first mount: if sessionStorage has a value for `key`, return it;
- *   otherwise return `initialDraft` and seed sessionStorage.
+ *   otherwise return `initialDraft` (session left empty until setDraft).
  * - setDraft(next | (prev) => next): update both React state and sessionStorage.
  *   Accepts the same shapes as React's setState (value OR updater function).
  * - clearDraft(): remove the key from sessionStorage (called on save or
  *   discard). Leaves the React state alone (caller decides what to do).
+ * - setDraftLocal(next | (prev) => next): update React state ONLY — does not
+ *   write sessionStorage. Use on close/reset so an empty draft never sticks
+ *   under the entity key after clearDraft (JD R4-C1 race).
  *
  * The hook is intentionally simple — it does NOT parse JSON shape; the caller
  * passes the same T both ways. sessionStorage values are JSON.stringify'd.
@@ -37,6 +41,32 @@ function readSession<T>(key: string): T | null {
   }
 }
 
+/**
+ * Read a draft from sessionStorage without mounting the hook.
+ * Used by editor seed effects so F5/remount restore is not wiped by
+ * entity→draft reseeding (JD R3-C1).
+ */
+export function readDraftSession<T>(key: string): T | null {
+  return readSession<T>(key);
+}
+
+/**
+ * Seed an editor draft from the entity baseline without overwriting a
+ * session-restored draft. Always sets `initialDraft` for dirty comparison;
+ * only calls `setDraft` when sessionStorage has no value for `draftKey`.
+ */
+export function seedEditorDraftFromBaseline<T>(
+  draftKey: string,
+  baseline: T,
+  setDraft: (next: T) => void,
+  setInitialDraft: (next: T) => void,
+): void {
+  setInitialDraft(baseline);
+  if (readSession(draftKey) === null) {
+    setDraft(baseline);
+  }
+}
+
 function writeSession<T>(key: string, value: T): void {
   try {
     sessionStorage.setItem(key, JSON.stringify(value));
@@ -56,7 +86,12 @@ function removeSession(key: string): void {
 export function useDraftSession<T>(
   key: string,
   initialDraft: T,
-): readonly [T, Dispatch<SetStateAction<T>>, () => void] {
+): readonly [
+  T,
+  Dispatch<SetStateAction<T>>,
+  () => void,
+  Dispatch<SetStateAction<T>>,
+] {
   const [state, setState] = useState<T>(() => {
     const persisted = readSession<T>(key);
     if (persisted !== null) return persisted;
@@ -102,5 +137,12 @@ export function useDraftSession<T>(
     removeSession(keyRef.current);
   }, []);
 
-  return [state, setDraft, clearDraft] as const;
+  /** React-only state update — never touches sessionStorage (JD R4-C1). */
+  const setDraftLocal = useCallback<Dispatch<SetStateAction<T>>>((next) => {
+    setState((prev) =>
+      typeof next === 'function' ? (next as (prev: T) => T)(prev) : next,
+    );
+  }, []);
+
+  return [state, setDraft, clearDraft, setDraftLocal] as const;
 }

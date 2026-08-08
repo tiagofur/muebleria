@@ -47,6 +47,7 @@ import {
   resolveWallCabinetZMm,
   resolveWallFrames,
   scalePlanUnderlay,
+  seedDefaultLWallsIfEmpty,
   setActiveKitchenSpace,
   snapOffsetOnWall,
   syncActiveKitchenSpace,
@@ -116,13 +117,16 @@ export type ProjectSpatialStudioProps = {
   /** Project sale total (read-only context in chrome). */
   readonly quoteSalePrice?: number | null;
   /**
-   * When opening after "Agregar mueble", start on unplaced filter and
-   * optionally select an instance key (`itemId#index`).
+   * Open/focus studio without forcing after every quote add.
+   * Used by "Colocar en Proyectar" cue, tools CTA, and re-focus when
+   * adding while the studio is already open (re-applies when prop changes).
    */
   readonly bootstrap?: {
     readonly listFilter?: ListFilter;
     readonly selectKey?: string | null;
   } | null;
+  /** Open quote add-item modal while keeping Proyectar open. */
+  readonly onRequestAddItem?: () => void;
   /**
    * Soft lock actor for multi-user Proyectar. When omitted, no lock protocol.
    */
@@ -209,6 +213,7 @@ export function ProjectSpatialStudio({
   resolveMediaUrl,
   quoteSalePrice = null,
   bootstrap = null,
+  onRequestAddItem,
   planActor,
   onAcquirePlanEdit,
   onRenewPlanEdit,
@@ -228,10 +233,12 @@ export function ProjectSpatialStudio({
   const [surfaceMode, setSurfaceMode] = useState<MaterialSurfaceMode>(
     DEFAULT_MATERIAL_SURFACE_MODE,
   );
+  // Default 3/4 from first paint so FurnitureScene3D never mounts with
+  // cameraView=null (that enables Bounds.fit and steals the isometric preset).
   const [cameraView, setCameraView] = useState<{
     readonly type: 'front' | 'top' | 'side' | 'isometric';
     readonly ts: number;
-  } | null>(null);
+  }>({ type: 'isometric', ts: 0 });
   const [listCollapsed, setListCollapsed] = useState(false);
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
@@ -241,10 +248,12 @@ export function ProjectSpatialStudio({
     DEFAULT_SCENE_LIGHTING_MODE,
   );
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [defaultWallsMsg, setDefaultWallsMsg] = useState<string | null>(null);
   /** Read-only space navigation — must not persist layout / activeSpaceId. */
   const [viewSpaceId, setViewSpaceId] = useState<string | null>(null);
   const wallDragSession = useRef(false);
-  const appliedBootstrap = useRef(false);
+  const lastBootstrapKey = useRef<string | null>(null);
+  const seededDefaultWalls = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   // Soft-lock handlers often re-created each parent render. Keep them in refs
   // so the lock effect does not re-run → acquire → store patch → loop.
@@ -265,19 +274,34 @@ export function ProjectSpatialStudio({
       setUndoStack([]);
       setRedoStack([]);
       wallDragSession.current = false;
-      appliedBootstrap.current = false;
+      lastBootstrapKey.current = null;
+      seededDefaultWalls.current = false;
       setPlanLockBlocked(false);
+      setDefaultWallsMsg(null);
       return;
     }
-    if (bootstrap && !appliedBootstrap.current) {
-      appliedBootstrap.current = true;
-      if (bootstrap.listFilter) setListFilter(bootstrap.listFilter);
-      if (bootstrap.selectKey) {
-        setSelectedKey(bootstrap.selectKey);
-        setInspectorTab('props');
-      }
-      setListCollapsed(false);
+    // Default camera 3/4 (isometric) on every open for framing.
+    setCameraView({ type: 'isometric', ts: Date.now() });
+  }, [open]);
+
+  // Re-apply bootstrap whenever the prop identity/content changes while open
+  // (e.g. add while studio open → parent sets new { listFilter: 'unplaced' }).
+  useEffect(() => {
+    if (!open || !bootstrap) return;
+    const key = JSON.stringify({
+      listFilter: bootstrap.listFilter ?? null,
+      selectKey: bootstrap.selectKey ?? null,
+    });
+    if (lastBootstrapKey.current === key) return;
+    lastBootstrapKey.current = key;
+    if (bootstrap.listFilter) setListFilter(bootstrap.listFilter);
+    if (bootstrap.selectKey) {
+      setSelectedKey(bootstrap.selectKey);
+      setInspectorTab('props');
+    } else if (bootstrap.selectKey === null) {
+      // Explicit clear when parent wants list focus only.
     }
+    setListCollapsed(false);
   }, [open, bootstrap]);
 
   // Multi-user soft lock for Proyectar.
@@ -303,7 +327,10 @@ export function ProjectSpatialStudio({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // Nested dialogs (e.g. Agregar mueble) own Esc; do not close the studio.
+      if (document.querySelector('.ui-modal-root.is-open')) return;
+      onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -339,6 +366,31 @@ export function ProjectSpatialStudio({
     if (viewSpaceId === baseLayout.activeSpaceId) return baseLayout;
     return setActiveKitchenSpace(baseLayout, viewSpaceId);
   }, [baseLayout, canEdit, viewSpaceId]);
+
+  // Seed default L walls once when opening an empty editable space.
+  useEffect(() => {
+    if (!open || !canEdit) return;
+    if (seededDefaultWalls.current) return;
+    if (layout.walls.length > 0) {
+      seededDefaultWalls.current = true;
+      return;
+    }
+    seededDefaultWalls.current = true;
+    const seeded = seedDefaultLWallsIfEmpty(layout, newId);
+    onChangeLayout(pruneKitchenLayout(seeded, project.items));
+    setDefaultWallsMsg(
+      'Ambiente en L por defecto (Muro A + Muro B). Ajustá o importá un plano si hace falta.',
+    );
+    // Re-fire isometric so framing updates after walls appear.
+    setCameraView({ type: 'isometric', ts: Date.now() });
+  }, [
+    open,
+    canEdit,
+    layout,
+    onChangeLayout,
+    project.items,
+  ]);
+
   const lockHolderName =
     heldByOther && project.planEditSession?.userName?.trim()
       ? project.planEditSession.userName.trim()
@@ -1334,17 +1386,40 @@ export function ProjectSpatialStudio({
             <h3 className="spatial-studio__section-title" style={{ margin: 0 }}>
               Muebles
             </h3>
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              onClick={() => setListCollapsed(true)}
-              title="Ocultar lista"
-              data-testid="spatial-studio-collapse-list"
-              aria-label="Ocultar lista"
-            >
-              <PanelLeftClose size={16} strokeWidth={1.5} aria-hidden />
-            </button>
+            <div className="spatial-studio__sidebar-head-actions">
+              {canEdit && onRequestAddItem ? (
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={onRequestAddItem}
+                  data-testid="spatial-studio-add-item"
+                  title="Agregar mueble a la cotización"
+                >
+                  <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                onClick={() => setListCollapsed(true)}
+                title="Ocultar lista"
+                data-testid="spatial-studio-collapse-list"
+                aria-label="Ocultar lista"
+              >
+                <PanelLeftClose size={16} strokeWidth={1.5} aria-hidden />
+              </button>
+            </div>
           </div>
+
+          {defaultWallsMsg ? (
+            <p
+              className="spatial-studio__import-msg"
+              role="status"
+              data-testid="spatial-studio-default-walls-msg"
+            >
+              {defaultWallsMsg}
+            </p>
+          ) : null}
 
           <div
             className="spatial-studio__filter-row"
@@ -2645,6 +2720,26 @@ export function ProjectSpatialStudio({
                           Anclar a muro activo
                         </button>
                       ) : null}
+                      {canEdit ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn--small"
+                            onClick={() =>
+                              removePlacement(
+                                selectedPlacement.itemId,
+                                selectedPlacement.instanceIndex,
+                              )
+                            }
+                            data-testid="spatial-studio-unplace"
+                          >
+                            Sacar del plano (sigue en cotización)
+                          </button>
+                          <p className="spatial-studio__hint">
+                            Sacar del plano no borra el mueble de la cotización.
+                          </p>
+                        </>
+                      ) : null}
                     </>
                   ) : (
                     <>
@@ -2864,19 +2959,25 @@ export function ProjectSpatialStudio({
                       ) : null}
 
                       {canEdit ? (
-                        <button
-                          type="button"
-                          className="btn btn--small"
-                          onClick={() =>
-                            removePlacement(
-                              selectedPlacement.itemId,
-                              selectedPlacement.instanceIndex,
-                            )
-                          }
-                          data-testid="spatial-studio-unplace"
-                        >
-                          Sacar del plano
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn--small"
+                            onClick={() =>
+                              removePlacement(
+                                selectedPlacement.itemId,
+                                selectedPlacement.instanceIndex,
+                              )
+                            }
+                            data-testid="spatial-studio-unplace"
+                          >
+                            Sacar del plano (sigue en cotización)
+                          </button>
+                          <p className="spatial-studio__hint">
+                            Cambiar muro con el selector de arriba. Sacar del
+                            plano no borra el mueble de la cotización.
+                          </p>
+                        </>
                       ) : null}
                     </>
                   )}

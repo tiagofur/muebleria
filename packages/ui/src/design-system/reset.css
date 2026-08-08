@@ -96,6 +96,10 @@ table {
   border-spacing: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 :focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus, 0 0 0 3px hsla(245 58% 51% / 0.25));

@@ -6,14 +6,16 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from 'react';
 import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@muebles/domain';
-import { previewPartForComponent } from '@muebles/domain';
+import { evaluatePartFormula, previewPartForComponent } from '@muebles/domain';
 import {
   EntityEditorLayout,
+  seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
   useRoutableEntitySelection,
@@ -26,6 +28,7 @@ import {
 import {
   componentToDraft,
   emptyComponentDraft,
+  placementLabel,
   type ComponentDraft,
   type ComponentEditorTab,
 } from './componentDraft';
@@ -79,6 +82,9 @@ export function ComponentsScreen({
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
+  const [placementFilter, setPlacementFilter] = useState<string>('all');
+  /** Last edit-id we seeded into the draft — prevents wipe on `components` identity churn. */
+  const seededEditIdRef = useRef<string | null>(null);
 
   const componentIds = useMemo(
     () => components.map((c) => c.id),
@@ -211,46 +217,68 @@ export function ComponentsScreen({
 
   /**
    * Sync edit mode from shell URL (`/components/:id/edit` — Fase 3 UI 3c).
-   * - `'new'` sentinel: open create-new editor.
-   * - Real id: open edit on that component.
-   * - null / '': editor closed.
+   * Seed draft only when `openComponentEditId` changes (or when a real id
+   * first becomes available). Do NOT re-seed on unrelated `components`
+   * identity changes — that wipes in-progress edits / session draft (C1).
    */
   useEffect(() => {
     if (openComponentEditId == null || openComponentEditId === '') {
       setModalOpen(false);
       setEditingId(null);
+      seededEditIdRef.current = null;
       return;
     }
     if (openComponentEditId === 'new') {
-      const fresh = emptyComponentDraft();
-      setDraft(fresh);
-      setInitialDraft(fresh);
+      if (seededEditIdRef.current === 'new') return;
+      // Do not wipe session-restored draft on F5/remount (R3-C1).
+      seedEditorDraftFromBaseline(
+        draftKey,
+        emptyComponentDraft(),
+        setDraft,
+        setInitialDraft,
+      );
       setEditingId(null);
       setEditorTab('general');
       setError(null);
       setModalOpen(true);
+      seededEditIdRef.current = 'new';
       return;
     }
+    if (seededEditIdRef.current === openComponentEditId) return;
     const component = components.find((c) => c.id === openComponentEditId);
-    if (!component) return;
-    const fresh = componentToDraft(component);
-    setDraft(fresh);
-    setInitialDraft(fresh);
+    if (!component) return; // wait until entity is available, then seed once
+    // Entity baseline for dirty compare; keep session draft if present (R3-C1).
+    seedEditorDraftFromBaseline(
+      draftKey,
+      componentToDraft(component),
+      setDraft,
+      setInitialDraft,
+    );
     setEditingId(component.id);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
+    seededEditIdRef.current = openComponentEditId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openComponentEditId, components]);
 
-  const rows = useMemo(
-    () =>
-      filterCatalogItems(normalizedComponents, {
-        status,
-        query: debouncedSearch,
-      }),
-    [normalizedComponents, status, debouncedSearch],
-  );
+  const rows = useMemo(() => {
+    let filtered = filterCatalogItems(normalizedComponents, {
+      status,
+      query: debouncedSearch,
+      matchItem: (item, q) => {
+        const hay =
+          `${item.code} ${item.name} ${placementLabel(item.placement)}`.toLocaleLowerCase(
+            'es-UY',
+          );
+        return hay.includes(q);
+      },
+    });
+    if (placementFilter !== 'all') {
+      filtered = filtered.filter((c) => c.placement === placementFilter);
+    }
+    return filtered;
+  }, [normalizedComponents, status, debouncedSearch, placementFilter]);
 
   // F059: isDraftDirty, forceCloseEditor, closeModal come from useEntityEditorState.
 
@@ -316,16 +344,59 @@ export function ComponentsScreen({
       setError('El nombre es obligatorio.');
       return;
     }
-    if (draft.lengthMm <= 0 || draft.widthMm <= 0 || draft.thicknessMm <= 0) {
+    // Base dims required only when no formula replaces them (C8). Thickness always required.
+    const lengthOk = draft.lengthFormula.trim() ? true : draft.lengthMm > 0;
+    const widthOk = draft.widthFormula.trim() ? true : draft.widthMm > 0;
+    const thicknessOk = draft.thicknessMm > 0;
+    if (!lengthOk || !widthOk || !thicknessOk) {
       const offenders: string[] = [];
-      if (draft.lengthMm <= 0) offenders.push('el largo');
-      if (draft.widthMm <= 0) offenders.push('el ancho');
-      if (draft.thicknessMm <= 0) offenders.push('el espesor');
+      if (!lengthOk) offenders.push('el largo');
+      if (!widthOk) offenders.push('el ancho');
+      if (!thicknessOk) offenders.push('el espesor');
       setError(
         `Revisá las dimensiones: ${offenders.join(', ')} debe(n) ser mayor a 0.`,
       );
+      setEditorTab('geometry');
       return;
     }
+
+    // Validate non-empty formulas against sample container dims (C3).
+    const sampleDims = {
+      W: containerDims.PW,
+      H: containerDims.PH,
+      D: containerDims.PD,
+      PW: containerDims.PW,
+      PH: containerDims.PH,
+      PD: containerDims.PD,
+      T: draft.thicknessMm > 0 ? draft.thicknessMm : 18,
+      i: 0,
+    };
+    const formulaChecks: readonly {
+      readonly label: string;
+      readonly formula: string;
+      readonly field: 'length' | 'width' | 'x' | 'y' | 'z';
+    }[] = [
+      { label: 'largo', formula: draft.lengthFormula, field: 'length' },
+      { label: 'ancho', formula: draft.widthFormula, field: 'width' },
+      { label: 'posición X', formula: draft.xFormula, field: 'x' },
+      { label: 'posición Y', formula: draft.yFormula, field: 'y' },
+      { label: 'posición Z', formula: draft.zFormula, field: 'z' },
+    ];
+    for (const check of formulaChecks) {
+      if (!check.formula.trim()) continue;
+      try {
+        evaluatePartFormula(check.formula, sampleDims, {
+          structureCode: draft.code.trim() || 'component',
+          partDescription: draft.name.trim() || 'component',
+          field: check.field,
+        });
+      } catch {
+        setError(`La fórmula de ${check.label} no es válida.`);
+        setEditorTab('geometry');
+        return;
+      }
+    }
+
     if (!draft.optionRoles.trim()) {
       setError(
         'Falta al menos un rol de opción. Abrí la pestaña Opciones y elegí un grupo.',
@@ -397,6 +468,8 @@ export function ComponentsScreen({
           setSearch={setSearch}
           status={status}
           setStatus={setStatus}
+          placementFilter={placementFilter}
+          setPlacementFilter={setPlacementFilter}
           canMutate={canMutate}
           onCreate={handleCreateNew}
           onOpenDetail={(item) => setSelectedId(item.id)}

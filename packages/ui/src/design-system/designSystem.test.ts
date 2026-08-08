@@ -96,7 +96,7 @@ describe('design system (F016)', () => {
     ] as const) {
       expect(css, label).toContain('grid-template-columns: 1fr');
       expect(css, label).toMatch(/@media \(min-width: 640px\)/);
-      expect(css, label).toMatch(/@media \(min-width: 1100px\)/);
+      expect(css, label).toMatch(/@media \(min-width: 1024px\)/);
       expect(css, label).toContain('repeat(2, minmax(0, 1fr))');
       expect(css, label).toContain('repeat(3, minmax(0, 1fr))');
       // Prefer fixed ladder over unbounded auto-fill on the main list grid

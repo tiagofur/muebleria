@@ -2,9 +2,12 @@
  * Workshop 3D lighting presets (presentation quality without full PBR pipeline).
  */
 
-export type SceneLightingMode = 'workshop' | 'soft' | 'present';
+export type SceneLightingMode = 'workshop' | 'soft' | 'present' | 'catalog';
 
 export const DEFAULT_SCENE_LIGHTING_MODE: SceneLightingMode = 'present';
+
+/** Light studio backdrop for catalog product stills (not workshop charcoal). */
+export const CATALOG_PHOTO_BACKGROUND = '#eef1f4';
 
 export type SceneLightPlan = {
   readonly ambient: number;
@@ -84,36 +87,63 @@ export function planSceneLighting(
         environmentIntensity: 0,
         background: '#1a1c1e',
       };
+    case 'catalog':
+      // Product still: light studio, no contact/floor shadow band.
+      // No spot (spot always cast shadows on the canvas), key without castShadow.
+      return {
+        ambient: 0.72,
+        hemiSky: '#ffffff',
+        hemiGround: CATALOG_PHOTO_BACKGROUND,
+        hemiIntensity: 0.42,
+        key: {
+          pos: [d * 0.9, d * 1.5, d * 0.55],
+          intensity: 0.95,
+          castShadow: false,
+        },
+        fill: {
+          pos: [-d * 0.9, d * 0.8, d * 0.3],
+          intensity: 0.55,
+          color: '#f0f4fa',
+        },
+        rim: {
+          pos: [0, d * 0.6, -d * 1.0],
+          intensity: 0.3,
+          color: '#fff8ee',
+        },
+        useEnvironment: true,
+        environmentIntensity: 0.42,
+        background: CATALOG_PHOTO_BACKGROUND,
+      };
     case 'present':
     default:
       return {
-        ambient: 0.38,
+        ambient: 0.30,
         hemiSky: '#f7f9fc',
         hemiGround: '#3a3630',
-        hemiIntensity: 0.48,
+        hemiIntensity: 0.35,
         key: {
           pos: [d * 0.85, d * 1.65, d * 0.45],
-          intensity: 1.25,
+          intensity: 0.85,
           castShadow: true,
         },
         fill: {
           pos: [-d * 0.95, d * 0.75, d * 0.25],
-          intensity: 0.42,
+          intensity: 0.30,
           color: '#b8c8e8',
         },
         rim: {
           pos: [0, d * 0.55, -d * 1.05],
-          intensity: 0.32,
+          intensity: 0.22,
           color: '#fff0d8',
         },
         spot: {
           pos: [d * 0.25, d * 2.1, d * 0.15],
-          intensity: 0.5,
+          intensity: 0.35,
           angle: 0.38,
           penumbra: 0.65,
         },
         useEnvironment: true,
-        environmentIntensity: 0.32,
+        environmentIntensity: 0.22,
         background: '#141618',
       };
   }
@@ -128,36 +158,41 @@ export type BoardPhysicalResponse = {
   readonly envMapIntensity: number;
 };
 
+function isGlossyLightingMode(mode: SceneLightingMode | undefined): boolean {
+  const m = mode ?? 'present';
+  return m === 'present' || m === 'catalog';
+}
+
 export function boardPhysicalResponse(params: {
   readonly hasMap: boolean;
   readonly hasGrain: boolean;
   readonly lightingMode?: SceneLightingMode;
 }): BoardPhysicalResponse {
-  const present = (params.lightingMode ?? 'present') === 'present';
+  const present = isGlossyLightingMode(params.lightingMode);
   if (params.hasMap) {
     return {
-      roughness: present ? 0.48 : 0.62,
+      roughness: present ? 0.52 : 0.62,
       metalness: 0.03,
-      clearcoat: present ? 0.22 : 0.08,
+      clearcoat: present ? 0.15 : 0.08,
       clearcoatRoughness: 0.35,
-      envMapIntensity: present ? 0.55 : 0.2,
+      envMapIntensity: present ? 0.40 : 0.2,
     };
   }
   if (params.hasGrain) {
     return {
-      roughness: present ? 0.62 : 0.78,
+      roughness: present ? 0.68 : 0.78,
       metalness: 0.02,
-      clearcoat: present ? 0.12 : 0.04,
+      clearcoat: present ? 0.08 : 0.04,
       clearcoatRoughness: 0.55,
-      envMapIntensity: present ? 0.35 : 0.12,
+      envMapIntensity: present ? 0.25 : 0.12,
     };
   }
   // Solid color lacquer-ish
   return {
-    roughness: present ? 0.38 : 0.52,
+    roughness: present ? 0.44 : 0.52,
     metalness: 0.04,
-    clearcoat: present ? 0.4 : 0.15,
+    clearcoat: present ? 0.28 : 0.15,
     clearcoatRoughness: 0.28,
-    envMapIntensity: present ? 0.65 : 0.25,
+    envMapIntensity: present ? 0.48 : 0.25,
   };
 }

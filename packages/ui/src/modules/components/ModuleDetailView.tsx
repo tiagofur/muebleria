@@ -23,6 +23,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
+import { CatalogImage } from '../../common/CatalogImage';
 import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { formatModuleMoney } from '../moduleHelpers';
@@ -45,6 +46,8 @@ export type ModuleDetailViewProps = {
   readonly onDuplicate?: (id: string) => void;
   readonly onDelete: (id: string) => void;
   readonly onView3D: (mod: Module) => void;
+  /** Resolve relative /api/media paths for detail thumbnail. */
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 };
 
 function dimsLabel(mod: Module): string | null {
@@ -69,6 +72,7 @@ export function ModuleDetailView({
   onDuplicate,
   onDelete,
   onView3D,
+  resolveImageUrl = (u) => u,
 }: ModuleDetailViewProps): ReactNode {
   const estimate = moduleEstimates[mod.id];
   const chromeSale =
@@ -86,6 +90,7 @@ export function ModuleDetailView({
     ? (structures.find((s) => s.id === mod.structureId) ?? null)
     : null;
   const presetCount = mod.presets?.length ?? 0;
+  const thumbSrc = resolveImageUrl(mod.imageUrl);
 
   const moreItems = [
     ...(onDuplicate
@@ -118,6 +123,17 @@ export function ModuleDetailView({
           <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
           Lista
         </button>
+        <div
+          className="module-detail__thumb"
+          data-testid="module-detail-thumb"
+        >
+          <CatalogImage
+            src={thumbSrc}
+            alt={mod.name}
+            size="md"
+            className="module-detail__thumb-img"
+          />
+        </div>
         <div className="workspace-chrome__identity">
           <span className="workspace-chrome__code">{mod.code}</span>
           <div className="workspace-chrome__title-row">

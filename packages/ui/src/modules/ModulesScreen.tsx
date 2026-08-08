@@ -39,9 +39,11 @@ import {
   EntityEditorLayout,
   Modal,
   PageLoading,
+  seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
 } from '../common';
+import { consumeRequestCreateKey } from '../common/consumeRequestCreateKey';
 import '../catalogs/catalogs.css';
 import {
   draftToModule,
@@ -431,44 +433,63 @@ export function ModulesScreen({
   /**
    * Sync edit mode from shell URL (`/modules/:id/edit`).
    * Opens full-page editor (Fase 4 UI — no Modal LG).
+   * Seed only when edit id changes (or entity first appears) — not on
+   * unrelated `modules` identity churn (same pattern as Components C1).
    * - `'new'` → empty draft create.
    * - Real id → edit that module.
    * - null / '' → close the editor.
    */
+  const seededModuleEditIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (openModuleEditId == null || openModuleEditId === '') {
       setModalOpen(false);
       setEditingId(null);
+      seededModuleEditIdRef.current = null;
       return;
     }
     if (openModuleEditId === 'new') {
-      const fresh = emptyModuleDraft();
-      setDraft(fresh);
-      setInitialDraft(fresh);
+      if (seededModuleEditIdRef.current === 'new') return;
+      // Keep session-restored draft on F5/remount (R3-C1).
+      seedEditorDraftFromBaseline(
+        draftKey,
+        emptyModuleDraft(),
+        setDraft,
+        setInitialDraft,
+      );
       setEditingId(null);
+      setEditorTab('general');
       setError(null);
       setModalOpen(true);
+      seededModuleEditIdRef.current = 'new';
       return;
     }
+    if (seededModuleEditIdRef.current === openModuleEditId) return;
     const module = modules.find((m) => m.id === openModuleEditId);
     if (!module) return;
-    const fresh = moduleToDraft(module);
-    setDraft(fresh);
-    setInitialDraft(fresh);
+    seedEditorDraftFromBaseline(
+      draftKey,
+      moduleToDraft(module),
+      setDraft,
+      setInitialDraft,
+    );
     setEditingId(module.id);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
+    seededModuleEditIdRef.current = openModuleEditId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openModuleEditId, modules]);
 
-  // Open create modal from shell (Dashboard quick action)
+  // Open create once per requestCreateKey bump (Dashboard handoff).
+  // Module-scoped consume survives remount so leave/return does not re-open
+  // create and wipe an in-progress draft (JD R4-W sticky create key).
   useEffect(() => {
-    if (!requestCreateKey) return;
+    if (!consumeRequestCreateKey('modules', requestCreateKey)) return;
     const fresh = emptyModuleDraft();
     setEditingId(null);
     setDraft(fresh);
     setInitialDraft(fresh);
+    setEditorTab('general');
     setError(null);
     setModalOpen(true);
   }, [requestCreateKey]);
@@ -897,6 +918,7 @@ export function ModulesScreen({
           onStartCreate={startCreate}
           onOpenDetail={openDetail}
           onCreateCategory={onCreateCategory}
+          resolveImageUrl={resolveImageUrl}
         />
       )}
       renderDetailView={
@@ -921,6 +943,7 @@ export function ModulesScreen({
                   setViewerModule(mod);
                   setShow3DModal(true);
                 }}
+                resolveImageUrl={resolveImageUrl}
               />
             )
           : undefined
@@ -1088,6 +1111,21 @@ export function ModulesScreen({
             module={viewerModule}
             catalog={module3dCatalog}
             resolveMediaUrl={resolveImageUrl}
+            canMutate={canMutate}
+            onUploadImage={onUploadImage}
+            onApplyCatalogImage={
+              canMutate
+                ? (moduleId, imageUrl) => {
+                    const mod = modules.find((m) => m.id === moduleId);
+                    if (!mod) return;
+                    onUpdate(moduleId, {
+                      ...moduleToDraft(mod),
+                      imageUrl,
+                    });
+                    setViewerModule({ ...mod, imageUrl });
+                  }
+                : undefined
+            }
             onClose={() => {
               setShow3DModal(false);
               setViewerModule(null);

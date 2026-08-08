@@ -36,7 +36,11 @@ export {
   type UseRoutableEntitySelectionOptions,
   type UseRoutableEntitySelectionResult,
 } from './useRoutableEntitySelection';
-export { useDraftSession } from './useDraftSession';
+export {
+  useDraftSession,
+  readDraftSession,
+  seedEditorDraftFromBaseline,
+} from './useDraftSession';
 export {
   useEntityEditorState,
   type EntityEditorState,

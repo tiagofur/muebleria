@@ -12,6 +12,7 @@ export {
 } from './FurnitureScene3D';
 export {
   DEFAULT_SCENE_LIGHTING_MODE,
+  CATALOG_PHOTO_BACKGROUND,
   planSceneLighting,
   boardPhysicalResponse,
 } from './sceneLighting';
@@ -33,6 +34,7 @@ export {
   resolveMaterialSurface,
   resolvePartColor,
   sceneFraming,
+  cameraPositionForView,
   DEFAULT_MATERIAL_SURFACE_MODE,
   DEFAULT_TEXTURE_TILE_MM,
   type BoardColorMode,
@@ -71,3 +73,11 @@ export {
 } from './project3dPreview';
 export { type ModelFormat } from './ModelExporter';
 export { downloadBlob, sanitizeFilename } from './exportModel';
+export {
+  CATALOG_PHOTO_PNG_MIME,
+  canvasToPngBlob,
+  captureScenePngFile,
+  downloadPngFile,
+  findSceneCanvas,
+  pngBlobToFile,
+} from './captureScenePng';

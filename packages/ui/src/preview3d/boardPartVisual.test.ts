@@ -7,6 +7,7 @@ import {
   materialColorMap,
   materialTextureMap,
   resolvePartColor,
+  cameraPositionForView,
   sceneFraming,
 } from './boardPartVisual';
 
@@ -90,6 +91,14 @@ describe('boardPartVisual', () => {
     expect(f.center).toEqual([300, 360, 280]);
     expect(f.maxDim).toBe(720);
     expect(f.cameraDistance).toBeGreaterThan(f.maxDim);
+  });
+
+  it('places isometric 3/4 above the scene center (not under floor)', () => {
+    const f = sceneFraming(3000, 2400, 3000);
+    const pos = cameraPositionForView('isometric', f.center, f.maxDim);
+    expect(pos[1]).toBeGreaterThan(f.center[1]);
+    expect(pos[0]).toBeGreaterThan(f.center[0]);
+    expect(pos[2]).toBeGreaterThan(f.center[2]);
   });
 
   it('exposes grain and texture only in material color mode', () => {

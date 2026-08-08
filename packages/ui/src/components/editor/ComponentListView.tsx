@@ -12,7 +12,11 @@ import {
   StatusChips,
 } from '../../common';
 import type { CatalogStatusFilter } from '../../catalogs';
-import { geometrySummary, placementLabel } from '../componentDraft';
+import {
+  COMPONENT_PLACEMENTS,
+  geometrySummary,
+  placementLabel,
+} from '../componentDraft';
 
 export type ComponentListViewProps = {
   readonly rows: readonly Component[];
@@ -20,6 +24,8 @@ export type ComponentListViewProps = {
   readonly setSearch: Dispatch<SetStateAction<string>>;
   readonly status: CatalogStatusFilter;
   readonly setStatus: Dispatch<SetStateAction<CatalogStatusFilter>>;
+  readonly placementFilter: string;
+  readonly setPlacementFilter: Dispatch<SetStateAction<string>>;
   readonly canMutate: boolean;
   readonly onCreate: () => void;
   readonly onOpenDetail: (item: Component) => void;
@@ -31,12 +37,23 @@ export function ComponentListView({
   setSearch,
   status,
   setStatus,
+  placementFilter,
+  setPlacementFilter,
   canMutate,
   onCreate,
   onOpenDetail,
 }: ComponentListViewProps): ReactNode {
   const isFilterEmpty =
-    rows.length === 0 && (Boolean(search.trim()) || status !== 'active');
+    rows.length === 0 &&
+    (Boolean(search.trim()) ||
+      status !== 'active' ||
+      placementFilter !== 'all');
+
+  const clearFilters = () => {
+    setSearch('');
+    setStatus('active');
+    setPlacementFilter('all');
+  };
 
   return (
     <>
@@ -65,13 +82,31 @@ export function ComponentListView({
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Buscar por código o nombre…"
+          placeholder="Buscar por código, nombre o ubicación…"
         />
         <StatusChips
           value={status}
           onChange={setStatus}
           data-testid="component-status-chips"
         />
+        <label className="component-list__placement-filter">
+          <span className="component-list__placement-filter-label">
+            Ubicación
+          </span>
+          <select
+            value={placementFilter}
+            onChange={(e) => setPlacementFilter(e.target.value)}
+            aria-label="Filtrar por ubicación"
+            data-testid="component-placement-filter"
+          >
+            <option value="all">Todas</option>
+            {COMPONENT_PLACEMENTS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {rows.length === 0 ? (
@@ -84,13 +119,23 @@ export function ComponentListView({
           }
           description={
             isFilterEmpty
-              ? 'Probá cambiando el texto de búsqueda o el filtro de estado.'
+              ? 'Probá cambiando la búsqueda, el estado o la ubicación.'
               : 'Comenzá agregando componentes reutilizables para composición.'
           }
           actionLabel={
-            canMutate && !isFilterEmpty ? 'Crear componente' : undefined
+            isFilterEmpty
+              ? 'Limpiar filtros'
+              : canMutate
+                ? 'Crear componente'
+                : undefined
           }
-          onAction={canMutate && !isFilterEmpty ? onCreate : undefined}
+          onAction={
+            isFilterEmpty
+              ? clearFilters
+              : canMutate
+                ? onCreate
+                : undefined
+          }
           variant={isFilterEmpty ? 'no-results' : 'empty'}
         />
       ) : (

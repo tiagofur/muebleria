@@ -1,0 +1,26 @@
+/**
+ * EntityEditorPage — high-density inline editor page container.
+ * Applied to .entity-editor-page and .entity-editor-page__main.
+ */
+
+.entity-editor-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-page-gap, var(--space-3));
+  min-height: 100%;
+}
+
+.entity-editor-page__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--density-card-pad, var(--space-4));
+  box-shadow: var(--shadow-sm);
+}
+
+.entity-editor-page__main > form {
+  width: 100%;
+}

@@ -148,6 +148,14 @@ export interface ProjectDetailContextValue {
   readonly onOpenPresentation: () => void;
   /** Full-screen spatial studio (place/move on walls). */
   readonly onOpenSpatialStudio?: () => void;
+  /**
+   * After adding furniture from quote: soft cue to place in Proyectar
+   * (never auto-opens studio).
+   */
+  readonly postAddPlaceCue?: boolean;
+  readonly onDismissPostAddPlaceCue?: () => void;
+  /** Open Proyectar focused on unplaced units (CTA from cue / tools). */
+  readonly onOpenSpatialStudioUnplaced?: () => void;
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;

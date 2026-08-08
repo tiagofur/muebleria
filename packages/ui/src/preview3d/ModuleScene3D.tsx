@@ -12,6 +12,8 @@ import type {
   MaterialSurfaceMode,
   MaterialTextureLookup,
 } from './boardPartVisual';
+import type { SceneLightingMode } from './sceneLighting';
+import { DEFAULT_SCENE_LIGHTING_MODE } from './sceneLighting';
 
 export type ModuleScene3DProps = {
   readonly parts: readonly ResolvedBoardPart[];
@@ -31,6 +33,18 @@ export type ModuleScene3DProps = {
   readonly selectedPartId?: string | null;
   readonly onSelectPart?: (partId: string | null) => void;
   readonly isolateSelected?: boolean;
+  /** Workshop lighting preset (default present). */
+  readonly lightingMode?: SceneLightingMode;
+  /**
+   * RGB axes helper. Default true (floor-less inspect). Catalog product
+   * stills should pass false.
+   */
+  readonly showAxes?: boolean;
+  /**
+   * Outer wireframe footprint ghost. Default true for engineering inspect.
+   * Catalog product stills should pass false.
+   */
+  readonly showOuterGhost?: boolean;
 };
 
 /** Detect WebGL so tests/jsdom can skip Canvas. */
@@ -64,6 +78,9 @@ export function ModuleScene3D({
   selectedPartId,
   onSelectPart,
   isolateSelected,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  showAxes = true,
+  showOuterGhost = true,
 }: ModuleScene3DProps): ReactNode {
   return (
     <FurnitureScene3D
@@ -77,7 +94,7 @@ export function ModuleScene3D({
           originX: 0,
           originY: 0,
           originZ: 0,
-          showOuterGhost: true,
+          showOuterGhost,
         },
       ]}
       totalWidth={width}
@@ -87,6 +104,7 @@ export function ModuleScene3D({
       style={style}
       testId="module-scene-3d"
       showFloor={false}
+      showAxes={showAxes}
       colorMode={colorMode}
       materialColors={materialColors}
       materialTextures={materialTextures}
@@ -98,6 +116,7 @@ export function ModuleScene3D({
       selectedPartId={selectedPartId}
       onSelectPart={onSelectPart}
       isolateSelected={isolateSelected}
+      lightingMode={lightingMode}
     />
   );
 }

@@ -6,6 +6,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -22,6 +23,7 @@ import type {
 import {
   EntityEditorLayout,
   Modal,
+  seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
   useRoutableEntitySelection,
@@ -201,31 +203,45 @@ export function StructuresScreen({
    * - Real id: open edit on that structure.
    * - null / '': editor closed.
    */
+  /** Seed only when edit id changes — not on `structures` identity churn (C1). */
+  const seededStructureEditIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (openStructureEditId == null || openStructureEditId === '') {
       setModalOpen(false);
       setEditingId(null);
+      seededStructureEditIdRef.current = null;
       return;
     }
     if (openStructureEditId === 'new') {
-      const fresh = emptyStructureDraft();
-      setDraft(fresh);
-      setInitialDraft(fresh);
+      if (seededStructureEditIdRef.current === 'new') return;
+      // Keep session-restored draft on F5/remount (R3-C1).
+      seedEditorDraftFromBaseline(
+        draftKey,
+        emptyStructureDraft(),
+        setDraft,
+        setInitialDraft,
+      );
       setEditingId(null);
       setEditorTab('general');
       setError(null);
       setModalOpen(true);
+      seededStructureEditIdRef.current = 'new';
       return;
     }
+    if (seededStructureEditIdRef.current === openStructureEditId) return;
     const structure = structures.find((s) => s.id === openStructureEditId);
     if (!structure) return;
-    const fresh = structureToDraft(structure);
-    setDraft(fresh);
-    setInitialDraft(fresh);
+    seedEditorDraftFromBaseline(
+      draftKey,
+      structureToDraft(structure),
+      setDraft,
+      setInitialDraft,
+    );
     setEditingId(structure.id);
     setEditorTab('general');
     setError(null);
     setModalOpen(true);
+    seededStructureEditIdRef.current = openStructureEditId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openStructureEditId, structures]);
 

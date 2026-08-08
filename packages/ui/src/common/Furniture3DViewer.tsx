@@ -22,10 +22,12 @@ import {
   materialColorMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
+  DEFAULT_SCENE_LIGHTING_MODE,
   type BoardColorMode,
   type MaterialColorLookup,
   type MaterialSurfaceMode,
   type MaterialTextureLookup,
+  type SceneLightingMode,
 } from '../preview3d';
 import type { ResolvedBoardPart } from '@muebles/domain';
 import '../preview3d/partInspector.css';
@@ -84,6 +86,13 @@ export type Furniture3DViewerProps = {
    * Open automatically when initial wireframe is on.
    */
   readonly initialAdvancedOpen?: boolean;
+  /** Scene lighting preset. Default: present. */
+  readonly lightingMode?: SceneLightingMode;
+  /**
+   * When this token changes (and is > 0), force catalog-photo framing:
+   * 3/4 isometric, texture surface, material paint, no X-ray, perspective.
+   */
+  readonly catalogPhotoViewToken?: number;
 };
 
 export function Furniture3DViewer({
@@ -107,6 +116,8 @@ export function Furniture3DViewer({
   paintModeHint,
   initialSurfaceMode = DEFAULT_MATERIAL_SURFACE_MODE,
   initialAdvancedOpen,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  catalogPhotoViewToken = 0,
 }: Furniture3DViewerProps): ReactNode {
   const webglAvailable = useMemo(() => canUseWebGL(), []);
   const [colorMode, setColorMode] = useState<BoardColorMode>(initialColorMode);
@@ -126,6 +137,30 @@ export function Furniture3DViewer({
   } | null>(null);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [isolateSelected, setIsolateSelected] = useState(false);
+  /**
+   * Product-still clean mode (slice 2): no axes, no outer ghost, catalog
+   * lighting, outlines off. Activated by catalogPhotoViewToken.
+   */
+  const [productShotClean, setProductShotClean] = useState(
+    catalogPhotoViewToken > 0,
+  );
+
+  useEffect(() => {
+    if (!catalogPhotoViewToken) return;
+    setCameraView({ type: 'isometric', ts: Date.now() });
+    setSurfaceMode('texture');
+    setColorMode('material');
+    setShowWireframe(false);
+    setShowOutlines(false);
+    setProjection('perspective');
+    setIsolateSelected(false);
+    setSelectedPartId(null);
+    setProductShotClean(true);
+  }, [catalogPhotoViewToken]);
+
+  const effectiveLightingMode: SceneLightingMode = productShotClean
+    ? 'catalog'
+    : lightingMode;
 
   const materialColorsMemo = useMemo(
     () => materialColors ?? materialColorMap([]),
@@ -362,6 +397,9 @@ Common causes:
               showPartInspector ? setSelectedPartId : undefined
             }
             isolateSelected={showPartInspector && isolateSelected}
+            lightingMode={effectiveLightingMode}
+            showAxes={!productShotClean}
+            showOuterGhost={!productShotClean}
           />
         </div>
         {showPartInspector ? (

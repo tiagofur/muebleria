@@ -108,6 +108,7 @@ export function StructureEditorForm({
       id={formId}
       onSubmit={onSubmit}
       className="catalog-form structure-editor"
+      noValidate
     >
       {error ? (
         <p className="catalog-form__error" data-testid="form-error" role="alert">

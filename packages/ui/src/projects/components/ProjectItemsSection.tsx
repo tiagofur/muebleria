@@ -8,7 +8,7 @@
  */
 
 import { memo, useCallback, useRef, useState, type ReactNode } from 'react';
-import { Box, GripVertical, Plus } from 'lucide-react';
+import { Box, GripVertical, Plus, X } from 'lucide-react';
 import { useProjectDetail } from './projectDetailContext';
 import { ProjectItemStructureRevisionIndicator } from './ProjectItemStructureRevisionIndicator';
 import {
@@ -36,6 +36,9 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     addItemModalOpen,
     onOpenAddItemModal,
     canEditContent,
+    postAddPlaceCue,
+    onDismissPostAddPlaceCue,
+    onOpenSpatialStudioUnplaced,
   } = useProjectDetail();
 
   // ─── Drag & drop state ────────────────────────────────────────────────
@@ -149,6 +152,40 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
 
       {itemError && !addItemModalOpen ? (
         <p className="catalog-form__error">{itemError}</p>
+      ) : null}
+
+      {postAddPlaceCue ? (
+        <div
+          className="project-post-add-cue"
+          role="status"
+          data-testid="project-post-add-place-cue"
+        >
+          <p className="project-post-add-cue__text">
+            Mueble agregado a la cotización. Podés seguir armando la lista o
+            colocarlo en el plano.
+          </p>
+          <div className="project-post-add-cue__actions">
+            {onOpenSpatialStudioUnplaced ? (
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={onOpenSpatialStudioUnplaced}
+                data-testid="project-post-add-place-cue-open"
+              >
+                Colocar en Proyectar
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={() => onDismissPostAddPlaceCue?.()}
+              aria-label="Listo"
+              data-testid="project-post-add-place-cue-dismiss"
+            >
+              <X size={14} strokeWidth={1.5} aria-hidden /> Listo
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {project.items.length === 0 ? (

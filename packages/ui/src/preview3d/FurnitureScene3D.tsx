@@ -6,6 +6,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,7 @@ import * as THREE from 'three';
 import { offsetMmFromPlanPoint, type ResolvedBoardPart } from '@muebles/domain';
 import {
   boardPartsToVisuals,
+  cameraPositionForView,
   sceneFraming,
   type BoardColorMode,
   type BoardPartVisual,
@@ -95,6 +97,11 @@ export type FurnitureScene3DProps = {
   readonly testId?: string;
   /** Show a simple floor under the run. */
   readonly showFloor?: boolean;
+  /**
+   * Show RGB XYZ axes helper. Default: true when floor is off (module inspect),
+   * false when floor is on. Catalog product shots should pass false.
+   */
+  readonly showAxes?: boolean;
   readonly cameraView?: { readonly type: 'front' | 'top' | 'side' | 'isometric'; readonly ts: number } | null;
   /** Default `material` = fast solid colors from catalog. */
   readonly colorMode?: BoardColorMode;
@@ -772,30 +779,19 @@ function CameraViewSetter({
 }): ReactNode {
   const { camera } = useThree();
 
-  useEffect(() => {
+  // Layout effect so presets win over drei Bounds fit animation on the same frame.
+  useLayoutEffect(() => {
     if (!cameraView) return;
-
-    const dist = maxDim * 1.85;
 
     if (controlsRef.current) {
       controlsRef.current.target.set(center[0], center[1], center[2]);
     }
 
-    let targetPos: [number, number, number];
-    if (cameraView.type === 'top') {
-      targetPos = [center[0], center[1] + dist, center[2]];
-    } else if (cameraView.type === 'front') {
-      targetPos = [center[0], center[1], center[2] + dist];
-    } else if (cameraView.type === 'side') {
-      targetPos = [center[0] + dist, center[1], center[2]];
-    } else {
-      // isometric
-      targetPos = [
-        center[0] + maxDim * 0.55,
-        center[1] + Math.max(center[1] * 2, maxDim * 0.8),
-        center[2] + maxDim * 1.8,
-      ];
-    }
+    const targetPos = cameraPositionForView(
+      cameraView.type,
+      center,
+      maxDim,
+    );
 
     camera.position.set(...targetPos);
     camera.lookAt(center[0], center[1], center[2]);
@@ -816,6 +812,7 @@ function SceneContent({
   totalHeight,
   totalDepth,
   showFloor,
+  showAxes,
   colorMode,
   materialColors,
   materialTextures,
@@ -854,6 +851,7 @@ function SceneContent({
   readonly totalHeight: number;
   readonly totalDepth: number;
   readonly showFloor: boolean;
+  readonly showAxes: boolean;
   readonly colorMode: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
   readonly materialTextures?: MaterialTextureLookup;
@@ -938,7 +936,7 @@ function SceneContent({
           intensity={lighting.spot.intensity}
           angle={lighting.spot.angle}
           penumbra={lighting.spot.penumbra}
-          castShadow
+          castShadow={lighting.key.castShadow}
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
@@ -946,13 +944,18 @@ function SceneContent({
       {lighting.useEnvironment ? (
         <Suspense fallback={null}>
           <Environment
-            preset="warehouse"
+            preset={lightMode === 'catalog' ? 'studio' : 'warehouse'}
             environmentIntensity={lighting.environmentIntensity}
           />
         </Suspense>
       ) : null}
 
-      <Bounds fit margin={1.25}>
+      {/*
+        Auto-fit fights CameraViewSetter: Bounds animates ~1s from the default
+        camera and overwrites the 3/4 preset on open. Keep Bounds for grouping
+        only when a preset is active; otherwise fit empty/manual views.
+      */}
+      <Bounds fit={!cameraView} margin={1.25}>
         <group
           onClick={
             onSelectModule
@@ -962,7 +965,7 @@ function SceneContent({
               : undefined
           }
         >
-          {!showFloor ? (
+          {showAxes ? (
             <axesHelper args={[framing.maxDim * 0.75]} />
           ) : null}
           {showFloor ? (
@@ -1037,13 +1040,17 @@ function SceneContent({
         />
       </Bounds>
 
-      <ContactShadows
-        position={[framing.center[0], 0.5, framing.center[2]]}
-        opacity={0.32}
-        scale={framing.maxDim * 2.2}
-        blur={2.2}
-        far={framing.maxDim}
-      />
+      {/* Soft ground disk under the unit. Catalog product stills omit it so
+          the still is furniture-on-studio-backdrop only (no gray floor band). */}
+      {lightMode !== 'catalog' ? (
+        <ContactShadows
+          position={[framing.center[0], 0.5, framing.center[2]]}
+          opacity={0.32}
+          scale={framing.maxDim * 2.2}
+          blur={2.2}
+          far={framing.maxDim}
+        />
+      ) : null}
       <OrbitControls
         ref={controlsRef}
         makeDefault
@@ -1051,6 +1058,9 @@ function SceneContent({
         dampingFactor={0.08}
         minDistance={framing.maxDim * 0.3}
         maxDistance={framing.maxDim * 5}
+        // Keep orbit above the floor (no under-slab "looking up" view).
+        minPolarAngle={0.08}
+        maxPolarAngle={Math.PI / 2 - 0.06}
         target={framing.center as any}
         enabled={!measurementMode && !orbitSuppressed}
       />
@@ -1080,6 +1090,7 @@ export function FurnitureScene3D({
   style,
   testId = 'furniture-scene-3d',
   showFloor = true,
+  showAxes,
   colorMode = 'material',
   materialColors,
   materialTextures,
@@ -1122,6 +1133,8 @@ export function FurnitureScene3D({
   const selectionEnabled =
     (Boolean(onSelectPart) || Boolean(onSelectModule)) && !measurementMode;
   const hasWalls = walls.length > 0;
+  /** Axes default on only for floor-less inspect scenes (module editor). */
+  const axesVisible = showAxes ?? !showFloor;
   const rootClass = [
     'module-scene-3d',
     fillViewport ? 'module-scene-3d--fill' : '',
@@ -1129,6 +1142,18 @@ export function FurnitureScene3D({
   ]
     .filter(Boolean)
     .join(' ');
+
+  // Same 3/4 formula as the toolbar button / CameraViewSetter (first frame match).
+  const defaultCameraPosition = useMemo(() => {
+    const framing = sceneFraming(totalWidth, totalHeight, totalDepth);
+    return cameraPositionForView(
+      'isometric',
+      framing.center,
+      framing.maxDim,
+    );
+  }, [totalWidth, totalHeight, totalDepth]);
+  const cameraFar =
+    Math.max(totalWidth, totalHeight, totalDepth, 1) * 25;
 
   const hintText = [
     'Arrastrá para orbitar · rueda para zoom · click derecho o Shift+click para pan',
@@ -1240,26 +1265,18 @@ export function FurnitureScene3D({
           {cameraType === 'orthographic' ? (
             <OrthographicCamera
               makeDefault
-              position={[
-                totalWidth * 0.55,
-                Math.max(totalHeight * 1.15, Math.max(totalWidth, totalDepth) * 0.65),
-                totalDepth * 1.8 + totalWidth * 0.15,
-              ]}
+              position={[...defaultCameraPosition]}
               zoom={1.5}
               near={1}
-              far={Math.max(totalWidth, totalHeight, totalDepth) * 25}
+              far={cameraFar}
             />
           ) : (
             <PerspectiveCamera
               makeDefault
-              position={[
-                totalWidth * 0.55,
-                Math.max(totalHeight * 1.15, Math.max(totalWidth, totalDepth) * 0.65),
-                totalDepth * 1.8 + totalWidth * 0.15,
-              ]}
+              position={[...defaultCameraPosition]}
               fov={40}
               near={1}
-              far={Math.max(totalWidth, totalHeight, totalDepth) * 25}
+              far={cameraFar}
             />
           )}
           <Suspense fallback={null}>
@@ -1270,6 +1287,7 @@ export function FurnitureScene3D({
               totalHeight={totalHeight}
               totalDepth={totalDepth}
               showFloor={showFloor}
+              showAxes={axesVisible}
               colorMode={colorMode}
               materialColors={materialColors}
               materialTextures={materialTextures}
@@ -1308,7 +1326,8 @@ export function FurnitureScene3D({
               showFloorGrid={showFloorGrid}
               lightingMode={lightingMode}
             />
-          </Suspense>          </Canvas>
+          </Suspense>
+          </Canvas>
         </Suspense>
         </ErrorBoundary>
       </div>

@@ -254,6 +254,7 @@ export {
   layoutKitchenPlacements,
   nextOffsetOnWall,
   createDefaultLWalls,
+  seedDefaultLWallsIfEmpty,
 } from './kitchenLayout';
 export type { WallOffsetPeer } from './kitchenLayout';
 export type {

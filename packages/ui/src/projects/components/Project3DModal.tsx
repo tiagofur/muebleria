@@ -57,8 +57,13 @@ export function Project3DModal({
 
   const preview = useMemo(() => {
     if (!project) return null;
+    const hasKitchenWalls = Boolean(
+      project.kitchenLayout && project.kitchenLayout.walls.length > 0,
+    );
     return resolveProject3DPreview(project, catalog, {
       itemId: focus?.item.id,
+      // Quote run with a plan: hide unplaced (place them in Proyectar).
+      unplacedPolicy: hasKitchenWalls ? 'hide' : 'tail',
     });
   }, [project, catalog, focus?.item.id]);
 
@@ -93,14 +98,16 @@ export function Project3DModal({
           {!focus && preview.modules.length > 0 ? (
             <p className="catalog-empty" data-testid="project-3d-run-hint">
               {preview.layoutMode === 'kitchen'
-                ? `Según plano de cocina (${preview.placedCount} colocad${preview.placedCount === 1 ? 'a' : 'as'}${
+                ? `Según plano (${preview.placedCount} colocad${
+                    preview.placedCount === 1 ? 'a' : 'as'
+                  })${
                     preview.unplacedCount > 0
-                      ? `, ${preview.unplacedCount} sin colocar al final`
-                      : ''
-                  }).`
+                      ? `. ${preview.unplacedCount} sin colocar en la cotización — abrí Proyectar para ubicarlas.`
+                      : '.'
+                  }`
                 : `Vista en línea de la cotización (${preview.modules.length} unidad${
                     preview.modules.length === 1 ? '' : 'es'
-                  }). Abrí «Plan de cocina» en Herramientas para armar L/U.`}
+                  }). Abrí Proyectar para armar muros y colocar.`}
             </p>
           ) : null}
 
