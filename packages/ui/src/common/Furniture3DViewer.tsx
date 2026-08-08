@@ -20,11 +20,13 @@ import {
   MaterialSurfaceModeField,
   canUseWebGL,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   DEFAULT_SCENE_LIGHTING_MODE,
   type BoardColorMode,
   type MaterialColorLookup,
+  type MaterialPhysicalLookup,
   type MaterialSurfaceMode,
   type MaterialTextureLookup,
   type SceneLightingMode,
@@ -46,6 +48,8 @@ export type Furniture3DViewerProps = {
   readonly materialColors?: MaterialColorLookup;
   /** Optional material texture lookup (catalog materialId -> media URL). */
   readonly materialTextures?: MaterialTextureLookup;
+  /** Optional per-material PBR override lookup (catalog materialId -> entry). */
+  readonly materialPhysical?: MaterialPhysicalLookup;
   /**
    * Resolve relative media URLs for TextureLoader (auth token / absolute origin).
    * Used when materialTextures is not pre-built.
@@ -102,6 +106,7 @@ export function Furniture3DViewer({
   depth,
   materialColors,
   materialTextures,
+  materialPhysical,
   resolveMediaUrl,
   materialsForTextures,
   initialColorMode = 'material',
@@ -165,6 +170,10 @@ export function Furniture3DViewer({
   const materialColorsMemo = useMemo(
     () => materialColors ?? materialColorMap([]),
     [materialColors],
+  );
+  const materialPhysicalMemo = useMemo(
+    () => materialPhysical ?? materialPhysicalMap([]),
+    [materialPhysical],
   );
   const materialTexturesMemo = useMemo(() => {
     if (materialTextures) return materialTextures;
@@ -387,6 +396,7 @@ Common causes:
             colorMode={colorMode}
             materialColors={materialColorsMemo}
             materialTextures={materialTexturesMemo}
+            materialPhysical={materialPhysicalMemo}
             surfaceMode={surfaceMode}
             cameraView={cameraView}
             cameraType={projection}

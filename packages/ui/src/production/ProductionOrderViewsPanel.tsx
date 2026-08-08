@@ -10,6 +10,7 @@ import {
   FurnitureScene3D,
   canUseWebGL,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   type BoardColorMode,
@@ -68,6 +69,10 @@ export function ProductionOrderViewsPanel({
   const materialTextures = useMemo(
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
+  );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(catalog.materials),
+    [catalog.materials],
   );
 
   return (
@@ -236,6 +241,7 @@ export function ProductionOrderViewsPanel({
               colorMode={colorMode}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              materialPhysical={materialPhysical}
               surfaceMode={surfaceMode}
               showOutlines={showOutlines}
             />

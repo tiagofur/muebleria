@@ -22,6 +22,7 @@ import { formatMoneyDisplay } from '../../common';
 import {
   canUseWebGL,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
   DEFAULT_MATERIAL_SURFACE_MODE,
   type BoardColorMode,
@@ -208,6 +209,10 @@ export function ProjectPresentationMode({
   const materialTextures = useMemo(
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
+  );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(catalog.materials),
+    [catalog.materials],
   );
 
   const handleCapturePng = () => {
@@ -652,6 +657,7 @@ export function ProjectPresentationMode({
                   colorMode={colorMode}
                   materialColors={materialColors}
                   materialTextures={materialTextures}
+                  materialPhysical={materialPhysical}
                   surfaceMode={surfaceMode}
                   showOutlines={showOutlines}
                   measurementMode={measureMode}

@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { OptionChoices, Structure } from '@muebles/domain';
 import { Modal, Furniture3DViewer } from '../../common';
-import { materialColorMap, materialTextureMap } from '../../preview3d';
+import { materialColorMap, materialPhysicalMap, materialTextureMap } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import {
   boardFinishPickerGroupsForModule,
@@ -90,6 +90,10 @@ export function Structure3DModal({
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
   );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(catalog.materials),
+    [catalog.materials],
+  );
 
   const title = structure
     ? `Vista 3D — ${structure.code} - ${structure.name}`
@@ -163,6 +167,7 @@ export function Structure3DModal({
               depth={preview.depth}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              materialPhysical={materialPhysical}
               paintModeHint="Los selectores de acabado de arriba eligen el material de cada grupo. Este control solo cambia cómo se colorea la vista."
               testId="structure-3d-viewer"
             />

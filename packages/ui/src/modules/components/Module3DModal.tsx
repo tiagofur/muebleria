@@ -19,6 +19,7 @@ import {
   captureScenePngFile,
   downloadPngFile,
   materialColorMap,
+  materialPhysicalMap,
   materialTextureMap,
 } from '../../preview3d';
 import {
@@ -151,6 +152,10 @@ export function Module3DModal({
   const materialTextures = useMemo(
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
+  );
+  const materialPhysical = useMemo(
+    () => materialPhysicalMap(catalog.materials),
+    [catalog.materials],
   );
 
   const canSaveAsCatalogPhoto = Boolean(
@@ -314,6 +319,7 @@ export function Module3DModal({
               depth={preview.depth}
               materialColors={materialColors}
               materialTextures={materialTextures}
+              materialPhysical={materialPhysical}
               lightingMode="catalog"
               initialSurfaceMode="texture"
               initialShowOutlines={false}
