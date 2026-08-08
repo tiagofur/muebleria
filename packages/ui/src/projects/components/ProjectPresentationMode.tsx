@@ -64,7 +64,6 @@ export type ProjectPresentationModeProps = {
   readonly salePrice: number | null;
   readonly workshopName?: string;
   readonly onClose: () => void;
-  readonly onGoToProyectar?: () => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   /** Leave presentation and open Proyectar (empty plan / 3D CTA). */
   readonly onGoToProyectar?: () => void;
@@ -857,6 +856,7 @@ export function ProjectPresentationMode({
                 }
               >
                 <FurnitureScene3D
+                  className="module-scene-3d--fill"
                   modules={explodedModules.map((m) => ({
                     key: m.instanceKey,
                     parts: m.parts,

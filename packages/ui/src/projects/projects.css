@@ -1074,13 +1074,18 @@
 
 .project-presentation__slide--viewer {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .project-presentation__slide--active .project-presentation__viewer {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
