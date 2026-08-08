@@ -51,6 +51,7 @@ export type AppNavId =
   | 'modules'
   | 'structures'
   | 'components'
+  | 'agregados'
   | 'materials'
   | 'edges'
   | 'hardware'

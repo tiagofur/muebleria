@@ -17,6 +17,7 @@
 import { create } from 'zustand';
 
 import type {
+  Agregado,
   Catalog,
   Component,
   Customer,
@@ -138,6 +139,11 @@ export interface CatalogState {
   readonly createComponent: (draft: ComponentDraft) => void;
   readonly updateComponent: (id: string, draft: ComponentDraft) => void;
   readonly toggleComponentActive: (id: string) => void;
+
+  // --- Agregados ---
+  readonly createAgregado: (item: Agregado) => void;
+  readonly updateAgregado: (item: Agregado) => void;
+  readonly deleteAgregado: (id: string) => void;
 
   // --- Customers ---
   readonly createCustomer: (
@@ -862,6 +868,31 @@ export function createCatalogStore(options: InternalOptions) {
           comp.id === id ? { ...comp, active: !comp.active } : comp,
         ),
       }));
+    },
+
+    // --- Agregados ---
+    createAgregado: (item) => {
+      patch(set, get, (c) => ({
+        ...c,
+        agregados: [...(c.agregados ?? []), item],
+      }));
+      toast({ type: 'success', message: `✓ "${item.code}" creado` });
+    },
+
+    updateAgregado: (item) => {
+      patch(set, get, (c) => ({
+        ...c,
+        agregados: (c.agregados ?? []).map((a) => (a.id === item.id ? item : a)),
+      }));
+      toast({ type: 'success', message: '✓ Cambios guardados' });
+    },
+
+    deleteAgregado: (id) => {
+      patch(set, get, (c) => ({
+        ...c,
+        agregados: (c.agregados ?? []).filter((a) => a.id !== id),
+      }));
+      toast({ type: 'info', message: 'Agregado eliminado' });
     },
 
     // --- Customers ---

@@ -35,6 +35,8 @@ export type {
   Perforation,
   Component,
   ModuleComponentInstance,
+  Agregado,
+  ModuleAgregadoInstance,
   ProjectItem,
   ItemFloorStatus,
   ProjectProductionState,

@@ -244,6 +244,12 @@ export {
 } from './components';
 
 export {
+  AgregadosScreen,
+  type AgregadosScreenProps,
+  type AgregadoDraft,
+} from './agregados';
+
+export {
   ModuleScene3D,
   FurnitureScene3D,
   PartInspector,

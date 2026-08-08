@@ -15,6 +15,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   modules: '/modules',
   structures: '/structures',
   components: '/components',
+  agregados: '/agregados',
   materials: '/materials',
   edges: '/edges',
   hardware: '/hardware',
