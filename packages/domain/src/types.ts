@@ -596,16 +596,29 @@ export interface ProjectKitchenLayout {
    * Typical 1400–1500. Omit → domain default (1400).
    */
   readonly wallCabinetZMm?: number;
+   /**
+    * When true, 3D shows a simple visual countertop on floor cabinets.
+    * Presentation only — not BOM. Omit → true (obra look).
+    */
+   readonly showCountertop?: boolean;
   /**
-   * When true, 3D shows a simple visual countertop on floor cabinets.
-   * Presentation only — not BOM. Omit → true (obra look).
+   * Ambient floor material for the 3D room scene (presentation-only, #4148).
+   * Mirror of the active space's ref — resolved against
+   * `Catalog.ambientMaterials` (surfaceType 'floor') by the caller. Omit = none.
    */
-  readonly showCountertop?: boolean;
+   readonly floorMaterialId?: string;
   /**
-   * Named spaces (multi-ambiente). When omitted, the top-level walls/placements
-   * are treated as a single default space ("Cocina").
+   * Ambient wall material for the 3D room scene (presentation-only, #4148).
+   * Mirror of the active space's ref. Omit = none.
    */
-  readonly spaces?: readonly KitchenSpace[];
+   readonly wallMaterialId?: string;
+  /** Show the room ceiling in the 3D scene (Q1, #4151). Mirror of active space. */
+   readonly showCeiling?: boolean;
+   /**
+    * Named spaces (multi-ambiente). When omitted, the top-level walls/placements
+    * are treated as a single default space ("Cocina").
+    */
+   readonly spaces?: readonly KitchenSpace[];
   /** Id of the active space; mirrored into top-level walls/placements. */
   readonly activeSpaceId?: string;
   /** Underlay of the active space (mirrored). */

@@ -683,4 +683,57 @@ describe('kitchenLayout', () => {
     ];
     expect(nextOffsetOnWall(layout, 'w1', fps, 20)).toBe(620);
   });
+
+  it('carries ambient refs (floor/wall/ceiling) through sync like showCountertop', () => {
+    // RED: spacePlanFields must carry floorMaterialId/wallMaterialId/showCeiling
+    // so the top-level mirror (used by ProjectSpatialStudio commit) round-trips them.
+    let layout = ensureKitchenSpaces({
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [],
+      floorMaterialId: 'floor-1',
+      wallMaterialId: 'wall-1',
+      showCeiling: true,
+    });
+    const active = layout.spaces!.find((s) => s.id === layout.activeSpaceId)!;
+    expect(active.floorMaterialId).toBe('floor-1');
+    expect(active.wallMaterialId).toBe('wall-1');
+    expect(active.showCeiling).toBe(true);
+    // Top-level mirror also reflects (caller reads layout.floorMaterialId).
+    expect(layout.floorMaterialId).toBe('floor-1');
+
+    // A commit that changes walls must PRESERVE the ambient refs (sync round-trip).
+    layout = syncActiveKitchenSpace({
+      ...layout,
+      walls: [{ id: 'w2', lengthMm: 2000, angleDeg: 90 }],
+      floorMaterialId: 'floor-1',
+      wallMaterialId: 'wall-1',
+      showCeiling: true,
+    });
+    const after = layout.spaces!.find((s) => s.id === layout.activeSpaceId)!;
+    expect(after.floorMaterialId).toBe('floor-1');
+    expect(after.wallMaterialId).toBe('wall-1');
+    expect(after.showCeiling).toBe(true);
+  });
+
+  it('switching active space carries each space own ambient refs', () => {
+    let layout = ensureKitchenSpaces({
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [],
+      floorMaterialId: 'floor-a',
+    });
+    layout = addKitchenSpace(layout, 'Baño', () => 'space-bath');
+    // Set a different floor on baño via top-level commit + sync.
+    layout = syncActiveKitchenSpace({
+      ...layout,
+      floorMaterialId: 'floor-b',
+    });
+    // Switch back to cocina — its floor should still be floor-a.
+    layout = setActiveKitchenSpace(layout, DEFAULT_KITCHEN_SPACE_ID);
+    const cocina = layout.spaces!.find((s) => s.id === layout.activeSpaceId)!;
+    expect(cocina.floorMaterialId).toBe('floor-a');
+    // Switch to baño — its floor should be floor-b.
+    layout = setActiveKitchenSpace(layout, 'space-bath');
+    const bath = layout.spaces!.find((s) => s.id === layout.activeSpaceId)!;
+    expect(bath.floorMaterialId).toBe('floor-b');
+  });
 });
