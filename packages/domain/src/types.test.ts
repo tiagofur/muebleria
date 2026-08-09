@@ -11,6 +11,8 @@ import {
   type EdgeBand,
   type Hardware,
   type HardwareLine,
+  type HardwarePlacement,
+  type AnchorFace,
   type MaterialBoard,
   type Module,
   type ModuleComponentInstance,
@@ -367,6 +369,86 @@ describe('domain entity types', () => {
     expect(instance.quantity).toBe(1);
     expect(instance.placementOverride).toBe('frontal');
     expect(instance.overrides?.notes).toBe('Instalar con bisagra oculta');
+  });
+
+  it('constructs Hardware with parametric preview geometry (8 additive fields, VH-01)', () => {
+    const knob: Hardware = {
+      id: '33333333-3333-4333-8333-333333333333',
+      code: 'HER-JAL-POM',
+      name: 'Pomo Cromado 32mm',
+      unit: 'piece',
+      costPerUnit: 18,
+      active: true,
+      previewShape: 'knob',
+      previewSizeMm: 32,
+      previewProjectionMm: 12,
+      previewDiameterMm: 8,
+      previewColor: '#C0C0C0',
+      previewMetalness: 1,
+      previewRoughness: 0.25,
+      previewClearcoat: 0.6,
+    };
+
+    // Cost-only hardware (hinge/slide) still constructs with no preview fields.
+    const hinge: Hardware = {
+      id: '44444444-4444-4444-8444-444444444445',
+      code: 'HER-BIS-CL',
+      name: 'Bisagra Cierre Lento',
+      unit: 'piece',
+      costPerUnit: 28,
+      active: true,
+    };
+
+    expect(knob.previewShape).toBe('knob');
+    expect(knob.previewSizeMm).toBe(32);
+    expect(knob.previewProjectionMm).toBe(12);
+    expect(knob.previewDiameterMm).toBe(8);
+    expect(knob.previewColor).toBe('#C0C0C0');
+    expect(knob.previewMetalness).toBe(1);
+    expect(knob.previewRoughness).toBe(0.25);
+    expect(knob.previewClearcoat).toBe(0.6);
+    // Cost path is untouched by the additive preview fields.
+    expect(knob.costPerUnit).toBe(18);
+    expect(hinge.costPerUnit).toBe(28);
+    expect(hinge.previewShape).toBeUndefined();
+  });
+
+  it('constructs HardwarePlacement on ModuleComponentInstance.overrides (VH-02, distinct from Perforation)', () => {
+    const frontFace: HardwarePlacement = {
+      hardwareId: '33333333-3333-4333-8333-333333333333',
+      anchorFace: 'front',
+      relativePosition: { xPercent: 50, yPercent: 50 },
+    };
+
+    const rotatedPull: HardwarePlacement = {
+      hardwareId: '55555555-5555-4555-8555-555555555556',
+      anchorFace: 'front',
+      relativePosition: { xPercent: 50, yPercent: 80 },
+      rotationDeg: { z: 90 },
+      scale: 1.1,
+    };
+
+    const instance: ModuleComponentInstance = {
+      componentId: 'comp-puerta',
+      quantity: 1,
+      overrides: {
+        notes: 'Jaladera al frente',
+        hardwarePlacements: [frontFace, rotatedPull],
+      },
+    };
+
+    const face: AnchorFace = 'front';
+
+    expect(frontFace.anchorFace).toBe('front');
+    expect(frontFace.relativePosition.xPercent).toBe(50);
+    expect(frontFace.rotationDeg).toBeUndefined();
+    expect(rotatedPull.rotationDeg?.z).toBe(90);
+    expect(rotatedPull.scale).toBe(1.1);
+    expect(face).toBe('front');
+    expect(instance.overrides?.hardwarePlacements).toHaveLength(2);
+    expect(instance.overrides?.hardwarePlacements?.[0]?.hardwareId).toBe(
+      '33333333-3333-4333-8333-333333333333',
+    );
   });
 
   it('exposes DomainError hierarchy with optional context', () => {

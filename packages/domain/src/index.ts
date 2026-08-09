@@ -24,6 +24,8 @@ export type {
   EdgeAssignment,
   BoardPart,
   HardwareLine,
+  AnchorFace,
+  HardwarePlacement,
   ExternalDims,
   Module,
   Structure,
