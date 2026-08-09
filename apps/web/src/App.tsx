@@ -73,6 +73,7 @@ import {
   AppShell,
   EdgesCatalog,
   HardwareCatalog,
+  AmbientMaterialsCatalog,
   MaterialsCatalog,
   ModulesScreen,
   ModuleShowcase,
@@ -696,6 +697,7 @@ function AppContent({
   const materials = catalog?.materials ?? [];
   const edges = catalog?.edges ?? [];
   const hardware = catalog?.hardware ?? [];
+  const ambientMaterials = catalog?.ambientMaterials ?? [];
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
@@ -964,6 +966,9 @@ function AppContent({
   const createHardware = catalogActions.createHardware;
   const updateHardware = catalogActions.updateHardware;
   const setHardwareActive = catalogActions.setHardwareActive;
+  const createAmbientMaterial = catalogActions.createAmbientMaterial;
+  const updateAmbientMaterial = catalogActions.updateAmbientMaterial;
+  const setAmbientMaterialActive = catalogActions.setAmbientMaterialActive;
   const createOptionGroup = catalogActions.createOptionGroup;
   const updateOptionGroup = catalogActions.updateOptionGroup;
   const deleteOptionGroup = catalogActions.deleteOptionGroup;
@@ -2075,6 +2080,22 @@ function AppContent({
           onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
           canMutate={canMutateCatalog}
           showCosts={showCosts}
+          resolveImageUrl={resolveMediaUrl}
+          onUploadImage={
+            canMutateCatalog && session === 'auth' && authToken
+              ? uploadCatalogImage
+              : undefined
+          }
+        />
+      ) : null}
+      {navId === 'ambientMaterials' ? (
+        <AmbientMaterialsCatalog
+          materials={ambientMaterials}
+          onCreate={createAmbientMaterial}
+          onUpdate={updateAmbientMaterial}
+          onDeactivate={(id) => setAmbientMaterialActive(id, false)}
+          onReactivate={(id) => setAmbientMaterialActive(id, true)}
+          canMutate={canMutateCatalog}
           resolveImageUrl={resolveMediaUrl}
           onUploadImage={
             canMutateCatalog && session === 'auth' && authToken

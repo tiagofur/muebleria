@@ -18,6 +18,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   materials: '/materials',
   edges: '/edges',
   hardware: '/hardware',
+  ambientMaterials: '/materiales-ambiente',
   optionGroups: '/option-groups',
   settings: '/settings',
   users: '/users',
@@ -60,6 +61,7 @@ const ENTITY_SECTIONS: readonly EntitySection[] = [
   'materials',
   'edges',
   'hardware',
+  'ambientMaterials',
   'optionGroups',
 ] as const;
 

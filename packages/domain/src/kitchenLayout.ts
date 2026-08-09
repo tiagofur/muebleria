@@ -109,11 +109,20 @@ function spacePlanFields(
     readonly baseClearanceMm?: number;
     readonly wallCabinetZMm?: number;
     readonly showCountertop?: boolean;
+    readonly floorMaterialId?: string;
+    readonly wallMaterialId?: string;
+    readonly showCeiling?: boolean;
     readonly underlay?: KitchenPlanUnderlay;
   },
 ): Pick<
   KitchenSpace,
-  'baseClearanceMm' | 'wallCabinetZMm' | 'showCountertop' | 'underlay'
+  | 'baseClearanceMm'
+  | 'wallCabinetZMm'
+  | 'showCountertop'
+  | 'floorMaterialId'
+  | 'wallMaterialId'
+  | 'showCeiling'
+  | 'underlay'
 > {
   return {
     ...(source.baseClearanceMm === undefined
@@ -125,6 +134,15 @@ function spacePlanFields(
     ...(source.showCountertop === undefined
       ? {}
       : { showCountertop: source.showCountertop }),
+    ...(source.floorMaterialId === undefined
+      ? {}
+      : { floorMaterialId: source.floorMaterialId }),
+    ...(source.wallMaterialId === undefined
+      ? {}
+      : { wallMaterialId: source.wallMaterialId }),
+    ...(source.showCeiling === undefined
+      ? {}
+      : { showCeiling: source.showCeiling }),
     ...(source.underlay === undefined ? {} : { underlay: source.underlay }),
   };
 }

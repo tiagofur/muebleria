@@ -15,6 +15,7 @@ import type {
   MaterialBoard,
   EdgeBand,
   Hardware,
+  AmbientMaterial,
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
@@ -45,6 +46,8 @@ export type Module3DCatalogInput = {
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
   readonly optionGroups: readonly OptionGroup[];
+  /** Presentation-only ambient materials (floor/wall) for the 3D scene. */
+  readonly ambientMaterials?: readonly AmbientMaterial[];
 };
 
 function dimsFromModule(

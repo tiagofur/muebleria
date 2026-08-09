@@ -468,6 +468,33 @@ export function ProjectSpatialStudio({
     [catalog.materials, resolveMediaUrl],
   );
 
+  /**
+   * Resolve active space ambient refs (floor/wall) against the catalog's
+   * ambientMaterials collection. Caller pre-resolves — FurnitureScene3D
+   * receives ready AmbientMaterial props (consistent with materialColors).
+   * Refs live on the top-level layout mirror (syncActiveKitchenSpace carries
+   * them through, mirroring showCountertop).
+   */
+  const ambientFloor = useMemo(() => {
+    const id = layout.floorMaterialId;
+    if (!id) return undefined;
+    return (
+      (catalog.ambientMaterials ?? []).find(
+        (m) => m.id === id && m.surfaceType === 'floor',
+      ) ?? undefined
+    );
+  }, [catalog.ambientMaterials, layout.floorMaterialId]);
+
+  const ambientWall = useMemo(() => {
+    const id = layout.wallMaterialId;
+    if (!id) return undefined;
+    return (
+      (catalog.ambientMaterials ?? []).find(
+        (m) => m.id === id && m.surfaceType === 'wall',
+      ) ?? undefined
+    );
+  }, [catalog.ambientMaterials, layout.wallMaterialId]);
+
   const selectedRef = useMemo(() => {
     if (!selectedKey) return null;
     const hash = selectedKey.lastIndexOf('#');
@@ -1764,6 +1791,70 @@ export function ProjectSpatialStudio({
                   />
                   <span>Mesada visual sobre bajos</span>
                 </label>
+
+                <label className="spatial-studio__field">
+                  <span>Piso (escena 3D)</span>
+                  <select
+                    value={layout.floorMaterialId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        floorMaterialId: e.target.value || undefined,
+                      })
+                    }
+                    data-testid="spatial-studio-floor-picker"
+                  >
+                    <option value="">— Sin piso —</option>
+                    {(catalog.ambientMaterials ?? [])
+                      .filter((m) => m.active && m.surfaceType === 'floor')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.code})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="spatial-studio__field">
+                  <span>Pared (escena 3D)</span>
+                  <select
+                    value={layout.wallMaterialId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        wallMaterialId: e.target.value || undefined,
+                      })
+                    }
+                    data-testid="spatial-studio-wall-picker"
+                  >
+                    <option value="">— Sin pared —</option>
+                    {(catalog.ambientMaterials ?? [])
+                      .filter((m) => m.active && m.surfaceType === 'wall')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.code})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="spatial-studio__field spatial-studio__check-row">
+                  <input
+                    type="checkbox"
+                    checked={layout.showCeiling === true}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        showCeiling: e.target.checked,
+                      })
+                    }
+                    data-testid="spatial-studio-toggle-ceiling"
+                  />
+                  <span>Mostrar techo</span>
+                </label>
               </div>
             ) : null}
           </section>
@@ -2180,6 +2271,9 @@ export function ProjectSpatialStudio({
                 showOutlines={showOutlines}
                 showWireframe={showWireframe}
                 showFloorGrid={showFloorGrid}
+                ambientFloor={ambientFloor}
+                ambientWall={ambientWall}
+                showCeiling={layout.showCeiling}
                 selectedModuleKey={selectedKey}
                 onSelectModule={(key) => {
                   setSelectedKey(key);

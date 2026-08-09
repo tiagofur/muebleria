@@ -27,6 +27,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   Structure,
+  AmbientMaterial,
 } from '@muebles/domain';
 import {
   bumpStructureRevision,
@@ -46,6 +47,7 @@ import {
   type OptionGroupDraft,
   type StructureDraft,
   type CategoryDraft,
+  type AmbientMaterialDraft,
 } from '@muebles/ui';
 
 import { draftToComponent, draftToModule, draftToStructure } from './catalogMappers';
@@ -98,6 +100,11 @@ export interface CatalogState {
   readonly createHardware: (draft: HardwareDraft) => void;
   readonly updateHardware: (id: string, draft: HardwareDraft) => void;
   readonly setHardwareActive: (id: string, active: boolean) => void;
+
+  // --- Ambient materials (presentation-only: floor/wall scene textures) ---
+  readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => void;
+  readonly updateAmbientMaterial: (id: string, draft: AmbientMaterialDraft) => void;
+  readonly setAmbientMaterialActive: (id: string, active: boolean) => void;
 
   // --- Option groups ---
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
@@ -166,6 +173,17 @@ function defaultNewId(): string {
 function optionalNotes(notes: string): string | undefined {
   const trimmed = notes.trim();
   return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Coerces an ambient PBR form field (`number | ''`) to a domain-safe
+ * `number | undefined`, clamped to [0, 1]. Mirrors MaterialsCatalog.parsePbr
+ * so the store never persists empty-string or out-of-range values.
+ */
+function parsePbr(v: number | '' | undefined): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(1, Math.max(0, v))
+    : undefined;
 }
 
 export function createCatalogStore(options: InternalOptions) {
@@ -498,6 +516,119 @@ export function createCatalogStore(options: InternalOptions) {
       patch(set, get, (c) => ({
         ...c,
         hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),
+      }));
+      if (target) {
+        toast({
+          type: 'info',
+          message: active
+            ? `↑ "${target.name}" reactivado`
+            : `↓ "${target.name}" desactivado`,
+        });
+      }
+    },
+
+    // --- Ambient materials (presentation-only: floor/wall scene textures) ---
+    createAmbientMaterial: (draft) => {
+      const code = draft.code.trim();
+      // Coerce form `number | ''` → `number | undefined`, clamped to [0,1].
+      // Mirrors MaterialsCatalog.parsePbr; domain type stays `number | undefined`.
+      const roughness = parsePbr(draft.previewRoughness);
+      const metalness = parsePbr(draft.previewMetalness);
+      const clearcoat = parsePbr(draft.previewClearcoat);
+      const item: AmbientMaterial = {
+        id: newId(),
+        code,
+        name: draft.name.trim(),
+        active: true,
+        surfaceType: draft.surfaceType,
+        ...(draft.previewColor?.trim()
+          ? { previewColor: draft.previewColor.trim() }
+          : {}),
+        ...(draft.previewTextureUrl?.trim()
+          ? { previewTextureUrl: draft.previewTextureUrl.trim() }
+          : {}),
+        ...(draft.previewTextureTileWidthMm && draft.previewTextureTileWidthMm > 0
+          ? { previewTextureTileWidthMm: draft.previewTextureTileWidthMm }
+          : {}),
+        ...(draft.previewTextureTileLengthMm &&
+        draft.previewTextureTileLengthMm > 0
+          ? { previewTextureTileLengthMm: draft.previewTextureTileLengthMm }
+          : {}),
+        ...(roughness !== undefined ? { previewRoughness: roughness } : {}),
+        ...(metalness !== undefined ? { previewMetalness: metalness } : {}),
+        ...(clearcoat !== undefined ? { previewClearcoat: clearcoat } : {}),
+      };
+      if (!get().catalog) return;
+      void patch(set, get, (c) => ({
+        ...c,
+        ambientMaterials: [...(c.ambientMaterials ?? []), item],
+      })).then(
+        () => {
+          toast({ type: 'success', message: `✓ "${code}" creado` });
+        },
+        () => {
+          /* error toast already shown by patch */
+        },
+      );
+    },
+
+    updateAmbientMaterial: (id, draft) => {
+      // Coerce form `number | ''` → `number | undefined`, clamped to [0,1].
+      const roughness = parsePbr(draft.previewRoughness);
+      const metalness = parsePbr(draft.previewMetalness);
+      const clearcoat = parsePbr(draft.previewClearcoat);
+      void patch(set, get, (c) => ({
+        ...c,
+        ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
+          m.id === id
+            ? {
+                ...m,
+                code: draft.code.trim(),
+                name: draft.name.trim(),
+                surfaceType: draft.surfaceType,
+                ...(draft.previewColor?.trim()
+                  ? { previewColor: draft.previewColor.trim() }
+                  : {}),
+                ...(draft.previewTextureUrl?.trim()
+                  ? { previewTextureUrl: draft.previewTextureUrl.trim() }
+                  : {}),
+                ...(draft.previewTextureTileWidthMm &&
+                draft.previewTextureTileWidthMm > 0
+                  ? { previewTextureTileWidthMm: draft.previewTextureTileWidthMm }
+                  : {}),
+                ...(draft.previewTextureTileLengthMm &&
+                draft.previewTextureTileLengthMm > 0
+                  ? { previewTextureTileLengthMm: draft.previewTextureTileLengthMm }
+                  : {}),
+                ...(roughness !== undefined
+                  ? { previewRoughness: roughness }
+                  : {}),
+                ...(metalness !== undefined
+                  ? { previewMetalness: metalness }
+                  : {}),
+                ...(clearcoat !== undefined
+                  ? { previewClearcoat: clearcoat }
+                  : {}),
+              }
+            : m,
+        ),
+      })).then(
+        () => {
+          toast({ type: 'success', message: '✓ Cambios guardados' });
+        },
+        () => {
+          /* error toast already shown by patch */
+        },
+      );
+    },
+
+    setAmbientMaterialActive: (id, active) => {
+      const target = get().catalog?.ambientMaterials?.find((m) => m.id === id);
+      patch(set, get, (c) => ({
+        ...c,
+        ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
+          m.id === id ? { ...m, active } : m,
+        ),
       }));
       if (target) {
         toast({

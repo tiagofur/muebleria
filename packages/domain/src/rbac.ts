@@ -250,6 +250,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'materials',
       'edges',
       'hardware',
+      'ambientMaterials',
       'optionGroups',
       'settings',
       'users',
@@ -269,6 +270,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
     ids.add('materials');
     ids.add('edges');
     ids.add('hardware');
+    ids.add('ambientMaterials');
     ids.add('optionGroups');
   }
   if (roleCanAccessSettings(role)) ids.add('settings');
