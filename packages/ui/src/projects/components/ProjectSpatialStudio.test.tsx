@@ -15,6 +15,9 @@ vi.mock('../../preview3d', async (importOriginal) => {
       testId?: string;
       fillViewport?: boolean;
       className?: string;
+      ambientFloor?: { readonly id?: string } | null;
+      ambientWall?: { readonly id?: string } | null;
+      showCeiling?: boolean;
     }) => (
       <div
         data-testid={props.testId ?? 'furniture-scene-3d'}
@@ -25,6 +28,9 @@ vi.mock('../../preview3d', async (importOriginal) => {
         ]
           .filter(Boolean)
           .join(' ')}
+        data-ambient-floor={props.ambientFloor?.id ?? ''}
+        data-ambient-wall={props.ambientWall?.id ?? ''}
+        data-show-ceiling={props.showCeiling ? 'true' : 'false'}
       />
     ),
   };
@@ -972,5 +978,139 @@ EOF
     expect(onUpdateItem).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'it-a', measurePresetId: 'p800' }),
     );
+  });
+});
+
+describe('ProjectSpatialStudio — ambient scene materials', () => {
+  it('resolves floorMaterialId and passes ambientFloor to the scene', () => {
+    const projectWithAmbient: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+        floorMaterialId: 'am-floor-1',
+      },
+    };
+    const catalogWithAmbient = {
+      ...catalog,
+      ambientMaterials: [
+        {
+          id: 'am-floor-1',
+          code: 'CERAMIC',
+          name: 'Cerámica',
+          active: true,
+          surfaceType: 'floor' as const,
+          previewColor: '#222222',
+        },
+      ],
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithAmbient}
+        modules={[modA]}
+        catalog={catalogWithAmbient}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    const scene = screen.getByTestId('spatial-studio-scene');
+    expect(scene.getAttribute('data-ambient-floor')).toBe('am-floor-1');
+  });
+
+  it('does not pass ambientFloor when floorMaterialId is undefined', () => {
+    const projectNoAmbient: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectNoAmbient}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    const scene = screen.getByTestId('spatial-studio-scene');
+    expect(scene.getAttribute('data-ambient-floor')).toBe('');
+  });
+
+  it('showCeiling toggle updates the layout ref', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-toggle-ceiling'));
+    expect(onChangeLayout).toHaveBeenCalled();
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      showCeiling?: boolean;
+    };
+    expect(next.showCeiling).toBe(true);
+  });
+
+  it('floor material picker selection updates KitchenSpace ref', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    const catalogWithAmbient = {
+      ...catalog,
+      ambientMaterials: [
+        {
+          id: 'am-floor-1',
+          code: 'CERAMIC',
+          name: 'Cerámica',
+          active: true,
+          surfaceType: 'floor' as const,
+          previewColor: '#333333',
+        },
+      ],
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalogWithAmbient}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    // Select the floor material from the native select.
+    fireEvent.change(screen.getByTestId('spatial-studio-floor-picker'), {
+      target: { value: 'am-floor-1' },
+    });
+    expect(onChangeLayout).toHaveBeenCalled();
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      floorMaterialId?: string;
+    };
+    expect(next.floorMaterialId).toBe('am-floor-1');
   });
 });
