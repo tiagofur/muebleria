@@ -123,6 +123,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       categories,
       structures,
       components,
+      ambientMaterials,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -133,6 +134,10 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/categories'),
       fetchJson('/catalog/structures').catch(() => []),
       fetchJson('/catalog/components').catch(() => []),
+      // Ambient materials are presentation-only (floor/wall textures for the 3D
+      // room scene). `.catch(() => [])` keeps older backends (without the
+      // endpoint) working — ambient renders as none, same as today.
+      fetchJson('/catalog/ambient-materials').catch(() => []),
     ]);
 
     return catalogFromApi({
@@ -145,6 +150,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       categories,
       customers,
       components,
+      ambientMaterials,
     });
   }
 

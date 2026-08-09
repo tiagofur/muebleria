@@ -64,6 +64,55 @@ describe('APIWorkspaceRepository', () => {
     expect(ws.catalog.modules).toEqual([]);
   });
 
+  it('loads ambient materials and maps them through getCatalog', async () => {
+    const mockAmbient = [
+      {
+        id: 'am1',
+        code: 'CERAM',
+        name: 'Cerámica blanca',
+        active: true,
+        surface_type: 'floor',
+        preview_color: '#eeeeee',
+        preview_texture_url: '/api/media/ceram.webp',
+        preview_texture_tile_width_mm: 400,
+        preview_texture_tile_length_mm: 400,
+      },
+    ];
+
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/catalog/ambient-materials')) {
+        return { ok: true, json: async () => mockAmbient } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const ws = await repo.load();
+    const ambient = ws.catalog.ambientMaterials ?? [];
+
+    expect(ambient).toHaveLength(1);
+    expect(ambient[0]?.surfaceType).toBe('floor');
+    expect(ambient[0]?.previewColor).toBe('#eeeeee');
+    expect(ambient[0]?.previewTextureTileWidthMm).toBe(400);
+  });
+
+  it('getCatalog tolerates a missing ambient-materials endpoint (older backend)', async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/catalog/ambient-materials')) {
+        return { ok: false, status: 404, statusText: 'Not Found' } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const ws = await repo.load();
+
+    // .catch(() => []) keeps older backends working: ambient renders as none.
+    expect(ws.catalog.ambientMaterials).toEqual([]);
+  });
+
   it('normalizes JSON null list payloads to empty arrays', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
