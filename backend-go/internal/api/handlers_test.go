@@ -35,6 +35,16 @@ type stubStore struct {
 	lastCreatedProject   *domain.Project
 	materialReturnedByID *domain.MaterialBoard
 	materialGetByIDErr   error
+	// Ambient materials (presentation-only floor/wall, #4150)
+	listAmbientMaterials      []domain.AmbientMaterial
+	ambientReturnedByID       *domain.AmbientMaterial
+	ambientGetByIDErr         error
+	createAmbientErr          error
+	createAmbientOK           bool
+	updateAmbientCalled       bool
+	updateAmbientReceived     *domain.AmbientMaterial
+	deactivateAmbientCalled   bool
+	deactivateAmbientReceived string
 	// Auth test hooks
 	getUserByEmail      *domain.User
 	getUserByEmailErr   error
@@ -51,16 +61,16 @@ type stubStore struct {
 	lastCreatedTemplate  *domain.ProjectTemplate
 	deleteTemplateCalled bool
 	// Catalog media lifecycle hooks (F040 cleanup).
-	updateMaterialCalled     bool
-	updateMaterialReceived   *domain.MaterialBoard
-	hardwareReturnedByID     *domain.Hardware
-	updateHardwareCalled     bool
-	updateHardwareReceived   *domain.Hardware
-	moduleReturnedByID       *domain.Module
-	updateModuleCalled       bool
-	updateModuleReceived     *domain.Module
-	deleteModuleCalled       bool
-	deleteModuleReceivedID   string
+	updateMaterialCalled   bool
+	updateMaterialReceived *domain.MaterialBoard
+	hardwareReturnedByID   *domain.Hardware
+	updateHardwareCalled   bool
+	updateHardwareReceived *domain.Hardware
+	moduleReturnedByID     *domain.Module
+	updateModuleCalled     bool
+	updateModuleReceived   *domain.Module
+	deleteModuleCalled     bool
+	deleteModuleReceivedID string
 }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
@@ -154,6 +164,35 @@ func (s *stubStore) UpdateMaterialBoard(_ context.Context, _ string, m *domain.M
 	return nil
 }
 func (s *stubStore) DeactivateMaterialBoard(context.Context, string) error {
+	return nil
+}
+func (s *stubStore) ListAmbientMaterials(context.Context) ([]domain.AmbientMaterial, error) {
+	if s.listAmbientMaterials != nil {
+		return s.listAmbientMaterials, nil
+	}
+	return []domain.AmbientMaterial{}, nil
+}
+func (s *stubStore) GetAmbientMaterialByID(_ context.Context, _ string) (*domain.AmbientMaterial, error) {
+	return s.ambientReturnedByID, s.ambientGetByIDErr
+}
+func (s *stubStore) CreateAmbientMaterial(_ context.Context, m *domain.AmbientMaterial) error {
+	if s.createAmbientErr != nil {
+		return s.createAmbientErr
+	}
+	s.createAmbientOK = true
+	cp := *m
+	s.updateAmbientReceived = &cp // record for create-roundtrip assertions
+	return nil
+}
+func (s *stubStore) UpdateAmbientMaterial(_ context.Context, _ string, m *domain.AmbientMaterial) error {
+	s.updateAmbientCalled = true
+	cp := *m
+	s.updateAmbientReceived = &cp
+	return nil
+}
+func (s *stubStore) DeactivateAmbientMaterial(_ context.Context, id string) error {
+	s.deactivateAmbientCalled = true
+	s.deactivateAmbientReceived = id
 	return nil
 }
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {
