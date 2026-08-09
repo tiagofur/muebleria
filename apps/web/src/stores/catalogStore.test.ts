@@ -686,6 +686,118 @@ describe('catalogStore — customers', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Ambient materials
+// ---------------------------------------------------------------------------
+
+describe('catalogStore — ambient materials', () => {
+  async function flush(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('createAmbientMaterial appends + persists + toasts', async () => {
+    const { deps, saved, toasts } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    store.getState().createAmbientMaterial({
+      code: 'CERAMIC',
+      name: 'Cerámica negra',
+      surfaceType: 'floor',
+      previewColor: '#222222',
+      previewTextureUrl: '',
+      previewTextureTileWidthMm: 0,
+      previewTextureTileLengthMm: 0,
+    });
+    await flush();
+    const cat = store.getState().catalog!;
+    const added = cat.ambientMaterials ?? [];
+    expect(added).toHaveLength(1);
+    expect(added[0]!.code).toBe('CERAMIC');
+    expect(added[0]!.surfaceType).toBe('floor');
+    expect(added[0]!.active).toBe(true);
+    expect(saved).toHaveLength(1);
+    expect(toasts.some((t) => /CERAMIC/.test(t.message))).toBe(true);
+  });
+
+  it('createAmbientMaterial coerces empty-string PBR to undefined and clamps', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    // Form inputs yield `number | ''`: empty string, valid, and out-of-range.
+    store.getState().createAmbientMaterial({
+      code: 'PBR',
+      name: 'Pbr test',
+      surfaceType: 'floor',
+      previewColor: '',
+      previewTextureUrl: '',
+      previewTextureTileWidthMm: 0,
+      previewTextureTileLengthMm: 0,
+      previewRoughness: '',
+      previewMetalness: 0.5,
+      previewClearcoat: 2,
+    });
+    await flush();
+    const added = store.getState().catalog!.ambientMaterials![0]!;
+    // Empty-string form value excluded (no "" persisted to domain type).
+    expect(added.previewRoughness).toBeUndefined();
+    // Valid number passed through.
+    expect(added.previewMetalness).toBe(0.5);
+    // Out-of-range clamped to [0, 1].
+    expect(added.previewClearcoat).toBe(1);
+  });
+
+  it('updateAmbientMaterial patches the matching id', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog({
+      ...seedCatalog(),
+      ambientMaterials: [
+        {
+          id: 'am-1',
+          code: 'OLD',
+          name: 'Viejo',
+          active: true,
+          surfaceType: 'wall',
+        },
+      ],
+    });
+    store.getState().updateAmbientMaterial('am-1', {
+      code: 'NEW',
+      name: 'Nuevo',
+      surfaceType: 'wall',
+      previewColor: '',
+      previewTextureUrl: '',
+      previewTextureTileWidthMm: 0,
+      previewTextureTileLengthMm: 0,
+    });
+    await flush();
+    const am = store.getState().catalog!.ambientMaterials!;
+    expect(am[0]!.code).toBe('NEW');
+    expect(am[0]!.name).toBe('Nuevo');
+  });
+
+  it('setAmbientMaterialActive toggles active', () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog({
+      ...seedCatalog(),
+      ambientMaterials: [
+        {
+          id: 'am-1',
+          code: 'CERAMIC',
+          name: 'Cerámica',
+          active: true,
+          surfaceType: 'floor',
+        },
+      ],
+    });
+    store.getState().setAmbientMaterialActive('am-1', false);
+    const am = store.getState().catalog!.ambientMaterials!;
+    expect(am[0]!.active).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Media helpers
 // ---------------------------------------------------------------------------
 

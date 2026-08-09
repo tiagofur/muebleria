@@ -54,3 +54,9 @@ export {
   type HardwareDraft,
   type HardwareCatalogProps,
 } from './HardwareCatalog';
+
+export {
+  AmbientMaterialsCatalog,
+  type AmbientMaterialDraft,
+  type AmbientMaterialsCatalogProps,
+} from './AmbientMaterialsCatalog';

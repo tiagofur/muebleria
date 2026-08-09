@@ -7,6 +7,7 @@ export const PACKAGE_NAME = '@muebles/ui' as const;
 
 export {
   ActiveBadge,
+  AmbientMaterialsCatalog,
   CatalogPicker,
   CatalogTable,
   EdgesCatalog,
@@ -27,6 +28,8 @@ export {
   type CatalogStatusFilter,
   type CatalogTableProps,
   type CodedCatalogItem,
+  type AmbientMaterialDraft,
+  type AmbientMaterialsCatalogProps,
   type EdgeDraft,
   type EdgesCatalogProps,
   type FilterCatalogOptions,

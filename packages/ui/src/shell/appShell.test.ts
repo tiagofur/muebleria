@@ -60,6 +60,7 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     // design.md §4.1: composition first, then catalogs, Grupos last (Fase 6).
+    // Ambient materials (catalogs) sit before Grupos.
     expect(ingenieria.items.map((i) => i.id)).toEqual([
       'modules',
       'structures',
@@ -67,6 +68,7 @@ describe('AppShell nav model (F017)', () => {
       'materials',
       'edges',
       'hardware',
+      'ambientMaterials',
       'optionGroups',
     ]);
     expect(ingenieria.items.map((i) => i.label)).toEqual([
@@ -76,12 +78,14 @@ describe('AppShell nav model (F017)', () => {
       'Materiales',
       'Cantos',
       'Herrajes',
+      'Ambiente',
       'Grupos',
     ]);
     expect(ingenieria.items.map((i) => i.group)).toEqual([
       'composition',
       'composition',
       'composition',
+      'catalogs',
       'catalogs',
       'catalogs',
       'catalogs',
