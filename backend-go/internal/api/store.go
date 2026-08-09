@@ -39,6 +39,13 @@ type Store interface {
 	UpdateMaterialBoard(ctx context.Context, id string, m *domain.MaterialBoard) error
 	DeactivateMaterialBoard(ctx context.Context, id string) error
 
+	// Catalog: ambient materials (presentation-only floor/wall surfaces, #4150)
+	ListAmbientMaterials(ctx context.Context) ([]domain.AmbientMaterial, error)
+	GetAmbientMaterialByID(ctx context.Context, id string) (*domain.AmbientMaterial, error)
+	CreateAmbientMaterial(ctx context.Context, m *domain.AmbientMaterial) error
+	UpdateAmbientMaterial(ctx context.Context, id string, m *domain.AmbientMaterial) error
+	DeactivateAmbientMaterial(ctx context.Context, id string) error
+
 	// Catalog: edge bands
 	ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, error)
 	GetEdgeBandByID(ctx context.Context, id string) (*domain.EdgeBand, error)
