@@ -114,6 +114,7 @@ import {
   type StructureDraft,
   ComponentsScreen,
   type ComponentDraft,
+  AgregadosScreen,
   PageLoading,
   type CommandPaletteItem,
 } from '@muebles/ui';
@@ -701,6 +702,7 @@ function AppContent({
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
+  const agregados = catalog?.agregados ?? [];
   const components = catalog?.components ?? [];
   const categories = catalog?.categories ?? [];
   const customers = catalog?.customers ?? [];
@@ -995,6 +997,9 @@ function AppContent({
   const createComponent = catalogActions.createComponent;
   const updateComponent = catalogActions.updateComponent;
   const toggleComponentActive = catalogActions.toggleComponentActive;
+  const createAgregado = catalogActions.createAgregado;
+  const updateAgregado = catalogActions.updateAgregado;
+  const deleteAgregado = catalogActions.deleteAgregado;
   const createCustomer = useCallback(
     (draft: CustomerDraft) => {
       catalogActions.createCustomer(draft, {
@@ -2243,6 +2248,17 @@ function AppContent({
           openComponentEditId={routeComponentEditId}
           onRequestEdit={(id) => onEntityEditRequest('components', id)}
           onSelectionChange={onComponentSelectionChange}
+          canMutate={canMutateModules}
+        />
+      ) : null}
+      {navId === 'agregados' ? (
+        <AgregadosScreen
+          agregados={agregados}
+          catalogComponents={components}
+          catalogHardware={hardware}
+          onCreate={createAgregado}
+          onUpdate={updateAgregado}
+          onDelete={deleteAgregado}
           canMutate={canMutateModules}
         />
       ) : null}

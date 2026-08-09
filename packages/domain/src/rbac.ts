@@ -247,6 +247,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'modules',
       'structures',
       'components',
+      'agregados',
       'materials',
       'edges',
       'hardware',
@@ -260,11 +261,12 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
   if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
-  // Ingeniería: Muebles + Estructuras + Componentes (admin / ingeniero)
+  // Ingeniería: Muebles + Estructuras + Componentes + Agregados (admin / ingeniero)
   if (roleCanAccessModulesNav(role)) ids.add('modules');
   if (roleCanMutateModules(role)) {
     ids.add('structures');
     ids.add('components');
+    ids.add('agregados');
   }
   if (roleCanAccessCatalogNav(role)) {
     ids.add('materials');

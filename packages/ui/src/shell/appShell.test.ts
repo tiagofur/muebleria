@@ -65,6 +65,7 @@ describe('AppShell nav model (F017)', () => {
       'modules',
       'structures',
       'components',
+      'agregados',
       'materials',
       'edges',
       'hardware',
@@ -75,6 +76,7 @@ describe('AppShell nav model (F017)', () => {
       'Muebles',
       'Estructuras',
       'Componentes',
+      'Agregados',
       'Materiales',
       'Cantos',
       'Herrajes',
@@ -82,6 +84,7 @@ describe('AppShell nav model (F017)', () => {
       'Grupos',
     ]);
     expect(ingenieria.items.map((i) => i.group)).toEqual([
+      'composition',
       'composition',
       'composition',
       'composition',

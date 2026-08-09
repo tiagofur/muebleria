@@ -265,6 +265,8 @@ export interface Module {
   /** Component instances placed directly on this module (doors, shelves, …).
    * Combined with the referenced structure's components to produce board parts. */
   readonly components?: readonly ModuleComponentInstance[];
+  /** Sub-assembly instances placed directly on this module (e.g. doors with hinges, drawers). */
+  readonly agregados?: readonly ModuleAgregadoInstance[];
   readonly externalDims?: ExternalDims;
   /** Fundamental furniture type for project measure defaults (#109). */
   readonly furnitureType?: FurnitureType;
@@ -317,6 +319,8 @@ export interface Structure {
   readonly presets?: readonly DimensionPreset[];
   /** Component instances when this structure is used in a composed module. */
   readonly components?: readonly ModuleComponentInstance[];
+  /** Sub-assembly instances placed on this structure. */
+  readonly agregados?: readonly ModuleAgregadoInstance[];
   readonly notes?: string;
   /** Soft-delete / hide from pickers. Default true when omitted. */
   readonly active?: boolean;
@@ -412,6 +416,38 @@ export interface ModuleComponentInstance {
     readonly rotateY?: number;
     readonly rotateZ?: number;
   };
+}
+
+/**
+ * A reusable sub-assembly composed of ComponentInstances + HardwareLines.
+ * Examples: a drawer, a door with hinges and handle, a divider panel group.
+ * Added to a module via ModuleAgregadoInstance (quantity + optional mirror flag).
+ */
+export interface Agregado {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly notes?: string;
+  /**
+   * Reference (bounding-box) dimensions for the sub-assembly.
+   * W/H/D formulas in child components resolve against these.
+   */
+  readonly externalDims?: ExternalDims;
+  /** Board components that make up this sub-assembly. */
+  readonly components?: readonly ModuleComponentInstance[];
+  /** Fixed hardware included per unit (bisagras, correderas, jaladeras, etc.). */
+  readonly hardwareLines?: readonly HardwareLine[];
+}
+
+/**
+ * Reference to an Agregado placed inside a Module, with optional mirroring.
+ */
+export interface ModuleAgregadoInstance {
+  readonly agregadoId: string;
+  readonly quantity: number;
+  /** When true, the sub-assembly is mirrored (e.g. door opening to the opposite side). */
+  readonly mirrored?: boolean;
 }
 
 // --- Project / quotation ---
@@ -820,6 +856,8 @@ export interface Catalog {
   readonly customers?: readonly Customer[];
   /** Reusable components catalog (F049 / H07). */
   readonly components?: readonly Component[];
+  /** Reusable sub-assemblies (agregados): drawers, doors with hardware, etc. */
+  readonly agregados?: readonly Agregado[];
   readonly users?: readonly User[];
 }
 

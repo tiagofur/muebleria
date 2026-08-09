@@ -35,6 +35,8 @@ export type {
   Perforation,
   Component,
   ModuleComponentInstance,
+  Agregado,
+  ModuleAgregadoInstance,
   ProjectItem,
   ItemFloorStatus,
   ProjectProductionState,
@@ -433,3 +435,11 @@ export {
   snapshotOnStatusChange,
   diffVersions,
 } from './projectVersioning';
+
+// --- Agregados helpers ---
+export {
+  mirrorComponentPlacement,
+  mirrorComponentInstance,
+  resolveAgregadoInstance,
+} from './agregados';
+

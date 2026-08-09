@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   Layers,
   LayoutGrid,
+  Boxes,
   LogOut,
   Menu,
   Minus,
@@ -51,6 +52,7 @@ export type AppNavId =
   | 'modules'
   | 'structures'
   | 'components'
+  | 'agregados'
   | 'materials'
   | 'edges'
   | 'hardware'
@@ -173,6 +175,12 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
         id: 'components',
         label: 'Componentes',
         icon: Puzzle,
+        group: 'composition',
+      },
+      {
+        id: 'agregados',
+        label: 'Agregados',
+        icon: Boxes,
         group: 'composition',
       },
       { id: 'materials', label: 'Materiales', icon: Layers, group: 'catalogs' },
