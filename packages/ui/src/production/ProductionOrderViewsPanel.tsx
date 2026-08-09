@@ -227,6 +227,7 @@ export function ProductionOrderViewsPanel({
                 baseClearanceMm: m.baseClearanceMm,
                 showCountertop: m.showCountertop,
                 showOuterGhost: true,
+                resolvedHardwarePlacements: m.resolvedHardwarePlacements,
               }))}
               totalWidth={preview.totalWidth}
               totalHeight={preview.totalHeight}
@@ -238,6 +239,7 @@ export function ProductionOrderViewsPanel({
               materialTextures={materialTextures}
               surfaceMode={surfaceMode}
               showOutlines={showOutlines}
+              hardwareCatalog={catalog.hardware}
             />
           </div>
         ) : (

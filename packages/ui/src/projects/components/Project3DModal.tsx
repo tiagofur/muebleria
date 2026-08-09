@@ -169,6 +169,7 @@ export function Project3DModal({
                 baseClearanceMm: m.baseClearanceMm,
                 showCountertop: m.showCountertop,
                 showOuterGhost: true,
+                resolvedHardwarePlacements: m.resolvedHardwarePlacements,
               }))}
               totalWidth={preview.totalWidth}
               totalHeight={preview.totalHeight}
@@ -180,6 +181,7 @@ export function Project3DModal({
               materialTextures={materialTextures}
               surfaceMode={surfaceMode}
               showOutlines={showOutlines}
+              hardwareCatalog={catalog.hardware}
             />
           ) : (
             <div

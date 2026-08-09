@@ -998,6 +998,7 @@ export function ProjectSpatialStudio({
     baseClearanceMm: m.baseClearanceMm,
     showCountertop: m.showCountertop,
     showOuterGhost: true,
+    resolvedHardwarePlacements: m.resolvedHardwarePlacements,
   }));
 
   const sceneWalls = preview.walls.map((w) => ({
@@ -2274,6 +2275,7 @@ export function ProjectSpatialStudio({
                 ambientFloor={ambientFloor}
                 ambientWall={ambientWall}
                 showCeiling={layout.showCeiling}
+                hardwareCatalog={catalog.hardware}
                 selectedModuleKey={selectedKey}
                 onSelectModule={(key) => {
                   setSelectedKey(key);

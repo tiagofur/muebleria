@@ -11,6 +11,19 @@ export {
   type SceneLightingMode,
 } from './FurnitureScene3D';
 export {
+  HardwareMesh,
+  degToRad,
+  hardwarePlacementPosition,
+  hardwarePlacementRotation,
+  normalOrientationQuaternion,
+  resolveHardwareGeometry,
+  DEFAULT_KNOB_DIAMETER_MM,
+  DEFAULT_BAR_LENGTH_MM,
+  DEFAULT_BAR_DIAMETER_MM,
+  DEFAULT_PROJECTION_MM,
+  type HardwareGeometry,
+} from './HardwareMesh';
+export {
   DEFAULT_SCENE_LIGHTING_MODE,
   CATALOG_PHOTO_BACKGROUND,
   planSceneLighting,

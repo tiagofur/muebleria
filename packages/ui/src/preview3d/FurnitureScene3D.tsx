@@ -27,7 +27,9 @@ import * as THREE from 'three';
 import {
   offsetMmFromPlanPoint,
   type AmbientMaterial,
+  type Hardware,
   type ResolvedBoardPart,
+  type ResolvedHardwarePlacement,
 } from '@muebles/domain';
 import {
   boardPartsToVisuals,
@@ -40,6 +42,7 @@ import {
   type MaterialTextureLookup,
 } from './boardPartVisual';
 import { BoardMeshMaterial } from './BoardMeshMaterial';
+import { HardwareMesh } from './HardwareMesh';
 import { MeasurementTool } from './MeasurementTool';
 import { KeyboardNav } from './KeyboardNav';
 import { ModelExporter, type ModelFormat } from './ModelExporter';
@@ -87,6 +90,13 @@ export type FurnitureSceneModule = {
   /** Visual countertop slab on top of floor cabinets (presentation). */
   readonly showCountertop?: boolean;
   readonly showOuterGhost?: boolean;
+  /**
+   * Parametric hardware placements (jaladeras) resolved to board-LOCAL mm
+   * (Fase 2). Each placement's `componentInstanceId` matches a board part id,
+   * so the renderer attaches the handle to the matching board mesh group.
+   * Optional/empty → no handles (byte-identical to pre-Fase-2 scene).
+   */
+  readonly resolvedHardwarePlacements?: readonly ResolvedHardwarePlacement[];
 };
 
 /** Simple room wall segment in workshop mm (plan X/Y). */
@@ -225,6 +235,12 @@ export type FurnitureScene3DProps = {
    * `lightingMode !== 'catalog'`.
    */
   readonly showCeiling?: boolean;
+  /**
+   * Hardware catalog, used to look up preview geometry/PBR for resolved
+   * hardware placements on each module (Fase 2). Optional: when omitted (or a
+   * module has no `resolvedHardwarePlacements`), no handles render.
+   */
+  readonly hardwareCatalog?: readonly Hardware[];
 };
 
 function BoardMesh({
@@ -235,6 +251,8 @@ function BoardMesh({
   dimmed = false,
   onSelect,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  hardwarePlacements,
+  hardwareCatalog,
 }: {
   readonly visual: BoardPartVisual;
   readonly showWireframe?: boolean;
@@ -243,6 +261,13 @@ function BoardMesh({
   readonly dimmed?: boolean;
   readonly onSelect?: (partId: string) => void;
   readonly lightingMode?: SceneLightingMode;
+  /**
+   * Resolved hardware placements filtered to this board (by componentInstanceId
+   * === visual.id). Rendered as children of the board group so they inherit the
+   * board transform — the group's local frame matches the resolver contract.
+   */
+  readonly hardwarePlacements?: readonly ResolvedHardwarePlacement[];
+  readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
 }): ReactNode {
   const [w, t, l] = visual.size;
   const transparent = showWireframe || dimmed;
@@ -254,6 +279,23 @@ function BoardMesh({
     : showWireframe
       ? visual.color
       : '#000000';
+  const handleMeshes =
+    hardwarePlacements && hardwarePlacements.length > 0 && hardwareCatalog
+      ? hardwarePlacements.map((placement) => {
+          const hardware = hardwareCatalog.get(placement.hardwareId);
+          if (!hardware) return null; // swapped/removed → no orphan mesh (VH-09)
+          // Remount on hardware/shape swap so the material + geometry refresh
+          // cleanly (mirrors BoardMeshMaterial key discipline).
+          return (
+            <HardwareMesh
+              key={`${visual.id}:${placement.hardwareId}:${placement.componentInstanceId}`}
+              placement={placement}
+              hardware={hardware}
+              lightingMode={lightingMode}
+            />
+          );
+        })
+      : null;
   return (
     <group position={visual.position} rotation={visual.rotation}>
       <mesh
@@ -316,6 +358,10 @@ function BoardMesh({
           <Edges scale={1} threshold={15} color={edgeColor} />
         ) : null}
       </mesh>
+      {/* Hardware handles mount as siblings of the <mesh> inside the board
+          group: they share the group's local frame ([0,W]×[0,T]×[0,L]), so the
+          resolver's localPosition lands exactly on the anchor face. */}
+      {handleMeshes}
     </group>
   );
 }
@@ -509,6 +555,7 @@ function ModuleGroup({
   onModuleFreeDragStart,
   onModuleFreeDragEnd,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  hardwareCatalog,
   controlsRef,
   setOrbitSuppressed,
 }: {
@@ -545,6 +592,8 @@ function ModuleGroup({
   ) => void;
   readonly onModuleFreeDragStart?: (moduleKey: string) => void;
   readonly onModuleFreeDragEnd?: (moduleKey: string) => void;
+  /** Hardware catalog (id → entry) for rendering resolved placements. */
+  readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
@@ -708,6 +757,17 @@ function ModuleGroup({
       }),
     [mod.parts, colorMode, materialColors, materialTextures, surfaceMode],
   );
+  // Group resolved hardware placements by the board part they attach to
+  // (componentInstanceId === part id). Empty when the module carries none.
+  const placementsByPartId = useMemo(() => {
+    const map = new Map<string, ResolvedHardwarePlacement[]>();
+    for (const p of mod.resolvedHardwarePlacements ?? []) {
+      const list = map.get(p.componentInstanceId);
+      if (list) list.push(p);
+      else map.set(p.componentInstanceId, [p]);
+    }
+    return map;
+  }, [mod.resolvedHardwarePlacements]);
   // Workshop → Three Y-up: [x, z, y]
   const groupPos: [number, number, number] = [
     mod.originX,
@@ -786,6 +846,8 @@ function ModuleGroup({
             dimmed={dimmed}
             onSelect={onSelectPart}
             lightingMode={lightingMode}
+            hardwarePlacements={placementsByPartId.get(v.id)}
+            hardwareCatalog={hardwareCatalog}
           />
         );
       })}
@@ -879,6 +941,7 @@ function SceneContent({
   ambientFloor,
   ambientWall,
   showCeiling,
+  hardwareCatalog,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -921,8 +984,15 @@ function SceneContent({
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
   readonly showCeiling?: boolean;
+  readonly hardwareCatalog?: readonly Hardware[];
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
+  // Hardware id → entry lookup for resolved placements (Fase 2).
+  const hardwareById = useMemo(() => {
+    const map = new Map<string, Hardware>();
+    for (const h of hardwareCatalog ?? []) map.set(h.id, h);
+    return map;
+  }, [hardwareCatalog]);
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
@@ -1107,6 +1177,7 @@ function SceneContent({
               onModuleFreeDragStart={onModuleFreeDragStart}
               onModuleFreeDragEnd={onModuleFreeDragEnd}
               lightingMode={lightMode}
+              hardwareCatalog={hardwareById}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
             />
@@ -1250,6 +1321,7 @@ export function FurnitureScene3D({
   ambientFloor,
   ambientWall,
   showCeiling,
+  hardwareCatalog,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -1453,6 +1525,7 @@ export function FurnitureScene3D({
               ambientFloor={ambientFloor}
               ambientWall={ambientWall}
               showCeiling={showCeiling}
+              hardwareCatalog={hardwareCatalog}
             />
           </Suspense>
           </Canvas>
