@@ -170,6 +170,14 @@ export {
 } from './spatialAnchor';
 
 export {
+  resolveHardwarePlacement,
+  normalizeHardwarePreview,
+  type ResolveHardwarePlacementParams,
+  type ResolvedHardwarePlacement,
+  type NormalizedHardwarePreview,
+} from './hardwarePlacement';
+
+export {
   previewPartForComponent,
   type ComponentPreviewInput,
   type ComponentPreviewOptions,
