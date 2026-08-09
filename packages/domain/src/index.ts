@@ -435,3 +435,11 @@ export {
   snapshotOnStatusChange,
   diffVersions,
 } from './projectVersioning';
+
+// --- Agregados helpers ---
+export {
+  mirrorComponentPlacement,
+  mirrorComponentInstance,
+  resolveAgregadoInstance,
+} from './agregados';
+

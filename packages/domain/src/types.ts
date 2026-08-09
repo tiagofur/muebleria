@@ -265,6 +265,8 @@ export interface Module {
   /** Component instances placed directly on this module (doors, shelves, …).
    * Combined with the referenced structure's components to produce board parts. */
   readonly components?: readonly ModuleComponentInstance[];
+  /** Sub-assembly instances placed directly on this module (e.g. doors with hinges, drawers). */
+  readonly agregados?: readonly ModuleAgregadoInstance[];
   readonly externalDims?: ExternalDims;
   /** Fundamental furniture type for project measure defaults (#109). */
   readonly furnitureType?: FurnitureType;
@@ -317,6 +319,8 @@ export interface Structure {
   readonly presets?: readonly DimensionPreset[];
   /** Component instances when this structure is used in a composed module. */
   readonly components?: readonly ModuleComponentInstance[];
+  /** Sub-assembly instances placed on this structure. */
+  readonly agregados?: readonly ModuleAgregadoInstance[];
   readonly notes?: string;
   /** Soft-delete / hide from pickers. Default true when omitted. */
   readonly active?: boolean;

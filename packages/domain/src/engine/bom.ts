@@ -10,6 +10,7 @@ import { ResolutionError, ValidationError } from '../errors';
 import {
   resolveModuleMeasurePreset,
 } from '../measurePresets';
+import { resolveAgregadoInstance } from '../agregados';
 import {
   applyBaseModeToHardwareLines,
   filterComponentInstancesForBaseMode,
@@ -506,7 +507,7 @@ export interface ComposedModuleInput {
   /** When set, filters zoclo components and supplies B to formulas. */
   readonly module?: Pick<
     Module,
-    'baseMode' | 'baseClearanceMm' | 'furnitureType'
+    'baseMode' | 'baseClearanceMm' | 'furnitureType' | 'agregados'
   >;
 }
 
@@ -557,11 +558,40 @@ export function resolveComposedModule(
     optionChoices,
     B,
   );
-  const allParts = [...structureParts, ...moduleParts];
+
+  // Expand sub-assemblies (agregados) attached to structure or module.
+  let agregadosComponents: ModuleComponentInstance[] = [];
+  let agregadosHardware: HardwareLine[] = [];
+  const catalogAgregados = catalog.agregados ?? [];
+  const allAgregadoInstances = [
+    ...(structure.agregados ?? []),
+    ...(module?.agregados ?? []),
+  ];
+  for (const agrInst of allAgregadoInstances) {
+    const res = resolveAgregadoInstance(agrInst, catalogAgregados);
+    agregadosComponents.push(...res.components);
+    agregadosHardware.push(...res.hardwareLines);
+  }
+
+  const filteredAgregadoInstances = filterComponentInstancesForBaseMode(
+    agregadosComponents,
+    catalog.components,
+    baseMode,
+  );
+  const agregadosParts = expandComponentInstances(
+    filteredAgregadoInstances,
+    catalog,
+    '',
+    dims,
+    optionChoices,
+    B,
+  );
+
+  const allParts = [...structureParts, ...moduleParts, ...agregadosParts];
 
   return {
     boardParts: allParts,
-    hardwareLines: [],
+    hardwareLines: agregadosHardware,
   };
 }
 
@@ -659,7 +689,7 @@ export function resolveBom(
     const baseMode = resolveModuleBaseMode(module);
     const widthMm = dims.width;
     composedHardware = applyBaseModeToHardwareLines(
-      [...composedHardware, ...module.hardwareLines],
+      [...composedHardware, ...(module.hardwareLines ?? [])],
       baseMode,
       widthMm,
     );
