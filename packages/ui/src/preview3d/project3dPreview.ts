@@ -4,6 +4,7 @@
 
 import type {
   Catalog,
+  Hardware,
   Module,
   OptionChoices,
   Project,
@@ -14,7 +15,9 @@ import {
   defaultMeasurePresetId,
   layoutKitchenPlacements,
   resolveBom,
+  resolveHardwarePlacement,
   resolveModuleMeasurePreset,
+  type ResolvedHardwarePlacement,
   type ResolvedWallFrame,
 } from '@muebles/domain';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
@@ -45,6 +48,14 @@ export type ProjectModule3DInstance = {
   readonly elevation: 'floor' | 'wall';
   /** Visual countertop slab (floor units only, presentation). */
   readonly showCountertop: boolean;
+  /**
+   * Parametric hardware placements (jaladeras) resolved to board-LOCAL mm
+   * (Fase 2, WU3). Additive: `[]` when no component instance carries
+   * `overrides.hardwarePlacements` or every hardware lacks a previewShape —
+   * the `parts` output is byte-identical to the pre-Fase-2 bridge in that case
+   * (VH-04 no-regression). Never reaches the Optimizer/cut path (VH-08).
+   */
+  readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   readonly error: string | null;
 };
 
@@ -109,6 +120,7 @@ function resolveItemBom(
   catalogInput: Module3DCatalogInput,
 ): {
   parts: readonly ResolvedBoardPart[];
+  resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   width: number;
   height: number;
   depth: number;
@@ -150,6 +162,11 @@ function resolveItemBom(
     const bom = resolveBom(module, choices, catalog, measurePresetId);
     return {
       parts: bom.boardParts,
+      resolvedHardwarePlacements: resolveModuleHardwarePlacements(
+        module,
+        bom.boardParts,
+        catalogInput.hardware,
+      ),
       ...dims,
       error:
         bom.boardParts.length === 0
@@ -159,10 +176,73 @@ function resolveItemBom(
   } catch (e) {
     return {
       parts: [],
+      resolvedHardwarePlacements: [],
       ...dims,
       error: e instanceof Error ? e.message : 'Error al resolver el mueble.',
     };
   }
+}
+
+/**
+ * Resolve parametric hardware placements (jaladeras) for one module into
+ * board-LOCAL mm (Fase 2, WU3). Pure — no Three.js.
+ *
+ * For each module component instance that carries
+ * `overrides.hardwarePlacements`, each placement is resolved against the
+ * board part the instance produced. The link between a component instance and
+ * its board part is the engine part-id convention `${componentId}-copy-${i}`
+ * (engine/bom.ts `expandComponentInstances` with empty idPrefix for structure,
+ * module and agregado components alike). The resolved `componentInstanceId`
+ * equals that part id, so the renderer attaches the handle to the matching
+ * board mesh by id.
+ *
+ * Returns `[]` (VH-04 no-regression) when:
+ *  - the module has no component instances with `hardwarePlacements`,
+ *  - the referenced hardware is missing from the catalog (swapped/removed), or
+ *  - the hardware has no valid `previewShape` (resolver returns null — VH-09).
+ *
+ * Placements never feed the Optimizer/cut path (VH-08): this array is consumed
+ * only by the 3D preview.
+ */
+function resolveModuleHardwarePlacements(
+  module: Module,
+  boardParts: readonly ResolvedBoardPart[],
+  hardwareCatalog: readonly Hardware[],
+): ResolvedHardwarePlacement[] {
+  const partById = new Map(boardParts.map((p) => [p.id, p]));
+  const out: ResolvedHardwarePlacement[] = [];
+
+  for (const instance of module.components ?? []) {
+    const placements = instance.overrides?.hardwarePlacements;
+    if (!placements || placements.length === 0) continue;
+
+    const qty = Math.max(1, Math.floor(instance.quantity) || 1);
+    for (let i = 0; i < qty; i++) {
+      // Matches engine/bom.ts expandComponentInstances idPrefix='' convention.
+      const componentInstanceId = `${instance.componentId}-copy-${i}`;
+      const part = partById.get(componentInstanceId);
+      if (!part) continue; // filtered by base mode / not a board — skip.
+
+      for (const placement of placements) {
+        const hardware = hardwareCatalog.find((h) => h.id === placement.hardwareId);
+        // VH-09: swapped-to-cost-only or removed hardware renders nothing.
+        if (!hardware) continue;
+        const resolved = resolveHardwarePlacement({
+          componentInstanceId,
+          placement,
+          board: {
+            widthMm: part.widthMm,
+            thicknessMm: part.thicknessMm,
+            lengthMm: part.lengthMm,
+          },
+          hardware,
+        });
+        if (resolved) out.push(resolved);
+      }
+    }
+  }
+
+  return out;
 }
 
 export type ResolveProject3DOptions = {
@@ -197,6 +277,7 @@ export function resolveProject3DPreview(
     item: ProjectItem;
     module: Module | undefined;
     parts: readonly ResolvedBoardPart[];
+    resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
     width: number;
     height: number;
     depth: number;
@@ -211,6 +292,7 @@ export function resolveProject3DPreview(
         item,
         module: undefined,
         parts: [],
+        resolvedHardwarePlacements: [],
         width: 600,
         height: 720,
         depth: 560,
@@ -223,6 +305,7 @@ export function resolveProject3DPreview(
       item,
       module,
       parts: resolved.parts,
+      resolvedHardwarePlacements: resolved.resolvedHardwarePlacements,
       width: resolved.width,
       height: resolved.height,
       depth: resolved.depth,
@@ -290,6 +373,7 @@ export function resolveProject3DPreview(
           elevation: place.elevation,
           showCountertop:
             showCountertop && place.elevation === 'floor',
+          resolvedHardwarePlacements: row?.resolvedHardwarePlacements ?? [],
           error: row?.error ?? null,
         };
       },
@@ -367,6 +451,7 @@ export function resolveProject3DPreview(
           baseClearanceMm: 0,
           elevation: 'floor' as const,
           showCountertop: false,
+          resolvedHardwarePlacements: row.resolvedHardwarePlacements,
           error: row.error,
         };
       });
@@ -409,6 +494,7 @@ export function resolveProject3DPreview(
         baseClearanceMm: 0,
         elevation: 'floor' as const,
         showCountertop: false,
+        resolvedHardwarePlacements: row.resolvedHardwarePlacements,
         error: row.error,
       };
     });
