@@ -450,6 +450,9 @@ function componentInstanceToApi(
   if (c.overrides?.rotateX !== undefined) overrides.rotateX = c.overrides.rotateX;
   if (c.overrides?.rotateY !== undefined) overrides.rotateY = c.overrides.rotateY;
   if (c.overrides?.rotateZ !== undefined) overrides.rotateZ = c.overrides.rotateZ;
+  if (c.overrides?.hardwarePlacements && c.overrides.hardwarePlacements.length > 0) {
+    overrides.hardwarePlacements = c.overrides.hardwarePlacements;
+  }
   return {
     componentId: c.componentId,
     quantity: c.quantity,
@@ -475,6 +478,9 @@ function componentInstanceFromApi(
       ? (raw.overrides as Record<string, unknown>)
       : undefined;
   const edgesRaw = overridesRaw?.edges;
+  const hardwarePlacementsRaw = Array.isArray(overridesRaw?.hardwarePlacements)
+    ? (overridesRaw?.hardwarePlacements as readonly unknown[])
+    : undefined;
   const lengthFormula =
     str(
       raw.length_formula ??
@@ -523,6 +529,7 @@ function componentInstanceFromApi(
     str(overridesRaw?.notes) || undefined;
   const hasOverrides =
     Array.isArray(edgesRaw) ||
+    hardwarePlacementsRaw !== undefined ||
     Boolean(lengthFormula) ||
     Boolean(widthFormula) ||
     Boolean(xFormula) ||
@@ -555,6 +562,9 @@ function componentInstanceFromApi(
           rotateX,
           rotateY,
           rotateZ,
+          hardwarePlacements: hardwarePlacementsRaw as
+            | readonly import('@muebles/domain').HardwarePlacement[]
+            | undefined,
         }
       : undefined,
   };
