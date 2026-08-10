@@ -1,11 +1,23 @@
 /**
  * Read-only inspector for a selected ResolvedBoardPart in the 3D viewer.
  * Pure UI — no Three.js. Used by Furniture3DViewer (and tests).
+ *
+ * F066: rediseñado en 5 secciones colapsables (Dimensiones / Material /
+ * Herrajes / Acabado / Avanzado). El estado de colapso persiste en
+ * localStorage via useInspectorSectionState. Las secciones Herrajes y
+ * Acabado muestran placeholder hoy; se pueblan con F069 (variantes) y
+ * F070 (placement editor).
  */
 
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import type { ResolvedBoardPart } from '@muebles/domain';
-import { X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import {
+  type InspectorSectionId,
+  useInspectorSectionState,
+} from './useInspectorSectionState';
+import './partInspector.css';
 
 export type PartInspectorProps = {
   readonly part: ResolvedBoardPart | null;
@@ -25,6 +37,98 @@ function formatDeg(n: number | undefined): string {
   return `${n}°`;
 }
 
+/** Datos de una fila del grid dentro de una sección. */
+type Field = {
+  readonly label: string;
+  readonly value: string;
+  readonly testId?: string;
+  readonly mono?: boolean;
+};
+
+/** Sub-componente: header colapsable + body. Patrón controlado del repo. */
+function CollapsibleSection({
+  id,
+  title,
+  testIdPrefix,
+  isOpen,
+  onToggle,
+  summary,
+  children,
+}: {
+  readonly id: InspectorSectionId;
+  readonly title: string;
+  readonly testIdPrefix: string;
+  readonly isOpen: boolean;
+  readonly onToggle: (id: InspectorSectionId) => void;
+  readonly summary?: string;
+  readonly children: ReactNode;
+}): ReactNode {
+  const panelId = `${testIdPrefix}-panel-${id}`;
+  const buttonId = `${testIdPrefix}-trigger-${id}`;
+  return (
+    <section className="part-inspector__section">
+      <h5 className="part-inspector__section-heading">
+        <button
+          type="button"
+          id={buttonId}
+          className="part-inspector__section-trigger"
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onClick={() => onToggle(id)}
+          data-testid={`${testIdPrefix}-section-${id}`}
+        >
+          <span className="part-inspector__section-chevron" aria-hidden>
+            {isOpen ? (
+              <ChevronDown size={14} strokeWidth={1.5} />
+            ) : (
+              <ChevronRight size={14} strokeWidth={1.5} />
+            )}
+          </span>
+          <span className="part-inspector__section-label">{title}</span>
+          {summary ? (
+            <span className="part-inspector__section-summary">{summary}</span>
+          ) : null}
+        </button>
+      </h5>
+      {isOpen ? (
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={buttonId}
+          className="part-inspector__section-body"
+        >
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Grid reutilizable de pares dt/dd dentro de una sección. */
+function FieldGrid({
+  fields,
+  testIdPrefix,
+}: {
+  readonly fields: readonly Field[];
+  readonly testIdPrefix: string;
+}): ReactNode {
+  return (
+    <dl className="part-inspector__grid" data-testid={`${testIdPrefix}-grid`}>
+      {fields.map((f) => (
+        <div key={f.label}>
+          <dt>{f.label}</dt>
+          <dd
+            data-testid={f.testId}
+            className={f.mono ? 'part-inspector__mono' : undefined}
+          >
+            {f.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function PartInspector({
   part,
   onClear,
@@ -32,6 +136,8 @@ export function PartInspector({
   onIsolateChange,
   testId = 'part-inspector',
 }: PartInspectorProps): ReactNode {
+  const sections = useInspectorSectionState();
+
   if (!part) {
     return (
       <div className="part-inspector part-inspector--empty" data-testid={testId}>
@@ -41,6 +147,42 @@ export function PartInspector({
       </div>
     );
   }
+
+  const dimensionFields: Field[] = [
+    {
+      label: 'Largo × Ancho × Espesor',
+      value: `${formatMm(part.lengthMm)} × ${formatMm(part.widthMm)} × ${formatMm(
+        part.thicknessMm,
+      )}`,
+      testId: `${testId}-dims`,
+    },
+    { label: 'Cantidad', value: String(part.quantity), testId: `${testId}-qty` },
+  ];
+
+  const materialFields: Field[] = [
+    {
+      label: 'Material',
+      value: part.materialId || '—',
+      testId: `${testId}-material`,
+      mono: true,
+    },
+  ];
+
+  const advancedFields: Field[] = [
+    { label: 'Rol', value: part.optionRole || '—', testId: `${testId}-role` },
+    {
+      label: 'Posición (X / Y / Z)',
+      value: `${formatMm(part.x)} / ${formatMm(part.y)} / ${formatMm(part.z)}`,
+      testId: `${testId}-pose`,
+    },
+    {
+      label: 'Rotación (X / Y / Z)',
+      value: `${formatDeg(part.rotateX)} / ${formatDeg(part.rotateY)} / ${formatDeg(
+        part.rotateZ,
+      )}`,
+      testId: `${testId}-rotation`,
+    },
+  ];
 
   return (
     <div className="part-inspector" data-testid={testId}>
@@ -68,54 +210,88 @@ export function PartInspector({
         ) : null}
       </div>
 
-      <dl className="part-inspector__grid" data-testid={`${testId}-grid`}>
-        <div>
-          <dt>Rol</dt>
-          <dd data-testid={`${testId}-role`}>{part.optionRole || '—'}</dd>
-        </div>
-        <div>
-          <dt>Largo × Ancho × Espesor</dt>
-          <dd data-testid={`${testId}-dims`}>
-            {formatMm(part.lengthMm)} × {formatMm(part.widthMm)} ×{' '}
-            {formatMm(part.thicknessMm)}
-          </dd>
-        </div>
-        <div>
-          <dt>Posición (X / Y / Z)</dt>
-          <dd data-testid={`${testId}-pose`}>
-            {formatMm(part.x)} / {formatMm(part.y)} / {formatMm(part.z)}
-          </dd>
-        </div>
-        <div>
-          <dt>Rotación (X / Y / Z)</dt>
-          <dd data-testid={`${testId}-rotation`}>
-            {formatDeg(part.rotateX)} / {formatDeg(part.rotateY)} /{' '}
-            {formatDeg(part.rotateZ)}
-          </dd>
-        </div>
-        <div>
-          <dt>Cantidad</dt>
-          <dd data-testid={`${testId}-qty`}>{part.quantity}</dd>
-        </div>
-        <div>
-          <dt>Material</dt>
-          <dd data-testid={`${testId}-material`} className="part-inspector__mono">
-            {part.materialId || '—'}
-          </dd>
-        </div>
-      </dl>
+      <div className="part-inspector__sections">
+        <CollapsibleSection
+          id="dimensions"
+          title="Dimensiones"
+          testIdPrefix={testId}
+          isOpen={sections.isOpen('dimensions')}
+          onToggle={sections.toggle}
+        >
+          <FieldGrid fields={dimensionFields} testIdPrefix={testId} />
+        </CollapsibleSection>
 
-      {onIsolateChange ? (
-        <label className="part-inspector__isolate" data-testid={`${testId}-isolate`}>
-          <input
-            type="checkbox"
-            checked={isolateSelected}
-            onChange={(e) => onIsolateChange(e.target.checked)}
-            data-testid={`${testId}-isolate-checkbox`}
-          />
-          Aislar pieza (atenuar el resto)
-        </label>
-      ) : null}
+        <CollapsibleSection
+          id="material"
+          title="Material"
+          testIdPrefix={testId}
+          isOpen={sections.isOpen('material')}
+          onToggle={sections.toggle}
+        >
+          <FieldGrid fields={materialFields} testIdPrefix={testId} />
+          <p
+            className="part-inspector__placeholder"
+            data-testid={`${testId}-finish-placeholder`}
+          >
+            Acabado del material
+          </p>
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          id="hardware"
+          title="Herrajes"
+          testIdPrefix={testId}
+          isOpen={sections.isOpen('hardware')}
+          onToggle={sections.toggle}
+        >
+          <p
+            className="part-inspector__placeholder"
+            data-testid={`${testId}-hardware-placeholder`}
+          >
+            Sin herrajes definidos para esta pieza
+          </p>
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          id="finish"
+          title="Acabado"
+          testIdPrefix={testId}
+          isOpen={sections.isOpen('finish')}
+          onToggle={sections.toggle}
+        >
+          <p
+            className="part-inspector__placeholder"
+            data-testid={`${testId}-finish-section-placeholder`}
+          >
+            Acabado del material
+          </p>
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          id="advanced"
+          title="Avanzado"
+          testIdPrefix={testId}
+          isOpen={sections.isOpen('advanced')}
+          onToggle={sections.toggle}
+          summary="Datos técnicos"
+        >
+          <FieldGrid fields={advancedFields} testIdPrefix={testId} />
+          {onIsolateChange ? (
+            <label
+              className="part-inspector__isolate"
+              data-testid={`${testId}-isolate`}
+            >
+              <input
+                type="checkbox"
+                checked={isolateSelected}
+                onChange={(e) => onIsolateChange(e.target.checked)}
+                data-testid={`${testId}-isolate-checkbox`}
+              />
+              Aislar pieza (atenuar el resto)
+            </label>
+          ) : null}
+        </CollapsibleSection>
+      </div>
     </div>
   );
 }
