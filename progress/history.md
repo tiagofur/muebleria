@@ -238,3 +238,25 @@
 - **Cambios:** `docs/prd.md` actualizado al estado real (MVP hecho, v1.1 parcial, Etapa 2 avanzada); `feature_list.json` añade F029–F033 pending; `progress/current.md` refleja backlog.
 - **GitHub:** issues abiertos #35 opciones proyecto, #36 cotización comercial, #37 Ajustes, #38 Electron empaquetado, #39 atajos grilla.
 - **Próximo:** F029 (#35) según harness (menor id pending).
+
+
+---
+
+## Sesión — Components catalog critique + Judgment Day (cerrada 2026-08-10)
+
+- **Branch:** `feat/quote-projectar-ux-bridge`
+- **Scope:** Critique + JD + fixes Componentes (lista/detalle/crear/editar)
+
+### Hecho
+- Critique 24/40 Acceptable
+- JD Rounds 1–5
+- **JUDGMENT: APPROVED** (R5 ambos jueces CLEAN)
+
+### Fixes clave
+- C1–C8: draft wipe, perforations, fórmulas, confirm desactivar, rot 0, 3D tab, placement filter, dims+fórmulas
+- Session: `seedEditorDraftFromBaseline` + `setDraftLocal` en forceClose (no sticky empty)
+- `consumeRequestCreateKey` modules/materials/projects
+- geometrySummary fórmulas en lista/detalle; edges con preview dims
+
+### Tests
+- Suites components/modules/common relacionadas verdes

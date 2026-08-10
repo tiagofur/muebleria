@@ -1,15 +1,50 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ResolvedBoardPart } from '@muebles/domain';
 import { PartInspector } from './PartInspector';
 import { PartList } from './PartList';
 
+const STORAGE_KEY = 'muebles.part-inspector.sections.v1';
+
+/**
+ * jsdom en este repo no habilita localStorage por defecto. Instalamos un
+ * mock tipo Map para que useInspectorSectionState persista como en producción
+ * y los tests de colapso/persistencia sean determinísticos.
+ */
+function installLocalStorageMock(): void {
+  const store = new Map<string, string>();
+  const mock: Storage = {
+    get length(): number {
+      return store.size;
+    },
+    clear: (): void => store.clear(),
+    getItem: (key: string): string | null => store.get(key) ?? null,
+    key: (index: number): string | null => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string): void => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string): void => {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mock,
+    writable: true,
+    configurable: true,
+  });
+}
+
+beforeEach(() => {
+  installLocalStorageMock();
+});
+
 afterEach(() => {
   cleanup();
+  globalThis.localStorage?.clear();
 });
 
 const samplePart: ResolvedBoardPart = {
@@ -53,14 +88,21 @@ describe('PartInspector', () => {
       />,
     );
 
+    // Título y código (siempre visibles en el header)
     expect(screen.getByTestId('part-inspector-title').textContent).toMatch(
       /Lateral izquierdo/,
     );
-    expect(screen.getByTestId('part-inspector-role').textContent).toBe(
-      'INTERIOR',
-    );
+    // Dimensiones: sección abierta por defecto
     expect(screen.getByTestId('part-inspector-dims').textContent).toMatch(
       /720 mm/,
+    );
+    expect(screen.getByTestId('part-inspector-qty').textContent).toBe('1');
+
+    // Avanzado (role, pose, rotation, isolate) arranca CERRADO por defecto.
+    // Abrimos la sección antes de validar sus campos.
+    await user.click(screen.getByTestId('part-inspector-section-advanced'));
+    expect(screen.getByTestId('part-inspector-role').textContent).toBe(
+      'INTERIOR',
     );
     expect(screen.getByTestId('part-inspector-pose').textContent).toMatch(
       /0 mm/,
@@ -74,6 +116,71 @@ describe('PartInspector', () => {
 
     await user.click(screen.getByTestId('part-inspector-isolate-checkbox'));
     expect(onIsolateChange).toHaveBeenCalledWith(true);
+  });
+
+  it('renders all 5 section headers', () => {
+    render(<PartInspector part={samplePart} />);
+    expect(screen.getByTestId('part-inspector-section-dimensions')).toBeTruthy();
+    expect(screen.getByTestId('part-inspector-section-material')).toBeTruthy();
+    expect(screen.getByTestId('part-inspector-section-hardware')).toBeTruthy();
+    expect(screen.getByTestId('part-inspector-section-finish')).toBeTruthy();
+    expect(screen.getByTestId('part-inspector-section-advanced')).toBeTruthy();
+  });
+
+  it('toggles a section open→closed (body hides) and back', async () => {
+    const user = userEvent.setup();
+    render(<PartInspector part={samplePart} />);
+
+    // Dimensions arranca abierto → dims visible
+    expect(screen.getByTestId('part-inspector-dims')).toBeTruthy();
+
+    // Cerrar dimensions
+    await user.click(screen.getByTestId('part-inspector-section-dimensions'));
+    expect(screen.queryByTestId('part-inspector-dims')).toBeNull();
+
+    // Reabrir
+    await user.click(screen.getByTestId('part-inspector-section-dimensions'));
+    expect(screen.getByTestId('part-inspector-dims')).toBeTruthy();
+  });
+
+  it('advanced starts collapsed (role not rendered until opened)', () => {
+    render(<PartInspector part={samplePart} />);
+    expect(screen.queryByTestId('part-inspector-role')).toBeNull();
+  });
+
+  it('shows hardware and finish placeholders', () => {
+    render(<PartInspector part={samplePart} />);
+    expect(
+      screen.getByTestId('part-inspector-hardware-placeholder').textContent,
+    ).toMatch(/Sin herrajes definidos/i);
+    expect(
+      screen.getByTestId('part-inspector-finish-section-placeholder')
+        .textContent,
+    ).toMatch(/Acabado del material/i);
+  });
+
+  it('persists collapse state across remounts', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<PartInspector part={samplePart} />);
+
+    // Cerrar dimensions
+    await user.click(screen.getByTestId('part-inspector-section-dimensions'));
+    expect(screen.queryByTestId('part-inspector-dims')).toBeNull();
+
+    // Verificamos que se persistió
+    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.dimensions).toBe(false);
+
+    // Desmontar y remontar — la sección sigue cerrada
+    unmount();
+    render(<PartInspector part={samplePart} />);
+    expect(screen.queryByTestId('part-inspector-dims')).toBeNull();
+
+    // Y al abrir de nuevo, vuelve el contenido
+    await user.click(screen.getByTestId('part-inspector-section-dimensions'));
+    expect(screen.getByTestId('part-inspector-dims')).toBeTruthy();
   });
 });
 
