@@ -520,8 +520,8 @@ function WallMesh({
           color={selected ? '#5b9fd4' : paintHover ? PAINT_HOVER_COLOR : WALL_DEFAULT_COLOR}
           roughness={0.9}
           metalness={0.05}
-          transparent
-          opacity={selected ? 0.72 : paintHover ? 0.85 : 0.55}
+          transparent={selected || paintHover}
+          opacity={selected ? 0.72 : paintHover ? 0.85 : 1}
         />
       </mesh>
     </group>
@@ -1299,7 +1299,7 @@ function SceneContent({
           ) : null}
           {ambientPlan.ceiling ? (
             <CeilingMesh
-              material={ambientWall}
+              material={ambientCeiling}
               widthMm={totalWidth * 1.4}
               depthMm={totalDepth * 1.6}
               position={[ceilingX, ceilingY, ceilingZ]}
