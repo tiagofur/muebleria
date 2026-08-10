@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AmbientMaterial,
   Component,
   Customer,
   EdgeBand,
@@ -82,6 +83,8 @@ export interface ProjectsScreenProps {
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
+  /** Ambient materials for 3D room scenes (floor/wall textures). */
+  readonly ambientMaterials?: readonly AmbientMaterial[];
   /** Catalog customers for name lookup on cards / detail / search. */
   readonly customers?: readonly Customer[];
   /** F034: admin can pick portfolio owner on create/edit. */
@@ -289,6 +292,7 @@ export function ProjectsScreen({
   materials,
   edges,
   hardware,
+  ambientMaterials = [],
   catalogComponents = [],
   catalogStructures = [],
   customers = [],
@@ -418,6 +422,7 @@ export function ProjectsScreen({
       edges,
       hardware,
       optionGroups,
+      ambientMaterials,
     }),
     [
       modules,
@@ -427,6 +432,7 @@ export function ProjectsScreen({
       edges,
       hardware,
       optionGroups,
+      ambientMaterials,
     ],
   );
 

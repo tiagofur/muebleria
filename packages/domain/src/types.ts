@@ -659,6 +659,11 @@ export interface KitchenSpace {
    * Resolves against `Catalog.ambientMaterials` (surfaceType 'wall'). Omit = none.
    */
   readonly wallMaterialId?: string;
+  /**
+   * Ambient ceiling material for the 3D room scene (presentation-only).
+   * Resolves against `Catalog.ambientMaterials` (surfaceType 'wall'). Omit = default white paint.
+   */
+  readonly ceilingMaterialId?: string;
   /** Show the room ceiling in the 3D scene (Q1, #4151). Default undefined = OFF. */
   readonly showCeiling?: boolean;
   /** Optional floor-plan underlay for this space. */
@@ -710,6 +715,11 @@ export interface ProjectKitchenLayout {
    * Mirror of the active space's ref. Omit = none.
    */
    readonly wallMaterialId?: string;
+  /**
+   * Ambient ceiling material for the 3D room scene (presentation-only).
+   * Mirror of the active space's ref. Omit = default white paint.
+   */
+   readonly ceilingMaterialId?: string;
   /** Show the room ceiling in the 3D scene (Q1, #4151). Mirror of active space. */
    readonly showCeiling?: boolean;
    /**

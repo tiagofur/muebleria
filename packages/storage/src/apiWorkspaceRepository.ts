@@ -5,6 +5,7 @@ import {
 } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import {
+  ambientMaterialToApi,
   catalogFromApi,
   categoryToApi,
   componentToApi,
@@ -304,6 +305,14 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
           customerToApi(c),
         );
       }
+    }
+
+    for (const amb of catalog.ambientMaterials ?? []) {
+      await this.upsert(
+        `/catalog/ambient-materials/${amb.id}`,
+        '/catalog/ambient-materials',
+        ambientMaterialToApi(amb),
+      );
     }
   }
 

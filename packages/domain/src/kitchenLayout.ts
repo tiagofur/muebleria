@@ -111,6 +111,7 @@ function spacePlanFields(
     readonly showCountertop?: boolean;
     readonly floorMaterialId?: string;
     readonly wallMaterialId?: string;
+    readonly ceilingMaterialId?: string;
     readonly showCeiling?: boolean;
     readonly underlay?: KitchenPlanUnderlay;
   },
@@ -121,6 +122,7 @@ function spacePlanFields(
   | 'showCountertop'
   | 'floorMaterialId'
   | 'wallMaterialId'
+  | 'ceilingMaterialId'
   | 'showCeiling'
   | 'underlay'
 > {
@@ -140,6 +142,9 @@ function spacePlanFields(
     ...(source.wallMaterialId === undefined
       ? {}
       : { wallMaterialId: source.wallMaterialId }),
+    ...(source.ceilingMaterialId === undefined
+      ? {}
+      : { ceilingMaterialId: source.ceilingMaterialId }),
     ...(source.showCeiling === undefined
       ? {}
       : { showCeiling: source.showCeiling }),

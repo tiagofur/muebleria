@@ -229,6 +229,8 @@ export type FurnitureScene3DProps = {
    * instead of the hardcoded #8b9098.
    */
   readonly ambientWall?: AmbientMaterial;
+  /** Ambient ceiling material for the 3D room scene. Defaults to clean white. */
+  readonly ambientCeiling?: AmbientMaterial;
   /**
    * Show the ceiling mesh (room box). Opt-in; default OFF to preserve the
    * current open feel. Only rendered when an ambient material is present and
@@ -241,6 +243,8 @@ export type FurnitureScene3DProps = {
    * module has no `resolvedHardwarePlacements`), no handles render.
    */
   readonly hardwareCatalog?: readonly Hardware[];
+  readonly onSelectFloor?: () => void;
+  readonly onSelectCeiling?: () => void;
 };
 
 function BoardMesh({
@@ -940,8 +944,11 @@ function SceneContent({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   ambientFloor,
   ambientWall,
+  ambientCeiling,
   showCeiling,
   hardwareCatalog,
+  onSelectFloor,
+  onSelectCeiling,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -983,8 +990,11 @@ function SceneContent({
   readonly lightingMode?: SceneLightingMode;
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
+  readonly ambientCeiling?: AmbientMaterial;
   readonly showCeiling?: boolean;
   readonly hardwareCatalog?: readonly Hardware[];
+  readonly onSelectFloor?: () => void;
+  readonly onSelectCeiling?: () => void;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   // Hardware id → entry lookup for resolved placements (Fase 2).
@@ -1023,7 +1033,7 @@ function SceneContent({
   // Room-box geometry derives from the floor-plane bounds + 2400mm height
   // (design #4151). Back wall spans the plane width at the back depth edge.
   const backWallWidth = totalWidth * 1.4;
-  const backWallZ = framing.center[2] + (totalDepth * 1.6) / 2;
+  const backWallZ = framing.center[2] - (totalDepth * 1.6) / 2;
   const ceilingY = ROOM_WALL_HEIGHT_MM;
   const ceilingZ = framing.center[2];
   const ceilingX = framing.center[0];
@@ -1105,20 +1115,47 @@ function SceneContent({
                 depthMm={totalDepth}
                 position={[framing.center[0], -1, framing.center[2]]}
                 lightingMode={lightMode}
+                onSelect={onSelectFloor}
               />
             ) : (
               <mesh
                 rotation={[-Math.PI / 2, 0, 0]}
                 position={[framing.center[0], -1, framing.center[2]]}
                 receiveShadow
+                onClick={
+                  onSelectFloor
+                    ? (e) => {
+                        e.stopPropagation();
+                        onSelectFloor();
+                      }
+                    : undefined
+                }
+                onPointerOver={
+                  onSelectFloor
+                    ? () => {
+                        if (typeof document !== 'undefined') {
+                          document.body.style.cursor = 'pointer';
+                        }
+                      }
+                    : undefined
+                }
+                onPointerOut={
+                  onSelectFloor
+                    ? () => {
+                        if (typeof document !== 'undefined') {
+                          document.body.style.cursor = '';
+                        }
+                      }
+                    : undefined
+                }
               >
                 <planeGeometry
                   args={[totalWidth * 1.4, totalDepth * 1.6]}
                 />
                 <meshStandardMaterial
-                  color="#2a2d31"
-                  roughness={0.95}
-                  metalness={0}
+                  color="#f4f4f0"
+                  roughness={0.85}
+                  metalness={0.02}
                 />
               </mesh>
             )
@@ -1187,12 +1224,14 @@ function SceneContent({
               catalog mode (spec #4149 room box + lighting gating). */}
           {ambientPlan.roomBox ? (
             <>
-              <BackWallMesh
-                material={ambientWall ?? ambientFloor}
-                widthMm={backWallWidth}
-                position={[framing.center[0], ROOM_WALL_HEIGHT_MM / 2, backWallZ]}
-                lightingMode={lightMode}
-              />
+              {walls.length === 0 ? (
+                <BackWallMesh
+                  material={ambientWall ?? ambientFloor}
+                  widthMm={backWallWidth}
+                  position={[framing.center[0], ROOM_WALL_HEIGHT_MM / 2, backWallZ]}
+                  lightingMode={lightMode}
+                />
+              ) : null}
               {walls.map((w) => {
                 const wdx = w.endXMm - w.originXMm;
                 const wdy = w.endYMm - w.originYMm;
@@ -1214,11 +1253,12 @@ function SceneContent({
           ) : null}
           {ambientPlan.ceiling ? (
             <CeilingMesh
-              material={ambientWall ?? ambientFloor}
+              material={ambientCeiling}
               widthMm={totalWidth * 1.4}
               depthMm={totalDepth * 1.6}
               position={[ceilingX, ceilingY, ceilingZ]}
               lightingMode={lightMode}
+              onSelect={onSelectCeiling}
             />
           ) : null}
         </group>
@@ -1320,8 +1360,11 @@ export function FurnitureScene3D({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   ambientFloor,
   ambientWall,
+  ambientCeiling,
   showCeiling,
   hardwareCatalog,
+  onSelectFloor,
+  onSelectCeiling,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
@@ -1524,8 +1567,11 @@ export function FurnitureScene3D({
               lightingMode={lightingMode}
               ambientFloor={ambientFloor}
               ambientWall={ambientWall}
+              ambientCeiling={ambientCeiling}
               showCeiling={showCeiling}
               hardwareCatalog={hardwareCatalog}
+              onSelectFloor={onSelectFloor}
+              onSelectCeiling={onSelectCeiling}
             />
           </Suspense>
           </Canvas>

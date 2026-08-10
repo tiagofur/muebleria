@@ -188,14 +188,14 @@ describe('resolveFloorColor', () => {
     expect(resolveFloorColor(floorMat)).toBe('#eeeeee');
   });
 
-  it('falls back to the hardcoded #2a2d31 when no material (backward-compat)', () => {
-    expect(resolveFloorColor(undefined)).toBe('#2a2d31');
+  it('falls back to the hardcoded #f4f4f0 when no material (visible light floor)', () => {
+    expect(resolveFloorColor(undefined)).toBe('#f4f4f0');
   });
 
-  it('falls back to #2a2d31 when material has no previewColor', () => {
+  it('falls back to #f4f4f0 when material has no previewColor', () => {
     expect(
       resolveFloorColor({ ...floorMat, previewColor: undefined }),
-    ).toBe('#2a2d31');
+    ).toBe('#f4f4f0');
   });
 });
 

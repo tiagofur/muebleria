@@ -170,6 +170,51 @@ describe('APIWorkspaceRepository', () => {
     expect(body.board_price).toBe(10);
   });
 
+  it('saveCatalog PUTs snake_case ambientMaterials body', async () => {
+    const putRequests: { url: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (init?.method === 'PUT' && url.includes('/catalog/ambient-materials/')) {
+        putRequests.push({
+          url,
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return { ok: true, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await repo.saveCatalog({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      ambientMaterials: [
+        {
+          id: 'amb-1',
+          code: 'PISO-01',
+          name: 'Porcelanato Gris 60x60',
+          active: true,
+          surfaceType: 'floor',
+          previewColor: '#cccccc',
+          previewTextureTileWidthMm: 600,
+          previewTextureTileLengthMm: 600,
+        },
+      ],
+    });
+
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0]?.url).toContain('/catalog/ambient-materials/amb-1');
+    expect(putRequests[0]?.body.code).toBe('PISO-01');
+    expect(putRequests[0]?.body.surface_type).toBe('floor');
+    expect(putRequests[0]?.body.preview_color).toBe('#cccccc');
+    expect(putRequests[0]?.body.preview_texture_tile_width_mm).toBe(600);
+  });
+
   it('createProject POSTs only (no PUT probe)', async () => {
     const methods: string[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {

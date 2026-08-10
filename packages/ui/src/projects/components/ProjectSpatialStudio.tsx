@@ -495,6 +495,16 @@ export function ProjectSpatialStudio({
     );
   }, [catalog.ambientMaterials, layout.wallMaterialId]);
 
+  const ambientCeiling = useMemo(() => {
+    const id = layout.ceilingMaterialId;
+    if (!id) return undefined;
+    return (
+      (catalog.ambientMaterials ?? []).find(
+        (m) => m.id === id && m.surfaceType === 'wall',
+      ) ?? undefined
+    );
+  }, [catalog.ambientMaterials, layout.ceilingMaterialId]);
+
   const selectedRef = useMemo(() => {
     if (!selectedKey) return null;
     const hash = selectedKey.lastIndexOf('#');
@@ -1841,6 +1851,30 @@ export function ProjectSpatialStudio({
                   </select>
                 </label>
 
+                <label className="spatial-studio__field">
+                  <span>Techo (escena 3D)</span>
+                  <select
+                    value={layout.ceilingMaterialId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        ceilingMaterialId: e.target.value || undefined,
+                      })
+                    }
+                    data-testid="spatial-studio-ceiling-picker"
+                  >
+                    <option value="">— Techo blanco por defecto (Pintura) —</option>
+                    {(catalog.ambientMaterials ?? [])
+                      .filter((m) => m.active && m.surfaceType === 'wall')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.code})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
                 <label className="spatial-studio__field spatial-studio__check-row">
                   <input
                     type="checkbox"
@@ -2274,6 +2308,7 @@ export function ProjectSpatialStudio({
                 showFloorGrid={showFloorGrid}
                 ambientFloor={ambientFloor}
                 ambientWall={ambientWall}
+                ambientCeiling={ambientCeiling}
                 showCeiling={layout.showCeiling}
                 hardwareCatalog={catalog.hardware}
                 selectedModuleKey={selectedKey}
@@ -2294,6 +2329,14 @@ export function ProjectSpatialStudio({
                 selectedWallId={activeWallId}
                 onSelectWall={(wallId) => {
                   setTargetWallId(wallId);
+                }}
+                onSelectFloor={() => {
+                  setSelectedKey(null);
+                  setInspectorTab('props');
+                }}
+                onSelectCeiling={() => {
+                  setSelectedKey(null);
+                  setInspectorTab('props');
                 }}
               />
             </Suspense>
@@ -2494,10 +2537,114 @@ export function ProjectSpatialStudio({
         >
           <h3 className="spatial-studio__section-title">Propiedades</h3>
           {!selectedItem || !selectedRef ? (
-            <p className="spatial-studio__hint">
-              Seleccioná un mueble en la lista o en el 3D — como en Promob: a la
-              derecha editás medida, acabados y posición.
-            </p>
+            <div className="spatial-studio__inspector-body">
+              <div className="spatial-studio__identity">
+                <p className="spatial-studio__item-label">
+                  {activeWallId
+                    ? `Muro: ${layout.walls.find((w) => w.id === activeWallId)?.name?.trim() || 'Muro activo'}`
+                    : `Ambiente: ${activeSpaceName}`}
+                </p>
+                <p className="spatial-studio__item-meta">
+                  {activeWallId
+                    ? `${layout.walls.find((w) => w.id === activeWallId)?.lengthMm ?? 0} mm de longitud`
+                    : 'Ajustes del espacio 3D (Piso, Paredes, Techo)'}
+                </p>
+              </div>
+
+              <div className="spatial-studio__tab-panel" style={{ marginTop: 'var(--space-3)' }}>
+                <div className="spatial-studio__field">
+                  <span className="spatial-studio__field-label">Color / Material de Piso (Suelo)</span>
+                  <select
+                    value={layout.floorMaterialId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        floorMaterialId: e.target.value || undefined,
+                      })
+                    }
+                    data-testid="spatial-studio-inspector-floor-picker"
+                  >
+                    <option value="">— Piso blanco por defecto —</option>
+                    {(catalog.ambientMaterials ?? [])
+                      .filter((m) => m.active && m.surfaceType === 'floor')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.code}) {m.previewColor ? `· ${m.previewColor}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="spatial-studio__field">
+                  <span className="spatial-studio__field-label">Color / Material de Pared (Muro)</span>
+                  <select
+                    value={layout.wallMaterialId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        wallMaterialId: e.target.value || undefined,
+                      })
+                    }
+                    data-testid="spatial-studio-inspector-wall-picker"
+                  >
+                    <option value="">— Pared gris por defecto —</option>
+                    {(catalog.ambientMaterials ?? [])
+                      .filter((m) => m.active && m.surfaceType === 'wall')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.code}) {m.previewColor ? `· ${m.previewColor}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="spatial-studio__field">
+                  <span className="spatial-studio__field-label">Color / Material de Techo</span>
+                  <select
+                    value={layout.ceilingMaterialId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        ceilingMaterialId: e.target.value || undefined,
+                      })
+                    }
+                    data-testid="spatial-studio-inspector-ceiling-picker"
+                  >
+                    <option value="">— Techo blanco por defecto (Pintura) —</option>
+                    {(catalog.ambientMaterials ?? [])
+                      .filter((m) => m.active && m.surfaceType === 'wall')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.code}) {m.previewColor ? `· ${m.previewColor}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <label className="spatial-studio__field spatial-studio__check-row">
+                  <input
+                    type="checkbox"
+                    checked={layout.showCeiling === true}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      commit({
+                        ...layout,
+                        showCeiling: e.target.checked,
+                      })
+                    }
+                    data-testid="spatial-studio-inspector-toggle-ceiling"
+                  />
+                  <span>Mostrar techo en la escena 3D</span>
+                </label>
+
+                <p className="spatial-studio__hint" style={{ marginTop: 'var(--space-4)' }}>
+                  Seleccioná un mueble en el 3D o en la lista para editar sus medidas y acabados.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="spatial-studio__inspector-body">
               <div className="spatial-studio__identity">
@@ -2691,6 +2838,78 @@ export function ProjectSpatialStudio({
                       Sin grupos de opción requeridos para este mueble.
                     </p>
                   )}
+
+                  <hr className="spatial-studio__divider" style={{ margin: 'var(--space-4) 0' }} />
+                  <span className="spatial-studio__field-label">Acabados del Ambiente (3D)</span>
+                  <div className="spatial-studio__field" style={{ marginTop: 'var(--space-2)' }}>
+                    <span>Piso (Suelo)</span>
+                    <select
+                      value={layout.floorMaterialId ?? ''}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          floorMaterialId: e.target.value || undefined,
+                        })
+                      }
+                      data-testid="spatial-studio-item-floor-picker"
+                    >
+                      <option value="">— Piso blanco por defecto —</option>
+                      {(catalog.ambientMaterials ?? [])
+                        .filter((m) => m.active && m.surfaceType === 'floor')
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.code}) {m.previewColor ? `· ${m.previewColor}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="spatial-studio__field">
+                    <span>Pared (Muro)</span>
+                    <select
+                      value={layout.wallMaterialId ?? ''}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          wallMaterialId: e.target.value || undefined,
+                        })
+                      }
+                      data-testid="spatial-studio-item-wall-picker"
+                    >
+                      <option value="">— Pared gris por defecto —</option>
+                      {(catalog.ambientMaterials ?? [])
+                        .filter((m) => m.active && m.surfaceType === 'wall')
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.code}) {m.previewColor ? `· ${m.previewColor}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="spatial-studio__field">
+                    <span>Techo</span>
+                    <select
+                      value={layout.ceilingMaterialId ?? ''}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          ceilingMaterialId: e.target.value || undefined,
+                        })
+                      }
+                      data-testid="spatial-studio-item-ceiling-picker"
+                    >
+                      <option value="">— Techo blanco por defecto —</option>
+                      {(catalog.ambientMaterials ?? [])
+                        .filter((m) => m.active && m.surfaceType === 'wall')
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.code}) {m.previewColor ? `· ${m.previewColor}` : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
                 </div>
               ) : null}
 

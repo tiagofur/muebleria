@@ -2271,6 +2271,7 @@ function AppContent({
           materials={materials}
           edges={edges}
           hardware={hardware}
+          ambientMaterials={ambientMaterials}
           catalogStructures={structures}
           catalogComponents={components}
           resolveImageUrl={resolveMediaUrl}
