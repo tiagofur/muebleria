@@ -52,8 +52,10 @@ import {
   BackWallMesh,
   BaseboardMesh,
   CeilingMesh,
+  FLOOR_DEFAULT_COLOR,
   FloorAmbientMesh,
   ROOM_WALL_HEIGHT_MM,
+  WALL_DEFAULT_COLOR,
   WallAmbientMesh,
   planAmbientScene,
 } from './AmbientMeshes';
@@ -216,14 +218,14 @@ export type FurnitureScene3DProps = {
   /**
    * Ambient (presentation-only) floor material. When set AND
    * `lightingMode !== 'catalog'` AND `showFloor`, the floor renders the ambient
-   * material (texture/color) instead of the hardcoded #2a2d31. Caller resolves
+   * material (texture/color) instead of the white default. Caller resolves
    * `KitchenSpace.floorMaterialId` → AmbientMaterial via the catalog.
    */
   readonly ambientFloor?: AmbientMaterial;
   /**
    * Ambient (presentation-only) wall material. When set AND
    * `lightingMode !== 'catalog'`, wall segments render the ambient material
-   * instead of the hardcoded #8b9098.
+   * instead of the white default.
    */
   readonly ambientWall?: AmbientMaterial;
   /**
@@ -501,7 +503,7 @@ function WallMesh({
     >
       <boxGeometry args={[length, h, thickness]} />
       <meshStandardMaterial
-        color={selected ? '#5b9fd4' : '#8b9098'}
+        color={selected ? '#5b9fd4' : WALL_DEFAULT_COLOR}
         roughness={0.9}
         metalness={0.05}
         transparent
@@ -1124,7 +1126,7 @@ function SceneContent({
                   args={[totalWidth * 1.4, totalDepth * 1.6]}
                 />
                 <meshStandardMaterial
-                  color="#2a2d31"
+                  color={FLOOR_DEFAULT_COLOR}
                   roughness={0.95}
                   metalness={0}
                 />
