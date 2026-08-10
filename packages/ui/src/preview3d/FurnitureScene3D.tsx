@@ -63,7 +63,9 @@ import {
 import { isPastDragThreshold } from './moduleDragGesture';
 import {
   PAINT_DRAG_MIME,
+  UNPLACED_DRAG_MIME,
   decodePaintDrag,
+  decodeUnplacedDrag,
   type PaintDrop,
   type PaintSurface,
 } from './paintMaterial';
@@ -266,6 +268,48 @@ export type FurnitureScene3DProps = {
    * green overlay on FloorAmbientMesh/WallAmbientMesh.
    */
   readonly paintHoverSurface?: PaintSurface | null;
+
+  // ── F065 Drag ítem sin colocar → viewport ──────────────────────────────────
+  /**
+   * Ghost semi-transparente mostrado mientras se arrastra un ítem sin colocar.
+   * Null = no hay drag activo.
+   */
+  readonly ghostModule?: {
+    readonly widthMm: number;
+    readonly heightMm: number;
+    readonly depthMm: number;
+  } | null;
+  /** true=verde (válido), false=rojo (colisión), undefined=neutro. */
+  readonly ghostDropValid?: boolean;
+  /**
+   * Posición Three.js del ghost en escena (mm workshop).
+   * Calculada por ProjectSpatialStudio a partir del hit del raycaster.
+   */
+  readonly ghostPosition?: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  } | null;
+  /**
+   * Drop de un ítem sin colocar sobre el viewport. El Studio resuelve la
+   * posición (wallId+offsetMm para muro, planXMm/planYMm para piso).
+   */
+  readonly onUnplacedDrop?: (drop: {
+    readonly wallId: string | null;
+    readonly offsetMm: number;
+    readonly planXMm: number;
+    readonly planYMm: number;
+  }) => void;
+  /**
+   * Hover durante el drag de ítem sin colocar. Permite al Studio actualizar
+   * la posición del ghost y calcular validez.
+   */
+  readonly onUnplacedHover?: (hit: {
+    readonly wallId: string | null;
+    readonly offsetMm: number;
+    readonly planXMm: number;
+    readonly planYMm: number;
+  } | null) => void;
 };
 
 function BoardMesh({
@@ -385,6 +429,54 @@ function OuterGhost({
         opacity={highlighted ? 0.45 : 0.18}
       />
     </mesh>
+  );
+}
+
+/**
+ * Ghost semi-transparente del ítem siendo arrastrado al viewport (F065).
+ * valid=true → verde, valid=false → rojo, undefined → gris neutro.
+ */
+function GhostModuleMesh({
+  width,
+  height,
+  depth,
+  position,
+  valid,
+}: {
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly position: readonly [number, number, number];
+  readonly valid?: boolean;
+}): ReactNode {
+  const W = Math.max(width, 1);
+  const H = Math.max(height, 1);
+  const D = Math.max(depth, 1);
+  const color =
+    valid === false ? '#ef4444' : valid === true ? '#22c55e' : '#6b7280';
+  return (
+    <group position={[...position]}>
+      {/* Filled semi-transparent volume */}
+      <mesh position={[W / 2, H / 2, D / 2]}>
+        <boxGeometry args={[W, H, D]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.22}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Wireframe overlay for crisp edges */}
+      <mesh position={[W / 2, H / 2, D / 2]}>
+        <boxGeometry args={[W, H, D]} />
+        <meshBasicMaterial
+          color={color}
+          wireframe
+          transparent
+          opacity={0.7}
+        />
+      </mesh>
+    </group>
   );
 }
 
@@ -926,6 +1018,10 @@ function SceneContent({
   showCeiling,
   paintHoverSurface = null,
   registerResolvePaintHit,
+  registerResolveUnplacedHit,
+  ghostModule = null,
+  ghostDropValid,
+  ghostPosition = null,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -974,16 +1070,36 @@ function SceneContent({
   readonly registerResolvePaintHit?: (
     fn: ((clientX: number, clientY: number) => PaintSurface | null) | null,
   ) => void;
+  /** F065 — registra el resolver de hits para ítems sin colocar. */
+  readonly registerResolveUnplacedHit?: (
+    fn: ((
+      clientX: number,
+      clientY: number,
+    ) => {
+      readonly wallId: string | null;
+      readonly offsetMm: number;
+      readonly planXMm: number;
+      readonly planYMm: number;
+    } | null) | null,
+  ) => void;
+  readonly ghostModule?: FurnitureScene3DProps['ghostModule'];
+  readonly ghostDropValid?: boolean;
+  readonly ghostPosition?: FurnitureScene3DProps['ghostPosition'];
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const { camera, gl, scene } = useThree();
   const paintRaycaster = useMemo(() => new THREE.Raycaster(), []);
+  const unplacedRaycaster = useMemo(() => new THREE.Raycaster(), []);
   const paintFloorPlane = useMemo(
     () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     [],
   );
   const paintCeilingPlane = useMemo(
     () => new THREE.Plane(new THREE.Vector3(0, -1, 0), ROOM_WALL_HEIGHT_MM),
+    [],
+  );
+  const unplacedFloorPlane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     [],
   );
 
@@ -1060,6 +1176,84 @@ function SceneContent({
     });
     return () => registerResolvePaintHit(null);
   }, [camera, gl, scene, paintRaycaster, paintFloorPlane, paintCeilingPlane, registerResolvePaintHit]);
+
+  /**
+   * F065 — registra el resolver de hits para ítems sin colocar.
+   * Raycasts muros primero (para snap), luego piso (isla).
+   */
+  useEffect(() => {
+    if (!registerResolveUnplacedHit) return;
+    registerResolveUnplacedHit((clientX, clientY) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
+      unplacedRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+
+      // 1) Intento snap a muro más cercano
+      const wallMeshes: THREE.Object3D[] = [];
+      scene.traverse((obj) => {
+        if (obj.userData?.wallId && !obj.userData?.paintHoverOverlay) {
+          wallMeshes.push(obj);
+        }
+      });
+
+      if (wallMeshes.length > 0) {
+        const wallHits = unplacedRaycaster.intersectObjects(wallMeshes, false);
+        if (wallHits.length > 0) {
+          const hit = wallHits[0]!;
+          const wallId = hit.object.userData.wallId as string;
+          // offsetMm: proyección del punto de hit sobre el eje del muro.
+          // Aproximamos con la coordenada X del punto de impacto (workshop space).
+          const hitPoint = hit.point;
+          // Buscar la pared en walls para calcular el offset real.
+          const wall = walls.find((w) => w.id === wallId);
+          let offsetMm = 0;
+          if (wall) {
+            const dx = wall.endXMm - wall.originXMm;
+            const dy = wall.endYMm - wall.originYMm;
+            const len = Math.max(1, Math.hypot(dx, dy));
+            const ux = dx / len;
+            const uy = dy / len;
+            // Vector desde origin del muro al hit (Three X,Z → plan X,Y)
+            const px = hitPoint.x - wall.originXMm;
+            const py = hitPoint.z - wall.originYMm;
+            offsetMm = Math.max(0, Math.min(len, px * ux + py * uy));
+          }
+          return {
+            wallId,
+            offsetMm,
+            planXMm: hitPoint.x,
+            planYMm: hitPoint.z,
+          };
+        }
+      }
+
+      // 2) Drop en piso (isla)
+      const floorHit = new THREE.Vector3();
+      if (unplacedRaycaster.ray.intersectPlane(unplacedFloorPlane, floorHit)) {
+        const shiftX = (planShiftMm?.x ?? 0);
+        const shiftY = (planShiftMm?.y ?? 0);
+        return {
+          wallId: null,
+          offsetMm: 0,
+          planXMm: Math.round(floorHit.x - shiftX),
+          planYMm: Math.round(floorHit.z - shiftY),
+        };
+      }
+
+      return null;
+    });
+    return () => registerResolveUnplacedHit(null);
+  }, [
+    camera,
+    gl,
+    scene,
+    walls,
+    planShiftMm,
+    unplacedRaycaster,
+    unplacedFloorPlane,
+    registerResolveUnplacedHit,
+  ]);
 
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
@@ -1307,6 +1501,16 @@ function SceneContent({
               paintHover={paintHoverSurface?.kind === 'ceiling'}
             />
           ) : null}
+          {/* F065 — ghost del ítem siendo arrastrado al viewport */}
+          {ghostModule && ghostPosition ? (
+            <GhostModuleMesh
+              width={ghostModule.widthMm}
+              height={ghostModule.heightMm}
+              depth={ghostModule.depthMm}
+              position={[ghostPosition.x, ghostPosition.y, ghostPosition.z]}
+              valid={ghostDropValid}
+            />
+          ) : null}
         </group>
         <CameraViewSetter
           cameraView={cameraView}
@@ -1412,6 +1616,11 @@ export function FurnitureScene3D({
   onPaintDrop,
   onPaintHover,
   paintHoverSurface = null,
+  ghostModule = null,
+  ghostDropValid,
+  ghostPosition = null,
+  onUnplacedDrop,
+  onUnplacedHover,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   /**
@@ -1422,6 +1631,20 @@ export function FurnitureScene3D({
    */
   const resolvePaintHitRef = useRef<
     ((clientX: number, clientY: number) => PaintSurface | null) | null
+  >(null);
+  /**
+   * F065 — resolver de hits para ítems sin colocar. Registrado por SceneContent.
+   */
+  const resolveUnplacedHitRef = useRef<
+    ((
+      clientX: number,
+      clientY: number,
+    ) => {
+      readonly wallId: string | null;
+      readonly offsetMm: number;
+      readonly planXMm: number;
+      readonly planYMm: number;
+    } | null) | null
   >(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
@@ -1506,7 +1729,7 @@ export function FurnitureScene3D({
         tabIndex={0}
         aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
         onDragEnter={
-          onPaintHover
+          (onPaintHover || onUnplacedHover)
             ? (e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
@@ -1514,44 +1737,74 @@ export function FurnitureScene3D({
             : undefined
         }
         onDragOver={
-          onPaintHover
+          (onPaintHover || onUnplacedHover)
             ? (e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
-                const surface = resolvePaintHitRef.current?.(
-                  e.clientX,
-                  e.clientY,
-                );
-                onPaintHover(surface ?? null);
+                // F065: ítem sin colocar
+                if (onUnplacedHover) {
+                  const rawUnplaced = e.dataTransfer.types.includes(UNPLACED_DRAG_MIME);
+                  if (rawUnplaced) {
+                    const hit = resolveUnplacedHitRef.current?.(e.clientX, e.clientY) ?? null;
+                    onUnplacedHover(hit);
+                    return;
+                  }
+                }
+                // F067: material de superficie
+                if (onPaintHover) {
+                  const surface = resolvePaintHitRef.current?.(
+                    e.clientX,
+                    e.clientY,
+                  );
+                  onPaintHover(surface ?? null);
+                }
               }
             : undefined
         }
         onDragLeave={
-          onPaintHover
+          (onPaintHover || onUnplacedHover)
             ? (e) => {
                 if (e.currentTarget === e.target) {
-                  onPaintHover(null);
+                  onPaintHover?.(null);
+                  onUnplacedHover?.(null);
                 }
               }
             : undefined
         }
         onDrop={
-          onPaintDrop
+          (onPaintDrop || onUnplacedDrop)
             ? (e) => {
                 e.preventDefault();
-                const rawMime = e.dataTransfer.getData(PAINT_DRAG_MIME);
-                const rawText = e.dataTransfer.getData('text/plain');
-                const payload = decodePaintDrag(rawMime || rawText);
-                const surface = resolvePaintHitRef.current?.(e.clientX, e.clientY);
 
-                if (payload && surface) {
-                  onPaintDrop({ materialId: payload.materialId, surface });
-                } else if (rawText && surface) {
-                  onPaintDrop({ materialId: rawText, surface });
-                } else {
-                  onPaintDrop(null);
+                // F065: drop de ítem sin colocar
+                const rawUnplaced = e.dataTransfer.getData(UNPLACED_DRAG_MIME);
+                if (rawUnplaced && onUnplacedDrop) {
+                  const hit =
+                    resolveUnplacedHitRef.current?.(e.clientX, e.clientY) ?? null;
+                  if (hit) {
+                    onUnplacedDrop(hit);
+                  }
+                  if (onUnplacedHover) onUnplacedHover(null);
+                  if (onPaintHover) onPaintHover(null);
+                  return;
                 }
-                if (onPaintHover) onPaintHover(null);
+
+                // F067: drop de material de superficie
+                if (onPaintDrop) {
+                  const rawMime = e.dataTransfer.getData(PAINT_DRAG_MIME);
+                  const rawText = e.dataTransfer.getData('text/plain');
+                  const payload = decodePaintDrag(rawMime || rawText);
+                  const surface = resolvePaintHitRef.current?.(e.clientX, e.clientY);
+
+                  if (payload && surface) {
+                    onPaintDrop({ materialId: payload.materialId, surface });
+                  } else if (rawText && surface) {
+                    onPaintDrop({ materialId: rawText, surface });
+                  } else {
+                    onPaintDrop(null);
+                  }
+                  if (onPaintHover) onPaintHover(null);
+                }
               }
             : undefined
         }
@@ -1684,6 +1937,16 @@ export function FurnitureScene3D({
                     }
                   : undefined
               }
+              registerResolveUnplacedHit={
+                onUnplacedDrop || onUnplacedHover
+                  ? (fn) => {
+                      resolveUnplacedHitRef.current = fn;
+                    }
+                  : undefined
+              }
+              ghostModule={ghostModule}
+              ghostDropValid={ghostDropValid}
+              ghostPosition={ghostPosition}
             />
           </Suspense>
           </Canvas>

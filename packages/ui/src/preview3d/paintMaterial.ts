@@ -89,9 +89,62 @@ export function decodePaintDrag(raw: string | null): PaintDragPayload | null {
     const parsed = JSON.parse(raw) as Partial<PaintDragPayload>;
     if (
       typeof parsed.materialId === 'string' &&
-      (parsed.surfaceType === 'floor' || parsed.surfaceType === 'wall')
+      (parsed.surfaceType === 'floor' ||
+        parsed.surfaceType === 'wall' ||
+        parsed.surfaceType === 'ceiling')
     ) {
       return { materialId: parsed.materialId, surfaceType: parsed.surfaceType };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── F065 Drag de ítem sin colocar → viewport 3D ────────────────────────────
+
+/**
+ * MIME type para arrastrar un ítem "sin colocar" desde la lista lateral al
+ * viewport 3D. Diferente a PAINT_DRAG_MIME para que los handlers puedan
+ * distinguir entre "pintar una superficie" y "colocar un módulo".
+ */
+export const UNPLACED_DRAG_MIME = 'application/x-muebles-unplaced';
+
+/** Payload del drag de ítems sin colocar. */
+export type UnplacedDragPayload = {
+  readonly itemId: string;
+  readonly instanceIndex: number;
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly depthMm: number;
+};
+
+/** Serializa el payload de un ítem sin colocar. */
+export function encodeUnplacedDrag(payload: UnplacedDragPayload): string {
+  return JSON.stringify(payload);
+}
+
+/** Deserializa el payload de un ítem sin colocar; devuelve null si corrupto. */
+export function decodeUnplacedDrag(
+  raw: string | null,
+): UnplacedDragPayload | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<UnplacedDragPayload>;
+    if (
+      typeof parsed.itemId === 'string' &&
+      typeof parsed.instanceIndex === 'number' &&
+      typeof parsed.widthMm === 'number' &&
+      typeof parsed.heightMm === 'number' &&
+      typeof parsed.depthMm === 'number'
+    ) {
+      return {
+        itemId: parsed.itemId,
+        instanceIndex: parsed.instanceIndex,
+        widthMm: parsed.widthMm,
+        heightMm: parsed.heightMm,
+        depthMm: parsed.depthMm,
+      };
     }
     return null;
   } catch {

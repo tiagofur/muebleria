@@ -92,8 +92,10 @@ import {
 import { MaterialPalette } from '../../preview3d/MaterialPalette';
 import {
   PAINT_DRAG_MIME,
+  UNPLACED_DRAG_MIME,
   canApplyMaterial,
   decodePaintDrag,
+  encodeUnplacedDrag,
 } from '../../preview3d/paintMaterial';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
@@ -262,6 +264,21 @@ export function ProjectSpatialStudio({
   const [paintHoverSurface, setPaintHoverSurface] = useState<PaintSurface | null>(
     null,
   );
+
+  // F065 — ghost drag de ítem sin colocar al viewport 3D
+  const [ghostDrag, setGhostDrag] = useState<{
+    readonly itemId: string;
+    readonly instanceIndex: number;
+    readonly widthMm: number;
+    readonly heightMm: number;
+    readonly depthMm: number;
+  } | null>(null);
+  const [ghostHit, setGhostHit] = useState<{
+    readonly wallId: string | null;
+    readonly offsetMm: number;
+    readonly planXMm: number;
+    readonly planYMm: number;
+  } | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [defaultWallsMsg, setDefaultWallsMsg] = useState<string | null>(null);
   /** Read-only space navigation — must not persist layout / activeSpaceId. */
@@ -343,13 +360,19 @@ export function ProjectSpatialStudio({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // F065: si hay un ghost drag activo, cancelar el drag primero.
+      if (ghostDrag) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
       // Nested dialogs (e.g. Agregar mueble) own Esc; do not close the studio.
       if (document.querySelector('.ui-modal-root.is-open')) return;
       onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, ghostDrag]);
 
   const baseLayout = useMemo(
     () =>
@@ -916,13 +939,42 @@ export function ProjectSpatialStudio({
     });
   };
 
-  const placeOnWall = (itemId: string, instanceIndex: number, wallId: string) => {
+  const placeOnWall = (
+    itemId: string,
+    instanceIndex: number,
+    wallId: string,
+    /** Offset en mm desde el origen del muro. Si se omite, usa nextOffsetOnWall. */
+    offsetMm?: number,
+  ) => {
     if (!canEdit) return;
     const base = ensureWalls();
     const wall =
       base.walls.find((w) => w.id === wallId) ?? base.walls[0];
     if (!wall) return;
-    const offset = nextOffsetOnWall(base, wall.id, footprints, 20);
+    const resolvedOffset = (() => {
+      if (offsetMm === undefined) {
+        return nextOffsetOnWall(base, wall.id, footprints, 20);
+      }
+      const item2 = project.items.find((it) => it.id === itemId);
+      const mod2 = item2 ? modules.find((m) => m.id === item2.moduleId) : undefined;
+      const dims2 = item2 ? resolveItemDims(item2, mod2) : { width: 600, height: 720, depth: 560 };
+      const wallLen = wall.lengthMm;
+      const peers = base.placements
+        .filter((p) => p.wallId === wall.id && !isFreePlacement(p))
+        .map((p) => {
+          const fp = footprints.find(
+            (f) => f.itemId === p.itemId && f.instanceIndex === p.instanceIndex,
+          );
+          return { offsetMm: p.offsetMm, widthMm: fp?.width ?? 600 };
+        });
+      return snapOffsetOnWall({
+        offsetMm,
+        moduleWidthMm: dims2.width,
+        wallLengthMm: wallLen,
+        peers,
+        gapMm: 20,
+      });
+    })();
     const item = project.items.find((it) => it.id === itemId);
     const mod = item
       ? modules.find((m) => m.id === item.moduleId)
@@ -931,7 +983,7 @@ export function ProjectSpatialStudio({
       itemId,
       instanceIndex,
       wallId: wall.id,
-      offsetMm: offset,
+      offsetMm: resolvedOffset,
       elevation: defaultElevationForModule(mod),
     };
     commit({
@@ -942,7 +994,14 @@ export function ProjectSpatialStudio({
     setTargetWallId(wall.id);
   };
 
-  const placeAsIsland = (itemId: string, instanceIndex: number) => {
+  const placeAsIsland = (
+    itemId: string,
+    instanceIndex: number,
+    /** Plan X en mm (layout no-shifted). Si se omite, centra en el espacio. */
+    planXMm?: number,
+    /** Plan Y en mm (layout no-shifted). Si se omite, centra en el espacio. */
+    planYMm?: number,
+  ) => {
     if (!canEdit) return;
     const base = ensureWalls();
     const item = project.items.find((it) => it.id === itemId);
@@ -953,9 +1012,9 @@ export function ProjectSpatialStudio({
     const width = dims?.width ?? 600;
     const depth = dims?.depth ?? 560;
     const frames = resolveWallFrames(base.walls);
-    let freeXMm = 1200;
-    let freeYMm = 1000;
-    if (frames.length > 0) {
+    let freeXMm = planXMm ?? 1200;
+    let freeYMm = planYMm ?? 1000;
+    if (planXMm === undefined && frames.length > 0) {
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
@@ -969,6 +1028,9 @@ export function ProjectSpatialStudio({
       freeXMm = Math.round((minX + maxX) / 2 - width / 2);
       freeYMm = Math.round((minY + maxY) / 2 - depth / 2);
     }
+    // Snap to 50mm grid.
+    freeXMm = Math.round(freeXMm / 50) * 50;
+    freeYMm = Math.round(freeYMm / 50) * 50;
     const placement: ProjectItemPlacement = {
       itemId,
       instanceIndex,
@@ -1147,6 +1209,113 @@ export function ProjectSpatialStudio({
     setRedoStack([]);
   };
 
+  // ── F065 Handlers de drag de ítem sin colocar ──────────────────────────
+
+  /**
+   * Convierte el hit del raycaster de ítem-sin-colocar a posición Three.js
+   * para posicionar el ghost mesh en la escena.
+   *
+   * Convenio Three.js: X=plan-X, Y=altura, Z=plan-Y
+   * Para muros, pone el ghost tocando la cara interna del muro (~mm offset).
+   * Para piso, Y=0 (base del módulo en el suelo).
+   */
+  const resolveGhostPosition = (
+    hit: {
+      readonly wallId: string | null;
+      readonly offsetMm: number;
+      readonly planXMm: number;
+      readonly planYMm: number;
+    },
+    dims: { widthMm: number; heightMm: number; depthMm: number },
+  ): { x: number; y: number; z: number } | null => {
+    if (hit.wallId) {
+      // Muro: posición a lo largo del muro (shifted display space).
+      const displayWalls = preview.walls;
+      const wall = displayWalls.find((w) => w.id === hit.wallId);
+      if (!wall) return null;
+      const dx = wall.endXMm - wall.originXMm;
+      const dy = wall.endYMm - wall.originYMm;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const ux = dx / len;
+      const uy = dy / len;
+      // Perpendicular al muro (hacia el interior)
+      const nx = -uy;
+      const nz = ux;
+      const x = wall.originXMm + ux * hit.offsetMm + nx * (dims.depthMm / 2 + 20);
+      const z = wall.originYMm + uy * hit.offsetMm + nz * (dims.depthMm / 2 + 20);
+      return { x, y: 0, z };
+    }
+    // Piso/isla: usar planXMm/planYMm + shift de display.
+    const shiftX = planShiftMm.x;
+    const shiftY = planShiftMm.y;
+    return {
+      x: hit.planXMm + shiftX,
+      y: 0,
+      z: hit.planYMm + shiftY,
+    };
+  };
+
+  /**
+   * Calcula si el drop en muro será válido (hay espacio libre).
+   * Detección 1D simple: offset disponible ≥ ancho del módulo.
+   */
+  const calcGhostValid = (
+    hit: { wallId: string | null; offsetMm: number } | null,
+    ghost: { widthMm: number } | null,
+  ): boolean | undefined => {
+    if (!hit || !ghost) return undefined;
+    if (!hit.wallId) return true; // piso siempre válido
+    const base = layout;
+    const wall = base.walls.find((w) => w.id === hit.wallId);
+    if (!wall) return undefined;
+    const wallLen = wall.lengthMm;
+    const occupied = base.placements
+      .filter((p) => p.wallId === hit.wallId && !isFreePlacement(p))
+      .reduce((acc, p) => {
+        const fp = footprints.find(
+          (f) => f.itemId === p.itemId && f.instanceIndex === p.instanceIndex,
+        );
+        return acc + (fp?.width ?? ghost.widthMm) + 20;
+      }, 0);
+    return occupied + ghost.widthMm <= wallLen;
+  };
+
+  const handleUnplacedHover = (
+    hit: {
+      readonly wallId: string | null;
+      readonly offsetMm: number;
+      readonly planXMm: number;
+      readonly planYMm: number;
+    } | null,
+  ) => {
+    setGhostHit(hit);
+  };
+
+  const handleUnplacedDrop = (drop: {
+    readonly wallId: string | null;
+    readonly offsetMm: number;
+    readonly planXMm: number;
+    readonly planYMm: number;
+  }) => {
+    if (!ghostDrag || !canEdit) return;
+    if (drop.wallId) {
+      placeOnWall(
+        ghostDrag.itemId,
+        ghostDrag.instanceIndex,
+        drop.wallId,
+        drop.offsetMm,
+      );
+    } else {
+      placeAsIsland(
+        ghostDrag.itemId,
+        ghostDrag.instanceIndex,
+        drop.planXMm,
+        drop.planYMm,
+      );
+    }
+    setGhostDrag(null);
+    setGhostHit(null);
+  };
   const handleModuleWallOffset = (moduleKey: string, offsetMm: number) => {
     if (!canEdit) return;
     const hash = moduleKey.lastIndexOf('#');
@@ -1642,7 +1811,49 @@ export function ProjectSpatialStudio({
                               <button
                                 type="button"
                                 className="spatial-studio__item-pick"
-                                title="Doble click para colocar en el muro activo"
+                                title="Doble click para colocar en el muro activo; arrastrá al viewport para colocar directamente"
+                                draggable={canEdit}
+                                onDragStart={
+                                  canEdit
+                                    ? (e) => {
+                                        const item = project.items.find(
+                                          (it) => it.id === f.itemId,
+                                        );
+                                        const mod = item
+                                          ? modules.find(
+                                              (m) => m.id === item.moduleId,
+                                            )
+                                          : undefined;
+                                        const dims = item
+                                          ? resolveItemDims(item, mod)
+                                          : { width: 600, height: 720, depth: 560 };
+                                        const payload = encodeUnplacedDrag({
+                                          itemId: f.itemId,
+                                          instanceIndex: f.instanceIndex,
+                                          widthMm: dims.width,
+                                          heightMm: dims.height,
+                                          depthMm: dims.depth,
+                                        });
+                                        e.dataTransfer.setData(UNPLACED_DRAG_MIME, payload);
+                                        e.dataTransfer.effectAllowed = 'move';
+                                        setGhostDrag({
+                                          itemId: f.itemId,
+                                          instanceIndex: f.instanceIndex,
+                                          widthMm: dims.width,
+                                          heightMm: dims.height,
+                                          depthMm: dims.depth,
+                                        });
+                                      }
+                                    : undefined
+                                }
+                                onDragEnd={
+                                  canEdit
+                                    ? () => {
+                                        setGhostDrag(null);
+                                        setGhostHit(null);
+                                      }
+                                    : undefined
+                                }
                                 onClick={() => {
                                   setSelectedKey(key);
                                   setInspectorTab('props');
@@ -2471,6 +2682,15 @@ export function ProjectSpatialStudio({
                 paintHoverSurface={paintHoverSurface}
                 onPaintHover={handlePaintHover}
                 onPaintDrop={handlePaintDrop}
+                ghostModule={ghostDrag}
+                ghostDropValid={calcGhostValid(ghostHit, ghostDrag)}
+                ghostPosition={
+                  ghostDrag && ghostHit
+                    ? resolveGhostPosition(ghostHit, ghostDrag)
+                    : null
+                }
+                onUnplacedHover={canEdit ? handleUnplacedHover : undefined}
+                onUnplacedDrop={canEdit ? handleUnplacedDrop : undefined}
               />
             </Suspense>
           ) : (

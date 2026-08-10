@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   canApplyMaterial,
   decodePaintDrag,
+  decodeUnplacedDrag,
   encodePaintDrag,
+  encodeUnplacedDrag,
   resolvePaintSurface,
   type ResolvedIntersect,
 } from './paintMaterial';
@@ -25,9 +27,8 @@ describe('resolvePaintSurface', () => {
   });
 
   it('skips non-paintable intersects and finds the next paintable', () => {
-    // Simula: primero golpea una pieza (no paintable), luego el piso
     const hits: ResolvedIntersect[] = [
-      { kind: 'part' as unknown as 'floor', distance: 50 }, // no es floor/wall
+      { kind: 'part' as unknown as 'floor', distance: 50 },
       { kind: 'floor', distance: 100 },
     ] as ResolvedIntersect[];
     expect(resolvePaintSurface(hits)).toEqual({ kind: 'floor' });
@@ -74,6 +75,12 @@ describe('encode/decode paint drag', () => {
     expect(decodePaintDrag(encoded)).toEqual(payload);
   });
 
+  it('round-trips a ceiling payload (F065 fix)', () => {
+    const payload = { materialId: 'am-3', surfaceType: 'ceiling' as const };
+    const encoded = encodePaintDrag(payload);
+    expect(decodePaintDrag(encoded)).toEqual(payload);
+  });
+
   it('decode returns null for null input', () => {
     expect(decodePaintDrag(null)).toBeNull();
   });
@@ -94,5 +101,59 @@ describe('encode/decode paint drag', () => {
     expect(
       decodePaintDrag(JSON.stringify({ surfaceType: 'floor' })),
     ).toBeNull();
+  });
+});
+
+// ─── F065 encode/decode de ítem sin colocar ──────────────────────────────────
+
+describe('encodeUnplacedDrag / decodeUnplacedDrag', () => {
+  const validPayload = {
+    itemId: 'item-1',
+    instanceIndex: 0,
+    widthMm: 600,
+    heightMm: 720,
+    depthMm: 560,
+  };
+
+  it('round-trips a valid payload', () => {
+    const encoded = encodeUnplacedDrag(validPayload);
+    expect(decodeUnplacedDrag(encoded)).toEqual(validPayload);
+  });
+
+  it('round-trips with instanceIndex > 0', () => {
+    const p = { ...validPayload, instanceIndex: 2 };
+    expect(decodeUnplacedDrag(encodeUnplacedDrag(p))).toEqual(p);
+  });
+
+  it('returns null for null input', () => {
+    expect(decodeUnplacedDrag(null)).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(decodeUnplacedDrag('')).toBeNull();
+  });
+
+  it('returns null for corrupt JSON', () => {
+    expect(decodeUnplacedDrag('{bad')).toBeNull();
+  });
+
+  it('returns null when itemId is missing', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { itemId: _id, ...rest } = validPayload;
+    expect(decodeUnplacedDrag(JSON.stringify(rest))).toBeNull();
+  });
+
+  it('returns null when widthMm is a string instead of number', () => {
+    expect(
+      decodeUnplacedDrag(
+        JSON.stringify({ ...validPayload, widthMm: '600' }),
+      ),
+    ).toBeNull();
+  });
+
+  it('returns null when instanceIndex is missing', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { instanceIndex: _idx, ...rest } = validPayload;
+    expect(decodeUnplacedDrag(JSON.stringify(rest))).toBeNull();
   });
 });
