@@ -18,7 +18,7 @@
 
 import { Suspense, useEffect, type ReactNode } from 'react';
 import { useTexture } from '@react-three/drei';
-import { RepeatWrapping, SRGBColorSpace } from 'three';
+import { DoubleSide, RepeatWrapping, SRGBColorSpace } from 'three';
 import type { AmbientMaterial } from '@muebles/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
 import {
@@ -36,6 +36,8 @@ import type { FurnitureSceneWall } from './FurnitureScene3D';
 export const FLOOR_DEFAULT_COLOR = '#2a2d31';
 /** Hardcoded flat-gray wall when no ambient material (backward-compat). */
 export const WALL_DEFAULT_COLOR = '#8b9098';
+/** Clean white ceiling paint when no ambient material assigned. */
+export const CEILING_DEFAULT_COLOR = '#ffffff';
 /** Paint drag hover overlay (F067). Green signals "drop here to apply". */
 export const PAINT_HOVER_COLOR = '#4ade80';
 export const PAINT_HOVER_OPACITY = 0.3;
@@ -102,7 +104,7 @@ export function planAmbientScene(opts: {
     ambientFloor: isAmbientMode && Boolean(ambientFloor) && showFloor,
     ambientWall: isAmbientMode && Boolean(ambientWall),
     roomBox: isAmbientMode && hasAnyAmbient,
-    ceiling: isAmbientMode && hasAnyAmbient && Boolean(showCeiling),
+    ceiling: isAmbientMode && Boolean(showCeiling),
     contactShadow: isAmbientMode
       ? contactShadowForFloor(ambientFloor?.previewColor)
       : null,
@@ -518,27 +520,33 @@ export function CeilingMesh({
   widthMm,
   depthMm,
   position,
+  thicknessMm = 40,
   lightingMode = 'present',
 }: {
   readonly material?: AmbientMaterial;
   readonly widthMm: number;
   readonly depthMm: number;
   readonly position: Vec3;
+  readonly thicknessMm?: number;
   readonly lightingMode?: SceneLightingMode;
 }): ReactNode {
-  const color = resolveWallColor(material);
+  const color = material ? resolveWallColor(material) : CEILING_DEFAULT_COLOR;
   const phys = resolveWallPhysical(material, lightingMode);
+  // Center Y of box = position[1] + thickness/2 so the underside rests at
+  // position[1] (e.g. 2400mm wall height) and the box extrudes upward.
+  const posY = position[1] + thicknessMm / 2;
   return (
     <mesh
-      rotation={[Math.PI / 2, 0, 0]}
-      position={[position[0], position[1], position[2]]}
+      position={[position[0], posY, position[2]]}
       receiveShadow
+      castShadow
     >
-      <planeGeometry args={[widthMm, depthMm]} />
+      <boxGeometry args={[widthMm, thicknessMm, depthMm]} />
       <Suspense
         fallback={
           <meshStandardMaterial
             color={color}
+            side={DoubleSide}
             roughness={phys.roughness}
             metalness={phys.metalness}
           />
@@ -556,6 +564,7 @@ export function CeilingMesh({
         ) : (
           <meshStandardMaterial
             color={color}
+            side={DoubleSide}
             roughness={phys.roughness}
             metalness={phys.metalness}
           />

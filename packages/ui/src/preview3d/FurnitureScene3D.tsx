@@ -1225,7 +1225,7 @@ function SceneContent({
           ) : null}
           {ambientPlan.ceiling ? (
             <CeilingMesh
-              material={ambientWall ?? ambientFloor}
+              material={ambientWall}
               widthMm={totalWidth * 1.4}
               depthMm={totalDepth * 1.6}
               position={[ceilingX, ceilingY, ceilingZ]}
