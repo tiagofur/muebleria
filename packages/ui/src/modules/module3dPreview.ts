@@ -4,6 +4,7 @@
  */
 
 import type {
+  Agregado,
   Catalog,
   DimensionPreset,
   Module,
@@ -46,6 +47,12 @@ export type Module3DCatalogInput = {
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
   readonly optionGroups: readonly OptionGroup[];
+  /**
+   * Reusable sub-assemblies (agregados) referenced by `module.agregados` and
+   * `structure.agregados`. Threaded through so the preview BOM (and the
+   * hardware-placement resolver) can see agregado component instances.
+   */
+  readonly agregados?: readonly Agregado[];
   /** Presentation-only ambient materials (floor/wall) for the 3D scene. */
   readonly ambientMaterials?: readonly AmbientMaterial[];
 };

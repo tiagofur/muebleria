@@ -3,17 +3,21 @@
  */
 
 import type {
+  Agregado,
   Catalog,
   Hardware,
   Module,
+  ModuleComponentInstance,
   OptionChoices,
   Project,
   ProjectItem,
   ResolvedBoardPart,
+  Structure,
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
   layoutKitchenPlacements,
+  resolveAgregadoInstance,
   resolveBom,
   resolveHardwarePlacement,
   resolveModuleMeasurePreset,
@@ -156,6 +160,11 @@ function resolveItemBom(
     modules: catalogInput.modules,
     structures: catalogInput.structures,
     components: catalogInput.components,
+    // Thread agregados so resolveBom → resolveComposedModule can expand
+    // module.agregados / structure.agregados into board parts. Without this,
+    // agregado components never reach the preview BOM (engine/bom.ts reads
+    // `catalog.agregados ?? []`).
+    agregados: catalogInput.agregados,
   };
 
   try {
@@ -166,6 +175,10 @@ function resolveItemBom(
         module,
         bom.boardParts,
         catalogInput.hardware,
+        {
+          structures: catalogInput.structures,
+          agregados: catalogInput.agregados,
+        },
       ),
       ...dims,
       error:
@@ -187,32 +200,81 @@ function resolveItemBom(
  * Resolve parametric hardware placements (jaladeras) for one module into
  * board-LOCAL mm (Fase 2, WU3). Pure — no Three.js.
  *
- * For each module component instance that carries
- * `overrides.hardwarePlacements`, each placement is resolved against the
- * board part the instance produced. The link between a component instance and
- * its board part is the engine part-id convention `${componentId}-copy-${i}`
- * (engine/bom.ts `expandComponentInstances` with empty idPrefix for structure,
- * module and agregado components alike). The resolved `componentInstanceId`
- * equals that part id, so the renderer attaches the handle to the matching
- * board mesh by id.
+ * For each component instance that carries `overrides.hardwarePlacements`, each
+ * placement is resolved against the board part the instance produced. The link
+ * between a component instance and its board part is the engine part-id
+ * convention `${componentId}-copy-${i}` (engine/bom.ts `expandComponentInstances`
+ * with empty idPrefix for structure, module and agregado components alike).
+ * The resolved `componentInstanceId` equals that part id, so the renderer
+ * attaches the handle to the matching board mesh by id.
+ *
+ * The instance set iterated is the FULL set that produced board parts: the
+ * module's structure components, the module's own components, AND the resolved
+ * components of every agregado attached to the structure/module
+ * (`resolveAgregadoInstance` multiplies quantity and applies mirror). The
+ * PO's workflow is agregado-centric (doors/drawers modeled as agregados), so
+ * omitting agregado instances silently dropped their placements — the gap this
+ * closes.
  *
  * Returns `[]` (VH-04 no-regression) when:
- *  - the module has no component instances with `hardwarePlacements`,
+ *  - no component instance (structure/module/agregado) carries `hardwarePlacements`,
  *  - the referenced hardware is missing from the catalog (swapped/removed), or
  *  - the hardware has no valid `previewShape` (resolver returns null — VH-09).
  *
  * Placements never feed the Optimizer/cut path (VH-08): this array is consumed
  * only by the 3D preview.
+ *
+ * ⚠️ Part-id collision — KNOWN LIMITATION. Structure, module and agregado
+ * components all expand with `idPrefix=''`, so part-id is `${componentId}-copy-${i}`
+ * regardless of source. When the SAME componentId is reused across sources
+ * (e.g. a door added both directly on the module and via an agregado), the
+ * merged `boardParts` array contains two entries with the same id and the
+ * `partById` Map keeps only the last — a placement on either instance would
+ * then link to the surviving (possibly wrong) board. This is rare in practice
+ * (components are typed by placement/role, so cross-source reuse is uncommon)
+ * and is accepted here as a documented limitation; the proper per-source
+ * idPrefix fix (e.g. `agr-` for agregado components) is deferred to spec (see
+ * proposal #4180, open question #1). The common disjoint-componentId case
+ * resolves each placement against its own board correctly.
  */
 export function resolveModuleHardwarePlacements(
   module: Module,
   boardParts: readonly ResolvedBoardPart[],
   hardwareCatalog: readonly Hardware[],
+  /**
+   * Optional sources needed to resolve agregado and structure component
+   * instances. When omitted (e.g. the single-module editor modal), only
+   * `module.components` is iterated — preserving the pre-agregado behavior.
+   */
+  options: {
+    readonly structures?: readonly Structure[];
+    readonly agregados?: readonly Agregado[];
+  } = {},
 ): ResolvedHardwarePlacement[] {
   const partById = new Map(boardParts.map((p) => [p.id, p]));
   const out: ResolvedHardwarePlacement[] = [];
 
-  for (const instance of module.components ?? []) {
+  // Gather ALL component instances that produced board parts.
+  const structure = options.structures?.find(
+    (s) => s.id === module.structureId,
+  );
+  const agregadoInstances = [
+    ...(structure?.agregados ?? []),
+    ...(module.agregados ?? []),
+  ];
+  const agregadosCatalog = options.agregados ?? [];
+  const resolvedAgregadoComponents = agregadoInstances.flatMap((inst) =>
+    resolveAgregadoInstance(inst, agregadosCatalog).components,
+  );
+
+  // Structure + module + resolved agregado component instances.
+  const allInstances: readonly ModuleComponentInstance[] = [
+    ...(structure?.components ?? []),
+    ...(module.components ?? []),
+    ...resolvedAgregadoComponents,
+  ];
+
+  for (const instance of allInstances) {
     const placements = instance.overrides?.hardwarePlacements;
     if (!placements || placements.length === 0) continue;
 

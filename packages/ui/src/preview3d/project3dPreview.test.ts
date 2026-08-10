@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  Agregado,
   Component,
   EdgeBand,
   Hardware,
@@ -556,5 +557,152 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
       modules: [moduleMissing],
     });
     expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agregado component placements bridge — threads hardware placements on
+// agregado (sub-assembly) component instances through the preview resolver.
+//
+// The PO's workflow is agregado-centric (doors/drawers modeled as agregados).
+// Agregado components are `ModuleComponentInstance[]` (same type as
+// Module.components), so `overrides.hardwarePlacements` rides them with no new
+// domain field — the resolver only needs to ITERATE them and the preview BOM
+// needs to include the agregado catalog so agregado boards render.
+//
+// Fixtures reuse `material`/`edge`/`optionGroups`/`knobHardware` from above and
+// use a DISJOINT componentId (`c-agr-puerta`) so there is no part-id collision
+// with the structure's `c1`.
+// ---------------------------------------------------------------------------
+
+const agregadoDoorComponent: Component = {
+  id: 'c-agr-puerta',
+  code: 'COM-AGR-PUERTA',
+  name: 'Puerta (agregado)',
+  placement: 'frontal',
+  geometry: {
+    kind: 'rectangular_board',
+    // Same fixed dims as the Fase 2 `puertaComponent` → deterministic mapping.
+    lengthMm: 720,
+    widthMm: 596,
+    thicknessMm: 18,
+  },
+  defaultEdges: [
+    { side: 'L1', enabled: true },
+    { side: 'L2', enabled: true },
+    { side: 'W1', enabled: true },
+    { side: 'W2', enabled: true },
+  ],
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+// Agregado carrying a knob placement on its door component instance.
+const doorAgregado: Agregado = {
+  id: 'agr-door',
+  code: 'AGR-DOOR',
+  name: 'Puerta con jaladera',
+  components: [
+    {
+      componentId: 'c-agr-puerta',
+      quantity: 1,
+      overrides: {
+        hardwarePlacements: [
+          {
+            hardwareId: 'hw-knob',
+            anchorFace: 'front',
+            relativePosition: { xPercent: 50, yPercent: 50 },
+          },
+        ],
+      },
+    },
+  ],
+};
+
+// Module composed of the base structure `st1` (costados `c1`) + the door
+// agregado. `c1` and `c-agr-puerta` are disjoint → no part-id collision.
+const modWithAgregado: Module = {
+  id: 'm-agr',
+  code: 'MOD-AGR',
+  name: 'Bajo con agregado',
+  structureId: 'st1',
+  components: [],
+  agregados: [{ agregadoId: 'agr-door', quantity: 1 }],
+  hardwareLines: [],
+  externalDims: { width: 600, height: 720, depth: 560 },
+  presets: [{ id: 'p-agr', name: '600', width: 600, height: 720, depth: 560 }],
+};
+
+const catalogAgregadoHandle = {
+  modules: [modWithAgregado],
+  structures: [structure],
+  components: [comp, agregadoDoorComponent],
+  materials: [material],
+  edges: [edge],
+  hardware: [knobHardware],
+  optionGroups,
+  agregados: [doorAgregado],
+};
+
+const projectAgregado: Project = {
+  ...project,
+  items: [
+    {
+      id: 'it-agr',
+      moduleId: 'm-agr',
+      quantity: 1,
+      optionChoices: {},
+      measurePresetId: 'p-agr',
+    },
+  ],
+};
+
+describe('resolveProject3DPreview — agregado component placements bridge', () => {
+  it('threads hardware placements on agregado component instances (links to the agregado board part)', () => {
+    const preview = resolveProject3DPreview(
+      projectAgregado,
+      catalogAgregadoHandle,
+    );
+    expect(preview.modules).toHaveLength(1);
+
+    // The agregado board part MUST render in the preview BOM (the bridge now
+    // threads the agregado catalog into resolveBom).
+    const agregadoBoard = preview.modules[0]!.parts.find(
+      (p) => p.id === 'c-agr-puerta-copy-0',
+    );
+    expect(agregadoBoard).toBeDefined();
+
+    // And the placement on the agregado component instance MUST resolve.
+    const placements = preview.modules[0]!.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(1);
+
+    const p = placements[0]!;
+    // Agregado board part id uses the same `${componentId}-copy-${i}` convention
+    // (idPrefix='' for agregado components — engine/bom.ts:581-588).
+    expect(p.componentInstanceId).toBe('c-agr-puerta-copy-0');
+    expect(p.hardwareId).toBe('hw-knob');
+    // Same geometry as the Fase 2 fixture → same board-LOCAL mapping.
+    expect(p.localPosition).toEqual([298, 18, 360]);
+    expect(p.localNormal).toEqual([0, 1, 0]);
+    expect(p.standoffMm).toBe(25);
+    expect(p.scale).toBe(1);
+    expect(p.rotationDeg).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('no-regression: agregado component WITHOUT placements renders its board but resolves []', () => {
+    const doorAgregadoNoPlacement: Agregado = {
+      ...doorAgregado,
+      components: [{ componentId: 'c-agr-puerta', quantity: 1 }],
+    };
+    const preview = resolveProject3DPreview(projectAgregado, {
+      ...catalogAgregadoHandle,
+      agregados: [doorAgregadoNoPlacement],
+    });
+    expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
+    // The agregado board still renders (threading the catalog is independent
+    // of whether the instance carries a placement).
+    expect(
+      preview.modules[0]!.parts.some((p) => p.id === 'c-agr-puerta-copy-0'),
+    ).toBe(true);
   });
 });
