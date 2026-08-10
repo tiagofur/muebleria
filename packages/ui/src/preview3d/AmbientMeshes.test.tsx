@@ -31,6 +31,8 @@ import {
   CeilingMesh,
   FloorAmbientMesh,
   WallAmbientMesh,
+  PAINT_HOVER_COLOR,
+  PAINT_HOVER_OPACITY,
   planAmbientScene,
   resolveFloorColor,
   resolveFloorPhysical,
@@ -270,5 +272,23 @@ describe('ambient mesh components are exported React components', () => {
   });
   it('exports BaseboardMesh', () => {
     expect(typeof BaseboardMesh).toBe('function');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paint hover overlay constants (F067). The actual overlay rendering happens
+// inside the R3F <mesh> (not jsdom-testable); we verify the exported constants
+// that drive the overlay color/opacity so the visual contract is locked.
+// ---------------------------------------------------------------------------
+
+describe('paint hover overlay constants (F067)', () => {
+  it('exports PAINT_HOVER_COLOR as a green hex', () => {
+    expect(PAINT_HOVER_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(PAINT_HOVER_COLOR).toBe('#4ade80');
+  });
+
+  it('exports PAINT_HOVER_OPACITY between 0 and 1', () => {
+    expect(PAINT_HOVER_OPACITY).toBeGreaterThan(0);
+    expect(PAINT_HOVER_OPACITY).toBeLessThanOrEqual(1);
   });
 });

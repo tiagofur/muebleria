@@ -18,6 +18,11 @@ vi.mock('../../preview3d', async (importOriginal) => {
       ambientFloor?: { readonly id?: string } | null;
       ambientWall?: { readonly id?: string } | null;
       showCeiling?: boolean;
+      onPaintDrop?: (drop: import('../../preview3d').PaintDrop | null) => void;
+      onPaintHover?: (
+        surface: import('../../preview3d').PaintSurface | null,
+      ) => void;
+      paintHoverSurface?: import('../../preview3d').PaintSurface | null;
     }) => (
       <div
         data-testid={props.testId ?? 'furniture-scene-3d'}
@@ -31,7 +36,59 @@ vi.mock('../../preview3d', async (importOriginal) => {
         data-ambient-floor={props.ambientFloor?.id ?? ''}
         data-ambient-wall={props.ambientWall?.id ?? ''}
         data-show-ceiling={props.showCeiling ? 'true' : 'false'}
-      />
+        data-paint-hover={
+          props.paintHoverSurface
+            ? `${props.paintHoverSurface.kind}${
+                props.paintHoverSurface.kind === 'wall'
+                  ? `:${props.paintHoverSurface.wallId}`
+                  : ''
+              }`
+            : ''
+        }
+      >
+        {props.onPaintDrop ? (
+          <button
+            type="button"
+            data-testid="mock-paint-drop-floor"
+            onClick={() =>
+              props.onPaintDrop!({
+                materialId: 'am-floor-1',
+                surface: { kind: 'floor' },
+              })
+            }
+          >
+            mock drop floor
+          </button>
+        ) : null}
+        {props.onPaintDrop ? (
+          <button
+            type="button"
+            data-testid="mock-paint-drop-wall"
+            onClick={() =>
+              props.onPaintDrop!({
+                materialId: 'am-wall-1',
+                surface: { kind: 'wall', wallId: 'w1' },
+              })
+            }
+          >
+            mock drop wall
+          </button>
+        ) : null}
+        {props.onPaintDrop ? (
+          <button
+            type="button"
+            data-testid="mock-paint-drop-floor-to-wall"
+            onClick={() =>
+              props.onPaintDrop!({
+                materialId: 'am-floor-1',
+                surface: { kind: 'wall', wallId: 'w1' },
+              })
+            }
+          >
+            mock drop floor-to-wall mismatch
+          </button>
+        ) : null}
+      </div>
     ),
   };
 });
@@ -1070,7 +1127,111 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     expect(next.showCeiling).toBe(true);
   });
 
-  it('floor material picker selection updates KitchenSpace ref', () => {
+  it('paint drop floor material updates floorMaterialId (F067)', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    const catalogWithAmbient = {
+      ...catalog,
+      ambientMaterials: [
+        {
+          id: 'am-floor-1',
+          code: 'CERAMIC',
+          name: 'Cerámica',
+          active: true,
+          surfaceType: 'floor' as const,
+          previewColor: '#333333',
+        },
+        {
+          id: 'am-wall-1',
+          code: 'PINT',
+          name: 'Pintura',
+          active: true,
+          surfaceType: 'wall' as const,
+          previewColor: '#f5f5dc',
+        },
+      ],
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalogWithAmbient}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    // Simulate the FurnitureScene3D reporting a floor paint drop (the real
+    // canvas would raycast + read dataTransfer; here we invoke the callback
+    // the wired Studio passes down).
+    fireEvent.click(screen.getByTestId('mock-paint-drop-floor'));
+    expect(onChangeLayout).toHaveBeenCalled();
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      floorMaterialId?: string;
+      wallMaterialId?: string;
+    };
+    expect(next.floorMaterialId).toBe('am-floor-1');
+    expect(next.wallMaterialId).toBeUndefined();
+  });
+
+  it('paint drop wall material updates wallMaterialId (F067)', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    const catalogWithAmbient = {
+      ...catalog,
+      ambientMaterials: [
+        {
+          id: 'am-floor-1',
+          code: 'CERAMIC',
+          name: 'Cerámica',
+          active: true,
+          surfaceType: 'floor' as const,
+          previewColor: '#333333',
+        },
+        {
+          id: 'am-wall-1',
+          code: 'PINT',
+          name: 'Pintura',
+          active: true,
+          surfaceType: 'wall' as const,
+          previewColor: '#f5f5dc',
+        },
+      ],
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalogWithAmbient}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('mock-paint-drop-wall'));
+    const next = onChangeLayout.mock.calls.at(-1)![0] as {
+      floorMaterialId?: string;
+      wallMaterialId?: string;
+    };
+    expect(next.wallMaterialId).toBe('am-wall-1');
+    expect(next.floorMaterialId).toBeUndefined();
+  });
+
+  it('paint drop ignores surfaceType mismatch (floor material on wall)', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {
       ...project,
@@ -1103,14 +1264,7 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
         onChangeLayout={onChangeLayout}
       />,
     );
-    // Select the floor material from the native select.
-    fireEvent.change(screen.getByTestId('spatial-studio-floor-picker'), {
-      target: { value: 'am-floor-1' },
-    });
-    expect(onChangeLayout).toHaveBeenCalled();
-    const next = onChangeLayout.mock.calls.at(-1)![0] as {
-      floorMaterialId?: string;
-    };
-    expect(next.floorMaterialId).toBe('am-floor-1');
+    fireEvent.click(screen.getByTestId('mock-paint-drop-floor-to-wall'));
+    expect(onChangeLayout).not.toHaveBeenCalled();
   });
 });

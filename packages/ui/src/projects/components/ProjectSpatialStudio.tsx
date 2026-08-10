@@ -83,8 +83,16 @@ import {
   DEFAULT_SCENE_LIGHTING_MODE,
   type BoardColorMode,
   type MaterialSurfaceMode,
+  type PaintDrop,
+  type PaintSurface,
   type SceneLightingMode,
 } from '../../preview3d';
+import { MaterialPalette } from '../../preview3d/MaterialPalette';
+import {
+  PAINT_DRAG_MIME,
+  canApplyMaterial,
+  decodePaintDrag,
+} from '../../preview3d/paintMaterial';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
 import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
@@ -246,6 +254,9 @@ export function ProjectSpatialStudio({
   const [showFloorGrid, setShowFloorGrid] = useState(true);
   const [lightingMode, setLightingMode] = useState<SceneLightingMode>(
     DEFAULT_SCENE_LIGHTING_MODE,
+  );
+  const [paintHoverSurface, setPaintHoverSurface] = useState<PaintSurface | null>(
+    null,
   );
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [defaultWallsMsg, setDefaultWallsMsg] = useState<string | null>(null);
@@ -699,6 +710,34 @@ export function ProjectSpatialStudio({
       activeSpaceId: next.activeSpaceId ?? layout.activeSpaceId,
     });
     onChangeLayout(pruneKitchenLayout(merged, project.items));
+  };
+
+  /**
+   * F067 paint drag hover: FurnitureScene3D raycasted the surface under the
+   * cursor. We store it to drive the green overlay on the matching ambient mesh.
+   */
+  const handlePaintHover = (surface: PaintSurface | null) => {
+    setPaintHoverSurface(surface);
+  };
+
+  /**
+   * F067 paint drop: a material was dropped on the canvas. Validate that the
+   * material's surfaceType matches the hit surface (floor→floor, wall→wall),
+   * then commit the floor/wallMaterialId. Mismatches are silently ignored
+   * (cursor already showed 'copy' but the apply is a no-op).
+   */
+  const handlePaintDrop = (drop: PaintDrop | null) => {
+    setPaintHoverSurface(null);
+    if (!drop) return;
+    const material = (catalog.ambientMaterials ?? []).find(
+      (m) => m.id === drop.materialId,
+    );
+    if (!material) return;
+    if (drop.surface.kind === 'floor' && canApplyMaterial(material.surfaceType, drop.surface)) {
+      commit({ ...layout, floorMaterialId: drop.materialId });
+    } else if (drop.surface.kind === 'wall' && canApplyMaterial(material.surfaceType, drop.surface)) {
+      commit({ ...layout, wallMaterialId: drop.materialId });
+    }
   };
 
   const switchSpace = (spaceId: string) => {
@@ -1792,53 +1831,17 @@ export function ProjectSpatialStudio({
                   <span>Mesada visual sobre bajos</span>
                 </label>
 
-                <label className="spatial-studio__field">
-                  <span>Piso (escena 3D)</span>
-                  <select
-                    value={layout.floorMaterialId ?? ''}
-                    disabled={!canEdit}
-                    onChange={(e) =>
-                      commit({
-                        ...layout,
-                        floorMaterialId: e.target.value || undefined,
-                      })
-                    }
-                    data-testid="spatial-studio-floor-picker"
-                  >
-                    <option value="">— Sin piso —</option>
-                    {(catalog.ambientMaterials ?? [])
-                      .filter((m) => m.active && m.surfaceType === 'floor')
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.code})
-                        </option>
-                      ))}
-                  </select>
-                </label>
-
-                <label className="spatial-studio__field">
-                  <span>Pared (escena 3D)</span>
-                  <select
-                    value={layout.wallMaterialId ?? ''}
-                    disabled={!canEdit}
-                    onChange={(e) =>
-                      commit({
-                        ...layout,
-                        wallMaterialId: e.target.value || undefined,
-                      })
-                    }
-                    data-testid="spatial-studio-wall-picker"
-                  >
-                    <option value="">— Sin pared —</option>
-                    {(catalog.ambientMaterials ?? [])
-                      .filter((m) => m.active && m.surfaceType === 'wall')
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.code})
-                        </option>
-                      ))}
-                  </select>
-                </label>
+                <div className="spatial-studio__field">
+                  <span className="spatial-studio__field-label">
+                    Materiales (arrastrar al 3D)
+                  </span>
+                  <MaterialPalette
+                    materials={catalog.ambientMaterials ?? []}
+                    activeFloorId={layout.floorMaterialId}
+                    activeWallId={layout.wallMaterialId}
+                    testId="spatial-studio-material-palette"
+                  />
+                </div>
 
                 <label className="spatial-studio__field spatial-studio__check-row">
                   <input
@@ -2293,6 +2296,9 @@ export function ProjectSpatialStudio({
                 onSelectWall={(wallId) => {
                   setTargetWallId(wallId);
                 }}
+                paintHoverSurface={paintHoverSurface}
+                onPaintHover={handlePaintHover}
+                onPaintDrop={handlePaintDrop}
               />
             </Suspense>
           ) : (
