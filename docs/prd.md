@@ -869,67 +869,51 @@ Métricas subjetivas se validan con uso real del dueño del taller (aceptación 
 
 ## 17. Roadmap por fases
 
-### Fase 0 — Alineación — **HECHA**
+> **Canónico actualizado:** `docs/roadmap-comercial-v2.md` es la fuente única
+> de verdad del roadmap vivo. Esta sección es un resumen sincronizado; ante
+> duda, ganar el roadmap comercial. Fases 0–3 + UI design system + Backend Go
+> (F001–F064) están **hechas**. Lo de abajo es el trabajo pendiente.
 
-- [x] Análisis de plantillas
-- [x] PRD + modelo catálogo/grupos/cotización
-- [x] Aprobar / operar bajo este PRD (en uso como contrato de producto)
-- [x] Re-orientar harness del repo al producto (`AGENTS.md`, `feature_list.json`, docs)
-- [x] Design técnico (paquetes, schema, stack — ver `docs/architecture.md`, `docs/technical_design.md`)
+### Fases 0–3 + UI + Backend Go — **HECHAS** (F001–F064, 60 features)
 
-### Fase 1 — Fundación — **HECHA** (F001–F005)
+Incluye: scaffold, dominio, MVP, endurecer día a día (snapshot, herrajes,
+merma, duplicar, cintilla, veta), design system, backend Go+Postgres, auth,
+RBAC, motor de cálculo en Go, módulo producción (cola, assembly sheets,
+paperless, merma), preview 3D con manipulación/drag/herrajes, import DXF,
+export Optimizer/PDF/CSV completo. Ver `feature_list.json` y
+`progress/history.md` para el detalle.
 
-- [x] Scaffold monorepo TS
-- [x] `domain`: tipos + option groups + resolución BOM + costos + golden test
-- [x] `excel`: writer Optimizer + tests
-- [x] Storage local versionado
+### Fase A — Proyectar pulido — **PENDIENTE** (F065–F067)
 
-### Fase 2 — MVP usable — **HECHA** (F006–F011)
+Flujo "añadir mueble → colocarlo en 3D" fluido tipo Promob. Mejora del flujo
+actual (no barra catálogo nueva): drag-drop mejorado con preview/snap (F065),
+inspector 3D rediseñado con secciones colapsables (F066), paleta de
+materiales con aplicación por drag (F067). 6–8 semanas.
 
-- [x] UI catálogos + grupos de opciones
-- [x] UI muebles (roles en piezas/herrajes)
-- [x] UI cotización + resumen
-- [x] Export desde UI (web; desktop adapters)
-- [x] Datos semilla
+### Fase B — Herrajes 3D completos — **PENDIENTE** (F068–F070)
 
-### Fase 3 — Endurecer para el día a día — **PARCIAL**
+Geometrías de bisagra/corredera/riel/pata (F068), variantes de acabado
+predefinidas por herraje (F069), editor de placement con gizmo
+interactivo (F070). Sin perforaciones dinámicas (congelado F081). 6–8 semanas.
 
-- [x] Snapshot de cotización (F012)
-- [x] Lista de herrajes (F013)
-- [x] Merma % (F014)
-- [x] Duplicar módulo / proyecto (F015)
-- [x] Cintilla default por material (F027)
-- [x] Veta heredada del material (F028)
-- [ ] Opciones a nivel proyecto + override (#35 / F029)
-- [ ] Export cotización comercial (#36 / F030)
-- [ ] Mejoras UX grilla / atajos (#39 / F033)
-- [ ] Pantalla Ajustes (#37 / F031)
+### Fase C — Producción y corte de valor — **PENDIENTE** (F071–F074)
 
-### Fase 4 — Inteligencia de taller — **NO INICIADA**
+Etiquetas Zebra/ZPL térmicas 1–3 tamaños (F071), PDF preview de corte visual
+para cortes manuales (F072), CSV plan de corte editable configurable (F073),
+lista de piezas con perforaciones como datos estructurados (F074). Integra
+issues #254/#255/#256. 6–8 semanas.
 
-- Módulos paramétricos (gabinete N, cajonera N)
-- Reglas de taller (bisagras por alto, corredera por fondo)
-- Etiquetas / códigos de pieza avanzados
+### Fase D — Empaquetado y lanzamiento — **PENDIENTE** (F075–F077)
 
-### Fase 5 — Ecosistema (opcional) — **NO INICIADA**
+Electron empaquetado + firma Windows + auto-update, cierra #38/F032 (F075),
+onboarding + datos semilla demo comercial (F076), prep venta: pricing + landing
++ script de venta (F077). 4–6 semanas.
 
-- Import resultado nesting (consumo real de pliegos)
-- Cloud backup / multi-dispositivo completo
-- Integraciones CNC
+### Fase Congelada — Solo con clientes pagando — **POSTERGADO**
 
-### Fase UI design system — **HECHA** (F016–F023)
-
-- Tokens, layout sidebar, modales, toasts, catálogos/cards, dashboard.
-
-### Segunda Etapa (Fase 6+) — Backend Go + Postgres — **AVANZADA**
-
-- [x] Fundación backend Go + Postgres (F024)
-- [x] Auth, roles, aprobación admin (F026)
-- [x] Categorías jerárquicas de muebles (F025)
-- [x] Motor de cálculo / generadores en Go (paridad con TS)
-- [ ] Desktop Electron empaquetado (#38 / F032)
-- [ ] Sync multi-dispositivo / offline dual robusto
-- [ ] Clientes móviles
+F078 SketchUp plugin · F079 Render Blender headless premium · F080 Capas de
+acabado por componente · F081 Perforaciones dinámicas tipo Builder. No se
+empiezan hasta 3 talleres pagando 3 meses.
 
 ---
 

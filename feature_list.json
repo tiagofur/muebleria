@@ -1207,6 +1207,358 @@
         "docs/IDEAS/PRD.md §4.3 (patrón Command original)"
       ],
       "status": "done"
+    },
+    {
+      "id": "F065",
+      "phase": 12,
+      "name": "proyectar_drag_drop_mejorado",
+      "title": "Proyectar: drag-drop mejorado de ítem 'sin colocar' al muro/piso",
+      "description": "Fase A (Roadmap Comercial v2). Pulir el flujo de colocación: arrastrar un ítem 'sin colocar' directamente al viewport 3D, con preview fantasma siguiendo el cursor, snap visual a muros y grilla de piso, feedback de validez (verde = ok, rojo = colisión). Aprovecha el drag de muros/piso existente (handleModuleWallOffset, freeDragByKey) pero lo inicia desde la lista lateral, no solo mover lo ya colocado. Es el corazón del 'se siente como Promob' sin construir barra de catálogo nueva.",
+      "acceptance": [
+        "Drag desde ítem 'sin colocar' de la lista lateral hacia el viewport 3D inicia gesture",
+        "Preview fantasma (mesh semi-transparente) sigue al cursor durante el drag",
+        "Snap a muro activo (offset 18mm, gap 20mm) con indicador visual verde cuando es válido",
+        "Feedback rojo + bloqueo de drop si hay colisión con módulo existente",
+        "Drop en piso activa modo isla (free place, grilla 50mm)",
+        "ESC cancela el gesture y devuelve el ítem a 'sin colocar'",
+        "El ítem agregado aparece en cotización automáticamente (puente existente)",
+        "Test: gesture completo en jsdom (sin pixels), smoke manual en browser",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase A",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx (drag existente)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F066",
+      "phase": 12,
+      "name": "inspector_3d_redisenio_colapsable",
+      "title": "Inspector 3D rediseñado con secciones colapsables",
+      "description": "Fase A (Roadmap Comercial v2). Reorganizar PartInspector existente en secciones colapsables: Dimensiones / Material / Herrajes / Acabado / Avanzado. No es arquitectura nueva con tabs — es evolución del componente actual. Cada sección colapsable con header + chevron, estado de colapso persistido por sesión. Prepara la estructura para F069 (variantes de acabado) y F070 (editor de placement).",
+      "acceptance": [
+        "Componente Collapsible reutilizable (header + contenido animado) en packages/ui",
+        "PartInspector rediseñado con 5 secciones colapsables: Dimensiones, Material, Herrajes, Acabado, Avanzado",
+        "Estado colapsado/expandido persiste por sesión (localStorage o zustand)",
+        "Solo la sección relevante al tipo de selección se habilita (ej: herrajes solo si hay herrajes)",
+        "Sección vacía se oculta o muestra placeholder claro",
+        "Compatibilidad: toda funcionalidad existente del PartInspector preservada",
+        "Test: render de cada sección, toggle de colapso, persistencia",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase A",
+        "packages/ui/src/preview3d/PartInspector.tsx"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F067",
+      "phase": 12,
+      "name": "paleta_materiales_drag_apply",
+      "title": "Paleta de materiales con aplicación por drag (piso/muro/pieza)",
+      "description": "Fase A (Roadmap Comercial v2). Panel de paleta de materiales que permite arrastrar un material al piso, muro o pieza seleccionada para aplicarlo (el 'paint' de Promob). Usa raycast al soltar (onPointerMove + intersect) para identificar el mesh objetivo. Construye sobre catalog.ambientMaterials (piso/muro/techo) y boardPartVisual (piezas). Incluye preview del material en la paleta (thumbnail PBR).",
+      "acceptance": [
+        "Panel Paleta de Materiales con grid de thumbnails (catalog.ambientMaterials + materiales de pieza)",
+        "Drag de un material al viewport 3D identifica el mesh objetivo por raycast al soltar",
+        "Drop en piso aplica floorMaterialId del ambiente activo",
+        "Drop en muro aplica wallMaterialId del muro",
+        "Drop en pieza seleccionada aplica el material al boardPartVisual de esa pieza",
+        "Cursor cambia a 'paint' durante el drag",
+        "Feedback visual: mesh objetivo highlight al hover durante drag",
+        "Test: lógica de resolución de target por raycast (mock), smoke manual en browser",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase A",
+        "packages/ui/src/preview3d/AmbientMeshes.tsx",
+        "packages/ui/src/preview3d/boardPartVisual.ts"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F068",
+      "phase": 13,
+      "name": "herrajes_3d_geometrias_adicionales",
+      "title": "Geometrías 3D de herrajes: bisagra, corredera, riel, pata",
+      "description": "Fase B (Roadmap Comercial v2). Extender previewShape y HardwareMesh.tsx más allá de knob/bar-pull/cup-pull (solo jaladeras hoy). Agregar geometría paramétrica para: bisagra (cuerpo + copa), corredera telescópica, riel, pata nivelable. Cada uno con dimensiones razonables (no importadas de catálogo real todavía — placeholder proporcional). Cierra la base para F069 (acabados) y F070 (editor placement).",
+      "acceptance": [
+        "previewShape extiende union type: 'knob' | 'bar-pull' | 'cup-pull' | 'hinge' | 'slide' | 'rail' | 'leg'",
+        "HardwareMesh.tsx renderiza mesh para cada nuevo shape con proporciones plausibles",
+        "Bisagra: copa cilíndrica + cuerpo articulado, orientable según anchorFace",
+        "Corredera: riel + carril telescópico, largo proporcional al fondo del módulo",
+        "Riel: perfil lineal para cajones",
+        "Pata: cilindro + rosca nivelable",
+        "Cada mesh respeta placement (relativePosition + anchorFace + rotationDeg + scale)",
+        "Test: cada shape renderiza sin error, respeta placement mocking",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase B",
+        "packages/domain/src/types.ts (previewShape)",
+        "packages/ui/src/preview3d/HardwareMesh.tsx"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F069",
+      "phase": 13,
+      "name": "herrajes_variantes_acabado",
+      "title": "Variantes de acabado para herrajes (cromado/negro/bronce/mate)",
+      "description": "Fase B (Roadmap Comercial v2). Modelo D2: cada herraje del catálogo ofrece N acabados predefinidos (variantes cerradas, no capas por componente). Selector en inspector (F066). Migración aditiva hardware_finishes: tabla de acabados + FK en hardware. Swap de material PBR (metalness/roughness/color) al elegir variante. Capas por componente queda congelado (F080).",
+      "acceptance": [
+        "Migración aditiva backend-go (000038 o siguiente): CREATE TABLE IF NOT EXISTS hardware_finishes (id, code, name, color_hex, metalness, roughness, clearcoat)",
+        "Hardware tiene finishes: HardwareFinish[] (al menos 1 por default)",
+        "Catálogo semilla con acabados: cromado, negro mate, bronce, cepillado, oro",
+        "Selector de acabado en inspector F066 → swap de material PBR del HardwareMesh",
+        "Paridad TS ↔ Go en el modelo HardwareFinish",
+        "Persistence: hardware_finishes viajan en hardware del catálogo (no en project instance)",
+        "Test: variante cambia material, persistencia round-trip, migración up/down",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase B, Decisión D2",
+        "packages/domain/src/types.ts (Hardware)",
+        "backend-go/internal/storage/ (migración)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F070",
+      "phase": 13,
+      "name": "herrajes_editor_placement_3d",
+      "title": "Editor de placement de herrajes en 3D (gizmo interactivo)",
+      "description": "Fase B (Roadmap Comercial v2). Gizmo de posición/rotación interactivo en el viewport 3D para herrajes. Ajuste fino en inspector (F066) con campos numéricos (mm y grados). Multi-selección para mover varios herrajes juntos. Construye sobre HardwarePlacement (relativePosition + anchorFace + rotationDeg + scale) y hardwarePlacement resolver existente.",
+      "acceptance": [
+        "Gizmo 3D (translate/rotate) aparece al seleccionar un herraje en el viewport",
+        "Drag del gizmo actualiza relativePosition (conversión mm→percent del face)",
+        "Rotación del gizmo actualiza rotationDeg",
+        "Campos numéricos en inspector F066: posición (mm), rotación (deg), escala",
+        "Multi-selección: shift+click selecciona múltiples herrajes, gizmo los mueve juntos",
+        "Undo/redo (F061 CommandManager) cubre placement",
+        "Snap configurable (default 5mm posición, 5deg rotación)",
+        "Test: gizmo actualiza placement, undo/redo, multi-selección (mock R3F)",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase B",
+        "packages/domain/src/hardwarePlacement.ts (resolver)",
+        "packages/ui/src/preview3d/HardwareMesh.tsx"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F071",
+      "phase": 14,
+      "name": "etiquetas_zebra_zpl_termicas",
+      "title": "Etiquetas Zebra/ZPL para impresoras térmicas (1-3 tamaños)",
+      "description": "Fase C (Roadmap Comercial v2). Generar etiquetas en formato ZPL para impresoras térmicas Zebra (estándar de fábrica). 1-3 tamaños comunes (ej. 100x50, 100x150 mm). Cada etiqueta: código de pieza, dimensiones (LxAxE), material, módulo, QR a datos. Salida .zpl descargable + impresión directa vía CUPS (Electron) o navegador web-print. Complementa el PDF de etiquetas A4 existente (pieceLabelsExport).",
+      "acceptance": [
+        "Generador ZPL en packages/excel (o nuevo paquete packages/labels): pieceToZpl(piece, size)",
+        "1-3 presets de tamaño configurables (default: 100x50mm, 100x150mm, opcional 50x25mm)",
+        "Cada etiqueta ZPL incluye: código, dimensiones, material, módulo, QR (ZPL ^BY)",
+        "Preview en UI antes de imprimir (render PNG del ZPL o mock visual)",
+        "Descarga .zpl batch (todas las piezas del proyecto en un archivo)",
+        "Impresión directa vía CUPS en Electron (apps/desktop) — canal IPC nuevo",
+        "Impresión vía navegador (web-print API) para web",
+        "Test: generación ZPL de una piezafixture, batch, presets",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase C",
+        "packages/excel/src/pieceLabelsExport.ts (PDF A4 existente)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F072",
+      "phase": 14,
+      "name": "pdf_preview_corte_visual_manual",
+      "title": "PDF preview de corte visual para cortes manuales",
+      "description": "Fase C (Roadmap Comercial v2). Generar un PDF que dibuja las piezas como rectángulos empaquetados sobre un tablero estándar (ej. 2440x1830mm), con dimensiones y código de cada pieza. Para el taller que corta a mano (sin CNC ni optimizador). NO es nesting optimizado (D5) — es un empaquetado simple left-to-right/top-to-bottom legible. Construye sobre ProductionBoardView.tsx (SVG) pero lo exporta a PDF imprimible.",
+      "acceptance": [
+        "Generador PDF en packages/excel: cutPreviewPdf(cutRows, boardSize, packing)",
+        "Dimensiones de tablero configurables (default 2440x1830, presets comunes LatAm)",
+        "Empaquetado simple legible (no optimizado): left-to-right, top-to-bottom, con margen de sierra configurable (default 4mm)",
+        "Cada pieza dibujada con: código, dimensiones LxA, material (color o etiqueta)",
+        "Múltiples tableros si las piezas no caben en uno (paginación)",
+        "Leyenda con totales: cantidad de tableros, m², material dominante",
+        "Preview en UI (ProductionOrderOptimizationPanel) + descarga PDF",
+        "Test: empaquetado de N piezas, paginación, márgenes",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase C",
+        "packages/ui/src/production/ProductionBoardView.tsx",
+        "packages/excel/src/optimizerExport.ts"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F073",
+      "phase": 14,
+      "name": "csv_plan_corte_configurable",
+      "title": "CSV de plan de corte editable y configurable",
+      "description": "Fase C (Roadmap Comercial v2). Hacer el CSV de cut list configurable: columnas seleccionables, separador configurable (; o , o tab), presets por taller. Más allá del CSV fijo actual (cutListCsvExport con CUT_LIST_CSV_HEADERS hardcoded). Permite que cada taller exporte el CSV en el formato que su optimizador o sierra espera.",
+      "acceptance": [
+        "Config de export CSV: CsvExportConfig { columns: ColumnKey[], separator: ';' | ',' | '\\t', includeHeader: boolean, encoding: 'utf-8' | 'latin-1' }",
+        "Columnas disponibles: piece_code, module_code, material, length_mm, width_mm, thickness_mm, qty, grain, edge_l, edge_r, edge_t, edge_b, description (superset del actual)",
+        "Presets guardables por taller (persistencia en settings)",
+        "UI de configuración con drag-reorder de columnas + checkboxes",
+        "Preview del CSV resultante antes de descargar",
+        "Default backward-compatible: mismo formato que cutListCsvExport actual",
+        "Test: configuración genera CSV esperado, presets, encoding",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase C",
+        "packages/excel/src/cutListCsvExport.ts (fijo actual)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F074",
+      "phase": 14,
+      "name": "lista_piezas_perforaciones_datos",
+      "title": "Lista de piezas con perforaciones como datos estructurados",
+      "description": "Fase C (Roadmap Comercial v2). Cada pieza del cut list lleva su lista de perforaciones (diámetro, posición X/Y, profundidad) como datos estructurados, no como geometría 3D. Fluye al CSV (F073 como columnas opcionales) y a la etiqueta ZPL (F071). Usa Component.perforations (Perforation type 'hinge_cup' ya existe) y lo resuelve a nivel de pieza en el BOM. NO genera G-code ni perfora la malla 3D (eso es F081 congelado).",
+      "acceptance": [
+        "ResolvedBoardPart extiende con perforations: ResolvedPerforation[] ({ diameterMm, xMm, yMm, depthMm, type })",
+        "resolveBom resuelve Component.perforations a nivel de cada pieza del BOM",
+        "ProductionCutRow extiende con perforations (array serializado o columnas flag)",
+        "CSV (F073): columnas opcionales perforaciones (count, diámetros, posiciones)",
+        "Etiqueta ZPL (F071): muestra perforaciones relevantes (count + diámetros)",
+        "Paridad TS ↔ Go en ResolvedPerforation",
+        "Test: pieza con bisagra_cup genera perforación 35mm, BOM round-trip",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase C",
+        "packages/domain/src/types.ts (Perforation, ResolvedBoardPart)",
+        "packages/domain/src/engine/bom.ts"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F075",
+      "phase": 15,
+      "name": "electron_empaquetado_firma_windows",
+      "title": "Electron empaquetado + firma Windows + auto-update",
+      "description": "Fase D (Roadmap Comercial v2). Empaquetar apps/desktop (Electron, 98 líneas hoy) en instalador .exe Windows con electron-builder. Firma con certificado de código (evitar falsos positivos antivirus). Auto-update vía electron-updater (GitHub releases). Cierra issue #38 / F032 histórico. Producto instalable con doble clic, sin navegador ni dev server.",
+      "acceptance": [
+        "electron-builder config en apps/desktop (targets: nsis Windows, opcional dmg macOS)",
+        "Script pnpm build:desktop genera .exe instalador en dist/",
+        "Firma de código: instrucción + script para cert .pfx (sin commitear el cert)",
+        "electron-updater config: check de updates desde GitHub releases",
+        "Iconos de app (icon.ico Windows, icon.icns macOS) en apps/desktop/build/",
+        "Smoke: instalador corre en Windows 10/11, app abre, carga backend, exporta Excel",
+        "Doc en README de cómo generar release (cert + tag + publish)",
+        "pnpm build:desktop + typecheck verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase D",
+        "docs/prd.md §11 (arquitectura desktop)",
+        "apps/desktop/electron/main.mjs"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F076",
+      "phase": 15,
+      "name": "onboarding_demo_comercial",
+      "title": "Onboarding + datos semilla para demo comercial",
+      "description": "Fase D (Roadmap Comercial v2). Proyecto ejemplo (cocina L completa con muebles LatAm) + catálogo semilla ampliado + tour guiado de 3 pasos. Lo que un vendedor muestra en una carpintería en 5 minutos. No es funcionalidad nueva — es contenido + onboarding que hace que la primera experiencia sea wow.",
+      "acceptance": [
+        "Proyecto demo 'Cocina López' (cocina L completa: 4 alacenas + 4 bajomesadas + isla + zoclo) en datos semilla",
+        "Catálogo semilla con 15-20 muebles LatAm (nombres, medidas cerradas comunes)",
+        "Tour guiado de 3 pasos en primera apertura (tooltip overlay): crear proyecto, añadir mueble, ver 3D",
+        "Skip del tour + re-ver desde ajustes",
+        "Material ambient (piso/muro) sembrado para que el 3D se vea bien out-of-the-box",
+        "Smoke: usuario nuevo abre app, ve tour, carga demo, ve cocina 3D en < 1 min",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase D",
+        "packages/excel/src/__fixtures__/plantillaDemo.ts (semilla actual)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F077",
+      "phase": 15,
+      "name": "prep_venta_pricing_landing",
+      "title": "Prep venta: pricing tiers + landing + script de venta",
+      "description": "Fase D (Roadmap Comercial v2). Modelo de cobro definido ($40/80/mes sugerido), landing page minimal, doc de demo, script de venta para ferias/contactos de carpintería. NO es código de producto — es habilitador comercial. Landing puede ser una página estática en apps/web o repo separado.",
+      "acceptance": [
+        "Doc docs/comercial/pricing.md con tiers ($40 starter / $80 pro), qué incluye cada uno, argumento de valor",
+        "Landing page (estática o en apps/web): hero, propuesta, 3 screenshots, CTA contacto",
+        "Doc docs/comercial/demo-script.md: qué mostrar en 5-10 min a un carpintero (paso a paso)",
+        "Comparativa vs Promob/Excel/Gabster (tabla honesta de dónde ganas y dónde no)",
+        "FAQ de objeciones comunes ('es muy caro', 'promob hace más', 'no tengo pc')",
+        "Doc de onboarding de nuevo cliente (cómo dar de alta un taller)",
+        "Revisión: pricing y propuesta alineados con roadmap comercial v2"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase D, §0 propuesta de valor"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F078",
+      "phase": 16,
+      "name": "sketchup_plugin_exporter",
+      "title": "SketchUp plugin (exportador modelo → API) [CONGELADO]",
+      "description": "Roadmap Comercial v2 Fase Congelada. Plugin Ruby para SketchUp que exporta el modelo (componentes con naming convention) como JSON de piezas a la API Go del sistema. Para usuarios que ya modelan en SketchUp y no quieren migrar. NO se empieza hasta 3 talleres pagando 3 meses. Cuando se arranque: convención de naming de componentes (ej. 'MUEBLE-TIPO-W-H-D'), parser, POST a /api/projects/import.",
+      "acceptance": [
+        "[CONGELADO] No se implementa hasta disparador comercial"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase Congelada"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F079",
+      "phase": 16,
+      "name": "render_blender_headless_premium",
+      "title": "Render backend Blender headless (premium) [CONGELADO]",
+      "description": "Roadmap Comercial v2 Fase Congelada. Pipeline de render server: app genera .glb de la escena → POST a endpoint Go → Go lanza blender --background --python render.py (Cycles pathtracer) → devuelve PNG. Calidad Promob Render. Add-on de pago. NO se empieza hasta demanda probada.",
+      "acceptance": [
+        "[CONGELADO] No se implementa hasta disparador comercial"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase Congelada"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F080",
+      "phase": 16,
+      "name": "herrajes_capas_acabado_componente",
+      "title": "Capas de acabado por componente de herraje [CONGELADO]",
+      "description": "Roadmap Comercial v2 Fase Congelada. Modelo avanzado (vs F069 variantes): un herraje se compone de partes (cuerpo, base, empuñadura) y cada parte tiene acabado independiente. Más tipo Promob Builder. Postergado hasta demanda de catálogo complejo.",
+      "acceptance": [
+        "[CONGELADO] No se implementa hasta disparador comercial"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase Congelada, Decisión D2"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F081",
+      "phase": 16,
+      "name": "perforaciones_dinamicas_builder",
+      "title": "Perforaciones dinámicas tipo Promob Builder [CONGELADO]",
+      "description": "Roadmap Comercial v2 Fase Congelada. CSG visual (three-bvh-csg) para perforar la malla 3D en tiempo real según herrajes colocados + export a CNC/DXF. Lo más difícil técnicamente del roadmap. NO se empieza hasta cliente con CNC real pidiendo G-code.",
+      "acceptance": [
+        "[CONGELADO] No se implementa hasta disparador comercial"
+      ],
+      "references": [
+        "docs/roadmap-comercial-v2.md Fase Congelada"
+      ],
+      "status": "pending"
     }
   ]
 }
