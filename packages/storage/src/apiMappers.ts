@@ -795,6 +795,7 @@ function kitchenWallToApi(w: {
   angleDeg: number;
   originXMm?: number;
   originYMm?: number;
+  wallMaterialId?: string;
 }): Record<string, unknown> {
   return {
     id: w.id,
@@ -803,6 +804,7 @@ function kitchenWallToApi(w: {
     angle_deg: w.angleDeg,
     origin_x_mm: w.originXMm ?? null,
     origin_y_mm: w.originYMm ?? null,
+    wall_material_id: w.wallMaterialId ?? null,
   };
 }
 
@@ -910,6 +912,7 @@ function kitchenLayoutToApi(
             s.showCountertop === undefined ? null : s.showCountertop,
           floor_material_id: s.floorMaterialId ?? null,
           wall_material_id: s.wallMaterialId ?? null,
+          ceiling_material_id: s.ceilingMaterialId ?? null,
           show_ceiling: s.showCeiling === undefined ? null : s.showCeiling,
           underlay: kitchenUnderlayToApi(s.underlay),
         }))
@@ -924,10 +927,12 @@ function kitchenWallFromApi(w: unknown): {
   angleDeg: number;
   originXMm?: number;
   originYMm?: number;
+  wallMaterialId?: string;
 } {
   const wr = w as Record<string, unknown>;
   const ox = wr.origin_x_mm ?? wr.originXMm;
   const oy = wr.origin_y_mm ?? wr.originYMm;
+  const wMatId = str(wr.wall_material_id ?? wr.wallMaterialId);
   return {
     id: str(wr.id),
     name: str(wr.name) || undefined,
@@ -937,6 +942,7 @@ function kitchenWallFromApi(w: unknown): {
       ox === null || ox === undefined || ox === '' ? undefined : num(ox),
     originYMm:
       oy === null || oy === undefined || oy === '' ? undefined : num(oy),
+    ...(wMatId ? { wallMaterialId: wMatId } : {}),
   };
 }
 
@@ -1016,6 +1022,7 @@ function kitchenLayoutFromApi(
     const sCt = sr.show_countertop ?? sr.showCountertop;
     const sFloorM = str(sr.floor_material_id ?? sr.floorMaterialId);
     const sWallM = str(sr.wall_material_id ?? sr.wallMaterialId);
+    const sCeilM = str(sr.ceiling_material_id ?? sr.ceilingMaterialId);
     const sCeil = sr.show_ceiling ?? sr.showCeiling;
     const sUnderlay = kitchenUnderlayFromApi(sr.underlay);
     return {
@@ -1030,6 +1037,7 @@ function kitchenLayoutFromApi(
         : { showCountertop: Boolean(sCt) }),
       ...(sFloorM ? { floorMaterialId: sFloorM } : {}),
       ...(sWallM ? { wallMaterialId: sWallM } : {}),
+      ...(sCeilM ? { ceilingMaterialId: sCeilM } : {}),
       ...(sCeil === null || sCeil === undefined || sCeil === ''
         ? {}
         : { showCeiling: Boolean(sCeil) }),

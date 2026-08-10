@@ -90,6 +90,7 @@ function toDraft(item: AmbientMaterial): AmbientMaterialDraft {
 const SURFACE_TYPE_LABEL: Readonly<Record<AmbientSurfaceType, string>> = {
   floor: 'Suelo',
   wall: 'Pared',
+  ceiling: 'Techo',
 };
 
 export interface AmbientMaterialsCatalogProps {
@@ -491,6 +492,7 @@ export function AmbientMaterialsCatalog({
               >
                 <option value="floor">Suelo</option>
                 <option value="wall">Pared</option>
+                <option value="ceiling">Techo</option>
               </select>
             </div>
           </fieldset>

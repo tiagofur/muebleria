@@ -7,10 +7,13 @@
  * y decide qué superficie fue golpeada. Así es testeable en jsdom sin WebGL.
  */
 
+import type { AmbientSurfaceType } from '@muebles/domain';
+
 /** Superficie objetivo de un drop de material. */
 export type PaintSurface =
   | { readonly kind: 'floor' }
-  | { readonly kind: 'wall'; readonly wallId: string };
+  | { readonly kind: 'wall'; readonly wallId: string }
+  | { readonly kind: 'ceiling' };
 
 /** Resultado de un drop válido. */
 export type PaintDrop = {
@@ -24,7 +27,7 @@ export type PaintDrop = {
  * extrae `userData` del mesh golpeado y lo pasa como `kind` + `wallId`.
  */
 export type ResolvedIntersect = {
-  readonly kind: 'floor' | 'wall';
+  readonly kind: 'floor' | 'wall' | 'ceiling';
   readonly wallId?: string;
   readonly distance: number;
 };
@@ -32,11 +35,7 @@ export type ResolvedIntersect = {
 /**
  * Dado una lista de intersects resueltos (ordenados por distancia, el más
  * cercano primero), devuelve la superficie de pintura golpeada o null si
- * ninguno es una superficie pintable (piso/muro).
- *
- * Prioriza el intersect más cercano. Si el primero es una pieza de mueble
- * o algo no pintable, lo saltea y sigue con el siguiente (tolera que el
- * raycaster pase TODOS los intersects, no solo ambient).
+ * ninguno es una superficie pintable (piso/muro/techo).
  */
 export function resolvePaintSurface(
   intersects: readonly ResolvedIntersect[],
@@ -48,35 +47,34 @@ export function resolvePaintSurface(
     if (hit.kind === 'wall' && hit.wallId) {
       return { kind: 'wall', wallId: hit.wallId };
     }
-    // kind no pintable → seguir al siguiente intersect
+    if (hit.kind === 'ceiling') {
+      return { kind: 'ceiling' };
+    }
   }
   return null;
 }
 
 /**
  * Valida que un material pueda aplicarse a una superficie según su
- * surfaceType. Los ambient materials tienen surfaceType 'floor'|'wall'.
- * El piso solo acepta floor; los muros solo aceptan wall.
+ * surfaceType. Los ambient materials tienen surfaceType 'floor'|'wall'|'ceiling'.
  */
 export function canApplyMaterial(
-  materialSurfaceType: 'floor' | 'wall',
+  materialSurfaceType: AmbientSurfaceType,
   target: PaintSurface,
 ): boolean {
   if (target.kind === 'floor') return materialSurfaceType === 'floor';
+  if (target.kind === 'ceiling') return materialSurfaceType === 'ceiling';
   return materialSurfaceType === 'wall';
 }
 
 /**
  * Payload que viaja en el dataTransfer del drag HTML5 de la paleta.
- * Codificado como JSON en 'application/json' para tolerar IDs con
- * cualquier caracter. El nombre MIME custom es deliberado para no
- * colisionar con drags de texto plano de otros componentes.
  */
 export const PAINT_DRAG_MIME = 'application/x-muebles-paint';
 
 export type PaintDragPayload = {
   readonly materialId: string;
-  readonly surfaceType: 'floor' | 'wall';
+  readonly surfaceType: AmbientSurfaceType;
 };
 
 /** Serializa el payload del drag a JSON string. */

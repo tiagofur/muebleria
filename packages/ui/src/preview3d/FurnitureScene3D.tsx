@@ -54,6 +54,7 @@ import {
   CeilingMesh,
   FLOOR_DEFAULT_COLOR,
   FloorAmbientMesh,
+  PAINT_HOVER_COLOR,
   ROOM_WALL_HEIGHT_MM,
   WALL_DEFAULT_COLOR,
   WallAmbientMesh,
@@ -107,6 +108,8 @@ export type FurnitureSceneWall = {
   readonly endYMm: number;
   /** Wall height mm (default 2400). */
   readonly heightMm?: number;
+  /** Optional ambient material override for this specific wall. */
+  readonly wallMaterialId?: string;
 };
 
 export type FurnitureScene3DProps = {
@@ -228,6 +231,16 @@ export type FurnitureScene3DProps = {
    * instead of the white default.
    */
   readonly ambientWall?: AmbientMaterial;
+  /**
+   * Ambient (presentation-only) ceiling material. When set AND
+   * `lightingMode !== 'catalog'`, the ceiling renders the ambient material
+   * instead of the white default.
+   */
+  readonly ambientCeiling?: AmbientMaterial;
+  /**
+   * Catalog ambient materials used for looking up per-wall wallMaterialId overrides.
+   */
+  readonly availableAmbientMaterials?: readonly AmbientMaterial[];
   /**
    * Show the ceiling mesh (room box). Opt-in; default OFF to preserve the
    * current open feel. Only rendered when an ambient material is present and
@@ -458,10 +471,12 @@ function FloorGrid({
 function WallMesh({
   wall,
   selected = false,
+  paintHover = false,
   onSelect,
 }: {
   readonly wall: FurnitureSceneWall;
   readonly selected?: boolean;
+  readonly paintHover?: boolean;
   readonly onSelect?: (wallId: string) => void;
 }): ReactNode {
   const h = wall.heightMm ?? 2400;
@@ -474,42 +489,42 @@ function WallMesh({
   const thickness = selected ? 48 : 40;
   // Workshop → Three: [x, z, y]; wall sits on floor, long axis along length.
   return (
-    <mesh
-      position={[midX, h / 2, midY]}
-      rotation={[0, -yaw, 0]}
-      userData={{ wallId: wall.id }}
-      onClick={
-        onSelect
-          ? (e) => {
-              e.stopPropagation();
-              onSelect(wall.id);
-            }
-          : undefined
-      }
-      onPointerOver={
-        onSelect
-          ? () => {
-              document.body.style.cursor = 'pointer';
-            }
-          : undefined
-      }
-      onPointerOut={
-        onSelect
-          ? () => {
-              document.body.style.cursor = '';
-            }
-          : undefined
-      }
-    >
-      <boxGeometry args={[length, h, thickness]} />
-      <meshStandardMaterial
-        color={selected ? '#5b9fd4' : WALL_DEFAULT_COLOR}
-        roughness={0.9}
-        metalness={0.05}
-        transparent
-        opacity={selected ? 0.72 : 0.55}
-      />
-    </mesh>
+    <group position={[midX, h / 2, midY]} rotation={[0, -yaw, 0]}>
+      <mesh
+        userData={{ wallId: wall.id }}
+        onClick={
+          onSelect
+            ? (e) => {
+                e.stopPropagation();
+                onSelect(wall.id);
+              }
+            : undefined
+        }
+        onPointerOver={
+          onSelect
+            ? () => {
+                document.body.style.cursor = 'pointer';
+              }
+            : undefined
+        }
+        onPointerOut={
+          onSelect
+            ? () => {
+                document.body.style.cursor = '';
+              }
+            : undefined
+        }
+      >
+        <boxGeometry args={[length, h, thickness]} />
+        <meshStandardMaterial
+          color={selected ? '#5b9fd4' : paintHover ? PAINT_HOVER_COLOR : WALL_DEFAULT_COLOR}
+          roughness={0.9}
+          metalness={0.05}
+          transparent
+          opacity={selected ? 0.72 : paintHover ? 0.85 : 0.55}
+        />
+      </mesh>
+    </group>
   );
 }
 
@@ -906,6 +921,8 @@ function SceneContent({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   ambientFloor,
   ambientWall,
+  ambientCeiling,
+  availableAmbientMaterials,
   showCeiling,
   paintHoverSurface = null,
   registerResolvePaintHit,
@@ -950,6 +967,8 @@ function SceneContent({
   readonly lightingMode?: SceneLightingMode;
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
+  readonly ambientCeiling?: AmbientMaterial;
+  readonly availableAmbientMaterials?: readonly AmbientMaterial[];
   readonly showCeiling?: boolean;
   readonly paintHoverSurface?: PaintSurface | null;
   readonly registerResolvePaintHit?: (
@@ -963,12 +982,15 @@ function SceneContent({
     () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     [],
   );
+  const paintCeilingPlane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, -1, 0), ROOM_WALL_HEIGHT_MM),
+    [],
+  );
 
   /**
    * Register the paint-hit resolver so the canvas wrapper can raycast during
-   * HTML5 dragOver/drop (F067). Resolves which ambient surface (floor/wall)
-   * is under the cursor by intersecting the floor plane first, then walls by
-   * their userData.wallId.
+   * HTML5 dragOver/drop (F067). Resolves which ambient surface (floor/wall/ceiling)
+   * is under the cursor.
    */
   useEffect(() => {
     if (!registerResolvePaintHit) return;
@@ -977,30 +999,67 @@ function SceneContent({
       const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
       const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
       paintRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
-      // Floor: intersect the mathematical floor plane.
+
       const floorHit = new THREE.Vector3();
-      if (paintRaycaster.ray.intersectPlane(paintFloorPlane, floorHit)) {
-        // Walls: intersect wall meshes (only when present) to check if a wall
-        // is closer than the floor. Traverse scene for wall userData.
-        const wallMeshes: THREE.Object3D[] = [];
-        scene.traverse((obj) => {
-          if (obj.userData?.wallId && !obj.userData?.paintHoverOverlay) {
-            wallMeshes.push(obj);
-          }
-        });
-        if (wallMeshes.length > 0) {
-          const wallHits = paintRaycaster.intersectObjects(wallMeshes, false);
-          if (wallHits.length > 0 && wallHits[0]!.distance < floorHit.distanceTo(paintRaycaster.ray.origin)) {
-            const wallId = wallHits[0]!.object.userData.wallId as string;
-            return { kind: 'wall', wallId };
-          }
+      const hasFloorHit = paintRaycaster.ray.intersectPlane(paintFloorPlane, floorHit);
+
+      const wallMeshes: THREE.Object3D[] = [];
+      const ceilingMeshes: THREE.Object3D[] = [];
+
+      scene.traverse((obj) => {
+        if (obj.userData?.wallId && !obj.userData?.paintHoverOverlay) {
+          wallMeshes.push(obj);
+        } else if (obj.userData?.surface === 'ceiling' && !obj.userData?.paintHoverOverlay) {
+          ceilingMeshes.push(obj);
         }
+      });
+
+      const wallHits = wallMeshes.length > 0 ? paintRaycaster.intersectObjects(wallMeshes, false) : [];
+      const ceilingHits = ceilingMeshes.length > 0 ? paintRaycaster.intersectObjects(ceilingMeshes, false) : [];
+
+      let closestKind: 'floor' | 'wall' | 'ceiling' | null = null;
+      let closestWallId: string | undefined = undefined;
+      let minDistance = Infinity;
+
+      if (wallHits.length > 0) {
+        minDistance = wallHits[0]!.distance;
+        closestKind = 'wall';
+        closestWallId = wallHits[0]!.object.userData.wallId as string;
+      }
+
+      if (ceilingHits.length > 0 && ceilingHits[0]!.distance < minDistance) {
+        minDistance = ceilingHits[0]!.distance;
+        closestKind = 'ceiling';
+      }
+
+      if (hasFloorHit) {
+        const dist = floorHit.distanceTo(paintRaycaster.ray.origin);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestKind = 'floor';
+        }
+      }
+
+      if (!closestKind && showCeiling && camera.position.y < ROOM_WALL_HEIGHT_MM && paintRaycaster.ray.direction.y > 0) {
+        const ceilingHit = new THREE.Vector3();
+        if (paintRaycaster.ray.intersectPlane(paintCeilingPlane, ceilingHit)) {
+          return { kind: 'ceiling' };
+        }
+      }
+
+      if (closestKind === 'wall' && closestWallId) {
+        return { kind: 'wall', wallId: closestWallId };
+      }
+      if (closestKind === 'ceiling') {
+        return { kind: 'ceiling' };
+      }
+      if (closestKind === 'floor') {
         return { kind: 'floor' };
       }
       return null;
     });
     return () => registerResolvePaintHit(null);
-  }, [camera, gl, scene, paintRaycaster, paintFloorPlane, registerResolvePaintHit]);
+  }, [camera, gl, scene, paintRaycaster, paintFloorPlane, paintCeilingPlane, registerResolvePaintHit]);
 
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
@@ -1015,19 +1074,17 @@ function SceneContent({
     [lightingMode, framing.maxDim],
   );
   const lightMode = lightingMode ?? DEFAULT_SCENE_LIGHTING_MODE;
-  // Ambient (floor/wall/room-box) rendering plan — pure decision layer
-  // (AmbientMeshes.tsx). Gated by lighting mode + material presence; absent
-  // materials → all false → byte-identical to today's hardcoded scene.
   const ambientPlan = useMemo(
     () =>
       planAmbientScene({
         lightMode,
         ambientFloor,
         ambientWall,
+        ambientCeiling,
         showCeiling,
         showFloor,
       }),
-    [lightMode, ambientFloor, ambientWall, showCeiling, showFloor],
+    [lightMode, ambientFloor, ambientWall, ambientCeiling, showCeiling, showFloor],
   );
   // Room-box geometry derives from the floor-plane bounds + 2400mm height
   // (design #4151). Back wall spans the plane width at the back depth edge.
@@ -1126,7 +1183,11 @@ function SceneContent({
                   args={[totalWidth * 1.4, totalDepth * 1.6]}
                 />
                 <meshStandardMaterial
-                  color={FLOOR_DEFAULT_COLOR}
+                  color={
+                    paintHoverSurface?.kind === 'floor'
+                      ? PAINT_HOVER_COLOR
+                      : FLOOR_DEFAULT_COLOR
+                  }
                   roughness={0.95}
                   metalness={0}
                 />
@@ -1136,11 +1197,18 @@ function SceneContent({
           {showFloor && showFloorGrid ? (
             <FloorGrid totalWidth={totalWidth} totalDepth={totalDepth} />
           ) : null}
-          {walls.map((w) =>
-            ambientPlan.ambientWall && ambientWall ? (
+          {walls.map((w) => {
+            const wMat =
+              (w.wallMaterialId
+                ? availableAmbientMaterials?.find(
+                    (m) => m.id === w.wallMaterialId,
+                  )
+                : undefined) ?? ambientWall;
+
+            return wMat ? (
               <WallAmbientMesh
                 key={w.id}
-                material={ambientWall}
+                material={wMat}
                 wall={w}
                 selected={selectedWallId === w.id}
                 onSelect={onSelectWall}
@@ -1155,10 +1223,14 @@ function SceneContent({
                 key={w.id}
                 wall={w}
                 selected={selectedWallId === w.id}
+                paintHover={
+                  paintHoverSurface?.kind === 'wall' &&
+                  paintHoverSurface.wallId === w.id
+                }
                 onSelect={onSelectWall}
               />
-            ),
-          )}
+            );
+          })}
           {modules.map((mod) => (
             <ModuleGroup
               key={mod.key}
@@ -1201,7 +1273,7 @@ function SceneContent({
           {ambientPlan.roomBox ? (
             <>
               <BackWallMesh
-                material={ambientWall ?? ambientFloor}
+                material={ambientWall}
                 widthMm={backWallWidth}
                 position={[framing.center[0], ROOM_WALL_HEIGHT_MM / 2, backWallZ]}
                 lightingMode={lightMode}
@@ -1333,6 +1405,8 @@ export function FurnitureScene3D({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   ambientFloor,
   ambientWall,
+  ambientCeiling,
+  availableAmbientMaterials,
   showCeiling,
   onPaintDrop,
   onPaintHover,
@@ -1430,10 +1504,17 @@ export function FurnitureScene3D({
         className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
         tabIndex={0}
         aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
+        onDragEnter={
+          onPaintHover
+            ? (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+              }
+            : undefined
+        }
         onDragOver={
           onPaintHover
             ? (e) => {
-                if (!e.dataTransfer.types.includes(PAINT_DRAG_MIME)) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
                 const surface = resolvePaintHitRef.current?.(
@@ -1456,15 +1537,16 @@ export function FurnitureScene3D({
         onDrop={
           onPaintDrop
             ? (e) => {
-                if (!e.dataTransfer.types.includes(PAINT_DRAG_MIME)) return;
                 e.preventDefault();
-                const payload = decodePaintDrag(
-                  e.dataTransfer.getData(PAINT_DRAG_MIME),
-                );
-                const surface =
-                  payload && resolvePaintHitRef.current?.(e.clientX, e.clientY);
+                const rawMime = e.dataTransfer.getData(PAINT_DRAG_MIME);
+                const rawText = e.dataTransfer.getData('text/plain');
+                const payload = decodePaintDrag(rawMime || rawText);
+                const surface = resolvePaintHitRef.current?.(e.clientX, e.clientY);
+
                 if (payload && surface) {
                   onPaintDrop({ materialId: payload.materialId, surface });
+                } else if (rawText && surface) {
+                  onPaintDrop({ materialId: rawText, surface });
                 } else {
                   onPaintDrop(null);
                 }
@@ -1590,6 +1672,8 @@ export function FurnitureScene3D({
               lightingMode={lightingMode}
               ambientFloor={ambientFloor}
               ambientWall={ambientWall}
+              ambientCeiling={ambientCeiling}
+              availableAmbientMaterials={availableAmbientMaterials}
               showCeiling={showCeiling}
               paintHoverSurface={paintHoverSurface}
               registerResolvePaintHit={

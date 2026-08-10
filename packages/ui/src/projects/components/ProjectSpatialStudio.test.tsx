@@ -444,6 +444,7 @@ describe('ProjectSpatialStudio', () => {
         onChangeLayout={onChangeLayout}
       />,
     );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     const input = screen.getByTestId(
       'spatial-studio-import-input',
     ) as HTMLInputElement;
@@ -501,6 +502,7 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     const input = screen.getByTestId(
       'spatial-studio-import-input',
     ) as HTMLInputElement;
@@ -942,6 +944,7 @@ EOF
     );
 
     expect(screen.getByTestId('project-spatial-studio')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-create-l'));
     expect(onChangeLayout).toHaveBeenCalled();
     const withWalls = onChangeLayout.mock.calls[0]![0];
@@ -967,6 +970,7 @@ EOF
       />,
     );
 
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-modules'));
     fireEvent.click(screen.getByTestId('spatial-studio-place-it-a-0'));
     expect(onChangeLayout).toHaveBeenCalled();
     const next = onChangeLayout.mock.calls[0]![0];
@@ -996,10 +1000,12 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-wall-z-1500'));
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ wallCabinetZMm: 1500 }),
     );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-materials'));
     fireEvent.click(screen.getByTestId('spatial-studio-toggle-countertop'));
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ showCountertop: false }),
@@ -1026,6 +1032,7 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-layout-plinth-120'));
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ baseClearanceMm: 120 }),
@@ -1164,6 +1171,7 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
         onChangeLayout={onChangeLayout}
       />,
     );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-materials'));
     fireEvent.click(screen.getByTestId('spatial-studio-toggle-ceiling'));
     expect(onChangeLayout).toHaveBeenCalled();
     const next = onChangeLayout.mock.calls.at(-1)![0] as {
@@ -1271,8 +1279,9 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     const next = onChangeLayout.mock.calls.at(-1)![0] as {
       floorMaterialId?: string;
       wallMaterialId?: string;
+      walls?: Array<{ id: string; wallMaterialId?: string }>;
     };
-    expect(next.wallMaterialId).toBe('am-wall-1');
+    expect(next.walls?.[0]?.wallMaterialId).toBe('am-wall-1');
     expect(next.floorMaterialId).toBeUndefined();
   });
 
@@ -1311,5 +1320,34 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     );
     fireEvent.click(screen.getByTestId('mock-paint-drop-floor-to-wall'));
     expect(onChangeLayout).not.toHaveBeenCalled();
+  });
+
+  it('switches sidebar tabs between Muebles, Materiales, and Ambiente', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={project}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+
+    const btnModules = screen.getByTestId('spatial-studio-tab-modules');
+    const btnMaterials = screen.getByTestId('spatial-studio-tab-materials');
+    const btnRoom = screen.getByTestId('spatial-studio-tab-room');
+
+    expect(btnModules.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('spatial-studio-filter-all')).toBeTruthy();
+
+    fireEvent.click(btnMaterials);
+    expect(btnMaterials.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('spatial-studio-material-palette')).toBeTruthy();
+
+    fireEvent.click(btnRoom);
+    expect(btnRoom.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('spatial-studio-space-name')).toBeTruthy();
   });
 });

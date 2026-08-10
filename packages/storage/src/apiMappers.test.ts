@@ -1057,10 +1057,11 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
           {
             id: 'sp-1',
             name: 'Cocina',
-            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0, wallMaterialId: 'amb-wall-accent' }],
             placements: [],
             floorMaterialId: 'amb-floor',
             wallMaterialId: 'amb-wall',
+            ceilingMaterialId: 'amb-ceiling',
             showCeiling: true,
           },
         ],
@@ -1072,14 +1073,19 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
     const api = projectToApi(p);
     const kl = api.kitchen_layout as Record<string, unknown>;
     const space = (kl.spaces as Record<string, unknown>[])[0]!;
+    const wall1 = (space.walls as Record<string, unknown>[])[0]!;
     expect(space.floor_material_id).toBe('amb-floor');
     expect(space.wall_material_id).toBe('amb-wall');
+    expect(space.ceiling_material_id).toBe('amb-ceiling');
     expect(space.show_ceiling).toBe(true);
+    expect(wall1.wall_material_id).toBe('amb-wall-accent');
 
     const round = projectFromApi(api as Record<string, unknown>);
     expect(round.kitchenLayout?.spaces?.[0]?.floorMaterialId).toBe('amb-floor');
     expect(round.kitchenLayout?.spaces?.[0]?.wallMaterialId).toBe('amb-wall');
+    expect(round.kitchenLayout?.spaces?.[0]?.ceilingMaterialId).toBe('amb-ceiling');
     expect(round.kitchenLayout?.spaces?.[0]?.showCeiling).toBe(true);
+    expect(round.kitchenLayout?.spaces?.[0]?.walls[0]?.wallMaterialId).toBe('amb-wall-accent');
   });
 
   it('legacy kitchen layout without ambient refs loads as undefined (no crash)', () => {

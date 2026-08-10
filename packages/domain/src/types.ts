@@ -77,7 +77,7 @@ export interface MaterialBoard {
  * Surface an ambient material is intended for in the 3D room scene.
  * Presentation-only — never quoted, never in BOM/cost/export (spec #4148).
  */
-export type AmbientSurfaceType = 'floor' | 'wall';
+export type AmbientSurfaceType = 'floor' | 'wall' | 'ceiling';
 
 /**
  * Presentation-only material (floor tiles, wall porcelain, paint) used to
@@ -517,6 +517,8 @@ export interface KitchenWall {
   /** Optional start; if omitted, chained from previous wall end. */
   readonly originXMm?: number;
   readonly originYMm?: number;
+  /** Optional per-wall ambient material override. Omit = inherit space wallMaterialId. */
+  readonly wallMaterialId?: string;
 }
 
 /** How a quote unit is anchored in the kitchen plan. Default `wall`. */
@@ -597,6 +599,8 @@ export interface KitchenSpace {
    * Resolves against `Catalog.ambientMaterials` (surfaceType 'wall'). Omit = none.
    */
   readonly wallMaterialId?: string;
+  /** Ambient ceiling material for the 3D room scene (presentation-only). Omit = none. */
+  readonly ceilingMaterialId?: string;
   /** Show the room ceiling in the 3D scene (Q1, #4151). Default undefined = OFF. */
   readonly showCeiling?: boolean;
   /** Optional floor-plan underlay for this space. */
@@ -648,6 +652,8 @@ export interface ProjectKitchenLayout {
    * Mirror of the active space's ref. Omit = none.
    */
    readonly wallMaterialId?: string;
+  /** Ambient ceiling material for the 3D room scene (presentation-only). Omit = none. */
+   readonly ceilingMaterialId?: string;
   /** Show the room ceiling in the 3D scene (Q1, #4151). Mirror of active space. */
    readonly showCeiling?: boolean;
    /**

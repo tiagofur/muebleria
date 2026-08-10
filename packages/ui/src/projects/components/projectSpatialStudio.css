@@ -253,6 +253,49 @@
   font-weight: var(--weight-semibold);
 }
 
+.spatial-studio__sidebar-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-input, #1a1d20);
+  padding: 3px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, #272a2e);
+  margin-bottom: var(--space-3, 12px);
+}
+
+.spatial-studio__sidebar-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  font: inherit;
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--weight-medium, 500);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--duration-fast, 0.15s) var(--ease-out, ease-out),
+    color var(--duration-fast, 0.15s) var(--ease-out, ease-out);
+}
+
+.spatial-studio__sidebar-tab:hover {
+  background: var(--surface-hover, #23272b);
+  color: var(--text-primary, #f9fafb);
+}
+
+.spatial-studio__sidebar-tab--active {
+  background: var(--surface-card, #1f2328);
+  color: var(--text-primary, #ffffff);
+  font-weight: var(--weight-semibold, 600);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
 .spatial-studio__sidebar-head {
   display: flex;
   align-items: center;

@@ -147,6 +147,8 @@ export {
 
 export {
   DEFAULT_MATERIAL_PREVIEW_COLOR,
+  DEFAULT_AMBIENT_MATERIALS,
+  resolveAmbientMaterials,
   isValidPreviewColor,
   normalizePreviewColor,
 } from './materialPreview';
@@ -442,4 +444,6 @@ export {
   mirrorComponentInstance,
   resolveAgregadoInstance,
 } from './agregados';
+
+
 

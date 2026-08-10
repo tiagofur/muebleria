@@ -88,6 +88,7 @@ export function planAmbientScene(opts: {
   readonly lightMode: SceneLightingMode;
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
+  readonly ambientCeiling?: AmbientMaterial;
   readonly showCeiling?: boolean;
   readonly showFloor?: boolean;
 }): AmbientScenePlan {
@@ -95,16 +96,16 @@ export function planAmbientScene(opts: {
     lightMode,
     ambientFloor,
     ambientWall,
+    ambientCeiling,
     showCeiling,
     showFloor = true,
   } = opts;
   const isAmbientMode = lightMode !== 'catalog';
-  const hasAnyAmbient = Boolean(ambientFloor) || Boolean(ambientWall);
   return {
     ambientFloor: isAmbientMode && Boolean(ambientFloor) && showFloor,
     ambientWall: isAmbientMode && Boolean(ambientWall),
-    roomBox: isAmbientMode && hasAnyAmbient,
-    ceiling: isAmbientMode && Boolean(showCeiling),
+    roomBox: isAmbientMode && Boolean(ambientWall),
+    ceiling: isAmbientMode && (Boolean(showCeiling) || Boolean(ambientCeiling)),
     contactShadow: isAmbientMode
       ? contactShadowForFloor(ambientFloor?.previewColor)
       : null,
@@ -522,6 +523,7 @@ export function CeilingMesh({
   position,
   thicknessMm = 40,
   lightingMode = 'present',
+  paintHover = false,
 }: {
   readonly material?: AmbientMaterial;
   readonly widthMm: number;
@@ -529,6 +531,7 @@ export function CeilingMesh({
   readonly position: Vec3;
   readonly thicknessMm?: number;
   readonly lightingMode?: SceneLightingMode;
+  readonly paintHover?: boolean;
 }): ReactNode {
   const color = material ? resolveWallColor(material) : CEILING_DEFAULT_COLOR;
   const phys = resolveWallPhysical(material, lightingMode);
@@ -536,41 +539,58 @@ export function CeilingMesh({
   // position[1] (e.g. 2400mm wall height) and the box extrudes upward.
   const posY = position[1] + thicknessMm / 2;
   return (
-    <mesh
-      position={[position[0], posY, position[2]]}
-      receiveShadow
-      castShadow
-    >
-      <boxGeometry args={[widthMm, thicknessMm, depthMm]} />
-      <Suspense
-        fallback={
-          <meshStandardMaterial
-            color={color}
-            side={DoubleSide}
-            roughness={phys.roughness}
-            metalness={phys.metalness}
-          />
-        }
+    <group position={[position[0], posY, position[2]]}>
+      <mesh
+        receiveShadow
+        castShadow
+        userData={{ surface: 'ceiling' }}
       >
-        {material?.previewTextureUrl ? (
-          <WallTextureMaterial
-            url={material.previewTextureUrl}
-            lengthMm={widthMm}
-            heightMm={depthMm}
-            tileWidthMm={material.previewTextureTileWidthMm}
-            tileLengthMm={material.previewTextureTileLengthMm}
-            phys={phys}
-          />
-        ) : (
-          <meshStandardMaterial
-            color={color}
+        <boxGeometry args={[widthMm, thicknessMm, depthMm]} />
+        <Suspense
+          fallback={
+            <meshStandardMaterial
+              color={paintHover ? PAINT_HOVER_COLOR : color}
+              side={DoubleSide}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+            />
+          }
+        >
+          {material?.previewTextureUrl ? (
+            <WallTextureMaterial
+              url={material.previewTextureUrl}
+              lengthMm={widthMm}
+              heightMm={depthMm}
+              tileWidthMm={material.previewTextureTileWidthMm}
+              tileLengthMm={material.previewTextureTileLengthMm}
+              phys={phys}
+            />
+          ) : (
+            <meshStandardMaterial
+              color={paintHover ? PAINT_HOVER_COLOR : color}
+              side={DoubleSide}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+            />
+          )}
+        </Suspense>
+      </mesh>
+      {paintHover ? (
+        <mesh
+          rotation={[Math.PI / 2, 0, 0]}
+          position={[0, -thicknessMm / 2 - 1, 0]}
+          userData={{ surface: 'ceiling', paintHoverOverlay: true }}
+        >
+          <planeGeometry args={[widthMm, depthMm]} />
+          <meshBasicMaterial
+            color={PAINT_HOVER_COLOR}
+            transparent
+            opacity={PAINT_HOVER_OPACITY}
             side={DoubleSide}
-            roughness={phys.roughness}
-            metalness={phys.metalness}
           />
-        )}
-      </Suspense>
-    </mesh>
+        </mesh>
+      ) : null}
+    </group>
   );
 }
 

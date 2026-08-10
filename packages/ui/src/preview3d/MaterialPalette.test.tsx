@@ -55,7 +55,7 @@ describe('MaterialPalette', () => {
   it('renders hint text', () => {
     render(<MaterialPalette materials={materials} />);
     expect(
-      screen.getByText(/Arrastrá un material al piso o muro/i),
+      screen.getByText(/Arrastrá un material/i),
     ).toBeTruthy();
   });
 

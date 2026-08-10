@@ -111,7 +111,7 @@ describe('planAmbientScene — FurnitureScene3D ambient wiring', () => {
       ambientFloor: floorMat,
       showFloor: true,
     });
-    expect(plan.roomBox).toBe(true);
+    expect(plan.roomBox).toBe(false);
     expect(plan.ceiling).toBe(false);
   });
 
@@ -141,6 +141,7 @@ describe('planAmbientScene — FurnitureScene3D ambient wiring', () => {
       const plan = planAmbientScene({
         lightMode: mode,
         ambientFloor: floorMat,
+        ambientWall: wallMat,
         showFloor: true,
       });
       expect(plan.ambientFloor).toBe(true);
