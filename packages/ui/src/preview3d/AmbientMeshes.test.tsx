@@ -204,14 +204,14 @@ describe('resolveFloorColor', () => {
     expect(resolveFloorColor(floorMat)).toBe('#eeeeee');
   });
 
-  it('falls back to the hardcoded #2a2d31 when no material (backward-compat)', () => {
-    expect(resolveFloorColor(undefined)).toBe('#2a2d31');
+  it('falls back to white (#ffffff) when no material (consistent with walls/ceiling)', () => {
+    expect(resolveFloorColor(undefined)).toBe('#ffffff');
   });
 
-  it('falls back to #2a2d31 when material has no previewColor', () => {
+  it('falls back to white when material has no previewColor', () => {
     expect(
       resolveFloorColor({ ...floorMat, previewColor: undefined }),
-    ).toBe('#2a2d31');
+    ).toBe('#ffffff');
   });
 });
 
@@ -220,8 +220,8 @@ describe('resolveWallColor', () => {
     expect(resolveWallColor(wallMat)).toBe('#d8d2c8');
   });
 
-  it('falls back to the hardcoded #8b9098 when no material (backward-compat)', () => {
-    expect(resolveWallColor(undefined)).toBe('#8b9098');
+  it('falls back to white (#ffffff) when no material (consistent with floor/ceiling)', () => {
+    expect(resolveWallColor(undefined)).toBe('#ffffff');
   });
 });
 

@@ -32,10 +32,10 @@ import type { FurnitureSceneWall } from './FurnitureScene3D';
 // Constants — verified against FurnitureScene3D.tsx (design #4151).
 // ---------------------------------------------------------------------------
 
-/** Hardcoded charcoal floor when no ambient material (backward-compat). */
-export const FLOOR_DEFAULT_COLOR = '#2a2d31';
-/** Hardcoded flat-gray wall when no ambient material (backward-compat). */
-export const WALL_DEFAULT_COLOR = '#8b9098';
+/** Default floor color when no ambient material — white, consistent with walls/ceiling. */
+export const FLOOR_DEFAULT_COLOR = '#ffffff';
+/** Default wall color when no ambient material — white, consistent with floor/ceiling. */
+export const WALL_DEFAULT_COLOR = '#ffffff';
 /** Clean white ceiling paint when no ambient material assigned. */
 export const CEILING_DEFAULT_COLOR = '#ffffff';
 /** Paint drag hover overlay (F067). Green signals "drop here to apply". */
@@ -59,9 +59,9 @@ const FLOOR_DEPTH_FACTOR = 1.6;
  * these booleans to decide which meshes to mount (vs the hardcoded fallbacks).
  */
 export type AmbientScenePlan = {
-  /** Render FloorAmbientMesh (vs the hardcoded #2a2d31 floor). */
+  /** Render FloorAmbientMesh (vs the default-color fallback floor). */
   readonly ambientFloor: boolean;
-  /** Render WallAmbientMesh per wall (vs the hardcoded #8b9098 walls). */
+  /** Render WallAmbientMesh per wall (vs the default-color fallback walls). */
   readonly ambientWall: boolean;
   /** Render the room box (BackWallMesh + BaseboardMeshes). */
   readonly roomBox: boolean;
@@ -111,12 +111,12 @@ export function planAmbientScene(opts: {
   };
 }
 
-/** Floor base color — material previewColor or the hardcoded #2a2d31. */
+/** Floor base color — material previewColor or the white default. */
 export function resolveFloorColor(material?: AmbientMaterial): string {
   return material?.previewColor ?? FLOOR_DEFAULT_COLOR;
 }
 
-/** Wall base color — material previewColor or the hardcoded #8b9098. */
+/** Wall base color — material previewColor or the white default. */
 export function resolveWallColor(material?: AmbientMaterial): string {
   return material?.previewColor ?? WALL_DEFAULT_COLOR;
 }
