@@ -20,6 +20,7 @@ import {
   downloadPngFile,
   materialColorMap,
   materialTextureMap,
+  resolveModuleHardwarePlacements,
 } from '../../preview3d';
 import {
   resolveModule3DPreview,
@@ -152,6 +153,19 @@ export function Module3DModal({
     () => materialTextureMap(catalog.materials, resolveMediaUrl),
     [catalog.materials, resolveMediaUrl],
   );
+
+  // Resolve parametric hardware placements (jaladeras) for this single module
+  // so its handles render in the module editor 3D view (Fase 2 gap fix, path A).
+  // Guarded: returns [] when the module/preview/hardware catalog are unavailable,
+  // so FurnitureScene3D stays byte-identical to the pre-Fase-2 scene.
+  const resolvedHardwarePlacements = useMemo(() => {
+    if (!module || !preview) return [];
+    return resolveModuleHardwarePlacements(
+      module,
+      preview.parts,
+      catalog.hardware,
+    );
+  }, [module, preview, catalog.hardware]);
 
   const canSaveAsCatalogPhoto = Boolean(
     canMutate && onUploadImage && onApplyCatalogImage && module,
@@ -318,6 +332,8 @@ export function Module3DModal({
               initialSurfaceMode="texture"
               initialShowOutlines={false}
               catalogPhotoViewToken={catalogPhotoViewToken}
+              resolvedHardwarePlacements={resolvedHardwarePlacements}
+              hardwareCatalog={catalog.hardware}
               paintModeHint="Los selectores de acabado de arriba eligen el material de cada grupo. Este control solo cambia cómo se colorea la vista. La foto de vitrina se captura sin contornos ni ejes."
               testId="module-3d-viewer"
             />

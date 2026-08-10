@@ -80,6 +80,7 @@ export {
 } from './project3dLayout';
 export {
   resolveProject3DPreview,
+  resolveModuleHardwarePlacements,
   type Project3DPreviewResult,
   type ProjectModule3DInstance,
   type ResolveProject3DOptions,

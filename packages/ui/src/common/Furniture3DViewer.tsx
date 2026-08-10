@@ -29,7 +29,11 @@ import {
   type MaterialTextureLookup,
   type SceneLightingMode,
 } from '../preview3d';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type {
+  Hardware,
+  ResolvedBoardPart,
+  ResolvedHardwarePlacement,
+} from '@muebles/domain';
 import '../preview3d/partInspector.css';
 import './furniture3dViewer.css';
 
@@ -93,6 +97,18 @@ export type Furniture3DViewerProps = {
    * 3/4 isometric, texture surface, material paint, no X-ray, perspective.
    */
   readonly catalogPhotoViewToken?: number;
+  /**
+   * Parametric hardware placements (jaladeras) resolved to board-LOCAL mm
+   * (Fase 2). Forwarded to ModuleScene3D → FurnitureScene3D so a single
+   * module's handles render in the module editor 3D view. Optional/empty →
+   * no handles (byte-identical to pre-Fase-2 scene).
+   */
+  readonly resolvedHardwarePlacements?: readonly ResolvedHardwarePlacement[];
+  /**
+   * Hardware catalog used to look up preview geometry/PBR for the resolved
+   * placements. Optional: when omitted (or no placements), no handles render.
+   */
+  readonly hardwareCatalog?: readonly Hardware[];
 };
 
 export function Furniture3DViewer({
@@ -118,6 +134,8 @@ export function Furniture3DViewer({
   initialAdvancedOpen,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   catalogPhotoViewToken = 0,
+  resolvedHardwarePlacements,
+  hardwareCatalog,
 }: Furniture3DViewerProps): ReactNode {
   const webglAvailable = useMemo(() => canUseWebGL(), []);
   const [colorMode, setColorMode] = useState<BoardColorMode>(initialColorMode);
@@ -400,6 +418,8 @@ Common causes:
             lightingMode={effectiveLightingMode}
             showAxes={!productShotClean}
             showOuterGhost={!productShotClean}
+            resolvedHardwarePlacements={resolvedHardwarePlacements}
+            hardwareCatalog={hardwareCatalog}
           />
         </div>
         {showPartInspector ? (

@@ -204,7 +204,7 @@ function resolveItemBom(
  * Placements never feed the Optimizer/cut path (VH-08): this array is consumed
  * only by the 3D preview.
  */
-function resolveModuleHardwarePlacements(
+export function resolveModuleHardwarePlacements(
   module: Module,
   boardParts: readonly ResolvedBoardPart[],
   hardwareCatalog: readonly Hardware[],
