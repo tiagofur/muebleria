@@ -991,13 +991,20 @@ export function repackPlacementsOnWall(
   };
 }
 
-/** Suggest next offset on a wall (pack after last placement). */
+/**
+ * Suggest next offset on a wall (pack after last placement).
+ * Clamped so the moved module's footprint stays within the wall length:
+ * if the packed position would overflow, it falls back to 0 rather than
+ * placing the module beyond the wall end (outside the room).
+ */
 export function nextOffsetOnWall(
   layout: ProjectKitchenLayout,
   wallId: string,
   footprints: readonly KitchenFootprint[],
   gapMm: number = 20,
 ): number {
+  const wall = layout.walls.find((w) => w.id === wallId);
+  const wallLength = wall?.lengthMm;
   const onWall = layout.placements.filter((p) => p.wallId === wallId);
   if (onWall.length === 0) return 0;
   const fpByKey = new Map(
@@ -1008,7 +1015,15 @@ export function nextOffsetOnWall(
     const w = fpByKey.get(`${p.itemId}#${p.instanceIndex}`)?.width ?? 600;
     maxEnd = Math.max(maxEnd, p.offsetMm + w);
   }
-  return maxEnd + gapMm;
+  const next = maxEnd + gapMm;
+  // If the wall length is known, clamp so the moved module fits. We don't
+  // know the moved module's width here (it's not in `onWall` yet), so we
+  // guard the offset itself: a positive offset beyond the wall length can
+  // never place a module inside the wall. Fall back to 0.
+  if (wallLength !== undefined && next > wallLength) {
+    return 0;
+  }
+  return next;
 }
 
 export function createDefaultLWalls(newId: () => string): KitchenWall[] {

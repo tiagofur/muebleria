@@ -695,6 +695,40 @@ describe('kitchenLayout', () => {
     expect(nextOffsetOnWall(layout, 'w1', fps, 20)).toBe(620);
   });
 
+  it('nextOffsetOnWall clamps to 0 when packed offset overflows the wall (move-wall bug)', () => {
+    // Muro destino corto (2500mm) ya cargado con muebles que ocupan hasta 2400.
+    // El siguiente offset packed sería 2420 > 2500? no — pero si excede, cae a 0.
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 2500, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'i1',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+        {
+          itemId: 'i2',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 620,
+          elevation: 'floor',
+        },
+      ],
+    };
+    const fps = [
+      { itemId: 'i1', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+      { itemId: 'i2', instanceIndex: 0, width: 600, height: 720, depth: 560 },
+    ];
+    // Packed: maxEnd = 620 + 600 = 1220, next = 1240 → dentro del muro (2500).
+    expect(nextOffsetOnWall(layout, 'w1', fps, 20)).toBe(1240);
+
+    // Ahora un muro que NO entra: longitud 1200, packed 1240 > 1200 → clamp a 0.
+    const shortLayout = { ...layout, walls: [{ id: 'w1', lengthMm: 1200, angleDeg: 0 }] };
+    expect(nextOffsetOnWall(shortLayout, 'w1', fps, 20)).toBe(0);
+  });
+
   it('carries ambient refs (floor/wall/ceiling) through sync like showCountertop', () => {
     // RED: spacePlanFields must carry floorMaterialId/wallMaterialId/showCeiling
     // so the top-level mirror (used by ProjectSpatialStudio commit) round-trips them.
