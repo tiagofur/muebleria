@@ -666,9 +666,11 @@ describe('resolveProject3DPreview — agregado component placements bridge', () 
     expect(preview.modules).toHaveLength(1);
 
     // The agregado board part MUST render in the preview BOM (the bridge now
-    // threads the agregado catalog into resolveBom).
+    // threads the agregado catalog into resolveBom). AH-03: agregado part ids
+    // carry the per-instance prefix `agr-${agrIdx}-` (agrIdx=0 — the only
+    // agregado, attached to the module; the structure has none).
     const agregadoBoard = preview.modules[0]!.parts.find(
-      (p) => p.id === 'c-agr-puerta-copy-0',
+      (p) => p.id === 'agr-0-c-agr-puerta-copy-0',
     );
     expect(agregadoBoard).toBeDefined();
 
@@ -677,9 +679,10 @@ describe('resolveProject3DPreview — agregado component placements bridge', () 
     expect(placements).toHaveLength(1);
 
     const p = placements[0]!;
-    // Agregado board part id uses the same `${componentId}-copy-${i}` convention
-    // (idPrefix='' for agregado components — engine/bom.ts:581-588).
-    expect(p.componentInstanceId).toBe('c-agr-puerta-copy-0');
+    // Agregado board part id uses the per-instance `agr-${agrIdx}-` prefix
+    // (engine/bom.ts resolveComposedModule), so the resolver links the handle
+    // against the matching prefixed part id.
+    expect(p.componentInstanceId).toBe('agr-0-c-agr-puerta-copy-0');
     expect(p.hardwareId).toBe('hw-knob');
     // Same geometry as the Fase 2 fixture → same board-LOCAL mapping.
     expect(p.localPosition).toEqual([298, 18, 360]);
@@ -700,9 +703,115 @@ describe('resolveProject3DPreview — agregado component placements bridge', () 
     });
     expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
     // The agregado board still renders (threading the catalog is independent
-    // of whether the instance carries a placement).
+    // of whether the instance carries a placement). AH-03 prefixed id.
     expect(
-      preview.modules[0]!.parts.some((p) => p.id === 'c-agr-puerta-copy-0'),
+      preview.modules[0]!.parts.some(
+        (p) => p.id === 'agr-0-c-agr-puerta-copy-0',
+      ),
     ).toBe(true);
+  });
+
+  it('AH-03 collision-safe: two agregados sharing a componentId each resolve to their OWN board', () => {
+    // Two agregados modeling a door each, BOTH reusing `c-agr-puerta`. Each
+    // carries its own knob placement. Before AH-03 the merged partById kept
+    // only the last duplicate part id and both handles collapsed onto the
+    // same (wrong) board. With per-instance prefixes, each placement links to
+    // its OWN board part (distinct agrIdx prefixes).
+    const doorAgregadoA: Agregado = {
+      id: 'agr-door-a',
+      code: 'AGR-DOOR-A',
+      name: 'Puerta A',
+      components: [
+        {
+          componentId: 'c-agr-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const doorAgregadoB: Agregado = {
+      id: 'agr-door-b',
+      code: 'AGR-DOOR-B',
+      name: 'Puerta B',
+      components: [
+        {
+          componentId: 'c-agr-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const modWithTwoAgregados: Module = {
+      id: 'm-two-agr',
+      code: 'MOD-TWO-AGR',
+      name: 'Dos agregados',
+      structureId: 'st1',
+      components: [],
+      agregados: [
+        { agregadoId: 'agr-door-a', quantity: 1 },
+        { agregadoId: 'agr-door-b', quantity: 1 },
+      ],
+      hardwareLines: [],
+      externalDims: { width: 600, height: 720, depth: 560 },
+      presets: [{ id: 'p-two-agr', name: '600', width: 600, height: 720, depth: 560 }],
+    };
+    const projectTwoAgregados: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-two-agr',
+          moduleId: 'm-two-agr',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p-two-agr',
+        },
+      ],
+    };
+    const catalogTwoAgregados = {
+      modules: [modWithTwoAgregados],
+      structures: [structure],
+      components: [comp, agregadoDoorComponent],
+      materials: [material],
+      edges: [edge],
+      hardware: [knobHardware],
+      optionGroups,
+      agregados: [doorAgregadoA, doorAgregadoB],
+    };
+
+    const preview = resolveProject3DPreview(
+      projectTwoAgregados,
+      catalogTwoAgregados,
+    );
+    expect(preview.modules).toHaveLength(1);
+
+    // Two board parts — one per agregado instance — each with a DISTINCT id.
+    const partIds = preview.modules[0]!.parts.map((p) => p.id);
+    expect(partIds).toContain('agr-0-c-agr-puerta-copy-0');
+    expect(partIds).toContain('agr-1-c-agr-puerta-copy-0');
+
+    // Each agregado's placement resolves and links to its OWN board.
+    const placements = preview.modules[0]!.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(2);
+    const instanceIds = placements.map((p) => p.componentInstanceId);
+    expect(instanceIds).toContain('agr-0-c-agr-puerta-copy-0');
+    expect(instanceIds).toContain('agr-1-c-agr-puerta-copy-0');
+    // CRITICAL: the two placements target DIFFERENT boards (no collapse).
+    expect(new Set(instanceIds).size).toBe(2);
   });
 });

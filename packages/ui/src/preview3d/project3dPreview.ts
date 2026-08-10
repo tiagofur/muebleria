@@ -203,10 +203,12 @@ function resolveItemBom(
  * For each component instance that carries `overrides.hardwarePlacements`, each
  * placement is resolved against the board part the instance produced. The link
  * between a component instance and its board part is the engine part-id
- * convention `${componentId}-copy-${i}` (engine/bom.ts `expandComponentInstances`
- * with empty idPrefix for structure, module and agregado components alike).
- * The resolved `componentInstanceId` equals that part id, so the renderer
- * attaches the handle to the matching board mesh by id.
+ * convention `${idPrefix}${componentId}-copy-${i}` (engine/bom.ts
+ * `expandComponentInstances`). Structure + module components use `idPrefix=''`;
+ * each agregado instance uses `idPrefix='agr-${agrIdx}-'` (AH-03, collision-safe).
+ * The resolver mirrors that per-source prefix so the resolved
+ * `componentInstanceId` equals the part id and the renderer attaches the handle
+ * to the matching board mesh by id.
  *
  * The instance set iterated is the FULL set that produced board parts: the
  * module's structure components, the module's own components, AND the resolved
@@ -224,18 +226,17 @@ function resolveItemBom(
  * Placements never feed the Optimizer/cut path (VH-08): this array is consumed
  * only by the 3D preview.
  *
- * ⚠️ Part-id collision — KNOWN LIMITATION. Structure, module and agregado
- * components all expand with `idPrefix=''`, so part-id is `${componentId}-copy-${i}`
- * regardless of source. When the SAME componentId is reused across sources
- * (e.g. a door added both directly on the module and via an agregado), the
- * merged `boardParts` array contains two entries with the same id and the
- * `partById` Map keeps only the last — a placement on either instance would
- * then link to the surviving (possibly wrong) board. This is rare in practice
- * (components are typed by placement/role, so cross-source reuse is uncommon)
- * and is accepted here as a documented limitation; the proper per-source
- * idPrefix fix (e.g. `agr-` for agregado components) is deferred to spec (see
- * proposal #4180, open question #1). The common disjoint-componentId case
- * resolves each placement against its own board correctly.
+ * AH-03 part-id partitioning (collision-safe). Two agregados that reference
+ * components sharing a componentId expand to DISTINCT part ids
+ * (`agr-0-X-copy-0` vs `agr-1-X-copy-0`) because engine/bom.ts prefixes each
+ * agregado instance with `agr-${agrIdx}-`. The resolver iterates each source
+ * set (structure / module / per-agregado-instance) with its own prefix and
+ * looks the part up against the now-unique `partById` Map, so a placement
+ * always links to its OWN board — never the wrong/collapsed one. Structure and
+ * module placements keep `''` (backward compatible with the 31 Fase 2 face-mode
+ * goldens). Residual: structure↔module componentId overlap still shares `''`
+ * (pre-agregado behavior; rare in practice — components are typed by
+ * placement/role); out of scope here.
  */
 export function resolveModuleHardwarePlacements(
   module: Module,
@@ -251,37 +252,51 @@ export function resolveModuleHardwarePlacements(
     readonly agregados?: readonly Agregado[];
   } = {},
 ): ResolvedHardwarePlacement[] {
+  // AH-03: part ids are collision-free. Structure + module components expand
+  // with idPrefix=''; each agregado instance expands with `agr-${agrIdx}-`.
+  // The resolver mirrors that per-source prefix so each placement links to its
+  // own board (two agregados sharing a componentId no longer collapse).
   const partById = new Map(boardParts.map((p) => [p.id, p]));
   const out: ResolvedHardwarePlacement[] = [];
 
-  // Gather ALL component instances that produced board parts.
   const structure = options.structures?.find(
     (s) => s.id === module.structureId,
   );
-  const agregadoInstances = [
+  const agregadosCatalog = options.agregados ?? [];
+  const allAgregadoInstances = [
     ...(structure?.agregados ?? []),
     ...(module.agregados ?? []),
   ];
-  const agregadosCatalog = options.agregados ?? [];
-  const resolvedAgregadoComponents = agregadoInstances.flatMap((inst) =>
-    resolveAgregadoInstance(inst, agregadosCatalog).components,
-  );
 
-  // Structure + module + resolved agregado component instances.
-  const allInstances: readonly ModuleComponentInstance[] = [
-    ...(structure?.components ?? []),
-    ...(module.components ?? []),
-    ...resolvedAgregadoComponents,
+  // Build the source set tagged with the per-source idPrefix that
+  // engine/bom.ts resolveComposedModule used to expand each instance.
+  // Structure + module use '' (backward compatible with the 31 Fase 2 face
+  // goldens); each agregado instance uses `agr-${agrIdx}-` in the SAME order
+  // the engine expands them ([...structure.agregados, ...module.agregados]).
+  // Base-mode filtering need NOT be replicated here: parts bom.ts filtered out
+  // are absent from `partById`, so the lookup below skips them naturally.
+  type Source = { inst: ModuleComponentInstance; prefix: string };
+  const sources: Source[] = [
+    ...(structure?.components ?? []).map((inst) => ({ inst, prefix: '' })),
+    ...(module.components ?? []).map((inst) => ({ inst, prefix: '' })),
   ];
+  allAgregadoInstances.forEach((agrInst, agrIdx) => {
+    const prefix = `agr-${agrIdx}-`;
+    for (const inst of resolveAgregadoInstance(agrInst, agregadosCatalog)
+      .components) {
+      sources.push({ inst, prefix });
+    }
+  });
 
-  for (const instance of allInstances) {
-    const placements = instance.overrides?.hardwarePlacements;
+  for (const { inst, prefix } of sources) {
+    const placements = inst.overrides?.hardwarePlacements;
     if (!placements || placements.length === 0) continue;
 
-    const qty = Math.max(1, Math.floor(instance.quantity) || 1);
+    const qty = Math.max(1, Math.floor(inst.quantity) || 1);
     for (let i = 0; i < qty; i++) {
-      // Matches engine/bom.ts expandComponentInstances idPrefix='' convention.
-      const componentInstanceId = `${instance.componentId}-copy-${i}`;
+      // Mirrors engine/bom.ts expandComponentInstances:
+      // `${idPrefix}${component.id}-copy-${i}`.
+      const componentInstanceId = `${prefix}${inst.componentId}-copy-${i}`;
       const part = partById.get(componentInstanceId);
       if (!part) continue; // filtered by base mode / not a board — skip.
 
