@@ -6,6 +6,7 @@ import {
 import type { WorkspaceRepository } from './workspaceRepository';
 import {
   catalogFromApi,
+  ambientMaterialToApi,
   categoryToApi,
   componentToApi,
   customerToApi,
@@ -302,6 +303,19 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
           `/customers/${c.id}`,
           '/customers',
           customerToApi(c),
+        );
+      }
+    }
+
+    // Ambient materials (floor/wall/ceiling textures). Without this loop,
+    // create/update in the UI mutates the in-memory catalog but never reaches
+    // the DB — the material vanishes on reload (getCatalog fetches []).
+    if (catalog.ambientMaterials) {
+      for (const am of catalog.ambientMaterials) {
+        await this.upsert(
+          `/catalog/ambient-materials/${am.id}`,
+          '/catalog/ambient-materials',
+          ambientMaterialToApi(am),
         );
       }
     }

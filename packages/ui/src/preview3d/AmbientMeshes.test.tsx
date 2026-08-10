@@ -29,6 +29,7 @@ import {
   BaseboardMesh,
   BackWallMesh,
   CeilingMesh,
+  CEILING_DEFAULT_COLOR,
   FloorAmbientMesh,
   WallAmbientMesh,
   PAINT_HOVER_COLOR,
@@ -120,6 +121,19 @@ describe('planAmbientScene — FurnitureScene3D ambient wiring', () => {
     expect(plan.ambientWall).toBe(false);
     expect(plan.roomBox).toBe(false);
     expect(plan.ceiling).toBe(false);
+  });
+
+  it('ceiling renders with showCeiling even WITHOUT ambient material (fix: techo invisible)', () => {
+    // Regression: ceiling used to require hasAnyAmbient, so toggling "show
+    // ceiling" with no floor/wall material did nothing. Now ceiling only
+    // needs showCeiling + present mode; CeilingMesh falls back to white.
+    const plan = planAmbientScene({
+      lightMode: 'present',
+      showCeiling: true,
+      showFloor: true,
+    });
+    expect(plan.ceiling).toBe(true);
+    expect(plan.roomBox).toBe(false); // roomBox still needs ambient material
   });
 
   it('enables ambient in workshop and soft modes too (not catalog-only gating)', () => {
@@ -290,5 +304,9 @@ describe('paint hover overlay constants (F067)', () => {
   it('exports PAINT_HOVER_OPACITY between 0 and 1', () => {
     expect(PAINT_HOVER_OPACITY).toBeGreaterThan(0);
     expect(PAINT_HOVER_OPACITY).toBeLessThanOrEqual(1);
+  });
+
+  it('exports CEILING_DEFAULT_COLOR as white (fix: techo heredaba color del piso)', () => {
+    expect(CEILING_DEFAULT_COLOR).toBe('#ffffff');
   });
 });

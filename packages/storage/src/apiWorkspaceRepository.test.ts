@@ -170,6 +170,47 @@ describe('APIWorkspaceRepository', () => {
     expect(body.board_price).toBe(10);
   });
 
+  it('saveCatalog PUTs ambient materials (regression: CRUD vanished on reload)', async () => {
+    const ambientPuts: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        init?.method === 'PUT' &&
+        url.includes('/catalog/ambient-materials/')
+      ) {
+        ambientPuts.push(String(init.body));
+        return { ok: true, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await repo.saveCatalog({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      ambientMaterials: [
+        {
+          id: 'am-1',
+          code: 'CER',
+          name: 'Cerámica',
+          active: true,
+          surfaceType: 'floor',
+          previewColor: '#333333',
+        },
+      ],
+    });
+
+    expect(ambientPuts).toHaveLength(1);
+    const body = JSON.parse(ambientPuts[0]!);
+    expect(body.surface_type).toBe('floor');
+    expect(body.preview_color).toBe('#333333');
+  });
+
   it('createProject POSTs only (no PUT probe)', async () => {
     const methods: string[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {
