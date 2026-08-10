@@ -155,7 +155,9 @@ export function Module3DModal({
   );
 
   // Resolve parametric hardware placements (jaladeras) for this single module
-  // so its handles render in the module editor 3D view (Fase 2 gap fix, path A).
+  // so its handles render in the module editor 3D view (Fase 2 gap fix, path A;
+  // #4181 — also thread structures + agregados so placements on agregado
+  // component instances resolve, not just module.components).
   // Guarded: returns [] when the module/preview/hardware catalog are unavailable,
   // so FurnitureScene3D stays byte-identical to the pre-Fase-2 scene.
   const resolvedHardwarePlacements = useMemo(() => {
@@ -164,8 +166,9 @@ export function Module3DModal({
       module,
       preview.parts,
       catalog.hardware,
+      { structures: catalog.structures, agregados: catalog.agregados },
     );
-  }, [module, preview, catalog.hardware]);
+  }, [module, preview, catalog.hardware, catalog.structures, catalog.agregados]);
 
   const canSaveAsCatalogPhoto = Boolean(
     canMutate && onUploadImage && onApplyCatalogImage && module,

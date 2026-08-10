@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  Agregado,
   Component,
   EdgeBand,
   Hardware,
@@ -167,5 +168,86 @@ describe('resolveModule3DPreview', () => {
     expect(wood.parts.every((p) => p.materialId === 'mat-wood')).toBe(true);
     expect(wood.parts.every((p) => p.grain === 1)).toBe(true);
     expect(wood.optionChoices.INTERIOR).toBe('mat-wood');
+  });
+
+  it('#4181: threads agregados into the editor preview BOM (agregado board parts render)', () => {
+    // The module editor preview used to build its Catalog WITHOUT agregados,
+    // so resolveBom -> resolveComposedModule read `catalog.agregados ?? []` = []
+    // and agregado boards never rendered in the editor modal (#4181).
+    const doorComponent: Component = {
+      id: 'c-agr-puerta',
+      code: 'COM-AGR-PUERTA',
+      name: 'Puerta (agregado)',
+      placement: 'frontal',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 720,
+        widthMm: 596,
+        thicknessMm: 18,
+      },
+      defaultEdges: [
+        { side: 'L1', enabled: true },
+        { side: 'L2', enabled: true },
+        { side: 'W1', enabled: true },
+        { side: 'W2', enabled: true },
+      ],
+      optionRoles: ['INTERIOR'],
+      active: true,
+    };
+    const doorAgregado: Agregado = {
+      id: 'agr-door',
+      code: 'AGR-DOOR',
+      name: 'Puerta con jaladera',
+      components: [
+        {
+          componentId: 'c-agr-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const knobHardware: Hardware = {
+      id: 'hw-knob',
+      code: 'HW-KNOB',
+      name: 'Jaladera knob',
+      unit: 'piece',
+      costPerUnit: 0,
+      active: true,
+      previewShape: 'knob',
+      previewDiameterMm: 32,
+      previewProjectionMm: 25,
+      previewColor: '#888888',
+      previewMetalness: 0.9,
+      previewRoughness: 0.25,
+    };
+    const moduleWithAgregado: Module = {
+      ...baseModule,
+      id: 'm-agr',
+      components: [],
+      agregados: [{ agregadoId: 'agr-door', quantity: 1 }],
+    };
+    const catalogWithAgregado = {
+      ...catalog,
+      modules: [moduleWithAgregado],
+      components: [comp, doorComponent],
+      hardware: [knobHardware],
+      agregados: [doorAgregado],
+    };
+
+    const preview = resolveModule3DPreview(moduleWithAgregado, catalogWithAgregado);
+    expect(preview.error).toBeNull();
+    // The agregado board part MUST render (the bridge threads agregados into
+    // the Catalog so resolveBom expands them). AH-03 per-instance prefix.
+    expect(
+      preview.parts.some((p) => p.id === 'agr-0-c-agr-puerta-copy-0'),
+    ).toBe(true);
   });
 });

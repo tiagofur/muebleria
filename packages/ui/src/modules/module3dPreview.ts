@@ -139,6 +139,11 @@ export function resolveModule3DPreview(
     modules: catalogInput.modules,
     structures: catalogInput.structures,
     components: catalogInput.components,
+    // Thread agregados so resolveBom -> resolveComposedModule can expand
+    // module.agregados / structure.agregados into board parts. Without this,
+    // agregado components never reach the editor preview BOM (#4181 — the
+    // engine reads `catalog.agregados ?? []`). Mirrors resolveItemBom.
+    agregados: catalogInput.agregados,
   };
 
   try {
