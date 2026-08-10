@@ -108,7 +108,8 @@ func isEmptyComponentInstanceOverrides(ov *domain.ComponentInstanceOverrides) bo
 	return len(ov.Edges) == 0 &&
 		ov.LengthFormula == "" && ov.WidthFormula == "" &&
 		ov.XFormula == "" && ov.YFormula == "" && ov.ZFormula == "" &&
-		ov.RotateX == nil && ov.RotateY == nil && ov.RotateZ == nil
+		ov.RotateX == nil && ov.RotateY == nil && ov.RotateZ == nil &&
+		len(ov.HardwarePlacements) == 0
 }
 
 // fullComponentInstanceOverridesJSON serializes ALL override fields into JSONB.
@@ -1301,7 +1302,6 @@ func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
 	_, err := s.Pool.Exec(ctx, query, id)
 	return err
 }
-
 
 func nullKitchenLayout(b []byte) interface{} {
 	if len(b) == 0 || string(b) == "null" {
