@@ -1304,6 +1304,7 @@ function SceneContent({
               depthMm={totalDepth * 1.6}
               position={[ceilingX, ceilingY, ceilingZ]}
               lightingMode={lightMode}
+              paintHover={paintHoverSurface?.kind === 'ceiling'}
             />
           ) : null}
         </group>
