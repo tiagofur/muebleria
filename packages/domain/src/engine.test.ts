@@ -43,6 +43,7 @@ import {
 import { ResolutionError, ValidationError } from './errors';
 import { bumpStructureRevision } from './structures/versioning';
 import type {
+  Agregado,
   Catalog,
   Component,
   ComponentPlacement,
@@ -2229,6 +2230,85 @@ describe('resolveComposedModule', () => {
     expect(ent2.lengthMm).toBe(462);
     expect(ent2.optionRole).toBe('INTERIOR');
     expect(ent2.id).not.toBe(ent1.id);
+  });
+
+  it('AH-03: two agregados sharing a componentId get distinct per-instance part-id prefixes (collision-safe)', () => {
+    // The PO's workflow attaches doors/drawers as agregados. When two agregado
+    // instances reference components that share a componentId, the engine MUST
+    // disambiguate their board parts — otherwise the renderer links a handle to
+    // the wrong board (the merged partById Map keeps only the last duplicate).
+    // Prefix scheme: `agr-${agrIdx}-${componentId}-copy-${i}` where agrIdx is the
+    // stable index in `[...structure.agregados, ...module.agregados]`.
+    const sharedDoorComponent: Component = {
+      id: 'comp-shared-door',
+      code: 'COM-SHARED-DOOR',
+      name: 'Puerta compartida',
+      placement: 'puerta' as ComponentPlacement,
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 717,
+        widthMm: 296,
+        thicknessMm: 18,
+      },
+      defaultEdges: MOCK_TEST_EDGES,
+      optionRoles: ['FRENTE'],
+      active: true,
+    };
+    const agrLeft: Agregado = {
+      id: 'agr-left',
+      code: 'AGR-LEFT',
+      name: 'Puerta izquierda',
+      components: [{ componentId: 'comp-shared-door', quantity: 1 }],
+    };
+    const agrRight: Agregado = {
+      id: 'agr-right',
+      code: 'AGR-RIGHT',
+      name: 'Puerta derecha',
+      components: [{ componentId: 'comp-shared-door', quantity: 1 }],
+    };
+    const structureWithTwoAgregados: Structure = {
+      id: 'struct-two-agr',
+      code: 'EST-TWO-AGR',
+      name: 'Estructura dos agregados',
+      externalDims: { width: 600, height: 720, depth: 560 },
+      components: [],
+      agregados: [
+        { agregadoId: 'agr-left', quantity: 1 },
+        { agregadoId: 'agr-right', quantity: 1 },
+      ],
+    };
+    const catalog: Catalog = {
+      ...catalogWithComponents(),
+      components: [
+        ...(catalogWithComponents().components ?? []),
+        sharedDoorComponent,
+      ],
+      agregados: [agrLeft, agrRight],
+    };
+
+    const result = resolveComposedModule({
+      structure: structureWithTwoAgregados,
+      componentInstances: [],
+      catalog,
+      dims: { width: 600, height: 720, depth: 560 },
+    });
+
+    // Two board parts — one per agregado instance — each with a DISTINCT id.
+    expect(result.boardParts).toHaveLength(2);
+    const ids = result.boardParts.map((p) => p.id);
+    expect(ids).toContain('agr-0-comp-shared-door-copy-0');
+    expect(ids).toContain('agr-1-comp-shared-door-copy-0');
+    // The collision-prone unprefixed id must NOT appear for agregado parts.
+    expect(ids).not.toContain('comp-shared-door-copy-0');
+    // Behavior (dims) is byte-identical between the two — only the id differs.
+    const a = result.boardParts.find(
+      (p) => p.id === 'agr-0-comp-shared-door-copy-0',
+    )!;
+    const b = result.boardParts.find(
+      (p) => p.id === 'agr-1-comp-shared-door-copy-0',
+    )!;
+    expect(a.lengthMm).toBe(b.lengthMm);
+    expect(a.widthMm).toBe(b.widthMm);
   });
 
   it('uses instance edge overrides when provided', () => {

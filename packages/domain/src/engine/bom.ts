@@ -560,32 +560,42 @@ export function resolveComposedModule(
   );
 
   // Expand sub-assemblies (agregados) attached to structure or module.
-  let agregadosComponents: ModuleComponentInstance[] = [];
-  let agregadosHardware: HardwareLine[] = [];
+  //
+  // AH-03: each agregado instance expands with its OWN part-id prefix
+  // `agr-${agrIdx}-` so two agregados that reference components sharing a
+  // componentId cannot collide on part ids (`agr-0-X-copy-0` vs
+  // `agr-1-X-copy-0`). Without this, the renderer's `partById` Map would keep
+  // only the last duplicate and a hardware handle would link to the wrong
+  // board. Structure + module components keep `idPrefix=''` (backward
+  // compatible with the Fase 2 part-id goldens). `agrIdx` is the stable index
+  // in `[...structure.agregados, ...module.agregados]` and MUST match the
+  // resolver's source order (project3dPreview.resolveModuleHardwarePlacements).
   const catalogAgregados = catalog.agregados ?? [];
   const allAgregadoInstances = [
     ...(structure.agregados ?? []),
     ...(module?.agregados ?? []),
   ];
-  for (const agrInst of allAgregadoInstances) {
+  let agregadosParts: typeof structureParts = [];
+  const agregadosHardware: HardwareLine[] = [];
+  allAgregadoInstances.forEach((agrInst, agrIdx) => {
     const res = resolveAgregadoInstance(agrInst, catalogAgregados);
-    agregadosComponents.push(...res.components);
+    const filtered = filterComponentInstancesForBaseMode(
+      res.components,
+      catalog.components,
+      baseMode,
+    );
+    agregadosParts = agregadosParts.concat(
+      expandComponentInstances(
+        filtered,
+        catalog,
+        `agr-${agrIdx}-`,
+        dims,
+        optionChoices,
+        B,
+      ),
+    );
     agregadosHardware.push(...res.hardwareLines);
-  }
-
-  const filteredAgregadoInstances = filterComponentInstancesForBaseMode(
-    agregadosComponents,
-    catalog.components,
-    baseMode,
-  );
-  const agregadosParts = expandComponentInstances(
-    filteredAgregadoInstances,
-    catalog,
-    '',
-    dims,
-    optionChoices,
-    B,
-  );
+  });
 
   const allParts = [...structureParts, ...moduleParts, ...agregadosParts];
 
