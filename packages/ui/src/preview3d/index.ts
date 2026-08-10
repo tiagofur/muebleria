@@ -9,6 +9,8 @@ export {
   type FurnitureSceneModule,
   type FurnitureSceneWall,
   type SceneLightingMode,
+  type PaintSurface,
+  type PaintDrop,
 } from './FurnitureScene3D';
 export {
   DEFAULT_SCENE_LIGHTING_MODE,

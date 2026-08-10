@@ -36,6 +36,9 @@ import type { FurnitureSceneWall } from './FurnitureScene3D';
 export const FLOOR_DEFAULT_COLOR = '#2a2d31';
 /** Hardcoded flat-gray wall when no ambient material (backward-compat). */
 export const WALL_DEFAULT_COLOR = '#8b9098';
+/** Paint drag hover overlay (F067). Green signals "drop here to apply". */
+export const PAINT_HOVER_COLOR = '#4ade80';
+export const PAINT_HOVER_OPACITY = 0.3;
 /** Standard kitchen wall height (mm). Mirrors WallMesh default. */
 export const ROOM_WALL_HEIGHT_MM = 2400;
 /** Baseboard strip geometry (mm). Design #4151 Q2 (real thin geometry). */
@@ -226,51 +229,75 @@ export function FloorAmbientMesh({
   depthMm,
   position,
   lightingMode = 'present',
+  paintHover = false,
 }: {
   readonly material: AmbientMaterial;
   readonly widthMm: number;
   readonly depthMm: number;
   readonly position?: Vec3;
   readonly lightingMode?: SceneLightingMode;
+  readonly paintHover?: boolean;
 }): ReactNode {
   const color = resolveFloorColor(material);
   const phys = resolveFloorPhysical(material, lightingMode);
+  const pos: Vec3 = position ?? [0, 0, 0];
   return (
-    <mesh
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={position ? [position[0], position[1], position[2]] : undefined}
-      receiveShadow
-    >
-      <planeGeometry
-        args={[widthMm * FLOOR_WIDTH_FACTOR, depthMm * FLOOR_DEPTH_FACTOR]}
-      />
-      <Suspense
-        fallback={
-          <meshStandardMaterial
-            color={color}
-            roughness={phys.roughness}
-            metalness={phys.metalness}
-          />
-        }
+    <>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[pos[0], pos[1], pos[2]]}
+        receiveShadow
+        userData={{ surface: 'floor' }}
       >
-        {material.previewTextureUrl ? (
-          <FloorTextureMaterial
-            url={material.previewTextureUrl}
-            widthMm={widthMm}
-            depthMm={depthMm}
-            tileWidthMm={material.previewTextureTileWidthMm}
-            tileLengthMm={material.previewTextureTileLengthMm}
-            phys={phys}
+        <planeGeometry
+          args={[widthMm * FLOOR_WIDTH_FACTOR, depthMm * FLOOR_DEPTH_FACTOR]}
+        />
+        <Suspense
+          fallback={
+            <meshStandardMaterial
+              color={color}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+            />
+          }
+        >
+          {material.previewTextureUrl ? (
+            <FloorTextureMaterial
+              url={material.previewTextureUrl}
+              widthMm={widthMm}
+              depthMm={depthMm}
+              tileWidthMm={material.previewTextureTileWidthMm}
+              tileLengthMm={material.previewTextureTileLengthMm}
+              phys={phys}
+            />
+          ) : (
+            <meshStandardMaterial
+              color={color}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+            />
+          )}
+        </Suspense>
+      </mesh>
+      {paintHover ? (
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[pos[0], pos[1] + 1, pos[2]]}
+          userData={{ surface: 'floor', paintHoverOverlay: true }}
+        >
+          <planeGeometry
+            args={[widthMm * FLOOR_WIDTH_FACTOR, depthMm * FLOOR_DEPTH_FACTOR]}
           />
-        ) : (
           <meshStandardMaterial
-            color={color}
-            roughness={phys.roughness}
-            metalness={phys.metalness}
+            color={PAINT_HOVER_COLOR}
+            transparent
+            opacity={PAINT_HOVER_OPACITY}
+            emissive={PAINT_HOVER_COLOR}
+            emissiveIntensity={0.4}
           />
-        )}
-      </Suspense>
-    </mesh>
+        </mesh>
+      ) : null}
+    </>
   );
 }
 
@@ -323,12 +350,14 @@ export function WallAmbientMesh({
   selected = false,
   onSelect,
   lightingMode = 'present',
+  paintHover = false,
 }: {
   readonly material: AmbientMaterial;
   readonly wall: FurnitureSceneWall;
   readonly selected?: boolean;
   readonly onSelect?: (wallId: string) => void;
   readonly lightingMode?: SceneLightingMode;
+  readonly paintHover?: boolean;
 }): ReactNode {
   const h = wall.heightMm ?? ROOM_WALL_HEIGHT_MM;
   const dx = wall.endXMm - wall.originXMm;
@@ -341,70 +370,88 @@ export function WallAmbientMesh({
   const color = resolveWallColor(material);
   const phys = resolveWallPhysical(material, lightingMode);
   return (
-    <mesh
-      position={[midX, h / 2, midY]}
-      rotation={[0, -yaw, 0]}
-      userData={{ wallId: wall.id }}
-      onClick={
-        onSelect
-          ? (e) => {
-              e.stopPropagation();
-              onSelect(wall.id);
-            }
-          : undefined
-      }
-      onPointerOver={
-        onSelect
-          ? () => {
-              if (typeof document !== 'undefined') {
-                document.body.style.cursor = 'pointer';
+    <>
+      <mesh
+        position={[midX, h / 2, midY]}
+        rotation={[0, -yaw, 0]}
+        userData={{ wallId: wall.id }}
+        onClick={
+          onSelect
+            ? (e) => {
+                e.stopPropagation();
+                onSelect(wall.id);
               }
-            }
-          : undefined
-      }
-      onPointerOut={
-        onSelect
-          ? () => {
-              if (typeof document !== 'undefined') {
-                document.body.style.cursor = '';
+            : undefined
+        }
+        onPointerOver={
+          onSelect
+            ? () => {
+                if (typeof document !== 'undefined') {
+                  document.body.style.cursor = 'pointer';
+                }
               }
-            }
-          : undefined
-      }
-    >
-      <boxGeometry args={[length, h, thickness]} />
-      <Suspense
-        fallback={
-          <meshStandardMaterial
-            color={selected ? '#5b9fd4' : color}
-            roughness={phys.roughness}
-            metalness={phys.metalness}
-            emissive={selected ? '#5b9fd4' : '#000000'}
-            emissiveIntensity={selected ? 0.35 : 0}
-          />
+            : undefined
+        }
+        onPointerOut={
+          onSelect
+            ? () => {
+                if (typeof document !== 'undefined') {
+                  document.body.style.cursor = '';
+                }
+              }
+            : undefined
         }
       >
-        {material.previewTextureUrl ? (
-          <WallTextureMaterial
-            url={material.previewTextureUrl}
-            lengthMm={length}
-            heightMm={h}
-            tileWidthMm={material.previewTextureTileWidthMm}
-            tileLengthMm={material.previewTextureTileLengthMm}
-            phys={phys}
-            selected={selected}
-          />
-        ) : (
+        <boxGeometry args={[length, h, thickness]} />
+        <Suspense
+          fallback={
+            <meshStandardMaterial
+              color={selected ? '#5b9fd4' : color}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+              emissive={selected ? '#5b9fd4' : '#000000'}
+              emissiveIntensity={selected ? 0.35 : 0}
+            />
+          }
+        >
+          {material.previewTextureUrl ? (
+            <WallTextureMaterial
+              url={material.previewTextureUrl}
+              lengthMm={length}
+              heightMm={h}
+              tileWidthMm={material.previewTextureTileWidthMm}
+              tileLengthMm={material.previewTextureTileLengthMm}
+              phys={phys}
+              selected={selected}
+            />
+          ) : (
+            <meshStandardMaterial
+              color={selected ? '#5b9fd4' : color}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+              emissive={selected ? '#5b9fd4' : '#000000'}
+              emissiveIntensity={selected ? 0.35 : 0}
+            />
+          )}
+        </Suspense>
+      </mesh>
+      {paintHover ? (
+        <mesh
+          position={[midX, h / 2, midY]}
+          rotation={[0, -yaw, 0]}
+          userData={{ wallId: wall.id, paintHoverOverlay: true }}
+        >
+          <boxGeometry args={[length + 1, h + 1, thickness + 2]} />
           <meshStandardMaterial
-            color={selected ? '#5b9fd4' : color}
-            roughness={phys.roughness}
-            metalness={phys.metalness}
-            emissive={selected ? '#5b9fd4' : '#000000'}
-            emissiveIntensity={selected ? 0.35 : 0}
+            color={PAINT_HOVER_COLOR}
+            transparent
+            opacity={PAINT_HOVER_OPACITY}
+            emissive={PAINT_HOVER_COLOR}
+            emissiveIntensity={0.4}
           />
-        )}
-      </Suspense>
-    </mesh>
+        </mesh>
+      ) : null}
+    </>
   );
 }
 

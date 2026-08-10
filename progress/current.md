@@ -1,8 +1,8 @@
-# Sesión — Roadmap Comercial v2 + F066 Inspector colapsable
+# Sesión — Roadmap Comercial v2 + F066 + F067
 
-- **Branch:** `feat/F066-inspector-colapsable` (desde main)
+- **Branch:** `feat/F067-paleta-materiales-drag` (desde main)
 - **Fecha:** 2026-08-10
-- **Scope:** Planeamiento estratégico (roadmap comercial) + primera feature F066
+- **Scope:** Planeamiento + F066 (inspector colapsable) + F067 (paleta materiales drag)
 
 ## Contexto de la sesión
 
@@ -51,5 +51,51 @@ cerrada por defecto. Se adaptó el test para abrir la sección antes del assert
 
 ## Siguiente
 
-- Commit F066 + push + cerrar issue #278
-- Próxima feature Fase A: F065 (drag-drop mejorado) o F067 (paleta materiales)
+- Commit F066 + push + cerrar issue #278 ✓ (hecho)
+- F067 paleta de materiales (en curso)
+
+## Hecho — F067 Paleta de materiales con drag-apply (#279, Fase A)
+
+Reemplaza los `<select>` nativos de Piso/Pared del ProjectSpatialStudio por
+una paleta de ambient materials arrastrable al 3D, con highlight del mesh
+objetivo. Es el "paint" de Promob, limitado a piso/muro (board materials queda
+para después).
+
+- `paintMaterial.ts` (new): tipos PaintSurface/PaintDrop + función pura
+  `resolvePaintSurface` (testeable sin WebGL) + encode/decode del drag payload
+  + `canApplyMaterial` (valida surfaceType floor↔wall).
+- `MaterialPalette.tsx` (new): paleta separa floor/wall, drag HTML5 source con
+  dataTransfer (PAINT_DRAG_MIME), thumbnail (textureUrl img o previewColor swatch),
+  marca el material activo.
+- `AmbientMeshes.tsx`: FloorAmbientMesh/WallAmbientMesh aceptan `paintHover` →
+  overlay verde (#4ade80, opacity 0.3) cuando es el target. FloorAmbientMesh
+  gana userData surface:'floor' para raycast.
+- `FurnitureScene3D.tsx`: props onPaintDrop/onPaintHover/paintHoverSurface.
+  SceneContent registra un resolver (useThree + raycaster) que el wrapper del
+  canvas invoca en onDragOver/onDrop (HTML5). Lee dataTransfer, raycastea,
+  resuelve surface y llama al callback con el drop completo.
+- `ProjectSpatialStudio.tsx`: reemplaza selects por `<MaterialPalette>`,
+  handlers handlePaintHover/handlePaintDrop (valida surfaceType, commitea
+  floor/wallMaterialId).
+- Tests: +28 (15 paintMaterial + 9 MaterialPalette + 2 AmbientMeshes constants
+  + 3 Studio: floor drop, wall drop, mismatch ignorado).
+
+### Decisión de testing
+El drag HTML5 → raycast → drop NO es testeable en jsdom (no hay WebGL, el
+raycast vive dentro del Canvas). El mock de FurnitureScene3D en el test del
+Studio expone botones que invocan onPaintDrop con drops resueltos, simulando
+lo que el canvas real haría. La función pura resolvePaintSurface se testea
+aislada. Verificación visual del gesture completo queda como smoke manual en
+browser (mismo patrón que el resto del 3D del repo).
+
+### Verificación visual pendiente (browser smoke)
+- Drag material de piso al canvas → highlight verde del piso → aplica textura.
+- Drag material de muro al canvas → highlight verde del muro → aplica color.
+- Drag material de piso sobre un muro → no aplica (surfaceType mismatch).
+- Estos 3 casos requieren browser real (WebGL), no cubiertos por jsdom.
+
+## Validación
+
+- `pnpm --filter @muebles/ui test`: 662/662 ✓
+- `pnpm typecheck`: 6 workspaces ✓
+- `./init.sh`: verde completo ✓

@@ -58,11 +58,18 @@ import {
   planAmbientScene,
 } from './AmbientMeshes';
 import { isPastDragThreshold } from './moduleDragGesture';
+import {
+  PAINT_DRAG_MIME,
+  decodePaintDrag,
+  type PaintDrop,
+  type PaintSurface,
+} from './paintMaterial';
 import { AlertTriangle } from 'lucide-react';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import './moduleScene3d.css';
 
 export type { SceneLightingMode } from './sceneLighting';
+export type { PaintSurface, PaintDrop } from './paintMaterial';
 
 export type FurnitureSceneModule = {
   readonly key: string;
@@ -225,6 +232,25 @@ export type FurnitureScene3DProps = {
    * `lightingMode !== 'catalog'`.
    */
   readonly showCeiling?: boolean;
+  /**
+   * Paint drop handler (F067). Fired when the user drops a dragged ambient
+   * material onto the canvas. FurnitureScene3D reads the dataTransfer, raycasts
+   * to resolve the surface, and hands back the resolved drop. The Studio
+   * validates surfaceType and commits floor/wallMaterialId. Receives null when
+   * the drop misses all paintable surfaces.
+   */
+  readonly onPaintDrop?: (drop: PaintDrop | null) => void;
+  /**
+   * Paint hover handler (F067). Fired as the dragged material moves over the
+   * canvas. FurnitureScene3D raycasts and reports the surface under the cursor,
+   * or null when the drag leaves the canvas / misses paintable surfaces.
+   */
+  readonly onPaintHover?: (surface: PaintSurface | null) => void;
+  /**
+   * Surface currently highlighted as paint-drop target, or null. Drives the
+   * green overlay on FloorAmbientMesh/WallAmbientMesh.
+   */
+  readonly paintHoverSurface?: PaintSurface | null;
 };
 
 function BoardMesh({
@@ -879,6 +905,8 @@ function SceneContent({
   ambientFloor,
   ambientWall,
   showCeiling,
+  paintHoverSurface = null,
+  registerResolvePaintHit,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -921,8 +949,57 @@ function SceneContent({
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
   readonly showCeiling?: boolean;
+  readonly paintHoverSurface?: PaintSurface | null;
+  readonly registerResolvePaintHit?: (
+    fn: ((clientX: number, clientY: number) => PaintSurface | null) | null,
+  ) => void;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
+  const { camera, gl, scene } = useThree();
+  const paintRaycaster = useMemo(() => new THREE.Raycaster(), []);
+  const paintFloorPlane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    [],
+  );
+
+  /**
+   * Register the paint-hit resolver so the canvas wrapper can raycast during
+   * HTML5 dragOver/drop (F067). Resolves which ambient surface (floor/wall)
+   * is under the cursor by intersecting the floor plane first, then walls by
+   * their userData.wallId.
+   */
+  useEffect(() => {
+    if (!registerResolvePaintHit) return;
+    registerResolvePaintHit((clientX, clientY) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
+      paintRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+      // Floor: intersect the mathematical floor plane.
+      const floorHit = new THREE.Vector3();
+      if (paintRaycaster.ray.intersectPlane(paintFloorPlane, floorHit)) {
+        // Walls: intersect wall meshes (only when present) to check if a wall
+        // is closer than the floor. Traverse scene for wall userData.
+        const wallMeshes: THREE.Object3D[] = [];
+        scene.traverse((obj) => {
+          if (obj.userData?.wallId && !obj.userData?.paintHoverOverlay) {
+            wallMeshes.push(obj);
+          }
+        });
+        if (wallMeshes.length > 0) {
+          const wallHits = paintRaycaster.intersectObjects(wallMeshes, false);
+          if (wallHits.length > 0 && wallHits[0]!.distance < floorHit.distanceTo(paintRaycaster.ray.origin)) {
+            const wallId = wallHits[0]!.object.userData.wallId as string;
+            return { kind: 'wall', wallId };
+          }
+        }
+        return { kind: 'floor' };
+      }
+      return null;
+    });
+    return () => registerResolvePaintHit(null);
+  }, [camera, gl, scene, paintRaycaster, paintFloorPlane, registerResolvePaintHit]);
+
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
@@ -1035,6 +1112,7 @@ function SceneContent({
                 depthMm={totalDepth}
                 position={[framing.center[0], -1, framing.center[2]]}
                 lightingMode={lightMode}
+                paintHover={paintHoverSurface?.kind === 'floor'}
               />
             ) : (
               <mesh
@@ -1065,6 +1143,10 @@ function SceneContent({
                 selected={selectedWallId === w.id}
                 onSelect={onSelectWall}
                 lightingMode={lightMode}
+                paintHover={
+                  paintHoverSurface?.kind === 'wall' &&
+                  paintHoverSurface.wallId === w.id
+                }
               />
             ) : (
               <WallMesh
@@ -1250,8 +1332,20 @@ export function FurnitureScene3D({
   ambientFloor,
   ambientWall,
   showCeiling,
+  onPaintDrop,
+  onPaintHover,
+  paintHoverSurface = null,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
+  /**
+   * Ref registrado por SceneContent (que has useThree access). Holds a
+   * function that, given client coords, raycasts the scene and returns the
+   * paint surface hit (floor/wall) or null. The canvas wrapper calls this on
+   * HTML5 dragOver/drop — bridges the DOM drag event into the R3F world.
+   */
+  const resolvePaintHitRef = useRef<
+    ((clientX: number, clientY: number) => PaintSurface | null) | null
+  >(null);
   const hasAnyParts = modules.some((m) => m.parts.length > 0);
   // Keep empty modules so outer ghosts match layout footprint (no invisible gaps).
   const sceneModules = modules;
@@ -1334,6 +1428,48 @@ export function FurnitureScene3D({
         className="module-scene-3d__canvas-wrap module-scene-3d__canvas-wrap--focusable"
         tabIndex={0}
         aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
+        onDragOver={
+          onPaintHover
+            ? (e) => {
+                if (!e.dataTransfer.types.includes(PAINT_DRAG_MIME)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                const surface = resolvePaintHitRef.current?.(
+                  e.clientX,
+                  e.clientY,
+                );
+                onPaintHover(surface ?? null);
+              }
+            : undefined
+        }
+        onDragLeave={
+          onPaintHover
+            ? (e) => {
+                if (e.currentTarget === e.target) {
+                  onPaintHover(null);
+                }
+              }
+            : undefined
+        }
+        onDrop={
+          onPaintDrop
+            ? (e) => {
+                if (!e.dataTransfer.types.includes(PAINT_DRAG_MIME)) return;
+                e.preventDefault();
+                const payload = decodePaintDrag(
+                  e.dataTransfer.getData(PAINT_DRAG_MIME),
+                );
+                const surface =
+                  payload && resolvePaintHitRef.current?.(e.clientX, e.clientY);
+                if (payload && surface) {
+                  onPaintDrop({ materialId: payload.materialId, surface });
+                } else {
+                  onPaintDrop(null);
+                }
+                if (onPaintHover) onPaintHover(null);
+              }
+            : undefined
+        }
       >
         {showHint && fillViewport ? (
           <p className="module-scene-3d__hint module-scene-3d__hint--overlay">
@@ -1453,6 +1589,14 @@ export function FurnitureScene3D({
               ambientFloor={ambientFloor}
               ambientWall={ambientWall}
               showCeiling={showCeiling}
+              paintHoverSurface={paintHoverSurface}
+              registerResolvePaintHit={
+                onPaintDrop || onPaintHover
+                  ? (fn) => {
+                      resolvePaintHitRef.current = fn;
+                    }
+                  : undefined
+              }
             />
           </Suspense>
           </Canvas>
