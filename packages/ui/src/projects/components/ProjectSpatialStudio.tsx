@@ -1069,6 +1069,7 @@ export function ProjectSpatialStudio({
     endXMm: w.endXMm,
     endYMm: w.endYMm,
     heightMm: 2400,
+    wallMaterialId: w.wallMaterialId,
   }));
 
   const applyOffsetOnWall = (

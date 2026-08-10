@@ -52,6 +52,8 @@ export type ResolvedWallFrame = {
   readonly originYMm: number;
   readonly endXMm: number;
   readonly endYMm: number;
+  /** Optional per-wall ambient material override (propagated from KitchenWall). */
+  readonly wallMaterialId?: string;
 };
 
 export type KitchenPlacedModule = {
@@ -342,6 +344,7 @@ export function resolveWallFrames(
       originYMm,
       endXMm,
       endYMm,
+      wallMaterialId: w.wallMaterialId,
     });
     cursorX = endXMm;
     cursorY = endYMm;

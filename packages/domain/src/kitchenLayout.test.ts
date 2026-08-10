@@ -43,6 +43,17 @@ describe('kitchenLayout', () => {
     expect(frames[1]!.endYMm).toBe(2500);
   });
 
+  it('resolveWallFrames propagates wallMaterialId per wall (per-wall ambient)', () => {
+    const baseWalls = createDefaultLWalls(() => 'w' + Math.random());
+    const fixed = [
+      { ...baseWalls[0]!, id: 'a', originXMm: 0, originYMm: 0, wallMaterialId: 'am-wall-a' },
+      { ...baseWalls[1]!, id: 'b', originXMm: 3000, originYMm: 0 },
+    ];
+    const frames = resolveWallFrames(fixed);
+    expect(frames[0]!.wallMaterialId).toBe('am-wall-a');
+    expect(frames[1]!.wallMaterialId).toBeUndefined();
+  });
+
   it('seedDefaultLWallsIfEmpty seeds only when active walls are empty', () => {
     let n = 0;
     const newId = () => `w${++n}`;
