@@ -2858,7 +2858,7 @@ export function ProjectSpatialStudio({
                               selectedPlacement.itemId,
                               selectedPlacement.instanceIndex,
                               v,
-                              { history: 'push', snap: true },
+                              { history: 'push', snap: false },
                             );
                           }}
                           data-testid="spatial-studio-offset"

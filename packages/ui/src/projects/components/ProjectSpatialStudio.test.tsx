@@ -781,11 +781,56 @@ EOF
     expect(undoBtn.disabled).toBe(false);
     fireEvent.click(undoBtn);
     const afterUndo = onChangeLayout.mock.calls.at(-1)![0];
-    // Undo restores layout as of before the nudge (packed offsets).
     expect(
       afterUndo.placements.find((p: { itemId: string }) => p.itemId === 'it-a')!
         .offsetMm,
     ).toBe(0);
+  });
+
+  it('updates wall offset from input field when current offset is 0 without snapping back to 0', () => {
+    const onChangeLayout = vi.fn();
+    const projectWithZeroOffset: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-a',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p600',
+        },
+      ],
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithZeroOffset}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    const offsetInput = screen.getByTestId('spatial-studio-offset');
+    fireEvent.change(offsetInput, { target: { value: '10' } });
+    expect(onChangeLayout).toHaveBeenCalled();
+    const updated = onChangeLayout.mock.calls.at(-1)![0];
+    expect(updated.placements[0].offsetMm).toBe(10);
   });
 
   it('collapses list to rail with unplaced badge', () => {
