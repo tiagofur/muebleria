@@ -849,8 +849,12 @@ function ModuleGroup({
     mod.originZ,
     mod.originY,
   ];
+  // Workshop → Three Y-up handedness: the module yaw must be negated to match
+  // the wall meshes (rotation={[0, -yaw, 0]}). Without the negation, modules on
+  // walls with yaw ≠ 0 (e.g. Muro B of an L-kitchen, yaw 90) render with their
+  // depth pointing OUTSIDE the room instead of toward the interior.
   const yawRad = ((mod.yawDeg ?? 0) * Math.PI) / 180;
-  const groupRot: [number, number, number] = [0, yawRad, 0];
+  const groupRot: [number, number, number] = [0, -yawRad, 0];
   const hasSelection = Boolean(selectedPartId);
 
   return (
