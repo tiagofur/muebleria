@@ -26,13 +26,25 @@ func TestAgregados_CRUDRoundTrip(t *testing.T) {
 	in := &domain.Agregado{
 		ID:          id,
 		Code:        code,
-		Name:        "Cuerpo 3 Cajones",
-		Description: "3 cajones apilables con despiece",
+		Name:        "Puerta con Bisagras",
+		Description: "Puerta batiente con 2 bisagras y 1 jaladera",
 		Active:      true,
 		Components: []domain.ComponentInstance{
 			{
-				ComponentID: "c-frente",
+				ComponentID: "c-puerta",
 				Quantity:    1,
+			},
+		},
+		HardwareLines: []domain.HardwareLine{
+			{
+				ID:         "hwline-1",
+				Quantity:   2,
+				OptionRole: "BISAGRAS",
+			},
+			{
+				ID:         "hwline-2",
+				Quantity:   1,
+				OptionRole: "JALADERAS",
 			},
 		},
 	}
@@ -45,7 +57,7 @@ func TestAgregados_CRUDRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAgregadoByID failed: %v", err)
 	}
-	if got.Code != code || got.Name != "Cuerpo 3 Cajones" || len(got.Components) != 1 {
+	if got.Code != code || got.Name != "Puerta con Bisagras" || len(got.Components) != 1 || len(got.HardwareLines) != 2 {
 		t.Fatalf("mismatch after create: %+v", got)
 	}
 

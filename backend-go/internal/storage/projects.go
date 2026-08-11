@@ -495,7 +495,7 @@ func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, pres
 	}
 	for _, pr := range presets {
 		var err error
-		if pr.ID != "" {
+		if pr.ID != "" && isValidUUID(pr.ID) {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm)
 				VALUES ($1, $2, $3, $4, $5, $6)
@@ -1120,6 +1120,9 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		}
 
 		partID := p.ID
+		if !isValidUUID(partID) {
+			partID = ""
+		}
 		if partID == "" {
 			partQuery := `
 				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
@@ -1142,11 +1145,14 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 	// Insertar HardwareLines
 	for _, hl := range m.HardwareLines {
 		var hwID interface{} = nil
-		if hl.HardwareID != "" {
+		if hl.HardwareID != "" && isValidUUID(hl.HardwareID) {
 			hwID = hl.HardwareID
 		}
 
 		hlID := hl.ID
+		if !isValidUUID(hlID) {
+			hlID = ""
+		}
 		if hlID == "" {
 			hwLineQuery := `
 				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id)
@@ -1268,6 +1274,9 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 			}
 		}
 		partID := p.ID
+		if !isValidUUID(partID) {
+			partID = ""
+		}
 		if partID == "" {
 			partQuery := `
 				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
@@ -1290,10 +1299,13 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	// Insertar HardwareLines
 	for _, hl := range m.HardwareLines {
 		var hwID interface{} = nil
-		if hl.HardwareID != "" {
+		if hl.HardwareID != "" && isValidUUID(hl.HardwareID) {
 			hwID = hl.HardwareID
 		}
 		hlID := hl.ID
+		if !isValidUUID(hlID) {
+			hlID = ""
+		}
 		if hlID == "" {
 			hwLineQuery := `
 				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id)

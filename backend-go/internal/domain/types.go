@@ -321,14 +321,19 @@ type ComponentInstance struct {
 // Agregado is a reusable sub-assembly catalog entity composed of ComponentInstances.
 // Examples: a drawer assembly, a door with hinges and handle, a divider panel group.
 type Agregado struct {
-	ID          string              `json:"id"`
-	Code        string              `json:"code"`
-	Name        string              `json:"name"`
-	Description string              `json:"description,omitempty"`
-	Components  []ComponentInstance `json:"components,omitempty"`
-	Active      bool                `json:"active"`
-	CreatedAt   time.Time           `json:"created_at"`
-	UpdatedAt   time.Time           `json:"updated_at"`
+	ID            string              `json:"id"`
+	Code          string              `json:"code"`
+	Name          string              `json:"name"`
+	Description   string              `json:"description,omitempty"`
+	Notes         string              `json:"notes,omitempty"`
+	WidthMm       int                 `json:"width_mm,omitempty"`
+	HeightMm      int                 `json:"height_mm,omitempty"`
+	DepthMm       int                 `json:"depth_mm,omitempty"`
+	Components    []ComponentInstance `json:"components,omitempty"`
+	HardwareLines []HardwareLine      `json:"hardware_lines,omitempty"`
+	Active        bool                `json:"active"`
+	CreatedAt     time.Time           `json:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"`
 }
 
 // HardwarePlacement attaches a visible hardware instance to a component face for

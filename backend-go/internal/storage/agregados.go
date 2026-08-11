@@ -14,7 +14,7 @@ import (
 
 func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, error) {
 	query := `
-		SELECT id, code, name, description, components, active, created_at, updated_at
+		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
 		FROM agregados
 		ORDER BY name ASC;
 	`
@@ -40,7 +40,7 @@ func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, e
 
 func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error) {
 	query := `
-		SELECT id, code, name, description, components, active, created_at, updated_at
+		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
 		FROM agregados
 		WHERE id = $1;
 	`
@@ -64,13 +64,21 @@ func (s *PostgresStore) CreateAgregado(ctx context.Context, a *domain.Agregado) 
 		componentsJSON = []byte("[]")
 	}
 
+	hwLinesJSON, err := json.Marshal(a.HardwareLines)
+	if err != nil {
+		return fmt.Errorf("error marshaling agregado hardware lines: %w", err)
+	}
+	if len(hwLinesJSON) == 0 || string(hwLinesJSON) == "null" {
+		hwLinesJSON = []byte("[]")
+	}
+
 	query := `
-		INSERT INTO agregados (id, code, name, description, components, active)
-		VALUES ($1, $2, $3, $4, $5, $6);
+		INSERT INTO agregados (id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 	`
 	_, err = s.Pool.Exec(ctx, query,
-		a.ID, a.Code, a.Name, nullIfEmpty(a.Description),
-		componentsJSON, a.Active,
+		a.ID, a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
+		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active,
 	)
 	if err != nil {
 		return fmt.Errorf("error creating agregado: %w", err)
@@ -87,14 +95,22 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 		componentsJSON = []byte("[]")
 	}
 
+	hwLinesJSON, err := json.Marshal(a.HardwareLines)
+	if err != nil {
+		return fmt.Errorf("error marshaling agregado hardware lines: %w", err)
+	}
+	if len(hwLinesJSON) == 0 || string(hwLinesJSON) == "null" {
+		hwLinesJSON = []byte("[]")
+	}
+
 	query := `
 		UPDATE agregados
-		SET code = $1, name = $2, description = $3, components = $4, active = $5, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $6;
+		SET code = $1, name = $2, description = $3, notes = $4, width_mm = $5, height_mm = $6, depth_mm = $7, components = $8, hardware_lines = $9, active = $10, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $11;
 	`
 	tag, err := s.Pool.Exec(ctx, query,
-		a.Code, a.Name, nullIfEmpty(a.Description),
-		componentsJSON, a.Active, id,
+		a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
+		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, id,
 	)
 	if err != nil {
 		return fmt.Errorf("error updating agregado: %w", err)
@@ -115,9 +131,11 @@ func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string) error
 func scanAgregado(r rowScanner) (domain.Agregado, error) {
 	var a domain.Agregado
 	var desc *string
+	var notes *string
 	var componentsRaw []byte
+	var hwLinesRaw []byte
 	err := r.Scan(
-		&a.ID, &a.Code, &a.Name, &desc, &componentsRaw, &a.Active,
+		&a.ID, &a.Code, &a.Name, &desc, &notes, &a.WidthMm, &a.HeightMm, &a.DepthMm, &componentsRaw, &hwLinesRaw, &a.Active,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
@@ -126,11 +144,20 @@ func scanAgregado(r rowScanner) (domain.Agregado, error) {
 	if desc != nil {
 		a.Description = *desc
 	}
+	if notes != nil {
+		a.Notes = *notes
+	}
 	if len(componentsRaw) > 0 {
 		_ = json.Unmarshal(componentsRaw, &a.Components)
 	}
 	if a.Components == nil {
 		a.Components = []domain.ComponentInstance{}
+	}
+	if len(hwLinesRaw) > 0 {
+		_ = json.Unmarshal(hwLinesRaw, &a.HardwareLines)
+	}
+	if a.HardwareLines == nil {
+		a.HardwareLines = []domain.HardwareLine{}
 	}
 	return a, nil
 }

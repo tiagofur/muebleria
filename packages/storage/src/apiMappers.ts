@@ -1594,25 +1594,41 @@ export function breakdownFromApi(raw: Record<string, unknown>): QuoteBreakdown {
 }
 
 export function agregadoToApi(a: import('@muebles/domain').Agregado): Record<string, unknown> {
+  const dims = a.externalDims;
   return {
     id: a.id,
     code: a.code,
     name: a.name,
     description: a.description ?? '',
+    notes: a.notes ?? '',
+    width_mm: dims?.width ?? 0,
+    height_mm: dims?.height ?? 0,
+    depth_mm: dims?.depth ?? 0,
     components: (a.components ?? []).map(componentInstanceToApi),
+    hardware_lines: (a.hardwareLines ?? []).map(hardwareLineToApi),
     active: a.active !== false,
   };
 }
 
 export function agregadoFromApi(raw: Record<string, unknown>): import('@muebles/domain').Agregado {
   const componentsRaw = raw.components;
+  const hardwareLinesRaw = raw.hardware_lines ?? raw.hardwareLines;
+  const w = num(raw.width_mm ?? raw.widthMm);
+  const h = num(raw.height_mm ?? raw.heightMm);
+  const d = num(raw.depth_mm ?? raw.depthMm);
+  const hasDims = w > 0 || h > 0 || d > 0;
   return {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
     description: str(raw.description) || undefined,
+    notes: str(raw.notes) || undefined,
+    externalDims: hasDims ? { width: w, height: h, depth: d } : undefined,
     components: Array.isArray(componentsRaw)
       ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
+      : [],
+    hardwareLines: Array.isArray(hardwareLinesRaw)
+      ? (hardwareLinesRaw as Record<string, unknown>[]).map(hardwareLineFromApi)
       : [],
     active: raw.active !== false,
   };

@@ -615,7 +615,11 @@ export function ModulesScreen({
     const id =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
-        : `hwline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
     const line = emptyHardwareLineDraft(id);
     if (hardwareRoles[0]) {
       line.optionRole = hardwareRoles[0].code;

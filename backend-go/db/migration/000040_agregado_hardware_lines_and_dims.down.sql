@@ -1,0 +1,6 @@
+ALTER TABLE agregados
+DROP COLUMN IF EXISTS hardware_lines,
+DROP COLUMN IF EXISTS depth_mm,
+DROP COLUMN IF EXISTS height_mm,
+DROP COLUMN IF EXISTS width_mm,
+DROP COLUMN IF EXISTS notes;
