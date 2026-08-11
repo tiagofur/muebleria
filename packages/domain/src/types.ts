@@ -441,13 +441,34 @@ export interface Agregado {
 }
 
 /**
- * Reference to an Agregado placed inside a Module, with optional mirroring.
+ * Reference to an Agregado placed inside a Module or Structure, with
+ * spatial positioning, local bounding box, stacking, and overrides.
  */
 export interface ModuleAgregadoInstance {
+  readonly id?: string;
   readonly agregadoId: string;
+  readonly name?: string;
+  /** Spatial position (X, Y, Z formulas or mm) inside the parent furniture piece. */
+  readonly position?: {
+    readonly xFormula?: string;
+    readonly yFormula?: string;
+    readonly zFormula?: string;
+  };
+  /** Local bounding box dimensions (W, H, D formulas or mm) for the sub-assembly space. */
+  readonly dimensions?: {
+    readonly widthFormula?: string;
+    readonly heightFormula?: string;
+    readonly depthFormula?: string;
+  };
   readonly quantity: number;
+  /** Direction for distributing N units (e.g. vertical stack of drawers). */
+  readonly layoutDirection?: 'vertical' | 'horizontal' | 'none';
+  /** Clearance/gap between stacked units in mm (default 0). */
+  readonly gapMm?: number;
   /** When true, the sub-assembly is mirrored (e.g. door opening to the opposite side). */
   readonly mirrored?: boolean;
+  /** Hardware option overrides per instance (e.g. { JALADERA: 'jaladera-gola-256' }). */
+  readonly optionOverrides?: Record<string, string>;
 }
 
 // --- Project / quotation ---

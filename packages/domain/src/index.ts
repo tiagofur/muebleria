@@ -448,6 +448,8 @@ export {
   mirrorComponentPlacement,
   mirrorComponentInstance,
   resolveAgregadoInstance,
+  calculateAgregadoSubspaceUnits,
+  type SubspaceUnit,
 } from './agregados';
 
 

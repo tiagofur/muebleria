@@ -10,7 +10,10 @@ import { ResolutionError, ValidationError } from '../errors';
 import {
   resolveModuleMeasurePreset,
 } from '../measurePresets';
-import { resolveAgregadoInstance } from '../agregados';
+import {
+  calculateAgregadoSubspaceUnits,
+  resolveAgregadoInstance,
+} from '../agregados';
 import {
   applyBaseModeToHardwareLines,
   filterComponentInstancesForBaseMode,
@@ -352,7 +355,8 @@ function getComponentThickness(
   if (role) {
     const choiceId = resolveBoardOptionChoiceId(role, optionChoices);
     if (choiceId) {
-      const material = catalog.materials.find((m) => m.id === choiceId);
+      const materials = catalog.materials ?? catalog.boardMaterials ?? [];
+      const material = materials.find((m) => m.id === choiceId);
       if (material) {
         return material.thicknessMm;
       }
@@ -536,7 +540,7 @@ export function resolveComposedModule(
     baseMode,
   );
   const moduleInstances = filterComponentInstancesForBaseMode(
-    componentInstances,
+    componentInstances ?? [],
     catalog.components,
     baseMode,
   );
@@ -560,32 +564,111 @@ export function resolveComposedModule(
   );
 
   // Expand sub-assemblies (agregados) attached to structure or module.
-  let agregadosComponents: ModuleComponentInstance[] = [];
+  let agregadosParts: BoardPart[] = [];
   let agregadosHardware: HardwareLine[] = [];
   const catalogAgregados = catalog.agregados ?? [];
   const allAgregadoInstances = [
     ...(structure.agregados ?? []),
     ...(module?.agregados ?? []),
   ];
-  for (const agrInst of allAgregadoInstances) {
-    const res = resolveAgregadoInstance(agrInst, catalogAgregados);
-    agregadosComponents.push(...res.components);
-    agregadosHardware.push(...res.hardwareLines);
-  }
 
-  const filteredAgregadoInstances = filterComponentInstancesForBaseMode(
-    agregadosComponents,
-    catalog.components,
-    baseMode,
-  );
-  const agregadosParts = expandComponentInstances(
-    filteredAgregadoInstances,
-    catalog,
-    '',
-    dims,
-    optionChoices,
-    B,
-  );
+  const PW = dims.width;
+  const PH = dims.height;
+  const PD = dims.depth;
+
+  for (const agrInst of allAgregadoInstances) {
+    const agregado = catalogAgregados.find((a) => a.id === agrInst.agregadoId);
+    if (!agregado) continue;
+
+    // Evaluate sub-assembly space bounding box and origin position in parent furniture space
+    const parentDims = { W: PW, H: PH, D: PD, PW, PH, PD, T: 18, B };
+    const spaceW = agrInst.dimensions?.widthFormula
+      ? evaluatePartFormula(agrInst.dimensions.widthFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'agregadoWidth',
+        })
+      : agregado.externalDims?.width ?? PW;
+
+    const spaceH = agrInst.dimensions?.heightFormula
+      ? evaluatePartFormula(agrInst.dimensions.heightFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'agregadoHeight',
+        })
+      : agregado.externalDims?.height ?? PH;
+
+    const spaceD = agrInst.dimensions?.depthFormula
+      ? evaluatePartFormula(agrInst.dimensions.depthFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'agregadoDepth',
+        })
+      : agregado.externalDims?.depth ?? PD;
+
+    const spaceX = agrInst.position?.xFormula
+      ? evaluatePartFormula(agrInst.position.xFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'agregadoX',
+        })
+      : 0;
+
+    const spaceY = agrInst.position?.yFormula
+      ? evaluatePartFormula(agrInst.position.yFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'agregadoY',
+        })
+      : 0;
+
+    const spaceZ = agrInst.position?.zFormula
+      ? evaluatePartFormula(agrInst.position.zFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'agregadoZ',
+        })
+      : 0;
+
+    const units = calculateAgregadoSubspaceUnits(
+      agrInst.quantity,
+      { width: spaceW, height: spaceH, depth: spaceD },
+      { x: spaceX, y: spaceY, z: spaceZ },
+      agrInst.layoutDirection ?? 'none',
+      agrInst.gapMm ?? 0,
+    );
+
+    for (const unit of units) {
+      const unitInst = { ...agrInst, quantity: 1 };
+      const res = resolveAgregadoInstance(unitInst, catalogAgregados);
+      agregadosHardware.push(...res.hardwareLines);
+
+      const filteredComponents = filterComponentInstancesForBaseMode(
+        res.components ?? [],
+        catalog.components ?? [],
+        baseMode,
+      );
+
+      const unitParts = expandComponentInstances(
+        filteredComponents,
+        catalog,
+        `agr-${agrInst.agregadoId}-u${unit.unitIndex}`,
+        { width: unit.width, height: unit.height, depth: unit.depth },
+        optionChoices,
+        B,
+      );
+
+      // Apply unit origin offset (spaceX + unit.x, spaceY + unit.y, spaceZ + unit.z)
+      const offsetParts = unitParts.map((p) => ({
+        ...p,
+        x: p.x + unit.x,
+        y: p.y + unit.y,
+        z: p.z + unit.z,
+      }));
+
+      agregadosParts.push(...offsetParts);
+    }
+  }
 
   const allParts = [...structureParts, ...moduleParts, ...agregadosParts];
 

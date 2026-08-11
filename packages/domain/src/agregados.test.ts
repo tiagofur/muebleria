@@ -3,8 +3,10 @@ import {
   mirrorComponentPlacement,
   mirrorComponentInstance,
   resolveAgregadoInstance,
+  calculateAgregadoSubspaceUnits,
 } from './agregados';
-import type { Agregado, ModuleAgregadoInstance } from './types';
+import { resolveComposedModule } from './engine/bom';
+import type { Agregado, Catalog, Module, ModuleAgregadoInstance, Structure } from './types';
 
 describe('agregados domain helpers', () => {
   describe('mirrorComponentPlacement', () => {
@@ -34,6 +36,79 @@ describe('agregados domain helpers', () => {
       const mirrored = mirrorComponentInstance(original);
       expect(mirrored.placementOverride).toBe('lateral_derecho');
       expect(mirrored.overrides?.rotateY).toBe(270);
+    });
+  });
+
+  describe('calculateAgregadoSubspaceUnits', () => {
+    it('calculates vertical stacking for N units with gap', () => {
+      const units = calculateAgregadoSubspaceUnits(
+        3,
+        { width: 764, height: 600, depth: 550 },
+        { x: 18, y: 0, z: 100 },
+        'vertical',
+        3,
+      );
+
+      expect(units).toHaveLength(3);
+      // Available H = 600 - 2 * 3 = 594. Unit H = 198.
+      expect(units[0]).toEqual({
+        unitIndex: 0,
+        x: 18,
+        y: 0,
+        z: 100,
+        width: 764,
+        height: 198,
+        depth: 550,
+      });
+      expect(units[1]).toEqual({
+        unitIndex: 1,
+        x: 18,
+        y: 0,
+        z: 301, // 100 + 198 + 3
+        width: 764,
+        height: 198,
+        depth: 550,
+      });
+      expect(units[2]).toEqual({
+        unitIndex: 2,
+        x: 18,
+        y: 0,
+        z: 502, // 301 + 198 + 3
+        width: 764,
+        height: 198,
+        depth: 550,
+      });
+    });
+
+    it('calculates horizontal stacking for N units with gap', () => {
+      const units = calculateAgregadoSubspaceUnits(
+        2,
+        { width: 800, height: 700, depth: 500 },
+        { x: 0, y: 0, z: 0 },
+        'horizontal',
+        4,
+      );
+
+      expect(units).toHaveLength(2);
+      // Available W = 800 - 4 = 796. Unit W = 398.
+      expect(units[0]).toEqual({
+        unitIndex: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+        width: 398,
+        height: 700,
+        depth: 500,
+      });
+      expect(units[1]).toEqual({
+        unitIndex: 1,
+        x: 402, // 0 + 398 + 4
+        y: 0,
+        z: 0,
+        width: 398,
+        height: 700,
+        depth: 500,
+      });
     });
   });
 
@@ -81,6 +156,19 @@ describe('agregados domain helpers', () => {
       expect(resolved.hardwareLines[1]?.quantity).toBe(2); // 1 * 2
     });
 
+    it('applies optionOverrides to hardware lines', () => {
+      const inst: ModuleAgregadoInstance = {
+        agregadoId: 'agr-puerta-std',
+        quantity: 1,
+        optionOverrides: {
+          JALADERA: 'hw-jaladera-gola-256',
+        },
+      };
+
+      const resolved = resolveAgregadoInstance(inst, [mockAgregado]);
+      expect(resolved.hardwareLines[1]?.hardwareId).toBe('hw-jaladera-gola-256');
+    });
+
     it('resolves mirrored agregado instance', () => {
       const inst: ModuleAgregadoInstance = {
         agregadoId: 'agr-puerta-std',
@@ -103,4 +191,117 @@ describe('agregados domain helpers', () => {
       expect(resolved.hardwareLines).toEqual([]);
     });
   });
+
+  describe('calculateModuleBom with Agregados subspace', () => {
+    it('evaluates component formulas against local subspace bounding box and offsets in 3D', () => {
+      const catalog: Catalog = {
+        boardMaterials: [
+          { id: 'm1', code: 'M1', name: 'MDF 18', thicknessMm: 18, costPerM2: 100, active: true },
+        ],
+        edgeBands: [],
+        hardware: [],
+        components: [
+          {
+            id: 'c-frente',
+            code: 'FRT-CAJ',
+            name: 'Frente de cajón',
+            placement: 'frente_cajon',
+            geometry: {
+              kind: 'rectangular_board',
+              lengthFormula: 'D',
+              widthFormula: 'W - 4',
+            },
+            defaultEdges: [],
+            optionRoles: ['PLACA'],
+            active: true,
+          },
+        ],
+        optionGroups: [
+          {
+            id: 'og-placa',
+            code: 'PLACA',
+            name: 'Material Placa',
+            required: true,
+            choices: [{ id: 'ch-m1', name: 'MDF 18', materialId: 'm1' }],
+          },
+        ],
+        agregados: [
+          {
+            id: 'agr-cajon',
+            code: 'AGR-CAJ-01',
+            name: 'Cuerpo de Cajón',
+            components: [
+              {
+                componentId: 'c-frente',
+                quantity: 1,
+                placementOverride: 'frente_cajon',
+                overrides: {
+                  lengthFormula: 'H - 4', // Local drawer height minus 4mm
+                  widthFormula: 'W - 4',  // Local drawer width minus 4mm
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const structure: Structure = {
+        id: 'str-cajonera',
+        code: 'STR-CAJ',
+        name: 'Mueble Cajonera 800x600x500',
+        components: [],
+        agregados: [
+          {
+            agregadoId: 'agr-cajon',
+            quantity: 3,
+            layoutDirection: 'vertical',
+            gapMm: 3,
+            position: { xFormula: '18', yFormula: '0', zFormula: '100' },
+            dimensions: { widthFormula: 'W - 36', heightFormula: '600', depthFormula: 'D' },
+          },
+        ],
+      };
+
+      const module: Module = {
+        id: 'mod-cajonera',
+        code: 'MOD-CAJ',
+        name: 'Modulo Cajonera',
+        structureId: 'str-cajonera',
+        defaultOptionChoices: { PLACA: 'ch-m1' },
+      };
+
+      const bom = resolveComposedModule({
+        structure,
+        module,
+        catalog,
+        dims: { width: 800, height: 1800, depth: 500 },
+        optionChoices: { PLACA: 'ch-m1' },
+      });
+
+      // 3 drawer fronts generated
+      expect(bom.boardParts).toHaveLength(3);
+
+      // Local subspace W = 800 - 36 = 764. Local subspace H = 600.
+      // 3 vertical drawers with 3mm gap: unit H = (600 - 2*3)/3 = 198mm.
+      // Unit 0 Z = 100, Unit 1 Z = 301, Unit 2 Z = 502.
+      // Frente width = W_local - 4 = 764 - 4 = 760mm.
+      // Frente length = H_local - 4 = 198 - 4 = 194mm.
+
+      const p0 = bom.boardParts[0]!;
+      expect(p0.widthMm).toBe(760);
+      expect(p0.lengthMm).toBe(194);
+      expect(p0.z).toBe(102); // spaceZ(100) + defaultPoseForPlacement.z(2)
+
+      const p1 = bom.boardParts[1]!;
+      expect(p1.widthMm).toBe(760);
+      expect(p1.lengthMm).toBe(194);
+      expect(p1.z).toBe(303); // spaceZ(301) + defaultPoseForPlacement.z(2)
+
+      const p2 = bom.boardParts[2]!;
+      expect(p2.widthMm).toBe(760);
+      expect(p2.lengthMm).toBe(194);
+      expect(p2.z).toBe(504); // spaceZ(502) + defaultPoseForPlacement.z(2)
+    });
+  });
 });
+

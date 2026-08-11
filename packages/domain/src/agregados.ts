@@ -58,7 +58,7 @@ export function mirrorComponentInstance(
 
 /**
  * Resolves a ModuleAgregadoInstance into its constituent ComponentInstances and HardwareLines.
- * Multiplies quantities by instance.quantity and applies mirroring if requested.
+ * Multiplies quantities by instance.quantity, applies mirroring if requested, and applies optionOverrides.
  */
 export function resolveAgregadoInstance(
   instance: ModuleAgregadoInstance,
@@ -83,11 +83,91 @@ export function resolveAgregadoInstance(
     ? rawComponents.map(mirrorComponentInstance)
     : rawComponents;
 
-  const hardwareLines = (agregado.hardwareLines ?? []).map((h) => ({
-    ...h,
-    id: `${h.id}-agr-${instance.agregadoId}`,
-    quantity: h.quantity * mult,
-  }));
+  const rawHardware = agregado.hardwareLines ?? [];
+  const hardwareLines = rawHardware.map((h) => {
+    const overrideHardwareId =
+      instance.optionOverrides && instance.optionRole && instance.optionOverrides[instance.optionRole]
+        ? instance.optionOverrides[instance.optionRole]
+        : instance.optionOverrides && h.optionRole && instance.optionOverrides[h.optionRole]
+        ? instance.optionOverrides[h.optionRole]
+        : h.hardwareId;
+
+    return {
+      ...h,
+      id: `${h.id}-agr-${instance.agregadoId}`,
+      hardwareId: overrideHardwareId ?? h.hardwareId,
+      quantity: h.quantity * mult,
+    };
+  });
 
   return { components, hardwareLines };
+}
+
+export interface SubspaceUnit {
+  readonly unitIndex: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}
+
+/**
+ * Computes individual sub-space bounding boxes and 3D positions for N units of an Agregado instance.
+ */
+export function calculateAgregadoSubspaceUnits(
+  quantity: number,
+  spaceDims: { width: number; height: number; depth: number },
+  spacePos: { x: number; y: number; z: number },
+  layoutDirection: 'vertical' | 'horizontal' | 'none' = 'none',
+  gapMm = 0,
+): readonly SubspaceUnit[] {
+  const N = Math.max(1, quantity);
+  const gap = Math.max(0, gapMm);
+  const units: SubspaceUnit[] = [];
+
+  if (layoutDirection === 'vertical' && N > 1) {
+    const availableH = Math.max(1, spaceDims.height - (N - 1) * gap);
+    const unitH = availableH / N;
+    for (let i = 0; i < N; i++) {
+      units.push({
+        unitIndex: i,
+        x: spacePos.x,
+        y: spacePos.y,
+        z: spacePos.z + i * (unitH + gap),
+        width: spaceDims.width,
+        height: unitH,
+        depth: spaceDims.depth,
+      });
+    }
+  } else if (layoutDirection === 'horizontal' && N > 1) {
+    const availableW = Math.max(1, spaceDims.width - (N - 1) * gap);
+    const unitW = availableW / N;
+    for (let i = 0; i < N; i++) {
+      units.push({
+        unitIndex: i,
+        x: spacePos.x + i * (unitW + gap),
+        y: spacePos.y,
+        z: spacePos.z,
+        width: unitW,
+        height: spaceDims.height,
+        depth: spaceDims.depth,
+      });
+    }
+  } else {
+    for (let i = 0; i < N; i++) {
+      units.push({
+        unitIndex: i,
+        x: spacePos.x,
+        y: spacePos.y,
+        z: spacePos.z,
+        width: spaceDims.width,
+        height: spaceDims.height,
+        depth: spaceDims.depth,
+      });
+    }
+  }
+
+  return units;
 }
