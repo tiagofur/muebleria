@@ -155,6 +155,7 @@ describe('StructuresScreen', () => {
       active: true,
       presets: [],
       components: [{ componentId: 'comp-costado', quantity: 1 }],
+      agregados: [],
     });
   });
 
@@ -258,6 +259,7 @@ describe('StructuresScreen', () => {
       depthMm: 0,
       active: true,
       components: [{ componentId: 'comp-costado', quantity: 1 }],
+      agregados: [],
       presets: [
         {
           id: expect.any(String),
@@ -314,17 +316,16 @@ describe('StructuresScreen', () => {
     expect(screen.getByTestId('components-empty')).toBeTruthy();
   });
 
-  it('critique: tab order General → Componentes → Presets; save jumps to components', () => {
+  it('critique: tab order General → Componentes → Agregados → Presets; save jumps to components', () => {
+    const onCreate = vi.fn();
     render(
       <StructuresScreen
         structures={[]}
         optionGroups={[]}
         catalogComponents={[mockCatalogComponent]}
-        onCreate={vi.fn()}
+        onCreate={onCreate}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
-        onDeactivate={vi.fn()}
-        onReactivate={vi.fn()}
       />,
     );
 
@@ -338,6 +339,9 @@ describe('StructuresScreen', () => {
       'structure-editor-tab-components',
     );
     expect(tabButtons[2]?.getAttribute('data-testid')).toBe(
+      'structure-editor-tab-agregados',
+    );
+    expect(tabButtons[3]?.getAttribute('data-testid')).toBe(
       'structure-editor-tab-presets',
     );
 

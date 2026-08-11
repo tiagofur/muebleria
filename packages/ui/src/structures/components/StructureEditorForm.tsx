@@ -12,13 +12,14 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Component, DimensionPreset } from '@muebles/domain';
+import type { Agregado, Component, DimensionPreset } from '@muebles/domain';
 import {
   STRUCTURE_EDITOR_TABS,
   type StructureDraft,
   type StructureEditorTab,
 } from '../structureDraft';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
+import { StructureEditorAgregadosPanel } from './StructureEditorAgregadosPanel';
 import { StructureEditorComponentsPanel } from './StructureEditorComponentsPanel';
 import { StructureEditorGeneralPanel } from './StructureEditorGeneralPanel';
 import { StructureEditorPresetsPanel } from './StructureEditorPresetsPanel';
@@ -35,6 +36,7 @@ export type StructureEditorFormProps = {
   readonly setDraft: Dispatch<SetStateAction<StructureDraft>>;
   readonly editingId: string | null;
   readonly catalogComponents: readonly Component[];
+  readonly catalogAgregados?: readonly Agregado[];
   readonly catalogInput?: Module3DCatalogInput;
   readonly onRequestAddComponent: () => void;
   readonly previewPresetId: string;
@@ -54,6 +56,7 @@ export function StructureEditorForm({
   setDraft,
   editingId,
   catalogComponents,
+  catalogAgregados = [],
   catalogInput = {
     modules: [],
     structures: [],
@@ -131,7 +134,9 @@ export function StructureEditorForm({
               ? ` (${draft.presets.length})`
               : tab.id === 'components' && draft.components.length > 0
                 ? ` (${draft.components.length})`
-                : '';
+                : tab.id === 'agregados' && draft.agregados.length > 0
+                  ? ` (${draft.agregados.length})`
+                  : '';
           return (
             <button
               key={tab.id}
@@ -185,6 +190,13 @@ export function StructureEditorForm({
         catalogInput={catalogInput}
         previewPresetId={previewPresetId}
         onPreviewPresetChange={onPreviewPresetChange}
+      />
+
+      <StructureEditorAgregadosPanel
+        draft={draft}
+        setDraft={setDraft}
+        catalogAgregados={catalogAgregados}
+        hidden={editorTab !== 'agregados'}
       />
 
       <StructureEditorPresetsPanel

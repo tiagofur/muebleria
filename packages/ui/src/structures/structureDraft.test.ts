@@ -44,4 +44,38 @@ describe('structureToDraft', () => {
       },
     });
   });
+
+  it('preserves agregados instances with position, dimensions, layoutDirection and gap', () => {
+    const st: Structure = {
+      id: 's1',
+      code: 'EST-01',
+      name: 'Cuerpo',
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-cajon-1',
+          name: 'Set de Cajones',
+          quantity: 3,
+          layoutDirection: 'vertical',
+          gapMm: 3,
+          position: { zFormula: '100' },
+          dimensions: { widthFormula: 'W - 36', heightFormula: '600' },
+          mirrored: false,
+        },
+      ],
+    };
+    const draft = structureToDraft(st);
+    expect(draft.agregados).toHaveLength(1);
+    expect(draft.agregados[0]).toEqual({
+      id: 'inst-1',
+      agregadoId: 'agr-cajon-1',
+      name: 'Set de Cajones',
+      quantity: 3,
+      layoutDirection: 'vertical',
+      gapMm: 3,
+      position: { zFormula: '100' },
+      dimensions: { widthFormula: 'W - 36', heightFormula: '600' },
+      mirrored: false,
+    });
+  });
 });

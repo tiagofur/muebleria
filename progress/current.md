@@ -1,19 +1,21 @@
-# Sesión — F082 Motor Paramétrico de Agregados (#294, Fase 1)
+# Sesión — F083 UI de Agregados en Muebles (#295, Fase 2)
 
 - **Fecha:** 2026-08-11
-- **Scope:** Implementación de F082 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #294)
+- **Scope:** Implementación de F083 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #295)
 
-## Contexto de la sesión
+## Hecho — F082 Motor Paramétrico de Agregados (#294, Fase 1)
 
-Análisis conceptual y auditoría de Agregados completada. Se creó la especificación técnica en `docs/agregados-subassemblies-plan.md` y 4 GitHub Issues (#294-#297).
-Se acordó implementar en paralelo la Fase 1 (Dominio) y Fase 2 (UI Estructuras) sin interferir con las mejoras 3D de Proyectar.
+- `ModuleAgregadoInstance` extendido en `packages/domain/src/types.ts` con `position`, `dimensions`, `layoutDirection`, `gapMm` y `optionOverrides`.
+- `agregados.ts` implementa `calculateAgregadoSubspaceUnits(...)` para desglosar y apilar N unidades (vertical/horizontal/none) con separación `gapMm`.
+- `bom.ts` evalúa fórmulas dentro del sub-espacio ($W_{\text{local}}, H_{\text{local}}, D_{\text{local}}$) y desplaza las coordenadas 3D de cada pieza producida.
+- 402/402 tests en `@muebles/domain` pasando ✓.
 
-## En Curso — F082 Motor Paramétrico de Agregados (#294)
+## En Curso — F083 UI de Agregados en Muebles (#295, Fase 2)
 
-1. Extender `ModuleAgregadoInstance` en `packages/domain/src/types.ts`.
-2. Actualizar `resolveAgregadoInstance` en `packages/domain/src/agregados.ts` para calcular Bounding Box local y apilamiento.
-3. Actualizar `bom.ts` para evaluar fórmulas dentro de $W_{\text{local}}, H_{\text{local}}, D_{\text{local}}$.
-4. Unit tests en `packages/domain/src/agregados.test.ts`.
+1. Añadir pestaña **Agregados** en `StructureEditorForm.tsx` y `StructureDraft` (`packages/ui/src/structures`).
+2. Implementar sub-componente de lista y edición de `ModuleAgregadoInstance` con selector de Agregados del catálogo.
+3. Formulario para parametrizar: posición $Z$, ancho libre, alto del hueco, cantidad $N$, apilamiento vertical/horizontal, luz `gapMm`, espejeado `mirrored` y overrides de herrajes.
+4. Unit tests en `packages/ui/src/structures`.
 
 ## Hecho — Planeamiento
 

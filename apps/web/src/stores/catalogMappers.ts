@@ -60,6 +60,20 @@ export function draftToStructure(id: string, draft: StructureDraft): Structure {
           overrides: c.overrides,
         }))
       : undefined,
+    agregados: draft.agregados && draft.agregados.length > 0
+      ? draft.agregados.map((a) => ({
+          id: a.id,
+          agregadoId: a.agregadoId,
+          name: a.name?.trim() || undefined,
+          position: a.position ? { ...a.position } : undefined,
+          dimensions: a.dimensions ? { ...a.dimensions } : undefined,
+          quantity: a.quantity,
+          layoutDirection: a.layoutDirection,
+          gapMm: a.gapMm,
+          mirrored: a.mirrored,
+          optionOverrides: a.optionOverrides ? { ...a.optionOverrides } : undefined,
+        }))
+      : undefined,
   };
 }
 

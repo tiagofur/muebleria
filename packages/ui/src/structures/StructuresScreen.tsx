@@ -52,6 +52,7 @@ export interface StructuresScreenProps {
   readonly structures: readonly Structure[];
   readonly optionGroups: readonly OptionGroup[];
   readonly catalogComponents?: readonly Component[];
+  readonly catalogAgregados?: readonly Agregado[];
   readonly catalogMaterials?: readonly MaterialBoard[];
   readonly catalogEdges?: readonly EdgeBand[];
   readonly catalogHardware?: readonly Hardware[];
@@ -82,6 +83,7 @@ export function StructuresScreen({
   structures,
   optionGroups,
   catalogComponents = [],
+  catalogAgregados = [],
   catalogMaterials = [],
   catalogEdges = [],
   catalogHardware = [],
@@ -485,6 +487,7 @@ export function StructuresScreen({
           setDraft={setDraft}
           editingId={editingId}
           catalogComponents={catalogComponents}
+          catalogAgregados={catalogAgregados}
           catalogInput={catalogInput}
           onRequestAddComponent={() => {
             setAddComponentOpen(true);

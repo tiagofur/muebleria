@@ -2,14 +2,18 @@
  * Structure editor draft helpers.
  */
 
-import type { DimensionPreset, Structure } from '@muebles/domain';
+import type { DimensionPreset, ModuleAgregadoInstance, Structure } from '@muebles/domain';
 import type { ComponentInstanceDraft } from '../modules';
 
 /**
- * Tab order: General → Componentes (primary job) → Presets.
+ * Tab order: General → Componentes → Agregados → Presets.
  * Vista 3D is co-located on Componentes (live sticky preview), not a separate tab.
  */
-export type StructureEditorTab = 'general' | 'components' | 'presets';
+export type StructureEditorTab =
+  | 'general'
+  | 'components'
+  | 'agregados'
+  | 'presets';
 
 export const STRUCTURE_EDITOR_TABS: readonly {
   readonly id: StructureEditorTab;
@@ -17,6 +21,7 @@ export const STRUCTURE_EDITOR_TABS: readonly {
 }[] = [
   { id: 'general', label: 'General' },
   { id: 'components', label: 'Componentes' },
+  { id: 'agregados', label: 'Agregados' },
   { id: 'presets', label: 'Presets' },
 ] as const;
 
@@ -28,6 +33,7 @@ export interface StructureDraft {
   depthMm: number;
   presets: DimensionPreset[];
   components: ComponentInstanceDraft[];
+  agregados: ModuleAgregadoInstance[];
   notes: string;
   active: boolean;
 }
@@ -41,6 +47,7 @@ export function emptyStructureDraft(): StructureDraft {
     depthMm: 0,
     presets: [],
     components: [],
+    agregados: [],
     notes: '',
     active: true,
   };
@@ -62,6 +69,14 @@ export function structureToDraft(item: Structure): StructureDraft {
           quantity: c.quantity,
           placementOverride: c.placementOverride ?? '',
           overrides: c.overrides,
+        }))
+      : [],
+    agregados: item.agregados
+      ? item.agregados.map((a) => ({
+          ...a,
+          position: a.position ? { ...a.position } : undefined,
+          dimensions: a.dimensions ? { ...a.dimensions } : undefined,
+          optionOverrides: a.optionOverrides ? { ...a.optionOverrides } : undefined,
         }))
       : [],
   };

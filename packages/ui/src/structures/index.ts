@@ -4,6 +4,7 @@ export {
 } from './StructuresScreen';
 
 export { StructureRevisionBadge } from './components/StructureRevisionBadge';
+export { StructureEditorAgregadosPanel } from './components/StructureEditorAgregadosPanel';
 export { resolveStructure3DPreview } from './structure3dPreview';
 
 export type { StructureDraft, StructureEditorTab } from './structureDraft';
