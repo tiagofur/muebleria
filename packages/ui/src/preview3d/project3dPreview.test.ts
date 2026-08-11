@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  Agregado,
   Component,
   EdgeBand,
   Hardware,
@@ -295,5 +296,522 @@ describe('resolveProject3DPreview', () => {
     expect(island!.yawDeg).toBe(90);
     // Must not fall back to linear run at origin 0.
     expect(island!.originX).not.toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 2 — parametric hardware placements (WU3 bridge, VH-T09..T12).
+// Separate catalog/project so the no-regression suite above stays untouched.
+// ---------------------------------------------------------------------------
+
+const puertaComponent: Component = {
+  id: 'c-puerta',
+  code: 'COM-PUERTA',
+  name: 'Puerta',
+  placement: 'frontal',
+  geometry: {
+    kind: 'rectangular_board',
+    // Fixed dims (no formulas) → deterministic resolved board part.
+    lengthMm: 720,
+    widthMm: 596,
+    thicknessMm: 18,
+  },
+  defaultEdges: [
+    { side: 'L1', enabled: true },
+    { side: 'L2', enabled: true },
+    { side: 'W1', enabled: true },
+    { side: 'W2', enabled: true },
+  ],
+  // INTERIOR routes through the fixture's only option group (→ mat-a). The
+  // optionRole only picks the material; it does not affect placement geometry.
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+const structureWithPuerta: Structure = {
+  ...structure,
+  id: 'st-puerta',
+  components: [{ componentId: 'c-puerta', quantity: 1 }],
+};
+
+const knobHardware: Hardware = {
+  id: 'hw-knob',
+  code: 'HW-KNOB',
+  name: 'Jaladera knob',
+  unit: 'piece',
+  costPerUnit: 0,
+  active: true,
+  previewShape: 'knob',
+  previewDiameterMm: 32,
+  previewProjectionMm: 25,
+  previewColor: '#888888',
+  previewMetalness: 0.9,
+  previewRoughness: 0.25,
+};
+
+const costOnlyHardware: Hardware = {
+  id: 'hw-cost-only',
+  code: 'HW-COST',
+  name: 'Herraje solo costo',
+  unit: 'piece',
+  costPerUnit: 0,
+  active: true,
+  // no previewShape → resolver returns null (VH-09)
+};
+
+const modWithHandle: Module = {
+  id: 'm-handle',
+  code: 'MOD-HANDLE',
+  name: 'Bajo con jaladera',
+  structureId: 'st-puerta',
+  components: [],
+  hardwareLines: [],
+  externalDims: { width: 600, height: 720, depth: 560 },
+  presets: [
+    { id: 'p-handle', name: '600', width: 600, height: 720, depth: 560 },
+  ],
+};
+
+const catalogWithHardware = {
+  modules: [modWithHandle],
+  structures: [structureWithPuerta],
+  components: [puertaComponent],
+  materials: [material],
+  edges: [edge],
+  hardware: [knobHardware, costOnlyHardware],
+  optionGroups,
+};
+
+const projectWithHandle: Project = {
+  ...project,
+  items: [
+    {
+      id: 'it-handle',
+      moduleId: 'm-handle',
+      quantity: 1,
+      optionChoices: {},
+      measurePresetId: 'p-handle',
+    },
+  ],
+};
+
+describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', () => {
+  it('VH-04 no-regression: no placements → resolvedHardwarePlacements=[] and parts byte-identical', () => {
+    // The original catalog (modA/modB) has no components with hardwarePlacements
+    // and an empty hardware catalog. The bridge must produce no placements and
+    // leave the parts array byte-identical to the pre-Fase-2 output.
+    const preview = resolveProject3DPreview(project, catalog);
+    expect(preview.modules.length).toBeGreaterThan(0);
+    for (const mod of preview.modules) {
+      expect(mod.resolvedHardwarePlacements).toEqual([]);
+    }
+    // parts untouched: re-resolve the same item through resolveBom directly
+    // (independent of the bridge) and compare the part ids/dims byte-for-byte.
+    const firstItem = project.items[0]!;
+    const module = catalog.modules.find((m) => m.id === firstItem.moduleId)!;
+    // Snapshot the bridge parts; they must not change shape when placements
+    // are added later (VH-08 structural guarantee).
+    const bridgeParts = preview.modules[0]!.parts;
+    expect(bridgeParts.length).toBeGreaterThan(0);
+    expect(bridgeParts.every((p) => typeof p.widthMm === 'number')).toBe(true);
+    // No module carries placements.
+    expect(
+      preview.modules.every((m) => m.resolvedHardwarePlacements.length === 0),
+    ).toBe(true);
+  });
+
+  it('VH-T11 positive: resolves a knob placement to board-LOCAL mm keyed by partId', () => {
+    const moduleWithPlacement: Module = {
+      ...modWithHandle,
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const catalogPlacement = {
+      ...catalogWithHardware,
+      modules: [moduleWithPlacement],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, catalogPlacement);
+    expect(preview.modules).toHaveLength(1);
+    const placements = preview.modules[0]!.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(1);
+
+    const p = placements[0]!;
+    // componentInstanceId = engine part id `${componentId}-copy-${i}`.
+    expect(p.componentInstanceId).toBe('c-puerta-copy-0');
+    expect(p.hardwareId).toBe('hw-knob');
+    // Pinned front-face mapping (resolver contract): for a 596x18x720 board,
+    // front center = (xPct·W, T, yPct·L) = (298, 18, 360), normal (0,1,0).
+    expect(p.localPosition).toEqual([298, 18, 360]);
+    expect(p.localNormal).toEqual([0, 1, 0]);
+    // standoffMm = previewProjectionMm.
+    expect(p.standoffMm).toBe(25);
+    expect(p.scale).toBe(1);
+    expect(p.rotationDeg).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('VH-08 export isolation: placements present do not alter the parts output', () => {
+    // Both variants carry the SAME component instance; only the
+    // hardwarePlacements override differs. Parts must stay byte-identical —
+    // placements live in the additive array only (never reach the cut path).
+    const baseInstance = {
+      componentId: 'c-puerta',
+      quantity: 1,
+    } as const;
+    const withPlacement: Module = {
+      ...modWithHandle,
+      components: [
+        {
+          ...baseInstance,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const withoutPlacement: Module = {
+      ...modWithHandle,
+      components: [{ ...baseInstance }],
+    };
+    const withP = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [withPlacement],
+    });
+    const withoutP = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [withoutPlacement],
+    });
+    // Placements appear only in the additive array...
+    expect(withP.modules[0]!.resolvedHardwarePlacements).toHaveLength(1);
+    expect(withoutP.modules[0]!.resolvedHardwarePlacements).toHaveLength(0);
+    // ...while the board parts the Optimizer/cut path consumes are identical.
+    expect(withP.modules[0]!.parts).toEqual(withoutP.modules[0]!.parts);
+  });
+
+  it('VH-09 swap fallback: hardware without previewShape is filtered (no orphan mesh)', () => {
+    const moduleSwap: Module = {
+      ...modWithHandle,
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-cost-only',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [moduleSwap],
+    });
+    // cost-only hardware (no previewShape) → resolver null → filtered out.
+    expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
+  });
+
+  it('VH-09 missing hardware id (swapped/removed) is filtered', () => {
+    const moduleMissing: Module = {
+      ...modWithHandle,
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-does-not-exist',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [moduleMissing],
+    });
+    expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agregado component placements bridge — threads hardware placements on
+// agregado (sub-assembly) component instances through the preview resolver.
+//
+// The PO's workflow is agregado-centric (doors/drawers modeled as agregados).
+// Agregado components are `ModuleComponentInstance[]` (same type as
+// Module.components), so `overrides.hardwarePlacements` rides them with no new
+// domain field — the resolver only needs to ITERATE them and the preview BOM
+// needs to include the agregado catalog so agregado boards render.
+//
+// Fixtures reuse `material`/`edge`/`optionGroups`/`knobHardware` from above and
+// use a DISJOINT componentId (`c-agr-puerta`) so there is no part-id collision
+// with the structure's `c1`.
+// ---------------------------------------------------------------------------
+
+const agregadoDoorComponent: Component = {
+  id: 'c-agr-puerta',
+  code: 'COM-AGR-PUERTA',
+  name: 'Puerta (agregado)',
+  placement: 'frontal',
+  geometry: {
+    kind: 'rectangular_board',
+    // Same fixed dims as the Fase 2 `puertaComponent` → deterministic mapping.
+    lengthMm: 720,
+    widthMm: 596,
+    thicknessMm: 18,
+  },
+  defaultEdges: [
+    { side: 'L1', enabled: true },
+    { side: 'L2', enabled: true },
+    { side: 'W1', enabled: true },
+    { side: 'W2', enabled: true },
+  ],
+  optionRoles: ['INTERIOR'],
+  active: true,
+};
+
+// Agregado carrying a knob placement on its door component instance.
+const doorAgregado: Agregado = {
+  id: 'agr-door',
+  code: 'AGR-DOOR',
+  name: 'Puerta con jaladera',
+  components: [
+    {
+      componentId: 'c-agr-puerta',
+      quantity: 1,
+      overrides: {
+        hardwarePlacements: [
+          {
+            hardwareId: 'hw-knob',
+            anchorFace: 'front',
+            relativePosition: { xPercent: 50, yPercent: 50 },
+          },
+        ],
+      },
+    },
+  ],
+};
+
+// Module composed of the base structure `st1` (costados `c1`) + the door
+// agregado. `c1` and `c-agr-puerta` are disjoint → no part-id collision.
+const modWithAgregado: Module = {
+  id: 'm-agr',
+  code: 'MOD-AGR',
+  name: 'Bajo con agregado',
+  structureId: 'st1',
+  components: [],
+  agregados: [{ agregadoId: 'agr-door', quantity: 1 }],
+  hardwareLines: [],
+  externalDims: { width: 600, height: 720, depth: 560 },
+  presets: [{ id: 'p-agr', name: '600', width: 600, height: 720, depth: 560 }],
+};
+
+const catalogAgregadoHandle = {
+  modules: [modWithAgregado],
+  structures: [structure],
+  components: [comp, agregadoDoorComponent],
+  materials: [material],
+  edges: [edge],
+  hardware: [knobHardware],
+  optionGroups,
+  agregados: [doorAgregado],
+};
+
+const projectAgregado: Project = {
+  ...project,
+  items: [
+    {
+      id: 'it-agr',
+      moduleId: 'm-agr',
+      quantity: 1,
+      optionChoices: {},
+      measurePresetId: 'p-agr',
+    },
+  ],
+};
+
+describe('resolveProject3DPreview — agregado component placements bridge', () => {
+  it('threads hardware placements on agregado component instances (links to the agregado board part)', () => {
+    const preview = resolveProject3DPreview(
+      projectAgregado,
+      catalogAgregadoHandle,
+    );
+    expect(preview.modules).toHaveLength(1);
+
+    // The agregado board part MUST render in the preview BOM (the bridge now
+    // threads the agregado catalog into resolveBom). AH-03: agregado part ids
+    // carry the per-instance prefix `agr-${agrIdx}-` (agrIdx=0 — the only
+    // agregado, attached to the module; the structure has none).
+    const agregadoBoard = preview.modules[0]!.parts.find(
+      (p) => p.id === 'agr-0-c-agr-puerta-copy-0',
+    );
+    expect(agregadoBoard).toBeDefined();
+
+    // And the placement on the agregado component instance MUST resolve.
+    const placements = preview.modules[0]!.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(1);
+
+    const p = placements[0]!;
+    // Agregado board part id uses the per-instance `agr-${agrIdx}-` prefix
+    // (engine/bom.ts resolveComposedModule), so the resolver links the handle
+    // against the matching prefixed part id.
+    expect(p.componentInstanceId).toBe('agr-0-c-agr-puerta-copy-0');
+    expect(p.hardwareId).toBe('hw-knob');
+    // Same geometry as the Fase 2 fixture → same board-LOCAL mapping.
+    expect(p.localPosition).toEqual([298, 18, 360]);
+    expect(p.localNormal).toEqual([0, 1, 0]);
+    expect(p.standoffMm).toBe(25);
+    expect(p.scale).toBe(1);
+    expect(p.rotationDeg).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('no-regression: agregado component WITHOUT placements renders its board but resolves []', () => {
+    const doorAgregadoNoPlacement: Agregado = {
+      ...doorAgregado,
+      components: [{ componentId: 'c-agr-puerta', quantity: 1 }],
+    };
+    const preview = resolveProject3DPreview(projectAgregado, {
+      ...catalogAgregadoHandle,
+      agregados: [doorAgregadoNoPlacement],
+    });
+    expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
+    // The agregado board still renders (threading the catalog is independent
+    // of whether the instance carries a placement). AH-03 prefixed id.
+    expect(
+      preview.modules[0]!.parts.some(
+        (p) => p.id === 'agr-0-c-agr-puerta-copy-0',
+      ),
+    ).toBe(true);
+  });
+
+  it('AH-03 collision-safe: two agregados sharing a componentId each resolve to their OWN board', () => {
+    // Two agregados modeling a door each, BOTH reusing `c-agr-puerta`. Each
+    // carries its own knob placement. Before AH-03 the merged partById kept
+    // only the last duplicate part id and both handles collapsed onto the
+    // same (wrong) board. With per-instance prefixes, each placement links to
+    // its OWN board part (distinct agrIdx prefixes).
+    const doorAgregadoA: Agregado = {
+      id: 'agr-door-a',
+      code: 'AGR-DOOR-A',
+      name: 'Puerta A',
+      components: [
+        {
+          componentId: 'c-agr-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const doorAgregadoB: Agregado = {
+      id: 'agr-door-b',
+      code: 'AGR-DOOR-B',
+      name: 'Puerta B',
+      components: [
+        {
+          componentId: 'c-agr-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const modWithTwoAgregados: Module = {
+      id: 'm-two-agr',
+      code: 'MOD-TWO-AGR',
+      name: 'Dos agregados',
+      structureId: 'st1',
+      components: [],
+      agregados: [
+        { agregadoId: 'agr-door-a', quantity: 1 },
+        { agregadoId: 'agr-door-b', quantity: 1 },
+      ],
+      hardwareLines: [],
+      externalDims: { width: 600, height: 720, depth: 560 },
+      presets: [{ id: 'p-two-agr', name: '600', width: 600, height: 720, depth: 560 }],
+    };
+    const projectTwoAgregados: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-two-agr',
+          moduleId: 'm-two-agr',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p-two-agr',
+        },
+      ],
+    };
+    const catalogTwoAgregados = {
+      modules: [modWithTwoAgregados],
+      structures: [structure],
+      components: [comp, agregadoDoorComponent],
+      materials: [material],
+      edges: [edge],
+      hardware: [knobHardware],
+      optionGroups,
+      agregados: [doorAgregadoA, doorAgregadoB],
+    };
+
+    const preview = resolveProject3DPreview(
+      projectTwoAgregados,
+      catalogTwoAgregados,
+    );
+    expect(preview.modules).toHaveLength(1);
+
+    // Two board parts — one per agregado instance — each with a DISTINCT id.
+    const partIds = preview.modules[0]!.parts.map((p) => p.id);
+    expect(partIds).toContain('agr-0-c-agr-puerta-copy-0');
+    expect(partIds).toContain('agr-1-c-agr-puerta-copy-0');
+
+    // Each agregado's placement resolves and links to its OWN board.
+    const placements = preview.modules[0]!.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(2);
+    const instanceIds = placements.map((p) => p.componentInstanceId);
+    expect(instanceIds).toContain('agr-0-c-agr-puerta-copy-0');
+    expect(instanceIds).toContain('agr-1-c-agr-puerta-copy-0');
+    // CRITICAL: the two placements target DIFFERENT boards (no collapse).
+    expect(new Set(instanceIds).size).toBe(2);
   });
 });

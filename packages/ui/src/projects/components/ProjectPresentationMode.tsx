@@ -870,6 +870,7 @@ export function ProjectPresentationMode({
                     baseClearanceMm: m.baseClearanceMm,
                     showCountertop: m.showCountertop,
                     showOuterGhost: true,
+                    resolvedHardwarePlacements: m.resolvedHardwarePlacements,
                   }))}
                   totalWidth={preview.totalWidth}
                   totalHeight={preview.totalHeight}
@@ -885,6 +886,7 @@ export function ProjectPresentationMode({
                   exportFormat={exportFormat}
                   onExportComplete={() => setExportFormat(null)}
                   exportProjectName={project.name}
+                  hardwareCatalog={catalog.hardware}
                 />
               </Suspense>
             ) : (

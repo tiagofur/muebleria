@@ -223,7 +223,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 
 func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, notes, active, created_at, updated_at
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, notes, active, created_at, updated_at
 		FROM hardwares
 		ORDER BY name ASC;
 	`
@@ -239,7 +239,7 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 		var notes *string
 		var imageURL *string
 		var packageSize *float64
-		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
+		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -389,7 +389,7 @@ func (s *PostgresStore) ReactivateEdgeBand(ctx context.Context, id string) error
 
 func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, notes, active, created_at, updated_at
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, notes, active, created_at, updated_at
 		FROM hardwares
 		WHERE id = $1;
 	`
@@ -398,7 +398,7 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 	var notes *string
 	var imageURL *string
 	var packageSize *float64
-	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
+	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -421,11 +421,11 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 	}
 	if h.ID != "" {
 		query := `
-			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, image_url, notes, active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, notes, active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.Notes, h.Active).
+		err := s.Pool.QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, h.Notes, h.Active).
 			Scan(&h.CreatedAt, &h.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating hardware: %w", err)
@@ -433,11 +433,11 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 		return nil
 	}
 	query := `
-		INSERT INTO hardwares (code, name, unit, cost_per_unit, package_size, image_url, notes, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO hardwares (code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, notes, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.Notes, h.Active).
+	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, h.Notes, h.Active).
 		Scan(&h.ID, &h.CreatedAt, &h.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating hardware: %w", err)
@@ -452,11 +452,11 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain
 	}
 	query := `
 		UPDATE hardwares
-		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, notes = $7, active = $8, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $9
+		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, preview_shape = $7, preview_size_mm = $8, preview_projection_mm = $9, preview_diameter_mm = $10, preview_color = $11, preview_roughness = $12, preview_metalness = $13, preview_clearcoat = $14, notes = $15, active = $16, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $17
 		RETURNING updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.Notes, h.Active, id).
+	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, h.Notes, h.Active, id).
 		Scan(&h.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

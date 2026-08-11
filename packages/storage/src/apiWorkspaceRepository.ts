@@ -5,6 +5,7 @@ import {
 } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import {
+  ambientMaterialToApi,
   catalogFromApi,
   ambientMaterialToApi,
   categoryToApi,
@@ -318,6 +319,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
           ambientMaterialToApi(am),
         );
       }
+    }
     }
   }
 

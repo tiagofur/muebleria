@@ -24,6 +24,8 @@ export type {
   EdgeAssignment,
   BoardPart,
   HardwareLine,
+  AnchorFace,
+  HardwarePlacement,
   ExternalDims,
   Module,
   Structure,
@@ -168,6 +170,14 @@ export {
   type SpatialRotation,
   type Vec3,
 } from './spatialAnchor';
+
+export {
+  resolveHardwarePlacement,
+  normalizeHardwarePreview,
+  type ResolveHardwarePlacementParams,
+  type ResolvedHardwarePlacement,
+  type NormalizedHardwarePreview,
+} from './hardwarePlacement';
 
 export {
   previewPartForComponent,

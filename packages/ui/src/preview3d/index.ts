@@ -13,6 +13,19 @@ export {
   type PaintDrop,
 } from './FurnitureScene3D';
 export {
+  HardwareMesh,
+  degToRad,
+  hardwarePlacementPosition,
+  hardwarePlacementRotation,
+  normalOrientationQuaternion,
+  resolveHardwareGeometry,
+  DEFAULT_KNOB_DIAMETER_MM,
+  DEFAULT_BAR_LENGTH_MM,
+  DEFAULT_BAR_DIAMETER_MM,
+  DEFAULT_PROJECTION_MM,
+  type HardwareGeometry,
+} from './HardwareMesh';
+export {
   DEFAULT_SCENE_LIGHTING_MODE,
   CATALOG_PHOTO_BACKGROUND,
   planSceneLighting,
@@ -69,6 +82,7 @@ export {
 } from './project3dLayout';
 export {
   resolveProject3DPreview,
+  resolveModuleHardwarePlacements,
   type Project3DPreviewResult,
   type ProjectModule3DInstance,
   type ResolveProject3DOptions,

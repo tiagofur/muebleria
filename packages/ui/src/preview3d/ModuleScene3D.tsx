@@ -4,7 +4,11 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type {
+  Hardware,
+  ResolvedBoardPart,
+  ResolvedHardwarePlacement,
+} from '@muebles/domain';
 import { FurnitureScene3D } from './FurnitureScene3D';
 import type {
   BoardColorMode,
@@ -45,6 +49,18 @@ export type ModuleScene3DProps = {
    * Catalog product stills should pass false.
    */
   readonly showOuterGhost?: boolean;
+  /**
+   * Parametric hardware placements (jaladeras) resolved to board-LOCAL mm
+   * (Fase 2). Forwarded into the single module entry of FurnitureScene3D,
+   * which attaches each placement to its board mesh by componentInstanceId.
+   * Optional/empty → no handles (byte-identical to pre-Fase-2 scene).
+   */
+  readonly resolvedHardwarePlacements?: readonly ResolvedHardwarePlacement[];
+  /**
+   * Hardware catalog used to look up preview geometry/PBR for the resolved
+   * placements. Optional: when omitted (or no placements), no handles render.
+   */
+  readonly hardwareCatalog?: readonly Hardware[];
 };
 
 /** Detect WebGL so tests/jsdom can skip Canvas. */
@@ -81,6 +97,8 @@ export function ModuleScene3D({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   showAxes = true,
   showOuterGhost = true,
+  resolvedHardwarePlacements,
+  hardwareCatalog,
 }: ModuleScene3DProps): ReactNode {
   return (
     <FurnitureScene3D
@@ -95,6 +113,7 @@ export function ModuleScene3D({
           originY: 0,
           originZ: 0,
           showOuterGhost,
+          resolvedHardwarePlacements,
         },
       ]}
       totalWidth={width}
@@ -117,6 +136,7 @@ export function ModuleScene3D({
       onSelectPart={onSelectPart}
       isolateSelected={isolateSelected}
       lightingMode={lightingMode}
+      hardwareCatalog={hardwareCatalog}
     />
   );
 }

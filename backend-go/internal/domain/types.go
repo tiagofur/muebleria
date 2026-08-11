@@ -128,11 +128,22 @@ type Hardware struct {
 	// Nil = no purchase rounding.
 	PackageSize *float64 `json:"package_size,omitempty"`
 	// ImageURL relative media path (F040).
-	ImageURL  string    `json:"image_url,omitempty"`
-	Notes     string    `json:"notes,omitempty"`
-	Active    bool      `json:"active"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ImageURL string `json:"image_url,omitempty"`
+	Notes    string `json:"notes,omitempty"`
+	// Preview geometry for the 3D renderer (Fase 2: visible handles). All
+	// optional; nil = cost-only hardware (no mesh rendered). Pointer types so
+	// metalness/clearcoat 0.0 round-trips (never nullIfZeroFloat).
+	PreviewShape        *string   `json:"preview_shape,omitempty"`
+	PreviewSizeMm       *float64  `json:"preview_size_mm,omitempty"`
+	PreviewProjectionMm *float64  `json:"preview_projection_mm,omitempty"`
+	PreviewDiameterMm   *float64  `json:"preview_diameter_mm,omitempty"`
+	PreviewColor        *string   `json:"preview_color,omitempty"`
+	PreviewRoughness    *float64  `json:"preview_roughness,omitempty"`
+	PreviewMetalness    *float64  `json:"preview_metalness,omitempty"`
+	PreviewClearcoat    *float64  `json:"preview_clearcoat,omitempty"`
+	Active              bool      `json:"active"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 type OptionGroup struct {
@@ -207,7 +218,7 @@ type Module struct {
 	Presets []DimensionPreset `json:"presets,omitempty"`
 	// Components are module-level component instances (doors, shelves, …) for
 	// composed modules, beyond those inherited from StructureID.
-	Components   []ComponentInstance `json:"components,omitempty"`
+	Components []ComponentInstance `json:"components,omitempty"`
 	// ImageURL relative media path for sales showcase (F040).
 	ImageURL      string         `json:"image_url,omitempty"`
 	BoardParts    []BoardPart    `json:"board_parts"`
@@ -298,24 +309,50 @@ type StructureRevision struct {
 
 // ComponentInstance is a reference to a reusable component placed in a structure or module.
 type ComponentInstance struct {
-	ComponentID       string             `json:"componentId"`
-	Quantity          int                `json:"quantity"`
+	ComponentID       string              `json:"componentId"`
+	Quantity          int                 `json:"quantity"`
 	PlacementOverride *ComponentPlacement `json:"placementOverride,omitempty"`
 	// Overrides allow per-instance edge/formula overrides (mirrors TS overrides).
 	Overrides *ComponentInstanceOverrides `json:"overrides,omitempty"`
 }
 
+// HardwarePlacement attaches a visible hardware instance to a component face for
+// the 3D preview (Fase 2: visible handles). Distinct from Perforation
+// (CNC/machining — different lifecycle/consumers). Rides the component-instance
+// overrides JSONB; no dedicated column or migration.
+type HardwarePlacement struct {
+	HardwareID       string               `json:"hardwareId"`
+	AnchorFace       string               `json:"anchorFace"` // front|back|left|right|top|bottom
+	RelativePosition HardwareRelPosition  `json:"relativePosition"`
+	RotationDeg      *HardwareRotationDeg `json:"rotationDeg,omitempty"`
+	Scale            *float64             `json:"scale,omitempty"`
+}
+
+// HardwareRelPosition is the 2D position on the face plane (percent).
+type HardwareRelPosition struct {
+	XPercent float64 `json:"xPercent"`
+	YPercent float64 `json:"yPercent"`
+}
+
+// HardwareRotationDeg is an optional per-axis rotation in degrees (board frame).
+type HardwareRotationDeg struct {
+	X float64 `json:"x,omitempty"`
+	Y float64 `json:"y,omitempty"`
+	Z float64 `json:"z,omitempty"`
+}
+
 // ComponentInstanceOverrides mirrors ModuleComponentInstance.overrides from TS.
 type ComponentInstanceOverrides struct {
-	Edges         []EdgeAssignment `json:"edges,omitempty"`
-	LengthFormula string           `json:"lengthFormula,omitempty"`
-	WidthFormula  string           `json:"widthFormula,omitempty"`
-	XFormula      string           `json:"xFormula,omitempty"`
-	YFormula      string           `json:"yFormula,omitempty"`
-	ZFormula      string           `json:"zFormula,omitempty"`
-	RotateX       *int             `json:"rotateX,omitempty"`
-	RotateY       *int             `json:"rotateY,omitempty"`
-	RotateZ       *int             `json:"rotateZ,omitempty"`
+	Edges              []EdgeAssignment    `json:"edges,omitempty"`
+	LengthFormula      string              `json:"lengthFormula,omitempty"`
+	WidthFormula       string              `json:"widthFormula,omitempty"`
+	XFormula           string              `json:"xFormula,omitempty"`
+	YFormula           string              `json:"yFormula,omitempty"`
+	ZFormula           string              `json:"zFormula,omitempty"`
+	RotateX            *int                `json:"rotateX,omitempty"`
+	RotateY            *int                `json:"rotateY,omitempty"`
+	RotateZ            *int                `json:"rotateZ,omitempty"`
+	HardwarePlacements []HardwarePlacement `json:"hardwarePlacements,omitempty"`
 }
 
 // ComponentPlacement represents where a component goes in the cabinet structure.
@@ -402,13 +439,13 @@ type Project struct {
 	KitchenLayout json.RawMessage `json:"kitchen_layout,omitempty"`
 	// PlanEditSession soft-locks Proyectar for multi-user collaboration.
 	// Shape: { "user_id", "user_name", "expires_at" }.
-	PlanEditSession json.RawMessage `json:"plan_edit_session,omitempty"`
+	PlanEditSession       json.RawMessage `json:"plan_edit_session,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
 	// Shape: { revision, revision_at, fingerprint, last_export_* }.
-	Production json.RawMessage `json:"production,omitempty"`
-	Notes         string          `json:"notes,omitempty"`
+	Production    json.RawMessage     `json:"production,omitempty"`
+	Notes         string              `json:"notes,omitempty"`
 	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
 	CreatedAt     time.Time           `json:"created_at"`
 	UpdatedAt     time.Time           `json:"updated_at"`
@@ -419,21 +456,21 @@ type Project struct {
 // desde plantilla" clones a fresh draft Project from one of these (the clone
 // logic lives in the TS domain; Go only persists CRUD).
 type ProjectTemplate struct {
-	ID                string        `json:"id"`
-	Name              string        `json:"name"`
-	Currency          string        `json:"currency"`
-	MarginFactor      float64       `json:"margin_factor"`
-	LaborFixedCost    float64       `json:"labor_fixed_cost"`
-	Items             []ProjectItem `json:"items"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Currency            string            `json:"currency"`
+	MarginFactor        float64           `json:"margin_factor"`
+	LaborFixedCost      float64           `json:"labor_fixed_cost"`
+	Items               []ProjectItem     `json:"items"`
 	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
 	// MeasureDefaults / KitchenLayout / InstallationChecklist are JSON blobs
 	// mirroring the Project fields of the same names.
-	MeasureDefaults        json.RawMessage `json:"measure_defaults,omitempty"`
-	KitchenLayout          json.RawMessage `json:"kitchen_layout,omitempty"`
-	InstallationChecklist  json.RawMessage `json:"installation_checklist,omitempty"`
-	Notes                  string          `json:"notes,omitempty"`
-	CreatedAt              time.Time       `json:"created_at"`
-	UpdatedAt              time.Time       `json:"updated_at"`
+	MeasureDefaults       json.RawMessage `json:"measure_defaults,omitempty"`
+	KitchenLayout         json.RawMessage `json:"kitchen_layout,omitempty"`
+	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
+	Notes                 string          `json:"notes,omitempty"`
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
 }
 
 type QuoteBreakdown struct {
@@ -465,7 +502,6 @@ type Catalog struct {
 	Categories   []ModuleCategory `json:"categories,omitempty"`
 	Components   []Component      `json:"components,omitempty"`
 }
-
 
 // WorkshopSettings is taller-wide defaults (F031 + F044 COST-02).
 type WorkshopSettings struct {

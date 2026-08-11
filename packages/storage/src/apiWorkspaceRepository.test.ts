@@ -170,15 +170,15 @@ describe('APIWorkspaceRepository', () => {
     expect(body.board_price).toBe(10);
   });
 
-  it('saveCatalog PUTs ambient materials (regression: CRUD vanished on reload)', async () => {
-    const ambientPuts: string[] = [];
+  it('saveCatalog PUTs snake_case ambientMaterials body', async () => {
+    const putRequests: { url: string; body: Record<string, unknown> }[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
-      if (
-        init?.method === 'PUT' &&
-        url.includes('/catalog/ambient-materials/')
-      ) {
-        ambientPuts.push(String(init.body));
+      if (init?.method === 'PUT' && url.includes('/catalog/ambient-materials/')) {
+        putRequests.push({
+          url,
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
         return { ok: true, json: async () => ({}) } as Response;
       }
       return { ok: true, json: async () => [] } as Response;
@@ -195,20 +195,24 @@ describe('APIWorkspaceRepository', () => {
       customers: [],
       ambientMaterials: [
         {
-          id: 'am-1',
-          code: 'CER',
-          name: 'Cerámica',
+          id: 'amb-1',
+          code: 'PISO-01',
+          name: 'Porcelanato Gris 60x60',
           active: true,
           surfaceType: 'floor',
-          previewColor: '#333333',
+          previewColor: '#cccccc',
+          previewTextureTileWidthMm: 600,
+          previewTextureTileLengthMm: 600,
         },
       ],
     });
 
-    expect(ambientPuts).toHaveLength(1);
-    const body = JSON.parse(ambientPuts[0]!);
-    expect(body.surface_type).toBe('floor');
-    expect(body.preview_color).toBe('#333333');
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0]?.url).toContain('/catalog/ambient-materials/amb-1');
+    expect(putRequests[0]?.body.code).toBe('PISO-01');
+    expect(putRequests[0]?.body.surface_type).toBe('floor');
+    expect(putRequests[0]?.body.preview_color).toBe('#cccccc');
+    expect(putRequests[0]?.body.preview_texture_tile_width_mm).toBe(600);
   });
 
   it('createProject POSTs only (no PUT probe)', async () => {

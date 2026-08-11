@@ -393,6 +393,16 @@ export function validateAmbientRefs(
       );
       if (err) errors.push(err);
     }
+    if (sp.ceilingMaterialId) {
+      const err = resolveAmbientRef(
+        ambientMaterials,
+        sp.ceilingMaterialId,
+        'wall',
+        sp.id,
+        'ceilingMaterialId',
+      );
+      if (err) errors.push(err);
+    }
   }
   return errors;
 }

@@ -128,6 +128,36 @@ export interface Hardware {
   readonly imageUrl?: string;
   readonly notes?: string;
   readonly active: boolean;
+  /**
+   * Parametric preview shape rendered in the 3D scene. When omitted (or
+   * invalid) the hardware is cost-only and renders nothing (VH-09).
+   */
+  readonly previewShape?: 'knob' | 'bar-pull' | 'cup-pull';
+  /** Knob diameter OR bar-pull length, in mm. */
+  readonly previewSizeMm?: number;
+  /** Standoff of the handle from the anchor face, in mm (0 = flush). */
+  readonly previewProjectionMm?: number;
+  /** Grip tube diameter (bar-pull / cup-pull), in mm. */
+  readonly previewDiameterMm?: number;
+  /**
+   * Solid color for the preview mesh — same hex path as
+   * `MaterialBoard.previewColor` (`#RGB` or `#RRGGBB`).
+   */
+  readonly previewColor?: string;
+  /**
+   * Surface roughness (0..1) — same semantics as `MaterialBoard.previewRoughness`.
+   * The renderer feeds this into `boardPhysicalResponse` (PR2).
+   */
+  readonly previewRoughness?: number;
+  /**
+   * Metallic property (0..1) — same semantics as `MaterialBoard.previewMetalness`.
+   */
+  readonly previewMetalness?: number;
+  /**
+   * Clearcoat lacquer layer (0..1) — same semantics as
+   * `MaterialBoard.previewClearcoat`.
+   */
+  readonly previewClearcoat?: number;
 }
 
 /**
@@ -380,6 +410,32 @@ export interface Perforation {
   readonly type: 'through' | 'blind' | 'dowel' | 'shelf_pin' | 'hinge_cup';
 }
 
+/**
+ * Board face a piece of hardware is anchored to, expressed in the board-LOCAL
+ * frame (local X = width, Y = thickness, Z = length). This is a visualization
+ * anchor — distinct from {@link Perforation} which models CNC machining and has
+ * a different lifecycle/consumers (VH-02).
+ */
+export type AnchorFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
+
+/**
+ * Visualization anchor for a piece of hardware on a board face. The position is
+ * a percentage across the face plane (independent of the resolved board size),
+ * plus optional per-instance rotation/scale. Rides the component-instance
+ * overrides JSONB — no dedicated migration (VH-02). Distinct from
+ * {@link Perforation} (CNC/machining).
+ */
+export interface HardwarePlacement {
+  readonly hardwareId: string;
+  readonly anchorFace: AnchorFace;
+  readonly relativePosition: {
+    readonly xPercent: number;
+    readonly yPercent: number;
+  };
+  readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
+  readonly scale?: number;
+}
+
 export interface Component {
   readonly id: string;
   readonly code: string;
@@ -416,6 +472,12 @@ export interface ModuleComponentInstance {
     readonly rotateX?: number;
     readonly rotateY?: number;
     readonly rotateZ?: number;
+    /**
+     * Visualization anchors for parametric handles on this board instance
+     * (VH-02). Rides this overrides JSONB — no dedicated migration. The
+     * renderer resolves each via `resolveHardwarePlacement` (PR2).
+     */
+    readonly hardwarePlacements?: readonly HardwarePlacement[];
   };
 }
 
@@ -621,7 +683,10 @@ export interface KitchenSpace {
    * Resolves against `Catalog.ambientMaterials` (surfaceType 'wall'). Omit = none.
    */
   readonly wallMaterialId?: string;
-  /** Ambient ceiling material for the 3D room scene (presentation-only). Omit = none. */
+  /**
+   * Ambient ceiling material for the 3D room scene (presentation-only).
+   * Resolves against `Catalog.ambientMaterials` (surfaceType 'ceiling'). Omit = default white paint.
+   */
   readonly ceilingMaterialId?: string;
   /** Show the room ceiling in the 3D scene (Q1, #4151). Default undefined = OFF. */
   readonly showCeiling?: boolean;
@@ -674,7 +739,10 @@ export interface ProjectKitchenLayout {
    * Mirror of the active space's ref. Omit = none.
    */
    readonly wallMaterialId?: string;
-  /** Ambient ceiling material for the 3D room scene (presentation-only). Omit = none. */
+  /**
+   * Ambient ceiling material for the 3D room scene (presentation-only).
+   * Mirror of the active space's ref. Omit = default white paint.
+   */
    readonly ceilingMaterialId?: string;
   /** Show the room ceiling in the 3D scene (Q1, #4151). Mirror of active space. */
    readonly showCeiling?: boolean;

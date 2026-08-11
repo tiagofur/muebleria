@@ -3,18 +3,25 @@
  */
 
 import type {
+  Agregado,
   Catalog,
+  Hardware,
   Module,
+  ModuleComponentInstance,
   OptionChoices,
   Project,
   ProjectItem,
   ResolvedBoardPart,
+  Structure,
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
   layoutKitchenPlacements,
+  resolveAgregadoInstance,
   resolveBom,
+  resolveHardwarePlacement,
   resolveModuleMeasurePreset,
+  type ResolvedHardwarePlacement,
   type ResolvedWallFrame,
 } from '@muebles/domain';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
@@ -45,6 +52,14 @@ export type ProjectModule3DInstance = {
   readonly elevation: 'floor' | 'wall';
   /** Visual countertop slab (floor units only, presentation). */
   readonly showCountertop: boolean;
+  /**
+   * Parametric hardware placements (jaladeras) resolved to board-LOCAL mm
+   * (Fase 2, WU3). Additive: `[]` when no component instance carries
+   * `overrides.hardwarePlacements` or every hardware lacks a previewShape —
+   * the `parts` output is byte-identical to the pre-Fase-2 bridge in that case
+   * (VH-04 no-regression). Never reaches the Optimizer/cut path (VH-08).
+   */
+  readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   readonly error: string | null;
 };
 
@@ -109,6 +124,7 @@ function resolveItemBom(
   catalogInput: Module3DCatalogInput,
 ): {
   parts: readonly ResolvedBoardPart[];
+  resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   width: number;
   height: number;
   depth: number;
@@ -144,12 +160,26 @@ function resolveItemBom(
     modules: catalogInput.modules,
     structures: catalogInput.structures,
     components: catalogInput.components,
+    // Thread agregados so resolveBom → resolveComposedModule can expand
+    // module.agregados / structure.agregados into board parts. Without this,
+    // agregado components never reach the preview BOM (engine/bom.ts reads
+    // `catalog.agregados ?? []`).
+    agregados: catalogInput.agregados,
   };
 
   try {
     const bom = resolveBom(module, choices, catalog, measurePresetId);
     return {
       parts: bom.boardParts,
+      resolvedHardwarePlacements: resolveModuleHardwarePlacements(
+        module,
+        bom.boardParts,
+        catalogInput.hardware,
+        {
+          structures: catalogInput.structures,
+          agregados: catalogInput.agregados,
+        },
+      ),
       ...dims,
       error:
         bom.boardParts.length === 0
@@ -159,10 +189,137 @@ function resolveItemBom(
   } catch (e) {
     return {
       parts: [],
+      resolvedHardwarePlacements: [],
       ...dims,
       error: e instanceof Error ? e.message : 'Error al resolver el mueble.',
     };
   }
+}
+
+/**
+ * Resolve parametric hardware placements (jaladeras) for one module into
+ * board-LOCAL mm (Fase 2, WU3). Pure — no Three.js.
+ *
+ * For each component instance that carries `overrides.hardwarePlacements`, each
+ * placement is resolved against the board part the instance produced. The link
+ * between a component instance and its board part is the engine part-id
+ * convention `${idPrefix}${componentId}-copy-${i}` (engine/bom.ts
+ * `expandComponentInstances`). Structure + module components use `idPrefix=''`;
+ * each agregado instance uses `idPrefix='agr-${agrIdx}-'` (AH-03, collision-safe).
+ * The resolver mirrors that per-source prefix so the resolved
+ * `componentInstanceId` equals the part id and the renderer attaches the handle
+ * to the matching board mesh by id.
+ *
+ * The instance set iterated is the FULL set that produced board parts: the
+ * module's structure components, the module's own components, AND the resolved
+ * components of every agregado attached to the structure/module
+ * (`resolveAgregadoInstance` multiplies quantity and applies mirror). The
+ * PO's workflow is agregado-centric (doors/drawers modeled as agregados), so
+ * omitting agregado instances silently dropped their placements — the gap this
+ * closes.
+ *
+ * Returns `[]` (VH-04 no-regression) when:
+ *  - no component instance (structure/module/agregado) carries `hardwarePlacements`,
+ *  - the referenced hardware is missing from the catalog (swapped/removed), or
+ *  - the hardware has no valid `previewShape` (resolver returns null — VH-09).
+ *
+ * Placements never feed the Optimizer/cut path (VH-08): this array is consumed
+ * only by the 3D preview.
+ *
+ * AH-03 part-id partitioning (collision-safe). Two agregados that reference
+ * components sharing a componentId expand to DISTINCT part ids
+ * (`agr-0-X-copy-0` vs `agr-1-X-copy-0`) because engine/bom.ts prefixes each
+ * agregado instance with `agr-${agrIdx}-`. The resolver iterates each source
+ * set (structure / module / per-agregado-instance) with its own prefix and
+ * looks the part up against the now-unique `partById` Map, so a placement
+ * always links to its OWN board — never the wrong/collapsed one. Structure and
+ * module placements keep `''` (backward compatible with the 31 Fase 2 face-mode
+ * goldens). Residual: structure↔module componentId overlap still shares `''`
+ * (pre-agregado behavior; rare in practice — components are typed by
+ * placement/role); out of scope here.
+ */
+export function resolveModuleHardwarePlacements(
+  module: Module,
+  boardParts: readonly ResolvedBoardPart[],
+  hardwareCatalog: readonly Hardware[],
+  /**
+   * Optional sources needed to resolve agregado and structure component
+   * instances. When omitted (e.g. the single-module editor modal), only
+   * `module.components` is iterated — preserving the pre-agregado behavior.
+   */
+  options: {
+    readonly structures?: readonly Structure[];
+    readonly agregados?: readonly Agregado[];
+  } = {},
+): ResolvedHardwarePlacement[] {
+  // AH-03: part ids are collision-free. Structure + module components expand
+  // with idPrefix=''; each agregado instance expands with `agr-${agrIdx}-`.
+  // The resolver mirrors that per-source prefix so each placement links to its
+  // own board (two agregados sharing a componentId no longer collapse).
+  const partById = new Map(boardParts.map((p) => [p.id, p]));
+  const out: ResolvedHardwarePlacement[] = [];
+
+  const structure = options.structures?.find(
+    (s) => s.id === module.structureId,
+  );
+  const agregadosCatalog = options.agregados ?? [];
+  const allAgregadoInstances = [
+    ...(structure?.agregados ?? []),
+    ...(module.agregados ?? []),
+  ];
+
+  // Build the source set tagged with the per-source idPrefix that
+  // engine/bom.ts resolveComposedModule used to expand each instance.
+  // Structure + module use '' (backward compatible with the 31 Fase 2 face
+  // goldens); each agregado instance uses `agr-${agrIdx}-` in the SAME order
+  // the engine expands them ([...structure.agregados, ...module.agregados]).
+  // Base-mode filtering need NOT be replicated here: parts bom.ts filtered out
+  // are absent from `partById`, so the lookup below skips them naturally.
+  type Source = { inst: ModuleComponentInstance; prefix: string };
+  const sources: Source[] = [
+    ...(structure?.components ?? []).map((inst) => ({ inst, prefix: '' })),
+    ...(module.components ?? []).map((inst) => ({ inst, prefix: '' })),
+  ];
+  allAgregadoInstances.forEach((agrInst, agrIdx) => {
+    const prefix = `agr-${agrIdx}-`;
+    for (const inst of resolveAgregadoInstance(agrInst, agregadosCatalog)
+      .components) {
+      sources.push({ inst, prefix });
+    }
+  });
+
+  for (const { inst, prefix } of sources) {
+    const placements = inst.overrides?.hardwarePlacements;
+    if (!placements || placements.length === 0) continue;
+
+    const qty = Math.max(1, Math.floor(inst.quantity) || 1);
+    for (let i = 0; i < qty; i++) {
+      // Mirrors engine/bom.ts expandComponentInstances:
+      // `${idPrefix}${component.id}-copy-${i}`.
+      const componentInstanceId = `${prefix}${inst.componentId}-copy-${i}`;
+      const part = partById.get(componentInstanceId);
+      if (!part) continue; // filtered by base mode / not a board — skip.
+
+      for (const placement of placements) {
+        const hardware = hardwareCatalog.find((h) => h.id === placement.hardwareId);
+        // VH-09: swapped-to-cost-only or removed hardware renders nothing.
+        if (!hardware) continue;
+        const resolved = resolveHardwarePlacement({
+          componentInstanceId,
+          placement,
+          board: {
+            widthMm: part.widthMm,
+            thicknessMm: part.thicknessMm,
+            lengthMm: part.lengthMm,
+          },
+          hardware,
+        });
+        if (resolved) out.push(resolved);
+      }
+    }
+  }
+
+  return out;
 }
 
 export type ResolveProject3DOptions = {
@@ -197,6 +354,7 @@ export function resolveProject3DPreview(
     item: ProjectItem;
     module: Module | undefined;
     parts: readonly ResolvedBoardPart[];
+    resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
     width: number;
     height: number;
     depth: number;
@@ -211,6 +369,7 @@ export function resolveProject3DPreview(
         item,
         module: undefined,
         parts: [],
+        resolvedHardwarePlacements: [],
         width: 600,
         height: 720,
         depth: 560,
@@ -223,6 +382,7 @@ export function resolveProject3DPreview(
       item,
       module,
       parts: resolved.parts,
+      resolvedHardwarePlacements: resolved.resolvedHardwarePlacements,
       width: resolved.width,
       height: resolved.height,
       depth: resolved.depth,
@@ -290,6 +450,7 @@ export function resolveProject3DPreview(
           elevation: place.elevation,
           showCountertop:
             showCountertop && place.elevation === 'floor',
+          resolvedHardwarePlacements: row?.resolvedHardwarePlacements ?? [],
           error: row?.error ?? null,
         };
       },
@@ -367,6 +528,7 @@ export function resolveProject3DPreview(
           baseClearanceMm: 0,
           elevation: 'floor' as const,
           showCountertop: false,
+          resolvedHardwarePlacements: row.resolvedHardwarePlacements,
           error: row.error,
         };
       });
@@ -409,6 +571,7 @@ export function resolveProject3DPreview(
         baseClearanceMm: 0,
         elevation: 'floor' as const,
         showCountertop: false,
+        resolvedHardwarePlacements: row.resolvedHardwarePlacements,
         error: row.error,
       };
     });

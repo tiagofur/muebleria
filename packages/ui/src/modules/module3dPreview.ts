@@ -48,6 +48,12 @@ export type Module3DCatalogInput = {
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
   readonly optionGroups: readonly OptionGroup[];
+  /**
+   * Reusable sub-assemblies (agregados) referenced by `module.agregados` and
+   * `structure.agregados`. Threaded through so the preview BOM (and the
+   * hardware-placement resolver) can see agregado component instances.
+   */
+  readonly agregados?: readonly Agregado[];
   /** Presentation-only ambient materials (floor/wall) for the 3D scene. */
   readonly ambientMaterials?: readonly AmbientMaterial[];
 };
@@ -134,6 +140,10 @@ export function resolveModule3DPreview(
     modules: catalogInput.modules,
     structures: catalogInput.structures,
     components: catalogInput.components,
+    // Thread agregados so resolveBom -> resolveComposedModule can expand
+    // module.agregados / structure.agregados into board parts. Without this,
+    // agregado components never reach the editor preview BOM (#4181 — the
+    // engine reads `catalog.agregados ?? []`). Mirrors resolveItemBom.
     agregados: catalogInput.agregados,
   };
 
