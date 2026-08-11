@@ -263,6 +263,10 @@ export function createWorkspaceStore(options?: InternalOptions) {
               err instanceof Error
                 ? err.message
                 : 'No se pudo cargar el espacio de trabajo';
+            if (/401|unauthorized/i.test(message) && get().session === 'auth') {
+              get().logout();
+              return;
+            }
             set({ workspaceLoading: false, workspaceLoadError: message });
           }
         },
@@ -324,8 +328,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
               })),
             });
           } catch (err) {
-            console.error('Failed to load assignable owners:', err);
-            // Fallback: at least show the current auth user if any.
+            const msg = err instanceof Error ? err.message : String(err);
+            if (/401|unauthorized/i.test(msg)) {
+              get().logout();
+              return;
+            }
+            // Fall back to current authUser on fetch failure (#12).
             if (authUser) {
               set({
                 assignableOwners: [
