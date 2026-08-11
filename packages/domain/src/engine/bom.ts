@@ -582,29 +582,38 @@ export function resolveComposedModule(
 
     // Evaluate sub-assembly space bounding box and origin position in parent furniture space
     const parentDims = { W: PW, H: PH, D: PD, PW, PH, PD, T: 18, B };
-    const spaceW = agrInst.dimensions?.widthFormula
+    const rawW = agrInst.dimensions?.widthFormula?.trim()
       ? evaluatePartFormula(agrInst.dimensions.widthFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
           field: 'width',
         })
-      : agregado.externalDims?.width ?? PW;
+      : agregado.externalDims?.width && agregado.externalDims.width > 0
+        ? agregado.externalDims.width
+        : PW;
+    const spaceW = rawW > 0 ? rawW : PW;
 
-    const spaceH = agrInst.dimensions?.heightFormula
+    const rawH = agrInst.dimensions?.heightFormula?.trim()
       ? evaluatePartFormula(agrInst.dimensions.heightFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
           field: 'length',
         })
-      : agregado.externalDims?.height ?? PH;
+      : agregado.externalDims?.height && agregado.externalDims.height > 0
+        ? agregado.externalDims.height
+        : PH;
+    const spaceH = rawH > 0 ? rawH : PH;
 
-    const spaceD = agrInst.dimensions?.depthFormula
+    const rawD = agrInst.dimensions?.depthFormula?.trim()
       ? evaluatePartFormula(agrInst.dimensions.depthFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
           field: 'length',
         })
-      : agregado.externalDims?.depth ?? PD;
+      : agregado.externalDims?.depth && agregado.externalDims.depth > 0
+        ? agregado.externalDims.depth
+        : PD;
+    const spaceD = rawD > 0 ? rawD : PD;
 
     const spaceX = agrInst.position?.xFormula
       ? evaluatePartFormula(agrInst.position.xFormula, parentDims, {
