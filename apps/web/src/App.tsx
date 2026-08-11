@@ -2188,6 +2188,7 @@ function AppContent({
           requestCreateKey={modulesCreateKey}
           structures={structures}
           catalogComponents={components}
+          catalogAgregados={agregados}
           materials={materials}
           edges={edges}
           canMutate={canMutateModules}

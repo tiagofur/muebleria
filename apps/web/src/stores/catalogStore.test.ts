@@ -442,6 +442,7 @@ describe('catalogStore — categories (atypical)', () => {
       hardwareLines: [],
       structureId: '',
       components: [],
+      agregados: [],
       presets: [],
     });
 

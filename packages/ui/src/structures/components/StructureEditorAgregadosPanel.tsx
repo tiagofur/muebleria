@@ -6,19 +6,25 @@ import { useState, type Dispatch, type ReactNode, type SetStateAction } from 're
 import type { Agregado, ModuleAgregadoInstance } from '@muebles/domain';
 import type { StructureDraft } from '../structureDraft';
 
-export interface StructureEditorAgregadosPanelProps {
-  readonly draft: StructureDraft;
-  readonly setDraft: Dispatch<SetStateAction<StructureDraft>>;
+export interface StructureEditorAgregadosPanelProps<
+  T extends { readonly agregados: readonly ModuleAgregadoInstance[] } = {
+    readonly agregados: readonly ModuleAgregadoInstance[];
+  },
+> {
+  readonly draft: T;
+  readonly setDraft: Dispatch<SetStateAction<T>>;
   readonly catalogAgregados?: readonly Agregado[];
   readonly hidden?: boolean;
 }
 
-export function StructureEditorAgregadosPanel({
+export function StructureEditorAgregadosPanel<
+  T extends { readonly agregados: readonly ModuleAgregadoInstance[] },
+>({
   draft,
   setDraft,
   catalogAgregados = [],
   hidden = false,
-}: StructureEditorAgregadosPanelProps): ReactNode {
+}: StructureEditorAgregadosPanelProps<T>): ReactNode {
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
 
   if (hidden) return null;

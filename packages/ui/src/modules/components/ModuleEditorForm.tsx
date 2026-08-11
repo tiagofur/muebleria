@@ -13,6 +13,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type {
+  Agregado,
   Component,
   Hardware,
   OptionGroup,
@@ -32,6 +33,7 @@ import {
 import { ModuleEditorHardwarePanel } from './ModuleEditorHardwarePanel';
 import { ModuleEditorMeasuresPanel } from './ModuleEditorMeasuresPanel';
 import { ModuleEditorStructurePanel } from './ModuleEditorStructurePanel';
+import { StructureEditorAgregadosPanel } from '../../structures/components/StructureEditorAgregadosPanel';
 import {
   DEFAULT_COMPOSITION_TAB,
   isCompositionTab,
@@ -58,6 +60,7 @@ export type ModuleEditorFormProps = {
   readonly structures: readonly Structure[];
   readonly selectedStructure: Structure | undefined;
   readonly catalogComponents: readonly Component[];
+  readonly catalogAgregados?: readonly Agregado[];
   readonly composedEnabled: boolean;
   readonly onRequestAddComponent: () => void;
   readonly canMutate: boolean;
@@ -115,6 +118,7 @@ export function ModuleEditorForm({
   structures,
   selectedStructure,
   catalogComponents,
+  catalogAgregados = [],
   composedEnabled,
   onRequestAddComponent,
   canMutate,
@@ -293,6 +297,8 @@ export function ModuleEditorForm({
             let badge = '';
             if (tab.id === 'components' && draft.components.length > 0) {
               badge = ` (${draft.components.length})`;
+            } else if (tab.id === 'agregados' && draft.agregados.length > 0) {
+              badge = ` (${draft.agregados.length})`;
             } else if (tab.id === 'measures' && draft.presets.length > 0) {
               badge = ` (${draft.presets.length})`;
             } else if (tab.id === 'hardware' && draft.hardwareLines.length > 0) {
@@ -374,6 +380,13 @@ export function ModuleEditorForm({
           {boardEditorSlot}
         </div>
       ) : null}
+
+      <StructureEditorAgregadosPanel
+        draft={draft}
+        setDraft={setDraft}
+        catalogAgregados={catalogAgregados}
+        hidden={editorTab !== 'agregados'}
+      />
 
       <ModuleEditorMeasuresPanel
         draft={draft}

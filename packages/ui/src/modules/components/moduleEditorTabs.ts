@@ -8,6 +8,7 @@ export type ModuleEditorTab =
   | 'general'
   | 'structure'
   | 'components'
+  | 'agregados'
   | 'measures'
   | 'hardware'
   | 'cost';
@@ -28,12 +29,13 @@ export const MODULE_EDITOR_PRIMARY_TABS: readonly {
 export const MODULE_EDITOR_COMPOSITION_TABS: readonly {
   readonly id: Extract<
     ModuleEditorTab,
-    'structure' | 'components' | 'measures' | 'hardware'
+    'structure' | 'components' | 'agregados' | 'measures' | 'hardware'
   >;
   readonly label: string;
 }[] = [
   { id: 'structure', label: 'Estructura' },
   { id: 'components', label: 'Componentes' },
+  { id: 'agregados', label: 'Sub-conjuntos (Agregados)' },
   { id: 'measures', label: 'Medidas' },
   { id: 'hardware', label: 'Herrajes' },
 ] as const;
@@ -46,6 +48,7 @@ export const MODULE_EDITOR_TABS: readonly {
   { id: 'general', label: 'General' },
   { id: 'structure', label: 'Estructura' },
   { id: 'components', label: 'Componentes' },
+  { id: 'agregados', label: 'Sub-conjuntos (Agregados)' },
   { id: 'measures', label: 'Medidas' },
   { id: 'hardware', label: 'Herrajes' },
   { id: 'cost', label: 'Costo' },
@@ -71,6 +74,7 @@ export function tabForModuleValidationError(
 ): ModuleEditorTab {
   const m = message.toLocaleLowerCase('es-UY');
   if (m.includes('herraje')) return 'hardware';
+  if (m.includes('agregado') || m.includes('sub-conjunto')) return 'agregados';
   if (m.includes('estructura') || m.includes('medida base')) return 'structure';
   if (m.includes('componente') || m.includes('composición')) return 'components';
   if (m.includes('preset') || m.includes('opción de medida')) return 'measures';

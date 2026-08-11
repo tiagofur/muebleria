@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  Agregado,
   Component,
   Hardware,
   Module,
@@ -86,6 +87,7 @@ export interface ModulesScreenProps {
   readonly modules: readonly Module[];
   readonly optionGroups: readonly OptionGroup[];
   readonly hardware: readonly Hardware[];
+  readonly catalogAgregados?: readonly Agregado[];
   readonly materials?: readonly MaterialBoard[];
   readonly edges?: readonly EdgeBand[];
   /** Hierarchical categories (MOD-09). Default empty. */
@@ -195,6 +197,7 @@ export function ModulesScreen({
   loading = false,
   structures: propStructures = [],
   catalogComponents: propCatalogComponents = [],
+  catalogAgregados: propCatalogAgregados = [],
   materials: propMaterials = [],
   edges: propEdges = [],
   canMutate = true,
@@ -966,6 +969,7 @@ export function ModulesScreen({
             structures={structures}
             selectedStructure={selectedStructure ?? undefined}
             catalogComponents={catalogComponents}
+            catalogAgregados={propCatalogAgregados}
             composedEnabled={composedEnabled}
             onRequestAddComponent={() => {
               setAddComponentOpen(true);

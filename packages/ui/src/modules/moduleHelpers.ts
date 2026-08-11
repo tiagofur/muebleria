@@ -11,6 +11,7 @@ import type {
   FurnitureType,
   HardwareLine,
   Module,
+  ModuleAgregadoInstance,
   ModuleBaseMode,
   ModuleCategory,
   OptionGroup,
@@ -105,6 +106,8 @@ export type ModuleDraft = {
   structureId: string;
   /** Component instances for composed modules. */
   components: ComponentInstanceDraft[];
+  /** Sub-assembly instances placed directly on this module (doors, drawers, …). */
+  agregados: ModuleAgregadoInstance[];
   /** Commercial measure options for sales (H09 / #104). */
   presets: MeasurePresetDraft[];
 };
@@ -128,6 +131,7 @@ export function emptyModuleDraft(): ModuleDraft {
     hardwareLines: [],
     structureId: '',
     components: [],
+    agregados: [],
     presets: [],
   };
 }
@@ -253,6 +257,7 @@ export function moduleToDraft(mod: Module): ModuleDraft {
       placementOverride: c.placementOverride,
       overrides: c.overrides,
     })),
+    agregados: [...(mod.agregados ?? [])],
     presets: (mod.presets ?? []).map((p) => ({
       id: p.id,
       name: p.name ?? '',
@@ -325,6 +330,7 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
         : undefined,
       overrides: c.overrides,
     })),
+    agregados: draft.agregados.length > 0 ? [...draft.agregados] : undefined,
     presets:
       draft.presets.length > 0
         ? draft.presets.map((p) => ({

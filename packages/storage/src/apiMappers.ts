@@ -360,6 +360,7 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     base_clearance_mm:
       m.baseClearanceMm === undefined ? null : m.baseClearanceMm,
     components: (m.components ?? []).map(componentInstanceToApi),
+    agregados: (m.agregados ?? []).map(agregadoInstanceToApi),
     presets: (m.presets ?? []).map(presetToApi),
     image_url: m.imageUrl ?? '',
     notes: m.notes ?? '',
@@ -393,6 +394,10 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
   const labor = num(raw.base_labor_cost ?? raw.baseLaborCost);
   const imageUrl = str(raw.image_url ?? raw.imageUrl) || undefined;
   const componentsRaw = raw.components;
+  const agregadosRaw = raw.agregados;
+  const agregados = Array.isArray(agregadosRaw)
+    ? (agregadosRaw as Record<string, unknown>[]).map(agregadoInstanceFromApi)
+    : undefined;
   const presetsRaw = raw.presets;
   const presets = Array.isArray(presetsRaw)
     ? (presetsRaw as Record<string, unknown>[]).map(presetFromApi)
@@ -409,6 +414,7 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     components: Array.isArray(componentsRaw)
       ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
       : undefined,
+    agregados: agregados && agregados.length > 0 ? agregados : undefined,
     presets: presets && presets.length > 0 ? presets : undefined,
     baseLaborCost: labor > 0 ? labor : undefined,
     imageUrl,
