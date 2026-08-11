@@ -4,6 +4,7 @@
  */
 
 import type {
+  Agregado,
   Catalog,
   DimensionPreset,
   Module,
@@ -42,6 +43,7 @@ export type Module3DCatalogInput = {
   readonly modules: readonly Module[];
   readonly structures: readonly Structure[];
   readonly components: readonly Component[];
+  readonly agregados?: readonly Agregado[];
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
@@ -132,6 +134,7 @@ export function resolveModule3DPreview(
     modules: catalogInput.modules,
     structures: catalogInput.structures,
     components: catalogInput.components,
+    agregados: catalogInput.agregados,
   };
 
   try {

@@ -1,21 +1,26 @@
-# Sesión — F083 UI de Agregados en Muebles (#295, Fase 2)
+# Sesión — F084 Jerarquía y Preview 3D de Agregados (#296, Fase 3)
 
 - **Fecha:** 2026-08-11
-- **Scope:** Implementación de F083 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #295)
+- **Scope:** Implementación de F084 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #296)
 
 ## Hecho — F082 Motor Paramétrico de Agregados (#294, Fase 1)
 
 - `ModuleAgregadoInstance` extendido en `packages/domain/src/types.ts` con `position`, `dimensions`, `layoutDirection`, `gapMm` y `optionOverrides`.
 - `agregados.ts` implementa `calculateAgregadoSubspaceUnits(...)` para desglosar y apilar N unidades (vertical/horizontal/none) con separación `gapMm`.
 - `bom.ts` evalúa fórmulas dentro del sub-espacio ($W_{\text{local}}, H_{\text{local}}, D_{\text{local}}$) y desplaza las coordenadas 3D de cada pieza producida.
-- 402/402 tests en `@muebles/domain` pasando ✓.
+- 402/402 tests en `@muebles/domain` pasando ✓. Commit `a0753ea`.
 
-## En Curso — F083 UI de Agregados en Muebles (#295, Fase 2)
+## Hecho — F083 UI de Agregados en Muebles (#295, Fase 2)
 
-1. Añadir pestaña **Agregados** en `StructureEditorForm.tsx` y `StructureDraft` (`packages/ui/src/structures`).
-2. Implementar sub-componente de lista y edición de `ModuleAgregadoInstance` con selector de Agregados del catálogo.
-3. Formulario para parametrizar: posición $Z$, ancho libre, alto del hueco, cantidad $N$, apilamiento vertical/horizontal, luz `gapMm`, espejeado `mirrored` y overrides de herrajes.
-4. Unit tests en `packages/ui/src/structures`.
+- Pestaña **Agregados** integrada en `StructureEditorForm.tsx` y `StructureDraft` (`packages/ui/src/structures`).
+- Creado `StructureEditorAgregadosPanel.tsx` con selector del catálogo de agregados y formulario de parametrización ($N$, apilamiento, luz `gapMm`, posición $Z$, $W$, $H$, espejeado).
+- 679/679 tests en `@muebles/ui` pasando ✓. Commit `d928f9d`.
+
+## En Curso — F084 Jerarquía y Preview 3D de Agregados (#296, Fase 3)
+
+1. Verificar que `previewComponentPart.ts` y mappers 3D rendericen piezas de agregados en sus coordenadas calculadas $(X,Y,Z)$.
+2. Agrupar piezas de sub-ensambles en `FurnitureScene3D.tsx` / `ModuleScene3D.tsx` bajo nodos 3D de sub-conjuntos identificados.
+3. Permitir inspección visual y refresco dinámico al modificar dimensiones y posiciones en la UI.
 
 ## Hecho — Planeamiento
 

@@ -99,6 +99,7 @@ export function resolveStructure3DPreview(
         ? (c.placementOverride as ComponentPlacement)
         : undefined,
     })),
+    agregados: draft.agregados.map((a) => ({ ...a })),
   };
 
   const defaults = defaultOptionChoicesForModule(
@@ -122,6 +123,7 @@ export function resolveStructure3DPreview(
     modules: catalogInput.modules,
     structures: catalogInput.structures,
     components: catalogInput.components,
+    agregados: catalogInput.agregados,
   };
 
   try {
