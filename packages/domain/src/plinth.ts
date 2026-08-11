@@ -87,6 +87,15 @@ export function resolveBoardOptionChoiceId(
     const front = optionChoices[ZOCLO_BOARD_FALLBACK_ROLE]?.trim();
     if (front) return front;
   }
+  const roleUpper = optionRole.trim().toUpperCase();
+  if (
+    roleUpper === 'PUERTA' ||
+    roleUpper.startsWith('PUERTA_') ||
+    roleUpper === 'FRENTE_CAJON'
+  ) {
+    const front = optionChoices['FRENTE']?.trim();
+    if (front) return front;
+  }
   return undefined;
 }
 

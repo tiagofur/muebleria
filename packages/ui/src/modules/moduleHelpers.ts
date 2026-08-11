@@ -3,6 +3,7 @@
  */
 
 import type {
+  Agregado,
   BoardPart,
   Component,
   ComponentPlacement,
@@ -600,6 +601,7 @@ export function parseOptionalNumber(raw: string): number | undefined {
 export type ModuleRolesSource = {
   readonly components?: readonly { readonly componentId: string }[];
   readonly structureId?: string;
+  readonly agregados?: readonly { readonly agregadoId: string }[];
   readonly hardwareLines?: readonly {
     readonly optionRole: string;
     readonly hardwareId?: string;
@@ -608,38 +610,62 @@ export type ModuleRolesSource = {
 
 /**
  * Option-group codes referenced by the module (component optionRoles +
- * variable hardware lines). Pure — no pricing.
+ * variable hardware lines + sub-assembly/agregado roles). Pure — no pricing.
  */
 export function usedOptionRolesForModule(
   module: ModuleRolesSource,
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): Set<string> {
   const usedRoles = new Set<string>();
+
+  const addComponentRoles = (componentId: string) => {
+    if (!catalogComponents) return;
+    const comp = catalogComponents.find((c) => c.id === componentId);
+    if (comp) {
+      for (const role of comp.optionRoles) {
+        if (role.trim()) usedRoles.add(role.trim());
+      }
+    }
+  };
+
+  const addAgregadoRoles = (agregadoId: string) => {
+    if (!catalogAgregados) return;
+    const agr = catalogAgregados.find((a) => a.id === agregadoId);
+    if (!agr) return;
+    for (const cInst of agr.components ?? []) {
+      addComponentRoles(cInst.componentId);
+    }
+    for (const hLine of agr.hardwareLines ?? []) {
+      if (!hLine.hardwareId && hLine.optionRole?.trim()) {
+        usedRoles.add(hLine.optionRole.trim());
+      }
+    }
+  };
+
   for (const line of module.hardwareLines ?? []) {
     if (line.hardwareId) continue;
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }
-  if (module.components && catalogComponents) {
+  if (module.components) {
     for (const inst of module.components) {
-      const comp = catalogComponents.find((c) => c.id === inst.componentId);
-      if (comp) {
-        for (const role of comp.optionRoles) {
-          if (role.trim()) usedRoles.add(role.trim());
-        }
-      }
+      addComponentRoles(inst.componentId);
     }
   }
-  if (module.structureId && catalogStructures && catalogComponents) {
+  if (module.agregados) {
+    for (const agrInst of module.agregados) {
+      addAgregadoRoles(agrInst.agregadoId);
+    }
+  }
+  if (module.structureId && catalogStructures) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     if (structure) {
       for (const inst of structure.components ?? []) {
-        const comp = catalogComponents.find((c) => c.id === inst.componentId);
-        if (comp) {
-          for (const role of comp.optionRoles) {
-            if (role.trim()) usedRoles.add(role.trim());
-          }
-        }
+        addComponentRoles(inst.componentId);
+      }
+      for (const agrInst of structure.agregados ?? []) {
+        addAgregadoRoles(agrInst.agregadoId);
       }
     }
   }
@@ -655,11 +681,13 @@ export function defaultOptionChoicesForModule(
   optionGroups: readonly OptionGroup[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): Record<string, string> {
   const usedRoles = usedOptionRolesForModule(
     module,
     catalogComponents,
     catalogStructures,
+    catalogAgregados,
   );
 
   const choices: Record<string, string> = {};
@@ -706,11 +734,13 @@ export function boardFinishPickerGroupsForModule(
   }[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): BoardFinishPickerGroup[] {
   const usedRoles = usedOptionRolesForModule(
     module,
     catalogComponents,
     catalogStructures,
+    catalogAgregados,
   );
   const byId = new Map(materials.map((m) => [m.id, m]));
   const result: BoardFinishPickerGroup[] = [];

@@ -373,10 +373,9 @@ export function WallAmbientMesh({
   const color = resolveWallColor(material);
   const phys = resolveWallPhysical(material, lightingMode);
   return (
-    <>
+    <group position={[midX, h / 2, midY]} rotation={[0, -yaw, 0]}>
       <mesh
-        position={[midX, h / 2, midY]}
-        rotation={[0, -yaw, 0]}
+        position={[0, 0, -thickness / 2]}
         userData={{ wallId: wall.id }}
         onClick={
           onSelect
@@ -440,8 +439,7 @@ export function WallAmbientMesh({
       </mesh>
       {paintHover ? (
         <mesh
-          position={[midX, h / 2, midY]}
-          rotation={[0, -yaw, 0]}
+          position={[0, 0, -thickness / 2]}
           userData={{ wallId: wall.id, paintHoverOverlay: true }}
         >
           <boxGeometry args={[length + 1, h + 1, thickness + 2]} />
@@ -454,7 +452,7 @@ export function WallAmbientMesh({
           />
         </mesh>
       ) : null}
-    </>
+    </group>
   );
 }
 

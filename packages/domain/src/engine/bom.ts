@@ -613,9 +613,7 @@ export function resolveComposedModule(
           partDescription: agregado.name,
           field: 'length',
         })
-      : agregado.externalDims?.depth && agregado.externalDims.depth > 0
-        ? agregado.externalDims.depth
-        : PD;
+      : PD;
     const spaceD = rawD > 0 ? rawD : PD;
 
     const spaceX = agrInst.position?.xFormula

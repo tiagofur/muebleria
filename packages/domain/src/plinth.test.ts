@@ -30,7 +30,7 @@ describe('plinth', () => {
     ).toBe(80);
   });
 
-  it('inherits FRENTE for ZOCLO board material choice', () => {
+  it('inherits FRENTE for ZOCLO, PUERTA and FRENTE_CAJON board material choice', () => {
     expect(
       resolveBoardOptionChoiceId(ZOCLO_BOARD_ROLE, {
         FRENTE: 'mat-front',
@@ -42,6 +42,22 @@ describe('plinth', () => {
         FRENTE: 'mat-front',
       }),
     ).toBe('mat-zoclo');
+    expect(
+      resolveBoardOptionChoiceId('PUERTA', {
+        FRENTE: 'mat-front',
+      }),
+    ).toBe('mat-front');
+    expect(
+      resolveBoardOptionChoiceId('FRENTE_CAJON', {
+        FRENTE: 'mat-front',
+      }),
+    ).toBe('mat-front');
+    expect(
+      resolveBoardOptionChoiceId('PUERTA', {
+        PUERTA: 'mat-door',
+        FRENTE: 'mat-front',
+      }),
+    ).toBe('mat-door');
     expect(resolveBoardOptionChoiceId('INTERIOR', {})).toBeUndefined();
   });
 

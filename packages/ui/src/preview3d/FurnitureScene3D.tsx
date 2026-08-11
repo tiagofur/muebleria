@@ -605,6 +605,7 @@ function WallMesh({
   return (
     <group position={[midX, h / 2, midY]} rotation={[0, -yaw, 0]}>
       <mesh
+        position={[0, 0, -thickness / 2]}
         userData={{ wallId: wall.id }}
         onClick={
           onSelect

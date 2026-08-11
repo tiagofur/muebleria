@@ -145,6 +145,7 @@ function resolveItemBom(
     catalogInput.optionGroups,
     catalogInput.components,
     catalogInput.structures,
+    catalogInput.agregados,
   );
   const choices: OptionChoices = {
     ...defaults,

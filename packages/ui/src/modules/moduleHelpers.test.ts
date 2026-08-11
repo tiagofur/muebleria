@@ -20,6 +20,7 @@ import {
   patchInstanceOverrides,
   optionGroupsForBoardParts,
   optionGroupsForHardware,
+  usedOptionRolesForModule,
   SEED_MODULE_CODES,
   suggestPartCode,
   validateModuleCode,
@@ -367,6 +368,36 @@ describe('suggestPartCode / defaultOptionChoicesForModule', () => {
     expect(finishGroups[1]!.options[0]!.grainDefault).toBe(true);
     // Hardware groups are excluded from finish pickers
     expect(finishGroups.some((g) => g.code === 'BISAGRA')).toBe(false);
+  });
+
+  it('collects option roles from agregados attached to module or structure', () => {
+    const catalogAgregados = [
+      {
+        id: 'agr-pue',
+        code: 'AGR-PUE',
+        name: 'Puerta',
+        components: [{ componentId: 'comp-door', quantity: 1 }],
+      },
+    ];
+    const catalogComponents = [
+      {
+        id: 'comp-door',
+        code: 'PUE-01',
+        name: 'Hoja Puerta',
+        placement: 'puerta' as const,
+        geometry: { kind: 'rectangular_board' as const, lengthMm: 700, widthMm: 600, thicknessMm: 18 },
+        defaultEdges: [],
+        optionRoles: ['PUERTA'],
+        active: true,
+      },
+    ];
+    const roles = usedOptionRolesForModule(
+      { agregados: [{ agregadoId: 'agr-pue' }] },
+      catalogComponents,
+      [],
+      catalogAgregados,
+    );
+    expect(Array.from(roles)).toContain('PUERTA');
   });
 });
 

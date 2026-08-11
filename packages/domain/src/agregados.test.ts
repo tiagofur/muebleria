@@ -321,6 +321,86 @@ describe('agregados domain helpers', () => {
       expect(p2.lengthMm).toBe(194);
       expect(p2.z).toBe(504); // spaceZ(502) + defaultPoseForPlacement.z(2)
     });
+
+    it('places door component in Agregado at front (y = PD) and inherits FRENTE choice when depthFormula is empty', () => {
+      const catalog: Catalog = {
+        materials: [
+          {
+            id: 'm1',
+            code: 'M1',
+            name: 'Placa 18mm',
+            widthMm: 2750,
+            lengthMm: 1830,
+            thicknessMm: 18,
+            grainDefault: false,
+            boardPrice: 100,
+            wastePercent: 0,
+            costPerM2: 20,
+            active: true,
+          },
+        ],
+        edges: [],
+        hardware: [],
+        optionGroups: [],
+        modules: [],
+        components: [
+          {
+            id: 'c-puerta',
+            code: 'PUE',
+            name: 'Hoja de Puerta',
+            placement: 'puerta',
+            geometry: {
+              kind: 'rectangular_board',
+              lengthMm: 700,
+              widthMm: 600,
+              thicknessMm: 18,
+            },
+            defaultEdges: [],
+            optionRoles: ['PUERTA'],
+            active: true,
+          },
+        ],
+        agregados: [
+          {
+            id: 'agr-puerta',
+            code: 'AGR-PUE',
+            name: 'Puerta Sencilla',
+            externalDims: { width: 600, height: 700, depth: 18 },
+            components: [
+              {
+                componentId: 'c-puerta',
+                quantity: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const structure: Structure = {
+        id: 'str-gab',
+        code: 'STR-GAB',
+        name: 'Mueble Gabinete',
+        components: [],
+        agregados: [
+          {
+            agregadoId: 'agr-puerta',
+            quantity: 1,
+          },
+        ],
+      };
+
+      const bom = resolveComposedModule({
+        structure,
+        catalog,
+        componentInstances: [],
+        dims: { width: 600, height: 700, depth: 500 },
+        optionChoices: { FRENTE: 'm1' },
+      });
+
+      expect(bom.boardParts).toHaveLength(1);
+      const doorPart = bom.boardParts[0]!;
+      expect(doorPart.y).toBe(500);
+    });
   });
 });
 

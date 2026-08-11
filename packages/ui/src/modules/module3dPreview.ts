@@ -120,6 +120,7 @@ export function resolveModule3DPreview(
     catalogInput.optionGroups,
     catalogInput.components,
     catalogInput.structures,
+    catalogInput.agregados,
   );
   const choices: OptionChoices = {
     ...defaults,
