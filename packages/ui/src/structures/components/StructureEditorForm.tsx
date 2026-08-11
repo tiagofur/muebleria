@@ -129,13 +129,16 @@ export function StructureEditorForm({
         {STRUCTURE_EDITOR_TABS.map((tab, index) => {
           const selected = editorTab === tab.id;
           const showEmptyBadge = tab.id === 'components' && componentsEmpty;
+          const presLen = draft.presets?.length ?? 0;
+          const compLen = draft.components?.length ?? 0;
+          const agrLen = draft.agregados?.length ?? 0;
           const countLabel =
-            tab.id === 'presets' && draft.presets.length > 0
-              ? ` (${draft.presets.length})`
-              : tab.id === 'components' && draft.components.length > 0
-                ? ` (${draft.components.length})`
-                : tab.id === 'agregados' && draft.agregados.length > 0
-                  ? ` (${draft.agregados.length})`
+            tab.id === 'presets' && presLen > 0
+              ? ` (${presLen})`
+              : tab.id === 'components' && compLen > 0
+                ? ` (${compLen})`
+                : tab.id === 'agregados' && agrLen > 0
+                  ? ` (${agrLen})`
                   : '';
           return (
             <button

@@ -94,11 +94,14 @@ export type ModuleEditorFormProps = {
 
 function compositionBadge(draft: ModuleDraft): string {
   const parts: string[] = [];
-  if (draft.components.length > 0) parts.push(`${draft.components.length} comp.`);
-  if (draft.presets.length > 0) parts.push(`${draft.presets.length} med.`);
-  if (draft.hardwareLines.length > 0) {
-    parts.push(`${draft.hardwareLines.length} herr.`);
-  }
+  const compLen = draft.components?.length ?? 0;
+  const agrLen = draft.agregados?.length ?? 0;
+  const presLen = draft.presets?.length ?? 0;
+  const hwLen = draft.hardwareLines?.length ?? 0;
+  if (compLen > 0) parts.push(`${compLen} comp.`);
+  if (agrLen > 0) parts.push(`${agrLen} agr.`);
+  if (presLen > 0) parts.push(`${presLen} med.`);
+  if (hwLen > 0) parts.push(`${hwLen} herr.`);
   return parts.length > 0 ? ` (${parts.join(' · ')})` : '';
 }
 
@@ -300,15 +303,19 @@ export function ModuleEditorForm({
               tab.id === 'measures' ||
               tab.id === 'hardware';
             const gated = requiresStructure && structureMissing;
+            const compLen = draft.components?.length ?? 0;
+            const agrLen = draft.agregados?.length ?? 0;
+            const presLen = draft.presets?.length ?? 0;
+            const hwLen = draft.hardwareLines?.length ?? 0;
             let badge = '';
-            if (tab.id === 'components' && draft.components.length > 0) {
-              badge = ` (${draft.components.length})`;
-            } else if (tab.id === 'agregados' && draft.agregados.length > 0) {
-              badge = ` (${draft.agregados.length})`;
-            } else if (tab.id === 'measures' && draft.presets.length > 0) {
-              badge = ` (${draft.presets.length})`;
-            } else if (tab.id === 'hardware' && draft.hardwareLines.length > 0) {
-              badge = ` (${draft.hardwareLines.length})`;
+            if (tab.id === 'components' && compLen > 0) {
+              badge = ` (${compLen})`;
+            } else if (tab.id === 'agregados' && agrLen > 0) {
+              badge = ` (${agrLen})`;
+            } else if (tab.id === 'measures' && presLen > 0) {
+              badge = ` (${presLen})`;
+            } else if (tab.id === 'hardware' && hwLen > 0) {
+              badge = ` (${hwLen})`;
             }
             const showEmptyStructure =
               tab.id === 'structure' && structureMissing;

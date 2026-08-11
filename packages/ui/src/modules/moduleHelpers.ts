@@ -308,7 +308,7 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
           depth: depth ?? 0,
         }
       : undefined,
-    hardwareLines: draft.hardwareLines.map((l) => ({
+    hardwareLines: (draft.hardwareLines ?? []).map((l) => ({
       id: l.id,
       quantity: l.quantity,
       descriptionOverride: optionalNotes(l.descriptionOverride),
@@ -321,8 +321,8 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
           ? l.hardwareId.trim()
           : undefined,
     })),
-    structureId: draft.structureId.trim() || undefined,
-    components: draft.components.map((c) => ({
+    structureId: (draft.structureId ?? '').trim() || undefined,
+    components: (draft.components ?? []).map((c) => ({
       componentId: c.componentId,
       quantity: c.quantity,
       placementOverride: c.placementOverride
@@ -330,10 +330,11 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
         : undefined,
       overrides: c.overrides,
     })),
-    agregados: draft.agregados.length > 0 ? [...draft.agregados] : undefined,
+    agregados:
+      (draft.agregados ?? []).length > 0 ? [...draft.agregados] : undefined,
     presets:
-      draft.presets.length > 0
-        ? draft.presets.map((p) => ({
+      (draft.presets ?? []).length > 0
+        ? (draft.presets ?? []).map((p) => ({
             id: p.id,
             name: p.name.trim() || undefined,
             width: p.width,

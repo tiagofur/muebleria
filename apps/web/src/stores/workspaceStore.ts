@@ -312,7 +312,13 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 },
               },
             );
-            if (!res.ok) throw new Error(`owners ${res.status}`);
+            if (!res.ok) {
+              if (res.status === 401 && get().session === 'auth') {
+                get().logout();
+                return;
+              }
+              throw new Error(`owners ${res.status}`);
+            }
             const users = (await res.json()) as ReadonlyArray<{
               id: string;
               name: string;

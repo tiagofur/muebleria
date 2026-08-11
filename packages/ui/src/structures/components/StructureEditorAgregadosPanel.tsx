@@ -105,7 +105,7 @@ export function StructureEditorAgregadosPanel<
 
     setDraft((prev) => ({
       ...prev,
-      agregados: [...prev.agregados, newInst],
+      agregados: [...(prev.agregados ?? []), newInst],
     }));
   };
 
@@ -116,7 +116,7 @@ export function StructureEditorAgregadosPanel<
       setPendingRemove(null);
       setDraft((prev) => ({
         ...prev,
-        agregados: prev.agregados.filter((_, i) => i !== index),
+        agregados: (prev.agregados ?? []).filter((_, i) => i !== index),
       }));
       return;
     }
@@ -132,7 +132,7 @@ export function StructureEditorAgregadosPanel<
   ) => {
     setDraft((prev) => ({
       ...prev,
-      agregados: prev.agregados.map((item, i) =>
+      agregados: (prev.agregados ?? []).map((item, i) =>
         i === index ? { ...item, ...patch } : item,
       ),
     }));
@@ -186,15 +186,15 @@ export function StructureEditorAgregadosPanel<
         </div>
       )}
 
-      {draft.agregados.length > 0 ? <FormulaLegend /> : null}
+      {(draft.agregados ?? []).length > 0 ? <FormulaLegend /> : null}
 
-      {draft.agregados.length === 0 ? (
+      {(draft.agregados ?? []).length === 0 ? (
         <div className="catalog-form__empty" data-testid="structure-agregados-empty">
           No hay agregados añadidos todavía.
         </div>
       ) : (
         <div className="structure-editor__agregados-list">
-          {draft.agregados.map((inst, idx) => {
+          {(draft.agregados ?? []).map((inst, idx) => {
             const template = catalogAgregados.find((a) => a.id === inst.agregadoId);
             const isPendingRemove = pendingRemove?.index === idx;
             return (
