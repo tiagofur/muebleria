@@ -27,8 +27,11 @@ import * as THREE from 'three';
 import {
   offsetMmFromPlanPoint,
   type AmbientMaterial,
+  type Hardware,
   type ResolvedBoardPart,
+  type ResolvedHardwarePlacement,
 } from '@muebles/domain';
+import { HardwareMesh } from './HardwareMesh';
 import {
   boardPartsToVisuals,
   cameraPositionForView,
@@ -99,6 +102,8 @@ export type FurnitureSceneModule = {
   /** Visual countertop slab on top of floor cabinets (presentation). */
   readonly showCountertop?: boolean;
   readonly showOuterGhost?: boolean;
+  /** Per-part resolved hardware placements (handles, hinges) for 3D rendering. */
+  readonly resolvedHardwarePlacements?: readonly ResolvedHardwarePlacement[];
 };
 
 /** Simple room wall segment in workshop mm (plan X/Y). */
@@ -297,6 +302,11 @@ export type FurnitureScene3DProps = {
    * colisiona con otro módulo.
    */
   readonly draggingInvalid?: boolean;
+  /**
+   * Hardware catalog lookup (id → Hardware) for rendering handles/hinges.
+   * When omitted, no hardware meshes render.
+   */
+  readonly hardwareCatalog?: readonly Hardware[];
   /**
    * Drop de un ítem sin colocar sobre el viewport. El Studio resuelve la
    * posición (wallId+offsetMm para muro, planXMm/planYMm para piso).
@@ -656,6 +666,7 @@ function ModuleGroup({
   onModuleFreeDragStart,
   onModuleFreeDragEnd,
   draggingInvalid = false,
+  hardwareCatalog,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   controlsRef,
   setOrbitSuppressed,
@@ -695,6 +706,8 @@ function ModuleGroup({
   readonly onModuleFreeDragEnd?: (moduleKey: string) => void;
   /** When true, the selected module's ghost renders red (collision during drag). */
   readonly draggingInvalid?: boolean;
+  /** Hardware catalog for rendering handles/hinges on this module's parts. */
+  readonly hardwareCatalog?: readonly Hardware[];
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
@@ -1643,6 +1656,7 @@ export function FurnitureScene3D({
   ghostDropValid,
   ghostPosition = null,
   draggingInvalid = false,
+  hardwareCatalog,
   onUnplacedDrop,
   onUnplacedHover,
 }: FurnitureScene3DProps): ReactNode {

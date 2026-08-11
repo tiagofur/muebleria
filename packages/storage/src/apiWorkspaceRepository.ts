@@ -7,7 +7,6 @@ import type { WorkspaceRepository } from './workspaceRepository';
 import {
   ambientMaterialToApi,
   catalogFromApi,
-  ambientMaterialToApi,
   categoryToApi,
   componentToApi,
   customerToApi,
@@ -319,7 +318,6 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
           ambientMaterialToApi(am),
         );
       }
-    }
     }
   }
 
