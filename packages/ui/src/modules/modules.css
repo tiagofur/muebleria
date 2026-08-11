@@ -283,6 +283,18 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Tabs that require a structure base: muted when structure is not yet selected */
+.module-editor__subtab--gated {
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: help;
+}
+
+.module-editor__subtab--gated:hover {
+  color: var(--text-muted);
+  background: transparent;
+}
+
 /* Grid keyboard capture (#39): stronger focus ring on numeric fields */
 .module-editor__section .catalog-form__field input:focus-visible,
 .module-editor__section .catalog-form__field select:focus-visible {

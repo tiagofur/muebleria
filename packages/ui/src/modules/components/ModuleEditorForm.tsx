@@ -294,6 +294,12 @@ export function ModuleEditorForm({
         >
           {MODULE_EDITOR_COMPOSITION_TABS.map((tab, index) => {
             const selected = editorTab === tab.id;
+            // Tabs that only make sense with a structure base
+            const requiresStructure =
+              tab.id === 'components' ||
+              tab.id === 'measures' ||
+              tab.id === 'hardware';
+            const gated = requiresStructure && structureMissing;
             let badge = '';
             if (tab.id === 'components' && draft.components.length > 0) {
               badge = ` (${draft.components.length})`;
@@ -318,10 +324,16 @@ export function ModuleEditorForm({
                 aria-selected={selected}
                 aria-controls={`module-editor-panel-${tab.id}`}
                 tabIndex={selected ? 0 : -1}
-                className={
+                className={[
                   selected
                     ? 'module-editor__subtab module-editor__subtab--active'
-                    : 'module-editor__subtab'
+                    : 'module-editor__subtab',
+                  gated ? 'module-editor__subtab--gated' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                title={
+                  gated ? 'Elegí una estructura base primero' : undefined
                 }
                 data-testid={`module-editor-tab-${tab.id}`}
                 onClick={() => setEditorTab(tab.id)}

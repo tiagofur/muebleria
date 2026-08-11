@@ -61,7 +61,7 @@ describe('StructureEditorAgregadosPanel', () => {
   it('renders empty message when no agregados are attached', () => {
     render(<TestHarness />);
     expect(screen.getByTestId('structure-agregados-empty').textContent).toContain(
-      'No hay sub-conjuntos agregados',
+      'No hay agregados',
     );
   });
 
@@ -124,8 +124,12 @@ describe('StructureEditorAgregadosPanel', () => {
     fireEvent.change(posZInput, { target: { value: 'B + 20' } });
     expect(currentDraft.agregados[0]!.position?.zFormula).toBe('B + 20');
 
-    // Remove
+    // Remove: soft-delete requires two clicks (first=enter confirm, second=execute)
     const removeBtn = screen.getByTestId('structure-remove-agregado-0');
+    fireEvent.click(removeBtn);
+    // After first click: card is in pending-remove state, draft unchanged
+    expect(currentDraft.agregados).toHaveLength(1);
+    // Second click confirms removal
     fireEvent.click(removeBtn);
     expect(currentDraft.agregados).toHaveLength(0);
   });
