@@ -3,6 +3,8 @@ import {
   ambientMaterialFromApi,
   ambientMaterialToApi,
   catalogFromApi,
+  hardwareToApi,
+  hardwareFromApi,
   materialToApi,
   materialFromApi,
   moduleToApi,
@@ -22,6 +24,7 @@ import {
 import type {
   AmbientMaterial,
   Component,
+  Hardware,
   MaterialBoard,
   Module,
   ModuleCategory,
@@ -1154,5 +1157,86 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
     expect(round.agregados![0]!.position?.zFormula).toBe('100');
     expect(round.agregados![0]!.dimensions?.widthFormula).toBe('W - 36');
     expect(round.agregados![0]!.optionOverrides).toEqual({ PLACA: 'mat-mdf' });
+  });
+});
+
+describe('hardwareToApi / hardwareFromApi — PBR round-trip (F069)', () => {
+  it('round-trips preview fields (shape + PBR)', () => {
+    const hw: Hardware = {
+      id: 'hw-1',
+      code: 'HW-KNOB',
+      name: 'Jaladera cromada',
+      unit: 'piece',
+      costPerUnit: 5,
+      active: true,
+      previewShape: 'knob',
+      previewColor: '#c0c0c0',
+      previewSizeMm: 28,
+      previewDiameterMm: 28,
+      previewProjectionMm: 25,
+      previewRoughness: 0.15,
+      previewMetalness: 0.9,
+      previewClearcoat: 0.8,
+    };
+    const api = hardwareToApi(hw);
+    expect(api.preview_shape).toBe('knob');
+    expect(api.preview_color).toBe('#c0c0c0');
+    expect(api.preview_metalness).toBe(0.9);
+    expect(api.preview_clearcoat).toBe(0.8);
+
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.previewShape).toBe('knob');
+    expect(round.previewColor).toBe('#c0c0c0');
+    expect(round.previewMetalness).toBe(0.9);
+    expect(round.previewClearcoat).toBe(0.8);
+    expect(round.previewRoughness).toBe(0.15);
+  });
+
+  it('preserves PBR value 0 (not undefined)', () => {
+    const hw: Hardware = {
+      id: 'hw-2',
+      code: 'HW-BLACK',
+      name: 'Negro mate',
+      unit: 'piece',
+      costPerUnit: 3,
+      active: true,
+      previewShape: 'bar-pull',
+      previewColor: '#1a1a1a',
+      previewMetalness: 0.1,
+      previewRoughness: 0.7,
+      previewClearcoat: 0,
+    };
+    const round = hardwareFromApi(hardwareToApi(hw) as Record<string, unknown>);
+    expect(round.previewClearcoat).toBe(0);
+    expect(round.previewMetalness).toBe(0.1);
+  });
+
+  it('omits preview fields when absent (backward-compat)', () => {
+    const hw: Hardware = {
+      id: 'hw-3',
+      code: 'HW-PLAIN',
+      name: 'Tornillo',
+      unit: 'piece',
+      costPerUnit: 0.5,
+      active: true,
+    };
+    const round = hardwareFromApi(hardwareToApi(hw) as Record<string, unknown>);
+    expect(round.previewShape).toBeUndefined();
+    expect(round.previewColor).toBeUndefined();
+    expect(round.previewMetalness).toBeUndefined();
+  });
+
+  it('rejects invalid shape strings', () => {
+    const api = hardwareToApi({
+      id: 'hw-4',
+      code: 'HW-X',
+      name: 'Bad',
+      unit: 'piece',
+      costPerUnit: 1,
+      active: true,
+      previewShape: 'ring' as Hardware['previewShape'],
+    });
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.previewShape).toBeUndefined();
   });
 });

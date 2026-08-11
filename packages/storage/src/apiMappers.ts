@@ -214,6 +214,16 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     image_url: h.imageUrl ?? '',
     notes: h.notes ?? '',
     active: h.active,
+    // Preview fields (F068/F069): geometry + PBR. Must round-trip or finishes
+    // and shapes set in the UI vanish on reload.
+    preview_shape: h.previewShape ?? null,
+    preview_size_mm: h.previewSizeMm ?? null,
+    preview_projection_mm: h.previewProjectionMm ?? null,
+    preview_diameter_mm: h.previewDiameterMm ?? null,
+    preview_color: h.previewColor ?? null,
+    preview_roughness: h.previewRoughness ?? null,
+    preview_metalness: h.previewMetalness ?? null,
+    preview_clearcoat: h.previewClearcoat ?? null,
   };
 }
 
@@ -224,6 +234,8 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     pkgRaw === null || pkgRaw === undefined || pkgRaw === ''
       ? undefined
       : Math.max(0, num(pkgRaw));
+  const shapeRaw = str(raw.preview_shape ?? raw.previewShape);
+  const validShapes = ['knob', 'bar-pull', 'cup-pull', 'hinge', 'slide', 'rail', 'leg'];
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -236,6 +248,15 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     imageUrl: str(raw.image_url ?? raw.imageUrl) || undefined,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
+    // Preview fields (F068/F069)
+    ...(validShapes.includes(shapeRaw) ? { previewShape: shapeRaw as Hardware['previewShape'] } : {}),
+    previewSizeMm: optionalNum(raw.preview_size_mm ?? raw.previewSizeMm),
+    previewProjectionMm: optionalNum(raw.preview_projection_mm ?? raw.previewProjectionMm),
+    previewDiameterMm: optionalNum(raw.preview_diameter_mm ?? raw.previewDiameterMm),
+    previewColor: str(raw.preview_color ?? raw.previewColor) || undefined,
+    previewRoughness: optionalNum(raw.preview_roughness ?? raw.previewRoughness),
+    previewMetalness: optionalNum(raw.preview_metalness ?? raw.previewMetalness),
+    previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
   };
 }
 

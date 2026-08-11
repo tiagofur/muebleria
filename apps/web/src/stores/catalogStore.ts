@@ -192,6 +192,53 @@ function parsePbr(v: number | '' | undefined): number | undefined {
     : undefined;
 }
 
+/**
+ * Parses a numeric form field (string or number) → `number | undefined`.
+ * For PBR fields (roughness/metalness/clearcoat), clamps to [0, 1].
+ */
+function parseDraftNum(
+  v: string | number | undefined,
+  clamp01 = false,
+): number | undefined {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  return clamp01 ? Math.min(1, Math.max(0, n)) : n;
+}
+
+const HARDWARE_SHAPES = ['knob', 'bar-pull', 'cup-pull', 'hinge', 'slide', 'rail', 'leg'];
+
+/**
+ * Extracts 3D preview fields from a HardwareDraft into a partial Hardware
+ * object that can be spread into create/update. F069.
+ */
+function hardwarePreviewFields(
+  draft: HardwareDraft,
+): Pick<Hardware,
+  | 'previewShape'
+  | 'previewColor'
+  | 'previewSizeMm'
+  | 'previewDiameterMm'
+  | 'previewProjectionMm'
+  | 'previewRoughness'
+  | 'previewMetalness'
+  | 'previewClearcoat'
+> {
+  const shape = HARDWARE_SHAPES.includes(draft.previewShape)
+    ? (draft.previewShape as Hardware['previewShape'])
+    : undefined;
+  const color = draft.previewColor?.trim() || undefined;
+  return {
+    ...(shape ? { previewShape: shape } : {}),
+    ...(color ? { previewColor: color } : {}),
+    ...(draft.previewSizeMm ? { previewSizeMm: parseDraftNum(draft.previewSizeMm) } : {}),
+    ...(draft.previewDiameterMm ? { previewDiameterMm: parseDraftNum(draft.previewDiameterMm) } : {}),
+    ...(draft.previewProjectionMm ? { previewProjectionMm: parseDraftNum(draft.previewProjectionMm) } : {}),
+    ...(draft.previewRoughness ? { previewRoughness: parseDraftNum(draft.previewRoughness, true) } : {}),
+    ...(draft.previewMetalness ? { previewMetalness: parseDraftNum(draft.previewMetalness, true) } : {}),
+    ...(draft.previewClearcoat ? { previewClearcoat: parseDraftNum(draft.previewClearcoat, true) } : {}),
+  };
+}
+
 export function createCatalogStore(options: InternalOptions) {
   const newId = options.deps.newId ?? defaultNewId;
   const saveCatalog = options.deps.saveCatalog;
@@ -485,6 +532,7 @@ export function createCatalogStore(options: InternalOptions) {
         imageUrl: draft.imageUrl?.trim() || undefined,
         notes: optionalNotes(draft.notes),
         active: true,
+        ...hardwarePreviewFields(draft),
       };
       patch(set, get, (c) => ({ ...c, hardware: [...c.hardware, item] }));
       toast({ type: 'success', message: `✓ "${code}" creado` });
@@ -500,6 +548,14 @@ export function createCatalogStore(options: InternalOptions) {
           if (h.id !== id) return h;
           const {
             packageSize: _drop,
+            previewShape: _ds,
+            previewColor: _dc,
+            previewSizeMm: _dsm,
+            previewDiameterMm: _ddm,
+            previewProjectionMm: _dpm,
+            previewRoughness: _dr,
+            previewMetalness: _dm,
+            previewClearcoat: _dcl,
             ...rest
           } = h;
           return {
@@ -511,6 +567,7 @@ export function createCatalogStore(options: InternalOptions) {
             ...(packageSize === undefined ? {} : { packageSize }),
             imageUrl: draft.imageUrl?.trim() || undefined,
             notes: optionalNotes(draft.notes),
+            ...hardwarePreviewFields(draft),
           };
         }),
       }));

@@ -314,6 +314,14 @@ describe('catalogStore — hardware / optionGroups / components', () => {
       packageSize: '',
       imageUrl: '',
       notes: '',
+      previewShape: '',
+      previewColor: '',
+      previewSizeMm: '',
+      previewDiameterMm: '',
+      previewProjectionMm: '',
+      previewRoughness: '',
+      previewMetalness: '',
+      previewClearcoat: '',
     });
     expect(
       store.getState().catalog!.hardware.some((h) => h.code === 'HW-1'),

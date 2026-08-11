@@ -178,6 +178,12 @@ export {
   type ResolvedHardwarePlacement,
   type NormalizedHardwarePreview,
 } from './hardwarePlacement';
+export {
+  HARDWARE_FINISHES,
+  getHardwareFinish,
+  type HardwareFinish,
+  type HardwareFinishId,
+} from './hardwareFinishes';
 
 export {
   previewPartForComponent,

@@ -4,6 +4,7 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { Hardware, HardwareUnit } from '@muebles/domain';
+import { HARDWARE_FINISHES } from '@muebles/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,
@@ -44,6 +45,15 @@ export type HardwareDraft = {
   /** Relative media path (F040/F042). */
   imageUrl: string;
   notes: string;
+  // --- F069: 3D preview fields ---
+  previewShape: string;
+  previewColor: string;
+  previewSizeMm: string;
+  previewDiameterMm: string;
+  previewProjectionMm: string;
+  previewRoughness: string;
+  previewMetalness: string;
+  previewClearcoat: string;
 };
 
 const emptyDraft = (): HardwareDraft => ({
@@ -54,6 +64,14 @@ const emptyDraft = (): HardwareDraft => ({
   packageSize: '',
   imageUrl: '',
   notes: '',
+  previewShape: '',
+  previewColor: '',
+  previewSizeMm: '',
+  previewDiameterMm: '',
+  previewProjectionMm: '',
+  previewRoughness: '',
+  previewMetalness: '',
+  previewClearcoat: '',
 });
 
 function toDraft(item: Hardware): HardwareDraft {
@@ -66,6 +84,14 @@ function toDraft(item: Hardware): HardwareDraft {
       item.packageSize !== undefined ? String(item.packageSize) : '',
     imageUrl: item.imageUrl ?? '',
     notes: item.notes ?? '',
+    previewShape: item.previewShape ?? '',
+    previewColor: item.previewColor ?? '',
+    previewSizeMm: item.previewSizeMm !== undefined ? String(item.previewSizeMm) : '',
+    previewDiameterMm: item.previewDiameterMm !== undefined ? String(item.previewDiameterMm) : '',
+    previewProjectionMm: item.previewProjectionMm !== undefined ? String(item.previewProjectionMm) : '',
+    previewRoughness: item.previewRoughness !== undefined ? String(item.previewRoughness) : '',
+    previewMetalness: item.previewMetalness !== undefined ? String(item.previewMetalness) : '',
+    previewClearcoat: item.previewClearcoat !== undefined ? String(item.previewClearcoat) : '',
   };
 }
 
@@ -552,6 +578,73 @@ export function HardwareCatalog({
                 value={draft.notes}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
               />
+            </div>
+          </fieldset>
+
+          {/* F069: 3D preview — shape + finish preset + color */}
+          <fieldset className="catalog-form__section">
+            <legend className="catalog-form__section-title">Vista 3D</legend>
+            <div className="catalog-form__row">
+              <label className="catalog-form__field">
+                <span>Forma (3D)</span>
+                <select
+                  value={draft.previewShape}
+                  onChange={(e) => setDraft({ ...draft, previewShape: e.target.value })}
+                  data-testid="hardware-form-shape"
+                >
+                  <option value="">— Sin forma —</option>
+                  <option value="knob">Tirador (perilla)</option>
+                  <option value="bar-pull">Tirador (barra)</option>
+                  <option value="cup-pull">Tirador (copa)</option>
+                  <option value="hinge">Bisagra</option>
+                  <option value="slide">Corredera</option>
+                  <option value="rail">Riel</option>
+                  <option value="leg">Pata</option>
+                </select>
+              </label>
+              <label className="catalog-form__field">
+                <span>Acabado</span>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const finish = HARDWARE_FINISHES.find((f) => f.id === e.target.value);
+                    if (finish) {
+                      setDraft({
+                        ...draft,
+                        previewColor: finish.color,
+                        previewMetalness: String(finish.metalness),
+                        previewRoughness: String(finish.roughness),
+                        previewClearcoat: String(finish.clearcoat),
+                      });
+                    }
+                  }}
+                  data-testid="hardware-form-finish"
+                >
+                  <option value="">— Personalizado —</option>
+                  {HARDWARE_FINISHES.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="catalog-form__row">
+              <label className="catalog-form__field">
+                <span>Color</span>
+                <input
+                  type="color"
+                  value={draft.previewColor || '#9aa0a6'}
+                  onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
+                  data-testid="hardware-form-color"
+                />
+              </label>
+              {draft.previewColor ? (
+                <span
+                  className="material-color-swatch"
+                  style={{ backgroundColor: draft.previewColor }}
+                  aria-label={draft.previewColor}
+                  data-testid="hardware-form-color-swatch"
+                />
+              ) : null}
             </div>
           </fieldset>
         </form>
