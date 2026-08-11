@@ -232,17 +232,43 @@ type DimensionPreset struct {
 // pushes an immutable snapshot of the previous BOM-relevant fields onto
 // History. The zero value (Revision == 0) is treated as DEFAULT (1) by the
 // engine helpers so legacy rows keep working.
+type AgregadoPosition struct {
+	XFormula string `json:"x_formula,omitempty"`
+	YFormula string `json:"y_formula,omitempty"`
+	ZFormula string `json:"z_formula,omitempty"`
+}
+
+type AgregadoDimensions struct {
+	WidthFormula  string `json:"width_formula,omitempty"`
+	HeightFormula string `json:"height_formula,omitempty"`
+	DepthFormula  string `json:"depth_formula,omitempty"`
+}
+
+type ModuleAgregadoInstance struct {
+	ID              string              `json:"id,omitempty"`
+	AgregadoID      string              `json:"agregado_id"`
+	Name            string              `json:"name,omitempty"`
+	Quantity        int                 `json:"quantity"`
+	LayoutDirection string              `json:"layout_direction,omitempty"`
+	GapMm           float64             `json:"gap_mm,omitempty"`
+	Position        *AgregadoPosition   `json:"position,omitempty"`
+	Dimensions      *AgregadoDimensions `json:"dimensions,omitempty"`
+	Mirrored        bool                `json:"mirrored,omitempty"`
+	OptionOverrides map[string]string   `json:"option_overrides,omitempty"`
+}
+
 type Structure struct {
-	ID         string              `json:"id"`
-	Code       string              `json:"code"`
-	Name       string              `json:"name"`
-	WidthMm    int                 `json:"width_mm,omitempty"`
-	HeightMm   int                 `json:"height_mm,omitempty"`
-	DepthMm    int                 `json:"depth_mm,omitempty"`
-	Components []ComponentInstance `json:"components,omitempty"`
-	Presets    []DimensionPreset   `json:"presets,omitempty"`
-	Notes      string              `json:"notes,omitempty"`
-	Active     bool                `json:"active"`
+	ID         string                   `json:"id"`
+	Code       string                   `json:"code"`
+	Name       string                   `json:"name"`
+	WidthMm    int                      `json:"width_mm,omitempty"`
+	HeightMm   int                      `json:"height_mm,omitempty"`
+	DepthMm    int                      `json:"depth_mm,omitempty"`
+	Components []ComponentInstance      `json:"components,omitempty"`
+	Agregados  []ModuleAgregadoInstance `json:"agregados,omitempty"`
+	Presets    []DimensionPreset        `json:"presets,omitempty"`
+	Notes      string                   `json:"notes,omitempty"`
+	Active     bool                     `json:"active"`
 	// Revision is the monotonic version of the structure's BOM-relevant fields.
 	// Starts at 1 (DEFAULT_STRUCTURE_REVISION); legacy rows (0 / missing) are
 	// normalised to 1 by the engine helpers.
@@ -259,14 +285,15 @@ type Structure struct {
 // only the fields that affect ResolveBom are captured (notes/active/history are
 // intentionally dropped).
 type StructureRevision struct {
-	Revision   int                 `json:"revision"`
-	Code       string              `json:"code"`
-	Name       string              `json:"name"`
-	WidthMm    int                 `json:"width_mm,omitempty"`
-	HeightMm   int                 `json:"height_mm,omitempty"`
-	DepthMm    int                 `json:"depth_mm,omitempty"`
-	Components []ComponentInstance `json:"components,omitempty"`
-	Presets    []DimensionPreset   `json:"presets,omitempty"`
+	Revision   int                      `json:"revision"`
+	Code       string                   `json:"code"`
+	Name       string                   `json:"name"`
+	WidthMm    int                      `json:"width_mm,omitempty"`
+	HeightMm   int                      `json:"height_mm,omitempty"`
+	DepthMm    int                      `json:"depth_mm,omitempty"`
+	Components []ComponentInstance      `json:"components,omitempty"`
+	Agregados  []ModuleAgregadoInstance `json:"agregados,omitempty"`
+	Presets    []DimensionPreset        `json:"presets,omitempty"`
 }
 
 // ComponentInstance is a reference to a reusable component placed in a structure or module.

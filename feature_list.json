@@ -1613,7 +1613,7 @@
         "docs/agregados-subassemblies-plan.md Fase 3",
         "Issue #296"
       ],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "F085",
@@ -1631,7 +1631,7 @@
         "docs/agregados-subassemblies-plan.md Fase 4",
         "Issue #297"
       ],
-      "status": "pending"
+      "status": "in_progress"
     }
   ]
 }

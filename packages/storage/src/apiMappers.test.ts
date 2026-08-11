@@ -1118,4 +1118,41 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
     expect(round.kitchenLayout?.spaces?.[0]?.wallMaterialId).toBeUndefined();
     expect(round.kitchenLayout?.spaces?.[0]?.showCeiling).toBeUndefined();
   });
+
+  it('structureToApi and structureFromApi preserve agregados roundtrip', () => {
+    const st: Structure = {
+      id: 'st-caj',
+      code: 'EST-CAJ',
+      name: 'Estructura con Cajones',
+      components: [],
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-caj-3',
+          name: 'Columna de 3 Cajones',
+          quantity: 3,
+          layoutDirection: 'vertical',
+          gapMm: 3,
+          position: { zFormula: '100' },
+          dimensions: { widthFormula: 'W - 36', heightFormula: '600' },
+          mirrored: true,
+          optionOverrides: { PLACA: 'mat-mdf' },
+        },
+      ],
+    };
+
+    const api = structureToApi(st);
+    expect(api.agregados).toHaveLength(1);
+
+    const round = structureFromApi(api);
+    expect(round.agregados).toHaveLength(1);
+    expect(round.agregados![0]!.agregadoId).toBe('agr-caj-3');
+    expect(round.agregados![0]!.quantity).toBe(3);
+    expect(round.agregados![0]!.layoutDirection).toBe('vertical');
+    expect(round.agregados![0]!.gapMm).toBe(3);
+    expect(round.agregados![0]!.mirrored).toBe(true);
+    expect(round.agregados![0]!.position?.zFormula).toBe('100');
+    expect(round.agregados![0]!.dimensions?.widthFormula).toBe('W - 36');
+    expect(round.agregados![0]!.optionOverrides).toEqual({ PLACA: 'mat-mdf' });
+  });
 });

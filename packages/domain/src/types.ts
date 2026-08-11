@@ -348,6 +348,7 @@ export interface StructureRevision {
   readonly externalDims?: ExternalDims;
   readonly presets?: readonly DimensionPreset[];
   readonly components?: readonly ModuleComponentInstance[];
+  readonly agregados?: readonly ModuleAgregadoInstance[];
 }
 
 // --- Reusable components (F049 / H07) ---

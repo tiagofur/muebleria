@@ -1,7 +1,7 @@
-# Sesión — F084 Jerarquía y Preview 3D de Agregados (#296, Fase 3)
+# Sesión — F085 Export Optimizer, Persistencia y Trazabilidad de Agregados (#297, Fase 4)
 
 - **Fecha:** 2026-08-11
-- **Scope:** Implementación de F084 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #296)
+- **Scope:** Implementación de F085 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #297)
 
 ## Hecho — F082 Motor Paramétrico de Agregados (#294, Fase 1)
 
@@ -16,11 +16,16 @@
 - Creado `StructureEditorAgregadosPanel.tsx` con selector del catálogo de agregados y formulario de parametrización ($N$, apilamiento, luz `gapMm`, posición $Z$, $W$, $H$, espejeado).
 - 679/679 tests en `@muebles/ui` pasando ✓. Commit `d928f9d`.
 
-## En Curso — F084 Jerarquía y Preview 3D de Agregados (#296, Fase 3)
+## Hecho — F084 Jerarquía y Preview 3D de Agregados (#296, Fase 3)
 
-1. Verificar que `previewComponentPart.ts` y mappers 3D rendericen piezas de agregados en sus coordenadas calculadas $(X,Y,Z)$.
-2. Agrupar piezas de sub-ensambles en `FurnitureScene3D.tsx` / `ModuleScene3D.tsx` bajo nodos 3D de sub-conjuntos identificados.
-3. Permitir inspección visual y refresco dinámico al modificar dimensiones y posiciones en la UI.
+- `structure3dPreview.ts` y `module3dPreview.ts` resuelven piezas de agregados en sus coordenadas $(X,Y,Z)$ calculadas en tiempo real.
+- Pruebas unitarias de resolución 3D en `structure3dPreview.test.ts`. Commit `9b190b0`.
+
+## En Curso — F085 Export Optimizer, Persistencia y Trazabilidad (#297, Fase 4)
+
+1. Trazabilidad de agregados en despiece BOM y exportador de Excel (`packages/excel` / `Plantilla_Optimizer.xlsx`).
+2. Persistencia en `packages/storage` y backend Go (migraciones SQL / modelos de agregados).
+3. Verificación de tests end-to-end en todo el monorepo.
 
 ## Hecho — Planeamiento
 

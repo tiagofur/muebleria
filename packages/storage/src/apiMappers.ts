@@ -586,6 +586,71 @@ function presetFromApi(raw: Record<string, unknown>): import('@muebles/domain').
  * Mirrors the subset of `Structure` fields that affect BOM resolution
  * (no `notes`/`active` — irrelevant for re-resolution, see Slice 1).
  */
+export function agregadoInstanceToApi(
+  inst: import('@muebles/domain').ModuleAgregadoInstance,
+): Record<string, unknown> {
+  return {
+    id: inst.id,
+    agregado_id: inst.agregadoId,
+    name: inst.name,
+    quantity: inst.quantity,
+    layout_direction: inst.layoutDirection,
+    gap_mm: inst.gapMm,
+    mirrored: inst.mirrored,
+    position: inst.position
+      ? {
+          x_formula: inst.position.xFormula,
+          y_formula: inst.position.yFormula,
+          z_formula: inst.position.zFormula,
+        }
+      : undefined,
+    dimensions: inst.dimensions
+      ? {
+          width_formula: inst.dimensions.widthFormula,
+          height_formula: inst.dimensions.heightFormula,
+          depth_formula: inst.dimensions.depthFormula,
+        }
+      : undefined,
+    option_overrides: inst.optionOverrides,
+  };
+}
+
+export function agregadoInstanceFromApi(
+  raw: Record<string, unknown>,
+): import('@muebles/domain').ModuleAgregadoInstance {
+  const posRaw = raw.position as Record<string, unknown> | undefined;
+  const dimsRaw = raw.dimensions as Record<string, unknown> | undefined;
+  const overridesRaw = raw.option_overrides ?? raw.optionOverrides;
+
+  return {
+    id: str(raw.id),
+    agregadoId: str(raw.agregado_id ?? raw.agregadoId),
+    name: str(raw.name) || undefined,
+    quantity: num(raw.quantity) || 1,
+    layoutDirection: (str(raw.layout_direction ?? raw.layoutDirection) as any) || 'none',
+    gapMm: num(raw.gap_mm ?? raw.gapMm) || 0,
+    mirrored: Boolean(raw.mirrored),
+    position: posRaw
+      ? {
+          xFormula: str(posRaw.x_formula ?? posRaw.xFormula) || undefined,
+          yFormula: str(posRaw.y_formula ?? posRaw.yFormula) || undefined,
+          zFormula: str(posRaw.z_formula ?? posRaw.zFormula) || undefined,
+        }
+      : undefined,
+    dimensions: dimsRaw
+      ? {
+          widthFormula: str(dimsRaw.width_formula ?? dimsRaw.widthFormula) || undefined,
+          heightFormula: str(dimsRaw.height_formula ?? dimsRaw.heightFormula) || undefined,
+          depthFormula: str(dimsRaw.depth_formula ?? dimsRaw.depthFormula) || undefined,
+        }
+      : undefined,
+    optionOverrides:
+      overridesRaw && typeof overridesRaw === 'object'
+        ? (overridesRaw as Record<string, string>)
+        : undefined,
+  };
+}
+
 function structureRevisionToApi(
   r: import('@muebles/domain').StructureRevision,
 ): Record<string, unknown> {
@@ -598,6 +663,7 @@ function structureRevisionToApi(
     depth_mm: r.externalDims?.depth ?? 0,
     components: (r.components ?? []).map(componentInstanceToApi),
     presets: (r.presets ?? []).map(presetToApi),
+    agregados: (r.agregados ?? []).map(agregadoInstanceToApi),
   };
 }
 
@@ -610,6 +676,7 @@ function structureRevisionFromApi(
   const hasDims = w > 0 || h > 0 || d > 0;
   const componentsRaw = raw.components;
   const presetsRaw = raw.presets;
+  const agregadosRaw = raw.agregados;
   return {
     revision: num(raw.revision, 1),
     code: str(raw.code),
@@ -620,6 +687,9 @@ function structureRevisionFromApi(
       : undefined,
     presets: Array.isArray(presetsRaw)
       ? (presetsRaw as Record<string, unknown>[]).map(presetFromApi)
+      : undefined,
+    agregados: Array.isArray(agregadosRaw)
+      ? (agregadosRaw as Record<string, unknown>[]).map(agregadoInstanceFromApi)
       : undefined,
   };
 }
@@ -642,6 +712,7 @@ export function structureToApi(st: import('@muebles/domain').Structure): Record<
     history: (st.history ?? []).map(structureRevisionToApi),
     components: (st.components ?? []).map(componentInstanceToApi),
     presets: (st.presets ?? []).map(presetToApi),
+    agregados: (st.agregados ?? []).map(agregadoInstanceToApi),
   };
 }
 
@@ -653,6 +724,7 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
   const activeRaw = raw.active;
   const componentsRaw = raw.components;
   const presetsRaw = raw.presets;
+  const agregadosRaw = raw.agregados;
   const revisionRaw = raw.revision;
   const historyRaw = raw.history;
   const history = Array.isArray(historyRaw)
@@ -676,6 +748,9 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
       : undefined,
     presets: Array.isArray(presetsRaw)
       ? (presetsRaw as Record<string, unknown>[]).map(presetFromApi)
+      : undefined,
+    agregados: Array.isArray(agregadosRaw)
+      ? (agregadosRaw as Record<string, unknown>[]).map(agregadoInstanceFromApi)
       : undefined,
   };
 }
