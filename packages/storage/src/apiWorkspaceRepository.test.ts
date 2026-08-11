@@ -376,4 +376,44 @@ describe('APIWorkspaceRepository', () => {
     // Conflict is not an error: console stays clean.
     expect(errSpy).not.toHaveBeenCalled();
   });
+
+  it('saveCatalog PUTs agregados body', async () => {
+    const putBodies: { url: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (init?.method === 'PUT' && url.includes('/catalog/agregados/')) {
+        putBodies.push({
+          url,
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return { ok: true, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await repo.saveCatalog({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      agregados: [
+        {
+          id: 'agr-1',
+          code: 'AGR-CAJON-3',
+          name: 'Cuerpo 3 Cajones',
+          components: [],
+          active: true,
+        },
+      ],
+    });
+
+    expect(putBodies).toHaveLength(1);
+    expect(putBodies[0]!.url).toContain('/catalog/agregados/agr-1');
+    expect(putBodies[0]!.body['code']).toBe('AGR-CAJON-3');
+    expect(putBodies[0]!.body['name']).toBe('Cuerpo 3 Cajones');
+  });
 });

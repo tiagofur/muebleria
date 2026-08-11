@@ -316,6 +316,19 @@ type ComponentInstance struct {
 	Overrides *ComponentInstanceOverrides `json:"overrides,omitempty"`
 }
 
+// Agregado is a reusable sub-assembly catalog entity composed of ComponentInstances.
+// Examples: a drawer assembly, a door with hinges and handle, a divider panel group.
+type Agregado struct {
+	ID          string              `json:"id"`
+	Code        string              `json:"code"`
+	Name        string              `json:"name"`
+	Description string              `json:"description,omitempty"`
+	Components  []ComponentInstance `json:"components,omitempty"`
+	Active      bool                `json:"active"`
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+}
+
 // HardwarePlacement attaches a visible hardware instance to a component face for
 // the 3D preview (Fase 2: visible handles). Distinct from Perforation
 // (CNC/machining — different lifecycle/consumers). Rides the component-instance
@@ -501,6 +514,7 @@ type Catalog struct {
 	Structures   []Structure      `json:"structures,omitempty"`
 	Categories   []ModuleCategory `json:"categories,omitempty"`
 	Components   []Component      `json:"components,omitempty"`
+	Agregados    []Agregado       `json:"agregados,omitempty"`
 }
 
 // WorkshopSettings is taller-wide defaults (F031 + F044 COST-02).

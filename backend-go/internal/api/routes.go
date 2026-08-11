@@ -63,6 +63,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/catalog/option-groups/{id}", authMW(http.HandlerFunc(server.HandleOptionGroupByID)))
 	mux.Handle("DELETE /api/catalog/option-groups/{id}", authMW(http.HandlerFunc(server.HandleOptionGroupByID)))
 
+	// Catálogo: Agregados (sub-ensambles reutilizables)
+	mux.Handle("GET /api/catalog/agregados", authMW(http.HandlerFunc(server.HandleAgregados)))
+	mux.Handle("POST /api/catalog/agregados", authMW(http.HandlerFunc(server.HandleAgregados)))
+	mux.Handle("GET /api/catalog/agregados/{id}", authMW(http.HandlerFunc(server.HandleAgregadoByID)))
+	mux.Handle("PUT /api/catalog/agregados/{id}", authMW(http.HandlerFunc(server.HandleAgregadoByID)))
+	mux.Handle("DELETE /api/catalog/agregados/{id}", authMW(http.HandlerFunc(server.HandleAgregadoByID)))
+
 	// Catálogo: Categorías jerárquicas de módulos (F025)
 	mux.Handle("GET /api/catalog/categories", authMW(http.HandlerFunc(server.HandleCategories)))
 	mux.Handle("POST /api/catalog/categories", authMW(http.HandlerFunc(server.HandleCategories)))

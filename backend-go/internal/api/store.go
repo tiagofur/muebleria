@@ -67,6 +67,13 @@ type Store interface {
 	UpdateOptionGroup(ctx context.Context, id string, og *domain.OptionGroup) error
 	DeleteOptionGroup(ctx context.Context, id string) error
 
+	// Catalog: agregados (reusable sub-assemblies)
+	ListAgregados(ctx context.Context) ([]domain.Agregado, error)
+	GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error)
+	CreateAgregado(ctx context.Context, a *domain.Agregado) error
+	UpdateAgregado(ctx context.Context, id string, a *domain.Agregado) error
+	DeactivateAgregado(ctx context.Context, id string) error
+
 	// Catalog: categories
 	ListCategories(ctx context.Context) ([]domain.ModuleCategory, error)
 	GetCategoryByID(ctx context.Context, id string) (*domain.ModuleCategory, error)

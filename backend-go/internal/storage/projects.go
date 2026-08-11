@@ -182,6 +182,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	}
 	cat.Categories = cats
 
+	agrs, _ := s.ListAgregados(ctx)
+	cat.Agregados = agrs
+
 	// Cargar módulos y su despiece
 	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm FROM modules ORDER BY name ASC`
 	rows, err := s.Pool.Query(ctx, query)

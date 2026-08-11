@@ -1587,6 +1587,31 @@ export function breakdownFromApi(raw: Record<string, unknown>): QuoteBreakdown {
   };
 }
 
+export function agregadoToApi(a: import('@muebles/domain').Agregado): Record<string, unknown> {
+  return {
+    id: a.id,
+    code: a.code,
+    name: a.name,
+    description: a.description ?? '',
+    components: (a.components ?? []).map(componentInstanceToApi),
+    active: a.active !== false,
+  };
+}
+
+export function agregadoFromApi(raw: Record<string, unknown>): import('@muebles/domain').Agregado {
+  const componentsRaw = raw.components;
+  return {
+    id: str(raw.id),
+    code: str(raw.code),
+    name: str(raw.name),
+    description: str(raw.description) || undefined,
+    components: Array.isArray(componentsRaw)
+      ? (componentsRaw as Record<string, unknown>[]).map(componentInstanceFromApi)
+      : [],
+    active: raw.active !== false,
+  };
+}
+
 export function catalogFromApi(parts: {
   materials: unknown;
   edges: unknown;
@@ -1597,6 +1622,7 @@ export function catalogFromApi(parts: {
   categories: unknown;
   customers: unknown;
   components?: unknown;
+  agregados?: unknown;
   ambientMaterials?: unknown;
   ambient_materials?: unknown;
 }): Catalog {
@@ -1613,6 +1639,7 @@ export function catalogFromApi(parts: {
     categories: asRows(parts.categories).map(categoryFromApi),
     customers: asRows(parts.customers).map(customerFromApi),
     components: asRows(parts.components).map(componentFromApi),
+    agregados: asRows(parts.agregados).map(agregadoFromApi),
     ambientMaterials: asRows(parts.ambient_materials ?? parts.ambientMaterials).map(
       ambientMaterialFromApi,
     ),

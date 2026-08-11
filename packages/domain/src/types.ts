@@ -492,6 +492,7 @@ export interface Agregado {
   readonly name: string;
   readonly description?: string;
   readonly notes?: string;
+  readonly active?: boolean;
   /**
    * Reference (bounding-box) dimensions for the sub-assembly.
    * W/H/D formulas in child components resolve against these.

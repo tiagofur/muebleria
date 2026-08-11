@@ -5,6 +5,7 @@ import {
 } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import {
+  agregadoToApi,
   ambientMaterialToApi,
   catalogFromApi,
   categoryToApi,
@@ -124,6 +125,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       categories,
       structures,
       components,
+      agregados,
       ambientMaterials,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
@@ -135,6 +137,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/categories'),
       fetchJson('/catalog/structures').catch(() => []),
       fetchJson('/catalog/components').catch(() => []),
+      fetchJson('/catalog/agregados').catch(() => []),
       // Ambient materials are presentation-only (floor/wall textures for the 3D
       // room scene). `.catch(() => [])` keeps older backends (without the
       // endpoint) working — ambient renders as none, same as today.
@@ -151,6 +154,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       categories,
       customers,
       components,
+      agregados,
       ambientMaterials,
     });
   }
@@ -267,6 +271,14 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         `/catalog/components/${c.id}`,
         '/catalog/components',
         componentToApi(c),
+      );
+    }
+
+    for (const a of catalog.agregados ?? []) {
+      await this.upsert(
+        `/catalog/agregados/${a.id}`,
+        '/catalog/agregados',
+        agregadoToApi(a),
       );
     }
 

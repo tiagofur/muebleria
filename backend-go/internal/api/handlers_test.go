@@ -324,6 +324,25 @@ func (s *stubStore) DeleteStructure(context.Context, string) error {
 	s.stubNotUsed("DeleteStructure")
 	return nil
 }
+func (s *stubStore) ListAgregados(context.Context) ([]domain.Agregado, error) {
+	return []domain.Agregado{}, nil
+}
+func (s *stubStore) GetAgregadoByID(context.Context, string) (*domain.Agregado, error) {
+	s.stubNotUsed("GetAgregadoByID")
+	return nil, nil
+}
+func (s *stubStore) CreateAgregado(context.Context, *domain.Agregado) error {
+	s.stubNotUsed("CreateAgregado")
+	return nil
+}
+func (s *stubStore) UpdateAgregado(context.Context, string, *domain.Agregado) error {
+	s.stubNotUsed("UpdateAgregado")
+	return nil
+}
+func (s *stubStore) DeactivateAgregado(context.Context, string) error {
+	s.stubNotUsed("DeactivateAgregado")
+	return nil
+}
 func (s *stubStore) ListComponents(context.Context) ([]domain.Component, error) {
 	s.stubNotUsed("ListComponents")
 	return nil, nil
