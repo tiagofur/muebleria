@@ -471,16 +471,19 @@ function expandComponentInstances(
       // Explicit rotate on component/override wins over placement default.
       const rotateX =
         instance.overrides?.rotateX ??
-        component.rotateX ??
-        placementPose.rotateX;
+        (placement === 'custom' || (component.rotateX && component.rotateX !== 0)
+          ? component.rotateX
+          : placementPose.rotateX);
       const rotateY =
         instance.overrides?.rotateY ??
-        component.rotateY ??
-        placementPose.rotateY;
+        (placement === 'custom' || (component.rotateY && component.rotateY !== 0)
+          ? component.rotateY
+          : placementPose.rotateY);
       const rotateZ =
         instance.overrides?.rotateZ ??
-        component.rotateZ ??
-        placementPose.rotateZ;
+        (placement === 'custom' || (component.rotateZ && component.rotateZ !== 0)
+          ? component.rotateZ
+          : placementPose.rotateZ);
 
       parts.push({
         id: `${idPrefix}${component.id}-copy-${i}`,
