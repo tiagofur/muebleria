@@ -25,6 +25,7 @@ describe('draftToStructure', () => {
           },
         },
       ],
+      agregados: [],
     };
     const st = draftToStructure('s1', draft);
     expect(st.components?.[0]).toEqual({

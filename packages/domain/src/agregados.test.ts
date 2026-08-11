@@ -195,10 +195,24 @@ describe('agregados domain helpers', () => {
   describe('calculateModuleBom with Agregados subspace', () => {
     it('evaluates component formulas against local subspace bounding box and offsets in 3D', () => {
       const catalog: Catalog = {
-        boardMaterials: [
-          { id: 'm1', code: 'M1', name: 'MDF 18', thicknessMm: 18, costPerM2: 100, active: true },
+        materials: [
+          {
+            id: 'm1',
+            code: 'M1',
+            name: 'MDF 18',
+            thicknessMm: 18,
+            costPerM2: 100,
+            widthMm: 1830,
+            lengthMm: 2600,
+            grainDefault: true,
+            boardPrice: 1000,
+            wastePercent: 10,
+            active: true,
+          },
         ],
-        edgeBands: [],
+        modules: [],
+        structures: [],
+        edges: [],
         hardware: [],
         components: [
           {
@@ -208,6 +222,9 @@ describe('agregados domain helpers', () => {
             placement: 'frente_cajon',
             geometry: {
               kind: 'rectangular_board',
+              lengthMm: 0,
+              widthMm: 0,
+              thicknessMm: 18,
               lengthFormula: 'D',
               widthFormula: 'W - 4',
             },
@@ -221,8 +238,9 @@ describe('agregados domain helpers', () => {
             id: 'og-placa',
             code: 'PLACA',
             name: 'Material Placa',
+            kind: 'board',
             required: true,
-            choices: [{ id: 'ch-m1', name: 'MDF 18', materialId: 'm1' }],
+            optionIds: ['m1'],
           },
         ],
         agregados: [
@@ -267,15 +285,16 @@ describe('agregados domain helpers', () => {
         code: 'MOD-CAJ',
         name: 'Modulo Cajonera',
         structureId: 'str-cajonera',
-        defaultOptionChoices: { PLACA: 'ch-m1' },
+        hardwareLines: [],
       };
 
       const bom = resolveComposedModule({
         structure,
         module,
+        componentInstances: [],
         catalog,
-        dims: { width: 800, height: 1800, depth: 500 },
-        optionChoices: { PLACA: 'ch-m1' },
+        dims: { width: 800, height: 720, depth: 500 },
+        optionChoices: { PLACA: 'm1' },
       });
 
       // 3 drawer fronts generated

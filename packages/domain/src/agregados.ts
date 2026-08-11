@@ -86,9 +86,7 @@ export function resolveAgregadoInstance(
   const rawHardware = agregado.hardwareLines ?? [];
   const hardwareLines = rawHardware.map((h) => {
     const overrideHardwareId =
-      instance.optionOverrides && instance.optionRole && instance.optionOverrides[instance.optionRole]
-        ? instance.optionOverrides[instance.optionRole]
-        : instance.optionOverrides && h.optionRole && instance.optionOverrides[h.optionRole]
+      instance.optionOverrides && h.optionRole && instance.optionOverrides[h.optionRole]
         ? instance.optionOverrides[h.optionRole]
         : h.hardwareId;
 

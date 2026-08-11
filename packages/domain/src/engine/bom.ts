@@ -355,7 +355,7 @@ function getComponentThickness(
   if (role) {
     const choiceId = resolveBoardOptionChoiceId(role, optionChoices);
     if (choiceId) {
-      const materials = catalog.materials ?? catalog.boardMaterials ?? [];
+      const materials = catalog.materials ?? [];
       const material = materials.find((m) => m.id === choiceId);
       if (material) {
         return material.thicknessMm;
@@ -586,7 +586,7 @@ export function resolveComposedModule(
       ? evaluatePartFormula(agrInst.dimensions.widthFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
-          field: 'agregadoWidth',
+          field: 'width',
         })
       : agregado.externalDims?.width ?? PW;
 
@@ -594,7 +594,7 @@ export function resolveComposedModule(
       ? evaluatePartFormula(agrInst.dimensions.heightFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
-          field: 'agregadoHeight',
+          field: 'length',
         })
       : agregado.externalDims?.height ?? PH;
 
@@ -602,7 +602,7 @@ export function resolveComposedModule(
       ? evaluatePartFormula(agrInst.dimensions.depthFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
-          field: 'agregadoDepth',
+          field: 'length',
         })
       : agregado.externalDims?.depth ?? PD;
 
@@ -610,7 +610,7 @@ export function resolveComposedModule(
       ? evaluatePartFormula(agrInst.position.xFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
-          field: 'agregadoX',
+          field: 'x',
         })
       : 0;
 
@@ -618,7 +618,7 @@ export function resolveComposedModule(
       ? evaluatePartFormula(agrInst.position.yFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
-          field: 'agregadoY',
+          field: 'y',
         })
       : 0;
 
@@ -626,7 +626,7 @@ export function resolveComposedModule(
       ? evaluatePartFormula(agrInst.position.zFormula, parentDims, {
           structureCode: agregado.code,
           partDescription: agregado.name,
-          field: 'agregadoZ',
+          field: 'z',
         })
       : 0;
 
@@ -661,9 +661,9 @@ export function resolveComposedModule(
       // Apply unit origin offset (spaceX + unit.x, spaceY + unit.y, spaceZ + unit.z)
       const offsetParts = unitParts.map((p) => ({
         ...p,
-        x: p.x + unit.x,
-        y: p.y + unit.y,
-        z: p.z + unit.z,
+        x: (p.x ?? 0) + unit.x,
+        y: (p.y ?? 0) + unit.y,
+        z: (p.z ?? 0) + unit.z,
       }));
 
       agregadosParts.push(...offsetParts);

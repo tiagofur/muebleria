@@ -82,8 +82,8 @@ describe('StructureEditorAgregadosPanel', () => {
     fireEvent.click(addBtn);
 
     expect(currentDraft.agregados).toHaveLength(1);
-    expect(currentDraft.agregados[0].agregadoId).toBe('agr-1');
-    expect(currentDraft.agregados[0].name).toBe('Cuerpo de 3 Cajones');
+    expect(currentDraft.agregados[0]!.agregadoId).toBe('agr-1');
+    expect(currentDraft.agregados[0]!.name).toBe('Cuerpo de 3 Cajones');
     expect(screen.getByTestId('structure-agregado-item-0')).toBeDefined();
   });
 
@@ -117,12 +117,12 @@ describe('StructureEditorAgregadosPanel', () => {
     // Update quantity
     const qtyInput = screen.getByTestId('structure-agr-0-qty');
     fireEvent.change(qtyInput, { target: { value: '4' } });
-    expect(currentDraft.agregados[0].quantity).toBe(4);
+    expect(currentDraft.agregados[0]!.quantity).toBe(4);
 
     // Update Z formula
     const posZInput = screen.getByTestId('structure-agr-0-pos-z');
     fireEvent.change(posZInput, { target: { value: 'B + 20' } });
-    expect(currentDraft.agregados[0].position?.zFormula).toBe('B + 20');
+    expect(currentDraft.agregados[0]!.position?.zFormula).toBe('B + 20');
 
     // Remove
     const removeBtn = screen.getByTestId('structure-remove-agregado-0');

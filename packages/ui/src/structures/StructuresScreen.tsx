@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  Agregado,
   Component,
   DimensionPreset,
   EdgeBand,

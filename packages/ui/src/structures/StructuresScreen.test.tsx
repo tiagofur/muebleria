@@ -326,6 +326,8 @@ describe('StructuresScreen', () => {
         onCreate={onCreate}
         onUpdate={vi.fn()}
         onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
       />,
     );
 

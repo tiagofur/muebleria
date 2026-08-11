@@ -633,6 +633,7 @@ describe('catalogStore — structures', () => {
       depthMm: first.externalDims?.depth ?? 0,
       presets: [],
       components: [],
+      agregados: [],
     });
 
     const updated = store.getState().catalog!.structures?.find((s) => s.id === first.id);
