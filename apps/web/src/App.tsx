@@ -2220,6 +2220,7 @@ function AppContent({
           structures={structures}
           optionGroups={optionGroups}
           catalogComponents={components}
+          catalogAgregados={agregados}
           catalogMaterials={materials}
           catalogEdges={edges}
           catalogHardware={hardware}
