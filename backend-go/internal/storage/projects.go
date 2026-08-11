@@ -186,7 +186,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	cat.Agregados = agrs
 
 	// Cargar módulos y su despiece
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm FROM modules ORDER BY name ASC`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados FROM modules ORDER BY name ASC`
 	rows, err := s.Pool.Query(ctx, query)
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
@@ -203,7 +203,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		var furnitureType *string
 		var baseMode *string
 		var baseClearanceMm *int
-		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm)
+		var agrsRaw []byte
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw)
 		if err != nil {
 			return cat, err
 		}
@@ -236,6 +237,12 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		}
 		if baseClearanceMm != nil {
 			m.BaseClearanceMm = baseClearanceMm
+		}
+		if len(agrsRaw) > 0 {
+			_ = json.Unmarshal(agrsRaw, &m.Agregados)
+		}
+		if m.Agregados == nil {
+			m.Agregados = []domain.ModuleAgregadoInstance{}
 		}
 
 		// Component instances placed directly on this module (F054).
@@ -920,7 +927,7 @@ func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, created_at, updated_at FROM modules WHERE id = $1`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, created_at, updated_at FROM modules WHERE id = $1`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var m domain.Module
 	var w, h, d *int
@@ -931,7 +938,8 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	var furnitureType *string
 	var baseMode *string
 	var baseClearanceMm *int
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &m.CreatedAt, &m.UpdatedAt)
+	var agrsRaw []byte
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -964,6 +972,12 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 	if baseClearanceMm != nil {
 		m.BaseClearanceMm = baseClearanceMm
+	}
+	if len(agrsRaw) > 0 {
+		_ = json.Unmarshal(agrsRaw, &m.Agregados)
+	}
+	if m.Agregados == nil {
+		m.Agregados = []domain.ModuleAgregadoInstance{}
 	}
 
 	modComponents, err := s.loadModuleComponents(ctx, m.ID)
@@ -1061,22 +1075,27 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		baseClearanceArg = *m.BaseClearanceMm
 	}
 
+	agrsJSON, _ := json.Marshal(m.Agregados)
+	if m.Agregados == nil {
+		agrsJSON = []byte("[]")
+	}
+
 	if idToInsert != "" {
 		queryInsert = `
-			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			RETURNING created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg).
+		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON).
 			Scan(&m.CreatedAt, &m.UpdatedAt)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
-			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			RETURNING id, created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg).
+		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON).
 			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	}
 
@@ -1204,13 +1223,18 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	if m.BaseClearanceMm != nil {
 		baseClearanceArg = *m.BaseClearanceMm
 	}
+	agrsJSON, _ := json.Marshal(m.Agregados)
+	if m.Agregados == nil {
+		agrsJSON = []byte("[]")
+	}
+
 	query := `
 		UPDATE modules
-		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $14
+		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $15
 		RETURNING updated_at;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, id).Scan(&m.UpdatedAt)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, id).Scan(&m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("module not found")

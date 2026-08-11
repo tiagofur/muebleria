@@ -92,3 +92,111 @@ func containsAgregadoID(list []domain.Agregado, id string) bool {
 	}
 	return false
 }
+
+func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
+	store, _ := connectStore(t)
+	ctx := context.Background()
+
+	// 1. Structure with agregados
+	structIn := &domain.Structure{
+		Code:     uniqueID("ST-AGR"),
+		Name:     "Estructura con Agregados",
+		WidthMm:  800,
+		HeightMm: 720,
+		DepthMm:  560,
+		Active:   true,
+		Revision: 1,
+		Agregados: []domain.ModuleAgregadoInstance{
+			{
+				ID:              "inst-1",
+				AgregadoID:      "agr-1",
+				Name:            "Puerta Izq",
+				Quantity:        1,
+				LayoutDirection: "vertical",
+				GapMm:           3.0,
+				Mirrored:        true,
+				Position:        &domain.AgregadoPosition{ZFormula: "100"},
+				Dimensions:      &domain.AgregadoDimensions{WidthFormula: "W - 36", HeightFormula: "600"},
+			},
+		},
+	}
+
+	if err := store.CreateStructure(ctx, structIn); err != nil {
+		t.Fatalf("CreateStructure failed: %v", err)
+	}
+	structID := structIn.ID
+
+	structGot, err := store.GetStructureByID(ctx, structID)
+	if err != nil {
+		t.Fatalf("GetStructureByID failed: %v", err)
+	}
+	if len(structGot.Agregados) != 1 {
+		t.Fatalf("expected 1 agregado on structure, got %d", len(structGot.Agregados))
+	}
+	if structGot.Agregados[0].Name != "Puerta Izq" || !structGot.Agregados[0].Mirrored {
+		t.Fatalf("mismatch on structure agregado: %+v", structGot.Agregados[0])
+	}
+
+	// Update structure agregados
+	structIn.Agregados[0].Name = "Puerta Izq Modificada"
+	if err := store.UpdateStructure(ctx, structID, structIn); err != nil {
+		t.Fatalf("UpdateStructure failed: %v", err)
+	}
+
+	structUpd, err := store.GetStructureByID(ctx, structID)
+	if err != nil {
+		t.Fatalf("GetStructureByID after update failed: %v", err)
+	}
+	if len(structUpd.Agregados) != 1 || structUpd.Agregados[0].Name != "Puerta Izq Modificada" {
+		t.Fatalf("mismatch after structure update: %+v", structUpd.Agregados)
+	}
+
+	// 2. Module with agregados
+	modIn := &domain.Module{
+		Code:     uniqueID("MOD-AGR"),
+		Name:     "Mueble con Agregados",
+		WidthMm:  800,
+		HeightMm: 720,
+		DepthMm:  560,
+		Agregados: []domain.ModuleAgregadoInstance{
+			{
+				ID:              "inst-mod-1",
+				AgregadoID:      "agr-cajones",
+				Name:            "3 Cajones",
+				Quantity:        3,
+				LayoutDirection: "vertical",
+				GapMm:           2.0,
+			},
+		},
+	}
+
+	if err := store.CreateModule(ctx, modIn); err != nil {
+		t.Fatalf("CreateModule failed: %v", err)
+	}
+	modID := modIn.ID
+
+	modGot, err := store.GetModuleByID(ctx, modID)
+	if err != nil {
+		t.Fatalf("GetModuleByID failed: %v", err)
+	}
+	if len(modGot.Agregados) != 1 {
+		t.Fatalf("expected 1 agregado on module, got %d", len(modGot.Agregados))
+	}
+	if modGot.Agregados[0].Name != "3 Cajones" || modGot.Agregados[0].Quantity != 3 {
+		t.Fatalf("mismatch on module agregado: %+v", modGot.Agregados[0])
+	}
+
+	// Update module agregados
+	modIn.Agregados[0].Quantity = 4
+	if err := store.UpdateModule(ctx, modID, modIn); err != nil {
+		t.Fatalf("UpdateModule failed: %v", err)
+	}
+
+	modUpd, err := store.GetModuleByID(ctx, modID)
+	if err != nil {
+		t.Fatalf("GetModuleByID after update failed: %v", err)
+	}
+	if len(modUpd.Agregados) != 1 || modUpd.Agregados[0].Quantity != 4 {
+		t.Fatalf("mismatch after module update: %+v", modUpd.Agregados)
+	}
+}

@@ -219,6 +219,8 @@ type Module struct {
 	// Components are module-level component instances (doors, shelves, …) for
 	// composed modules, beyond those inherited from StructureID.
 	Components []ComponentInstance `json:"components,omitempty"`
+	// Agregados are module-level sub-assemblies (doors, drawers, …) attached to the module.
+	Agregados []ModuleAgregadoInstance `json:"agregados,omitempty"`
 	// ImageURL relative media path for sales showcase (F040).
 	ImageURL      string         `json:"image_url,omitempty"`
 	BoardParts    []BoardPart    `json:"board_parts"`

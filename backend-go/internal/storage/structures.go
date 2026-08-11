@@ -127,6 +127,7 @@ func structureRevisionSnapshot(revision int, st domain.Structure) ([]byte, error
 		HeightMm:   st.HeightMm,
 		DepthMm:    st.DepthMm,
 		Components: st.Components,
+		Agregados:  st.Agregados,
 		Presets:    st.Presets,
 	}
 	return json.Marshal(snap)
@@ -198,7 +199,7 @@ func loadStructurePresetsTx(ctx context.Context, tx pgx.Tx, structureID string) 
 // reusable Component instances instead of carrying their own board parts.
 func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure, error) {
 	query := `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, created_at, updated_at
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, created_at, updated_at
 		FROM structures
 		ORDER BY name ASC;
 	`
@@ -213,7 +214,8 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		var st domain.Structure
 		var w, h, d *int
 		var notes *string
-		if err := rows.Scan(&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &st.CreatedAt, &st.UpdatedAt); err != nil {
+		var agrsRaw []byte
+		if err := rows.Scan(&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &st.CreatedAt, &st.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if w != nil {
@@ -227,6 +229,12 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		}
 		if notes != nil {
 			st.Notes = *notes
+		}
+		if len(agrsRaw) > 0 {
+			_ = json.Unmarshal(agrsRaw, &st.Agregados)
+		}
+		if st.Agregados == nil {
+			st.Agregados = []domain.ModuleAgregadoInstance{}
 		}
 		components, err := s.loadStructureComponents(ctx, st.ID)
 		if err != nil {
@@ -256,14 +264,15 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 
 func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domain.Structure, error) {
 	query := `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, created_at, updated_at
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, created_at, updated_at
 		FROM structures WHERE id = $1;
 	`
 	var st domain.Structure
 	var w, h, d *int
 	var notes *string
+	var agrsRaw []byte
 	err := s.Pool.QueryRow(ctx, query, id).Scan(
-		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &st.CreatedAt, &st.UpdatedAt,
+		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &st.CreatedAt, &st.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("structure not found: %w", err)
@@ -279,6 +288,12 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 	}
 	if notes != nil {
 		st.Notes = *notes
+	}
+	if len(agrsRaw) > 0 {
+		_ = json.Unmarshal(agrsRaw, &st.Agregados)
+	}
+	if st.Agregados == nil {
+		st.Agregados = []domain.ModuleAgregadoInstance{}
 	}
 	components, err := s.loadStructureComponents(ctx, st.ID)
 	if err != nil {
@@ -344,18 +359,23 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	// catalog entity (handlers POST create as active; deactivation is via PUT).
 	active := true
 
+	agrsJSON, _ := json.Marshal(st.Agregados)
+	if st.Agregados == nil {
+		agrsJSON = []byte("[]")
+	}
+
 	if st.ID != "" {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active, agregados)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			RETURNING created_at, updated_at;
-		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active).Scan(&st.CreatedAt, &st.UpdatedAt)
+		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON).Scan(&st.CreatedAt, &st.UpdatedAt)
 	} else {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active)
-			VALUES ($1,$2,$3,$4,$5,$6,$7)
+			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active, agregados)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 			RETURNING id, created_at, updated_at;
-		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
+		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
 	}
 	if err != nil {
 		return fmt.Errorf("error inserting structure: %w", err)
@@ -411,10 +431,11 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	// --- #108: capture previous state for the immutable snapshot -------------
 	var prev domain.Structure
 	var pw, ph, pd *int
+	var prevAgrsRaw []byte
 	err = tx.QueryRow(ctx, `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, revision
+		SELECT id, code, name, width_mm, height_mm, depth_mm, revision, agregados
 		FROM structures WHERE id = $1;
-	`, id).Scan(&prev.ID, &prev.Code, &prev.Name, &pw, &ph, &pd, &prev.Revision)
+	`, id).Scan(&prev.ID, &prev.Code, &prev.Name, &pw, &ph, &pd, &prev.Revision, &prevAgrsRaw)
 	if err != nil {
 		return fmt.Errorf("structure not found: %w", err)
 	}
@@ -426,6 +447,9 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	}
 	if pd != nil {
 		prev.DepthMm = *pd
+	}
+	if len(prevAgrsRaw) > 0 {
+		_ = json.Unmarshal(prevAgrsRaw, &prev.Agregados)
 	}
 	prevComponents, err := loadStructureComponentsTx(ctx, tx, id)
 	if err != nil {
@@ -470,12 +494,16 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	if st.DepthMm > 0 {
 		d = st.DepthMm
 	}
+	agrsJSON, _ := json.Marshal(st.Agregados)
+	if st.Agregados == nil {
+		agrsJSON = []byte("[]")
+	}
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE structures
-		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $9;
-	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, id)
+		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, agregados = $9, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $10;
+	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, id)
 	if err != nil {
 		return fmt.Errorf("error updating structure: %w", err)
 	}

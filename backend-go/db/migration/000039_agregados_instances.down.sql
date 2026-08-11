@@ -1,0 +1,2 @@
+ALTER TABLE structures DROP COLUMN IF EXISTS agregados;
+ALTER TABLE modules DROP COLUMN IF EXISTS agregados;
