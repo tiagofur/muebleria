@@ -3,7 +3,7 @@
  * Used by list→detail screens so `/section/:id` opens the same item.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export type UseRoutableEntitySelectionOptions = {
   /** Id from URL / shell (`null` or `''` = list). */
@@ -25,14 +25,17 @@ export function useRoutableEntitySelection(
   options: UseRoutableEntitySelectionOptions,
 ): UseRoutableEntitySelectionResult {
   const { openEntityId = null, onSelectionChange, knownIds } = options;
-  const [selectedId, setSelectedIdState] = useState<string | null>(null);
 
   const known = useMemo(() => new Set(knownIds), [knownIds]);
 
-  useEffect(() => {
-    onSelectionChange?.(selectedId);
-  }, [selectedId, onSelectionChange]);
+  const [selectedId, setSelectedIdState] = useState<string | null>(() => {
+    return openEntityId && openEntityId !== '' && known.has(openEntityId)
+      ? openEntityId
+      : null;
+  });
 
+  // Sync state FROM openEntityId prop (URL → State).
+  // Does NOT invoke onSelectionChange: the URL is already updated by the shell.
   useEffect(() => {
     if (openEntityId == null || openEntityId === '') {
       setSelectedIdState(null);
@@ -46,16 +49,28 @@ export function useRoutableEntitySelection(
   useEffect(() => {
     if (selectedId && !known.has(selectedId)) {
       setSelectedIdState(null);
+      onSelectionChange?.(null);
     }
-  }, [selectedId, known]);
+  }, [selectedId, known, onSelectionChange]);
 
-  const setSelectedId = useCallback((id: string | null) => {
-    setSelectedIdState(id);
-  }, []);
+  const setSelectedId = useCallback(
+    (id: string | null) => {
+      setSelectedIdState(id);
+      onSelectionChange?.(id);
+    },
+    [onSelectionChange],
+  );
 
-  const toggleSelectedId = useCallback((id: string) => {
-    setSelectedIdState((prev) => (prev === id ? null : id));
-  }, []);
+  const toggleSelectedId = useCallback(
+    (id: string) => {
+      setSelectedIdState((prev) => {
+        const next = prev === id ? null : id;
+        onSelectionChange?.(next);
+        return next;
+      });
+    },
+    [onSelectionChange],
+  );
 
   return { selectedId, setSelectedId, toggleSelectedId };
 }

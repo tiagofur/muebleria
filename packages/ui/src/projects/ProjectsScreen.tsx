@@ -500,9 +500,10 @@ export function ProjectsScreen({
   useEffect(() => {
     if (selectedId && !projects.some((p) => p.id === selectedId)) {
       setSelectedId(null);
+      onSelectionChange?.(null);
       setConfirmDelete(false);
     }
-  }, [projects, selectedId]);
+  }, [projects, selectedId, onSelectionChange]);
 
   const closeMetaModal = () => {
     setMetaModalOpen(false);

@@ -245,10 +245,16 @@ export function ModulesScreen({
     emptyDraft: emptyModuleDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
-      if (onRequestEdit) {
+      if (restoreId && restoreId !== 'new') {
+        if (onSelectionChange) {
+          onSelectionChange(restoreId);
+        } else if (onRequestEdit) {
+          onRequestEdit(null as any);
+        }
+      } else if (onRequestEdit) {
         onRequestEdit(null as any);
       } else if (onSelectionChange) {
-        onSelectionChange(restoreId);
+        onSelectionChange(null);
       }
     },
     currentSelectionId: selectedId,
@@ -418,11 +424,24 @@ export function ModulesScreen({
   // the URL has the `/edit` suffix. We use `openModuleEditId` to keep
   // `selectedId` pointed at the right module so the editor and the
   // "back to detail" flow work.
+  const lastOpenModuleIdRef = useRef<string | null>(openModuleId ?? null);
+  const lastOpenModuleEditIdRef = useRef<string | null>(openModuleEditId ?? null);
+
   useEffect(() => {
-    const viewId = openModuleId;
+    const normView = openModuleId ?? null;
+    const normEdit = openModuleEditId ?? null;
+    if (
+      lastOpenModuleIdRef.current === normView &&
+      lastOpenModuleEditIdRef.current === normEdit
+    ) {
+      return;
+    }
+    lastOpenModuleIdRef.current = normView;
+    lastOpenModuleEditIdRef.current = normEdit;
+
     const editId =
       openModuleEditId && openModuleEditId !== 'new' ? openModuleEditId : null;
-    const target = viewId ?? editId;
+    const target = normView ?? editId;
     if (target == null || target === '') {
       // Only clear selection if we're not in edit mode at all (else we'd
       // accidentally navigate back to the list when entering the editor).

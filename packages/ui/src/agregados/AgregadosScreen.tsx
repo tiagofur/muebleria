@@ -91,7 +91,7 @@ export function AgregadosScreen({
     emptyDraft: createEmptyAgregadoDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
-      if (onSelectionChange) onSelectionChange(restoreId);
+      onSelectionChange?.(restoreId);
     },
     currentSelectionId: expandedId,
   });

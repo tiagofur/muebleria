@@ -605,6 +605,8 @@ function AppContent({
 
   const location = useLocation();
   const navigate = useNavigate();
+  const locationPathnameRef = useRef(location.pathname);
+  locationPathnameRef.current = location.pathname;
 
   // Fase 3 slice 3.5: detect ?present=projectId for shared presentation links.
   const presentId = useMemo(() => {
@@ -1736,15 +1738,16 @@ function AppContent({
       // owns the URL while open; ModulesScreen's onSelectionChange effect can
       // still fire (e.g. when selectedId changes from null → id), but if we
       // are currently in edit mode we keep the URL stable.
-      if (isEntityEditPath(location.pathname, section)) {
+      const currentPathname = locationPathnameRef.current;
+      if (isEntityEditPath(currentPathname, section)) {
         return;
       }
       const target = id ? entityPath(section, id) : pathForNav(section);
-      if (location.pathname !== target) {
+      if (currentPathname !== target) {
         navigate(target);
       }
     },
-    [location.pathname, navigate],
+    [navigate],
   );
 
   /**
@@ -1755,8 +1758,11 @@ function AppContent({
    */
   const onEntityEditRequest = useCallback(
     (section: EntitySection, id: string | null) => {
+      const currentPathname = locationPathnameRef.current;
       if (!id) {
-        navigate(pathForNav(section));
+        if (currentPathname !== pathForNav(section)) {
+          navigate(pathForNav(section));
+        }
         return;
       }
       const target =
@@ -1765,11 +1771,11 @@ function AppContent({
           : section === 'structures'
             ? `${entityPath(section, id)}/edit`
             : `${entityPath(section, id)}/edit`;
-      if (location.pathname !== target) {
+      if (currentPathname !== target) {
         navigate(target);
       }
     },
-    [location.pathname, navigate],
+    [navigate],
   );
 
   const onProjectSelectionChange = useCallback(

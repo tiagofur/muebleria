@@ -122,10 +122,16 @@ export function ComponentsScreen({
     emptyDraft: emptyComponentDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
-      if (onRequestEdit) {
+      if (restoreId && restoreId !== 'new') {
+        if (onSelectionChange) {
+          onSelectionChange(restoreId);
+        } else if (onRequestEdit) {
+          onRequestEdit(null as any);
+        }
+      } else if (onRequestEdit) {
         onRequestEdit(null as any);
       } else if (onSelectionChange) {
-        onSelectionChange(restoreId);
+        onSelectionChange(null);
       }
     },
     currentSelectionId: expandedId,
