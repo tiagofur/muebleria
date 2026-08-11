@@ -132,8 +132,8 @@ export interface Hardware {
    * Parametric preview shape rendered in the 3D scene. When omitted (or
    * invalid) the hardware is cost-only and renders nothing (VH-09).
    */
-  readonly previewShape?: 'knob' | 'bar-pull' | 'cup-pull';
-  /** Knob diameter OR bar-pull length, in mm. */
+  readonly previewShape?: 'knob' | 'bar-pull' | 'cup-pull' | 'hinge' | 'slide' | 'rail' | 'leg';
+  /** Knob diameter, bar-pull length, hinge cup diameter, slide/rail length, or leg height, in mm. */
   readonly previewSizeMm?: number;
   /** Standoff of the handle from the anchor face, in mm (0 = flush). */
   readonly previewProjectionMm?: number;
