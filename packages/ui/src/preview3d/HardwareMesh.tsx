@@ -89,10 +89,20 @@ export const DEFAULT_BAR_DIAMETER_MM = 12;
 export const DEFAULT_CUP_DIAMETER_MM = 36;
 export const DEFAULT_PROJECTION_MM = 25;
 export const DEFAULT_HARDWARE_COLOR = '#9aa0a6';
+// F068 — new hardware shapes
+export const DEFAULT_HINGE_CUP_DIAMETER_MM = 35;
+export const DEFAULT_HINGE_CUP_DEPTH_MM = 11;
+export const DEFAULT_HINGE_ARM_LENGTH_MM = 50;
+export const DEFAULT_SLIDE_LENGTH_MM = 500;
+export const DEFAULT_SLIDE_HEIGHT_MM = 45;
+export const DEFAULT_RAIL_LENGTH_MM = 500;
+export const DEFAULT_RAIL_HEIGHT_MM = 30;
+export const DEFAULT_LEG_DIAMETER_MM = 12;
+export const DEFAULT_LEG_HEIGHT_MM = 120;
 
 export type HardwareGeometry = {
-  readonly shape: 'knob' | 'bar-pull' | 'cup-pull';
-  /** Knob head diameter / cup outer diameter (mm). */
+  readonly shape: 'knob' | 'bar-pull' | 'cup-pull' | 'hinge' | 'slide' | 'rail' | 'leg';
+  /** Knob head diameter / cup outer diameter / hinge cup diameter (mm). */
   readonly headDiameterMm: number;
   /** Bar-pull grip length (mm). */
   readonly gripLengthMm: number;
@@ -100,6 +110,16 @@ export type HardwareGeometry = {
   readonly gripDiameterMm: number;
   /** Handle projection off the face (mm) — equals placement.standoffMm. */
   readonly projectionMm: number;
+  /** Hinge cup depth (mm). */
+  readonly cupDepthMm: number;
+  /** Hinge arm length (mm). */
+  readonly armLengthMm: number;
+  /** Slide/rail length (mm). */
+  readonly railLengthMm: number;
+  /** Slide/rail height/profile (mm). */
+  readonly railHeightMm: number;
+  /** Leg height (mm). */
+  readonly legHeightMm: number;
   /** Mesh color (normalized #RRGGBB / #RGB), with a neutral default. */
   readonly color: string;
   /** Raw PBR scalars fed into boardPhysicalResponse. */
@@ -125,17 +145,31 @@ export function resolveHardwareGeometry(
   standoffMm: number,
 ): HardwareGeometry | null {
   const shape = hardware.previewShape;
-  if (shape !== 'knob' && shape !== 'bar-pull' && shape !== 'cup-pull') {
+  const validShapes = ['knob', 'bar-pull', 'cup-pull', 'hinge', 'slide', 'rail', 'leg'];
+  if (!shape || !validShapes.includes(shape)) {
     return null;
   }
   const projectionMm =
     standoffMm > 0 ? standoffMm : positiveOr(hardware.previewProjectionMm, DEFAULT_PROJECTION_MM);
   const headDiameterMm = positiveOr(
     hardware.previewDiameterMm ?? hardware.previewSizeMm,
-    shape === 'cup-pull' ? DEFAULT_CUP_DIAMETER_MM : DEFAULT_KNOB_DIAMETER_MM,
+    shape === 'cup-pull'
+      ? DEFAULT_CUP_DIAMETER_MM
+      : shape === 'hinge'
+        ? DEFAULT_HINGE_CUP_DIAMETER_MM
+        : shape === 'leg'
+          ? DEFAULT_LEG_DIAMETER_MM
+          : DEFAULT_KNOB_DIAMETER_MM,
   );
   const gripLengthMm = positiveOr(hardware.previewSizeMm, DEFAULT_BAR_LENGTH_MM);
   const gripDiameterMm = positiveOr(hardware.previewDiameterMm, DEFAULT_BAR_DIAMETER_MM);
+  const cupDepthMm = positiveOr(hardware.previewProjectionMm, DEFAULT_HINGE_CUP_DEPTH_MM);
+  const armLengthMm = positiveOr(hardware.previewSizeMm, DEFAULT_HINGE_ARM_LENGTH_MM);
+  const railLengthMm = positiveOr(hardware.previewSizeMm,
+    shape === 'rail' ? DEFAULT_RAIL_LENGTH_MM : DEFAULT_SLIDE_LENGTH_MM);
+  const railHeightMm = positiveOr(hardware.previewDiameterMm,
+    shape === 'rail' ? DEFAULT_RAIL_HEIGHT_MM : DEFAULT_SLIDE_HEIGHT_MM);
+  const legHeightMm = positiveOr(hardware.previewSizeMm, DEFAULT_LEG_HEIGHT_MM);
   const color = normalizePreviewColor(hardware.previewColor) ?? DEFAULT_HARDWARE_COLOR;
   return {
     shape,
@@ -143,6 +177,11 @@ export function resolveHardwareGeometry(
     gripLengthMm,
     gripDiameterMm,
     projectionMm,
+    cupDepthMm,
+    armLengthMm,
+    railLengthMm,
+    railHeightMm,
+    legHeightMm,
     color,
     previewRoughness: hardware.previewRoughness,
     previewMetalness: hardware.previewMetalness,
@@ -236,6 +275,128 @@ function CupPullPrimitive({
   );
 }
 
+// --- F068: new hardware primitives -----------------------------------------
+
+/**
+ * Hinge (bisagra cazoleta) — cup cylinder + articulated arm.
+ * Authored in +Y-outward frame: cup at the face surface, arm extends along +Y.
+ */
+function HingePrimitive({
+  geom,
+  mat,
+}: {
+  readonly geom: HardwareGeometry;
+  readonly mat: HandleMaterialProps;
+}): ReactNode {
+  const cupRadius = Math.max(geom.headDiameterMm / 2, 1);
+  const cupDepth = Math.max(geom.cupDepthMm, 2);
+  const armLen = Math.max(geom.armLengthMm, 10);
+  const armW = Math.max(cupRadius * 0.4, 3);
+  const armT = Math.max(cupDepth * 0.3, 2);
+  return (
+    <>
+      {/* Cup (cazoleta) — recessed cylinder at the face */}
+      <mesh position={[0, cupDepth / 2, 0]} castShadow>
+        <cylinderGeometry args={[cupRadius, cupRadius, cupDepth, 20]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+      {/* Arm — thin box from cup center outward along +Y */}
+      <mesh position={[0, cupDepth + armLen / 2, 0]} castShadow>
+        <boxGeometry args={[armW, armLen, armT]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+      {/* Mounting plate at the arm tip */}
+      <mesh position={[0, cupDepth + armLen, 0]} castShadow>
+        <boxGeometry args={[armW * 1.5, armT, armT * 1.5]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+    </>
+  );
+}
+
+/**
+ * Slide (corredera telescópica) — rail profile + inner track.
+ * Authored in +Y-outward frame: rail lies in the X-Z plane, projecting along +Y.
+ */
+function SlidePrimitive({
+  geom,
+  mat,
+}: {
+  readonly geom: HardwareGeometry;
+  readonly mat: HandleMaterialProps;
+}): ReactNode {
+  const len = Math.max(geom.railLengthMm, 50);
+  const h = Math.max(geom.railHeightMm, 10);
+  const t = Math.max(h * 0.2, 3);
+  return (
+    <>
+      {/* Outer rail profile */}
+      <mesh position={[0, t / 2, 0]} castShadow>
+        <boxGeometry args={[t, h, len]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+      {/* Inner track (slightly thinner, offset inward) */}
+      <mesh position={[t * 0.8, t / 2, 0]} castShadow>
+        <boxGeometry args={[t * 0.6, h * 0.8, len * 0.9]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+    </>
+  );
+}
+
+/**
+ * Rail (riel para cajones) — simplified linear profile.
+ * Thinner than a slide; single box.
+ */
+function RailPrimitive({
+  geom,
+  mat,
+}: {
+  readonly geom: HardwareGeometry;
+  readonly mat: HandleMaterialProps;
+}): ReactNode {
+  const len = Math.max(geom.railLengthMm, 50);
+  const h = Math.max(geom.railHeightMm, 10);
+  const t = Math.max(h * 0.15, 2);
+  return (
+    <mesh position={[0, t / 2, 0]} castShadow>
+      <boxGeometry args={[t, h, len]} />
+      <meshPhysicalMaterial {...mat} />
+    </mesh>
+  );
+}
+
+/**
+ * Leg (pata nivelable) — vertical cylinder + wider base.
+ * Authored in +Y-outward frame: cylinder extends along -Y (downward from face).
+ */
+function LegPrimitive({
+  geom,
+  mat,
+}: {
+  readonly geom: HardwareGeometry;
+  readonly mat: HandleMaterialProps;
+}): ReactNode {
+  const radius = Math.max(geom.headDiameterMm / 2, 2);
+  const height = Math.max(geom.legHeightMm, 20);
+  const baseRadius = radius * 1.6;
+  const baseH = Math.max(height * 0.08, 5);
+  return (
+    <>
+      {/* Main shaft */}
+      <mesh position={[0, -height / 2, 0]} castShadow>
+        <cylinderGeometry args={[radius, radius, height, 16]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+      {/* Leveling base (wider foot) */}
+      <mesh position={[0, -height + baseH / 2, 0]} castShadow>
+        <cylinderGeometry args={[baseRadius, baseRadius * 0.8, baseH, 16]} />
+        <meshPhysicalMaterial {...mat} />
+      </mesh>
+    </>
+  );
+}
+
 /**
  * Render one resolved hardware placement. Mount as a CHILD of the board mesh
  * `<group>` so it inherits the board transform (local frame = resolver frame).
@@ -292,8 +453,16 @@ export function HardwareMesh({
           <KnobPrimitive geom={geom} mat={mat} />
         ) : geom.shape === 'bar-pull' ? (
           <BarPullPrimitive geom={geom} mat={mat} />
-        ) : (
+        ) : geom.shape === 'cup-pull' ? (
           <CupPullPrimitive geom={geom} mat={mat} />
+        ) : geom.shape === 'hinge' ? (
+          <HingePrimitive geom={geom} mat={mat} />
+        ) : geom.shape === 'slide' ? (
+          <SlidePrimitive geom={geom} mat={mat} />
+        ) : geom.shape === 'rail' ? (
+          <RailPrimitive geom={geom} mat={mat} />
+        ) : (
+          <LegPrimitive geom={geom} mat={mat} />
         )}
       </group>
     </group>

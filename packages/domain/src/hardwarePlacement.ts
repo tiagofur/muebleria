@@ -39,7 +39,7 @@ export interface ResolvedHardwarePlacement {
 
 /** Normalized preview descriptor (VH-07). Undefined fields mean "not renderable". */
 export interface NormalizedHardwarePreview {
-  readonly shape?: 'knob' | 'bar-pull' | 'cup-pull';
+  readonly shape?: 'knob' | 'bar-pull' | 'cup-pull' | 'hinge' | 'slide' | 'rail' | 'leg';
   readonly sizeMm?: number;
   readonly projectionMm?: number;
   readonly diameterMm?: number;
@@ -49,7 +49,7 @@ export interface NormalizedHardwarePreview {
   readonly clearcoat?: number;
 }
 
-const PREVIEW_SHAPES = new Set(['knob', 'bar-pull', 'cup-pull']);
+const PREVIEW_SHAPES = new Set(['knob', 'bar-pull', 'cup-pull', 'hinge', 'slide', 'rail', 'leg']);
 
 function isPositiveFinite(value: number | undefined): value is number {
   return value != null && Number.isFinite(value) && value > 0;
@@ -88,7 +88,7 @@ function snap(n: number): number {
  */
 export function normalizeHardwarePreview(hardware: Hardware): NormalizedHardwarePreview {
   const result: {
-    shape?: 'knob' | 'bar-pull' | 'cup-pull';
+    shape?: 'knob' | 'bar-pull' | 'cup-pull' | 'hinge' | 'slide' | 'rail' | 'leg';
     sizeMm?: number;
     projectionMm?: number;
     diameterMm?: number;

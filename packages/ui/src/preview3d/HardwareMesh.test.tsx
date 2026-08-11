@@ -161,6 +161,56 @@ describe('resolveHardwareGeometry', () => {
     const bad: Hardware = { ...knob, previewShape: 'ring' as Hardware['previewShape'] };
     expect(resolveHardwareGeometry(bad, 25)).toBeNull();
   });
+
+  // --- F068: new shapes ---
+
+  it('hinge resolves with cup diameter + depth defaults', () => {
+    const hinge: Hardware = { ...knob, previewShape: 'hinge', previewDiameterMm: undefined, previewSizeMm: undefined, previewProjectionMm: undefined };
+    const g = resolveHardwareGeometry(hinge, 0)!;
+    expect(g.shape).toBe('hinge');
+    expect(g.headDiameterMm).toBe(35); // DEFAULT_HINGE_CUP_DIAMETER_MM
+    expect(g.cupDepthMm).toBe(11); // DEFAULT_HINGE_CUP_DEPTH_MM
+    expect(g.armLengthMm).toBe(50); // DEFAULT_HINGE_ARM_LENGTH_MM
+  });
+
+  it('hinge reads catalog dims when present', () => {
+    const hinge: Hardware = { ...knob, previewShape: 'hinge', previewDiameterMm: 40, previewProjectionMm: 13, previewSizeMm: 60 };
+    const g = resolveHardwareGeometry(hinge, 0)!;
+    expect(g.headDiameterMm).toBe(40);
+    expect(g.cupDepthMm).toBe(13);
+    expect(g.armLengthMm).toBe(60);
+  });
+
+  it('slide resolves with length + height defaults', () => {
+    const slide: Hardware = { ...knob, previewShape: 'slide', previewSizeMm: undefined, previewDiameterMm: undefined };
+    const g = resolveHardwareGeometry(slide, 0)!;
+    expect(g.shape).toBe('slide');
+    expect(g.railLengthMm).toBe(500); // DEFAULT_SLIDE_LENGTH_MM
+    expect(g.railHeightMm).toBe(45); // DEFAULT_SLIDE_HEIGHT_MM
+  });
+
+  it('rail resolves with length + height defaults', () => {
+    const rail: Hardware = { ...knob, previewShape: 'rail', previewSizeMm: undefined, previewDiameterMm: undefined };
+    const g = resolveHardwareGeometry(rail, 0)!;
+    expect(g.shape).toBe('rail');
+    expect(g.railLengthMm).toBe(500); // DEFAULT_RAIL_LENGTH_MM
+    expect(g.railHeightMm).toBe(30); // DEFAULT_RAIL_HEIGHT_MM
+  });
+
+  it('leg resolves with diameter + height defaults', () => {
+    const leg: Hardware = { ...knob, previewShape: 'leg', previewDiameterMm: undefined, previewSizeMm: undefined };
+    const g = resolveHardwareGeometry(leg, 0)!;
+    expect(g.shape).toBe('leg');
+    expect(g.headDiameterMm).toBe(12); // DEFAULT_LEG_DIAMETER_MM
+    expect(g.legHeightMm).toBe(120); // DEFAULT_LEG_HEIGHT_MM
+  });
+
+  it('leg reads catalog dims when present', () => {
+    const leg: Hardware = { ...knob, previewShape: 'leg', previewDiameterMm: 15, previewSizeMm: 150 };
+    const g = resolveHardwareGeometry(leg, 0)!;
+    expect(g.headDiameterMm).toBe(15);
+    expect(g.legHeightMm).toBe(150);
+  });
 });
 
 describe('degToRad', () => {
