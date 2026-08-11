@@ -262,6 +262,9 @@ export {
   nextOffsetOnWall,
   createDefaultLWalls,
   seedDefaultLWallsIfEmpty,
+  aabbOverlap2D,
+  placedModuleAabb,
+  placedModuleCollides,
 } from './kitchenLayout';
 export type { WallOffsetPeer } from './kitchenLayout';
 export type {
@@ -269,6 +272,8 @@ export type {
   ResolvedWallFrame,
   KitchenPlacedModule,
   KitchenLayoutResult,
+  Aabb2D,
+  CollisionPeer,
 } from './kitchenLayout';
 
 export { roundHardwarePurchaseQuantity } from './engine/labels';

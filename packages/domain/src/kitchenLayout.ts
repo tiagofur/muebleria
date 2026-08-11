@@ -644,6 +644,123 @@ export function reorderPlacementOnWall(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Collision detection (2D AABB overlap) — Fase A cierre.
+// Pure, jsdom-testable. Covers same-wall, cross-wall (L-corner) and free
+// island overlap. Floor vs wall-hung elevation is exempt (different Z band).
+// ---------------------------------------------------------------------------
+
+export type Aabb2D = {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+};
+
+/**
+ * Two axis-aligned rectangles overlap if they intersect in both X and Y.
+ * Touching edges (minX === other.maxX) do NOT count as overlap — a 1mm gap
+ * is enough to be valid, so strict inequalities are intentional.
+ */
+export function aabbOverlap2D(a: Aabb2D, b: Aabb2D): boolean {
+  return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
+}
+
+/**
+ * Collision tolerance (mm). Two AABBs whose overlap is within this margin are
+ * treated as NOT colliding — guards against floating point dust after layout
+ * resolution and lets visually-adjacent cabinets sit flush.
+ */
+export const COLLISION_TOLERANCE_MM = 1;
+
+/**
+ * AABB of a resolved placed module in the workshop plan (2D, top-down).
+ * Mirrors placementAabb but consumes a KitchenPlacedModule directly.
+ */
+export function placedModuleAabb(m: {
+  readonly originX: number;
+  readonly originY: number;
+  readonly width: number;
+  readonly depth: number;
+  readonly yawDeg: number;
+}): Aabb2D {
+  return placementAabb(m.originX, m.originY, m.width, m.depth, m.yawDeg);
+}
+
+/**
+ * True when `candidate`'s 2D footprint collides with any module in `peers`.
+ *
+ * - The candidate is excluded from `peers` by itemId+instanceIndex (so a
+ *   module never collides with itself).
+ * - Floor vs wall-hung elevation pairs are exempt: a base cabinet (floor)
+ *   and a wall cabinet (wall) in the same wall footprint occupy different Z
+ *   bands and do not collide.
+ * - A small tolerance (COLLISION_TOLERANCE_MM) shrinks each peer box so
+ *   flush-adjacent cabinets (gap = 0) are valid.
+ *
+ * `candidate` is an arbitrary footprint position (does not need to be in
+ * `peers`); this lets the caller test a hypothetical drop before committing.
+ */
+/**
+ * Structural peer type for collision detection. Both KitchenPlacedModule
+ * (domain) and ProjectModule3DInstance (UI preview) satisfy this — the
+ * function only needs the fields below.
+ */
+export type CollisionPeer = {
+  readonly itemId: string;
+  readonly instanceIndex?: number;
+  readonly instanceKey?: string;
+  readonly originX: number;
+  readonly originY: number;
+  readonly width: number;
+  readonly depth: number;
+  readonly yawDeg: number;
+  readonly elevation: PlacementElevation;
+};
+
+export function placedModuleCollides(
+  candidate: {
+    readonly itemId?: string;
+    readonly instanceIndex?: number;
+    readonly instanceKey?: string;
+    readonly originX: number;
+    readonly originY: number;
+    readonly width: number;
+    readonly depth: number;
+    readonly yawDeg: number;
+    readonly elevation: PlacementElevation;
+  },
+  peers: readonly CollisionPeer[],
+): boolean {
+  const cand = placedModuleAabb(candidate);
+  for (const peer of peers) {
+    // Skip self: prefer instanceKey match, fall back to itemId+instanceIndex.
+    if (candidate.instanceKey && peer.instanceKey === candidate.instanceKey) {
+      continue;
+    }
+    if (
+      candidate.itemId !== undefined &&
+      candidate.instanceIndex !== undefined &&
+      peer.itemId === candidate.itemId &&
+      peer.instanceIndex === candidate.instanceIndex
+    ) {
+      continue;
+    }
+    // Floor vs wall-hung: different Z band, no collision.
+    if (candidate.elevation !== peer.elevation) continue;
+    const peerBox = placedModuleAabb(peer);
+    // Shrink the peer box by the tolerance so flush adjacency (gap 0) is valid.
+    const shrunk: Aabb2D = {
+      minX: peerBox.minX + COLLISION_TOLERANCE_MM,
+      maxX: peerBox.maxX - COLLISION_TOLERANCE_MM,
+      minY: peerBox.minY + COLLISION_TOLERANCE_MM,
+      maxY: peerBox.maxY - COLLISION_TOLERANCE_MM,
+    };
+    if (aabbOverlap2D(cand, shrunk)) return true;
+  }
+  return false;
+}
+
 /**
  * Resolve plinth/legs clearance (mm) for a floor placement.
  * Wall elevation → 0. Floor → placement override → layout default → domain default.

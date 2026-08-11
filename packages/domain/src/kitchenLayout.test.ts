@@ -25,6 +25,9 @@ import {
   allKitchenPlacements,
   syncActiveKitchenSpace,
   DEFAULT_KITCHEN_SPACE_ID,
+  aabbOverlap2D,
+  placedModuleCollides,
+  type Aabb2D,
 } from './kitchenLayout';
 import type { ProjectItem, ProjectKitchenLayout } from './types';
 
@@ -780,5 +783,160 @@ describe('kitchenLayout', () => {
     layout = setActiveKitchenSpace(layout, 'space-bath');
     const bath = layout.spaces!.find((s) => s.id === layout.activeSpaceId)!;
     expect(bath.floorMaterialId).toBe('floor-b');
+  });
+});
+
+describe('aabbOverlap2D', () => {
+  const a: Aabb2D = { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+  it('overlapping boxes collide', () => {
+    expect(aabbOverlap2D(a, { minX: 50, maxX: 150, minY: 50, maxY: 150 })).toBe(true);
+  });
+  it('disjoint boxes do not collide', () => {
+    expect(aabbOverlap2D(a, { minX: 200, maxX: 300, minY: 0, maxY: 100 })).toBe(false);
+  });
+  it('flush-adjacent (touching edges) do NOT collide (strict inequality)', () => {
+    expect(aabbOverlap2D(a, { minX: 100, maxX: 200, minY: 0, maxY: 100 })).toBe(false);
+  });
+});
+
+describe('placedModuleCollides', () => {
+  // Helper: two floor modules on Muro A (+X, yaw 0), depth grows +Y.
+  const peerOnWallA = {
+    itemId: 'peer',
+    instanceIndex: 0,
+    instanceKey: 'peer#0',
+    wallId: 'wA',
+    width: 600,
+    height: 720,
+    depth: 560,
+    originX: 0,
+    originY: 0,
+    originZ: 0,
+    yawDeg: 0,
+    baseClearanceMm: 100,
+    elevation: 'floor' as const,
+  };
+
+  it('same-wall: candidate overlapping a peer → collides', () => {
+    // Peer occupies X [0,600]. Candidate at X 300, width 600 → X [300,900] overlaps.
+    const collides = placedModuleCollides(
+      {
+        itemId: 'cand',
+        instanceIndex: 0,
+        originX: 300,
+        originY: 0,
+        width: 600,
+        depth: 560,
+        yawDeg: 0,
+        elevation: 'floor',
+      },
+      [peerOnWallA],
+    );
+    expect(collides).toBe(true);
+  });
+
+  it('same-wall: candidate flush-adjacent (gap 0) → does NOT collide (tolerance)', () => {
+    // Peer X [0,600]. Candidate at X 600, width 600 → X [600,1200]. Flush, valid.
+    const collides = placedModuleCollides(
+      {
+        itemId: 'cand',
+        instanceIndex: 0,
+        originX: 600,
+        originY: 0,
+        width: 600,
+        depth: 560,
+        yawDeg: 0,
+        elevation: 'floor',
+      },
+      [peerOnWallA],
+    );
+    expect(collides).toBe(false);
+  });
+
+  it('excludes self (same itemId+instanceIndex)', () => {
+    const collides = placedModuleCollides(
+      {
+        itemId: 'peer',
+        instanceIndex: 0,
+        originX: 0,
+        originY: 0,
+        width: 600,
+        depth: 560,
+        yawDeg: 0,
+        elevation: 'floor',
+      },
+      [peerOnWallA],
+    );
+    expect(collides).toBe(false);
+  });
+
+  it('floor vs wall-hung in same footprint → does NOT collide (different Z band)', () => {
+    const wallHungPeer = { ...peerOnWallA, elevation: 'wall' as const };
+    const collides = placedModuleCollides(
+      {
+        itemId: 'cand',
+        instanceIndex: 0,
+        originX: 0,
+        originY: 0,
+        width: 600,
+        depth: 560,
+        yawDeg: 0,
+        elevation: 'floor',
+      },
+      [wallHungPeer],
+    );
+    expect(collides).toBe(false);
+  });
+
+  it('cross-wall (L-corner): candidate on Muro B overlapping Muro A peer → collides', () => {
+    // Muro A goes +X from (0,0); peer occupies X [0,600], Y [0,560] (depth +Y).
+    // Muro B goes +Y from (3000,0); a module at offset 0 has origin (3000,0),
+    // yaw 90 → AABB minX = 3000-560=2440, maxX=3000, Y [0,600].
+    // Overlap region: X [2440,3000] vs peer X [0,600] → disjoint. So to collide,
+    // the Muro B module must be near the corner. Place peer near end of Muro A:
+    const peerNearCorner = { ...peerOnWallA, originX: 2500 }; // X [2500,3100]
+    const candOnWallB = {
+      itemId: 'cand',
+      instanceIndex: 0,
+      originX: 3000,
+      originY: 0,
+      width: 600,
+      depth: 560,
+      yawDeg: 90, // Muro B
+      elevation: 'floor' as const,
+    };
+    // cand AABB (yaw 90): minX = 3000-560 = 2440, maxX 3000, Y [0,600].
+    // peer AABB: X [2500,3100], Y [0,560]. Overlap X [2500,3000], Y [0,560] → collide.
+    expect(placedModuleCollides(candOnWallB, [peerNearCorner])).toBe(true);
+  });
+
+  it('free island overlapping another island → collides', () => {
+    const islandPeer = { ...peerOnWallA, originX: 1000, originY: 1000 };
+    const cand = {
+      itemId: 'cand',
+      instanceIndex: 0,
+      originX: 1100,
+      originY: 1100,
+      width: 600,
+      depth: 560,
+      yawDeg: 0,
+      elevation: 'floor' as const,
+    };
+    expect(placedModuleCollides(cand, [islandPeer])).toBe(true);
+  });
+
+  it('free island far apart → does NOT collide', () => {
+    const islandPeer = { ...peerOnWallA, originX: 0, originY: 0 };
+    const cand = {
+      itemId: 'cand',
+      instanceIndex: 0,
+      originX: 5000,
+      originY: 5000,
+      width: 600,
+      depth: 560,
+      yawDeg: 0,
+      elevation: 'floor' as const,
+    };
+    expect(placedModuleCollides(cand, [islandPeer])).toBe(false);
   });
 });
