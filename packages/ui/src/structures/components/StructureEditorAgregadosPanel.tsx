@@ -20,87 +20,117 @@ import {
   type SetStateAction,
 } from 'react';
 import type { Agregado, ModuleAgregadoInstance } from '@muebles/domain';
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Trash2,
+  Maximize2,
+  Move,
+  Layers,
+  Settings,
+} from 'lucide-react';
 
 export interface StructureEditorAgregadosPanelProps<
-  T extends { readonly agregados: readonly ModuleAgregadoInstance[] } = {
-    readonly agregados: readonly ModuleAgregadoInstance[];
-  },
+  T extends { agregados?: ModuleAgregadoInstance[] },
 > {
   readonly draft: T;
   readonly setDraft: Dispatch<SetStateAction<T>>;
-  readonly catalogAgregados?: readonly Agregado[];
+  readonly catalogAgregados: readonly Agregado[];
   readonly hidden?: boolean;
 }
 
-/** Compact formula variable legend — collapses to keep the form clean. */
 function FormulaLegend(): ReactNode {
   const [open, setOpen] = useState(false);
   return (
-    <div className="agr-formula-legend">
+    <div
+      className="structure-editor__formula-legend"
+      data-testid="formula-legend"
+    >
       <button
         type="button"
-        className="agr-formula-legend__toggle"
+        className="structure-editor__formula-legend-toggle"
+        onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
       >
-        {open ? (
-          <ChevronDown size={13} strokeWidth={2} aria-hidden />
-        ) : (
-          <ChevronRight size={13} strokeWidth={2} aria-hidden />
-        )}
-        Variables de fórmulas
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <span>Variables de fórmulas (W, H, D, B)</span>
       </button>
       {open ? (
-        <dl className="agr-formula-legend__body">
-          <dt>W</dt><dd>Ancho exterior</dd>
-          <dt>H</dt><dd>Alto exterior</dd>
-          <dt>D</dt><dd>Profundidad exterior</dd>
-          <dt>B</dt><dd>Espesor de tablero</dd>
-        </dl>
+        <div className="structure-editor__formula-legend-body">
+          <p>
+            Podés usar números exactos en milímetros (ej. <code>500</code>) o
+            fórmulas paramétricas con estas variables:
+          </p>
+          <ul>
+            <li><code>W</code> = Ancho exterior del mueble / estructura.</li>
+            <li><code>H</code> = Alto exterior del mueble / estructura.</li>
+            <li><code>D</code> = Profundidad exterior del mueble.</li>
+            <li><code>B</code> = Alto de zoclo / patas (mm).</li>
+          </ul>
+          <p className="structure-editor__formula-legend-example">
+            Ejemplos: <code>W - 36</code> (para puertas con laterales de 18mm),{' '}
+            <code>H - B - 36</code> (alto util sobre zoclo), <code>B + 18</code>{' '}
+            (elevación X/Z).
+          </p>
+        </div>
       ) : null}
     </div>
   );
 }
 
-/** One pending-remove state is tracked by index; clears on next action. */
-type RemoveState = { index: number; timer: ReturnType<typeof setTimeout> } | null;
-
 export function StructureEditorAgregadosPanel<
-  T extends { readonly agregados: readonly ModuleAgregadoInstance[] },
+  T extends { agregados?: ModuleAgregadoInstance[] },
 >({
   draft,
   setDraft,
-  catalogAgregados = [],
+  catalogAgregados,
   hidden = false,
 }: StructureEditorAgregadosPanelProps<T>): ReactNode {
-  const [selectedCatalogId, setSelectedCatalogId] = useState('');
-  const [pendingRemove, setPendingRemove] = useState<RemoveState>(null);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
+  const [pendingRemove, setPendingRemove] = useState<{
+    index: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
   const clearPending = useCallback(() => {
-    setPendingRemove((prev) => {
-      if (prev) clearTimeout(prev.timer);
-      return null;
-    });
-  }, []);
+    if (pendingRemove) {
+      clearTimeout(pendingRemove.timer);
+      setPendingRemove(null);
+    }
+  }, [pendingRemove]);
 
   if (hidden) return null;
 
   const handleAddAgregado = () => {
     if (!selectedCatalogId) return;
-    const agr = catalogAgregados.find((a) => a.id === selectedCatalogId);
-    if (!agr) return;
+
+    const template = catalogAgregados.find((a) => a.id === selectedCatalogId);
 
     const newInst: ModuleAgregadoInstance = {
-      id: `agr-inst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      agregadoId: agr.id,
-      name: agr.name,
+      id:
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+              const r = (Math.random() * 16) | 0;
+              const v = c === 'x' ? r : (r & 0x3) | 0x8;
+              return v.toString(16);
+            }),
+      agregadoId: selectedCatalogId,
+      name: template?.name ?? '',
       quantity: 1,
-      layoutDirection: 'vertical',
-      gapMm: 3,
-      position: { zFormula: '100' },
-      dimensions: { widthFormula: 'W - 36', heightFormula: '600' },
+      layoutDirection: 'none',
+      gapMm: 0,
       mirrored: false,
+      position: {
+        xFormula: '',
+        yFormula: '',
+        zFormula: '',
+      },
+      dimensions: {
+        widthFormula: '',
+        heightFormula: '',
+        depthFormula: '',
+      },
     };
 
     setDraft((prev) => ({
@@ -111,7 +141,6 @@ export function StructureEditorAgregadosPanel<
 
   const handleRemoveAgregado = (index: number) => {
     if (pendingRemove?.index === index) {
-      // Second click → confirmed remove
       clearTimeout(pendingRemove.timer);
       setPendingRemove(null);
       setDraft((prev) => ({
@@ -120,7 +149,6 @@ export function StructureEditorAgregadosPanel<
       }));
       return;
     }
-    // First click → enter confirm state
     clearPending();
     const timer = setTimeout(() => setPendingRemove(null), 3500);
     setPendingRemove({ index, timer });
@@ -147,7 +175,8 @@ export function StructureEditorAgregadosPanel<
         <div>
           <h3 className="structure-editor__panel-title">Agregados</h3>
           <p className="structure-editor__panel-subtitle">
-            Puertas, cajones o módulos internos que se incorporan a esta pieza.
+            Puertas, cajones o módulos internos incorporados a esta pieza, con
+            posicionamiento 3D (X, Y, Z) y dimensiones del hueco (W, H, D).
           </p>
         </div>
       </div>
@@ -166,7 +195,7 @@ export function StructureEditorAgregadosPanel<
             data-testid="structure-agregado-select"
           >
             <option value="" disabled>
-              Elegir agregado…
+              Elegir agregado del catálogo…
             </option>
             {catalogAgregados.map((a) => (
               <option key={a.id} value={a.id}>
@@ -215,9 +244,6 @@ export function StructureEditorAgregadosPanel<
                     <strong className="structure-editor__agregado-name">
                       {inst.name || template?.name || 'Agregado'}
                     </strong>
-                    {inst.mirrored ? (
-                      <span className="badge badge--info">Espejeado</span>
-                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -244,165 +270,232 @@ export function StructureEditorAgregadosPanel<
                   </p>
                 ) : null}
 
-                <div className="structure-editor__agregado-grid">
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Nombre personalizado
-                    </label>
-                    <input
-                      type="text"
-                      className="catalog-form__input"
-                      value={inst.name ?? ''}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, { name: e.target.value })
-                      }
-                      placeholder={template?.name ?? 'Ej. 3 Cajones'}
-                      data-testid={`structure-agr-${idx}-name`}
-                    />
-                  </div>
-
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Cantidad
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      className="catalog-form__input"
-                      value={inst.quantity}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, {
-                          quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
-                        })
-                      }
-                      data-testid={`structure-agr-${idx}-qty`}
-                    />
-                  </div>
-
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Apilamiento
-                    </label>
-                    <select
-                      className="catalog-form__input"
-                      value={inst.layoutDirection ?? 'none'}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, {
-                          layoutDirection: e.target.value as any,
-                        })
-                      }
-                      data-testid={`structure-agr-${idx}-direction`}
-                    >
-                      <option value="vertical">Vertical (columna)</option>
-                      <option value="horizontal">Horizontal (fila)</option>
-                      <option value="none">Sin apilar</option>
-                    </select>
-                  </div>
-
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Separación (mm)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="catalog-form__input"
-                      value={inst.gapMm ?? 0}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, {
-                          gapMm: Math.max(0, parseFloat(e.target.value) || 0),
-                        })
-                      }
-                      data-testid={`structure-agr-${idx}-gap`}
-                    />
-                  </div>
-
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Posición Z
-                    </label>
-                    <input
-                      type="text"
-                      className="catalog-form__input"
-                      value={inst.position?.zFormula ?? ''}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, {
-                          position: {
-                            ...inst.position,
-                            zFormula: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="Ej. 100 o B + 20"
-                      data-testid={`structure-agr-${idx}-pos-z`}
-                    />
-                    <span className="catalog-form__hint">
-                      Distancia desde la base (mm o fórmula)
-                    </span>
-                  </div>
-
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Ancho hueco
-                    </label>
-                    <input
-                      type="text"
-                      className="catalog-form__input"
-                      value={inst.dimensions?.widthFormula ?? ''}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, {
-                          dimensions: {
-                            ...inst.dimensions,
-                            widthFormula: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="Ej. W - 36"
-                      data-testid={`structure-agr-${idx}-dim-w`}
-                    />
-                    <span className="catalog-form__hint">
-                      mm o fórmula — W = ancho exterior
-                    </span>
-                  </div>
-
-                  <div className="catalog-form__field">
-                    <label className="catalog-form__label">
-                      Alto hueco
-                    </label>
-                    <input
-                      type="text"
-                      className="catalog-form__input"
-                      value={inst.dimensions?.heightFormula ?? ''}
-                      onChange={(e) =>
-                        handleUpdateAgregado(idx, {
-                          dimensions: {
-                            ...inst.dimensions,
-                            heightFormula: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="Ej. 600 o H - B"
-                      data-testid={`structure-agr-${idx}-dim-h`}
-                    />
-                    <span className="catalog-form__hint">
-                      mm o fórmula — H = alto exterior
-                    </span>
-                  </div>
-
-                  <div className="catalog-form__field catalog-form__field--checkbox">
-                    <label className="catalog-form__checkbox-label">
+                <fieldset className="structure-editor__agregado-fieldset">
+                  <legend className="structure-editor__agregado-legend">
+                    <Maximize2 size={14} aria-hidden /> Dimensiones del Hueco / Sub-espacio
+                  </legend>
+                  <div className="structure-editor__agregado-grid-3col">
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Ancho hueco (W)</label>
                       <input
-                        type="checkbox"
-                        checked={inst.mirrored ?? false}
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.dimensions?.widthFormula ?? ''}
                         onChange={(e) =>
-                          handleUpdateAgregado(idx, { mirrored: e.target.checked })
+                          handleUpdateAgregado(idx, {
+                            dimensions: {
+                              ...inst.dimensions,
+                              widthFormula: e.target.value,
+                            },
+                          })
                         }
-                        data-testid={`structure-agr-${idx}-mirrored`}
+                        placeholder="Ej. W - 36"
+                        data-testid={`structure-agr-${idx}-dim-w`}
                       />
-                      Espejear (invertir izq ↔ der)
-                    </label>
+                      <span className="catalog-form__hint">mm o fórmula rel a W</span>
+                    </div>
+
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Alto hueco (H)</label>
+                      <input
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.dimensions?.heightFormula ?? ''}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            dimensions: {
+                              ...inst.dimensions,
+                              heightFormula: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Ej. H - B - 36"
+                        data-testid={`structure-agr-${idx}-dim-h`}
+                      />
+                      <span className="catalog-form__hint">mm o fórmula rel a H</span>
+                    </div>
+
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Profundidad hueco (D)</label>
+                      <input
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.dimensions?.depthFormula ?? ''}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            dimensions: {
+                              ...inst.dimensions,
+                              depthFormula: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Ej. D - 18"
+                        data-testid={`structure-agr-${idx}-dim-d`}
+                      />
+                      <span className="catalog-form__hint">mm o fórmula rel a D</span>
+                    </div>
                   </div>
-                </div>
+                </fieldset>
+
+                <fieldset className="structure-editor__agregado-fieldset">
+                  <legend className="structure-editor__agregado-legend">
+                    <Move size={14} aria-hidden /> Posición Espacial 3D (X, Y, Z)
+                  </legend>
+                  <div className="structure-editor__agregado-grid-3col">
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Posición X (Ancho / Lateral)</label>
+                      <input
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.position?.xFormula ?? ''}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            position: {
+                              ...inst.position,
+                              xFormula: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Ej. 18 o W/2"
+                        data-testid={`structure-agr-${idx}-pos-x`}
+                      />
+                      <span className="catalog-form__hint">Desde lateral izq (mm/fórmula)</span>
+                    </div>
+
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Posición Y (Profundidad)</label>
+                      <input
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.position?.yFormula ?? ''}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            position: {
+                              ...inst.position,
+                              yFormula: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Ej. 0 o 18"
+                        data-testid={`structure-agr-${idx}-pos-y`}
+                      />
+                      <span className="catalog-form__hint">Desde frente (mm/fórmula)</span>
+                    </div>
+
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Posición Z (Elevación / Vertical)</label>
+                      <input
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.position?.zFormula ?? ''}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            position: {
+                              ...inst.position,
+                              zFormula: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Ej. B + 18 o 100"
+                        data-testid={`structure-agr-${idx}-pos-z`}
+                      />
+                      <span className="catalog-form__hint">Desde la base (mm/fórmula)</span>
+                    </div>
+                  </div>
+                </fieldset>
+
+                <fieldset className="structure-editor__agregado-fieldset">
+                  <legend className="structure-editor__agregado-legend">
+                    <Layers size={14} aria-hidden /> Distribución y Repetición
+                  </legend>
+                  <div className="structure-editor__agregado-grid-3col">
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Cantidad (N)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="catalog-form__input"
+                        value={inst.quantity}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
+                          })
+                        }
+                        data-testid={`structure-agr-${idx}-qty`}
+                      />
+                    </div>
+
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Dirección de apilamiento</label>
+                      <select
+                        className="catalog-form__input"
+                        value={inst.layoutDirection ?? 'none'}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            layoutDirection: e.target.value as any,
+                          })
+                        }
+                        data-testid={`structure-agr-${idx}-direction`}
+                      >
+                        <option value="vertical">Vertical (columna)</option>
+                        <option value="horizontal">Horizontal (fila)</option>
+                        <option value="none">Sin apilar</option>
+                      </select>
+                    </div>
+
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Separación (gapMm)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        className="catalog-form__input"
+                        value={inst.gapMm ?? 0}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, {
+                            gapMm: Math.max(0, parseFloat(e.target.value) || 0),
+                          })
+                        }
+                        data-testid={`structure-agr-${idx}-gap`}
+                      />
+                      <span className="catalog-form__hint">mm luz entre unidades</span>
+                    </div>
+                  </div>
+                </fieldset>
+
+                <fieldset className="structure-editor__agregado-fieldset">
+                  <legend className="structure-editor__agregado-legend">
+                    <Settings size={14} aria-hidden /> Opción y Orientación
+                  </legend>
+                  <div className="structure-editor__agregado-grid-2col">
+                    <div className="catalog-form__field">
+                      <label className="catalog-form__label">Nombre borrador / etiqueta</label>
+                      <input
+                        type="text"
+                        className="catalog-form__input"
+                        value={inst.name ?? ''}
+                        onChange={(e) =>
+                          handleUpdateAgregado(idx, { name: e.target.value })
+                        }
+                        placeholder={template?.name ?? 'Ej. Puerta Principal'}
+                        data-testid={`structure-agr-${idx}-name`}
+                      />
+                    </div>
+
+                    <div className="catalog-form__field catalog-form__field--checkbox">
+                      <label className="catalog-form__checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={inst.mirrored ?? false}
+                          onChange={(e) =>
+                            handleUpdateAgregado(idx, { mirrored: e.target.checked })
+                          }
+                          data-testid={`structure-agr-${idx}-mirrored`}
+                        />
+                        Espejear (invertir izq ↔ der)
+                      </label>
+                    </div>
+                  </div>
+                </fieldset>
               </div>
             );
           })}

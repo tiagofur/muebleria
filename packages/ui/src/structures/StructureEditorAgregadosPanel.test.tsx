@@ -119,10 +119,23 @@ describe('StructureEditorAgregadosPanel', () => {
     fireEvent.change(qtyInput, { target: { value: '4' } });
     expect(currentDraft.agregados[0]!.quantity).toBe(4);
 
-    // Update Z formula
+    // Update X, Y, Z formulas
+    const posXInput = screen.getByTestId('structure-agr-0-pos-x');
+    fireEvent.change(posXInput, { target: { value: '18' } });
+    expect(currentDraft.agregados[0]!.position?.xFormula).toBe('18');
+
+    const posYInput = screen.getByTestId('structure-agr-0-pos-y');
+    fireEvent.change(posYInput, { target: { value: '0' } });
+    expect(currentDraft.agregados[0]!.position?.yFormula).toBe('0');
+
     const posZInput = screen.getByTestId('structure-agr-0-pos-z');
     fireEvent.change(posZInput, { target: { value: 'B + 20' } });
     expect(currentDraft.agregados[0]!.position?.zFormula).toBe('B + 20');
+
+    // Update Depth formula
+    const dimDInput = screen.getByTestId('structure-agr-0-dim-d');
+    fireEvent.change(dimDInput, { target: { value: 'D - 18' } });
+    expect(currentDraft.agregados[0]!.dimensions?.depthFormula).toBe('D - 18');
 
     // Remove: soft-delete requires two clicks (first=enter confirm, second=execute)
     const removeBtn = screen.getByTestId('structure-remove-agregado-0');
