@@ -1559,6 +1559,79 @@
         "docs/roadmap-comercial-v2.md Fase Congelada"
       ],
       "status": "pending"
+    },
+    {
+      "id": "F082",
+      "phase": 17,
+      "name": "agregados_subspace_engine",
+      "title": "Motor paramétrico de sub-espacios locales y apilamiento de agregados (#294)",
+      "description": "Fase 1 del Plan Maestro de Agregados (docs/agregados-subassemblies-plan.md). Extiende ModuleAgregadoInstance en packages/domain/src/types.ts con posicionamiento (position), dimensiones locales (dimensions), apilamiento (quantity, layoutDirection, gapMm) y redefinición (optionOverrides). Actualiza agregados.ts y bom.ts para evaluar fórmulas dentro del sub-bounding box del agregado.",
+      "acceptance": [
+        "ModuleAgregadoInstance define position, dimensions, quantity, layoutDirection, gapMm y optionOverrides",
+        "resolveAgregadoInstance calcula offsets para N unidades apiladas (vertical/horizontal)",
+        "expandComponentInstances evalúa fórmulas de piezas locales contra el sub-espacio (W_local, H_local, D_local)",
+        "agregados.test.ts valida 3 cajones apilados verticalmente y puertas espejeadas",
+        "pnpm --filter @muebles/domain test pasa al 100%"
+      ],
+      "references": [
+        "docs/agregados-subassemblies-plan.md Fase 1",
+        "Issue #294"
+      ],
+      "status": "in_progress"
+    },
+    {
+      "id": "F083",
+      "phase": 17,
+      "name": "agregados_structures_ui",
+      "title": "Interfaz de usuario para vincular agregados a muebles (#295)",
+      "description": "Fase 2 del Plan Maestro de Agregados. Nueva pestaña Agregados en StructureEditorForm.tsx (packages/ui/src/structures) para seleccionar del catálogo, definir posición Z, ancho libre, alto del hueco, cantidad N, dirección de apilamiento, luz gapMm y redefinición de herrajes/espejeado.",
+      "acceptance": [
+        "Pestaña Agregados visible en StructureEditorForm.tsx",
+        "Formulario para añadir y editar ModuleAgregadoInstance",
+        "Validación de campos y actualización de la estructura",
+        "pnpm --filter @muebles/ui test pasa al 100%"
+      ],
+      "references": [
+        "docs/agregados-subassemblies-plan.md Fase 2",
+        "Issue #295"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F084",
+      "phase": 17,
+      "name": "agregados_3d_hierarchy",
+      "title": "Visualización y jerarquía 3D interactiva de sub-ensambles (#296)",
+      "description": "Fase 3 del Plan Maestro de Agregados. Posicionamiento espacial de tableros y herrajes en previewComponentPart.ts y agrupación por sub-conjunto en FurnitureScene3D.tsx con refresco dinámico al ajustar medidas en 3D.",
+      "acceptance": [
+        "previewComponentPart.ts posiciona visualmente cada pieza del agregado en sus coordenadas (X,Y,Z)",
+        "Agrupación e identificación 3D de sub-ensambles en FurnitureScene3D.tsx",
+        "Inspector 3D actualiza visualización en tiempo real",
+        "pnpm --filter @muebles/ui test pasa al 100%"
+      ],
+      "references": [
+        "docs/agregados-subassemblies-plan.md Fase 3",
+        "Issue #296"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F085",
+      "phase": 17,
+      "name": "agregados_bom_export_storage",
+      "title": "Integración en cotizaciones, export optimizer y persistencia (#297)",
+      "description": "Fase 4 del Plan Maestro de Agregados. Trazabilidad de agregados en el BOM de cotización, exportación a Plantilla_Optimizer.xlsx etiquetada para escuadradora/QR y persistencia en packages/storage y backend-go.",
+      "acceptance": [
+        "Despiece BOM rotula piezas de agregados con su sub-conjunto",
+        "Export Optimizer incluye la etiqueta de sub-ensamble",
+        "API y storage persisten position, dimensions y overrides",
+        "pnpm test verde en todos los paquetes"
+      ],
+      "references": [
+        "docs/agregados-subassemblies-plan.md Fase 4",
+        "Issue #297"
+      ],
+      "status": "pending"
     }
   ]
 }

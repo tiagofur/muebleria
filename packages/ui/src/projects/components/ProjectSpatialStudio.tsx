@@ -36,6 +36,7 @@ import {
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   parseDxfToKitchenWalls,
+  placedModuleCollides,
   planEditSessionHeldByOther,
   pruneKitchenLayout,
   removeKitchenSpace,
@@ -264,6 +265,7 @@ export function ProjectSpatialStudio({
   const [paintHoverSurface, setPaintHoverSurface] = useState<PaintSurface | null>(
     null,
   );
+  const [draggingInvalid, setDraggingInvalid] = useState(false);
 
   // F065 — ghost drag de ítem sin colocar al viewport 3D
   const [ghostDrag, setGhostDrag] = useState<{
@@ -1189,6 +1191,40 @@ export function ProjectSpatialStudio({
             thresholdMm: 18,
             gapMm: 20,
           });
+    // Collision check: compute candidate origin by shifting along the wall
+    // direction from the current resolved position, then test against peers.
+    const currentMod = preview.modules.find(
+      (m) => m.instanceKey === `${itemId}#${instanceIndex}`,
+    );
+    if (currentMod) {
+      const delta = offsetMm - (placement.offsetMm ?? 0);
+      const yaw = currentMod.yawDeg;
+      let candX = currentMod.originX;
+      let candY = currentMod.originY;
+      if (yaw === 0) candX += delta;
+      else if (yaw === 90) candY += delta;
+      else if (yaw === 180) candX -= delta;
+      else if (yaw === 270) candY -= delta;
+      const collides = placedModuleCollides(
+        {
+          itemId,
+          instanceIndex,
+          instanceKey: `${itemId}#${instanceIndex}`,
+          originX: candX,
+          originY: candY,
+          width: currentMod.width,
+          depth: currentMod.depth,
+          yawDeg: currentMod.yawDeg,
+          elevation: currentMod.elevation,
+        },
+        preview.modules,
+      );
+      if (collides && wallDragSession.current) {
+        setDraggingInvalid(true);
+        return; // block commit during drag — mueble queda donde estaba
+      }
+    }
+    setDraggingInvalid(false);
     commit(
       {
         ...layout,
@@ -1331,6 +1367,7 @@ export function ProjectSpatialStudio({
 
   const handleModuleWallDragEnd = (moduleKey: string) => {
     wallDragSession.current = false;
+    setDraggingInvalid(false);
     if (!canEdit) return;
     const hash = moduleKey.lastIndexOf('#');
     if (hash < 0) return;
@@ -1357,6 +1394,30 @@ export function ProjectSpatialStudio({
     // Soft 50 mm grid while free-dragging (obra feel without CAD snap).
     const freeXMm = Math.round(planXMm / 50) * 50;
     const freeYMm = Math.round(planYMm / 50) * 50;
+    // Collision check for free/island placement.
+    const currentMod = preview.modules.find(
+      (m) => m.instanceKey === `${itemId}#${instanceIndex}`,
+    );
+    if (currentMod) {
+      const collides = placedModuleCollides(
+        {
+          itemId,
+          instanceIndex,
+          originX: freeXMm,
+          originY: freeYMm,
+          width: currentMod.width,
+          depth: currentMod.depth,
+          yawDeg: currentMod.yawDeg,
+          elevation: currentMod.elevation,
+        },
+        preview.modules,
+      );
+      if (collides) {
+        setDraggingInvalid(true);
+        return;
+      }
+    }
+    setDraggingInvalid(false);
     commit(
       {
         ...layout,
@@ -1400,6 +1461,7 @@ export function ProjectSpatialStudio({
 
   const handleModuleFreeDragEnd = (_moduleKey: string) => {
     wallDragSession.current = false;
+    setDraggingInvalid(false);
   };
 
   const convertSelectedToIsland = () => {
@@ -2680,6 +2742,7 @@ export function ProjectSpatialStudio({
                   setTargetWallId(wallId);
                 }}
                 paintHoverSurface={paintHoverSurface}
+                draggingInvalid={draggingInvalid}
                 onPaintHover={handlePaintHover}
                 onPaintDrop={handlePaintDrop}
                 ghostModule={ghostDrag}

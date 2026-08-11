@@ -291,6 +291,13 @@ export type FurnitureScene3DProps = {
     readonly z: number;
   } | null;
   /**
+   * Colisión durante drag (Fase A): cuando true, el OuterGhost del módulo
+   * seleccionado (el que se arrastra) se renderiza rojo (#ef4444) para avisar
+   * que el drop es inválido. El Studio lo setea cuando el offset candidato
+   * colisiona con otro módulo.
+   */
+  readonly draggingInvalid?: boolean;
+  /**
    * Drop de un ítem sin colocar sobre el viewport. El Studio resuelve la
    * posición (wallId+offsetMm para muro, planXMm/planYMm para piso).
    */
@@ -410,23 +417,28 @@ function OuterGhost({
   height,
   depth,
   highlighted = false,
+  invalid = false,
 }: {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
   readonly highlighted?: boolean;
+  readonly invalid?: boolean;
 }): ReactNode {
   const W = Math.max(width, 1);
   const H = Math.max(height, 1);
   const D = Math.max(depth, 1);
+  // invalid (collision during drag) wins over highlighted (selection).
+  const color = invalid ? '#ef4444' : highlighted ? '#f5c542' : '#6b7280';
+  const opacity = invalid ? 0.5 : highlighted ? 0.45 : 0.18;
   return (
     <mesh position={[W / 2, H / 2, D / 2]}>
       <boxGeometry args={[W, H, D]} />
       <meshBasicMaterial
-        color={highlighted ? '#f5c542' : '#6b7280'}
+        color={color}
         wireframe
         transparent
-        opacity={highlighted ? 0.45 : 0.18}
+        opacity={opacity}
       />
     </mesh>
   );
@@ -643,6 +655,7 @@ function ModuleGroup({
   onModuleFreeMove,
   onModuleFreeDragStart,
   onModuleFreeDragEnd,
+  draggingInvalid = false,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   controlsRef,
   setOrbitSuppressed,
@@ -680,6 +693,8 @@ function ModuleGroup({
   ) => void;
   readonly onModuleFreeDragStart?: (moduleKey: string) => void;
   readonly onModuleFreeDragEnd?: (moduleKey: string) => void;
+  /** When true, the selected module's ghost renders red (collision during drag). */
+  readonly draggingInvalid?: boolean;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
 }): ReactNode {
@@ -895,6 +910,7 @@ function ModuleGroup({
           height={mod.height}
           depth={mod.depth}
           highlighted={moduleSelected}
+          invalid={draggingInvalid && moduleSelected}
         />
       ) : null}
       {(mod.baseClearanceMm ?? 0) > 0 ? (
@@ -1026,6 +1042,7 @@ function SceneContent({
   ghostModule = null,
   ghostDropValid,
   ghostPosition = null,
+  draggingInvalid = false,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
   readonly walls: readonly FurnitureSceneWall[];
@@ -1089,6 +1106,7 @@ function SceneContent({
   readonly ghostModule?: FurnitureScene3DProps['ghostModule'];
   readonly ghostDropValid?: boolean;
   readonly ghostPosition?: FurnitureScene3DProps['ghostPosition'];
+  readonly draggingInvalid?: boolean;
 }): ReactNode {
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
   const { camera, gl, scene } = useThree();
@@ -1460,6 +1478,7 @@ function SceneContent({
               onModuleFreeMove={onModuleFreeMove}
               onModuleFreeDragStart={onModuleFreeDragStart}
               onModuleFreeDragEnd={onModuleFreeDragEnd}
+              draggingInvalid={draggingInvalid}
               lightingMode={lightMode}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
@@ -1623,6 +1642,7 @@ export function FurnitureScene3D({
   ghostModule = null,
   ghostDropValid,
   ghostPosition = null,
+  draggingInvalid = false,
   onUnplacedDrop,
   onUnplacedHover,
 }: FurnitureScene3DProps): ReactNode {
@@ -1951,6 +1971,7 @@ export function FurnitureScene3D({
               ghostModule={ghostModule}
               ghostDropValid={ghostDropValid}
               ghostPosition={ghostPosition}
+              draggingInvalid={draggingInvalid}
             />
           </Suspense>
           </Canvas>

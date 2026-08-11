@@ -1,15 +1,19 @@
-# Sesión — Roadmap Comercial v2 + F066 + F067
+# Sesión — F082 Motor Paramétrico de Agregados (#294, Fase 1)
 
-- **Branch:** `feat/F067-paleta-materiales-drag` (desde main)
-- **Fecha:** 2026-08-10
-- **Scope:** Planeamiento + F066 (inspector colapsable) + F067 (paleta materiales drag)
+- **Fecha:** 2026-08-11
+- **Scope:** Implementación de F082 (Plan Maestro de Agregados, docs/agregados-subassemblies-plan.md, Issue #294)
 
 ## Contexto de la sesión
 
-Sesión de planeamiento estratégico + arranque de implementación. El usuario
-quiere llevar el producto a "opción a Promob para fábricas chicas de LatAm".
-Se decidió NO migrar a C#/nativo, mantener el stack React/R3F/Go/Electron, y
-priorizar Proyectar + herrajes 3D + producción de corte + empaquetado Windows.
+Análisis conceptual y auditoría de Agregados completada. Se creó la especificación técnica en `docs/agregados-subassemblies-plan.md` y 4 GitHub Issues (#294-#297).
+Se acordó implementar en paralelo la Fase 1 (Dominio) y Fase 2 (UI Estructuras) sin interferir con las mejoras 3D de Proyectar.
+
+## En Curso — F082 Motor Paramétrico de Agregados (#294)
+
+1. Extender `ModuleAgregadoInstance` en `packages/domain/src/types.ts`.
+2. Actualizar `resolveAgregadoInstance` en `packages/domain/src/agregados.ts` para calcular Bounding Box local y apilamiento.
+3. Actualizar `bom.ts` para evaluar fórmulas dentro de $W_{\text{local}}, H_{\text{local}}, D_{\text{local}}$.
+4. Unit tests en `packages/domain/src/agregados.test.ts`.
 
 ## Hecho — Planeamiento
 

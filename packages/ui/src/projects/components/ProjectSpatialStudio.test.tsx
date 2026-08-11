@@ -774,7 +774,7 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'));
     fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
     fireEvent.click(screen.getByTestId('spatial-studio-nudge-right'));
     const undoBtn = screen.getByTestId(
@@ -787,6 +787,10 @@ EOF
       afterUndo.placements.find((p: { itemId: string }) => p.itemId === 'it-a')!
         .offsetMm,
     ).toBe(0);
+    expect(
+      afterUndo.placements.find((p: { itemId: string }) => p.itemId === 'it-b')!
+        .offsetMm,
+    ).toBe(620);
   });
 
   it('updates wall offset from input field when current offset is 0 without snapping back to 0', () => {
