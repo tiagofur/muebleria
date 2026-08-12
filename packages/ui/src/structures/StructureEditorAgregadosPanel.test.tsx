@@ -165,12 +165,12 @@ describe('StructureEditorAgregadosPanel', () => {
     ];
 
     const catalogHardware = [
-      { id: 'jal-1', code: 'JAL-GOLA-256', name: 'Jaladera Gola 256mm', category: 'jaladera' as const },
-      { id: 'jal-2', code: 'JAL-PERFIL-128', name: 'Jaladera Perfil 128mm', category: 'jaladera' as const },
+      { id: 'jal-1', code: 'JAL-GOLA-256', name: 'Jaladera Gola 256mm', category: 'jaladera' as const, unit: 'piece' as const, costPerUnit: 50, active: true },
+      { id: 'jal-2', code: 'JAL-PERFIL-128', name: 'Jaladera Perfil 128mm', category: 'jaladera' as const, unit: 'piece' as const, costPerUnit: 40, active: true },
     ];
 
     const optionGroups = [
-      { id: 'og-1', code: 'JALADERA', name: 'Jaladeras de Puerta', kind: 'hardware' as const, memberIds: ['jal-1', 'jal-2'] },
+      { id: 'og-1', code: 'JALADERA', name: 'Jaladeras de Puerta', kind: 'hardware' as const, required: true, optionIds: ['jal-1', 'jal-2'] },
     ];
 
     let currentDraft: StructureDraft = {

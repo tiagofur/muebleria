@@ -556,8 +556,8 @@ export function StructureEditorAgregadosPanel<
                             const currentOverride = inst.optionOverrides?.[role] ?? '';
 
                             const availableHardware = catalogHardware?.length
-                              ? group?.memberIds?.length
-                                ? catalogHardware.filter((h) => group.memberIds!.includes(h.id))
+                              ? group?.optionIds?.length
+                                ? catalogHardware.filter((h) => group.optionIds.includes(h.id))
                                 : catalogHardware
                               : [];
 
