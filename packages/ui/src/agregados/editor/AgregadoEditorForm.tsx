@@ -14,7 +14,9 @@ import type { Component, Hardware, HardwareLine, ModuleComponentInstance } from 
 import { Plus, Trash2 } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
+import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
+import { AgregadoEditorPreview3D } from './AgregadoEditorPreview3D';
 
 export type AgregadoEditorTab = 'general' | 'components' | 'hardware';
 
@@ -29,6 +31,10 @@ export type AgregadoEditorFormProps = {
   readonly editingId: string | null;
   readonly catalogComponents: readonly Component[];
   readonly catalogHardware: readonly Hardware[];
+  /** Full catalog for the live 3D preview. When omitted, the Piezas tab falls
+   * back to a single-column layout with no preview. */
+  readonly catalogInput?: Module3DCatalogInput;
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 };
 
 const TABS: { id: AgregadoEditorTab; label: string }[] = [
@@ -47,6 +53,8 @@ export function AgregadoEditorForm({
   setDraft,
   catalogComponents,
   catalogHardware,
+  catalogInput,
+  resolveImageUrl,
 }: AgregadoEditorFormProps): ReactNode {
 
   const addComponentInstance = () => {
@@ -281,119 +289,140 @@ export function AgregadoEditorForm({
       {/* Tab: Piezas */}
       {editorTab === 'components' && (
         <div className="agregado-editor__panel" data-testid="agregado-tab-components">
-          <div className="agregado-editor__panel-header">
-            <p className="catalog-form__hint">
-              Piezas de tablero que componen este sub-ensamble. Cada pieza usará W, H, D locales del agregado.
-            </p>
-            <button
-              type="button"
-              className="btn btn--secondary btn--small"
-              onClick={addComponentInstance}
-              disabled={catalogComponents.length === 0}
-              data-testid="agregado-add-component"
-            >
-              <Plus size={14} /> Añadir Pieza
-            </button>
-          </div>
+          <div
+            className={
+              catalogInput
+                ? 'agregado-editor__components-layout agregado-editor__components-layout--with-preview'
+                : 'agregado-editor__components-layout'
+            }
+          >
+            <div className="agregado-editor__components-list">
+              <div className="agregado-editor__panel-header">
+                <p className="catalog-form__hint">
+                  Piezas de tablero que componen este sub-ensamble. Cada pieza usará W, H, D locales del agregado.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--small"
+                  onClick={addComponentInstance}
+                  disabled={catalogComponents.length === 0}
+                  data-testid="agregado-add-component"
+                >
+                  <Plus size={14} /> Añadir Pieza
+                </button>
+              </div>
 
-          {draft.components.length === 0 ? (
-            <div className="agregado-editor__empty-slot">
-              No hay piezas en este sub-ensamble.
-            </div>
-          ) : (
-            <ul className="agregado-editor__item-list">
-              {draft.components.map((comp, idx) => {
-                const info = catalogComponents.find((c) => c.id === comp.componentId);
-                return (
-                  <li key={idx} className="agregado-editor__item-row" style={{ display: 'block' }}>
-                    <div className="agregado-editor__item-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <strong style={{ fontSize: '14px' }}>
-                        {info ? `${info.code} — ${info.name}` : comp.componentId}
-                      </strong>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--small btn--icon-only"
-                        aria-label="Eliminar pieza"
-                        onClick={() => removeComponentInstance(idx)}
-                        data-testid={`agregado-comp-${idx}-remove`}
+              {draft.components.length === 0 ? (
+                <div className="agregado-editor__empty-slot">
+                  No hay piezas en este sub-ensamble.
+                </div>
+              ) : (
+                <ul className="agregado-editor__item-list">
+                  {draft.components.map((comp, idx) => {
+                    const info = catalogComponents.find((c) => c.id === comp.componentId);
+                    return (
+                      <li
+                        key={idx}
+                        className="agregado-editor__item-row agregado-editor__item-row--block"
                       >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
+                        <div className="agregado-editor__item-header agregado-editor__item-header--flex">
+                          <strong className="agregado-editor__item-title">
+                            {info ? `${info.code} — ${info.name}` : comp.componentId}
+                          </strong>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--small btn--icon-only"
+                            aria-label="Eliminar pieza"
+                            onClick={() => removeComponentInstance(idx)}
+                            data-testid={`agregado-comp-${idx}-remove`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
 
-                    <div className="agregado-editor__item-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr', gap: '12px', alignItems: 'flex-start' }}>
-                      <div className="catalog-form__field">
-                        <label className="catalog-form__label">Componente</label>
-                        <select
-                          className="catalog-form__select"
-                          value={comp.componentId}
-                          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                            updateComponentInstance(idx, { componentId: e.target.value })
-                          }
-                          data-testid={`agregado-comp-${idx}-select`}
-                        >
-                          {catalogComponents.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.code} — {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                        <div className="agregado-editor__item-fields agregado-editor__item-fields--grid">
+                          <div className="catalog-form__field">
+                            <label className="catalog-form__label">Componente</label>
+                            <select
+                              className="catalog-form__select"
+                              value={comp.componentId}
+                              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                updateComponentInstance(idx, { componentId: e.target.value })
+                              }
+                              data-testid={`agregado-comp-${idx}-select`}
+                            >
+                              {catalogComponents.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.code} — {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                      <div className="catalog-form__field">
-                        <label className="catalog-form__label">Cantidad</label>
-                        <input
-                          type="number"
-                          min={1}
-                          className="catalog-form__input"
-                          value={comp.quantity}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            updateComponentInstance(idx, {
-                              quantity: Math.max(1, Number(e.target.value) || 1),
-                            })
+                          <div className="catalog-form__field">
+                            <label className="catalog-form__label">Cantidad</label>
+                            <input
+                              type="number"
+                              min={1}
+                              className="catalog-form__input"
+                              value={comp.quantity}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                updateComponentInstance(idx, {
+                                  quantity: Math.max(1, Number(e.target.value) || 1),
+                                })
+                              }
+                              data-testid={`agregado-comp-${idx}-qty`}
+                            />
+                          </div>
+
+                          <div className="catalog-form__field">
+                            <label className="catalog-form__label">Ubicación (opcional)</label>
+                            <select
+                              className="catalog-form__select"
+                              value={comp.placementOverride ?? ''}
+                              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                updateComponentInstance(idx, {
+                                  placementOverride: (e.target.value as any) || undefined,
+                                })
+                              }
+                              data-testid={`agregado-comp-${idx}-placement`}
+                            >
+                              <option value="">— Del componente —</option>
+                              {COMPONENT_PLACEMENTS.map((p) => (
+                                <option key={p.value} value={p.value}>
+                                  {p.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {info?.notes && (
+                          <p className="agregado-editor__item-hint">{info.notes}</p>
+                        )}
+
+                        <InstanceOverridesEditor
+                          overrides={comp.overrides}
+                          testIdSuffix={String(idx)}
+                          onChange={(nextOverrides) =>
+                            updateComponentInstance(idx, { overrides: nextOverrides })
                           }
-                          data-testid={`agregado-comp-${idx}-qty`}
                         />
-                      </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
 
-                      <div className="catalog-form__field">
-                        <label className="catalog-form__label">Ubicación (opcional)</label>
-                        <select
-                          className="catalog-form__select"
-                          value={comp.placementOverride ?? ''}
-                          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                            updateComponentInstance(idx, {
-                              placementOverride: (e.target.value as any) || undefined,
-                            })
-                          }
-                          data-testid={`agregado-comp-${idx}-placement`}
-                        >
-                          <option value="">— Del componente —</option>
-                          {COMPONENT_PLACEMENTS.map((p) => (
-                            <option key={p.value} value={p.value}>
-                              {p.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {info?.notes && (
-                      <p className="agregado-editor__item-hint" style={{ margin: '4px 0 8px' }}>{info.notes}</p>
-                    )}
-
-                    <InstanceOverridesEditor
-                      overrides={comp.overrides}
-                      testIdSuffix={String(idx)}
-                      onChange={(nextOverrides) =>
-                        updateComponentInstance(idx, { overrides: nextOverrides })
-                      }
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+            {catalogInput ? (
+              <AgregadoEditorPreview3D
+                draft={draft}
+                catalogInput={catalogInput}
+                resolveMediaUrl={resolveImageUrl}
+              />
+            ) : null}
+          </div>
         </div>
       )}
 

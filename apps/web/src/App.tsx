@@ -2269,6 +2269,10 @@ function AppContent({
           onUpdate={updateAgregado}
           onDelete={deleteAgregado}
           canMutate={canMutateModules}
+          optionGroups={optionGroups}
+          catalogMaterials={materials}
+          catalogEdges={edges}
+          resolveImageUrl={resolveMediaUrl}
         />
       ) : null}
       {navId === 'projects' ? (
