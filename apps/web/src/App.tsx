@@ -213,6 +213,7 @@ function computeModuleCostPreview(
     catalog.optionGroups,
     catalog.components,
     catalog.structures,
+    catalog.agregados,
   ) as OptionChoices;
   const gate = canShowPricePreview(required, choices);
   if (!gate.ok) {
@@ -2268,6 +2269,10 @@ function AppContent({
           onUpdate={updateAgregado}
           onDelete={deleteAgregado}
           canMutate={canMutateModules}
+          optionGroups={optionGroups}
+          catalogMaterials={materials}
+          catalogEdges={edges}
+          resolveImageUrl={resolveMediaUrl}
         />
       ) : null}
       {navId === 'projects' ? (
@@ -2282,6 +2287,7 @@ function AppContent({
           ambientMaterials={ambientMaterials}
           catalogStructures={structures}
           catalogComponents={components}
+          catalogAgregados={agregados}
           resolveImageUrl={resolveMediaUrl}
           customers={customers}
           canAssignOwner={canAssignOwner}

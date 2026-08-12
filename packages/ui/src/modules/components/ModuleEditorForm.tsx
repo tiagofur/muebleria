@@ -389,6 +389,7 @@ export function ModuleEditorForm({
         composedEnabled={composedEnabled}
         onRequestAdd={onRequestAddComponent}
         hidden={editorTab !== 'components'}
+        catalogHardware={activeHardware}
       />
       {boardEditorSlot && editorTab === 'components' ? (
         <div

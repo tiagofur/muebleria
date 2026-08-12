@@ -348,10 +348,14 @@ type HardwarePlacement struct {
 	Scale            *float64             `json:"scale,omitempty"`
 }
 
-// HardwareRelPosition is the 2D position on the face plane (percent).
+// HardwareRelPosition is the 2D position on the face plane (mm or formula).
 type HardwareRelPosition struct {
-	XPercent float64 `json:"xPercent"`
-	YPercent float64 `json:"yPercent"`
+	XMm      float64 `json:"xMm"`
+	YMm      float64 `json:"yMm"`
+	XFormula string  `json:"xFormula,omitempty"`
+	YFormula string  `json:"yFormula,omitempty"`
+	XPercent float64 `json:"xPercent,omitempty"`
+	YPercent float64 `json:"yPercent,omitempty"`
 }
 
 // HardwareRotationDeg is an optional per-axis rotation in degrees (board frame).

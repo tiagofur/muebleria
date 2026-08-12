@@ -83,20 +83,52 @@ export function resolveAgregadoInstance(
     ? rawComponents.map(mirrorComponentInstance)
     : rawComponents;
 
-  const rawHardware = agregado.hardwareLines ?? [];
-  const hardwareLines = rawHardware.map((h) => {
-    const overrideHardwareId =
-      instance.optionOverrides && h.optionRole && instance.optionOverrides[h.optionRole]
-        ? instance.optionOverrides[h.optionRole]
-        : h.hardwareId;
+  // Count positioned hardware: each hardwarePlacement on a component = 1 unit,
+  // scaled by the component's (already mult-scaled) quantity. This is the
+  // single source of truth for cost + 3D + future CNC — a positioned hardware
+  // is never also counted via a bulk hardwareLine (dedup below).
+  const placementCounts = new Map<string, number>();
+  for (const comp of components) {
+    const placements = comp.overrides?.hardwarePlacements;
+    if (!placements) continue;
+    for (const p of placements) {
+      if (!p.hardwareId) continue;
+      placementCounts.set(
+        p.hardwareId,
+        (placementCounts.get(p.hardwareId) ?? 0) + comp.quantity,
+      );
+    }
+  }
 
-    return {
-      ...h,
-      id: `${h.id}-agr-${instance.agregadoId}`,
-      hardwareId: overrideHardwareId ?? h.hardwareId,
-      quantity: h.quantity * mult,
-    };
-  });
+  const rawHardware = agregado.hardwareLines ?? [];
+  // Bulk hardware lines, EXCLUDING any whose resolved hardwareId is also
+  // positioned (positions win → single source of truth, no double count).
+  const bulkHardwareLines = rawHardware
+    .map((h) => {
+      const overrideHardwareId =
+        instance.optionOverrides && h.optionRole && instance.optionOverrides[h.optionRole]
+          ? instance.optionOverrides[h.optionRole]
+          : h.hardwareId;
+      return {
+        ...h,
+        id: `${h.id}-agr-${instance.agregadoId}`,
+        hardwareId: overrideHardwareId ?? h.hardwareId,
+        quantity: h.quantity * mult,
+      };
+    })
+    .filter((h) => !(h.hardwareId && placementCounts.has(h.hardwareId)));
+
+  // Position-derived hardware lines (one per positioned hardwareId).
+  const placementHardwareLines: HardwareLine[] = [...placementCounts].map(
+    ([hwId, qty]) => ({
+      id: `placement-agr-${instance.agregadoId}-${hwId}`,
+      quantity: qty,
+      optionRole: 'POSITIONED',
+      hardwareId: hwId,
+    }),
+  );
+
+  const hardwareLines = [...bulkHardwareLines, ...placementHardwareLines];
 
   return { components, hardwareLines };
 }

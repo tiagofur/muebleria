@@ -1,7 +1,7 @@
 /**
  * Hardware placement resolver — pure domain.
  *
- * Resolves a {@link HardwarePlacement} (a percentage-based face anchor) into a
+ * Resolves a {@link HardwarePlacement} (an mm-based face anchor) into a
  * concrete position + normal in the BOARD-LOCAL frame, given the host board's
  * local size. Mirrors the min-corner / local-box convention of `spatialAnchor`:
  * local X = width (W), Y = thickness (T), Z = length (L), and the board box
@@ -12,9 +12,19 @@
  * board mesh, so only face coordinates are needed here.
  */
 
+import { evaluatePartFormula } from './engine/shared';
 import { normalizePreviewColor } from './materialPreview';
 import type { BoardLocalSize, Vec3 } from './spatialAnchor';
 import type { Hardware, HardwarePlacement } from './types';
+
+/**
+ * Default hardware projection (mm) when the hardware has no previewProjectionMm.
+ * The renderer positions each hardware's group at `face + projection` so the
+ * primitive (authored +Y-outward, body extending toward the face in −Y) sits
+ * OUTSIDE the board. Without this default, hardware lacking previewProjectionMm
+ * would sit flush (standoff 0) and appear embedded into the board.
+ */
+export const DEFAULT_HARDWARE_PROJECTION_MM = 25;
 
 /**
  * Resolver output (D4). All coordinates are in the BOARD-LOCAL frame so the
@@ -63,11 +73,11 @@ function clampPbr(value: number | undefined): number | undefined {
   return value;
 }
 
-/** Clamp a percentage into [0,100]; non-finite → 0. */
-function clampPercent(value: number): number {
+/** Clamp millimeters into [0, max] (keep the hardware on the face); non-finite → 0. */
+function clampMm(value: number, max: number): number {
   if (!Number.isFinite(value)) return 0;
   if (value < 0) return 0;
-  if (value > 100) return 100;
+  if (value > max) return max;
   return value;
 }
 
@@ -138,7 +148,8 @@ export interface ResolveHardwarePlacementParams {
  *  - the anchor face is unknown.
  *
  * Negative board dimensions are clamped to 0 (mirrors spatialAnchor). The
- * `relativePosition` percentages are clamped into [0,100].
+ * `relativePosition` millimeter offsets are clamped into the face bounds
+ * ([0, faceDim]) so the hardware never leaves the board surface.
  */
 export function resolveHardwarePlacement(
   params: ResolveHardwarePlacementParams,
@@ -161,40 +172,73 @@ export function resolveHardwarePlacement(
   const t = Math.max(board.thicknessMm, 0);
   const l = Math.max(board.lengthMm, 0);
 
-  const xFrac = clampPercent(placement.relativePosition.xPercent) / 100;
-  const yFrac = clampPercent(placement.relativePosition.yPercent) / 100;
+  // Millimeter offsets from the face's origin corner along the two in-plane
+  // axes (same axis mapping as before), clamped per-face so the hardware never
+  // leaves the board surface.
+  const hwSize = normalized.sizeMm ?? 96;
+  const boardEnv = {
+    W: w,
+    L: l,
+    H: l,
+    D: l,
+    T: t,
+    PW: w,
+    PL: l,
+    PH: l,
+    PD: l,
+    PT: t,
+    HW: hwSize,
+  };
+
+  let xMm = placement.relativePosition.xMm;
+  if (placement.relativePosition.xFormula?.trim()) {
+    try {
+      xMm = evaluatePartFormula(placement.relativePosition.xFormula, boardEnv);
+    } catch {
+      xMm = placement.relativePosition.xMm;
+    }
+  }
+
+  let yMm = placement.relativePosition.yMm;
+  if (placement.relativePosition.yFormula?.trim()) {
+    try {
+      yMm = evaluatePartFormula(placement.relativePosition.yFormula, boardEnv);
+    } catch {
+      yMm = placement.relativePosition.yMm;
+    }
+  }
 
   let localPosition: Vec3;
   let localNormal: Vec3;
   switch (placement.anchorFace) {
     case 'front':
-      // Face plane W x L on the +thickness surface.
-      localPosition = [xFrac * w, t, yFrac * l];
+      // Face plane W x L on the +thickness surface. xMm along width, yMm along length.
+      localPosition = [clampMm(xMm, w), t, clampMm(yMm, l)];
       localNormal = [0, 1, 0];
       break;
     case 'back':
       // Face plane W x L on the 0-thickness surface.
-      localPosition = [xFrac * w, 0, yFrac * l];
+      localPosition = [clampMm(xMm, w), 0, clampMm(yMm, l)];
       localNormal = [0, -1, 0];
       break;
     case 'left':
-      // Face plane T x L on the 0-width surface.
-      localPosition = [0, xFrac * t, yFrac * l];
+      // Face plane T x L on the 0-width surface. xMm along thickness, yMm along length.
+      localPosition = [0, clampMm(xMm, t), clampMm(yMm, l)];
       localNormal = [-1, 0, 0];
       break;
     case 'right':
       // Face plane T x L on the +width surface.
-      localPosition = [w, xFrac * t, yFrac * l];
+      localPosition = [w, clampMm(xMm, t), clampMm(yMm, l)];
       localNormal = [1, 0, 0];
       break;
     case 'top':
-      // Face plane W x T on the +length surface.
-      localPosition = [xFrac * w, yFrac * t, l];
+      // Face plane W x T on the +length surface. xMm along width, yMm along thickness.
+      localPosition = [clampMm(xMm, w), clampMm(yMm, t), l];
       localNormal = [0, 0, 1];
       break;
     case 'bottom':
       // Face plane W x T on the 0-length surface.
-      localPosition = [xFrac * w, yFrac * t, 0];
+      localPosition = [clampMm(xMm, w), clampMm(yMm, t), 0];
       localNormal = [0, 0, -1];
       break;
     default:
@@ -209,7 +253,7 @@ export function resolveHardwarePlacement(
     hardwareId: placement.hardwareId,
     localPosition: [snap(localPosition[0]), snap(localPosition[1]), snap(localPosition[2])],
     localNormal,
-    standoffMm: normalized.projectionMm ?? 0,
+    standoffMm: normalized.projectionMm ?? DEFAULT_HARDWARE_PROJECTION_MM,
     scale,
     rotationDeg: {
       x: Number.isFinite(placement.rotationDeg?.x) ? placement.rotationDeg!.x! : 0,

@@ -114,7 +114,9 @@ export function evaluatePartFormula(
   const b = dims.B !== undefined ? dims.B : 0;
 
   // Substitute variables (multi-letter tokens before single letters)
+  const hw = (dims as { HW?: number }).HW;
   const expr = clean
+    .replace(/HW/g, String(hw ?? 0))
     .replace(/PW/g, String(pw))
     .replace(/PH/g, String(ph))
     .replace(/PD/g, String(pd))

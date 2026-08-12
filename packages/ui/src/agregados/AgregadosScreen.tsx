@@ -13,7 +13,14 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Agregado, Component, Hardware } from '@muebles/domain';
+import type {
+  Agregado,
+  Component,
+  EdgeBand,
+  Hardware,
+  MaterialBoard,
+  OptionGroup,
+} from '@muebles/domain';
 import {
   EntityEditorLayout,
   seedEditorDraftFromBaseline,
@@ -21,6 +28,7 @@ import {
   useEntityEditorState,
   useRoutableEntitySelection,
 } from '../common';
+import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   createEmptyAgregadoDraft,
   agregadoToDraft,
@@ -42,6 +50,12 @@ export interface AgregadosScreenProps {
   readonly canMutate?: boolean;
   readonly openAgregadoId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
+  /** Catalog slices required by the live 3D preview in the Piezas tab. When
+   * omitted, the editor falls back to a single-column layout with no preview. */
+  readonly optionGroups?: readonly OptionGroup[];
+  readonly catalogMaterials?: readonly MaterialBoard[];
+  readonly catalogEdges?: readonly EdgeBand[];
+  readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
 export function AgregadosScreen({
@@ -54,6 +68,10 @@ export function AgregadosScreen({
   canMutate = true,
   openAgregadoId = null,
   onSelectionChange,
+  optionGroups,
+  catalogMaterials,
+  catalogEdges,
+  resolveImageUrl,
 }: AgregadosScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -106,6 +124,29 @@ export function AgregadosScreen({
         (a.description ?? '').toLowerCase().includes(q),
     );
   }, [agregados, debouncedSearch]);
+
+  // Full catalog slice for the live 3D preview in the Piezas tab. Undefined
+  // when the shell didn't provide finishes → editor degrades to 1 column.
+  const catalogInput = useMemo<Module3DCatalogInput | undefined>(() => {
+    if (!optionGroups || !catalogMaterials || !catalogEdges) return undefined;
+    return {
+      modules: [],
+      structures: [],
+      components: catalogComponents,
+      materials: catalogMaterials,
+      edges: catalogEdges,
+      hardware: catalogHardware,
+      optionGroups,
+      agregados,
+    };
+  }, [
+    optionGroups,
+    catalogMaterials,
+    catalogEdges,
+    catalogComponents,
+    catalogHardware,
+    agregados,
+  ]);
 
   const handleCreateNew = () => {
     const fresh = createEmptyAgregadoDraft();
@@ -243,6 +284,8 @@ export function AgregadosScreen({
           editingId={editingId}
           catalogComponents={catalogComponents}
           catalogHardware={catalogHardware}
+          catalogInput={catalogInput}
+          resolveImageUrl={resolveImageUrl}
         />
       )}
     />

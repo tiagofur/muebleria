@@ -1,10 +1,21 @@
 /**
- * Pure helper: resolve structure draft components into 3D board parts for Furniture3DViewer.
+ * Pure helper: resolve an Agregado (sub-assembly) draft into 3D board parts for
+ * Furniture3DViewer. Used by the live preview embedded in the Agregado editor.
+ *
+ * Reuses the canonical engine pipeline (`resolveComposedModule`) by wrapping the
+ * draft in a synthetic `Structure` whose dims equal the agregado's external
+ * dims. The agregado's own pieces are passed as `componentInstances` (NOT
+ * `structure.components`) so the user's per-piece formula overrides
+ * (length/width/x/y/z/rotation) — edited via InstanceOverridesEditor — are
+ * honored and the preview updates live as the draft changes.
+ *
+ * Fase 3 of `docs/agregados-subassemblies-plan.md`. V1: pieces only (board
+ * parts). Hardware 3D meshes and real textures are follow-ups, mirroring how
+ * `resolveStructure3DPreview` / StructureEditorComponentsPanel behave.
  */
 
 import type {
   Catalog,
-  ComponentPlacement,
   DimensionPreset,
   OptionChoices,
   ResolvedBoardPart,
@@ -14,35 +25,23 @@ import { resolveComposedModule } from '@muebles/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
-import type { StructureDraft } from './structureDraft';
+import type { AgregadoDraft } from './agregadoDraft';
 
-export type Structure3DPreviewResult = {
+export type Agregado3DPreviewResult = {
   readonly parts: readonly ResolvedBoardPart[];
   readonly width: number;
   readonly height: number;
   readonly depth: number;
-  readonly presetId: string | undefined;
-  readonly presets: readonly DimensionPreset[];
   readonly optionChoices: OptionChoices;
   readonly error: string | null;
   readonly empty: boolean;
 };
 
-function dimsFromStructure(
-  draft: StructureDraft,
-  presetId: string | undefined,
-): { width: number; height: number; depth: number } {
-  if (presetId) {
-    const found = draft.presets.find((p) => p.id === presetId);
-    if (found && found.width > 0 && found.height > 0 && found.depth > 0) {
-      return {
-        width: found.width,
-        height: found.height,
-        depth: found.depth,
-      };
-    }
-  }
-
+function dimsFromDraft(draft: AgregadoDraft): {
+  width: number;
+  height: number;
+  depth: number;
+} {
   if (draft.widthMm > 0 && draft.heightMm > 0 && draft.depthMm > 0) {
     return {
       width: draft.widthMm,
@@ -50,63 +49,48 @@ function dimsFromStructure(
       depth: draft.depthMm,
     };
   }
-
-  if (draft.presets.length > 0) {
-    const first = draft.presets[0]!;
-    if (first.width > 0 && first.height > 0 && first.depth > 0) {
-      return {
-        width: first.width,
-        height: first.height,
-        depth: first.depth,
-      };
-    }
-  }
-
   return { ...DEFAULT_MODULE_FOOTPRINT_MM };
 }
 
 /**
- * Resolve 3D preview for a structure draft.
+ * Resolve 3D preview for an agregado draft.
  * @param optionChoicesOverride partial board finishes merged over defaults
  */
-export function resolveStructure3DPreview(
-  draft: StructureDraft,
+export function resolveAgregado3DPreview(
+  draft: AgregadoDraft,
   catalogInput: Module3DCatalogInput,
-  presetIdOverride?: string | null,
   optionChoicesOverride?: OptionChoices | null,
-): Structure3DPreviewResult {
-  const presets = draft.presets ?? [];
-  const presetId =
-    presetIdOverride?.trim() ||
-    (presets.length > 0 ? presets[0]!.id : undefined);
+): Agregado3DPreviewResult {
+  const dims = dimsFromDraft(draft);
 
-  const dims = dimsFromStructure(draft, presetId);
-
+  // Synthetic structure: empty components (pieces come in as componentInstances
+  // so user overrides apply). A single synthetic preset mirrors dims so the
+  // `resolveStructure` validation gate passes.
+  const syntheticPreset: DimensionPreset = {
+    id: 'single',
+    name: 'Único',
+    width: dims.width,
+    height: dims.height,
+    depth: dims.depth,
+  };
   const tempStructure: Structure = {
-    id: 'temp-structure',
-    code: draft.code || 'STR',
-    name: draft.name || 'Estructura',
+    id: 'temp-agregado-structure',
+    code: draft.code || 'AGR',
+    name: draft.name || 'Agregado',
     externalDims: {
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
     },
-    presets,
-    components: draft.components.map((c) => ({
-      componentId: c.componentId,
-      quantity: c.quantity,
-      placementOverride: c.placementOverride
-        ? (c.placementOverride as ComponentPlacement)
-        : undefined,
-    })),
-    agregados: draft.agregados.map((a) => ({ ...a })),
+    presets: [syntheticPreset],
+    components: [],
+    agregados: [],
   };
 
   const defaults = defaultOptionChoicesForModule(
     {
       components: draft.components,
-      hardwareLines: [],
-      agregados: draft.agregados,
+      hardwareLines: draft.hardwareLines,
     },
     catalogInput.optionGroups,
     catalogInput.components,
@@ -132,7 +116,9 @@ export function resolveStructure3DPreview(
   try {
     const composed = resolveComposedModule({
       structure: tempStructure,
-      componentInstances: [],
+      // draft.components carry the user's per-piece overrides (formulas + pose),
+      // so the preview reflects edits live.
+      componentInstances: draft.components,
       catalog,
       dims,
       optionChoices,
@@ -177,8 +163,6 @@ export function resolveStructure3DPreview(
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
-      presetId,
-      presets,
       optionChoices,
       error: null,
       empty: resolvedBoardParts.length === 0,
@@ -187,14 +171,12 @@ export function resolveStructure3DPreview(
     const message =
       e instanceof Error
         ? e.message
-        : 'No se pudo resolver el armado 3D de la estructura.';
+        : 'No se pudo resolver el armado 3D del agregado.';
     return {
       parts: [],
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
-      presetId,
-      presets,
       optionChoices,
       error: message,
       empty: true,

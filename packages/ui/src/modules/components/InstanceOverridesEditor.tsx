@@ -5,11 +5,13 @@
 
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import type { Hardware, HardwarePlacement } from '@muebles/domain';
 import {
   instanceOverridesSummary,
   patchInstanceOverrides,
   type ComponentInstanceDraft,
 } from '../moduleHelpers';
+import { HardwarePlacementsEditor } from './HardwarePlacementsEditor';
 import './instanceOverridesEditor.css';
 
 export type InstanceOverridesEditorProps = {
@@ -19,18 +21,50 @@ export type InstanceOverridesEditorProps = {
   ) => void;
   /** Suffix for test ids (e.g. instance index). */
   readonly testIdSuffix?: string;
+  /** Hardware catalog for the placements editor. When omitted, the Herrajes
+   * section is hidden (no hardware to position). */
+  readonly catalogHardware?: readonly Hardware[];
 };
 
 export function InstanceOverridesEditor({
   overrides,
   onChange,
   testIdSuffix = '',
+  catalogHardware,
 }: InstanceOverridesEditorProps): ReactNode {
   const formId = useId();
   const [open, setOpen] = useState(false);
   const tid = testIdSuffix ? `instance-overrides-${testIdSuffix}` : 'instance-overrides';
   const summary = instanceOverridesSummary(overrides);
   const hasCustom = summary !== 'automático';
+
+  // Swap only the hardwarePlacements array, preserving formula/rotation fields.
+  const handlePlacementsChange = (
+    next: readonly HardwarePlacement[] | undefined,
+  ) => {
+    if (!next || next.length === 0) {
+      if (!overrides) {
+        onChange(undefined);
+        return;
+      }
+      // Strip hardwarePlacements, keep the rest.
+      const { hardwarePlacements: _omit, ...rest } = overrides;
+      void _omit;
+      onChange(Object.keys(rest).length > 0 ? rest : undefined);
+    } else {
+      onChange({ ...(overrides ?? {}), hardwarePlacements: next });
+    }
+  };
+
+  // Reset clears formulas/rotation but preserves positioned hardware.
+  const handleReset = () => {
+    const hw = overrides?.hardwarePlacements;
+    if (hw && hw.length > 0) {
+      onChange({ hardwarePlacements: hw });
+    } else {
+      onChange(undefined);
+    }
+  };
 
   return (
     <div className="instance-overrides" data-testid={tid}>
@@ -73,7 +107,7 @@ export function InstanceOverridesEditor({
               type="button"
               className="btn btn--small btn--ghost"
               disabled={!hasCustom}
-              onClick={() => onChange(undefined)}
+              onClick={handleReset}
               data-testid={`${tid}-reset`}
             >
               <RotateCcw size={14} strokeWidth={1.5} aria-hidden />
@@ -232,7 +266,17 @@ export function InstanceOverridesEditor({
               />
             </div>
           </div>
+
         </div>
+      ) : null}
+
+      {catalogHardware && catalogHardware.length > 0 ? (
+        <HardwarePlacementsEditor
+          placements={overrides?.hardwarePlacements ?? []}
+          catalogHardware={catalogHardware}
+          onChange={handlePlacementsChange}
+          testIdSuffix={testIdSuffix}
+        />
       ) : null}
     </div>
   );

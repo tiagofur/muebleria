@@ -3,6 +3,7 @@
  */
 
 import type {
+  Agregado,
   Catalog,
   Component,
   Customer,
@@ -265,6 +266,7 @@ export function emptyAddItemDraft(
   optionGroups: readonly OptionGroup[] = [],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): AddItemDraft {
   const moduleId = modules[0]?.id ?? '';
   const mod = modules.find((m) => m.id === moduleId);
@@ -277,6 +279,7 @@ export function emptyAddItemDraft(
           optionGroups,
           catalogComponents,
           catalogStructures,
+          catalogAgregados,
         )
       : {},
     measurePresetId: mod?.presets?.[0]?.id,
@@ -368,9 +371,16 @@ export function groupsForModuleItem(
   optionGroups: readonly OptionGroup[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): OptionGroup[] {
   if (!module) return [];
-  const codes = requiredGroupCodesForModule(module, optionGroups, catalogComponents, catalogStructures);
+  const codes = requiredGroupCodesForModule(
+    module,
+    optionGroups,
+    catalogComponents,
+    catalogStructures,
+    catalogAgregados,
+  );
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   return codes
     .map((code) => byCode.get(code))
@@ -387,6 +397,7 @@ export function canShowProjectPricePreview(
   optionGroups: readonly OptionGroup[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): PricePreviewGateResult {
   const missing = new Set<string>();
   const byId = new Map(modules.map((m) => [m.id, m]));
@@ -397,7 +408,13 @@ export function canShowProjectPricePreview(
       missing.add(`módulo:${item.moduleId}`);
       continue;
     }
-    const required = requiredGroupCodesForModule(mod, optionGroups, catalogComponents, catalogStructures);
+    const required = requiredGroupCodesForModule(
+      mod,
+      optionGroups,
+      catalogComponents,
+      catalogStructures,
+      catalogAgregados,
+    );
     const effective = effectiveOptionChoices(
       item.optionChoices,
       project.projectLevelChoices,
@@ -564,8 +581,15 @@ export function defaultChoicesForNewItem(
   optionGroups: readonly OptionGroup[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): OptionChoices {
-  const required = requiredGroupCodesForModule(module, optionGroups, catalogComponents, catalogStructures);
+  const required = requiredGroupCodesForModule(
+    module,
+    optionGroups,
+    catalogComponents,
+    catalogStructures,
+    catalogAgregados,
+  );
   const byCode = new Map(optionGroups.map((g) => [g.code, g]));
   const choices: Record<string, string> = {};
   for (const code of required) {

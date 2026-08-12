@@ -31,6 +31,7 @@ import type {
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
+  Agregado,
 } from '@muebles/domain';
 import {
   type DropdownMenuSection,
@@ -80,6 +81,8 @@ export interface ProjectsScreenProps {
   /** Component + structure catalogs to resolve option roles from composed modules. */
   readonly catalogComponents?: readonly Component[];
   readonly catalogStructures?: readonly Structure[];
+  /** Agregados catalog for 3D preview (so module.agregados render in project 3D). */
+  readonly catalogAgregados?: readonly Agregado[];
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
@@ -295,6 +298,7 @@ export function ProjectsScreen({
   ambientMaterials = [],
   catalogComponents = [],
   catalogStructures = [],
+  catalogAgregados = [],
   customers = [],
   canAssignOwner = false,
   assignableOwners = [],
@@ -423,6 +427,9 @@ export function ProjectsScreen({
       hardware,
       optionGroups,
       ambientMaterials,
+      // Thread agregados so resolveProject3DPreview → resolveBom can expand
+      // module.agregados / structure.agregados into board parts.
+      agregados: catalogAgregados,
     }),
     [
       modules,
@@ -433,6 +440,7 @@ export function ProjectsScreen({
       hardware,
       optionGroups,
       ambientMaterials,
+      catalogAgregados,
     ],
   );
 
@@ -953,6 +961,7 @@ export function ProjectsScreen({
         catalogs={catalogs}
         catalogComponents={catalogComponents}
         catalogStructures={catalogStructures}
+        catalogAgregados={catalogAgregados}
         projectLevelChoices={selectedProject?.projectLevelChoices ?? {}}
         measureDefaults={selectedProject?.measureDefaults}
       />

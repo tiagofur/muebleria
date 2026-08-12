@@ -290,6 +290,11 @@ export function ModulesScreen({
       edges: propEdges,
       hardware,
       optionGroups,
+      // Thread agregados so resolveBom → resolveComposedModule can expand
+      // module.agregados / structure.agregados into board parts. Without this,
+      // catalog.agregados is empty and each instance is skipped silently
+      // (bom.ts `if (!agregado) continue`).
+      agregados: propCatalogAgregados,
     }),
     [
       modules,
@@ -299,6 +304,7 @@ export function ModulesScreen({
       propEdges,
       hardware,
       optionGroups,
+      propCatalogAgregados,
     ],
   );
 

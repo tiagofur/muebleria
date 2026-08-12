@@ -3,7 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Component } from '@muebles/domain';
+import type { Component, Hardware } from '@muebles/domain';
 import { Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import type { ModuleDraft } from '../moduleHelpers';
@@ -16,6 +16,8 @@ export type ModuleEditorComponentsPanelProps = {
   readonly composedEnabled: boolean;
   readonly onRequestAdd: () => void;
   readonly hidden: boolean;
+  /** Hardware catalog for the per-instance placements editor. */
+  readonly catalogHardware?: readonly Hardware[];
 };
 
 export function ModuleEditorComponentsPanel({
@@ -25,6 +27,7 @@ export function ModuleEditorComponentsPanel({
   composedEnabled,
   onRequestAdd,
   hidden,
+  catalogHardware,
 }: ModuleEditorComponentsPanelProps): ReactNode {
   return (
     <div
@@ -147,6 +150,7 @@ export function ModuleEditorComponentsPanel({
                 <InstanceOverridesEditor
                   overrides={comp.overrides}
                   testIdSuffix={String(idx)}
+                  catalogHardware={catalogHardware}
                   onChange={(next) => {
                     setDraft((prev) => ({
                       ...prev,

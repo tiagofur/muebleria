@@ -17,7 +17,7 @@
  */
 
 import { Suspense, useEffect, type ReactNode } from 'react';
-import { useTexture } from '@react-three/drei';
+import { Edges, useTexture } from '@react-three/drei';
 import { DoubleSide, RepeatWrapping, SRGBColorSpace } from 'three';
 import type { AmbientMaterial } from '@muebles/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
@@ -233,6 +233,7 @@ export function FloorAmbientMesh({
   position,
   lightingMode = 'present',
   paintHover = false,
+  onClick,
 }: {
   readonly material: AmbientMaterial;
   readonly widthMm: number;
@@ -240,6 +241,7 @@ export function FloorAmbientMesh({
   readonly position?: Vec3;
   readonly lightingMode?: SceneLightingMode;
   readonly paintHover?: boolean;
+  readonly onClick?: () => void;
 }): ReactNode {
   const color = resolveFloorColor(material);
   const phys = resolveFloorPhysical(material, lightingMode);
@@ -251,6 +253,14 @@ export function FloorAmbientMesh({
         position={[pos[0], pos[1], pos[2]]}
         receiveShadow
         userData={{ surface: 'floor' }}
+        onClick={
+          onClick
+            ? (e) => {
+                e.stopPropagation();
+                onClick();
+              }
+            : undefined
+        }
       >
         <planeGeometry
           args={[widthMm * FLOOR_WIDTH_FACTOR, depthMm * FLOOR_DEPTH_FACTOR]}
@@ -405,14 +415,13 @@ export function WallAmbientMesh({
         }
       >
         <boxGeometry args={[length, h, thickness]} />
+        {selected ? <Edges threshold={15} color="#3b82f6" lineWidth={2} /> : null}
         <Suspense
           fallback={
             <meshStandardMaterial
-              color={selected ? '#5b9fd4' : color}
+              color={color}
               roughness={phys.roughness}
               metalness={phys.metalness}
-              emissive={selected ? '#5b9fd4' : '#000000'}
-              emissiveIntensity={selected ? 0.35 : 0}
             />
           }
         >
@@ -428,11 +437,9 @@ export function WallAmbientMesh({
             />
           ) : (
             <meshStandardMaterial
-              color={selected ? '#5b9fd4' : color}
+              color={color}
               roughness={phys.roughness}
               metalness={phys.metalness}
-              emissive={selected ? '#5b9fd4' : '#000000'}
-              emissiveIntensity={selected ? 0.35 : 0}
             />
           )}
         </Suspense>

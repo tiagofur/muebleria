@@ -306,6 +306,48 @@ describe('requiredGroupCodesForModule', () => {
     // callers MUST pass them (quote UI used to forget and only showed herrajes).
     expect(codes).toEqual(['BISAGRA']);
   });
+
+  it('discovers optionRoles and hardware roles from agregados attached to module', () => {
+    const catalogComponents = [
+      {
+        id: 'comp-door',
+        code: 'DOOR-PANEL',
+        name: 'Panel Puerta',
+        placement: 'puerta' as const,
+        geometry: { kind: 'rectangular_board' as const, lengthMm: 700, widthMm: 400, thicknessMm: 18 },
+        defaultEdges: [],
+        optionRoles: ['FRENTE'],
+        active: true,
+      },
+    ];
+    const catalogAgregados = [
+      {
+        id: 'agr-door-set',
+        code: 'AGR-PUERTA',
+        name: 'Juego de Puerta',
+        components: [{ componentId: 'comp-door', quantity: 1 }],
+        hardwareLines: [{ id: 'hw-1', quantity: 1, optionRole: 'JALADERA' }],
+      },
+    ];
+    const optionGroups = [
+      ...groups,
+      { id: 'og-f', code: 'FRENTE', name: 'Frentes', kind: 'board' as const, required: true, optionIds: ['m1'] },
+      { id: 'og-j', code: 'JALADERA', name: 'Jaladeras', kind: 'hardware' as const, required: true, optionIds: ['h1'] },
+    ];
+
+    const codes = requiredGroupCodesForModule(
+      {
+        hardwareLines: [],
+        agregados: [{ agregadoId: 'agr-door-set' }],
+      },
+      optionGroups,
+      catalogComponents,
+      undefined,
+      catalogAgregados,
+    );
+
+    expect(codes.sort()).toEqual(['FRENTE', 'JALADERA']);
+  });
 });
 
 describe('SEED_OPTION_GROUP_CODES (OPT-03)', () => {

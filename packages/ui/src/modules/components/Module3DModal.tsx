@@ -114,13 +114,14 @@ export function Module3DModal({
         catalog.optionGroups,
         catalog.components,
         catalog.structures,
+        catalog.agregados,
       ),
     );
     setCaptureMessage(null);
     setCaptureError(null);
     // Default open framing: catalog 3/4 presentation view.
     setCatalogPhotoViewToken((t) => t + 1);
-  }, [module, catalog.optionGroups, catalog.components, catalog.structures]);
+  }, [module, catalog.optionGroups, catalog.components, catalog.structures, catalog.agregados]);
 
   const finishGroups = useMemo(() => {
     if (!module) return [];
@@ -130,6 +131,7 @@ export function Module3DModal({
       catalog.materials,
       catalog.components,
       catalog.structures,
+      catalog.agregados,
     );
   }, [module, catalog]);
 
@@ -162,13 +164,32 @@ export function Module3DModal({
   // so FurnitureScene3D stays byte-identical to the pre-Fase-2 scene.
   const resolvedHardwarePlacements = useMemo(() => {
     if (!module || !preview) return [];
+    const choices = defaultOptionChoicesForModule(
+      module,
+      catalog.optionGroups,
+      catalog.components,
+      catalog.structures,
+      catalog.agregados,
+    );
     return resolveModuleHardwarePlacements(
       module,
       preview.parts,
       catalog.hardware,
-      { structures: catalog.structures, agregados: catalog.agregados },
+      {
+        structures: catalog.structures,
+        agregados: catalog.agregados,
+        optionChoices: choices,
+      },
     );
-  }, [module, preview, catalog.hardware, catalog.structures, catalog.agregados]);
+  }, [
+    module,
+    preview,
+    catalog.hardware,
+    catalog.structures,
+    catalog.agregados,
+    catalog.optionGroups,
+    catalog.components,
+  ]);
 
   const canSaveAsCatalogPhoto = Boolean(
     canMutate && onUploadImage && onApplyCatalogImage && module,

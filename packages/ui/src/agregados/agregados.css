@@ -230,3 +230,99 @@
   font-family: var(--font-sans);
   line-height: var(--leading-normal);
 }
+
+/* ── Piezas tab: 2-col layout with live 3D preview (sticky) ────
+   Mirrors .structure-components-layout (structures.css). Single column by
+   default; promotes to a list + sticky preview past the desktop breakpoint. */
+
+.agregado-editor__components-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.agregado-editor__components-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .agregado-editor__components-layout--with-preview {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 1fr);
+  }
+
+  .agregado-editor__components-layout--with-preview .agregado-editor-3d {
+    position: sticky;
+    top: 3.25rem;
+  }
+}
+
+.agregado-editor-3d {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.agregado-editor-3d__hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.agregado-editor-3d__viewport {
+  min-height: 20rem;
+  width: 100%;
+  position: relative;
+}
+
+/* ── Item-row variants (replace former inline styles, design.md §802) ─ */
+
+.agregado-editor__item-row--block {
+  display: block;
+}
+
+.agregado-editor__item-header--flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.agregado-editor__item-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+/* Three-field grid (Componente / Cantidad / Ubicación) for agregado pieces,
+   overriding the default 1fr-auto-auto row used by the hardware tab. */
+.agregado-editor__item-fields--grid {
+  grid-template-columns: 1fr 100px 1fr;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+/* ── Hardware tab: unified 3D placements section ─────────────────── */
+
+.agregado-editor__hardware-placements {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.agregado-editor__piece-hardware {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}

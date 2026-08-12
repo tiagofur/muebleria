@@ -3,6 +3,7 @@
  */
 
 import type {
+  Agregado,
   Component,
   EdgeBand,
   Hardware,
@@ -31,6 +32,30 @@ function collectComponentRoles(
       for (const role of comp.optionRoles) {
         if (role.trim()) out.add(role.trim());
       }
+    }
+  }
+}
+
+/**
+ * Collect optionRoles from hardwareLines and component instances of Agregados.
+ */
+function collectAgregadoRoles(
+  agregadoInstances: readonly { readonly agregadoId: string }[] | undefined,
+  catalogAgregados: readonly Agregado[] | undefined,
+  catalogComponents: readonly Component[] | undefined,
+  out: Set<string>,
+): void {
+  if (!agregadoInstances || !catalogAgregados) return;
+  for (const inst of agregadoInstances) {
+    const agregado = catalogAgregados.find((a) => a.id === inst.agregadoId);
+    if (agregado) {
+      if (agregado.hardwareLines) {
+        for (const line of agregado.hardwareLines) {
+          if (line.hardwareId) continue;
+          if (line.optionRole?.trim()) out.add(line.optionRole.trim());
+        }
+      }
+      collectComponentRoles(agregado.components, catalogComponents, out);
     }
   }
 }
@@ -151,10 +176,12 @@ export function requiredGroupCodesForModule(
     }[];
     readonly components?: readonly { readonly componentId: string }[];
     readonly structureId?: string;
+    readonly agregados?: readonly { readonly agregadoId: string }[];
   },
   optionGroups: readonly OptionGroup[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
 ): string[] {
   const usedRoles = new Set<string>();
   for (const line of module.hardwareLines) {
@@ -162,9 +189,16 @@ export function requiredGroupCodesForModule(
     if (line.optionRole?.trim()) usedRoles.add(line.optionRole.trim());
   }
   collectComponentRoles(module.components, catalogComponents, usedRoles);
+  collectAgregadoRoles(module.agregados, catalogAgregados, catalogComponents, usedRoles);
   if (module.structureId && catalogStructures && catalogComponents) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     collectComponentRoles(structure?.components, catalogComponents, usedRoles);
+    collectAgregadoRoles(
+      (structure as any)?.agregados,
+      catalogAgregados,
+      catalogComponents,
+      usedRoles,
+    );
   }
 
   const required = optionGroups

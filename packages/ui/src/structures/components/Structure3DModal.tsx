@@ -50,12 +50,15 @@ export function Structure3DModal({
         {
           components: structure.components,
           hardwareLines: [],
+          agregados: structure.agregados,
         },
         catalog.optionGroups,
         catalog.components,
+        catalog.structures,
+        catalog.agregados,
       ),
     );
-  }, [structure, catalog.optionGroups, catalog.components]);
+  }, [structure, catalog]);
 
   const finishGroups = useMemo(() => {
     if (!structure) return [];
@@ -63,10 +66,13 @@ export function Structure3DModal({
       {
         components: structure.components,
         hardwareLines: [],
+        agregados: structure.agregados,
       },
       catalog.optionGroups,
       catalog.materials,
       catalog.components,
+      catalog.structures,
+      catalog.agregados,
     );
   }, [structure, catalog]);
 

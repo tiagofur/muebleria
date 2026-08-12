@@ -5,7 +5,7 @@ import {
   resolveAgregadoInstance,
   calculateAgregadoSubspaceUnits,
 } from './agregados';
-import { resolveComposedModule } from './engine/bom';
+import { resolveComposedModule, resolveBom } from './engine/bom';
 import type { Agregado, Catalog, Module, ModuleAgregadoInstance, Structure } from './types';
 
 describe('agregados domain helpers', () => {
@@ -189,6 +189,110 @@ describe('agregados domain helpers', () => {
       const resolved = resolveAgregadoInstance(inst, [mockAgregado]);
       expect(resolved.components).toEqual([]);
       expect(resolved.hardwareLines).toEqual([]);
+    });
+
+    it('counts positioned hardware from placements (cost = position count)', () => {
+      const agr: Agregado = {
+        id: 'agr-positioned',
+        code: 'AGR-POS',
+        name: 'Puerta con jaladera posicionada',
+        components: [
+          {
+            componentId: 'comp-puerta',
+            quantity: 1,
+            overrides: {
+              hardwarePlacements: [
+                {
+                  hardwareId: 'hw-jaladera',
+                  anchorFace: 'front',
+                  relativePosition: { xMm: 38, yMm: 50 },
+                },
+                {
+                  hardwareId: 'hw-jaladera',
+                  anchorFace: 'front',
+                  relativePosition: { xMm: 38, yMm: 100 },
+                },
+              ],
+            },
+          },
+        ],
+        hardwareLines: [],
+      };
+      const inst: ModuleAgregadoInstance = { agregadoId: 'agr-positioned', quantity: 1 };
+      const resolved = resolveAgregadoInstance(inst, [agr]);
+      // 2 placements of hw-jaladera → 1 derived line × 2.
+      const jal = resolved.hardwareLines.find((h) => h.hardwareId === 'hw-jaladera');
+      expect(jal).toBeTruthy();
+      expect(jal!.quantity).toBe(2);
+      expect(jal!.optionRole).toBe('POSITIONED');
+    });
+
+    it('dedups: bulk line for a positioned hardware is dropped (no double count)', () => {
+      const agr: Agregado = {
+        id: 'agr-dedup',
+        code: 'AGR-DEDUP',
+        name: 'Mixto',
+        components: [
+          {
+            componentId: 'comp-puerta',
+            quantity: 1,
+            overrides: {
+              hardwarePlacements: [
+                {
+                  hardwareId: 'hw-jaladera',
+                  anchorFace: 'front',
+                  relativePosition: { xMm: 38, yMm: 50 },
+                },
+              ],
+            },
+          },
+        ],
+        hardwareLines: [
+          // hw-jaladera ALSO in bulk → dropped (positions win).
+          { id: 'hl-jal', quantity: 5, optionRole: 'JALADERA', hardwareId: 'hw-jaladera' },
+          // hw-tornillo NOT positioned → bulk stays.
+          { id: 'hl-tor', quantity: 10, optionRole: 'TORNILLO', hardwareId: 'hw-tornillo' },
+        ],
+      };
+      const inst: ModuleAgregadoInstance = { agregadoId: 'agr-dedup', quantity: 1 };
+      const resolved = resolveAgregadoInstance(inst, [agr]);
+      const jal = resolved.hardwareLines.filter((h) => h.hardwareId === 'hw-jaladera');
+      expect(jal).toHaveLength(1);
+      expect(jal[0]!.quantity).toBe(1); // placement-derived, not the bulk ×5
+      expect(jal[0]!.optionRole).toBe('POSITIONED');
+      const tor = resolved.hardwareLines.find((h) => h.hardwareId === 'hw-tornillo');
+      expect(tor).toBeTruthy();
+      expect(tor!.quantity).toBe(10);
+    });
+
+    it('scales placement count by instance quantity and component quantity', () => {
+      const agr: Agregado = {
+        id: 'agr-scaled',
+        code: 'AGR-SCALED',
+        name: 'Componente x2',
+        components: [
+          {
+            componentId: 'comp-puerta',
+            quantity: 2, // 2 copies within one unit, each with 1 placement
+            overrides: {
+              hardwarePlacements: [
+                {
+                  hardwareId: 'hw-bisagra',
+                  anchorFace: 'front',
+                  relativePosition: { xMm: 50, yMm: 50 },
+                },
+              ],
+            },
+          },
+        ],
+        hardwareLines: [],
+      };
+      // Instance quantity 3 → 3 agregado copies × 2 component copies × 1 placement = 6.
+      const inst: ModuleAgregadoInstance = { agregadoId: 'agr-scaled', quantity: 3 };
+      const resolved = resolveAgregadoInstance(inst, [agr]);
+      const bis = resolved.hardwareLines.find((h) => h.hardwareId === 'hw-bisagra');
+      expect(bis).toBeTruthy();
+      expect(bis!.quantity).toBe(6);
     });
   });
 
@@ -400,6 +504,124 @@ describe('agregados domain helpers', () => {
       expect(bom.boardParts).toHaveLength(1);
       const doorPart = bom.boardParts[0]!;
       expect(doorPart.y).toBe(500);
+    });
+  });
+
+  describe('resolveBom end-to-end (path real del 3D del mueble)', () => {
+    const catalog: Catalog = {
+      materials: [
+        {
+          id: 'm1',
+          code: 'M1',
+          name: 'Placa 18',
+          widthMm: 2750,
+          lengthMm: 1830,
+          thicknessMm: 18,
+          grainDefault: false,
+          boardPrice: 100,
+          wastePercent: 0,
+          costPerM2: 20,
+          active: true,
+        },
+      ],
+      edges: [],
+      hardware: [],
+      optionGroups: [
+        {
+          id: 'og-puerta',
+          code: 'PUERTA',
+          name: 'Puerta',
+          kind: 'board',
+          required: true,
+          optionIds: ['m1'],
+        },
+      ],
+      modules: [],
+      components: [
+        {
+          id: 'c-puerta',
+          code: 'PUE',
+          name: 'Hoja',
+          placement: 'puerta',
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 700,
+            widthMm: 600,
+            thicknessMm: 18,
+          },
+          defaultEdges: [
+            { side: 'L1', enabled: false },
+            { side: 'L2', enabled: false },
+            { side: 'W1', enabled: false },
+            { side: 'W2', enabled: false },
+          ],
+          optionRoles: ['PUERTA'],
+          active: true,
+        },
+      ],
+      structures: [
+        {
+          id: 'str-gab',
+          code: 'STR-GAB',
+          name: 'Gabinete',
+          externalDims: { width: 600, height: 700, depth: 500 },
+          components: [],
+          active: true,
+        },
+      ],
+      agregados: [
+        {
+          id: 'agr-puerta',
+          code: 'AGR-PUE',
+          name: 'Puerta Sencilla',
+          externalDims: { width: 600, height: 700, depth: 18 },
+          components: [{ componentId: 'c-puerta', quantity: 1 }],
+        },
+      ],
+    };
+
+    it('módulo compuesto (con structureId) + agregado-puerta adjunto → la puerta aparece en boardParts al frente (y=PD)', () => {
+      const module: Module = {
+        id: 'mod-gab',
+        code: 'MOD-GAB',
+        name: 'Gabinete',
+        externalDims: { width: 600, height: 700, depth: 500 },
+        structureId: 'str-gab',
+        components: [],
+        agregados: [{ agregadoId: 'agr-puerta', quantity: 1 }],
+        hardwareLines: [],
+      };
+
+      const bom = resolveBom(module, { PUERTA: 'm1' }, catalog);
+
+      // La puerta del agregado debe llegar al BOM del mueble, posicionada al
+      // frente (y = PD = profundidad del mueble).
+      const door = bom.boardParts.find((p) => p.y === 500);
+      expect(
+        door,
+        'la puerta del agregado debe llegar al BOM del mueble al frente (y=PD)',
+      ).toBeTruthy();
+      expect(door!.y).toBe(500);
+    });
+
+    it('módulo SIN structureId + agregado-puerta adjunto → R-4: la puerta se pierde silenciosamente', () => {
+      const module: Module = {
+        id: 'mod-bare',
+        code: 'MOD-BARE',
+        name: 'Bare',
+        externalDims: { width: 600, height: 700, depth: 500 },
+        // structureId omitido intencionalmente
+        components: [],
+        agregados: [{ agregadoId: 'agr-puerta', quantity: 1 }],
+        hardwareLines: [],
+      };
+
+      const bom = resolveBom(module, { PUERTA: 'm1' }, catalog);
+
+      // BUG R-4 (docs/judgment-day-agregados-2026-08-11.md): la rama
+      // no-compuesta de resolveBom ignora module.agregados. Afirmación
+      // documenta el comportamiento actual; invertir cuando se fixee R-4.
+      expect(bom.boardParts).toHaveLength(0);
     });
   });
 });

@@ -17,6 +17,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  Agregado,
   Component,
   EdgeBand,
   Hardware,
@@ -75,6 +76,7 @@ export interface ProjectAddItemModalProps {
    */
   readonly catalogComponents?: readonly Component[];
   readonly catalogStructures?: readonly Structure[];
+  readonly catalogAgregados?: readonly Agregado[];
   /** F029: project-wide option defaults — empty key = inherit on this line. */
   readonly projectLevelChoices: Readonly<Record<string, string>>;
   /** #109: per-furnitureType measure defaults → pre-select closest preset. */
@@ -93,12 +95,19 @@ export function ProjectAddItemModal({
   catalogs,
   catalogComponents = [],
   catalogStructures = [],
+  catalogAgregados = [],
   projectLevelChoices,
   measureDefaults,
 }: ProjectAddItemModalProps): ReactNode {
   const formId = useId();
   const [addItem, setAddItem] = useState<AddItemDraft>(() =>
-    emptyAddItemDraft(modules, optionGroups, catalogComponents, catalogStructures),
+    emptyAddItemDraft(
+      modules,
+      optionGroups,
+      catalogComponents,
+      catalogStructures,
+      catalogAgregados,
+    ),
   );
   const [itemError, setItemError] = useState<string | null>(null);
   const [addCategoryL1, setAddCategoryL1] = useState('');
@@ -116,9 +125,10 @@ export function ProjectAddItemModal({
         optionGroups,
         catalogComponents,
         catalogStructures,
+        catalogAgregados,
       );
     });
-  }, [modules, optionGroups, catalogComponents, catalogStructures]);
+  }, [modules, optionGroups, catalogComponents, catalogStructures, catalogAgregados]);
 
   // Reset internal state only on the closed → open transition so an in-flight
   // session is never clobbered by a parent re-render.
@@ -131,6 +141,7 @@ export function ProjectAddItemModal({
           optionGroups,
           catalogComponents,
           catalogStructures,
+          catalogAgregados,
         ),
       );
       setItemError(null);
@@ -139,7 +150,7 @@ export function ProjectAddItemModal({
       setAddCategoryL3('');
     }
     prevOpen.current = open;
-  }, [open, modules, optionGroups, catalogComponents, catalogStructures]);
+  }, [open, modules, optionGroups, catalogComponents, catalogStructures, catalogAgregados]);
 
   const addItemCategoryFilter: CategoryFilterId = useMemo(() => {
     const id = cascadeSelectedCategoryId({
@@ -171,6 +182,7 @@ export function ProjectAddItemModal({
     optionGroups,
     catalogComponents,
     catalogStructures,
+    catalogAgregados,
   );
 
   const selectModuleForAdd = (moduleId: string) => {
@@ -182,6 +194,7 @@ export function ProjectAddItemModal({
           optionGroups,
           catalogComponents,
           catalogStructures,
+          catalogAgregados,
         )
       : {};
     const projectLevel = projectLevelChoices ?? {};
