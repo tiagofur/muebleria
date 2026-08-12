@@ -2287,6 +2287,7 @@ function AppContent({
           ambientMaterials={ambientMaterials}
           catalogStructures={structures}
           catalogComponents={components}
+          catalogAgregados={agregados}
           resolveImageUrl={resolveMediaUrl}
           customers={customers}
           canAssignOwner={canAssignOwner}

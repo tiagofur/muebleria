@@ -174,6 +174,9 @@ export function StructuresScreen({
       edges: catalogEdges,
       hardware: catalogHardware,
       optionGroups,
+      // Thread agregados so resolveBom → resolveComposedModule can expand
+      // structure.agregados into board parts in the 3D preview.
+      agregados: catalogAgregados,
     }),
     [
       structures,
@@ -182,6 +185,7 @@ export function StructuresScreen({
       catalogEdges,
       catalogHardware,
       optionGroups,
+      catalogAgregados,
     ],
   );
 
