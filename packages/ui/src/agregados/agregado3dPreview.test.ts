@@ -88,8 +88,8 @@ describe('resolveAgregado3DPreview', () => {
     expect(res.depth).toBe(18);
 
     // Piece resolves its length/width from local H/W of the agregado.
-    expect(res.parts[0].lengthMm).toBe(720);
-    expect(res.parts[0].widthMm).toBe(600);
+    expect(res.parts[0]!.lengthMm).toBe(720);
+    expect(res.parts[0]!.widthMm).toBe(600);
   });
 
   it('honors per-piece formula overrides (live edit)', () => {
@@ -107,7 +107,7 @@ describe('resolveAgregado3DPreview', () => {
     const res = resolveAgregado3DPreview(draft, mockCatalogInput);
 
     expect(res.error).toBeNull();
-    expect(res.parts[0].lengthMm).toBe(710);
+    expect(res.parts[0]!.lengthMm).toBe(710);
   });
 
   it('reports empty when the agregado has no pieces', () => {

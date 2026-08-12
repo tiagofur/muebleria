@@ -5,12 +5,11 @@
  * @vitest-environment jsdom
  */
 
-import type { FormEvent } from 'react';
+import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Component, Dispatch, SetStateAction } from 'react';
+import type { Component, Hardware } from '@muebles/domain';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
-import type { Hardware } from '@muebles/domain';
 import {
   AgregadoEditorForm,
   type AgregadoEditorTab,
