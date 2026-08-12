@@ -19,7 +19,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Agregado, ModuleAgregadoInstance } from '@muebles/domain';
+import type { Agregado, Hardware, ModuleAgregadoInstance, OptionGroup } from '@muebles/domain';
 import {
   ChevronDown,
   ChevronRight,
@@ -28,6 +28,8 @@ import {
   Move,
   Layers,
   Settings,
+  Settings2,
+  Plus,
 } from 'lucide-react';
 
 export interface StructureEditorAgregadosPanelProps<
@@ -36,7 +38,38 @@ export interface StructureEditorAgregadosPanelProps<
   readonly draft: T;
   readonly setDraft: Dispatch<SetStateAction<T>>;
   readonly catalogAgregados: readonly Agregado[];
+  readonly catalogHardware?: readonly Hardware[];
+  readonly optionGroups?: readonly OptionGroup[];
   readonly hidden?: boolean;
+}
+
+export function getOptionRolesForAgregado(
+  agregado: Agregado | undefined,
+  optionGroups?: readonly OptionGroup[],
+): string[] {
+  if (!agregado) return [];
+  const roles = new Set<string>();
+
+  for (const line of agregado.hardwareLines ?? []) {
+    if (line.optionRole?.trim()) {
+      roles.add(line.optionRole.trim());
+    }
+  }
+
+  for (const comp of agregado.components ?? []) {
+    for (const p of comp.overrides?.hardwarePlacements ?? []) {
+      if (!p.hardwareId) continue;
+      const id = p.hardwareId.trim();
+      if (
+        (optionGroups && optionGroups.some((g) => g.code === id)) ||
+        /^[A-Z0-9_]{3,}$/.test(id)
+      ) {
+        roles.add(id);
+      }
+    }
+  }
+
+  return Array.from(roles);
 }
 
 function FormulaLegend(): ReactNode {
@@ -84,6 +117,8 @@ export function StructureEditorAgregadosPanel<
   draft,
   setDraft,
   catalogAgregados,
+  catalogHardware = [],
+  optionGroups = [],
   hidden = false,
 }: StructureEditorAgregadosPanelProps<T>): ReactNode {
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
@@ -496,6 +531,81 @@ export function StructureEditorAgregadosPanel<
                     </div>
                   </div>
                 </fieldset>
+
+                {(() => {
+                  const inferredRoles = getOptionRolesForAgregado(template, optionGroups);
+                  const overrideKeys = Object.keys(inst.optionOverrides ?? {});
+                  const displayRoles = Array.from(new Set([...inferredRoles, ...overrideKeys]));
+
+                  return (
+                    <fieldset className="structure-editor__agregado-fieldset">
+                      <legend className="structure-editor__agregado-legend">
+                        <Settings2 size={14} aria-hidden /> Redefinición de Herrajes y Opciones (optionOverrides)
+                      </legend>
+                      {displayRoles.length === 0 ? (
+                        <p
+                          className="catalog-form__hint"
+                          data-testid={`structure-agr-${idx}-overrides-empty`}
+                        >
+                          Sin roles de opción detectados en este agregado.
+                        </p>
+                      ) : (
+                        <div className="structure-editor__agregado-grid-2col">
+                          {displayRoles.map((role) => {
+                            const group = optionGroups?.find((g) => g.code === role);
+                            const currentOverride = inst.optionOverrides?.[role] ?? '';
+
+                            const availableHardware = catalogHardware?.length
+                              ? group?.memberIds?.length
+                                ? catalogHardware.filter((h) => group.memberIds!.includes(h.id))
+                                : catalogHardware
+                              : [];
+
+                            return (
+                              <div key={role} className="catalog-form__field">
+                                <label className="catalog-form__label">
+                                  {group?.name ? `${group.name} (${role})` : `Herraje / Rol: ${role}`}
+                                </label>
+                                <select
+                                  className="catalog-form__input"
+                                  value={currentOverride}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const nextOverrides = { ...(inst.optionOverrides ?? {}) };
+                                    if (val) {
+                                      nextOverrides[role] = val;
+                                    } else {
+                                      delete nextOverrides[role];
+                                    }
+                                    handleUpdateAgregado(idx, {
+                                      optionOverrides:
+                                        Object.keys(nextOverrides).length > 0
+                                          ? nextOverrides
+                                          : undefined,
+                                    });
+                                  }}
+                                  data-testid={`structure-agr-${idx}-override-${role}`}
+                                >
+                                  <option value="">
+                                    (Usar valor por defecto del catálogo)
+                                  </option>
+                                  {availableHardware.map((h) => (
+                                    <option key={h.id} value={h.id}>
+                                      [{h.code}] {h.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="catalog-form__hint">
+                                  Redefine el herraje sólo para esta instancia
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </fieldset>
+                  );
+                })()}
               </div>
             );
           })}

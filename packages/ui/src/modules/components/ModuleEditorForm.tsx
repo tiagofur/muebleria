@@ -405,6 +405,8 @@ export function ModuleEditorForm({
         draft={draft}
         setDraft={setDraft}
         catalogAgregados={catalogAgregados}
+        catalogHardware={activeHardware}
+        optionGroups={hardwareRoles}
         hidden={editorTab !== 'agregados'}
       />
 

@@ -199,6 +199,8 @@ export function StructureEditorForm({
         draft={draft}
         setDraft={setDraft}
         catalogAgregados={catalogAgregados}
+        catalogHardware={catalogInput?.hardware}
+        optionGroups={catalogInput?.optionGroups}
         hidden={editorTab !== 'agregados'}
       />
 

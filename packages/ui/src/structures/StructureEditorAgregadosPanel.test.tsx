@@ -146,4 +146,66 @@ describe('StructureEditorAgregadosPanel', () => {
     fireEvent.click(removeBtn);
     expect(currentDraft.agregados).toHaveLength(0);
   });
+
+  it('renders optionOverrides dropdowns and updates draft optionOverrides on select', () => {
+    const catalogAgregadosWithRole: Agregado[] = [
+      {
+        id: 'agr-door',
+        code: 'AGR-PUERTA',
+        name: 'Puerta con Jaladera',
+        hardwareLines: [
+          {
+            id: 'hl-1',
+            hardwareId: 'jal-std',
+            optionRole: 'JALADERA',
+            quantity: 1,
+          },
+        ],
+      },
+    ];
+
+    const catalogHardware = [
+      { id: 'jal-1', code: 'JAL-GOLA-256', name: 'Jaladera Gola 256mm', category: 'jaladera' as const },
+      { id: 'jal-2', code: 'JAL-PERFIL-128', name: 'Jaladera Perfil 128mm', category: 'jaladera' as const },
+    ];
+
+    const optionGroups = [
+      { id: 'og-1', code: 'JALADERA', name: 'Jaladeras de Puerta', kind: 'hardware' as const, memberIds: ['jal-1', 'jal-2'] },
+    ];
+
+    let currentDraft: StructureDraft = {
+      ...emptyStructureDraft(),
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-door',
+          name: 'Puerta Principal',
+          quantity: 1,
+          optionOverrides: { JALADERA: 'jal-1' },
+        },
+      ],
+    };
+
+    render(
+      <StructureEditorAgregadosPanel
+        draft={currentDraft}
+        setDraft={(action) => {
+          currentDraft = typeof action === 'function' ? action(currentDraft) : action;
+        }}
+        catalogAgregados={catalogAgregadosWithRole}
+        catalogHardware={catalogHardware}
+        optionGroups={optionGroups}
+      />,
+    );
+
+    const overrideSelect = screen.getByTestId('structure-agr-0-override-JALADERA') as HTMLSelectElement;
+    expect(overrideSelect.value).toBe('jal-1');
+
+    fireEvent.change(overrideSelect, { target: { value: 'jal-2' } });
+    expect(currentDraft.agregados[0]!.optionOverrides?.['JALADERA']).toBe('jal-2');
+
+    // Select default empty value -> removes override key
+    fireEvent.change(overrideSelect, { target: { value: '' } });
+    expect(currentDraft.agregados[0]!.optionOverrides).toBeUndefined();
+  });
 });
