@@ -5,7 +5,7 @@ import {
   resolveAgregadoInstance,
   calculateAgregadoSubspaceUnits,
 } from './agregados';
-import { resolveComposedModule } from './engine/bom';
+import { resolveComposedModule, resolveBom } from './engine/bom';
 import type { Agregado, Catalog, Module, ModuleAgregadoInstance, Structure } from './types';
 
 describe('agregados domain helpers', () => {
@@ -400,6 +400,124 @@ describe('agregados domain helpers', () => {
       expect(bom.boardParts).toHaveLength(1);
       const doorPart = bom.boardParts[0]!;
       expect(doorPart.y).toBe(500);
+    });
+  });
+
+  describe('resolveBom end-to-end (path real del 3D del mueble)', () => {
+    const catalog: Catalog = {
+      materials: [
+        {
+          id: 'm1',
+          code: 'M1',
+          name: 'Placa 18',
+          widthMm: 2750,
+          lengthMm: 1830,
+          thicknessMm: 18,
+          grainDefault: false,
+          boardPrice: 100,
+          wastePercent: 0,
+          costPerM2: 20,
+          active: true,
+        },
+      ],
+      edges: [],
+      hardware: [],
+      optionGroups: [
+        {
+          id: 'og-puerta',
+          code: 'PUERTA',
+          name: 'Puerta',
+          kind: 'board',
+          required: true,
+          optionIds: ['m1'],
+        },
+      ],
+      modules: [],
+      components: [
+        {
+          id: 'c-puerta',
+          code: 'PUE',
+          name: 'Hoja',
+          placement: 'puerta',
+          geometry: {
+            kind: 'rectangular_board',
+            lengthMm: 700,
+            widthMm: 600,
+            thicknessMm: 18,
+          },
+          defaultEdges: [
+            { side: 'L1', enabled: false },
+            { side: 'L2', enabled: false },
+            { side: 'W1', enabled: false },
+            { side: 'W2', enabled: false },
+          ],
+          optionRoles: ['PUERTA'],
+          active: true,
+        },
+      ],
+      structures: [
+        {
+          id: 'str-gab',
+          code: 'STR-GAB',
+          name: 'Gabinete',
+          externalDims: { width: 600, height: 700, depth: 500 },
+          components: [],
+          active: true,
+        },
+      ],
+      agregados: [
+        {
+          id: 'agr-puerta',
+          code: 'AGR-PUE',
+          name: 'Puerta Sencilla',
+          externalDims: { width: 600, height: 700, depth: 18 },
+          components: [{ componentId: 'c-puerta', quantity: 1 }],
+        },
+      ],
+    };
+
+    it('módulo compuesto (con structureId) + agregado-puerta adjunto → la puerta aparece en boardParts al frente (y=PD)', () => {
+      const module: Module = {
+        id: 'mod-gab',
+        code: 'MOD-GAB',
+        name: 'Gabinete',
+        externalDims: { width: 600, height: 700, depth: 500 },
+        structureId: 'str-gab',
+        components: [],
+        agregados: [{ agregadoId: 'agr-puerta', quantity: 1 }],
+        hardwareLines: [],
+      };
+
+      const bom = resolveBom(module, { PUERTA: 'm1' }, catalog);
+
+      // La puerta del agregado debe llegar al BOM del mueble, posicionada al
+      // frente (y = PD = profundidad del mueble).
+      const door = bom.boardParts.find((p) => p.y === 500);
+      expect(
+        door,
+        'la puerta del agregado debe llegar al BOM del mueble al frente (y=PD)',
+      ).toBeTruthy();
+      expect(door!.y).toBe(500);
+    });
+
+    it('módulo SIN structureId + agregado-puerta adjunto → R-4: la puerta se pierde silenciosamente', () => {
+      const module: Module = {
+        id: 'mod-bare',
+        code: 'MOD-BARE',
+        name: 'Bare',
+        externalDims: { width: 600, height: 700, depth: 500 },
+        // structureId omitido intencionalmente
+        components: [],
+        agregados: [{ agregadoId: 'agr-puerta', quantity: 1 }],
+        hardwareLines: [],
+      };
+
+      const bom = resolveBom(module, { PUERTA: 'm1' }, catalog);
+
+      // BUG R-4 (docs/judgment-day-agregados-2026-08-11.md): la rama
+      // no-compuesta de resolveBom ignora module.agregados. Afirmación
+      // documenta el comportamiento actual; invertir cuando se fixee R-4.
+      expect(bom.boardParts).toHaveLength(0);
     });
   });
 });
