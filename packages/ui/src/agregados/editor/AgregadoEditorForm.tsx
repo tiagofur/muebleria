@@ -404,6 +404,7 @@ export function AgregadoEditorForm({
                         <InstanceOverridesEditor
                           overrides={comp.overrides}
                           testIdSuffix={String(idx)}
+                          catalogHardware={catalogHardware}
                           onChange={(nextOverrides) =>
                             updateComponentInstance(idx, { overrides: nextOverrides })
                           }

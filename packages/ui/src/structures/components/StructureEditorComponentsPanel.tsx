@@ -194,6 +194,7 @@ export function StructureEditorComponentsPanel({
                     <InstanceOverridesEditor
                       overrides={comp.overrides}
                       testIdSuffix={String(idx)}
+                      catalogHardware={catalogInput?.hardware}
                       onChange={(next) => {
                         setDraft((prev) => ({
                           ...prev,
