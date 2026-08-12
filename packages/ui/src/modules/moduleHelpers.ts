@@ -11,6 +11,7 @@ import type {
   EdgeSide,
   FurnitureType,
   HardwareLine,
+  HardwarePlacement,
   Module,
   ModuleAgregadoInstance,
   ModuleBaseMode,
@@ -70,6 +71,12 @@ export interface ComponentInstanceDraft {
     readonly rotateX?: number;
     readonly rotateY?: number;
     readonly rotateZ?: number;
+    /**
+     * Hardware placements (handles, hinges) anchored to this piece for 3D
+     * rendering and future CNC perforations. Preserved by clean/patch so that
+     * editing a formula does not silently drop them.
+     */
+    readonly hardwarePlacements?: readonly HardwarePlacement[];
   };
 }
 
@@ -436,6 +443,9 @@ export function cleanInstanceOverrides(
       : {}),
     ...(ov.rotateZ !== undefined && Number.isFinite(ov.rotateZ)
       ? { rotateZ: ov.rotateZ }
+      : {}),
+    ...(ov.hardwarePlacements && ov.hardwarePlacements.length > 0
+      ? { hardwarePlacements: ov.hardwarePlacements }
       : {}),
   };
   return Object.keys(next).length > 0 ? next : undefined;
