@@ -432,7 +432,9 @@ export function AgregadoEditorForm({
         <div className="agregado-editor__panel" data-testid="agregado-tab-hardware">
           <div className="agregado-editor__panel-header">
             <p className="catalog-form__hint">
-              Herrajes fijos por cada unidad de este agregado: bisagras, correderas, jaladeras, tornillería.
+              Herrajes en cantidad (solo costo, sin posición): tornillería,
+              perfiles, insumos. Para jaladeras/bisagras con posición 3D, usá la
+              sección de abajo.
             </p>
             <button
               type="button"
@@ -524,11 +526,12 @@ export function AgregadoEditorForm({
             data-testid="agregado-hardware-placements"
           >
             <h4 className="module-editor__section-title">
-              Posición de herrajes en piezas (3D)
+              Herrajes posicionados (3D + costo automático)
             </h4>
             <p className="catalog-form__hint">
-              Ancla cada herraje a una pieza y definí cara + X%/Y% + rotación.
-              Es lo que se ve en la Vista 3D y la base de las perforaciones.
+              Cada herraje acá se cotiza según la cantidad de posiciones (no lo
+              sumes también a la lista de arriba). Es lo que se ve en la Vista 3D
+              y la base de las perforaciones.
             </p>
             {draft.components.length === 0 ? (
               <p className="catalog-empty">
