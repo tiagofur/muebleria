@@ -496,6 +496,45 @@ function componentInstanceToApi(
   };
 }
 
+function hardwarePlacementFromApi(
+  raw: Record<string, unknown>,
+): import('@muebles/domain').HardwarePlacement {
+  const relRaw = (raw.relativePosition ?? raw.relative_position) as
+    | Record<string, unknown>
+    | undefined;
+  const rotRaw = (raw.rotationDeg ?? raw.rotation_deg) as
+    | Record<string, unknown>
+    | undefined;
+
+  const xFormula = str(relRaw?.xFormula ?? relRaw?.x_formula) || undefined;
+  const yFormula = str(relRaw?.yFormula ?? relRaw?.y_formula) || undefined;
+  const xMm = num(relRaw?.xMm ?? relRaw?.x_mm, 50);
+  const yMm = num(relRaw?.yMm ?? relRaw?.y_mm, 50);
+
+  return {
+    hardwareId: str(raw.hardwareId ?? raw.hardware_id),
+    anchorFace: (str(raw.anchorFace ?? raw.anchor_face, 'front') as any) || 'front',
+    relativePosition: {
+      xMm,
+      yMm,
+      ...(xFormula ? { xFormula } : {}),
+      ...(yFormula ? { yFormula } : {}),
+    },
+    ...(rotRaw
+      ? {
+          rotationDeg: {
+            x: num(rotRaw.x, 0),
+            y: num(rotRaw.y, 0),
+            z: num(rotRaw.z, 0),
+          },
+        }
+      : {}),
+    ...(typeof raw.scale === 'number' && Number.isFinite(raw.scale)
+      ? { scale: raw.scale }
+      : {}),
+  };
+}
+
 function componentInstanceFromApi(
   raw: Record<string, unknown>,
 ): import('@muebles/domain').ModuleComponentInstance {
@@ -506,7 +545,7 @@ function componentInstanceFromApi(
       : undefined;
   const edgesRaw = overridesRaw?.edges;
   const hardwarePlacementsRaw = Array.isArray(overridesRaw?.hardwarePlacements)
-    ? (overridesRaw?.hardwarePlacements as readonly unknown[])
+    ? (overridesRaw?.hardwarePlacements as readonly Record<string, unknown>[])
     : undefined;
   const lengthFormula =
     str(
@@ -589,9 +628,9 @@ function componentInstanceFromApi(
           rotateX,
           rotateY,
           rotateZ,
-          hardwarePlacements: hardwarePlacementsRaw as
-            | readonly import('@muebles/domain').HardwarePlacement[]
-            | undefined,
+          hardwarePlacements: Array.isArray(hardwarePlacementsRaw)
+            ? hardwarePlacementsRaw.map(hardwarePlacementFromApi)
+            : undefined,
         }
       : undefined,
   };

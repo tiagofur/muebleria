@@ -100,8 +100,8 @@ export function HardwarePlacementsEditor({
         </button>
       </div>
       <p className="catalog-form__hint">
-        Posición en mm desde la esquina de la cara (no cambia con el tamaño de
-        la pieza). Es la base de las perforaciones.
+        Posición en mm o fórmula (ej. 50, W / 2, L - 80) desde la esquina de la
+        cara. Es la base de las perforaciones.
       </p>
       {placements.length === 0 ? (
         <p className="catalog-empty">
@@ -159,40 +159,48 @@ export function HardwarePlacementsEditor({
                   </select>
                 </div>
                 <div className="catalog-form__field catalog-form__field--narrow">
-                  <label htmlFor={`hw-placement-x-${idx}${suffix}`}>X (mm)</label>
+                  <label htmlFor={`hw-placement-x-${idx}${suffix}`}>X (mm o fórmula)</label>
                   <input
                     id={`hw-placement-x-${idx}${suffix}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={p.relativePosition.xMm}
-                    onChange={(e) =>
+                    type="text"
+                    className="catalog-form__input"
+                    placeholder="ej: 50 ó W / 2"
+                    value={p.relativePosition.xFormula ?? p.relativePosition.xMm}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      const isSimpleNum = !isNaN(num) && val.trim() !== '';
                       update(idx, {
                         relativePosition: {
                           ...p.relativePosition,
-                          xMm: Number(e.target.value),
+                          xMm: isSimpleNum ? num : (p.relativePosition.xMm ?? 0),
+                          xFormula: isSimpleNum ? undefined : val,
                         },
-                      })
-                    }
+                      });
+                    }}
                     data-testid={`instance-hardware-placement-${idx}${suffix}-x`}
                   />
                 </div>
                 <div className="catalog-form__field catalog-form__field--narrow">
-                  <label htmlFor={`hw-placement-y-${idx}${suffix}`}>Y (mm)</label>
+                  <label htmlFor={`hw-placement-y-${idx}${suffix}`}>Y (mm o fórmula)</label>
                   <input
                     id={`hw-placement-y-${idx}${suffix}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={p.relativePosition.yMm}
-                    onChange={(e) =>
+                    type="text"
+                    className="catalog-form__input"
+                    placeholder="ej: 50 ó L - 80"
+                    value={p.relativePosition.yFormula ?? p.relativePosition.yMm}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      const isSimpleNum = !isNaN(num) && val.trim() !== '';
                       update(idx, {
                         relativePosition: {
                           ...p.relativePosition,
-                          yMm: Number(e.target.value),
+                          yMm: isSimpleNum ? num : (p.relativePosition.yMm ?? 0),
+                          yFormula: isSimpleNum ? undefined : val,
                         },
-                      })
-                    }
+                      });
+                    }}
                     data-testid={`instance-hardware-placement-${idx}${suffix}-y`}
                   />
                 </div>

@@ -127,4 +127,27 @@ describe('HardwarePlacementsEditor', () => {
       screen.getByTestId('instance-hardware-placements').textContent,
     ).toContain('Sin herrajes posicionados');
   });
+
+  it('allows typing a formula into Y position field (e.g. L - 80)', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={[
+          {
+            hardwareId: 'hw-1',
+            anchorFace: 'front',
+            relativePosition: { xMm: 50, yMm: 50 },
+          },
+        ]}
+      />,
+    );
+
+    const yInput = screen.getByTestId(
+      'instance-hardware-placement-0-y',
+    ) as HTMLInputElement;
+    await user.clear(yInput);
+    await user.type(yInput, 'L - 80');
+
+    expect(yInput.value).toBe('L - 80');
+  });
 });

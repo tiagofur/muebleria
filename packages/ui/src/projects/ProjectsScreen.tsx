@@ -961,6 +961,7 @@ export function ProjectsScreen({
         catalogs={catalogs}
         catalogComponents={catalogComponents}
         catalogStructures={catalogStructures}
+        catalogAgregados={catalogAgregados}
         projectLevelChoices={selectedProject?.projectLevelChoices ?? {}}
         measureDefaults={selectedProject?.measureDefaults}
       />

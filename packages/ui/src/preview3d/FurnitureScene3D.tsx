@@ -210,7 +210,7 @@ export type FurnitureScene3DProps = {
   readonly onModuleFreeDragEnd?: (moduleKey: string) => void;
   /** Highlight and click-select walls (set active wall in Proyectar). */
   readonly selectedWallId?: string | null;
-  readonly onSelectWall?: (wallId: string) => void;
+  readonly onSelectWall?: (wallId: string | null) => void;
   /**
    * Fill parent height/width (Proyectar studio). Default embedded preview
    * keeps a fixed ~380px canvas for modals/editors.
@@ -663,12 +663,13 @@ function WallMesh({
       >
         <boxGeometry args={[length, h, thickness]} />
         <meshStandardMaterial
-          color={selected ? '#5b9fd4' : paintHover ? PAINT_HOVER_COLOR : WALL_DEFAULT_COLOR}
+          color={paintHover ? PAINT_HOVER_COLOR : WALL_DEFAULT_COLOR}
           roughness={0.9}
           metalness={0.05}
-          transparent={selected || paintHover}
-          opacity={selected ? 0.72 : paintHover ? 0.85 : 1}
+          transparent={paintHover}
+          opacity={paintHover ? 0.85 : 1}
         />
+        {selected ? <Edges threshold={15} color="#3b82f6" lineWidth={2} /> : null}
       </mesh>
     </group>
   );
@@ -1138,7 +1139,7 @@ function SceneContent({
   readonly onModuleFreeDragStart?: FurnitureScene3DProps['onModuleFreeDragStart'];
   readonly onModuleFreeDragEnd?: FurnitureScene3DProps['onModuleFreeDragEnd'];
   readonly selectedWallId?: string | null;
-  readonly onSelectWall?: (wallId: string) => void;
+  readonly onSelectWall?: (wallId: string | null) => void;
   readonly showFloorGrid?: boolean;
   readonly lightingMode?: SceneLightingMode;
   readonly ambientFloor?: AmbientMaterial;
@@ -1454,12 +1455,23 @@ function SceneContent({
                 position={[framing.center[0], -1, framing.center[2]]}
                 lightingMode={lightMode}
                 paintHover={paintHoverSurface?.kind === 'floor'}
+                onClick={() => {
+                  onSelectModule?.(null);
+                  onSelectWall?.(null);
+                  onSelectPart?.(null as any);
+                }}
               />
             ) : (
               <mesh
                 rotation={[-Math.PI / 2, 0, 0]}
                 position={[framing.center[0], -1, framing.center[2]]}
                 receiveShadow
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectModule?.(null);
+                  onSelectWall?.(null);
+                  onSelectPart?.(null as any);
+                }}
               >
                 <planeGeometry
                   args={[totalWidth * 1.4, totalDepth * 1.6]}

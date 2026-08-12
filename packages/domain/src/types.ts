@@ -433,6 +433,8 @@ export interface HardwarePlacement {
   readonly relativePosition: {
     readonly xMm: number;
     readonly yMm: number;
+    readonly xFormula?: string;
+    readonly yFormula?: string;
   };
   readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
   readonly scale?: number;

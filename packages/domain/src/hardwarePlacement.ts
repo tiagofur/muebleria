@@ -12,9 +12,19 @@
  * board mesh, so only face coordinates are needed here.
  */
 
+import { evaluatePartFormula } from './engine/shared';
 import { normalizePreviewColor } from './materialPreview';
 import type { BoardLocalSize, Vec3 } from './spatialAnchor';
 import type { Hardware, HardwarePlacement } from './types';
+
+/**
+ * Default hardware projection (mm) when the hardware has no previewProjectionMm.
+ * The renderer positions each hardware's group at `face + projection` so the
+ * primitive (authored +Y-outward, body extending toward the face in −Y) sits
+ * OUTSIDE the board. Without this default, hardware lacking previewProjectionMm
+ * would sit flush (standoff 0) and appear embedded into the board.
+ */
+export const DEFAULT_HARDWARE_PROJECTION_MM = 25;
 
 /**
  * Resolver output (D4). All coordinates are in the BOARD-LOCAL frame so the
@@ -165,7 +175,38 @@ export function resolveHardwarePlacement(
   // Millimeter offsets from the face's origin corner along the two in-plane
   // axes (same axis mapping as before), clamped per-face so the hardware never
   // leaves the board surface.
-  const { xMm, yMm } = placement.relativePosition;
+  const hwSize = normalized.sizeMm ?? 96;
+  const boardEnv = {
+    W: w,
+    L: l,
+    H: l,
+    D: l,
+    T: t,
+    PW: w,
+    PL: l,
+    PH: l,
+    PD: l,
+    PT: t,
+    HW: hwSize,
+  };
+
+  let xMm = placement.relativePosition.xMm;
+  if (placement.relativePosition.xFormula?.trim()) {
+    try {
+      xMm = evaluatePartFormula(placement.relativePosition.xFormula, boardEnv);
+    } catch {
+      xMm = placement.relativePosition.xMm;
+    }
+  }
+
+  let yMm = placement.relativePosition.yMm;
+  if (placement.relativePosition.yFormula?.trim()) {
+    try {
+      yMm = evaluatePartFormula(placement.relativePosition.yFormula, boardEnv);
+    } catch {
+      yMm = placement.relativePosition.yMm;
+    }
+  }
 
   let localPosition: Vec3;
   let localNormal: Vec3;
@@ -212,7 +253,7 @@ export function resolveHardwarePlacement(
     hardwareId: placement.hardwareId,
     localPosition: [snap(localPosition[0]), snap(localPosition[1]), snap(localPosition[2])],
     localNormal,
-    standoffMm: normalized.projectionMm ?? 0,
+    standoffMm: normalized.projectionMm ?? DEFAULT_HARDWARE_PROJECTION_MM,
     scale,
     rotationDeg: {
       x: Number.isFinite(placement.rotationDeg?.x) ? placement.rotationDeg!.x! : 0,

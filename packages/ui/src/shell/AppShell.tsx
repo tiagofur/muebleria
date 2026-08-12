@@ -172,15 +172,15 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
         group: 'composition',
       },
       {
-        id: 'components',
-        label: 'Componentes',
-        icon: Puzzle,
-        group: 'composition',
-      },
-      {
         id: 'agregados',
         label: 'Agregados',
         icon: Boxes,
+        group: 'composition',
+      },
+      {
+        id: 'components',
+        label: 'Componentes',
+        icon: Puzzle,
         group: 'composition',
       },
       { id: 'materials', label: 'Materiales', icon: Layers, group: 'catalogs' },

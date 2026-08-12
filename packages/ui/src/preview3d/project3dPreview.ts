@@ -179,6 +179,7 @@ function resolveItemBom(
         {
           structures: catalogInput.structures,
           agregados: catalogInput.agregados,
+          optionChoices: choices,
         },
       ),
       ...dims,
@@ -251,6 +252,7 @@ export function resolveModuleHardwarePlacements(
   options: {
     readonly structures?: readonly Structure[];
     readonly agregados?: readonly Agregado[];
+    readonly optionChoices?: OptionChoices;
   } = {},
 ): ResolvedHardwarePlacement[] {
   // AH-03: part ids are collision-free. Structure + module components expand
@@ -308,7 +310,11 @@ export function resolveModuleHardwarePlacements(
       if (!part) continue; // filtered by base mode / not a board — skip.
 
       for (const placement of placements) {
-        const hardware = hardwareCatalog.find((h) => h.id === placement.hardwareId);
+        const targetId =
+          options.optionChoices?.[placement.hardwareId] ?? placement.hardwareId;
+        const hardware =
+          hardwareCatalog.find((h) => h.id === targetId) ??
+          hardwareCatalog.find((h) => h.id === placement.hardwareId);
         // VH-09: swapped-to-cost-only or removed hardware renders nothing.
         if (!hardware) continue;
         const resolved = resolveHardwarePlacement({

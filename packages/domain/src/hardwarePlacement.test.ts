@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_HARDWARE_PROJECTION_MM,
   normalizeHardwarePreview,
   resolveHardwarePlacement,
   type ResolvedHardwarePlacement,
@@ -153,9 +154,11 @@ describe('resolveHardwarePlacement — geometry, identity & defaults', () => {
     expect(resolve('front', 300, 400)!.standoffMm).toBe(12);
   });
 
-  it('standoffMm defaults to 0 when previewProjectionMm is absent', () => {
+  it('standoffMm defaults to DEFAULT_HARDWARE_PROJECTION_MM when previewProjectionMm is absent', () => {
     const flush: Hardware = { ...knob, previewProjectionMm: undefined };
-    expect(resolve('front', 300, 400, flush)!.standoffMm).toBe(0);
+    expect(resolve('front', 300, 400, flush)!.standoffMm).toBe(
+      DEFAULT_HARDWARE_PROJECTION_MM,
+    );
   });
 
   it('scale defaults to 1 when omitted', () => {
@@ -294,5 +297,68 @@ describe('normalizeHardwarePreview (VH-07)', () => {
   it('cost-only hardware normalizes to an empty object and never throws', () => {
     expect(() => normalizeHardwarePreview(costOnly)).not.toThrow();
     expect(normalizeHardwarePreview(costOnly)).toEqual({});
+  });
+});
+
+describe('resolveHardwarePlacement — xFormula and yFormula evaluation', () => {
+  it('evaluates yFormula "L - 80" relative to board length (800 - 80 = 720)', () => {
+    const r = resolveHardwarePlacement({
+      componentInstanceId: 'ci-puerta',
+      placement: {
+        hardwareId: knob.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 50, yMm: 0, yFormula: 'L - 80' },
+      },
+      board: BOARD,
+      hardware: knob,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.localPosition[2]).toBeCloseTo(720, 6);
+  });
+
+  it('evaluates yFormula "H - 80" relative to board height/length (800 - 80 = 720)', () => {
+    const r = resolveHardwarePlacement({
+      componentInstanceId: 'ci-puerta',
+      placement: {
+        hardwareId: knob.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 50, yMm: 0, yFormula: 'H - 80' },
+      },
+      board: BOARD,
+      hardware: knob,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.localPosition[2]).toBeCloseTo(720, 6);
+  });
+
+  it('evaluates xFormula "W / 2" relative to board width (600 / 2 = 300)', () => {
+    const r = resolveHardwarePlacement({
+      componentInstanceId: 'ci-puerta',
+      placement: {
+        hardwareId: knob.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 0, yMm: 400, xFormula: 'W / 2' },
+      },
+      board: BOARD,
+      hardware: knob,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.localPosition[0]).toBeCloseTo(300, 6);
+  });
+
+  it('falls back to numeric xMm / yMm if formula is invalid', () => {
+    const r = resolveHardwarePlacement({
+      componentInstanceId: 'ci-puerta',
+      placement: {
+        hardwareId: knob.id,
+        anchorFace: 'front',
+        relativePosition: { xMm: 42, yMm: 99, xFormula: 'INVALID ++', yFormula: 'ABC ??' },
+      },
+      board: BOARD,
+      hardware: knob,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.localPosition[0]).toBeCloseTo(42, 6);
+    expect(r!.localPosition[2]).toBeCloseTo(99, 6);
   });
 });

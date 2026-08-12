@@ -610,6 +610,7 @@ export function ProjectSpatialStudio({
         catalog.optionGroups,
         catalog.components,
         catalog.structures,
+        catalog.agregados,
       ),
     [selectedModule, catalog],
   );
@@ -1124,6 +1125,7 @@ export function ProjectSpatialStudio({
     baseClearanceMm: m.baseClearanceMm,
     showCountertop: m.showCountertop,
     showOuterGhost: true,
+    resolvedHardwarePlacements: m.resolvedHardwarePlacements,
   }));
 
   const sceneWalls = preview.walls.map((w) => ({
@@ -2714,6 +2716,7 @@ export function ProjectSpatialStudio({
                 materialTextures={materialTextures}
                 surfaceMode={surfaceMode}
                 lightingMode={lightingMode}
+                hardwareCatalog={catalog.hardware}
                 showOutlines={showOutlines}
                 showWireframe={showWireframe}
                 showFloorGrid={showFloorGrid}
@@ -2737,9 +2740,13 @@ export function ProjectSpatialStudio({
                 onModuleFreeMove={handleModuleFreeMove}
                 onModuleFreeDragStart={handleModuleFreeDragStart}
                 onModuleFreeDragEnd={handleModuleFreeDragEnd}
-                selectedWallId={activeWallId}
+                selectedWallId={targetWallId}
                 onSelectWall={(wallId) => {
-                  setTargetWallId(wallId);
+                  if (!wallId || wallId === targetWallId) {
+                    setTargetWallId(null);
+                  } else {
+                    setTargetWallId(wallId);
+                  }
                 }}
                 paintHoverSurface={paintHoverSurface}
                 draggingInvalid={draggingInvalid}
