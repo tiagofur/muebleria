@@ -305,3 +305,24 @@
   gap: var(--space-3);
   align-items: flex-start;
 }
+
+/* ── Hardware tab: unified 3D placements section ─────────────────── */
+
+.agregado-editor__hardware-placements {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.agregado-editor__piece-hardware {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}

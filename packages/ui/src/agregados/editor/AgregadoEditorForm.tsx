@@ -14,6 +14,7 @@ import type { Component, Hardware, HardwareLine, ModuleComponentInstance } from 
 import { Plus, Trash2 } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
+import { HardwarePlacementsEditor } from '../../modules/components/HardwarePlacementsEditor';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoEditorPreview3D } from './AgregadoEditorPreview3D';
@@ -404,7 +405,6 @@ export function AgregadoEditorForm({
                         <InstanceOverridesEditor
                           overrides={comp.overrides}
                           testIdSuffix={String(idx)}
-                          catalogHardware={catalogHardware}
                           onChange={(nextOverrides) =>
                             updateComponentInstance(idx, { overrides: nextOverrides })
                           }
@@ -515,6 +515,64 @@ export function AgregadoEditorForm({
               ))}
             </ul>
           )}
+
+          {/* Posición 3D de herrajes, unificado en este tab. Ancla cada herraje
+              a una pieza del agregado (cara + X%/Y% + rotación) — lo que se ve
+              en el 3D y alimenta las perforaciones. */}
+          <div
+            className="agregado-editor__hardware-placements"
+            data-testid="agregado-hardware-placements"
+          >
+            <h4 className="module-editor__section-title">
+              Posición de herrajes en piezas (3D)
+            </h4>
+            <p className="catalog-form__hint">
+              Ancla cada herraje a una pieza y definí cara + X%/Y% + rotación.
+              Es lo que se ve en la Vista 3D y la base de las perforaciones.
+            </p>
+            {draft.components.length === 0 ? (
+              <p className="catalog-empty">
+                Agregá piezas en la pestaña Piezas para posicionar herrajes.
+              </p>
+            ) : (
+              draft.components.map((comp, idx) => {
+                const info = catalogComponents.find(
+                  (c) => c.id === comp.componentId,
+                );
+                return (
+                  <div
+                    key={idx}
+                    className="agregado-editor__piece-hardware"
+                    data-testid={`agregado-piece-hardware-${idx}`}
+                  >
+                    <h5 className="module-part-card__title">
+                      {info ? `${info.code} — ${info.name}` : comp.componentId}
+                    </h5>
+                    <HardwarePlacementsEditor
+                      placements={comp.overrides?.hardwarePlacements ?? []}
+                      catalogHardware={catalogHardware}
+                      testIdSuffix={`hw-pc-${idx}`}
+                      onChange={(next) => {
+                        const current = comp.overrides ?? {};
+                        if (!next || next.length === 0) {
+                          const { hardwarePlacements: _omit, ...rest } = current;
+                          void _omit;
+                          updateComponentInstance(idx, {
+                            overrides:
+                              Object.keys(rest).length > 0 ? rest : undefined,
+                          });
+                        } else {
+                          updateComponentInstance(idx, {
+                            overrides: { ...current, hardwarePlacements: next },
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </form>
