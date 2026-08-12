@@ -417,13 +417,13 @@ describe('domain entity types', () => {
     const frontFace: HardwarePlacement = {
       hardwareId: '33333333-3333-4333-8333-333333333333',
       anchorFace: 'front',
-      relativePosition: { xPercent: 50, yPercent: 50 },
+      relativePosition: { xMm: 50, yMm: 50 },
     };
 
     const rotatedPull: HardwarePlacement = {
       hardwareId: '55555555-5555-4555-8555-555555555556',
       anchorFace: 'front',
-      relativePosition: { xPercent: 50, yPercent: 80 },
+      relativePosition: { xMm: 50, yMm: 80 },
       rotationDeg: { z: 90 },
       scale: 1.1,
     };
@@ -440,7 +440,7 @@ describe('domain entity types', () => {
     const face: AnchorFace = 'front';
 
     expect(frontFace.anchorFace).toBe('front');
-    expect(frontFace.relativePosition.xPercent).toBe(50);
+    expect(frontFace.relativePosition.xMm).toBe(50);
     expect(frontFace.rotationDeg).toBeUndefined();
     expect(rotatedPull.rotationDeg?.z).toBe(90);
     expect(rotatedPull.scale).toBe(1.1);

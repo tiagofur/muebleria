@@ -11,9 +11,10 @@ import type { Hardware } from './types';
  *
  * Board-LOCAL frame: local X = width (W), Y = thickness (T), Z = length (L).
  * The board box occupies [0,W] x [0,T] x [0,L]. Each anchor face maps a
- * (xPercent,yPercent) pair onto the two in-plane axes and points the normal
- * along the remaining axis. Pinned here so the PR2 renderer can trust the
- * local frame of the child <group> it drops on each board mesh.
+ * (xMm,yMm) pair — millimeters from the face's origin corner along the two
+ * in-plane axes — and points the normal along the remaining axis. Pinned here
+ * so the PR2 renderer can trust the local frame of the child <group> it drops
+ * on each board mesh.
  */
 const BOARD = { widthMm: 600, thicknessMm: 18, lengthMm: 800 } as const;
 
@@ -45,8 +46,8 @@ const costOnly: Hardware = {
 
 function resolve(
   face: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom',
-  xPercent: number,
-  yPercent: number,
+  xMm: number,
+  yMm: number,
   hardware: Hardware = knob,
   extra: {
     readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
@@ -58,7 +59,7 @@ function resolve(
     placement: {
       hardwareId: hardware.id,
       anchorFace: face,
-      relativePosition: { xPercent, yPercent },
+      relativePosition: { xMm, yMm },
       rotationDeg: extra.rotationDeg,
       scale: extra.scale,
     },
@@ -69,16 +70,16 @@ function resolve(
 
 describe('resolveHardwarePlacement — per-face board-LOCAL mapping', () => {
   it('front face center sits on the +thickness surface, normal +Y', () => {
-    const r = resolve('front', 50, 50);
+    const r = resolve('front', 300, 400);
     expect(r).not.toBeNull();
-    expect(r!.localPosition[0]).toBeCloseTo(300, 6); // 0.5 * W
+    expect(r!.localPosition[0]).toBeCloseTo(300, 6); // xMm along width
     expect(r!.localPosition[1]).toBeCloseTo(18, 6); // T (front surface)
-    expect(r!.localPosition[2]).toBeCloseTo(400, 6); // 0.5 * L
+    expect(r!.localPosition[2]).toBeCloseTo(400, 6); // yMm along length
     expect(r!.localNormal).toEqual([0, 1, 0]);
   });
 
   it('back face center sits on the 0-thickness surface, normal -Y', () => {
-    const r = resolve('back', 50, 50);
+    const r = resolve('back', 300, 400);
     expect(r).not.toBeNull();
     expect(r!.localPosition[0]).toBeCloseTo(300, 6);
     expect(r!.localPosition[1]).toBeCloseTo(0, 6);
@@ -87,34 +88,34 @@ describe('resolveHardwarePlacement — per-face board-LOCAL mapping', () => {
   });
 
   it('left face center sits on the 0-width surface, normal -X', () => {
-    const r = resolve('left', 50, 50);
+    const r = resolve('left', 9, 400);
     expect(r).not.toBeNull();
     expect(r!.localPosition[0]).toBeCloseTo(0, 6);
-    expect(r!.localPosition[1]).toBeCloseTo(9, 6); // 0.5 * T
-    expect(r!.localPosition[2]).toBeCloseTo(400, 6); // 0.5 * L
+    expect(r!.localPosition[1]).toBeCloseTo(9, 6); // xMm along thickness
+    expect(r!.localPosition[2]).toBeCloseTo(400, 6); // yMm along length
     expect(r!.localNormal).toEqual([-1, 0, 0]);
   });
 
   it('right face center sits on the +width surface, normal +X', () => {
-    const r = resolve('right', 50, 50);
+    const r = resolve('right', 9, 400);
     expect(r).not.toBeNull();
     expect(r!.localPosition[0]).toBeCloseTo(600, 6); // W
-    expect(r!.localPosition[1]).toBeCloseTo(9, 6); // 0.5 * T
-    expect(r!.localPosition[2]).toBeCloseTo(400, 6); // 0.5 * L
+    expect(r!.localPosition[1]).toBeCloseTo(9, 6); // xMm along thickness
+    expect(r!.localPosition[2]).toBeCloseTo(400, 6); // yMm along length
     expect(r!.localNormal).toEqual([1, 0, 0]);
   });
 
   it('top face center sits on the +length surface, normal +Z', () => {
-    const r = resolve('top', 50, 50);
+    const r = resolve('top', 300, 9);
     expect(r).not.toBeNull();
-    expect(r!.localPosition[0]).toBeCloseTo(300, 6); // 0.5 * W
-    expect(r!.localPosition[1]).toBeCloseTo(9, 6); // 0.5 * T
+    expect(r!.localPosition[0]).toBeCloseTo(300, 6); // xMm along width
+    expect(r!.localPosition[1]).toBeCloseTo(9, 6); // yMm along thickness
     expect(r!.localPosition[2]).toBeCloseTo(800, 6); // L
     expect(r!.localNormal).toEqual([0, 0, 1]);
   });
 
   it('bottom face center sits on the 0-length surface, normal -Z', () => {
-    const r = resolve('bottom', 50, 50);
+    const r = resolve('bottom', 300, 9);
     expect(r).not.toBeNull();
     expect(r!.localPosition[0]).toBeCloseTo(300, 6);
     expect(r!.localPosition[1]).toBeCloseTo(9, 6);
@@ -129,48 +130,48 @@ describe('resolveHardwarePlacement — corners & clamping', () => {
     expect(r!.localPosition).toEqual([0, 18, 0]);
   });
 
-  it('front {100,100} → max corner of the face plane', () => {
-    const r = resolve('front', 100, 100);
+  it('front {W,L} → max corner of the face plane', () => {
+    const r = resolve('front', 600, 800);
     expect(r!.localPosition).toEqual([600, 18, 800]);
   });
 
-  it('clamps xPercent>100 and yPercent<0 into the face bounds', () => {
-    const r = resolve('front', 150, -20);
-    expect(r!.localPosition[0]).toBeCloseTo(600, 6); // 150 -> 100
+  it('clamps xMm>W and yMm<0 into the face bounds', () => {
+    const r = resolve('front', 700, -20);
+    expect(r!.localPosition[0]).toBeCloseTo(600, 6); // 700 -> 600 (W)
     expect(r!.localPosition[2]).toBeCloseTo(0, 6); // -20 -> 0
   });
 });
 
 describe('resolveHardwarePlacement — geometry, identity & defaults', () => {
   it('carries componentInstanceId + hardwareId through', () => {
-    const r = resolve('front', 50, 50);
+    const r = resolve('front', 300, 400);
     expect(r!.componentInstanceId).toBe('ci-puerta');
     expect(r!.hardwareId).toBe('hw-knob');
   });
 
   it('standoffMm comes from previewProjectionMm', () => {
-    expect(resolve('front', 50, 50)!.standoffMm).toBe(12);
+    expect(resolve('front', 300, 400)!.standoffMm).toBe(12);
   });
 
   it('standoffMm defaults to 0 when previewProjectionMm is absent', () => {
     const flush: Hardware = { ...knob, previewProjectionMm: undefined };
-    expect(resolve('front', 50, 50, flush)!.standoffMm).toBe(0);
+    expect(resolve('front', 300, 400, flush)!.standoffMm).toBe(0);
   });
 
   it('scale defaults to 1 when omitted', () => {
-    expect(resolve('front', 50, 50)!.scale).toBe(1);
+    expect(resolve('front', 300, 400)!.scale).toBe(1);
   });
 
   it('scale passes through when provided', () => {
-    expect(resolve('front', 50, 50, knob, { scale: 1.5 })!.scale).toBe(1.5);
+    expect(resolve('front', 300, 400, knob, { scale: 1.5 })!.scale).toBe(1.5);
   });
 
   it('rotationDeg defaults to {0,0,0} when omitted', () => {
-    expect(resolve('front', 50, 50)!.rotationDeg).toEqual({ x: 0, y: 0, z: 0 });
+    expect(resolve('front', 300, 400)!.rotationDeg).toEqual({ x: 0, y: 0, z: 0 });
   });
 
   it('rotationDeg passes through provided axes and defaults the rest to 0', () => {
-    expect(resolve('front', 50, 50, knob, { rotationDeg: { z: 90 } })!.rotationDeg).toEqual({
+    expect(resolve('front', 300, 400, knob, { rotationDeg: { z: 90 } })!.rotationDeg).toEqual({
       x: 0,
       y: 0,
       z: 90,
@@ -180,12 +181,12 @@ describe('resolveHardwarePlacement — geometry, identity & defaults', () => {
 
 describe('resolveHardwarePlacement — null / fallback paths', () => {
   it('returns null when hardware has no previewShape (VH-09 cost-only)', () => {
-    expect(resolve('front', 50, 50, costOnly)).toBeNull();
+    expect(resolve('front', 300, 400, costOnly)).toBeNull();
   });
 
   it('returns null when previewShape is not in the enum (treated cost-only)', () => {
     const bad: Hardware = { ...knob, previewShape: 'ring' as Hardware['previewShape'] };
-    expect(resolve('front', 50, 50, bad)).toBeNull();
+    expect(resolve('front', 300, 400, bad)).toBeNull();
   });
 
   it('returns null when a board dimension is non-finite', () => {
@@ -194,7 +195,7 @@ describe('resolveHardwarePlacement — null / fallback paths', () => {
       placement: {
         hardwareId: knob.id,
         anchorFace: 'front',
-        relativePosition: { xPercent: 50, yPercent: 50 },
+        relativePosition: { xMm: 300, yMm: 400 },
       },
       board: { widthMm: NaN, thicknessMm: 18, lengthMm: 800 },
       hardware: knob,
@@ -208,13 +209,13 @@ describe('resolveHardwarePlacement — null / fallback paths', () => {
       placement: {
         hardwareId: knob.id,
         anchorFace: 'front',
-        relativePosition: { xPercent: 50, yPercent: 50 },
+        relativePosition: { xMm: 300, yMm: 400 },
       },
       board: { widthMm: -10, thicknessMm: 18, lengthMm: 800 },
       hardware: knob,
     });
     expect(r).not.toBeNull();
-    expect(r!.localPosition[0]).toBe(0); // max(-10,0) * 0.5
+    expect(r!.localPosition[0]).toBe(0); // clampMm(300, max(-10,0)=0) -> 0
   });
 });
 

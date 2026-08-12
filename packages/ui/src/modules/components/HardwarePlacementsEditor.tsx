@@ -63,7 +63,7 @@ export function HardwarePlacementsEditor({
       {
         hardwareId: firstHw?.id ?? '',
         anchorFace: 'front',
-        relativePosition: { xPercent: 50, yPercent: 50 },
+        relativePosition: { xMm: 50, yMm: 50 },
       },
     ]);
   };
@@ -99,6 +99,10 @@ export function HardwarePlacementsEditor({
           Añadir herraje
         </button>
       </div>
+      <p className="catalog-form__hint">
+        Posición en mm desde la esquina de la cara (no cambia con el tamaño de
+        la pieza). Es la base de las perforaciones.
+      </p>
       {placements.length === 0 ? (
         <p className="catalog-empty">
           Sin herrajes posicionados en esta pieza.
@@ -155,19 +159,18 @@ export function HardwarePlacementsEditor({
                   </select>
                 </div>
                 <div className="catalog-form__field catalog-form__field--narrow">
-                  <label htmlFor={`hw-placement-x-${idx}${suffix}`}>X %</label>
+                  <label htmlFor={`hw-placement-x-${idx}${suffix}`}>X (mm)</label>
                   <input
                     id={`hw-placement-x-${idx}${suffix}`}
                     type="number"
                     min={0}
-                    max={100}
                     step={1}
-                    value={p.relativePosition.xPercent}
+                    value={p.relativePosition.xMm}
                     onChange={(e) =>
                       update(idx, {
                         relativePosition: {
                           ...p.relativePosition,
-                          xPercent: Number(e.target.value),
+                          xMm: Number(e.target.value),
                         },
                       })
                     }
@@ -175,19 +178,18 @@ export function HardwarePlacementsEditor({
                   />
                 </div>
                 <div className="catalog-form__field catalog-form__field--narrow">
-                  <label htmlFor={`hw-placement-y-${idx}${suffix}`}>Y %</label>
+                  <label htmlFor={`hw-placement-y-${idx}${suffix}`}>Y (mm)</label>
                   <input
                     id={`hw-placement-y-${idx}${suffix}`}
                     type="number"
                     min={0}
-                    max={100}
                     step={1}
-                    value={p.relativePosition.yPercent}
+                    value={p.relativePosition.yMm}
                     onChange={(e) =>
                       update(idx, {
                         relativePosition: {
                           ...p.relativePosition,
-                          yPercent: Number(e.target.value),
+                          yMm: Number(e.target.value),
                         },
                       })
                     }

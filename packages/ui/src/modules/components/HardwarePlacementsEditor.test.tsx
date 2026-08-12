@@ -82,7 +82,7 @@ describe('HardwarePlacementsEditor', () => {
     ).toBe('50');
   });
 
-  it('updates X percent on the first placement', async () => {
+  it('updates X (mm) on the first placement', async () => {
     const user = userEvent.setup();
     render(
       <Harness
@@ -90,7 +90,7 @@ describe('HardwarePlacementsEditor', () => {
           {
             hardwareId: 'hw-1',
             anchorFace: 'front',
-            relativePosition: { xPercent: 50, yPercent: 50 },
+            relativePosition: { xMm: 50, yMm: 50 },
           },
         ]}
       />,
@@ -113,7 +113,7 @@ describe('HardwarePlacementsEditor', () => {
           {
             hardwareId: 'hw-1',
             anchorFace: 'front',
-            relativePosition: { xPercent: 50, yPercent: 50 },
+            relativePosition: { xMm: 50, yMm: 50 },
           },
         ]}
       />,

@@ -435,7 +435,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
               {
                 hardwareId: 'hw-knob',
                 anchorFace: 'front',
-                relativePosition: { xPercent: 50, yPercent: 50 },
+                relativePosition: { xMm: 50, yMm: 50 },
               },
             ],
           },
@@ -456,8 +456,8 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
     expect(p.componentInstanceId).toBe('c-puerta-copy-0');
     expect(p.hardwareId).toBe('hw-knob');
     // Pinned front-face mapping (resolver contract): for a 596x18x720 board,
-    // front center = (xPct·W, T, yPct·L) = (298, 18, 360), normal (0,1,0).
-    expect(p.localPosition).toEqual([298, 18, 360]);
+    // front at xMm=50, yMm=50 → (50, 18, 50), normal (0,1,0).
+    expect(p.localPosition).toEqual([50, 18, 50]);
     expect(p.localNormal).toEqual([0, 1, 0]);
     // standoffMm = previewProjectionMm.
     expect(p.standoffMm).toBe(25);
@@ -483,7 +483,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
               {
                 hardwareId: 'hw-knob',
                 anchorFace: 'front',
-                relativePosition: { xPercent: 50, yPercent: 50 },
+                relativePosition: { xMm: 50, yMm: 50 },
               },
             ],
           },
@@ -521,7 +521,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
               {
                 hardwareId: 'hw-cost-only',
                 anchorFace: 'front',
-                relativePosition: { xPercent: 50, yPercent: 50 },
+                relativePosition: { xMm: 50, yMm: 50 },
               },
             ],
           },
@@ -548,7 +548,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
               {
                 hardwareId: 'hw-does-not-exist',
                 anchorFace: 'front',
-                relativePosition: { xPercent: 50, yPercent: 50 },
+                relativePosition: { xMm: 50, yMm: 50 },
               },
             ],
           },
@@ -583,7 +583,7 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
               {
                 hardwareId: 'hw-knob',
                 anchorFace: 'front',
-                relativePosition: { xPercent: 50, yPercent: 50 },
+                relativePosition: { xMm: 50, yMm: 50 },
               },
             ],
           },

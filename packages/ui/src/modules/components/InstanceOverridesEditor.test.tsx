@@ -25,7 +25,7 @@ const mockPlacements: readonly HardwarePlacement[] = [
   {
     hardwareId: 'hw-1',
     anchorFace: 'front',
-    relativePosition: { xPercent: 50, yPercent: 50 },
+    relativePosition: { xMm: 50, yMm: 50 },
   },
 ];
 

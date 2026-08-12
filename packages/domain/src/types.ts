@@ -420,17 +420,19 @@ export type AnchorFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
 
 /**
  * Visualization anchor for a piece of hardware on a board face. The position is
- * a percentage across the face plane (independent of the resolved board size),
- * plus optional per-instance rotation/scale. Rides the component-instance
- * overrides JSONB — no dedicated migration (VH-02). Distinct from
- * {@link Perforation} (CNC/machining).
+ * expressed in millimeters from the face's origin corner along the two in-plane
+ * axes — fixed and independent of the resolved board size (a handle at 38 mm
+ * from the edge stays at 38 mm regardless of the door width). This is the data
+ * the CNC perforation pipeline consumes. Optional per-instance rotation/scale.
+ * Rides the component-instance overrides JSONB — no dedicated migration (VH-02).
+ * Distinct from {@link Perforation} (CNC/machining).
  */
 export interface HardwarePlacement {
   readonly hardwareId: string;
   readonly anchorFace: AnchorFace;
   readonly relativePosition: {
-    readonly xPercent: number;
-    readonly yPercent: number;
+    readonly xMm: number;
+    readonly yMm: number;
   };
   readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
   readonly scale?: number;
