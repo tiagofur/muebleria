@@ -68,6 +68,18 @@ export function HardwarePlacementsEditor({
     ]);
   };
 
+  const updateRotation = (
+    idx: number,
+    axis: 'x' | 'y' | 'z',
+    value: number,
+  ) => {
+    const current = placements[idx];
+    if (!current) return;
+    update(idx, {
+      rotationDeg: { ...current.rotationDeg, [axis]: value },
+    });
+  };
+
   return (
     <div
       className="instance-hardware-placements"
@@ -180,6 +192,51 @@ export function HardwarePlacementsEditor({
                       })
                     }
                     data-testid={`instance-hardware-placement-${idx}${suffix}-y`}
+                  />
+                </div>
+              </div>
+
+              <div className="module-editor__grid">
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <label htmlFor={`hw-placement-rx-${idx}${suffix}`}>
+                    Rot X (°)
+                  </label>
+                  <input
+                    id={`hw-placement-rx-${idx}${suffix}`}
+                    type="number"
+                    value={p.rotationDeg?.x ?? 0}
+                    onChange={(e) =>
+                      updateRotation(idx, 'x', Number(e.target.value))
+                    }
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-rx`}
+                  />
+                </div>
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <label htmlFor={`hw-placement-ry-${idx}${suffix}`}>
+                    Rot Y (°)
+                  </label>
+                  <input
+                    id={`hw-placement-ry-${idx}${suffix}`}
+                    type="number"
+                    value={p.rotationDeg?.y ?? 0}
+                    onChange={(e) =>
+                      updateRotation(idx, 'y', Number(e.target.value))
+                    }
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-ry`}
+                  />
+                </div>
+                <div className="catalog-form__field catalog-form__field--narrow">
+                  <label htmlFor={`hw-placement-rz-${idx}${suffix}`}>
+                    Rot Z (°)
+                  </label>
+                  <input
+                    id={`hw-placement-rz-${idx}${suffix}`}
+                    type="number"
+                    value={p.rotationDeg?.z ?? 0}
+                    onChange={(e) =>
+                      updateRotation(idx, 'z', Number(e.target.value))
+                    }
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-rz`}
                   />
                 </div>
               </div>

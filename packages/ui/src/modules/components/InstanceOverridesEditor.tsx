@@ -267,15 +267,16 @@ export function InstanceOverridesEditor({
             </div>
           </div>
 
-          {catalogHardware && catalogHardware.length > 0 ? (
-            <HardwarePlacementsEditor
-              placements={overrides?.hardwarePlacements ?? []}
-              catalogHardware={catalogHardware}
-              onChange={handlePlacementsChange}
-              testIdSuffix={testIdSuffix}
-            />
-          ) : null}
         </div>
+      ) : null}
+
+      {catalogHardware && catalogHardware.length > 0 ? (
+        <HardwarePlacementsEditor
+          placements={overrides?.hardwarePlacements ?? []}
+          catalogHardware={catalogHardware}
+          onChange={handlePlacementsChange}
+          testIdSuffix={testIdSuffix}
+        />
       ) : null}
     </div>
   );
