@@ -106,9 +106,12 @@ export function resolveStructure3DPreview(
     {
       components: draft.components,
       hardwareLines: [],
+      agregados: draft.agregados,
     },
     catalogInput.optionGroups,
     catalogInput.components,
+    catalogInput.structures,
+    catalogInput.agregados,
   );
   const optionChoices: OptionChoices = {
     ...defaults,

@@ -213,6 +213,7 @@ function computeModuleCostPreview(
     catalog.optionGroups,
     catalog.components,
     catalog.structures,
+    catalog.agregados,
   ) as OptionChoices;
   const gate = canShowPricePreview(required, choices);
   if (!gate.ok) {
