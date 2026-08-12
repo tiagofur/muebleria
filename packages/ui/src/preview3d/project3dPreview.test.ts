@@ -10,7 +10,10 @@ import type {
   Project,
   Structure,
 } from '@muebles/domain';
-import { resolveProject3DPreview } from './project3dPreview';
+import {
+  resolveModuleHardwarePlacements,
+  resolveProject3DPreview,
+} from './project3dPreview';
 import { PROJECT_RUN_GAP_MM } from './project3dLayout';
 
 const edge: EdgeBand = {
@@ -557,5 +560,69 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
       modules: [moduleMissing],
     });
     expect(preview.modules[0]!.resolvedHardwarePlacements).toEqual([]);
+  });
+
+  it('G2: agregado con quantity=N produce placements por unidad con prefijo que matchea el motor (agr-<id>-u<N>)', () => {
+    // El motor (engine/bom.ts resolveComposedModule) expande cada agregado por
+    // unidad con part-id `agr-${agregadoId}-u${unitIndex}${componentId}-copy-${i}`
+    // (sin guion entre unitIndex y componentId). El resolver de herrajes debe
+    // reproducir ese prefijo para que los placements encuentren sus piezas.
+    // Bug G2: antes usaba `agr-${agrIdx}-` (índice + guion) → nunca matcheaba.
+    const agregadoId = 'agr-puerta-doble';
+    const agregadoConHerraje: Agregado = {
+      id: agregadoId,
+      code: 'AGR-PUE-2',
+      name: 'Par de puertas',
+      externalDims: { width: 596, height: 720, depth: 18 },
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-knob',
+                anchorFace: 'front',
+                relativePosition: { xPercent: 50, yPercent: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [],
+      agregados: [{ agregadoId, quantity: 2 }],
+    };
+    // Part-ids exactos que el motor generaría para quantity=2 (unidades 0 y 1).
+    const motorPartIds = [
+      `agr-${agregadoId}-u0c-puerta-copy-0`,
+      `agr-${agregadoId}-u1c-puerta-copy-0`,
+    ];
+    const mockBoardParts = motorPartIds.map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      {
+        structures: catalogWithHardware.structures,
+        agregados: [agregadoConHerraje],
+      },
+    );
+
+    // Una jaladera por unidad (quantity=2) → 2 placements, cada uno linkeado
+    // al part-id de su unidad. Confirma que el prefijo reproduce el del motor.
+    expect(placements).toHaveLength(2);
+    expect(placements.map((p) => p.componentInstanceId).sort()).toEqual(
+      [...motorPartIds].sort(),
+    );
+    expect(placements.every((p) => p.hardwareId === 'hw-knob')).toBe(true);
   });
 });

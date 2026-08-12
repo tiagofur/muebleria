@@ -254,9 +254,10 @@ export function resolveModuleHardwarePlacements(
   } = {},
 ): ResolvedHardwarePlacement[] {
   // AH-03: part ids are collision-free. Structure + module components expand
-  // with idPrefix=''; each agregado instance expands with `agr-${agrIdx}-`.
-  // The resolver mirrors that per-source prefix so each placement links to its
-  // own board (two agregados sharing a componentId no longer collapse).
+  // with idPrefix=''; each agregado instance expands per unit with
+  // `agr-${agregadoId}-u${unitIndex}`. The resolver mirrors that per-source
+  // prefix so each placement links to its own board (two agregados sharing a
+  // componentId no longer collapse).
   const partById = new Map(boardParts.map((p) => [p.id, p]));
   const out: ResolvedHardwarePlacement[] = [];
 
@@ -272,8 +273,9 @@ export function resolveModuleHardwarePlacements(
   // Build the source set tagged with the per-source idPrefix that
   // engine/bom.ts resolveComposedModule used to expand each instance.
   // Structure + module use '' (backward compatible with the 31 Fase 2 face
-  // goldens); each agregado instance uses `agr-${agrIdx}-` in the SAME order
-  // the engine expands them ([...structure.agregados, ...module.agregados]).
+  // goldens). Each agregado instance is expanded per unit — mirroring the
+  // motor's `calculateAgregadoSubspaceUnits` (quantity units, unitIndex
+  // 0..N-1) — with prefix `agr-${agregadoId}-u${unitIndex}` (bom.ts ~665).
   // Base-mode filtering need NOT be replicated here: parts bom.ts filtered out
   // are absent from `partById`, so the lookup below skips them naturally.
   type Source = { inst: ModuleComponentInstance; prefix: string };
@@ -281,11 +283,15 @@ export function resolveModuleHardwarePlacements(
     ...(structure?.components ?? []).map((inst) => ({ inst, prefix: '' })),
     ...(module.components ?? []).map((inst) => ({ inst, prefix: '' })),
   ];
-  allAgregadoInstances.forEach((agrInst, agrIdx) => {
-    const prefix = `agr-${agrIdx}-`;
-    for (const inst of resolveAgregadoInstance(agrInst, agregadosCatalog)
-      .components) {
-      sources.push({ inst, prefix });
+  allAgregadoInstances.forEach((agrInst) => {
+    const qty = Math.max(1, Math.floor(agrInst.quantity) || 1);
+    for (let unitIndex = 0; unitIndex < qty; unitIndex++) {
+      const prefix = `agr-${agrInst.agregadoId}-u${unitIndex}`;
+      const unitInst = { ...agrInst, quantity: 1 };
+      for (const inst of resolveAgregadoInstance(unitInst, agregadosCatalog)
+        .components) {
+        sources.push({ inst, prefix });
+      }
     }
   });
 
