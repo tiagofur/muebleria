@@ -6,6 +6,8 @@ import {
   calculateAgregadoSubspaceUnits,
 } from './agregados';
 import { resolveComposedModule, resolveBom } from './engine/bom';
+import { validateStructure } from './engine/validate';
+import { ResolutionError } from './errors';
 import type { Agregado, Catalog, Module, ModuleAgregadoInstance, Structure } from './types';
 
 describe('agregados domain helpers', () => {
@@ -622,6 +624,49 @@ describe('agregados domain helpers', () => {
       // no-compuesta de resolveBom ignora module.agregados. Afirmación
       // documenta el comportamiento actual; invertir cuando se fixee R-4.
       expect(bom.boardParts).toHaveLength(0);
+    });
+  });
+
+  describe('R-3: validateStructure accepts agregados-only', () => {
+    it('does not throw when structure has agregados but no components', () => {
+      const structure: Structure = {
+        id: 'str-agr-only',
+        code: 'STR-AGR',
+        name: 'Solo agregados',
+        components: [],
+        agregados: [{ agregadoId: 'agr-puerta', quantity: 1 }],
+      };
+      expect(() => validateStructure(structure)).not.toThrow();
+    });
+  });
+
+  describe('R-5: agregadoId inexistente throws (no silent skip)', () => {
+    it('resolveComposedModule throws ResolutionError for bad agregadoId', () => {
+      const catalog: Catalog = {
+        materials: [],
+        edges: [],
+        hardware: [],
+        optionGroups: [],
+        modules: [],
+        components: [],
+        structures: [],
+        agregados: [],
+      };
+      const structure: Structure = {
+        id: 'str-bad',
+        code: 'STR-BAD',
+        name: 'Bad ref',
+        components: [],
+        agregados: [{ agregadoId: 'non-existent', quantity: 1 }],
+      };
+      expect(() =>
+        resolveComposedModule({
+          structure,
+          componentInstances: [],
+          catalog,
+          dims: { width: 600, height: 720, depth: 500 },
+        }),
+      ).toThrow(ResolutionError);
     });
   });
 });

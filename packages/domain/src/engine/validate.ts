@@ -233,9 +233,13 @@ export function validateStructure(structure: Structure): void {
       field: 'name',
     });
   }
-  if (!structure.components || structure.components.length === 0) {
+  // R-3: a structure may be composed entirely of agregados (sub-assemblies)
+  // without direct component instances. Accept either.
+  const hasComponents = structure.components && structure.components.length > 0;
+  const hasAgregados = structure.agregados && structure.agregados.length > 0;
+  if (!hasComponents && !hasAgregados) {
     throw new ValidationError(
-      'Structure must have at least one component instance',
+      'Structure must have at least one component or agregado instance',
       {
         structureId: structure.id,
         structureCode: structure.code,
@@ -259,7 +263,7 @@ export function validateStructure(structure: Structure): void {
     }
   }
 
-  for (const instance of structure.components) {
+  for (const instance of structure.components ?? []) {
     if (!instance.componentId?.trim()) {
       throw new ValidationError(
         'Structure component instance must reference a componentId',

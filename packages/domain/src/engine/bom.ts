@@ -581,7 +581,18 @@ export function resolveComposedModule(
 
   for (const agrInst of allAgregadoInstances) {
     const agregado = catalogAgregados.find((a) => a.id === agrInst.agregadoId);
-    if (!agregado) continue;
+    // R-5: throw loudly when an agregadoId references nothing in the catalog.
+    // A silent `continue` here would produce an incomplete BOM without any
+    // warning — the worst kind of data-integrity bug (typo → missing pieces).
+    if (!agregado) {
+      throw new ResolutionError(
+        `Agregado not found: ${agrInst.agregadoId}`,
+        {
+          agregadoId: agrInst.agregadoId,
+          field: 'agregadoId',
+        },
+      );
+    }
 
     // Evaluate sub-assembly space bounding box and origin position in parent furniture space
     const parentDims = { W: PW, H: PH, D: PD, PW, PH, PD, T: 18, B };
