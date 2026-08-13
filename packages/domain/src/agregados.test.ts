@@ -606,7 +606,7 @@ describe('agregados domain helpers', () => {
       expect(door!.y).toBe(500);
     });
 
-    it('módulo SIN structureId + agregado-puerta adjunto → R-4: la puerta se pierde silenciosamente', () => {
+    it('R-4 fixed: módulo SIN structureId + agregado → la puerta SÍ aparece en boardParts', () => {
       const module: Module = {
         id: 'mod-bare',
         code: 'MOD-BARE',
@@ -620,10 +620,11 @@ describe('agregados domain helpers', () => {
 
       const bom = resolveBom(module, { PUERTA: 'm1' }, catalog);
 
-      // BUG R-4 (docs/judgment-day-agregados-2026-08-11.md): la rama
-      // no-compuesta de resolveBom ignora module.agregados. Afirmación
-      // documenta el comportamiento actual; invertir cuando se fixee R-4.
-      expect(bom.boardParts).toHaveLength(0);
+      // R-4 FIXED: la rama no-compuesta ahora expande agregados vía una
+      // estructura sintética. La puerta debe aparecer al frente.
+      expect(bom.boardParts.length).toBeGreaterThanOrEqual(1);
+      const door = bom.boardParts.find((p) => p.y === 500);
+      expect(door, 'puerta del agregado debe llegar al BOM').toBeTruthy();
     });
   });
 

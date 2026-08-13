@@ -813,7 +813,6 @@ export function resolveBom(
   // Fixed / non-composed path: still validate measurePresetId if presets exist.
   resolveModuleMeasurePreset(module, measurePresetId);
 
-  // No structure: only hardware lines (still apply base mode filters).
   const dimsFallback = module.externalDims
     ? {
         width: module.externalDims.width,
@@ -821,8 +820,36 @@ export function resolveBom(
         depth: module.externalDims.depth,
       }
     : { width: 600, height: 720, depth: 560 };
+
+  // R-4: expand agregados even when the module has no structureId. A synthetic
+  // empty structure lets resolveComposedModule handle the agregado expansion
+  // (subspace, offsets, hardware) — same logic as the composed path. Without
+  // this, a non-composed module's agregados were silently dropped from the BOM.
+  const hasAgregados = module.agregados && module.agregados.length > 0;
+  if (hasAgregados) {
+    const syntheticStructure: Structure = {
+      id: `synthetic-${module.id}`,
+      code: module.code,
+      name: module.name,
+      externalDims: dimsFallback,
+      components: [],
+      agregados: module.agregados,
+      active: true,
+    };
+    const composed = resolveComposedModule({
+      structure: syntheticStructure,
+      componentInstances: [],
+      catalog,
+      dims: dimsFallback,
+      optionChoices,
+      module,
+    });
+    allParts = [...composed.boardParts];
+    composedHardware = [...composed.hardwareLines];
+  }
+
   const allHardware = applyBaseModeToHardwareLines(
-    module.hardwareLines,
+    [...composedHardware, ...(module.hardwareLines ?? [])],
     resolveModuleBaseMode(module),
     dimsFallback.width,
   );
