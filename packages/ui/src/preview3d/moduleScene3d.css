@@ -39,7 +39,7 @@
   padding: var(--space-1) var(--space-2);
   max-width: min(100%, 36rem);
   text-align: left;
-  color: color-mix(in srgb, var(--text-muted) 90%, #fff);
+  color: color-mix(in srgb, var(--text-muted) 90%, var(--text-inverse));
   background: color-mix(in srgb, var(--surface-overlay-chrome) 72%, transparent);
   border-radius: var(--radius-sm);
   pointer-events: none;
@@ -140,14 +140,14 @@
 
 /* Measurement tool label (#198) */
 .measurement-label {
-  background: var(--surface-card, #0f172a);
-  color: #f59e0b;
+  background: var(--surface-card);
+  color: var(--warning-500);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold, 700);
   font-variant-numeric: tabular-nums;
   padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
   border-radius: var(--radius-sm, 4px);
-  border: 1px solid #f59e0b;
+  border: 1px solid var(--warning-500);
   white-space: nowrap;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);

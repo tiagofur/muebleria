@@ -825,9 +825,9 @@
 }
 
 .prod-opt__badge--l2 {
-  background: hsl(150 30% 92%);
-  color: hsl(150 40% 25%);
-  border: 1px solid hsl(150 30% 70%);
+  background: var(--success-100);
+  color: var(--success-700);
+  border: 1px solid var(--success-300);
 }
 
 .prod-opt__disclaimer {

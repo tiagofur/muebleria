@@ -200,7 +200,7 @@
   padding: 0 0.25rem;
   border-radius: var(--radius-full);
   background: var(--danger-600, #b91c1c);
-  color: #fff;
+  color: var(--text-inverse);
   font-size: 0.65rem;
   font-weight: var(--weight-bold);
   line-height: 1;
