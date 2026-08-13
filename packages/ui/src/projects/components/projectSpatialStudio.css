@@ -415,7 +415,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #1a1c1e;
+  background: var(--surface-viewport);
   /* Center column must consume all remaining height for fillViewport 3D */
   overflow: hidden;
 }
@@ -444,11 +444,11 @@
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, #0f1216 78%, transparent);
-  color: var(--text-muted, #94a3b8);
+  background: color-mix(in srgb, var(--surface-overlay-chrome) 78%, transparent);
+  color: var(--text-muted);
   font-size: var(--text-xs);
   line-height: 1.2;
-  border: 1px solid color-mix(in srgb, var(--border-subtle, #334155) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
 }
 
 .spatial-studio__toolbar-group {
@@ -458,13 +458,13 @@
   gap: var(--space-1);
   padding: var(--space-1);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, #0f1216 82%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-subtle, #334155) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-overlay-chrome) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
 }
 
 .spatial-studio__tool--on {
-  box-shadow: inset 0 0 0 1px var(--accent-500, #3b82f6);
-  color: var(--text-brand, #93c5fd);
+  box-shadow: inset 0 0 0 1px var(--accent-500);
+  color: var(--text-brand);
 }
 
 .spatial-studio__plan-mini {
@@ -475,9 +475,9 @@
   width: min(220px, 42vw);
   padding: var(--space-2);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, #0f1216 88%, transparent);
-  border: 1px solid var(--border-subtle, #334155);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.35));
+  background: color-mix(in srgb, var(--surface-overlay-chrome) 88%, transparent);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
 }
 
 .spatial-studio__plan-mini-head {

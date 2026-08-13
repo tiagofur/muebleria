@@ -39,8 +39,8 @@
   padding: var(--space-1) var(--space-2);
   max-width: min(100%, 36rem);
   text-align: left;
-  color: color-mix(in srgb, var(--text-muted, #94a3b8) 90%, #fff);
-  background: color-mix(in srgb, #0f1216 72%, transparent);
+  color: color-mix(in srgb, var(--text-muted) 90%, #fff);
+  background: color-mix(in srgb, var(--surface-overlay-chrome) 72%, transparent);
   border-radius: var(--radius-sm);
   pointer-events: none;
   line-height: var(--leading-snug, 1.35);
