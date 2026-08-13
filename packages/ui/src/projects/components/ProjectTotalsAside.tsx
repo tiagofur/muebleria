@@ -157,7 +157,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
                   <div
                     className="project-material-summary__block"
                     data-testid="project-sheet-estimate"
-                    style={{ marginTop: '0.75rem' }}
+                    style={{ marginTop: 'var(--space-3)' }}
                   >
                     <p className="project-material-summary__label">
                       Pliegos estimados
@@ -193,7 +193,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
                 <div
                   className="project-material-summary__block"
                   data-testid="project-nesting-import"
-                  style={{ marginTop: '0.75rem' }}
+                  style={{ marginTop: 'var(--space-3)' }}
                 >
                   <p className="project-material-summary__label">
                     Nesting importado
@@ -226,7 +226,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
               ) : null}
 
               {canMutate && onImportNesting ? (
-                <div style={{ marginTop: '0.75rem' }}>
+                <div style={{ marginTop: 'var(--space-3)' }}>
                   <label
                     className="btn btn--small"
                     style={{ cursor: 'pointer' }}

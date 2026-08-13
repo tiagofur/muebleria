@@ -91,7 +91,7 @@ export function ModuleComponentAdderModal({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
+                  gap: 'var(--space-2)',
                   padding: '0.5rem 0.75rem',
                   cursor: 'pointer',
                   background:

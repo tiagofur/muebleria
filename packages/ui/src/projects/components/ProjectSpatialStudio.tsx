@@ -1983,7 +1983,7 @@ export function ProjectSpatialStudio({
                     </ul>
                   )}
                   {unplaced.length > 0 ? (
-                    <p className="spatial-studio__hint" style={{ marginTop: 8 }}>
+                    <p className="spatial-studio__hint" style={{ marginTop: 'var(--space-2)' }}>
                       Tip: doble click coloca en el muro activo
                       {activeWallId
                         ? ` (${layout.walls.find((w) => w.id === activeWallId)?.name ?? 'muro'})`

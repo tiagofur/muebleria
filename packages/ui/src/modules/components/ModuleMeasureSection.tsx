@@ -51,15 +51,15 @@ export function ModuleMeasureSection({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '0.75rem',
-          marginBottom: '0.5rem',
-          marginTop: '1rem',
+          gap: 'var(--space-3)',
+          marginBottom: 'var(--space-2)',
+          marginTop: 'var(--space-4)',
         }}
       >
         <h5 className="module-editor__section-title" style={{ margin: 0 }}>
           Más medidas para cotización ({presets.length})
         </h5>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           {canSeedFromBase && onSeedFromBase ? (
             <button
               type="button"
@@ -108,12 +108,12 @@ export function ModuleMeasureSection({
         <div
           className="structure-presets-list"
           data-testid="module-presets-list"
-          style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
         >
           {presets.map((preset, idx) => (
             <div
               key={preset.id}
-              style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}
+              style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}
               data-testid={`module-preset-item-${idx}`}
             >
               <input
