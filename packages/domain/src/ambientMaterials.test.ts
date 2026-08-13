@@ -167,20 +167,11 @@ describe('validateAmbientRefs — kitchen space floor/wall refs', () => {
     expect(errors).toEqual([]);
   });
 
-  it('errors when floorMaterialId resolves to a wall-type material (mismatch)', () => {
-    const errors = validateAmbientRefs([wallActive], [
-      space({ id: 'sp-1', floorMaterialId: 'amb-wall' }),
+  it('allows any active finish material to be assigned to floor, wall, or ceiling (universal finishes)', () => {
+    const errors = validateAmbientRefs([wallActive, floorActive], [
+      space({ id: 'sp-1', floorMaterialId: 'amb-wall', wallMaterialId: 'amb-floor', ceilingMaterialId: 'amb-wall' }),
     ]);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toBeInstanceOf(ValidationError);
-  });
-
-  it('errors when wallMaterialId resolves to a floor-type material (mismatch)', () => {
-    const errors = validateAmbientRefs([floorActive], [
-      space({ id: 'sp-1', wallMaterialId: 'amb-floor' }),
-    ]);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toBeInstanceOf(ValidationError);
+    expect(errors).toEqual([]);
   });
 
   it('errors when floorMaterialId points to an inactive ambient', () => {
@@ -200,9 +191,9 @@ describe('validateAmbientRefs — kitchen space floor/wall refs', () => {
   });
 
   it('collects multiple errors across spaces and refs', () => {
-    const errors = validateAmbientRefs([floorActive, wallActive], [
+    const errors = validateAmbientRefs([floorActive, wallActive, floorInactive], [
       space({ id: 'sp-1', floorMaterialId: 'unknown-a' }),
-      space({ id: 'sp-2', wallMaterialId: 'amb-floor', floorMaterialId: 'unknown-b' }),
+      space({ id: 'sp-2', wallMaterialId: 'amb-floor-off', floorMaterialId: 'unknown-b' }),
     ]);
     expect(errors).toHaveLength(3);
     for (const err of errors) {

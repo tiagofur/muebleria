@@ -53,9 +53,6 @@ describe('AmbientMaterialsCatalog', () => {
     );
     expect(screen.getByText('CERAMIC-BLACK')).toBeTruthy();
     expect(screen.getByText('PORCELAIN-WHITE')).toBeTruthy();
-    // surfaceType label rendered (Suelo / Pared)
-    expect(screen.getByText('Suelo')).toBeTruthy();
-    expect(screen.getByText('Pared')).toBeTruthy();
   });
 
   it('create flow opens modal and calls onCreate with the draft', () => {
@@ -163,25 +160,6 @@ describe('AmbientMaterialsCatalog', () => {
     expect(screen.getByText('CERAMIC-BLACK')).toBeTruthy();
   });
 
-  it('surfaceType select offers floor and wall options', () => {
-    render(
-      <AmbientMaterialsCatalog
-        materials={[]}
-        onCreate={vi.fn()}
-        onUpdate={vi.fn()}
-        onDeactivate={vi.fn()}
-        onReactivate={vi.fn()}
-        canMutate
-      />,
-    );
-    fireEvent.click(screen.getByTestId('ambient-material-create'));
-    const select = screen.getByLabelText('Tipo de superficie');
-    const options = (select as HTMLSelectElement).options;
-    const values = Array.from(options).map((o) => o.value);
-    expect(values).toContain('floor');
-    expect(values).toContain('wall');
-    expect(values).toContain('ceiling');
-  });
 
   it('filters materials by category and displays category path in table', () => {
     const catL1 = { id: 'c-wood', name: 'Maderas', sortOrder: 0 };

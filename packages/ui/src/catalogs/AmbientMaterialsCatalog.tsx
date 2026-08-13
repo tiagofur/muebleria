@@ -598,11 +598,6 @@ export function AmbientMaterialsCatalog({
         },
       },
       {
-        key: 'surfaceType',
-        header: 'Tipo',
-        render: (r) => SURFACE_TYPE_LABEL[r.surfaceType],
-      },
-      {
         key: 'status',
         header: 'Estado',
         render: (r) => <ActiveBadge active={r.active} />,
@@ -790,14 +785,6 @@ export function AmbientMaterialsCatalog({
                       </span>
                     </div>
                     <div className="catalog-row-detail__field">
-                      <span className="catalog-row-detail__label">
-                        Tipo de superficie
-                      </span>
-                      <span className="catalog-row-detail__value">
-                        {SURFACE_TYPE_LABEL[row.surfaceType]}
-                      </span>
-                    </div>
-                    <div className="catalog-row-detail__field">
                       <span className="catalog-row-detail__label">Estado</span>
                       <span className="catalog-row-detail__value">
                         <ActiveBadge active={row.active} />
@@ -981,24 +968,6 @@ export function AmbientMaterialsCatalog({
                 </select>
               </div>
             ) : null}
-
-            <div className="catalog-form__field">
-              <label htmlFor="amb-surface">Tipo de superficie</label>
-              <select
-                id="amb-surface"
-                value={draft.surfaceType}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    surfaceType: e.target.value as AmbientSurfaceType,
-                  })
-                }
-              >
-                <option value="floor">Suelo</option>
-                <option value="wall">Pared</option>
-                <option value="ceiling">Techo</option>
-              </select>
-            </div>
           </fieldset>
 
           <fieldset className="catalog-form__section">

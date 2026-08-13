@@ -360,12 +360,8 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
 }
 
 /**
- * Validate KitchenSpace ambient refs (spec #4148 / design #4151).
- *
- * For each space, `floorMaterialId` must resolve to an ACTIVE ambient material
- * with `surfaceType === 'floor'`; `wallMaterialId` must resolve to an ACTIVE
- * ambient material with `surfaceType === 'wall'`. Mismatched surfaceType,
- * inactive, or unknown id produce a ValidationError.
+ * Validates that ambient material references in KitchenSpaces point to valid, active
+ * ambient materials. Finishes are universal and can be applied to any surface or item.
  *
  * Returns a collected array (does NOT throw) so the project-validation path can
  * surface all ref errors at once. Separate from `validateCatalogEntityCodes`
@@ -381,7 +377,6 @@ export function validateAmbientRefs(
       const err = resolveAmbientRef(
         ambientMaterials,
         sp.floorMaterialId,
-        'floor',
         sp.id,
         'floorMaterialId',
       );
@@ -391,7 +386,6 @@ export function validateAmbientRefs(
       const err = resolveAmbientRef(
         ambientMaterials,
         sp.wallMaterialId,
-        'wall',
         sp.id,
         'wallMaterialId',
       );
@@ -401,7 +395,6 @@ export function validateAmbientRefs(
       const err = resolveAmbientRef(
         ambientMaterials,
         sp.ceilingMaterialId,
-        'wall',
         sp.id,
         'ceilingMaterialId',
       );
@@ -414,7 +407,6 @@ export function validateAmbientRefs(
 function resolveAmbientRef(
   ambientMaterials: readonly AmbientMaterial[],
   materialId: string,
-  expectedSurface: AmbientSurfaceType,
   spaceId: string,
   field: string,
 ): ValidationError | undefined {
@@ -429,18 +421,6 @@ function resolveAmbientRef(
     return new ValidationError(
       `Ambient material ref '${field}' points to an inactive material '${materialId}'`,
       { spaceId, field, materialId },
-    );
-  }
-  if (found.surfaceType !== expectedSurface) {
-    return new ValidationError(
-      `Ambient material ref '${field}' must resolve to a '${expectedSurface}' surface (got '${found.surfaceType}')`,
-      {
-        spaceId,
-        field,
-        materialId,
-        expectedSurfaceType: expectedSurface,
-        actualSurfaceType: found.surfaceType,
-      },
     );
   }
   return undefined;
