@@ -52,12 +52,12 @@ const sampleMaterials: AmbientMaterial[] = [
 ];
 
 describe('MaterialPalette', () => {
-  it('renders hint text and target surface switcher', () => {
+  it('renders target surface switcher and category comboboxes', () => {
     render(<MaterialPalette materials={sampleMaterials} categories={sampleCategories} />);
-    expect(screen.getByText(/Hacé clic en un acabado para aplicarlo/i)).toBeTruthy();
     expect(screen.getByTestId('material-palette-target-floor')).toBeTruthy();
     expect(screen.getByTestId('material-palette-target-wall')).toBeTruthy();
     expect(screen.getByTestId('material-palette-target-ceiling')).toBeTruthy();
+    expect(screen.getByTestId('material-palette-select-l1')).toBeTruthy();
   });
 
   it('groups materials by category taxonomy', () => {
@@ -73,14 +73,22 @@ describe('MaterialPalette', () => {
     expect(screen.getByText('Pinturas')).toBeTruthy();
   });
 
-  it('filters materials when category pill is clicked', () => {
+  it('filters materials and cascades subcategories when combobox is changed', () => {
     render(<MaterialPalette materials={sampleMaterials} categories={sampleCategories} />);
-    const woodPill = screen.getByTestId('material-palette-cat-cat-wood');
-    fireEvent.click(woodPill);
+    const l1Select = screen.getByTestId('material-palette-select-l1');
+    fireEvent.change(l1Select, { target: { value: 'cat-wood' } });
 
+    // Shows only wood materials (am-1)
     expect(screen.getByTestId('material-palette-chip-am-1')).toBeTruthy();
     expect(screen.queryByTestId('material-palette-chip-am-2')).toBeNull();
     expect(screen.queryByTestId('material-palette-chip-am-4')).toBeNull();
+
+    // Cascaded L2 select appears with children of 'cat-wood' (Robles)
+    const l2Select = screen.getByTestId('material-palette-select-l2');
+    expect(l2Select).toBeTruthy();
+
+    fireEvent.change(l2Select, { target: { value: 'cat-oak' } });
+    expect(screen.getByTestId('material-palette-chip-am-1')).toBeTruthy();
   });
 
   it('filters materials using search input', () => {

@@ -1,6 +1,7 @@
 /**
  * MaterialPalette — paleta de acabados 3D (texturas, pinturas, materiales) arrastrable al 3D.
- * Soporta jerarquía de categorías, filtrado, búsqueda y selector de superficie objetivo (Suelo/Pared/Techo).
+ * Soporta comboboxes en cascada para categorías (L1 › L2 › L3), búsqueda en tiempo real
+ * y selector compacto de superficie objetivo (Suelo/Pared/Techo).
  *
  * Drag source HTML5: cada material es draggable, codifica su id
  * en dataTransfer (PAINT_DRAG_MIME). El canvas del FurnitureScene3D es el drop
@@ -11,6 +12,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import type { AmbientCategory, AmbientMaterial } from '@muebles/domain';
 import {
   categoryPath,
+  childrenOf,
   filterAmbientMaterialsByCategory,
   UNCATEGORIZED_FILTER,
 } from '@muebles/domain';
@@ -54,12 +56,12 @@ function MaterialSwatch({
     return (
       <svg
         className="material-palette__swatch"
-        width={40}
-        height={40}
-        viewBox="0 0 40 40"
+        width={36}
+        height={36}
+        viewBox="0 0 36 36"
         aria-label={material.previewColor}
       >
-        <rect x={0} y={0} width={40} height={40} rx={6} fill={material.previewColor} />
+        <rect x={0} y={0} width={36} height={36} rx={5} fill={material.previewColor} />
       </svg>
     );
   }
@@ -103,7 +105,7 @@ function MaterialChip({
       onDragStart={handleDragStart}
       onClick={() => onSelect?.(material)}
       aria-pressed={active}
-      aria-label={`${material.name} (${material.code}) — hacer clic o arrastrar para aplicar`}
+      aria-label={`${material.name} (${material.code}) — clic o arrastrar para aplicar`}
       data-testid={testId}
     >
       <span className="material-palette__thumb">
@@ -118,17 +120,17 @@ function MaterialChip({
       {(isFloor || isWall || isCeiling) && (
         <span className="material-palette__badges">
           {isFloor && (
-            <span className="material-palette__badge material-palette__badge--floor" title="Aplicado al Suelo">
+            <span className="material-palette__badge material-palette__badge--floor" title="Aplicado en Suelo">
               Piso
             </span>
           )}
           {isWall && (
-            <span className="material-palette__badge material-palette__badge--wall" title="Aplicado a Pared">
+            <span className="material-palette__badge material-palette__badge--wall" title="Aplicado en Pared">
               Pared
             </span>
           )}
           {isCeiling && (
-            <span className="material-palette__badge material-palette__badge--ceiling" title="Aplicado al Techo">
+            <span className="material-palette__badge material-palette__badge--ceiling" title="Aplicado en Techo">
               Techo
             </span>
           )}
@@ -149,7 +151,9 @@ export function MaterialPalette({
   onSelectMaterial,
 }: MaterialPaletteProps): ReactNode {
   const [targetSurface, setTargetSurface] = useState<TargetSurface>('floor');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  const [selectedL1Id, setSelectedL1Id] = useState<string>('');
+  const [selectedL2Id, setSelectedL2Id] = useState<string>('');
+  const [selectedL3Id, setSelectedL3Id] = useState<string>('');
   const [search, setSearch] = useState('');
 
   const activeMaterials = useMemo(
@@ -157,37 +161,41 @@ export function MaterialPalette({
     [materials],
   );
 
-  // Category filter options
-  const categoryPills = useMemo(() => {
-    if (categories.length === 0) return [];
-    const rootCats = categories.filter((c) => !c.parentId);
-    const pills: { id: string | null; name: string; count: number }[] = [
-      { id: null, name: 'Todos', count: activeMaterials.length },
-    ];
-    for (const cat of rootCats) {
-      const count = filterAmbientMaterialsByCategory(activeMaterials, cat.id, categories).length;
-      pills.push({ id: cat.id, name: cat.name, count });
-    }
-    const uncategorizedCount = filterAmbientMaterialsByCategory(
-      activeMaterials,
-      UNCATEGORIZED_FILTER,
-      categories,
-    ).length;
-    if (uncategorizedCount > 0) {
-      pills.push({
-        id: UNCATEGORIZED_FILTER,
-        name: 'Sin categoría',
-        count: uncategorizedCount,
-      });
-    }
-    return pills;
-  }, [categories, activeMaterials]);
+  // Level 1 options (roots)
+  const l1Nodes = useMemo(() => childrenOf(categories, undefined), [categories]);
+
+  // Level 2 options (children of selected L1)
+  const l2Nodes = useMemo(
+    () => (selectedL1Id && selectedL1Id !== UNCATEGORIZED_FILTER ? childrenOf(categories, selectedL1Id) : []),
+    [categories, selectedL1Id],
+  );
+
+  // Level 3 options (children of selected L2)
+  const l3Nodes = useMemo(
+    () => (selectedL2Id ? childrenOf(categories, selectedL2Id) : []),
+    [categories, selectedL2Id],
+  );
+
+  // Count uncategorized
+  const uncategorizedCount = useMemo(
+    () => filterAmbientMaterialsByCategory(activeMaterials, UNCATEGORIZED_FILTER, categories).length,
+    [activeMaterials, categories],
+  );
+
+  // Active filter ID (L3 > L2 > L1 > null)
+  const effectiveFilterId = useMemo(() => {
+    if (selectedL1Id === UNCATEGORIZED_FILTER) return UNCATEGORIZED_FILTER;
+    if (selectedL3Id) return selectedL3Id;
+    if (selectedL2Id) return selectedL2Id;
+    if (selectedL1Id) return selectedL1Id;
+    return null;
+  }, [selectedL1Id, selectedL2Id, selectedL3Id]);
 
   // Filtered materials
   const filteredMaterials = useMemo(() => {
     let list = activeMaterials;
-    if (selectedCategoryFilter !== null) {
-      list = filterAmbientMaterialsByCategory(list, selectedCategoryFilter, categories);
+    if (effectiveFilterId !== null) {
+      list = filterAmbientMaterialsByCategory(list, effectiveFilterId, categories);
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -198,11 +206,11 @@ export function MaterialPalette({
       );
     }
     return list;
-  }, [activeMaterials, selectedCategoryFilter, categories, search]);
+  }, [activeMaterials, effectiveFilterId, categories, search]);
 
-  // Groups by Category
+  // Grouped sections
   const groupedSections = useMemo(() => {
-    if (categories.length === 0 || selectedCategoryFilter !== null) {
+    if (categories.length === 0 || effectiveFilterId !== null) {
       return [{ title: null, items: filteredMaterials }];
     }
 
@@ -229,7 +237,22 @@ export function MaterialPalette({
       result.push({ title: 'Sin categoría', items: uncategorized });
     }
     return result;
-  }, [filteredMaterials, categories, selectedCategoryFilter]);
+  }, [filteredMaterials, categories, effectiveFilterId]);
+
+  const handleL1Change = (val: string) => {
+    setSelectedL1Id(val);
+    setSelectedL2Id('');
+    setSelectedL3Id('');
+  };
+
+  const handleL2Change = (val: string) => {
+    setSelectedL2Id(val);
+    setSelectedL3Id('');
+  };
+
+  const handleL3Change = (val: string) => {
+    setSelectedL3Id(val);
+  };
 
   const handleChipSelect = (material: AmbientMaterial) => {
     onSelectMaterial?.(material, targetSurface);
@@ -237,15 +260,15 @@ export function MaterialPalette({
 
   return (
     <div className="material-palette" data-testid={testId}>
-      {/* Target surface segmented buttons */}
-      <div className="material-palette__target-bar">
-        <span className="material-palette__target-label">Superficie activa para aplicar:</span>
-        <div className="material-palette__target-segmented" role="radiogroup" aria-label="Superficie objetivo">
+      {/* Compact Quick Target Selector */}
+      <div className="material-palette__target-strip">
+        <span className="material-palette__target-prompt">Aplicar con clic a:</span>
+        <div className="material-palette__target-pills" role="radiogroup" aria-label="Superficie objetivo">
           <button
             type="button"
             className={
-              'material-palette__target-btn' +
-              (targetSurface === 'floor' ? ' material-palette__target-btn--active' : '')
+              'material-palette__target-pill' +
+              (targetSurface === 'floor' ? ' material-palette__target-pill--active' : '')
             }
             onClick={() => setTargetSurface('floor')}
             aria-pressed={targetSurface === 'floor'}
@@ -256,8 +279,8 @@ export function MaterialPalette({
           <button
             type="button"
             className={
-              'material-palette__target-btn' +
-              (targetSurface === 'wall' ? ' material-palette__target-btn--active' : '')
+              'material-palette__target-pill' +
+              (targetSurface === 'wall' ? ' material-palette__target-pill--active' : '')
             }
             onClick={() => setTargetSurface('wall')}
             aria-pressed={targetSurface === 'wall'}
@@ -268,8 +291,8 @@ export function MaterialPalette({
           <button
             type="button"
             className={
-              'material-palette__target-btn' +
-              (targetSurface === 'ceiling' ? ' material-palette__target-btn--active' : '')
+              'material-palette__target-pill' +
+              (targetSurface === 'ceiling' ? ' material-palette__target-pill--active' : '')
             }
             onClick={() => setTargetSurface('ceiling')}
             aria-pressed={targetSurface === 'ceiling'}
@@ -280,39 +303,90 @@ export function MaterialPalette({
         </div>
       </div>
 
-      <p className="material-palette__hint">
-        Hacé clic en un acabado para aplicarlo al {targetSurface === 'floor' ? 'suelo' : targetSurface === 'wall' ? 'muro' : 'techo'}, o arrastralo al 3D.
-      </p>
-
-      {/* Search Input */}
-      {materials.length > 3 ? (
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Buscar acabado por nombre o código..."
-          aria-label="Buscar acabados"
-        />
-      ) : null}
-
-      {/* Category Pills Filter */}
-      {categoryPills.length > 2 ? (
-        <div className="material-palette__categories" role="tablist" aria-label="Filtrar por categoría">
-          {categoryPills.map((pill) => (
-            <button
-              key={pill.id ?? 'all'}
-              type="button"
-              className={
-                'material-palette__cat-pill' +
-                (selectedCategoryFilter === pill.id ? ' material-palette__cat-pill--active' : '')
-              }
-              onClick={() => setSelectedCategoryFilter(pill.id)}
-              data-testid={`${testId}-cat-${pill.id ?? 'all'}`}
+      {/* Cascading Category Comboboxes */}
+      {categories.length > 0 ? (
+        <div className="material-palette__filters-box">
+          {/* L1 Category Combobox */}
+          <div className="material-palette__filter-row">
+            <select
+              className="select select--sm material-palette__select"
+              value={selectedL1Id}
+              onChange={(e) => handleL1Change(e.target.value)}
+              aria-label="Categoría principal"
+              data-testid={`${testId}-select-l1`}
             >
-              {pill.name} ({pill.count})
-            </button>
-          ))}
+              <option value="">Todas las categorías ({activeMaterials.length})</option>
+              {l1Nodes.map((cat) => {
+                const count = filterAmbientMaterialsByCategory(activeMaterials, cat.id, categories).length;
+                return (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({count})
+                  </option>
+                );
+              })}
+              {uncategorizedCount > 0 ? (
+                <option value={UNCATEGORIZED_FILTER}>
+                  Sin categoría ({uncategorizedCount})
+                </option>
+              ) : null}
+            </select>
+          </div>
+
+          {/* L2 Subcategory Combobox (if L1 selected and has children) */}
+          {l2Nodes.length > 0 ? (
+            <div className="material-palette__filter-row">
+              <select
+                className="select select--sm material-palette__select"
+                value={selectedL2Id}
+                onChange={(e) => handleL2Change(e.target.value)}
+                aria-label="Subcategoría nivel 2"
+                data-testid={`${testId}-select-l2`}
+              >
+                <option value="">Todas las subcategorías</option>
+                {l2Nodes.map((sub) => {
+                  const count = filterAmbientMaterialsByCategory(activeMaterials, sub.id, categories).length;
+                  return (
+                    <option key={sub.id} value={sub.id}>
+                      {sub.name} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          ) : null}
+
+          {/* L3 Subcategory Combobox (if L2 selected and has children) */}
+          {l3Nodes.length > 0 ? (
+            <div className="material-palette__filter-row">
+              <select
+                className="select select--sm material-palette__select"
+                value={selectedL3Id}
+                onChange={(e) => handleL3Change(e.target.value)}
+                aria-label="Subcategoría nivel 3"
+                data-testid={`${testId}-select-l3`}
+              >
+                <option value="">Todas</option>
+                {l3Nodes.map((sub3) => {
+                  const count = filterAmbientMaterialsByCategory(activeMaterials, sub3.id, categories).length;
+                  return (
+                    <option key={sub3.id} value={sub3.id}>
+                      {sub3.name} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          ) : null}
         </div>
       ) : null}
+
+      {/* Search Input */}
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Buscar acabado por nombre o código..."
+        aria-label="Buscar acabados"
+      />
 
       {materials.length === 0 && onOpenCatalog ? (
         <div className="material-palette__empty-box">

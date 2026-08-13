@@ -13,89 +13,83 @@
   line-height: 1.4;
 }
 
-/* Target Surface Switcher */
-.material-palette__target-bar {
+/* Compact Quick Target Selector */
+.material-palette__target-strip {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
 
-.material-palette__target-label {
+.material-palette__target-prompt {
   font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-medium, 500);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.material-palette__target-segmented {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-1);
+.material-palette__target-pills {
+  display: flex;
+  gap: 2px;
   background: var(--surface-input);
   padding: 2px;
   border-radius: var(--radius-sm);
 }
 
-.material-palette__target-btn {
-  padding: var(--space-1) var(--space-2);
+.material-palette__target-pill {
+  padding: 2px var(--space-2);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs, 4px);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-medium, 500);
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);
-  text-align: center;
 }
 
-.material-palette__target-btn:hover {
+.material-palette__target-pill:hover {
   color: var(--text-primary);
   background: var(--surface-hover);
 }
 
-.material-palette__target-btn--active {
+.material-palette__target-pill--active {
   background: var(--surface-card);
   color: var(--brand-600);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-semibold, 600);
   box-shadow: var(--shadow-sm);
 }
 
-/* Category Filter Pills */
-.material-palette__categories {
+/* Cascading Category Filters Box */
+.material-palette__filters-box {
   display: flex;
+  flex-direction: column;
   gap: var(--space-1);
-  overflow-x: auto;
-  padding-bottom: var(--space-1);
-  scrollbar-width: thin;
 }
 
-.material-palette__cat-pill {
-  padding: 2px var(--space-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
-  background: var(--surface-card);
-  color: var(--text-secondary);
+.material-palette__filter-row {
+  width: 100%;
+}
+
+.material-palette__select {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
   font-size: var(--text-xs);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.material-palette__cat-pill:hover {
-  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
   color: var(--text-primary);
-  border-color: var(--border-default);
+  cursor: pointer;
 }
 
-.material-palette__cat-pill--active {
-  background: var(--brand-500);
-  color: #fff;
+.material-palette__select:focus-visible {
+  outline: none;
   border-color: var(--brand-500);
-  font-weight: var(--weight-medium);
+  box-shadow: var(--shadow-focus);
 }
 
 .material-palette__group {

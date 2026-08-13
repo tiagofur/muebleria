@@ -2311,6 +2311,7 @@ function AppContent({
           edges={edges}
           hardware={hardware}
           ambientMaterials={ambientMaterials}
+          ambientCategories={ambientCategories}
           catalogStructures={structures}
           catalogComponents={components}
           catalogAgregados={agregados}

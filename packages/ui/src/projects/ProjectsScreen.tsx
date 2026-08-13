@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AmbientCategory,
   AmbientMaterial,
   Component,
   Customer,
@@ -88,6 +89,8 @@ export interface ProjectsScreenProps {
   readonly hardware: readonly Hardware[];
   /** Ambient materials for 3D room scenes (floor/wall textures). */
   readonly ambientMaterials?: readonly AmbientMaterial[];
+  /** Hierarchical ambient categories for 3D finishes palette. */
+  readonly ambientCategories?: readonly AmbientCategory[];
   /** Catalog customers for name lookup on cards / detail / search. */
   readonly customers?: readonly Customer[];
   /** F034: admin can pick portfolio owner on create/edit. */
@@ -296,6 +299,7 @@ export function ProjectsScreen({
   edges,
   hardware,
   ambientMaterials = [],
+  ambientCategories = [],
   catalogComponents = [],
   catalogStructures = [],
   catalogAgregados = [],
@@ -427,6 +431,7 @@ export function ProjectsScreen({
       hardware,
       optionGroups,
       ambientMaterials,
+      ambientCategories,
       // Thread agregados so resolveProject3DPreview → resolveBom can expand
       // module.agregados / structure.agregados into board parts.
       agregados: catalogAgregados,
@@ -440,6 +445,7 @@ export function ProjectsScreen({
       hardware,
       optionGroups,
       ambientMaterials,
+      ambientCategories,
       catalogAgregados,
     ],
   );
