@@ -436,7 +436,7 @@ describe('@muebles/web F008 module editor wiring', () => {
 describe('@muebles/web F009 quotation / projects wiring', () => {
   it('seed includes demo plantilla project; UI can still create drafts (PRJ-01)', () => {
     const ws = createSeedWorkspace();
-    expect(ws.projects).toHaveLength(1);
+    expect(ws.projects.length).toBeGreaterThanOrEqual(1);
     expect(ws.projects[0]?.name).toBe('Demo plantilla');
     expect(ws.projects[0]?.items).toHaveLength(1);
     const draft = emptyProjectDraft();

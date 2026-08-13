@@ -1,0 +1,273 @@
+/**
+ * ZplLabelPreviewModal CSS - Clean design system styling with HSL color tokens.
+ */
+
+.zpl-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.zpl-modal {
+  width: 100%;
+  max-width: 680px;
+  background-color: var(--color-surface, #ffffff);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+
+.zpl-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--color-surface-subtle, #f8fafc);
+}
+
+.zpl-modal__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+}
+
+.zpl-modal__close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: var(--color-text-secondary, #64748b);
+  border-radius: var(--radius-sm, 4px);
+
+  &:hover {
+    color: var(--color-text, #0f172a);
+    background-color: var(--color-surface-hover, #e2e8f0);
+  }
+}
+
+.zpl-modal__body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.zpl-modal__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-surface-subtle, #f8fafc);
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+
+.zpl-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #475569);
+
+  select {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.875rem;
+    border-radius: var(--radius-sm, 6px);
+    border: 1px solid var(--color-border, #cbd5e1);
+    background-color: var(--color-surface, #ffffff);
+    color: var(--color-text, #0f172a);
+  }
+}
+
+.zpl-modal__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text, #334155);
+  margin-top: auto;
+  margin-bottom: 0.375rem;
+  cursor: pointer;
+}
+
+.zpl-modal__toggle-code {
+  margin-left: auto;
+  margin-top: auto;
+  margin-bottom: 0.25rem;
+  background: none;
+  border: none;
+  font-size: 0.8125rem;
+  color: var(--color-primary, #2563eb);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--color-primary-hover, #1d4ed8);
+  }
+}
+
+.zpl-modal__preview-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+  background-color: #f1f5f9;
+  border-radius: var(--radius-md, 8px);
+  min-height: 220px;
+}
+
+.zpl-card {
+  background-color: #ffffff;
+  border-radius: 4px;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+}
+
+.zpl-card--50x25 {
+  padding: 0.5rem;
+}
+
+.zpl-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  flex: 1;
+  overflow: hidden;
+}
+
+.zpl-card__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.zpl-card__part-code {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: #0f172a;
+}
+
+.zpl-card__desc {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zpl-card__module,
+.zpl-card__mat,
+.zpl-card__edge {
+  font-size: 0.8125rem;
+  color: #475569;
+}
+
+.zpl-card__dims {
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+
+.zpl-card__qr-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-left: 0.75rem;
+  border-left: 1px dashed #cbd5e1;
+  color: #1e293b;
+}
+
+.zpl-card__qr-sub {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+.zpl-modal__code-view {
+  background-color: #0f172a;
+  color: #38bdf8;
+  border-radius: var(--radius-md, 8px);
+  padding: 1rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.zpl-modal__code {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.zpl-modal__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.zpl-modal__pag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--color-border, #cbd5e1);
+  background-color: var(--color-surface, #ffffff);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.zpl-modal__pag-info {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #475569);
+}
+
+.zpl-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--color-surface-subtle, #f8fafc);
+}
+
+.zpl-modal__total-count {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.zpl-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}

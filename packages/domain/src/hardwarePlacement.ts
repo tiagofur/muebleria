@@ -262,3 +262,36 @@ export function resolveHardwarePlacement(
     },
   };
 }
+
+/**
+ * Snap a value (mm or degrees) to the nearest step grid (default 5mm or 5°).
+ * If step <= 0 or non-finite, returns value rounded to 2 decimals.
+ */
+export function snapValue(value: number, step = 5): number {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(step) || step <= 0) return Math.round(value * 100) / 100;
+  return Math.round(value / step) * step;
+}
+
+/**
+ * Convert a 3D movement delta in board-local space to face-relative millimeter deltas (dxMm, dyMm).
+ */
+export function convertWorldDeltaToFaceMm(
+  delta: readonly [number, number, number],
+  anchorFace: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom',
+): { readonly dxMm: number; readonly dyMm: number } {
+  const [dx, dy, dz] = delta;
+  switch (anchorFace) {
+    case 'front':
+    case 'back':
+      return { dxMm: dx, dyMm: dz };
+    case 'left':
+    case 'right':
+      return { dxMm: dy, dyMm: dz };
+    case 'top':
+    case 'bottom':
+      return { dxMm: dx, dyMm: dy };
+    default:
+      return { dxMm: dx, dyMm: dy };
+  }
+}

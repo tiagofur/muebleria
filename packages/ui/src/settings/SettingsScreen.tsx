@@ -15,12 +15,14 @@ export type SettingsScreenProps = {
   readonly settings: WorkshopSettings;
   readonly onSave: (settings: WorkshopSettings) => void;
   readonly saving?: boolean;
+  readonly onOpenOnboardingTour?: () => void;
 };
 
 export function SettingsScreen({
   settings,
   onSave,
   saving = false,
+  onOpenOnboardingTour,
 }: SettingsScreenProps): ReactNode {
   const [margin, setMargin] = useState(String(settings.defaultMarginFactor));
   const [labor, setLabor] = useState(String(settings.defaultLaborFixedCost));
@@ -200,6 +202,27 @@ export function SettingsScreen({
             </span>
           </div>
         </fieldset>
+
+        {onOpenOnboardingTour ? (
+          <fieldset className="catalog-form__section">
+            <legend className="catalog-form__section-title">Ayuda & Tour</legend>
+            <div className="catalog-form__field">
+              <p className="settings-lead settings-lead--inline">
+                Revive las novedades del catálogo LatAm, despiece 3D y exportaciones a taller.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={onOpenOnboardingTour}
+                  data-testid="settings-open-onboarding-tour"
+                >
+                  Ver tour de bienvenida
+                </button>
+              </div>
+            </div>
+          </fieldset>
+        ) : null}
 
         <div className="settings-actions">
           <button

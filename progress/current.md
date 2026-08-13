@@ -110,8 +110,103 @@ browser (mismo patrón que el resto del 3D del repo).
 - Drag material de piso sobre un muro → no aplica (surfaceType mismatch).
 - Estos 3 casos requieren browser real (WebGL), no cubiertos por jsdom.
 
-## Validación
+## Hecho — F070 Editor de Placement 3D de Herrajes con Gizmo (Fase B)
 
-- `pnpm --filter @muebles/ui test`: 662/662 ✓
+Implementado editor de placement 3D de herrajes con Gizmo interactivo R3F e integración en el inspector colapsable:
+
+- `packages/domain/src/hardwarePlacement.ts`:
+  - `snapValue(value, step)` para redondear milímetros y grados a la grilla de ajuste (default 5mm / 5°).
+  - `convertWorldDeltaToFaceMm(delta, anchorFace)` para proyectar desplazamientos del puntero en 3D al plano 2D de la cara de la pieza.
+  - Tests unitarios en `hardwarePlacementGizmo.test.ts` (458/458 domain tests pasando ✓).
+- `packages/ui/src/preview3d/HardwarePlacementGizmo.tsx`:
+  - Componente 3D (R3F) con handles de traslación X/Y y anillo de rotación Z.
+  - Funciones puras de cálculo de posición y rotación (`computeNextPosition`, `computeNextRotation`).
+  - Tests en `HardwarePlacementGizmo.test.tsx`.
+- `packages/ui/src/preview3d/HardwareMesh.tsx`:
+  - Highlighting de selección (`#3b82f6`) y soporte para handlers de selección/modificación.
+- `packages/ui/src/preview3d/PartInspector.tsx`:
+  - Sección **Herrajes** del inspector colapsable (F066) con inputs numéricos para editar X (mm), Y (mm) y Rot Z (°).
+- `packages/ui/src/preview3d/FurnitureScene3D.tsx`:
+  - Conexión de selección de herrajes y callbacks de modificación de placement en la escena.
+
+## Hecho — F071 Etiquetas Zebra/ZPL para Impresoras Térmicas (Fase C)
+
+Implementado generador ZPL II y modal de vista previa e impresión de etiquetas térmicas:
+
+- `packages/domain/src/zplLabels.ts`:
+  - `pieceToZpl` y `pieceBatchToZpl`: generador ZPL II puro con 3 presets de tamaño (`100x50` mm estándar, `100x150` mm grande, `50x25` mm compacta) y conmutación 203/300 DPI.
+  - Sanitización de texto ZPL (`sanitizeZplText`) e integración con el QR payload nativo (`^BQ`).
+  - Unit tests en `zplLabelExport.test.ts`.
+- `packages/excel/src/zplLabelExport.ts`:
+  - Re-exportación de helpers ZPL para compatibilidad del paquete de exportaciones.
+- `packages/ui/src/production/ZplLabelPreviewModal.tsx` & `zplLabelPreviewModal.css`:
+  - Modal interactivo con selector de preset, DPI (203/300), toggle de bordes, visual card mock, alternador de código ZPL raw, paginación de piezas y botones de descarga batch `.zpl` e impresión.
+  - Unit tests en `ZplLabelPreviewModal.test.tsx`.
+- `packages/ui/src/production/ProductionOrderOptimizationPanel.tsx`:
+  - Botón **"Etiquetas ZPL (Zebra)"** al lado del export de Optimizer.
+
+## Hecho — F072 PDF Preview de Corte Visual para Cortes Manuales (Fase C)
+
+Implementado generador PDF vectorial de plano de corte visual para carpinterías sin CNC:
+
+- `packages/excel/src/cutPreviewPdfExport.ts`:
+  - `cutPreviewPdfExport` y `packCutRowsIntoSheets`: empaquetado LTR/TTB de piezas con margen de disco configurable (`sawKerfMm`, default 4mm) y paginación automática en múltiples tableros estándar (default 2440×1830 mm).
+  - Título del proyecto, dimensiones del tablero, índice de pliego (`Tablero X de N`), rectángulos proporcionales etiquetados con código + dimensiones, y bloque de leyenda con área total en $m²$ y material dominante.
+  - Pruebas unitarias en `cutPreviewPdfExport.test.ts` (48/48 excel tests pasando ✓).
+- `packages/excel/src/index.ts`:
+  - Re-exportación de `cutPreviewPdfExport`, `packCutRowsIntoSheets` y sus tipos.
+- `packages/ui/src/production/ProductionOrderOptimizationPanel.tsx`:
+  - Botón **"Preview Corte Visual (PDF)"** en la sección de plan de corte oficial de producción.
+- `apps/web/src/exportProductionPack.ts`:
+  - Integrado el archivo `preview_corte_visual_{baseName}.pdf` dentro del pack ZIP de producción.
+
+## Hecho — F073 CSV de Plan de Corte Editable y Configurable (Fase C)
+
+Implementado exportador de plano de corte en formato CSV configurable con presets para optimizadores de terceros:
+
+- `packages/domain/src/cutListConfigurableCsv.ts`:
+  - `cutListConfigurableCsvExport`: formateador puro de CSV con selección de delimitador (`;`, `,`, `\t`), toggle de encabezados y filtro por material.
+  - Presets preconfigurados para optimizadores industriales: **Estándar**, **Lepton Optimizer**, **CorteCerto** y **OptiNest**.
+- `packages/excel/src/cutListConfigurableCsvExport.ts` & `cutListConfigurableCsvExport.test.ts`:
+  - Re-exportación para la capa de exportaciones y pruebas unitarias (56/56 excel tests pasando ✓).
+- `packages/ui/src/production/CsvExportConfigModal.tsx` & `csvExportConfigModal.css`:
+  - Modal interactivo para configurar delimitador, preset, material y visualización previa en tiempo real del archivo `.csv` antes de descargar.
+  - Pruebas unitarias en `CsvExportConfigModal.test.tsx` (742/742 ui tests pasando ✓).
+- `packages/ui/src/production/ProductionOrderOptimizationPanel.tsx`:
+  - Botón **"CSV Configurable"** en la sección del plan de corte de producción.
+
+## Hecho — F076 Onboarding + Datos Semilla Demo Comercial (Fase D)
+
+Implementado sistema completo de onboarding interactivo y catálogo ampliado de demostración para talleres de Latinoamérica:
+
+- `packages/domain/src/__fixtures__/cocinaLopezDemo.ts`:
+  - Fixture `createCocinaLopezDemoProject()` con despiece y disposición espacial 3D de cocina en L completa (4 bajomesadas, 4 alacenas, isla central, torre despensa, zócalo) y ambientación de piso porcelanato y muros blanco marfil.
+  - Catálogo ampliado LatAm (`seedCatalogExpandedLatAm`) con 17+ módulos paramétricos comunes en la región (esquineros L, cajoneras 3C, alacena campana, torre horno).
+  - Pruebas unitarias en `cocinaLopezDemo.test.ts` (465/465 domain tests pasando ✓).
+- `packages/storage/src/seed.ts`:
+  - `createSeedWorkspace()` actualizado para incluir el proyecto de demostración "Cocina López" y el catálogo expandido LatAm.
+  - Pruebas unitarias de almacenamiento en `seed.test.ts` y `workspace.test.ts` (78/78 storage tests pasando ✓).
+- `packages/ui/src/onboarding/OnboardingTourModal.tsx` & `onboardingTourModal.css`:
+  - Modal overlay interactivo de 3 pasos (1: Experiencia 3D Instantánea, 2: Catálogo de Ingeniería LatAm, 3: Exportación a Producción).
+  - Control de avance, omitir, checkbox "No volver a mostrar en el inicio" persistido en `localStorage` (`muebles_has_seen_onboarding_v1`) y botón para cargar el demo 3D al finalizar.
+  - Pruebas unitarias en `OnboardingTourModal.test.tsx` (748/748 ui tests pasando ✓).
+- `packages/ui/src/settings/SettingsScreen.tsx`:
+  - Sección **Ayuda & Tour** con botón *"Ver tour de bienvenida"* para re-activar el onboarding en cualquier momento.
+- `apps/web/src/App.tsx`:
+  - Integración en la shell principal con apertura automática en primer uso y manejo de la carga de la demo 3D.
+  - Pruebas de integración en `App.test.ts` (232/232 web tests pasando ✓).
+
+## Validación monorepo
+
+- `pnpm --filter @muebles/domain test`: 465/465 ✓
+- `pnpm --filter @muebles/storage test`: 78/78 ✓
+- `pnpm --filter @muebles/excel test`: 60/60 ✓
+- `pnpm --filter @muebles/ui test`: 748/748 ✓
+- `pnpm --filter @muebles/web test`: 232/232 ✓
 - `pnpm typecheck`: 6 workspaces ✓
 - `./init.sh`: verde completo ✓
+
+
+
+
+

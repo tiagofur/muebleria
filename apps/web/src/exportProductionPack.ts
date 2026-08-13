@@ -25,6 +25,7 @@ import {
   productionDespiecePdfExport,
   productionCoverPdfExport,
   assemblySheetsPdfExport,
+  cutPreviewPdfExport,
 } from '@muebles/excel';
 
 export type ExportProductionPackResult =
@@ -148,7 +149,20 @@ export async function buildProductionPackExport(
       );
     }
 
-    // 8. Assembly sheets (PROD-4.1) best-effort
+    // 8. Visual Cut Layout PDF for manual cutting (PROD-4.2 / F072)
+    try {
+      const cutPreviewBuffer = await cutPreviewPdfExport({
+        projectId: project.id,
+        projectName: project.name,
+        customerName,
+        cutRows,
+      });
+      zip.file(`preview_corte_visual_${baseName}.pdf`, toUint8Array(cutPreviewBuffer));
+    } catch {
+      /* omit if cut rows empty / resolve error */
+    }
+
+    // 9. Assembly sheets (PROD-4.1) best-effort
     try {
       const assemblyBuffer = await assemblySheetsPdfExport({
         project,

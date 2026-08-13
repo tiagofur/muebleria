@@ -301,3 +301,12 @@ export {
   type Point3D,
   type IsoFace,
 } from './editor';
+
+// --- Onboarding Tour (F076) ---
+export {
+  OnboardingTourModal,
+  getHasSeenOnboardingTour,
+  setHasSeenOnboardingTour,
+  type OnboardingTourModalProps,
+} from './onboarding/OnboardingTourModal';
+

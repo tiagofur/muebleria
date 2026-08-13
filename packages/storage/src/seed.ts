@@ -4,12 +4,13 @@
  */
 
 import type { Workspace } from '@muebles/domain';
-import { DEFAULT_WORKSHOP_SETTINGS } from '@muebles/domain';
 import {
+  DEFAULT_WORKSHOP_SETTINGS,
+  createCocinaLopezDemoProject,
   createPlantillaDemoProject,
-  plantillaCatalogWithModules,
+  seedCatalogExpandedLatAm,
   seedCocinaEstandarTemplate,
-} from '@muebles/domain/fixtures';
+} from '@muebles/domain';
 
 /**
  * Persistence format version (NFR-10). Bump when migrations are required.
@@ -27,15 +28,17 @@ import {
 export const SCHEMA_VERSION = 3 as const;
 
 /**
- * Plantilla catalogs, MOD-GAB-01 + MOD-CAJ-01 + composed + alacena + despensa,
- * a draft demo quotation (MOD-GAB-01 × 1 with plantilla option choices), and a
- * reusable "Cocina estándar 3 m" template (#110) for first-open UX (CAT-06).
+ * Seed workspace with expanded LatAm catalog (17 modules), demo L-shaped kitchen project
+ * ("Cocina López") pre-positioned in 3D with ambient floor/wall materials, plus golden demo project.
  */
 export function createSeedWorkspace(): Workspace {
   return {
     schemaVersion: SCHEMA_VERSION,
-    catalog: plantillaCatalogWithModules,
-    projects: [createPlantillaDemoProject()],
+    catalog: seedCatalogExpandedLatAm,
+    projects: [
+      createPlantillaDemoProject(),
+      createCocinaLopezDemoProject(),
+    ],
     projectTemplates: [seedCocinaEstandarTemplate],
     settings: { ...DEFAULT_WORKSHOP_SETTINGS },
   };

@@ -12,20 +12,25 @@ import type {
 } from '@muebles/domain';
 import {
   estimateBoardSheets,
+  generatePartDrillingData,
   generateProjectMaterialSummary,
   nestingImportFromRows,
   parseNestingImportCsv,
   type Catalog,
   type NestingImportResult,
 } from '@muebles/domain';
-import { FileSpreadsheet } from 'lucide-react';
+import { Binary, FileSpreadsheet, FileText, QrCode } from 'lucide-react';
+import type { PieceLabel } from '@muebles/domain';
 import { ProductionBoardView } from './ProductionBoardView';
+import { ZplLabelPreviewModal } from './ZplLabelPreviewModal';
+import { CsvExportConfigModal } from './CsvExportConfigModal';
 
 export type ProductionOrderOptimizationPanelProps = {
   readonly project: Project;
   readonly catalog: Catalog | null;
   readonly cutRows: readonly ProductionCutRow[] | null;
   readonly onExportOptimizer?: () => void | Promise<void>;
+  readonly onExportCutPreviewPdf?: () => void | Promise<void>;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly exportBusy?: boolean;
   /** When true, production role may import nesting (mutates project). */
@@ -84,12 +89,15 @@ export function ProductionOrderOptimizationPanel({
   catalog,
   cutRows,
   onExportOptimizer,
+  onExportCutPreviewPdf,
   onImportNesting,
   exportBusy = false,
   canImportNesting = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
   /** null = use catalog waste; number = what-if override (PROD-4.3). */
   const [wasteWhatIf, setWasteWhatIf] = useState<number | null>(null);
+  const [isZplModalOpen, setIsZplModalOpen] = useState(false);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   const summary = useMemo(() => {
     if (!catalog) return null;
@@ -113,6 +121,41 @@ export function ProductionOrderOptimizationPanel({
     () => (cutRows ? groupCutRowsByMaterial(cutRows) : new Map()),
     [cutRows],
   );
+
+  const pieceLabels = useMemo<PieceLabel[]>(() => {
+    if (!cutRows) return [];
+    return cutRows.map((r) => {
+      const l1 = Boolean(r.L1);
+      const l2 = Boolean(r.L2);
+      const w1 = Boolean(r.W1);
+      const w2 = Boolean(r.W2);
+      const sides =
+        [
+          l1 ? 'L1' : null,
+          l2 ? 'L2' : null,
+          w1 ? 'W1' : null,
+          w2 ? 'W2' : null,
+        ]
+          .filter(Boolean)
+          .join('+') || 'Sin encintar';
+      return {
+        partCode: r.partCode,
+        description: r.partName || r.description,
+        moduleCode: r.moduleCode || 'MOD',
+        moduleName: r.moduleCode || 'Módulo',
+        materialCode: r.materialName,
+        materialName: r.materialName,
+        lengthMm: r.lengthMm,
+        widthMm: r.widthMm,
+        quantity: r.quantity,
+        L1: l1,
+        L2: l2,
+        W1: w1,
+        W2: w2,
+        edgeBandingInstruction: sides,
+      };
+    });
+  }, [cutRows]);
 
   const nesting = project.nestingImport;
 
@@ -314,27 +357,98 @@ export function ProductionOrderOptimizationPanel({
 
       {/* Official cut plan */}
       <section className="prod-opt__layer prod-opt__layer--official">
-        <h3 className="prod-hub__section-title">Plan de corte oficial</h3>
+        <h3 className="prod-hub__section-title">Plan de corte oficial y etiquetas</h3>
         <p className="prod-vistas__hint">
-          <strong>Plantilla_Optimizer.xlsx</strong> — única fuente de verdad
-          para sierra y nesting externo. L0 y L1 son ayuda visual; L2 es
-          resultado importado.
+          <strong>Plantilla_Optimizer.xlsx</strong> y etiquetas térmicas ZPL para impresora Zebra.
         </p>
-        {onExportOptimizer ? (
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {onExportOptimizer ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={exportBusy || !cutRows || cutRows.length === 0}
+              onClick={() => {
+                void onExportOptimizer();
+              }}
+              data-testid="prod-opt-export-optimizer"
+            >
+              <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+              Exportar Optimizer
+            </button>
+          ) : null}
+          {onExportCutPreviewPdf ? (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={exportBusy || !cutRows || cutRows.length === 0}
+              onClick={() => {
+                void onExportCutPreviewPdf();
+              }}
+              data-testid="prod-opt-export-cut-preview-pdf"
+            >
+              <FileText size={16} strokeWidth={1.5} aria-hidden />
+              Preview Corte Visual (PDF)
+            </button>
+          ) : null}
           <button
             type="button"
-            className="btn btn--primary"
-            disabled={exportBusy || !cutRows || cutRows.length === 0}
-            onClick={() => {
-              void onExportOptimizer();
-            }}
-            data-testid="prod-opt-export-optimizer"
+            className="btn btn--secondary"
+            disabled={!cutRows || cutRows.length === 0}
+            onClick={() => setIsCsvModalOpen(true)}
+            data-testid="prod-opt-export-csv-configurable"
           >
             <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-            Exportar Optimizer
+            CSV Configurable
           </button>
-        ) : null}
+          <button
+            type="button"
+            className="btn btn--secondary"
+            disabled={!cutRows || cutRows.length === 0}
+            onClick={() => {
+              if (!cutRows || cutRows.length === 0) return;
+              const data = generatePartDrillingData({ project, cutRows });
+              const content = JSON.stringify(data, null, 2);
+              const safeName = project.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+              const blob = new Blob([content], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `perforaciones_${safeName}.json`;
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+            data-testid="prod-opt-export-drilling-json"
+          >
+            <Binary size={16} strokeWidth={1.5} aria-hidden />
+            Perforaciones (JSON)
+          </button>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            disabled={!cutRows || cutRows.length === 0}
+            onClick={() => setIsZplModalOpen(true)}
+            data-testid="prod-opt-export-zpl"
+          >
+            <QrCode size={16} strokeWidth={1.5} aria-hidden />
+            Etiquetas ZPL (Zebra)
+          </button>
+        </div>
       </section>
+
+      <ZplLabelPreviewModal
+        isOpen={isZplModalOpen}
+        onClose={() => setIsZplModalOpen(false)}
+        labels={pieceLabels}
+        projectName={project.name}
+      />
+
+      <CsvExportConfigModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        cutRows={cutRows ?? []}
+        projectName={project.name}
+      />
     </div>
   );
 }
+

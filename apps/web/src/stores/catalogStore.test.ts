@@ -708,7 +708,10 @@ describe('catalogStore — ambient materials', () => {
   it('createAmbientMaterial appends + persists + toasts', async () => {
     const { deps, saved, toasts } = makeDeps();
     const store = createCatalogStore({ deps });
-    store.getState().setCatalog(seedCatalog());
+    store.getState().setCatalog({
+      ...seedCatalog(),
+      ambientMaterials: [],
+    });
     store.getState().createAmbientMaterial({
       code: 'CERAMIC',
       name: 'Cerámica negra',
@@ -732,7 +735,10 @@ describe('catalogStore — ambient materials', () => {
   it('createAmbientMaterial coerces empty-string PBR to undefined and clamps', async () => {
     const { deps } = makeDeps();
     const store = createCatalogStore({ deps });
-    store.getState().setCatalog(seedCatalog());
+    store.getState().setCatalog({
+      ...seedCatalog(),
+      ambientMaterials: [],
+    });
     // Form inputs yield `number | ''`: empty string, valid, and out-of-range.
     store.getState().createAmbientMaterial({
       code: 'PBR',

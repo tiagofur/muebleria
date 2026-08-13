@@ -87,6 +87,8 @@ import {
   RegisterScreen,
   SettingsScreen,
   UsersScreen,
+  OnboardingTourModal,
+  getHasSeenOnboardingTour,
   canShowPricePreview,
   canShowProjectPricePreview,
   aggregatePortfolioByOwner,
@@ -656,6 +658,21 @@ function AppContent({
   }, [location.pathname, navigate, session, actorRole, toast]);
 
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [showOnboardingTour, setShowOnboardingTour] = useState(false);
+
+  useEffect(() => {
+    if (!getHasSeenOnboardingTour()) {
+      setShowOnboardingTour(true);
+    }
+  }, []);
+
+  const handleLoadCocinaLopezDemo = useCallback(() => {
+    const targetPath = projectPath('proj-cocina-lopez-demo');
+    if (location.pathname !== targetPath) {
+      navigate(targetPath);
+    }
+  }, [location.pathname, navigate]);
+
   // Gap #1: BoardEditor overrides bridge — the editor reports pose/dim edits,
   // merged into the module draft on save.
   const [boardOverrides, setBoardOverrides] = useState<Readonly<Record<string, unknown>>>({});
@@ -2157,6 +2174,7 @@ function AppContent({
         <SettingsScreen
           settings={workshopSettings}
           onSave={saveWorkshopSettings}
+          onOpenOnboardingTour={() => setShowOnboardingTour(true)}
         />
       ) : null}
       {navId === 'showcase' ? (
@@ -2397,6 +2415,12 @@ function AppContent({
           autoPresentId={presentId}
         />
       ) : null}
+
+      <OnboardingTourModal
+        isOpen={showOnboardingTour}
+        onClose={() => setShowOnboardingTour(false)}
+        onLoadDemoProject={handleLoadCocinaLopezDemo}
+      />
     </AppShell>
   );
 }

@@ -207,9 +207,10 @@ describe('createSeedWorkspace (F011 seed_data)', () => {
 
   it('includes draft demo project MOD-GAB-01 × 1 with plantilla choices', () => {
     const seed = createSeedWorkspace();
-    expect(seed.projects).toHaveLength(1);
+    expect(seed.projects.length).toBeGreaterThanOrEqual(1);
 
-    const demo = seed.projects[0]!;
+    const demo = seed.projects.find((p) => p.id === IDS.projectDemo)!;
+    expect(demo).toBeDefined();
     expect(demo.id).toBe(IDS.projectDemo);
     expect(demo.name).toBe('Demo plantilla');
     expect(demo.status).toBe('draft');

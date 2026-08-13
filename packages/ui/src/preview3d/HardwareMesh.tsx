@@ -15,7 +15,7 @@
  */
 
 import { type ReactNode } from 'react';
-import type { Hardware, ResolvedHardwarePlacement } from '@muebles/domain';
+import type { Hardware, HardwarePlacement, ResolvedHardwarePlacement } from '@muebles/domain';
 import { normalizePreviewColor } from '@muebles/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
 
@@ -413,10 +413,16 @@ export function HardwareMesh({
   placement,
   hardware,
   lightingMode = 'present',
+  selected = false,
+  onSelect,
+  onChangePlacement,
 }: {
   readonly placement: ResolvedHardwarePlacement;
   readonly hardware: Hardware;
   readonly lightingMode?: SceneLightingMode;
+  readonly selected?: boolean;
+  readonly onSelect?: () => void;
+  readonly onChangePlacement?: (patch: Partial<HardwarePlacement>) => void;
 }): ReactNode {
   const geom = resolveHardwareGeometry(hardware, placement.standoffMm);
   if (!geom) return null;
@@ -430,7 +436,7 @@ export function HardwareMesh({
     previewClearcoat: geom.previewClearcoat,
   });
   const mat: HandleMaterialProps = {
-    color: geom.color,
+    color: selected ? '#3b82f6' : geom.color,
     roughness: phys.roughness,
     metalness: phys.metalness,
     clearcoat: phys.clearcoat,
@@ -438,15 +444,20 @@ export function HardwareMesh({
     envMapIntensity: phys.envMapIntensity,
   };
 
-  // NOTE: meshPhysicalMaterial (not meshStandardMaterial) so clearcoat /
-  // clearcoatRoughness / envMapIntensity from boardPhysicalResponse are honored
-  // — consistent with BoardMeshMaterial.tsx. meshStandardMaterial would silently
-  // drop clearcoat, defeating the previewClearcoat field added in PR1.
+  const handleClick = (e: { stopPropagation: () => void }) => {
+    if (onSelect) {
+      e.stopPropagation();
+      onSelect();
+    }
+  };
+
   return (
     <group
       position={hardwarePlacementPosition(placement)}
       rotation={hardwarePlacementRotation(placement)}
       scale={placement.scale}
+      onClick={handleClick}
+      data-testid="hardware-mesh-group"
     >
       <group quaternion={normalOrientationQuaternion(placement.localNormal)}>
         {geom.shape === 'knob' ? (
@@ -468,3 +479,4 @@ export function HardwareMesh({
     </group>
   );
 }
+

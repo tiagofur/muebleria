@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type { HardwarePlacement, ResolvedBoardPart } from '@muebles/domain';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import {
   type InspectorSectionId,
@@ -21,6 +21,8 @@ import './partInspector.css';
 
 export type PartInspectorProps = {
   readonly part: ResolvedBoardPart | null;
+  readonly placements?: readonly HardwarePlacement[];
+  readonly onUpdateHardwarePlacement?: (idx: number, patch: Partial<HardwarePlacement>) => void;
   readonly onClear?: () => void;
   readonly isolateSelected?: boolean;
   readonly onIsolateChange?: (isolate: boolean) => void;
@@ -131,6 +133,8 @@ function FieldGrid({
 
 export function PartInspector({
   part,
+  placements = [],
+  onUpdateHardwarePlacement,
   onClear,
   isolateSelected = false,
   onIsolateChange,
@@ -239,17 +243,81 @@ export function PartInspector({
 
         <CollapsibleSection
           id="hardware"
-          title="Herrajes"
+          title={`Herrajes (${placements.length})`}
           testIdPrefix={testId}
           isOpen={sections.isOpen('hardware')}
           onToggle={sections.toggle}
         >
-          <p
-            className="part-inspector__placeholder"
-            data-testid={`${testId}-hardware-placeholder`}
-          >
-            Sin herrajes definidos para esta pieza
-          </p>
+          {placements.length === 0 ? (
+            <p
+              className="part-inspector__placeholder"
+              data-testid={`${testId}-hardware-placeholder`}
+            >
+              Sin herrajes definidos para esta pieza
+            </p>
+          ) : (
+            <div className="part-inspector__hardware-list" data-testid={`${testId}-hardware-list`}>
+              {placements.map((hw, idx) => (
+                <div key={idx} className="part-inspector__hardware-item" data-testid={`${testId}-hardware-item-${idx}`}>
+                  <div className="part-inspector__hardware-name">
+                    <span>Herraje {idx + 1}: <strong>{hw.hardwareId}</strong></span>
+                    <span className="part-inspector__mono"> ({hw.anchorFace})</span>
+                  </div>
+                  <div className="part-inspector__hardware-inputs">
+                    <label>
+                      X (mm)
+                      <input
+                        type="number"
+                        value={hw.relativePosition.xMm}
+                        onChange={(e) =>
+                          onUpdateHardwarePlacement?.(idx, {
+                            relativePosition: {
+                              ...hw.relativePosition,
+                              xMm: Number(e.target.value),
+                            },
+                          })
+                        }
+                        data-testid={`${testId}-hw-${idx}-x`}
+                      />
+                    </label>
+                    <label>
+                      Y (mm)
+                      <input
+                        type="number"
+                        value={hw.relativePosition.yMm}
+                        onChange={(e) =>
+                          onUpdateHardwarePlacement?.(idx, {
+                            relativePosition: {
+                              ...hw.relativePosition,
+                              yMm: Number(e.target.value),
+                            },
+                          })
+                        }
+                        data-testid={`${testId}-hw-${idx}-y`}
+                      />
+                    </label>
+                    <label>
+                      Rot Z (°)
+                      <input
+                        type="number"
+                        value={hw.rotationDeg?.z ?? 0}
+                        onChange={(e) =>
+                          onUpdateHardwarePlacement?.(idx, {
+                            rotationDeg: {
+                              x: hw.rotationDeg?.x ?? 0,
+                              y: hw.rotationDeg?.y ?? 0,
+                              z: Number(e.target.value),
+                            },
+                          })
+                        }
+                        data-testid={`${testId}-hw-${idx}-rz`}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection
@@ -295,3 +363,4 @@ export function PartInspector({
     </div>
   );
 }
+

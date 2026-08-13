@@ -174,6 +174,8 @@ export {
 export {
   resolveHardwarePlacement,
   normalizeHardwarePreview,
+  snapValue,
+  convertWorldDeltaToFaceMm,
   type ResolveHardwarePlacementParams,
   type ResolvedHardwarePlacement,
   type NormalizedHardwarePreview,
@@ -459,6 +461,37 @@ export {
   diffVersions,
 } from './projectVersioning';
 
+// --- ZPL Thermal Labels (F071) ---
+export {
+  pieceToZpl,
+  pieceBatchToZpl,
+  sanitizeZplText,
+  dotsPerMm,
+  ZPL_SIZE_PRESETS,
+  type ZplSizePreset,
+  type ZplDpi,
+  type ZplExportOptions,
+  type ZplSizeDimensions,
+} from './zplLabels';
+
+// --- Configurable CSV Cut List (F073) ---
+export {
+  cutListConfigurableCsvExport,
+  type CsvDelimiter,
+  type CsvOptimizerPreset,
+  type CutListCsvExportOptions,
+} from './cutListConfigurableCsv';
+
+// --- Part Drilling Data (F074) ---
+export {
+  generatePartDrillingData,
+  type HoleFace,
+  type HoleType,
+  type HoleDefinition,
+  type PartDrillingPattern,
+  type ProjectDrillingData,
+} from './partDrilling';
+
 // --- Agregados helpers ---
 export {
   mirrorComponentPlacement,
@@ -467,6 +500,21 @@ export {
   calculateAgregadoSubspaceUnits,
   type SubspaceUnit,
 } from './agregados';
+
+// --- Fixtures & Demo Seeds (F076) ---
+export {
+  createCocinaLopezDemoProject,
+  seedCatalogExpandedLatAm,
+  seedAmbientMaterials,
+} from './__fixtures__/cocinaLopezDemo';
+export {
+  createPlantillaDemoProject,
+  plantillaCatalogWithModules,
+  seedCocinaEstandarTemplate,
+} from './__fixtures__/plantillaDemo';
+
+
+
 
 
 

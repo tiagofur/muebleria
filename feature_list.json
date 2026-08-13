@@ -1229,7 +1229,7 @@
         "docs/roadmap-comercial-v2.md Fase A",
         "packages/ui/src/projects/components/ProjectSpatialStudio.tsx (drag existente)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F066",
@@ -1251,7 +1251,7 @@
         "docs/roadmap-comercial-v2.md Fase A",
         "packages/ui/src/preview3d/PartInspector.tsx"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F067",
@@ -1275,7 +1275,7 @@
         "packages/ui/src/preview3d/AmbientMeshes.tsx",
         "packages/ui/src/preview3d/boardPartVisual.ts"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F068",
@@ -1299,7 +1299,7 @@
         "packages/domain/src/types.ts (previewShape)",
         "packages/ui/src/preview3d/HardwareMesh.tsx"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F069",
@@ -1322,7 +1322,7 @@
         "packages/domain/src/types.ts (Hardware)",
         "backend-go/internal/storage/ (migración)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F070",
@@ -1346,7 +1346,7 @@
         "packages/domain/src/hardwarePlacement.ts (resolver)",
         "packages/ui/src/preview3d/HardwareMesh.tsx"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F071",
@@ -1369,7 +1369,7 @@
         "docs/roadmap-comercial-v2.md Fase C",
         "packages/excel/src/pieceLabelsExport.ts (PDF A4 existente)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F072",
@@ -1393,7 +1393,7 @@
         "packages/ui/src/production/ProductionBoardView.tsx",
         "packages/excel/src/optimizerExport.ts"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F073",
@@ -1415,7 +1415,7 @@
         "docs/roadmap-comercial-v2.md Fase C",
         "packages/excel/src/cutListCsvExport.ts (fijo actual)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F074",
@@ -1435,10 +1435,10 @@
       ],
       "references": [
         "docs/roadmap-comercial-v2.md Fase C",
-        "packages/domain/src/types.ts (Perforation, ResolvedBoardPart)",
-        "packages/domain/src/engine/bom.ts"
+        "packages/domain/src/cncPilot.ts",
+        "packages/domain/src/workshopRules.ts"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F075",
@@ -1482,7 +1482,7 @@
         "docs/roadmap-comercial-v2.md Fase D",
         "packages/excel/src/__fixtures__/plantillaDemo.ts (semilla actual)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F077",
