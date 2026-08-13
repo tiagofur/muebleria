@@ -406,6 +406,14 @@ function ProjectDetailViewInner(): ReactNode {
     sections.push(...exportMenu.sections);
 
     const metaItems: DropdownMenuItem[] = [];
+    // Presentar moved from chrome to Más to reduce button clutter.
+    if (onOpenPresentation) {
+      metaItems.push({
+        id: 'present',
+        label: 'Presentar al cliente',
+        onSelect: onOpenPresentation,
+      });
+    }
     // Duplicate / template allowed for closed quotes (copy, not edit source).
     if (canMutate && onDuplicate) {
       metaItems.push({
@@ -485,6 +493,7 @@ function ProjectDetailViewInner(): ReactNode {
     productionExportOk,
     project.id,
     project.status,
+    onOpenPresentation,
   ]);
 
   const toggleTools = (panel: Exclude<QuoteToolsPanel, null>): void => {
@@ -596,16 +605,6 @@ function ProjectDetailViewInner(): ReactNode {
               {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
             </button>
           ) : null}
-
-          <button
-            type="button"
-            className="btn"
-            onClick={onOpenPresentation}
-            data-testid="project-chrome-present"
-            title="Modo presentación para el cliente (sin costos ni exports de planta)"
-          >
-            Presentar
-          </button>
 
           {onOpenSpatialStudio ? (
             <button

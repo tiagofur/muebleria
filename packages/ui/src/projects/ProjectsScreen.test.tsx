@@ -670,11 +670,10 @@ describe('ProjectsScreen F022', () => {
 
     await user.click(screen.getByTestId('project-card-prj-1'));
     expect(screen.getByTestId('project-chrome-actions')).toBeTruthy();
-    expect(screen.getByTestId('project-chrome-present')).toBeTruthy();
     expect(screen.getByTestId('project-chrome-edit')).toBeTruthy();
-    // Draft: no permanent Optimizer chrome button.
-    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    // Presentar moved to Más dropdown to reduce chrome clutter.
     await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.getByRole('menuitem', { name: /presentar/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /^Duplicar$/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /^Eliminar$/i })).toBeTruthy();
   });
