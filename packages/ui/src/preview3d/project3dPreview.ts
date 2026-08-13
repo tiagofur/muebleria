@@ -290,7 +290,7 @@ export function resolveModuleHardwarePlacements(
     for (let unitIndex = 0; unitIndex < qty; unitIndex++) {
       const prefix = `agr-${agrInst.agregadoId}-u${unitIndex}`;
       const unitInst = { ...agrInst, quantity: 1 };
-      for (const inst of resolveAgregadoInstance(unitInst, agregadosCatalog)
+      for (const inst of resolveAgregadoInstance(unitInst, agregadosCatalog, unitIndex)
         .components) {
         sources.push({ inst, prefix });
       }

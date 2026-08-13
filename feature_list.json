@@ -1632,6 +1632,27 @@
         "Issue #297"
       ],
       "status": "done"
+    },
+    {
+      "id": "F086",
+      "phase": 18,
+      "name": "finishes_catalog_hierarchy_rbac",
+      "title": "Catálogo de Acabados 3D: jerarquía de 3 niveles, desacoplamiento y RBAC",
+      "description": "Evolución del catálogo de presentación 3D (antes 'Ambiente' / ambientMaterials) a 'Acabados'. Soporta árbol jerárquico de categorías (hasta 3 niveles: Categoría + 2 Subcategorías opcionales) igual que Muebles, desacoplamiento de restricción rígida de superficies, persistencia en Postgres y packages/storage, y restricción de navegación en menú lateral a Admin e Ingeniero.",
+      "acceptance": [
+        "Menú lateral en Ingeniería renombrado a 'Acabados' con acceso restringido a Admin e Ingeniero",
+        "Jerarquía de categorías de acabados (FinishCategory) con hasta 3 niveles de profundidad (Categoría + 2 subcategorías)",
+        "Panel de árbol de categorías y gestión ABM en el catálogo de acabados",
+        "Persistencia en backend-go (migración aditiva + endpoints) y packages/storage",
+        "Pruebas unitarias e integración en @muebles/domain, @muebles/ui, backend-go y apps/web",
+        "pnpm test y pnpm typecheck pasan al 100%"
+      ],
+      "references": [
+        "docs/prd.md",
+        "docs/architecture.md",
+        "docs/design.md"
+      ],
+      "status": "done"
     }
   ]
 }

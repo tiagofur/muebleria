@@ -45,6 +45,14 @@ type stubStore struct {
 	updateAmbientReceived     *domain.AmbientMaterial
 	deactivateAmbientCalled   bool
 	deactivateAmbientReceived string
+	// Ambient categories (F086)
+	listAmbientCategories       []domain.AmbientCategory
+	ambientCategoryReturnedByID *domain.AmbientCategory
+	ambientCategoryGetByIDErr   error
+	createAmbientCategoryErr    error
+	createAmbientCategoryOK     bool
+	updateAmbientCategoryCalled bool
+	deleteAmbientCategoryCalled bool
 	// Auth test hooks
 	getUserByEmail      *domain.User
 	getUserByEmailErr   error
@@ -193,6 +201,30 @@ func (s *stubStore) UpdateAmbientMaterial(_ context.Context, _ string, m *domain
 func (s *stubStore) DeactivateAmbientMaterial(_ context.Context, id string) error {
 	s.deactivateAmbientCalled = true
 	s.deactivateAmbientReceived = id
+	return nil
+}
+func (s *stubStore) ListAmbientCategories(context.Context) ([]domain.AmbientCategory, error) {
+	if s.listAmbientCategories != nil {
+		return s.listAmbientCategories, nil
+	}
+	return []domain.AmbientCategory{}, nil
+}
+func (s *stubStore) GetAmbientCategoryByID(_ context.Context, _ string) (*domain.AmbientCategory, error) {
+	return s.ambientCategoryReturnedByID, s.ambientCategoryGetByIDErr
+}
+func (s *stubStore) CreateAmbientCategory(_ context.Context, _ *domain.AmbientCategory) error {
+	if s.createAmbientCategoryErr != nil {
+		return s.createAmbientCategoryErr
+	}
+	s.createAmbientCategoryOK = true
+	return nil
+}
+func (s *stubStore) UpdateAmbientCategory(_ context.Context, _ string, _ *domain.AmbientCategory) error {
+	s.updateAmbientCategoryCalled = true
+	return nil
+}
+func (s *stubStore) DeleteAmbientCategory(_ context.Context, _ string) error {
+	s.deleteAmbientCategoryCalled = true
 	return nil
 }
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {

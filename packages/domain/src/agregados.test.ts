@@ -229,6 +229,30 @@ describe('agregados domain helpers', () => {
       expect(jal!.optionRole).toBe('POSITIONED');
     });
 
+    it('prevents hardware line ID collision when unitIndex is passed or instance.id is present (R-6)', () => {
+      const agr: Agregado = {
+        id: 'agr-cajon',
+        code: 'AGR-CJN',
+        name: 'Cajón estándar',
+        components: [],
+        hardwareLines: [
+          { id: 'hl-corredera', quantity: 1, optionRole: 'CORREDERA', hardwareId: 'hw-corredera' },
+        ],
+      };
+      const inst: ModuleAgregadoInstance = {
+        id: 'inst-cajonera-1',
+        agregadoId: 'agr-cajon',
+        quantity: 1,
+      };
+
+      const resU0 = resolveAgregadoInstance(inst, [agr], 0);
+      const resU1 = resolveAgregadoInstance(inst, [agr], 1);
+
+      expect(resU0.hardwareLines[0]?.id).toBe('hl-corredera-agr-inst-cajonera-1-u0');
+      expect(resU1.hardwareLines[0]?.id).toBe('hl-corredera-agr-inst-cajonera-1-u1');
+      expect(resU0.hardwareLines[0]?.id).not.toBe(resU1.hardwareLines[0]?.id);
+    });
+
     it('dedups: bulk line for a positioned hardware is dropped (no double count)', () => {
       const agr: Agregado = {
         id: 'agr-dedup',

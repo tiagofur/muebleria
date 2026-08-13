@@ -4,7 +4,7 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { Hardware, HardwareUnit } from '@muebles/domain';
-import { HARDWARE_FINISHES } from '@muebles/domain';
+import { HARDWARE_FINISHES, matchHardwareFinish } from '@muebles/domain';
 import { ChevronDown, ChevronRight, Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,
@@ -140,6 +140,13 @@ export function HardwareCatalog({
   const [draft, setDraft] = useState<HardwareDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [preview3dOpen, setPreview3dOpen] = useState(false);
+
+  const selectedFinishId = matchHardwareFinish({
+    color: draft.previewColor,
+    metalness: draft.previewMetalness,
+    roughness: draft.previewRoughness,
+    clearcoat: draft.previewClearcoat,
+  });
 
   const rows = useMemo(
     () =>
@@ -629,7 +636,7 @@ export function HardwareCatalog({
                   <label className="catalog-form__field">
                     <span>Acabado</span>
                     <select
-                      value=""
+                      value={selectedFinishId}
                       onChange={(e) => {
                         const finish = HARDWARE_FINISHES.find((f) => f.id === e.target.value);
                         if (finish) {

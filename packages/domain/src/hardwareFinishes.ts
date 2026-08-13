@@ -70,3 +70,49 @@ export function getHardwareFinish(
 ): HardwareFinish | undefined {
   return HARDWARE_FINISHES.find((f) => f.id === id);
 }
+
+/** Normalize hex color to 6-digit lowercase format. */
+function normalizeHex(hex: string): string {
+  const h = hex.trim().toLowerCase();
+  if (h.length === 4 && h.startsWith('#')) {
+    return `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`;
+  }
+  return h;
+}
+
+/** Match current PBR values against preset finish options. Returns preset id or '' if custom/no match. */
+export function matchHardwareFinish(pbr: {
+  readonly color?: string;
+  readonly metalness?: number | string;
+  readonly roughness?: number | string;
+  readonly clearcoat?: number | string;
+}): HardwareFinishId | '' {
+  if (!pbr.color) return '';
+  const c = normalizeHex(pbr.color);
+  const parseVal = (v: number | string | undefined) => {
+    if (v === undefined || v === '') return undefined;
+    const n = typeof v === 'string' ? parseFloat(v) : v;
+    return isNaN(n) ? undefined : n;
+  };
+
+  const m = parseVal(pbr.metalness);
+  const r = parseVal(pbr.roughness);
+  const cl = parseVal(pbr.clearcoat);
+
+  for (const finish of HARDWARE_FINISHES) {
+    const finishColor = normalizeHex(finish.color);
+    const colorMatch = finishColor === c;
+    const metalnessMatch =
+      m === undefined || Math.abs(finish.metalness - m) < 0.02;
+    const roughnessMatch =
+      r === undefined || Math.abs(finish.roughness - r) < 0.02;
+    const clearcoatMatch =
+      cl === undefined || Math.abs(finish.clearcoat - cl) < 0.02;
+
+    if (colorMatch && metalnessMatch && roughnessMatch && clearcoatMatch) {
+      return finish.id;
+    }
+  }
+  return '';
+}
+

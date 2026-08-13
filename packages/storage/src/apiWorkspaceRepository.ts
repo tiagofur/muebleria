@@ -6,6 +6,7 @@ import {
 import type { WorkspaceRepository } from './workspaceRepository';
 import {
   agregadoToApi,
+  ambientCategoryToApi,
   ambientMaterialToApi,
   catalogFromApi,
   categoryToApi,
@@ -127,6 +128,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       components,
       agregados,
       ambientMaterials,
+      ambientCategories,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -142,6 +144,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       // room scene). `.catch(() => [])` keeps older backends (without the
       // endpoint) working — ambient renders as none, same as today.
       fetchJson('/catalog/ambient-materials').catch(() => []),
+      fetchJson('/catalog/ambient-categories').catch(() => []),
     ]);
 
     return catalogFromApi({
@@ -156,6 +159,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       components,
       agregados,
       ambientMaterials,
+      ambientCategories,
     });
   }
 
@@ -319,7 +323,18 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       }
     }
 
-    // Ambient materials (floor/wall/ceiling textures). Without this loop,
+    // Ambient categories (finishes taxonomy, max 3 levels).
+    if (catalog.ambientCategories) {
+      for (const cat of sortCategoriesForSave(catalog.ambientCategories)) {
+        await this.upsert(
+          `/catalog/ambient-categories/${cat.id}`,
+          '/catalog/ambient-categories',
+          ambientCategoryToApi(cat),
+        );
+      }
+    }
+
+    // Ambient materials (floor/wall/ceiling textures and finishes). Without this loop,
     // create/update in the UI mutates the in-memory catalog but never reaches
     // the DB — the material vanishes on reload (getCatalog fetches []).
     if (catalog.ambientMaterials) {

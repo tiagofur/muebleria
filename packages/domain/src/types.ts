@@ -93,6 +93,8 @@ export interface AmbientMaterial {
   readonly name: string;
   readonly active: boolean;
   readonly surfaceType: AmbientSurfaceType;
+  /** Hierarchical category node id; omit/undefined for uncategorized. */
+  readonly categoryId?: string;
   readonly previewColor?: string;
   readonly previewTextureUrl?: string;
   readonly previewTextureTileWidthMm?: number;
@@ -204,19 +206,31 @@ export interface OptionGroup {
   readonly optionIds: readonly string[];
 }
 
-// --- Module categories (hierarchical, max 3 levels) ---
+// --- Hierarchical categories (generic, max 3 levels) ---
 
-/**
- * User-defined category for classifying module templates.
- * Roots have no parentId; depth is 1..3 (root = 1).
- */
-export interface ModuleCategory {
+export interface CategoryNode {
   readonly id: string;
   readonly name: string;
   /** Parent category id; omit/undefined for root-level categories. */
   readonly parentId?: string;
   readonly sortOrder: number;
 }
+
+// --- Module categories ---
+
+/**
+ * User-defined category for classifying module templates.
+ * Roots have no parentId; depth is 1..3 (root = 1).
+ */
+export type ModuleCategory = CategoryNode;
+
+// --- Ambient / Finish material categories ---
+
+/**
+ * User-defined category for classifying ambient/finish materials (textures, finishes).
+ * Roots have no parentId; depth is 1..3 (root = 1).
+ */
+export type AmbientCategory = CategoryNode;
 
 // --- Module template ---
 
@@ -954,6 +968,8 @@ export interface Catalog {
    * (NOT shared namespace with `materials` board codes).
    */
   readonly ambientMaterials?: readonly AmbientMaterial[];
+  /** Hierarchical ambient/finish categories (up to 3 levels). */
+  readonly ambientCategories?: readonly AmbientCategory[];
   readonly customers?: readonly Customer[];
   /** Reusable components catalog (F049 / H07). */
   readonly components?: readonly Component[];

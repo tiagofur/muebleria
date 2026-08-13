@@ -115,3 +115,12 @@ func ValidateCategoryPlacement(parentID string, categories []ModuleCategory, mov
 	}
 	return nil
 }
+
+// ValidateAmbientCategoryPlacement ensures create/move of AmbientCategory stays within MaxCategoryDepth.
+func ValidateAmbientCategoryPlacement(parentID string, categories []AmbientCategory, movingID string) error {
+	conv := make([]ModuleCategory, len(categories))
+	for i, c := range categories {
+		conv[i] = ModuleCategory{ID: c.ID, Name: c.Name, ParentID: c.ParentID, SortOrder: c.SortOrder}
+	}
+	return ValidateCategoryPlacement(parentID, conv, movingID)
+}

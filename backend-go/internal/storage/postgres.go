@@ -48,3 +48,9 @@ func (s *PostgresStore) Close() {
 		log.Println("Database connection pool closed")
 	}
 }
+
+// rowScanner abstracts pgx.Row and pgx.Rows so scan logic can be shared between
+// single-row queries and multi-row cursors.
+type rowScanner interface {
+	Scan(dest ...any) error
+}

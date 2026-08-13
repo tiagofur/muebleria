@@ -12,4 +12,10 @@ describe('HardwareCatalog image upload (F042)', () => {
     expect(src).toContain('onUploadImage');
     expect(src).toContain('imageUrl');
   });
+
+  it('binds finish select value dynamically via matchHardwareFinish (F069 fix)', () => {
+    const src = readFileSync(join(here, 'HardwareCatalog.tsx'), 'utf8');
+    expect(src).toContain('value={selectedFinishId}');
+    expect(src).toContain('matchHardwareFinish');
+  });
 });

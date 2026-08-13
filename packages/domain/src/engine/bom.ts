@@ -661,7 +661,7 @@ export function resolveComposedModule(
 
     for (const unit of units) {
       const unitInst = { ...agrInst, quantity: 1 };
-      const res = resolveAgregadoInstance(unitInst, catalogAgregados);
+      const res = resolveAgregadoInstance(unitInst, catalogAgregados, unit.unitIndex);
       agregadosHardware.push(...res.hardwareLines);
 
       const filteredComponents = filterComponentInstancesForBaseMode(

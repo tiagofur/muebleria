@@ -63,6 +63,7 @@ export function mirrorComponentInstance(
 export function resolveAgregadoInstance(
   instance: ModuleAgregadoInstance,
   agregadosCatalog: readonly Agregado[],
+  unitIndex?: number,
 ): {
   readonly components: readonly ModuleComponentInstance[];
   readonly hardwareLines: readonly HardwareLine[];
@@ -73,6 +74,8 @@ export function resolveAgregadoInstance(
   }
 
   const mult = Math.max(1, instance.quantity);
+  const instanceKey = instance.id ? instance.id : instance.agregadoId;
+  const unitSuffix = unitIndex !== undefined ? `-u${unitIndex}` : '';
 
   const rawComponents = (agregado.components ?? []).map((c) => ({
     ...c,
@@ -111,7 +114,7 @@ export function resolveAgregadoInstance(
           : h.hardwareId;
       return {
         ...h,
-        id: `${h.id}-agr-${instance.agregadoId}`,
+        id: `${h.id}-agr-${instanceKey}${unitSuffix}`,
         hardwareId: overrideHardwareId ?? h.hardwareId,
         quantity: h.quantity * mult,
       };
@@ -121,7 +124,7 @@ export function resolveAgregadoInstance(
   // Position-derived hardware lines (one per positioned hardwareId).
   const placementHardwareLines: HardwareLine[] = [...placementCounts].map(
     ([hwId, qty]) => ({
-      id: `placement-agr-${instance.agregadoId}-${hwId}`,
+      id: `placement-agr-${instanceKey}${unitSuffix}-${hwId}`,
       quantity: qty,
       optionRole: 'POSITIONED',
       hardwareId: hwId,

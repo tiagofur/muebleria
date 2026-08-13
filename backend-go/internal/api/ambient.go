@@ -112,3 +112,104 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
+
+// --- CATALOG / AMBIENT CATEGORIES (F086) ---
+
+func (s *Server) HandleAmbientCategories(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		list, err := s.Store.ListAmbientCategories(r.Context())
+		if err != nil {
+			respondWithInternalError(w, err, "ambient categories list")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, list)
+
+	case http.MethodPost:
+		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		var c domain.AmbientCategory
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.CreateAmbientCategory(r.Context(), &c)
+		if err != nil {
+			if strings.Contains(err.Error(), "invalid category placement") ||
+				strings.Contains(err.Error(), "cannot exceed") ||
+				strings.Contains(err.Error(), "name is required") {
+				respondWithError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "ambient category create")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, c)
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleAmbientCategoryByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing ambient category id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		c, err := s.Store.GetAmbientCategoryByID(r.Context(), id)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "ambient category not found")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		var c domain.AmbientCategory
+		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		err := s.Store.UpdateAmbientCategory(r.Context(), id, &c)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if strings.Contains(err.Error(), "invalid category placement") ||
+				strings.Contains(err.Error(), "cannot exceed") ||
+				strings.Contains(err.Error(), "name is required") ||
+				strings.Contains(err.Error(), "cannot be its own") ||
+				strings.Contains(err.Error(), "descendant") {
+				respondWithError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "ambient category update")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, c)
+
+	case http.MethodDelete:
+		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		err := s.Store.DeleteAmbientCategory(r.Context(), id)
+		if err != nil {
+			if strings.Contains(err.Error(), "cannot delete category with children") {
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "ambient category delete")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]string{"message": "ambient category deleted"})
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}

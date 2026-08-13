@@ -1,0 +1,85 @@
+/* Kitchen plan editor — layout classes (Phase 2 inline→BEM migration). */
+
+.kitchen-plan__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.kitchen-plan__svg {
+  max-width: 100%;
+  background: var(--surface-muted);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+}
+
+.kitchen-plan__box {
+  cursor: default;
+}
+
+.kitchen-plan__box--draggable {
+  cursor: grab;
+}
+
+.kitchen-plan__walls {
+  margin-top: var(--space-4);
+}
+
+.kitchen-plan__unplaced {
+  margin-top: var(--space-4);
+}
+
+.kitchen-plan__unplaced-list {
+  list-style: none;
+  padding: 0;
+}
+
+.kitchen-plan__warnings {
+  margin-top: var(--space-3);
+}
+
+.kitchen-wall__controls {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.kitchen-wall__length {
+  width: 6.25rem;
+}
+
+.kitchen-wall__placements {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 0;
+}
+
+.kitchen-placed__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.kitchen-placed__label {
+  flex: 1 1 8.75rem;
+}
+
+.kitchen-placed__offset {
+  width: 4.5rem;
+}
+
+.kitchen-unplaced__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.kitchen-unplaced__label {
+  flex: 1;
+}

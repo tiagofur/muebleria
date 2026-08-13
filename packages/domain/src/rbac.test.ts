@@ -75,6 +75,11 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('vendedor').has('components')).toBe(false);
     expect(navIdsForRole('ingeniero').has('modules')).toBe(true);
     expect(navIdsForRole('vendedor').has('modules')).toBe(false);
+    expect(navIdsForRole('ingeniero').has('ambientMaterials')).toBe(true);
+    expect(navIdsForRole('admin').has('ambientMaterials')).toBe(true);
+    expect(navIdsForRole('vendedor').has('ambientMaterials')).toBe(false);
+    expect(navIdsForRole('gerente_ventas').has('ambientMaterials')).toBe(false);
+    expect(navIdsForRole('produccion').has('ambientMaterials')).toBe(false);
     expect(navIdsForRole('vendedor').has('showcase')).toBe(true);
     expect(navIdsForRole('ingeniero').has('showcase')).toBe(true);
     expect(navIdsForRole('produccion').has('showcase')).toBe(false);

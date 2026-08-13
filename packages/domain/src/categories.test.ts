@@ -12,10 +12,11 @@ import {
   childrenOf,
   collectDescendantIds,
   filterModulesByCategory,
+  filterAmbientMaterialsByCategory,
   subtreeHeight,
 } from './categories';
 import { ValidationError } from './errors';
-import type { Module, ModuleCategory } from './types';
+import type { AmbientCategory, AmbientMaterial, Module, ModuleCategory } from './types';
 
 const cats: readonly ModuleCategory[] = [
   { id: 'c1', name: 'Cocina', sortOrder: 0 },
@@ -131,5 +132,33 @@ describe('category hierarchy', () => {
       'Alacenas',
       'Esquineras',
     ]);
+  });
+
+  it('filters ambient / finish materials by category tree and uncategorized', () => {
+    const ambientCats: readonly AmbientCategory[] = [
+      { id: 'ac1', name: 'Maderas', sortOrder: 0 },
+      { id: 'ac1a', name: 'Robles', parentId: 'ac1', sortOrder: 0 },
+      { id: 'ac2', name: 'Metales', sortOrder: 1 },
+    ];
+    const ambMaterials: readonly AmbientMaterial[] = [
+      { id: 'am1', code: 'AM1', name: 'Sin cat', active: true, surfaceType: 'floor' },
+      { id: 'am2', code: 'AM2', name: 'Madera general', active: true, surfaceType: 'wall', categoryId: 'ac1' },
+      { id: 'am3', code: 'AM3', name: 'Roble Claro', active: true, surfaceType: 'floor', categoryId: 'ac1a' },
+      { id: 'am4', code: 'AM4', name: 'Aluminio Negro', active: true, surfaceType: 'wall', categoryId: 'ac2' },
+    ];
+
+    expect(filterAmbientMaterialsByCategory(ambMaterials, null, ambientCats)).toHaveLength(4);
+    expect(
+      filterAmbientMaterialsByCategory(ambMaterials, UNCATEGORIZED_FILTER, ambientCats).map((m) => m.id),
+    ).toEqual(['am1']);
+    expect(
+      filterAmbientMaterialsByCategory(ambMaterials, 'ac1', ambientCats).map((m) => m.id).sort(),
+    ).toEqual(['am2', 'am3']);
+    expect(
+      filterAmbientMaterialsByCategory(ambMaterials, 'ac1a', ambientCats).map((m) => m.id),
+    ).toEqual(['am3']);
+    expect(
+      filterAmbientMaterialsByCategory(ambMaterials, 'ac2', ambientCats).map((m) => m.id),
+    ).toEqual(['am4']);
   });
 });

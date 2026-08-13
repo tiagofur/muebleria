@@ -28,6 +28,7 @@ export {
   type CatalogStatusFilter,
   type CatalogTableProps,
   type CodedCatalogItem,
+  type AmbientCategoryDraft,
   type AmbientMaterialDraft,
   type AmbientMaterialsCatalogProps,
   type EdgeDraft,

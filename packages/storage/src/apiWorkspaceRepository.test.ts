@@ -215,6 +215,43 @@ describe('APIWorkspaceRepository', () => {
     expect(putRequests[0]?.body.preview_texture_tile_width_mm).toBe(600);
   });
 
+  it('saveCatalog PUTs ambientCategories body', async () => {
+    const putRequests: { url: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (init?.method === 'PUT' && url.includes('/catalog/ambient-categories/')) {
+        putRequests.push({
+          url,
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return { ok: true, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await repo.saveCatalog({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      ambientCategories: [
+        {
+          id: 'acat-1',
+          name: 'Maderas',
+          sortOrder: 0,
+        },
+      ],
+    });
+
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0]?.url).toContain('/catalog/ambient-categories/acat-1');
+    expect(putRequests[0]?.body.name).toBe('Maderas');
+  });
+
   it('createProject POSTs only (no PUT probe)', async () => {
     const methods: string[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {

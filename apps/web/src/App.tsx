@@ -719,6 +719,7 @@ function AppContent({
   const edges = catalog?.edges ?? [];
   const hardware = catalog?.hardware ?? [];
   const ambientMaterials = catalog?.ambientMaterials ?? [];
+  const ambientCategories = catalog?.ambientCategories ?? [];
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
@@ -991,6 +992,9 @@ function AppContent({
   const createAmbientMaterial = catalogActions.createAmbientMaterial;
   const updateAmbientMaterial = catalogActions.updateAmbientMaterial;
   const setAmbientMaterialActive = catalogActions.setAmbientMaterialActive;
+  const createAmbientCategory = catalogActions.createAmbientCategory;
+  const updateAmbientCategory = catalogActions.updateAmbientCategory;
+  const deleteAmbientCategory = catalogActions.deleteAmbientCategory;
   const createOptionGroup = catalogActions.createOptionGroup;
   const updateOptionGroup = catalogActions.updateOptionGroup;
   const deleteOptionGroup = catalogActions.deleteOptionGroup;
@@ -2120,10 +2124,14 @@ function AppContent({
       {navId === 'ambientMaterials' ? (
         <AmbientMaterialsCatalog
           materials={ambientMaterials}
+          categories={ambientCategories}
           onCreate={createAmbientMaterial}
           onUpdate={updateAmbientMaterial}
           onDeactivate={(id) => setAmbientMaterialActive(id, false)}
           onReactivate={(id) => setAmbientMaterialActive(id, true)}
+          onCreateCategory={createAmbientCategory}
+          onUpdateCategory={updateAmbientCategory}
+          onDeleteCategory={deleteAmbientCategory}
           canMutate={canMutateCatalog}
           resolveImageUrl={resolveMediaUrl}
           onUploadImage={

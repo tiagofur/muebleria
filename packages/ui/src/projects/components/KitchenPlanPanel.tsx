@@ -28,6 +28,7 @@ import {
 import type { PlacementElevation } from '@muebles/domain';
 import { Lock } from 'lucide-react';
 import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
+import './kitchenPlan.css';
 
 function defaultElevationForModule(
   module: Module | undefined,
@@ -329,7 +330,7 @@ export function KitchenPlanPanel({
           </span>
         ) : null}
         {canEdit ? (
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <div className="kitchen-plan__actions">
             {layout.walls.length === 0 ? (
               <button
                 type="button"
@@ -352,7 +353,7 @@ export function KitchenPlanPanel({
         ) : null}
       </div>
 
-      <p className="catalog-form__hint" style={{ marginTop: 0 }}>
+      <p className="catalog-form__hint">
         Dibujá muros simples y colocá los muebles de la cotización. La vista 3D
         usa este plano si hay colocaciones; si no, usa la corrida lineal.
       </p>
@@ -367,14 +368,8 @@ export function KitchenPlanPanel({
             width={svgW}
             height={svgH}
             viewBox={`0 0 ${svgW} ${svgH}`}
-            className="kitchen-plan-svg"
+            className="kitchen-plan-svg kitchen-plan__svg"
             data-testid="kitchen-plan-svg"
-            style={{
-              maxWidth: '100%',
-              background: 'var(--surface-muted)',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-default)',
-            }}
           >
             {frames.map((f) => {
               const x1 = pad + f.originXMm * scale;
@@ -463,13 +458,13 @@ export function KitchenPlanPanel({
                   }
                   onPointerMove={handlePlacementPointerMove}
                   onPointerUp={handlePlacementPointerUp}
-                  style={{ cursor: canEdit ? 'grab' : 'default' }}
+                  className={`kitchen-plan__box ${canEdit ? 'kitchen-plan__box--draggable' : ''}`.trim()}
                 />
               );
             })}
           </svg>
 
-          <div className="module-editor__grid" style={{ marginTop: 'var(--space-4)' }}>
+          <div className="module-editor__grid kitchen-plan__walls">
             {layout.walls.map((wall, wi) => (
               <div
                 key={wall.id}
@@ -489,7 +484,7 @@ export function KitchenPlanPanel({
                       }
                       placeholder="Nombre"
                     />
-                    <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                    <div className="kitchen-wall__controls">
                       <input
                         type="number"
                         value={wall.lengthMm}
@@ -499,7 +494,7 @@ export function KitchenPlanPanel({
                           })
                         }
                         aria-label="Largo mm"
-                        style={{ width: '6.25rem' }}
+                        className="kitchen-wall__length"
                       />
                       <select
                         value={wall.angleDeg}
@@ -530,7 +525,7 @@ export function KitchenPlanPanel({
                   </p>
                 )}
                 <ul
-                  style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0' }}
+                  className="kitchen-wall__placements"
                 >
                   {layout.placements
                     .filter((p) => p.wallId === wall.id)
@@ -538,16 +533,10 @@ export function KitchenPlanPanel({
                     .map((p) => (
                       <li
                         key={`${p.itemId}#${p.instanceIndex}`}
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 'var(--space-1)',
-                          alignItems: 'center',
-                          marginBottom: 'var(--space-2)',
-                        }}
+                        className="kitchen-placed__item"
                         data-testid={`kitchen-placed-${p.itemId}-${p.instanceIndex}`}
                       >
-                        <span style={{ flex: '1 1 140px' }}>
+                        <span className="kitchen-placed__label">
                           {itemLabel(p.itemId, p.instanceIndex, project, modules)}
                         </span>
                         {canEdit ? (
@@ -561,7 +550,7 @@ export function KitchenPlanPanel({
                                 })
                               }
                               aria-label="Offset mm"
-                              style={{ width: '4.5rem' }}
+                              className="kitchen-placed__offset"
                             />
                             <select
                               value={p.elevation}
@@ -621,20 +610,15 @@ export function KitchenPlanPanel({
           </div>
 
           {canEdit && unplaced.length > 0 ? (
-            <div style={{ marginTop: 'var(--space-4)' }} data-testid="kitchen-unplaced">
+            <div className="kitchen-plan__unplaced" data-testid="kitchen-unplaced">
               <h4 className="project-detail__section-title">Sin colocar</h4>
-              <ul style={{ listStyle: 'none', padding: 0 }}>
+              <ul className="kitchen-plan__unplaced-list">
                 {unplaced.map((f) => (
                   <li
                     key={`${f.itemId}#${f.instanceIndex}`}
-                    style={{
-                      display: 'flex',
-                      gap: 'var(--space-2)',
-                      alignItems: 'center',
-                      marginBottom: 'var(--space-2)',
-                    }}
+                    className="kitchen-unplaced__item"
                   >
-                    <span style={{ flex: 1 }}>
+                    <span className="kitchen-unplaced__label">
                       {itemLabel(f.itemId, f.instanceIndex, project, modules)}
                     </span>
                     {layout.walls.map((w) => (
@@ -659,9 +643,8 @@ export function KitchenPlanPanel({
 
       {warnings.length > 0 ? (
         <ul
-          className="catalog-form__error"
+          className="catalog-form__error kitchen-plan__warnings"
           data-testid="kitchen-plan-warnings"
-          style={{ marginTop: 'var(--space-3)' }}
         >
           {warnings.map((w) => (
             <li key={w}>{w}</li>

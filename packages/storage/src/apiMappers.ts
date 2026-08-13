@@ -4,6 +4,7 @@
  */
 
 import type {
+  AmbientCategory,
   AmbientMaterial,
   AmbientSurfaceType,
   BoardPart,
@@ -132,6 +133,7 @@ export function ambientMaterialToApi(
     name: m.name,
     active: m.active,
     surface_type: m.surfaceType,
+    category_id: m.categoryId ?? null,
     preview_color: m.previewColor ?? null,
     preview_texture_url: m.previewTextureUrl ?? null,
     preview_texture_tile_width_mm: m.previewTextureTileWidthMm ?? null,
@@ -148,7 +150,12 @@ export function ambientMaterialFromApi(
   // Defensively coalesce surfaceType (legacy/typo rows → floor), mirroring the
   // module mapper's furnitureType handling.
   const surfaceRaw = str(raw.surface_type ?? raw.surfaceType);
-  const surfaceType: AmbientSurfaceType = surfaceRaw === 'wall' ? 'wall' : 'floor';
+  const surfaceType: AmbientSurfaceType =
+    surfaceRaw === 'wall'
+      ? 'wall'
+      : surfaceRaw === 'ceiling'
+        ? 'ceiling'
+        : 'floor';
   const tileW = num(
     raw.preview_texture_tile_width_mm ?? raw.previewTextureTileWidthMm,
     0,
@@ -157,12 +164,14 @@ export function ambientMaterialFromApi(
     raw.preview_texture_tile_length_mm ?? raw.previewTextureTileLengthMm,
     0,
   );
+  const catId = str(raw.category_id ?? raw.categoryId);
   return {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
     active: bool(raw.active, true),
     surfaceType,
+    categoryId: catId || undefined,
     previewColor: str(raw.preview_color ?? raw.previewColor) || undefined,
     previewTextureUrl:
       str(raw.preview_texture_url ?? raw.previewTextureUrl) || undefined,
@@ -171,6 +180,29 @@ export function ambientMaterialFromApi(
     previewRoughness: optionalNum(raw.preview_roughness ?? raw.previewRoughness),
     previewMetalness: optionalNum(raw.preview_metalness ?? raw.previewMetalness),
     previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
+  };
+}
+
+export function ambientCategoryToApi(
+  c: AmbientCategory,
+): Record<string, unknown> {
+  return {
+    id: c.id,
+    name: c.name,
+    parent_id: c.parentId ?? null,
+    sort_order: c.sortOrder,
+  };
+}
+
+export function ambientCategoryFromApi(
+  raw: Record<string, unknown>,
+): AmbientCategory {
+  const parent = str(raw.parentId ?? raw.parent_id);
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    parentId: parent || undefined,
+    sortOrder: num(raw.sortOrder ?? raw.sort_order),
   };
 }
 
@@ -1707,6 +1739,8 @@ export function catalogFromApi(parts: {
   agregados?: unknown;
   ambientMaterials?: unknown;
   ambient_materials?: unknown;
+  ambientCategories?: unknown;
+  ambient_categories?: unknown;
 }): Catalog {
   const asRows = (v: unknown): Record<string, unknown>[] =>
     Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -1725,13 +1759,16 @@ export function catalogFromApi(parts: {
     ambientMaterials: asRows(parts.ambient_materials ?? parts.ambientMaterials).map(
       ambientMaterialFromApi,
     ),
+    ambientCategories: asRows(parts.ambient_categories ?? parts.ambientCategories).map(
+      ambientCategoryFromApi,
+    ),
   };
 }
 
 /** Parents before children so POST of new trees satisfies FK/placement. */
-export function sortCategoriesForSave(
-  categories: readonly ModuleCategory[],
-): ModuleCategory[] {
+export function sortCategoriesForSave<T extends { id: string; parentId?: string }>(
+  categories: readonly T[],
+): T[] {
   const byId = new Map(categories.map((c) => [c.id, c]));
   const depth = (id: string, seen = new Set<string>()): number => {
     if (seen.has(id)) return 0;

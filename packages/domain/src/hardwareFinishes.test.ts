@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HARDWARE_FINISHES,
   getHardwareFinish,
+  matchHardwareFinish,
   type HardwareFinishId,
 } from './hardwareFinishes';
 
@@ -54,3 +55,43 @@ describe('getHardwareFinish', () => {
     expect(getHardwareFinish('nonexistent')).toBeUndefined();
   });
 });
+
+describe('matchHardwareFinish', () => {
+  it('matches preset by exact color and PBR values', () => {
+    const chrome = getHardwareFinish('chrome')!;
+    expect(
+      matchHardwareFinish({
+        color: chrome.color,
+        metalness: String(chrome.metalness),
+        roughness: String(chrome.roughness),
+        clearcoat: String(chrome.clearcoat),
+      }),
+    ).toBe('chrome');
+
+    const bronze = getHardwareFinish('bronze')!;
+    expect(
+      matchHardwareFinish({
+        color: bronze.color,
+        metalness: bronze.metalness,
+        roughness: bronze.roughness,
+        clearcoat: bronze.clearcoat,
+      }),
+    ).toBe('bronze');
+  });
+
+  it('returns empty string for custom color', () => {
+    expect(
+      matchHardwareFinish({
+        color: '#ff0055',
+        metalness: '0.9',
+        roughness: '0.15',
+        clearcoat: '0.8',
+      }),
+    ).toBe('');
+  });
+
+  it('returns empty string when color is missing', () => {
+    expect(matchHardwareFinish({})).toBe('');
+  });
+});
+

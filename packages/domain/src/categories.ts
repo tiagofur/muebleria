@@ -3,29 +3,29 @@
  * Depth: root = 1, max = 3 levels.
  */
 
-import type { Module, ModuleCategory } from './types';
+import type { AmbientMaterial, CategoryNode, Module, ModuleCategory } from './types';
 import { ValidationError } from './errors';
 
 /** Maximum depth of a category node (root is depth 1). */
 export const MAX_CATEGORY_DEPTH = 3 as const;
 
-/** Sentinel filter: modules with no categoryId. */
+/** Sentinel filter: modules or materials with no categoryId. */
 export const UNCATEGORIZED_FILTER = '__uncategorized__' as const;
 
 export type CategoryFilterId = string | typeof UNCATEGORIZED_FILTER | null;
 
-function byIdMap(
-  categories: readonly ModuleCategory[],
-): Map<string, ModuleCategory> {
-  return new Map(categories.map((c) => [c.id, c]));
+function byIdMap<T extends CategoryNode>(
+  categories: readonly T[] = [],
+): Map<string, T> {
+  return new Map((categories ?? []).map((c) => [c.id, c]));
 }
 
 /**
  * Depth of a category (1 = root). Returns 0 if id is missing from the set.
  */
-export function categoryDepth(
+export function categoryDepth<T extends CategoryNode = CategoryNode>(
   categoryId: string | undefined,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[] = [],
 ): number {
   if (!categoryId) return 0;
   const map = byIdMap(categories);
@@ -54,11 +54,11 @@ export function categoryDepth(
 }
 
 /** Direct children of parentId (undefined = roots), sorted by sortOrder then name. */
-export function childrenOf(
-  categories: readonly ModuleCategory[],
+export function childrenOf<T extends CategoryNode = CategoryNode>(
+  categories: readonly T[] = [],
   parentId?: string,
-): ModuleCategory[] {
-  const list = categories.filter((c) =>
+): T[] {
+  const list = (categories ?? []).filter((c) =>
     parentId === undefined
       ? c.parentId === undefined || c.parentId === ''
       : c.parentId === parentId,
@@ -70,9 +70,9 @@ export function childrenOf(
 }
 
 /** All descendant ids of rootId (not including rootId). */
-export function collectDescendantIds(
+export function collectDescendantIds<T extends CategoryNode = CategoryNode>(
   rootId: string,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
 ): string[] {
   const result: string[] = [];
   const queue = [rootId];
@@ -91,9 +91,9 @@ export function collectDescendantIds(
 /**
  * Height of subtree rooted at categoryId: 1 if leaf, else 1 + max child height.
  */
-export function subtreeHeight(
+export function subtreeHeight<T extends CategoryNode = CategoryNode>(
   categoryId: string,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
 ): number {
   const kids = childrenOf(categories, categoryId);
   if (kids.length === 0) return 1;
@@ -110,9 +110,9 @@ export function subtreeHeight(
  * - For move: movingId set; resulting depth of deepest descendant must be ≤ 3
  * Throws ValidationError if invalid.
  */
-export function assertCategoryPlacement(
+export function assertCategoryPlacement<T extends CategoryNode = CategoryNode>(
   parentId: string | undefined,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
   options?: {
     readonly movingId?: string;
     readonly name?: string;
@@ -167,9 +167,9 @@ export function assertCategoryPlacement(
 }
 
 /** True if creating/moving under parentId is allowed. */
-export function canPlaceCategory(
+export function canPlaceCategory<T extends CategoryNode = CategoryNode>(
   parentId: string | undefined,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
   movingId?: string,
 ): boolean {
   try {
@@ -184,9 +184,9 @@ export function canPlaceCategory(
  * Set of category ids matching a filter node (node + all descendants).
  * null filter = no category restriction.
  */
-export function categoryFilterIdSet(
+export function categoryFilterIdSet<T extends CategoryNode = CategoryNode>(
   filterId: CategoryFilterId,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
 ): Set<string> | null {
   if (filterId === null) return null;
   if (filterId === UNCATEGORIZED_FILTER) return new Set();
@@ -197,10 +197,10 @@ export function categoryFilterIdSet(
  * Filter modules by category tree node (includes descendants) or uncategorized.
  * filterId null = all modules.
  */
-export function filterModulesByCategory(
+export function filterModulesByCategory<T extends CategoryNode = CategoryNode>(
   modules: readonly Module[],
   filterId: CategoryFilterId,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
 ): Module[] {
   if (filterId === null) return [...modules];
   if (filterId === UNCATEGORIZED_FILTER) {
@@ -210,14 +210,31 @@ export function filterModulesByCategory(
   return modules.filter((m) => m.categoryId && allowed.has(m.categoryId));
 }
 
+/**
+ * Filter ambient / finish materials by category tree node (includes descendants) or uncategorized.
+ * filterId null = all materials.
+ */
+export function filterAmbientMaterialsByCategory<T extends CategoryNode = CategoryNode>(
+  materials: readonly AmbientMaterial[],
+  filterId: CategoryFilterId,
+  categories: readonly T[],
+): AmbientMaterial[] {
+  if (filterId === null) return [...materials];
+  if (filterId === UNCATEGORIZED_FILTER) {
+    return materials.filter((m) => !m.categoryId);
+  }
+  const allowed = categoryFilterIdSet(filterId, categories)!;
+  return materials.filter((m) => m.categoryId && allowed.has(m.categoryId));
+}
+
 /** Breadcrumb path from root to category (inclusive). */
-export function categoryPath(
+export function categoryPath<T extends CategoryNode = CategoryNode>(
   categoryId: string | undefined,
-  categories: readonly ModuleCategory[],
-): ModuleCategory[] {
+  categories: readonly T[],
+): T[] {
   if (!categoryId) return [];
   const map = byIdMap(categories);
-  const path: ModuleCategory[] = [];
+  const path: T[] = [];
   let current: string | undefined = categoryId;
   const seen = new Set<string>();
   while (current) {
@@ -232,17 +249,17 @@ export function categoryPath(
 }
 
 /** Cascade select levels: roots, then children of selected L1, etc. */
-export function cascadeOptions(
-  categories: readonly ModuleCategory[],
+export function cascadeOptions<T extends CategoryNode = CategoryNode>(
+  categories: readonly T[],
   selected: {
     readonly level1Id?: string;
     readonly level2Id?: string;
     readonly level3Id?: string;
   },
 ): {
-  readonly level1: ModuleCategory[];
-  readonly level2: ModuleCategory[];
-  readonly level3: ModuleCategory[];
+  readonly level1: T[];
+  readonly level2: T[];
+  readonly level3: T[];
 } {
   const level1 = childrenOf(categories, undefined);
   const level2 = selected.level1Id
@@ -266,9 +283,9 @@ export function cascadeSelectedCategoryId(selected: {
 }
 
 /** Expand categoryId into cascade level ids. */
-export function cascadeFromCategoryId(
+export function cascadeFromCategoryId<T extends CategoryNode = CategoryNode>(
   categoryId: string | undefined,
-  categories: readonly ModuleCategory[],
+  categories: readonly T[],
 ): {
   readonly level1Id?: string;
   readonly level2Id?: string;

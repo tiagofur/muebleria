@@ -290,5 +290,119 @@ func TestHandleAmbientMaterialByID_DeleteDeactivates(t *testing.T) {
 	}
 }
 
+// --- AMBIENT CATEGORIES TESTS (F086) ---
+
+func TestHandleAmbientCategories_ListReturns200(t *testing.T) {
+	store := &stubStore{
+		listAmbientCategories: []domain.AmbientCategory{
+			{ID: "c1", Name: "Maderas", SortOrder: 0},
+			{ID: "c2", Name: "Metales", SortOrder: 1},
+		},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-categories", nil), "v1", string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+
+	srv.HandleAmbientCategories(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	var got []domain.AmbientCategory
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding list: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("list length = %d, want 2", len(got))
+	}
+}
+
+func TestHandleAmbientCategories_IngenieroCreateReturns201(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"c1","name":"Maderas","sort_order":0}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-categories", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleAmbientCategories(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+	if !store.createAmbientCategoryOK {
+		t.Fatal("store must create ambient category for ingeniero")
+	}
+}
+
+func TestHandleAmbientCategories_VendedorCreateReturns403(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"c1","name":"Maderas"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/ambient-categories", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleAmbientCategories(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status %d want 403 body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleAmbientCategoryByID_GetReturns200(t *testing.T) {
+	store := &stubStore{
+		ambientCategoryReturnedByID: &domain.AmbientCategory{
+			ID:   "c1",
+			Name: "Maderas",
+		},
+	}
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/ambient-categories/c1", nil), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "c1")
+	rr := httptest.NewRecorder()
+
+	srv.HandleAmbientCategoryByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleAmbientCategoryByID_UpdateAndDeletes(t *testing.T) {
+	store := &stubStore{
+		ambientCategoryReturnedByID: &domain.AmbientCategory{ID: "c1", Name: "Maderas"},
+	}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"name":"Maderas Nobles"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-categories/c1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "c1")
+	rr := httptest.NewRecorder()
+
+	srv.HandleAmbientCategoryByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !store.updateAmbientCategoryCalled {
+		t.Fatal("UpdateAmbientCategory must be called")
+	}
+
+	// Delete
+	delReq := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/ambient-categories/c1", nil), "eng", string(domain.RoleIngeniero))
+	delReq.SetPathValue("id", "c1")
+	delRR := httptest.NewRecorder()
+
+	srv.HandleAmbientCategoryByID(delRR, delReq)
+
+	if delRR.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, want 200", delRR.Code)
+	}
+	if !store.deleteAmbientCategoryCalled {
+		t.Fatal("DeleteAmbientCategory must be called")
+	}
+}
+
 // errNotFound mimics the storage-layer "not found" error the handler maps to 404.
 func errNotFound() error { return errors.New("ambient material not found") }

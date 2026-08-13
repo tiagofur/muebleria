@@ -31,7 +31,7 @@ import {
   WifiOff,
   X,
   Users,
-  Droplets,
+  Palette,
   type LucideIcon,
 } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
@@ -188,8 +188,8 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'hardware', label: 'Herrajes', icon: Settings2, group: 'catalogs' },
       {
         id: 'ambientMaterials',
-        label: 'Ambiente',
-        icon: Droplets,
+        label: 'Acabados',
+        icon: Palette,
         group: 'catalogs',
       },
       {

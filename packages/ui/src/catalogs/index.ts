@@ -57,6 +57,7 @@ export {
 
 export {
   AmbientMaterialsCatalog,
+  type AmbientCategoryDraft,
   type AmbientMaterialDraft,
   type AmbientMaterialsCatalogProps,
 } from './AmbientMaterialsCatalog';

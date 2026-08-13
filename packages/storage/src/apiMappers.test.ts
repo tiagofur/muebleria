@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ambientCategoryFromApi,
+  ambientCategoryToApi,
   ambientMaterialFromApi,
   ambientMaterialToApi,
   catalogFromApi,
@@ -22,6 +24,7 @@ import {
   structureFromApi,
 } from './apiMappers';
 import type {
+  AmbientCategory,
   AmbientMaterial,
   Component,
   Hardware,
@@ -1041,6 +1044,58 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
       customers: [],
     });
     expect(cat.ambientMaterials).toEqual([]);
+    expect(cat.ambientCategories).toEqual([]);
+  });
+
+  it('ambientCategoryToApi and ambientCategoryFromApi round-trip correctly', () => {
+    const c: AmbientCategory = {
+      id: 'cat-1',
+      name: 'Maderas',
+      parentId: 'root-cat',
+      sortOrder: 2,
+    };
+    const api = ambientCategoryToApi(c);
+    expect(api.id).toBe('cat-1');
+    expect(api.name).toBe('Maderas');
+    expect(api.parent_id).toBe('root-cat');
+    expect(api.sort_order).toBe(2);
+
+    const round = ambientCategoryFromApi(api as Record<string, unknown>);
+    expect(round).toEqual(c);
+  });
+
+  it('ambientMaterialToApi and fromApi preserve categoryId', () => {
+    const m: AmbientMaterial = {
+      id: 'mat-c',
+      code: 'WOOD-OAK',
+      name: 'Roble Claro',
+      active: true,
+      surfaceType: 'floor',
+      categoryId: 'cat-wood',
+    };
+    const api = ambientMaterialToApi(m);
+    expect(api.category_id).toBe('cat-wood');
+
+    const round = ambientMaterialFromApi(api as Record<string, unknown>);
+    expect(round.categoryId).toBe('cat-wood');
+    expect(round).toEqual(m);
+  });
+
+  it('catalogFromApi composes ambientCategories from payload', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      ambient_categories: [
+        { id: 'ac-1', name: 'Metales', sort_order: 1 },
+      ],
+    });
+    expect(cat.ambientCategories).toHaveLength(1);
+    expect(cat.ambientCategories?.[0]?.name).toBe('Metales');
   });
 
   it('round-trips kitchen space ambient refs (floor/wall/showCeiling)', () => {

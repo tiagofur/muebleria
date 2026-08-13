@@ -29,6 +29,7 @@ import type {
   OptionGroup,
   Structure,
   AmbientMaterial,
+  AmbientCategory,
 } from '@muebles/domain';
 import {
   bumpStructureRevision,
@@ -102,10 +103,14 @@ export interface CatalogState {
   readonly updateHardware: (id: string, draft: HardwareDraft) => void;
   readonly setHardwareActive: (id: string, active: boolean) => void;
 
-  // --- Ambient materials (presentation-only: floor/wall scene textures) ---
+  // --- Ambient materials (presentation-only: finishes & scene textures) ---
   readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => void;
   readonly updateAmbientMaterial: (id: string, draft: AmbientMaterialDraft) => void;
   readonly setAmbientMaterialActive: (id: string, active: boolean) => void;
+  readonly createAmbientCategory: (draft: CategoryDraft) => void;
+  readonly updateAmbientCategory: (id: string, draft: CategoryDraft) => void;
+  /** Auth: also DELETE /catalog/ambient-categories/{id}. */
+  readonly deleteAmbientCategory: (id: string) => Promise<void>;
 
   // --- Option groups ---
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
@@ -590,7 +595,7 @@ export function createCatalogStore(options: InternalOptions) {
       }
     },
 
-    // --- Ambient materials (presentation-only: floor/wall scene textures) ---
+    // --- Ambient materials (presentation-only: finishes & scene textures) ---
     createAmbientMaterial: (draft) => {
       const code = draft.code.trim();
       // Coerce form `number | ''` → `number | undefined`, clamped to [0,1].
@@ -604,6 +609,9 @@ export function createCatalogStore(options: InternalOptions) {
         name: draft.name.trim(),
         active: true,
         surfaceType: draft.surfaceType,
+        ...(draft.categoryId?.trim()
+          ? { categoryId: draft.categoryId.trim() }
+          : {}),
         ...(draft.previewColor?.trim()
           ? { previewColor: draft.previewColor.trim() }
           : {}),
@@ -649,6 +657,7 @@ export function createCatalogStore(options: InternalOptions) {
                 code: draft.code.trim(),
                 name: draft.name.trim(),
                 surfaceType: draft.surfaceType,
+                categoryId: draft.categoryId?.trim() || undefined,
                 ...(draft.previewColor?.trim()
                   ? { previewColor: draft.previewColor.trim() }
                   : {}),
@@ -700,6 +709,60 @@ export function createCatalogStore(options: InternalOptions) {
             ? `↑ "${target.name}" reactivado`
             : `↓ "${target.name}" desactivado`,
         });
+      }
+    },
+
+    createAmbientCategory: (draft) => {
+      const item: AmbientCategory = {
+        id: newId(),
+        name: draft.name.trim(),
+        parentId: draft.parentId.trim() || undefined,
+        sortOrder: Number(draft.sortOrder) || 0,
+      };
+      patch(set, get, (c) => ({
+        ...c,
+        ambientCategories: [...(c.ambientCategories ?? []), item],
+      }));
+      toast({ type: 'success', message: `✓ Categoría "${item.name}" creada` });
+    },
+
+    updateAmbientCategory: (id, draft) => {
+      patch(set, get, (cat) => ({
+        ...cat,
+        ambientCategories: (cat.ambientCategories ?? []).map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                name: draft.name.trim(),
+                parentId: draft.parentId.trim() || undefined,
+                sortOrder: Number(draft.sortOrder) || 0,
+              }
+            : c,
+        ),
+      }));
+      toast({ type: 'success', message: '✓ Categoría actualizada' });
+    },
+
+    deleteAmbientCategory: async (id) => {
+      const cats = get().catalog?.ambientCategories ?? [];
+      const hasChildren = cats.some((c) => c.parentId === id);
+      if (hasChildren) {
+        toast({
+          type: 'warning',
+          message: 'No se puede eliminar: tiene subcategorías',
+        });
+        return;
+      }
+      patch(set, get, (c) => ({
+        ...c,
+        ambientCategories: (c.ambientCategories ?? []).filter((cat) => cat.id !== id),
+        ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
+          m.categoryId === id ? { ...m, categoryId: undefined } : m,
+        ),
+      }));
+      const ok = await hardDeleteOnAuth(`/catalog/ambient-categories/${id}`);
+      if (ok) {
+        toast({ type: 'info', message: 'Categoría eliminada' });
       }
     },
 

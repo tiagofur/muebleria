@@ -261,18 +261,18 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
   if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
-  // Ingeniería: Muebles + Estructuras + Componentes + Agregados (admin / ingeniero)
+  // Ingeniería: Muebles + Estructuras + Componentes + Agregados + Acabados (admin / ingeniero)
   if (roleCanAccessModulesNav(role)) ids.add('modules');
   if (roleCanMutateModules(role)) {
     ids.add('structures');
     ids.add('components');
     ids.add('agregados');
+    ids.add('ambientMaterials');
   }
   if (roleCanAccessCatalogNav(role)) {
     ids.add('materials');
     ids.add('edges');
     ids.add('hardware');
-    ids.add('ambientMaterials');
     ids.add('optionGroups');
   }
   if (roleCanAccessSettings(role)) ids.add('settings');

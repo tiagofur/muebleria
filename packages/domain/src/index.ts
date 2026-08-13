@@ -13,6 +13,8 @@ export type {
   OptionChoices,
   AmbientSurfaceType,
   AmbientMaterial,
+  AmbientCategory,
+  CategoryNode,
   MaterialBoard,
   EdgeBand,
   Hardware,
@@ -134,6 +136,7 @@ export {
   childrenOf,
   collectDescendantIds,
   filterModulesByCategory,
+  filterAmbientMaterialsByCategory,
   subtreeHeight,
 } from './categories';
 
@@ -183,6 +186,7 @@ export {
 export {
   HARDWARE_FINISHES,
   getHardwareFinish,
+  matchHardwareFinish,
   type HardwareFinish,
   type HardwareFinishId,
 } from './hardwareFinishes';

@@ -180,5 +180,117 @@ describe('AmbientMaterialsCatalog', () => {
     const values = Array.from(options).map((o) => o.value);
     expect(values).toContain('floor');
     expect(values).toContain('wall');
+    expect(values).toContain('ceiling');
+  });
+
+  it('filters materials by category and displays category path in table', () => {
+    const catL1 = { id: 'c-wood', name: 'Maderas', sortOrder: 0 };
+    const catL2 = { id: 'c-oak', name: 'Robles', parentId: 'c-wood', sortOrder: 0 };
+    const woodMat: AmbientMaterial = {
+      id: 'am-wood',
+      code: 'OAK-01',
+      name: 'Roble Claro',
+      active: true,
+      surfaceType: 'floor',
+      categoryId: 'c-oak',
+    };
+    render(
+      <AmbientMaterialsCatalog
+        materials={[floorMat, woodMat]}
+        categories={[catL1, catL2]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        canMutate
+      />,
+    );
+
+    // Shows category badge
+    expect(screen.getByText('Maderas › Robles')).toBeTruthy();
+
+    // Category tree exists
+    expect(screen.getByTestId('category-filter-panel')).toBeTruthy();
+    expect(screen.getByTestId('category-filter-c-wood')).toBeTruthy();
+
+    // Filter by c-oak
+    fireEvent.click(screen.getByTestId('category-filter-c-oak'));
+    expect(screen.getByText('OAK-01')).toBeTruthy();
+    expect(screen.queryByText('CERAMIC-BLACK')).toBeNull();
+  });
+
+  it('allows picking category via 3-level cascade in form modal', () => {
+    const catL1 = { id: 'c-wood', name: 'Maderas', sortOrder: 0 };
+    const catL2 = { id: 'c-oak', name: 'Robles', parentId: 'c-wood', sortOrder: 0 };
+    const onCreate = vi.fn();
+    render(
+      <AmbientMaterialsCatalog
+        materials={[]}
+        categories={[catL1, catL2]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        canMutate
+      />,
+    );
+    fireEvent.click(screen.getByTestId('ambient-material-create'));
+
+    fireEvent.change(screen.getByLabelText('Código'), {
+      target: { value: 'OAK-DARK' },
+    });
+    fireEvent.change(screen.getByLabelText('Nombre'), {
+      target: { value: 'Roble Oscuro' },
+    });
+
+    // Pick L1 category
+    fireEvent.change(screen.getByTestId('ambient-material-category-l1'), {
+      target: { value: 'c-wood' },
+    });
+    // Pick L2 category
+    fireEvent.change(screen.getByTestId('ambient-material-category-l2'), {
+      target: { value: 'c-oak' },
+    });
+
+    fireEvent.click(screen.getByTestId('ambient-material-submit'));
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0]![0].categoryId).toBe('c-oak');
+  });
+
+  it('manages categories via modal: creates and deletes category', () => {
+    const onCreateCategory = vi.fn();
+    const onDeleteCategory = vi.fn();
+    render(
+      <AmbientMaterialsCatalog
+        materials={[]}
+        categories={[{ id: 'c-metal', name: 'Metales', sortOrder: 0 }]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateCategory={onCreateCategory}
+        onDeleteCategory={onDeleteCategory}
+        canMutate
+      />,
+    );
+
+    // Open manage categories modal
+    fireEvent.click(screen.getByTestId('manage-categories'));
+    expect(screen.getByTestId('ambient-category-manage-modal')).toBeTruthy();
+
+    // Click new category
+    fireEvent.click(screen.getByTestId('ambient-category-create-btn'));
+    expect(screen.getByTestId('ambient-category-form-modal')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('ambient-category-name-input'), {
+      target: { value: 'Piedras' },
+    });
+    fireEvent.click(screen.getByTestId('ambient-category-submit'));
+
+    expect(onCreateCategory).toHaveBeenCalledWith({
+      name: 'Piedras',
+      parentId: '',
+      sortOrder: '0',
+    });
   });
 });

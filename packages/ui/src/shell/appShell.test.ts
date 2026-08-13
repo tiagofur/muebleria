@@ -80,7 +80,7 @@ describe('AppShell nav model (F017)', () => {
       'Materiales',
       'Cantos',
       'Herrajes',
-      'Ambiente',
+      'Acabados',
       'Grupos',
     ]);
     expect(ingenieria.items.map((i) => i.group)).toEqual([
