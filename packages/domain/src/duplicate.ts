@@ -5,8 +5,10 @@
 
 import type {
   HardwareLine,
+  HardwarePlacement,
   InstallationChecklistItem,
   Module,
+  ModuleAgregadoInstance,
   ModuleComponentInstance,
   Project,
   ProjectItem,
@@ -57,6 +59,16 @@ function defaultNestedId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function cloneHardwarePlacement(p: HardwarePlacement): HardwarePlacement {
+  return {
+    hardwareId: p.hardwareId,
+    anchorFace: p.anchorFace,
+    relativePosition: { ...p.relativePosition },
+    rotationDeg: p.rotationDeg ? { ...p.rotationDeg } : undefined,
+    scale: p.scale,
+  };
+}
+
 function cloneComponentInstance(c: ModuleComponentInstance): ModuleComponentInstance {
   return {
     componentId: c.componentId,
@@ -70,8 +82,33 @@ function cloneComponentInstance(c: ModuleComponentInstance): ModuleComponentInst
           notes: c.overrides.notes,
           lengthFormula: c.overrides.lengthFormula,
           widthFormula: c.overrides.widthFormula,
+          // R-7: preserve spatial + hardware overrides (were lost on duplicate)
+          xFormula: c.overrides.xFormula,
+          yFormula: c.overrides.yFormula,
+          zFormula: c.overrides.zFormula,
+          rotateX: c.overrides.rotateX,
+          rotateY: c.overrides.rotateY,
+          rotateZ: c.overrides.rotateZ,
+          hardwarePlacements: c.overrides.hardwarePlacements
+            ? c.overrides.hardwarePlacements.map(cloneHardwarePlacement)
+            : undefined,
         }
       : undefined,
+  };
+}
+
+function cloneAgregadoInstance(a: ModuleAgregadoInstance): ModuleAgregadoInstance {
+  return {
+    id: a.id,
+    agregadoId: a.agregadoId,
+    name: a.name,
+    quantity: a.quantity,
+    position: a.position ? { ...a.position } : undefined,
+    dimensions: a.dimensions ? { ...a.dimensions } : undefined,
+    layoutDirection: a.layoutDirection,
+    gapMm: a.gapMm,
+    mirrored: a.mirrored,
+    optionOverrides: a.optionOverrides ? { ...a.optionOverrides } : undefined,
   };
 }
 
@@ -121,6 +158,8 @@ export function duplicateModule(
     baseLaborCost: module.baseLaborCost,
     notes: module.notes,
     hardwareLines: module.hardwareLines.map((l) => cloneHardwareLine(l, nextId())),
+    // R-1: preserve agregado instances (were silently lost on duplicate)
+    agregados: module.agregados?.map(cloneAgregadoInstance),
   };
 }
 

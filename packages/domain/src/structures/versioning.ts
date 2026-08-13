@@ -46,6 +46,9 @@ export function snapshotStructureRevision(
     externalDims: structure.externalDims,
     presets: structure.presets,
     components: structure.components,
+    // R-2: capture agregados so frozen quotes resolve against the revision's
+    // agregados, not the live structure's.
+    agregados: structure.agregados,
   };
 }
 
@@ -84,6 +87,7 @@ export interface ResolvedStructureRevision {
   readonly externalDims?: Structure['externalDims'];
   readonly presets?: Structure['presets'];
   readonly components?: Structure['components'];
+  readonly agregados?: Structure['agregados'];
 }
 
 /**
@@ -116,6 +120,7 @@ export function resolveStructureRevision(
       externalDims: structure.externalDims,
       presets: structure.presets,
       components: structure.components,
+      agregados: structure.agregados,
     };
   }
 
@@ -128,6 +133,7 @@ export function resolveStructureRevision(
       externalDims: matched.externalDims,
       presets: matched.presets,
       components: matched.components,
+      agregados: matched.agregados,
     };
   }
 
@@ -168,6 +174,9 @@ export function reifyResolvedStructure(
     externalDims: resolved.externalDims,
     presets: resolved.presets,
     components: resolved.components,
+    // R-2: use the revision's agregados (frozen), overriding the live ones
+    // that `...structure` would carry.
+    agregados: resolved.agregados,
     revision: resolved.revision,
   };
 }

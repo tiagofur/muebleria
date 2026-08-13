@@ -281,3 +281,32 @@ describe('captureProjectItemStructurePins', () => {
     expect(pinned[0]?.structureRevisionPin).toBe(5);
   });
 });
+
+describe('snapshotStructureRevision + agregados (R-2 fix)', () => {
+  it('snapshot captures agregados', () => {
+    const struct: Structure = {
+      ...baseStructure,
+      agregados: [{ agregadoId: 'agr-1', quantity: 2 }],
+    };
+    const snap = snapshotStructureRevision(struct);
+    expect(snap.agregados).toHaveLength(1);
+    expect(snap.agregados![0]!.agregadoId).toBe('agr-1');
+  });
+
+  it('pinned revision uses frozen agregados, not live (R-2 fix)', () => {
+    const v1: Structure = {
+      ...baseStructure,
+      revision: 1,
+      agregados: [{ agregadoId: 'agr-original', quantity: 1 }],
+    };
+    const { structure: v2 } = bumpStructureRevision(v1, {
+      ...v1,
+      agregados: [{ agregadoId: 'agr-changed', quantity: 3 }],
+    });
+    // Pin to revision 1 → must resolve with the FROZEN agregados.
+    const resolved = resolveStructureRevision(v2, 1);
+    expect(resolved.agregados).toHaveLength(1);
+    expect(resolved.agregados![0]!.agregadoId).toBe('agr-original');
+    expect(resolved.agregados![0]!.quantity).toBe(1);
+  });
+});

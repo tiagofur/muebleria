@@ -187,6 +187,69 @@ describe('duplicateModule', () => {
     });
     expect(copy.name).toBe('Clon custom');
   });
+
+  it('preserves agregado instances (R-1 fix)', () => {
+    const original = sampleModule({
+      agregados: [
+        {
+          agregadoId: 'agr-door',
+          quantity: 2,
+          layoutDirection: 'vertical' as const,
+          gapMm: 3,
+          position: { zFormula: '100' },
+          dimensions: { widthFormula: 'W - 36', heightFormula: '600' },
+        },
+      ],
+    });
+    const copy = duplicateModule(original, {
+      newId: 'mod-copy',
+      newCode: 'MOD-COPY',
+      nextNestedId: () => 'n1',
+    });
+
+    expect(copy.agregados).toHaveLength(1);
+    expect(copy.agregados![0]!.agregadoId).toBe('agr-door');
+    expect(copy.agregados![0]!.quantity).toBe(2);
+    expect(copy.agregados).not.toBe(original.agregados);
+    expect(copy.agregados![0]).not.toBe(original.agregados![0]);
+  });
+
+  it('preserves spatial overrides + hardwarePlacements on component clone (R-7 fix)', () => {
+    const original = sampleModule({
+      components: [
+        {
+          componentId: 'comp-1',
+          quantity: 1,
+          overrides: {
+            lengthFormula: 'H - 4',
+            xFormula: 'T',
+            rotateX: 90,
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-1',
+                anchorFace: 'front' as const,
+                relativePosition: { xMm: 38, yMm: 50 },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const copy = duplicateModule(original, {
+      newId: 'mod-copy',
+      newCode: 'MOD-COPY',
+      nextNestedId: () => 'n1',
+    });
+
+    const ov = copy.components![0]!.overrides!;
+    expect(ov.xFormula).toBe('T');
+    expect(ov.rotateX).toBe(90);
+    expect(ov.hardwarePlacements).toHaveLength(1);
+    expect(ov.hardwarePlacements![0]!.hardwareId).toBe('hw-1');
+    expect(ov.hardwarePlacements).not.toBe(
+      original.components![0]!.overrides!.hardwarePlacements,
+    );
+  });
 });
 
 describe('duplicateProject', () => {
