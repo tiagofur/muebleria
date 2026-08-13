@@ -13,6 +13,91 @@
   line-height: 1.4;
 }
 
+/* Target Surface Switcher */
+.material-palette__target-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.material-palette__target-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.material-palette__target-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-1);
+  background: var(--surface-input);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.material-palette__target-btn {
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-align: center;
+}
+
+.material-palette__target-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.material-palette__target-btn--active {
+  background: var(--surface-card);
+  color: var(--brand-600);
+  font-weight: var(--weight-semibold);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Category Filter Pills */
+.material-palette__categories {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  scrollbar-width: thin;
+}
+
+.material-palette__cat-pill {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.material-palette__cat-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.material-palette__cat-pill--active {
+  background: var(--brand-500);
+  color: #fff;
+  border-color: var(--brand-500);
+  font-weight: var(--weight-medium);
+}
+
 .material-palette__group {
   display: flex;
   flex-direction: column;
@@ -21,11 +106,49 @@
 
 .material-palette__group-title {
   margin: 0;
+  padding-top: var(--space-1);
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.material-palette__group-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--weight-regular, 400);
+}
+
+.material-palette__badges {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.material-palette__badge {
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+}
+
+.material-palette__badge--floor {
+  background: color-mix(in srgb, var(--brand-500) 15%, transparent);
+  color: var(--brand-600);
+}
+
+.material-palette__badge--wall {
+  background: color-mix(in srgb, #3b82f6 15%, transparent);
+  color: #2563eb;
+}
+
+.material-palette__badge--ceiling {
+  background: color-mix(in srgb, #8b5cf6 15%, transparent);
+  color: #7c3aed;
 }
 
 .material-palette__list {

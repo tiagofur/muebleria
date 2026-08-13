@@ -92,7 +92,7 @@ export interface AmbientMaterial {
   readonly code: string;
   readonly name: string;
   readonly active: boolean;
-  readonly surfaceType: AmbientSurfaceType;
+  readonly surfaceType?: AmbientSurfaceType;
   /** Hierarchical category node id; omit/undefined for uncategorized. */
   readonly categoryId?: string;
   readonly previewColor?: string;

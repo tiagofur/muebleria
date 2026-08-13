@@ -521,31 +521,19 @@ export function ProjectSpatialStudio({
   const ambientFloor = useMemo(() => {
     const id = layout.floorMaterialId;
     if (!id) return undefined;
-    return (
-      availableAmbientMaterials.find(
-        (m) => m.id === id && m.surfaceType === 'floor',
-      ) ?? undefined
-    );
+    return availableAmbientMaterials.find((m) => m.id === id) ?? undefined;
   }, [availableAmbientMaterials, layout.floorMaterialId]);
 
   const ambientWall = useMemo(() => {
     const id = layout.wallMaterialId;
     if (!id) return undefined;
-    return (
-      availableAmbientMaterials.find(
-        (m) => m.id === id && m.surfaceType === 'wall',
-      ) ?? undefined
-    );
+    return availableAmbientMaterials.find((m) => m.id === id) ?? undefined;
   }, [availableAmbientMaterials, layout.wallMaterialId]);
 
   const ambientCeiling = useMemo(() => {
     const id = layout.ceilingMaterialId;
     if (!id) return undefined;
-    return (
-      availableAmbientMaterials.find(
-        (m) => m.id === id && m.surfaceType === 'ceiling',
-      ) ?? undefined
-    );
+    return availableAmbientMaterials.find((m) => m.id === id) ?? undefined;
   }, [availableAmbientMaterials, layout.ceilingMaterialId]);
 
   const selectedRef = useMemo(() => {
@@ -776,15 +764,15 @@ export function ProjectSpatialStudio({
       (m) => m.id === drop.materialId,
     );
     if (!material) return;
-    if (drop.surface.kind === 'floor' && canApplyMaterial(material.surfaceType, drop.surface)) {
+    if (drop.surface.kind === 'floor') {
       commit({ ...layout, floorMaterialId: drop.materialId });
-    } else if (drop.surface.kind === 'wall' && canApplyMaterial(material.surfaceType, drop.surface)) {
+    } else if (drop.surface.kind === 'wall') {
       const targetWallId = drop.surface.wallId;
       const updatedWalls = (layout.walls ?? []).map((w) =>
         w.id === targetWallId ? { ...w, wallMaterialId: drop.materialId } : w,
       );
       commit({ ...layout, walls: updatedWalls });
-    } else if (drop.surface.kind === 'ceiling' && canApplyMaterial(material.surfaceType, drop.surface)) {
+    } else if (drop.surface.kind === 'ceiling') {
       commit({ ...layout, ceilingMaterialId: drop.materialId, showCeiling: true });
     }
   };
@@ -2080,15 +2068,16 @@ export function ProjectSpatialStudio({
               <section className="spatial-studio__section">
                 <MaterialPalette
                   materials={availableAmbientMaterials}
+                  categories={catalog.ambientCategories ?? []}
                   activeFloorId={layout.floorMaterialId}
                   activeWallId={layout.wallMaterialId}
                   activeCeilingId={layout.ceilingMaterialId}
                   testId="spatial-studio-material-palette"
-                  onSelectMaterial={(mat) => {
+                  onSelectMaterial={(mat, targetSurface) => {
                     if (!canEdit) return;
-                    if (mat.surfaceType === 'floor') {
+                    if (targetSurface === 'floor') {
                       commit({ ...layout, floorMaterialId: mat.id });
-                    } else if (mat.surfaceType === 'wall') {
+                    } else if (targetSurface === 'wall') {
                       if (activeWallId) {
                         const updatedWalls = (layout.walls ?? []).map((w) =>
                           w.id === activeWallId ? { ...w, wallMaterialId: mat.id } : w,
@@ -2097,7 +2086,7 @@ export function ProjectSpatialStudio({
                       } else {
                         commit({ ...layout, wallMaterialId: mat.id });
                       }
-                    } else if (mat.surfaceType === 'ceiling') {
+                    } else if (targetSurface === 'ceiling') {
                       commit({ ...layout, ceilingMaterialId: mat.id, showCeiling: true });
                     }
                   }}

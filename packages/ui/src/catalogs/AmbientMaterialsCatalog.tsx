@@ -63,7 +63,7 @@ import './catalogs.css';
 export type AmbientMaterialDraft = {
   code: string;
   name: string;
-  surfaceType: AmbientSurfaceType;
+  surfaceType?: AmbientSurfaceType;
   categoryId?: string;
   previewColor: string;
   /** Relative media path for 3D texture. */
@@ -80,7 +80,6 @@ export type AmbientCategoryDraft = CategoryDraft;
 const emptyDraft = (): AmbientMaterialDraft => ({
   code: '',
   name: '',
-  surfaceType: 'floor',
   categoryId: '',
   previewColor: '',
   previewTextureUrl: '',

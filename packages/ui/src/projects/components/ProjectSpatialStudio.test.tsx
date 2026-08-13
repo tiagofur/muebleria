@@ -1289,7 +1289,7 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     expect(next.floorMaterialId).toBeUndefined();
   });
 
-  it('paint drop ignores surfaceType mismatch (floor material on wall)', () => {
+  it('paint drop applies finish freely on wall (universal finish)', () => {
     const onChangeLayout = vi.fn();
     const projectWithWalls: Project = {
       ...project,
@@ -1306,7 +1306,6 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
           code: 'CERAMIC',
           name: 'Cerámica',
           active: true,
-          surfaceType: 'floor' as const,
           previewColor: '#333333',
         },
       ],
@@ -1323,7 +1322,11 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
       />,
     );
     fireEvent.click(screen.getByTestId('mock-paint-drop-floor-to-wall'));
-    expect(onChangeLayout).not.toHaveBeenCalled();
+    expect(onChangeLayout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        walls: [expect.objectContaining({ id: 'w1', wallMaterialId: 'am-floor-1' })],
+      }),
+    );
   });
 
   it('switches sidebar tabs between Muebles, Materiales, and Ambiente', () => {

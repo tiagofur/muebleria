@@ -80,7 +80,6 @@ describe('AmbientMaterialsCatalog', () => {
     const draft = onCreate.mock.calls[0]![0];
     expect(draft.code).toBe('GRANITE');
     expect(draft.name).toBe('Granito gris');
-    expect(draft.surfaceType).toBe('floor');
   });
 
   it('edit flow opens modal pre-filled and calls onUpdate', () => {

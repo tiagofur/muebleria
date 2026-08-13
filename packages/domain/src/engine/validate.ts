@@ -334,9 +334,9 @@ export function validateCatalogEntityCodes(catalog: Catalog): void {
         { ambientMaterialId: a.id, field: 'code/name' },
       );
     }
-    if (!AMBIENT_SURFACE_TYPES.has(a.surfaceType)) {
+    if (a.surfaceType && !AMBIENT_SURFACE_TYPES.has(a.surfaceType)) {
       throw new ValidationError(
-        `Ambient material surfaceType must be 'floor' or 'wall' (got '${a.surfaceType}')`,
+        `Ambient material surfaceType must be 'floor', 'wall', or 'ceiling' (got '${a.surfaceType}')`,
         {
           ambientMaterialId: a.id,
           ambientMaterialCode: a.code,

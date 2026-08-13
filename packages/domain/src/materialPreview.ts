@@ -158,19 +158,10 @@ export function resolveAmbientMaterials(
   customMaterials?: readonly AmbientMaterial[],
 ): readonly AmbientMaterial[] {
   const custom = (customMaterials ?? []).filter((m) => m.active);
-  const hasCustomFloor = custom.some((m) => m.surfaceType === 'floor');
-  const hasCustomWall = custom.some((m) => m.surfaceType === 'wall');
-  const hasCustomCeiling = custom.some((m) => m.surfaceType === 'ceiling');
-
-  const result = [...custom];
-  if (!hasCustomFloor) {
-    result.push(...DEFAULT_AMBIENT_MATERIALS.filter((m) => m.surfaceType === 'floor'));
+  if (custom.length === 0) {
+    return DEFAULT_AMBIENT_MATERIALS;
   }
-  if (!hasCustomWall) {
-    result.push(...DEFAULT_AMBIENT_MATERIALS.filter((m) => m.surfaceType === 'wall'));
-  }
-  if (!hasCustomCeiling) {
-    result.push(...DEFAULT_AMBIENT_MATERIALS.filter((m) => m.surfaceType === 'ceiling'));
-  }
-  return result;
+  const customIds = new Set(custom.map((m) => m.id));
+  const defaults = DEFAULT_AMBIENT_MATERIALS.filter((m) => !customIds.has(m.id));
+  return [...custom, ...defaults];
 }

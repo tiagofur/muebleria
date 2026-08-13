@@ -55,16 +55,15 @@ export function resolvePaintSurface(
 }
 
 /**
- * Valida que un material pueda aplicarse a una superficie según su
- * surfaceType. Los ambient materials tienen surfaceType 'floor'|'wall'|'ceiling'.
+ * Valida que un material pueda aplicarse a una superficie.
+ * Con el nuevo catálogo de Acabados 3D, todos los materiales son universales
+ * y pueden aplicarse libremente a pisos, muros, techos y elementos 3D.
  */
 export function canApplyMaterial(
-  materialSurfaceType: AmbientSurfaceType,
-  target: PaintSurface,
+  _materialSurfaceType: AmbientSurfaceType | undefined,
+  _target: PaintSurface,
 ): boolean {
-  if (target.kind === 'floor') return materialSurfaceType === 'floor';
-  if (target.kind === 'ceiling') return materialSurfaceType === 'ceiling';
-  return materialSurfaceType === 'wall';
+  return true;
 }
 
 /**
@@ -74,7 +73,7 @@ export const PAINT_DRAG_MIME = 'application/x-muebles-paint';
 
 export type PaintDragPayload = {
   readonly materialId: string;
-  readonly surfaceType: AmbientSurfaceType;
+  readonly surfaceType?: AmbientSurfaceType;
 };
 
 /** Serializa el payload del drag a JSON string. */
@@ -85,20 +84,29 @@ export function encodePaintDrag(payload: PaintDragPayload): string {
 /** Deserializa el payload del drag; devuelve null si está corrupto/vacío. */
 export function decodePaintDrag(raw: string | null): PaintDragPayload | null {
   if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<PaintDragPayload>;
-    if (
-      typeof parsed.materialId === 'string' &&
-      (parsed.surfaceType === 'floor' ||
-        parsed.surfaceType === 'wall' ||
-        parsed.surfaceType === 'ceiling')
-    ) {
-      return { materialId: parsed.materialId, surfaceType: parsed.surfaceType };
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as Partial<PaintDragPayload>;
+      if (typeof parsed.materialId === 'string' && parsed.materialId.length > 0) {
+        if (
+          parsed.surfaceType === undefined ||
+          parsed.surfaceType === 'floor' ||
+          parsed.surfaceType === 'wall' ||
+          parsed.surfaceType === 'ceiling'
+        ) {
+          return { materialId: parsed.materialId, surfaceType: parsed.surfaceType };
+        }
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
-  } catch {
-    return null;
   }
+
+  return { materialId: trimmed };
 }
 
 // ─── F065 Drag de ítem sin colocar → viewport 3D ────────────────────────────

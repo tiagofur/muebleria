@@ -45,20 +45,19 @@ describe('resolvePaintSurface', () => {
 });
 
 describe('canApplyMaterial', () => {
-  it('floor material → floor target: allowed', () => {
+  it('any material → floor target: allowed', () => {
     expect(canApplyMaterial('floor', { kind: 'floor' })).toBe(true);
+    expect(canApplyMaterial(undefined, { kind: 'floor' })).toBe(true);
   });
 
-  it('floor material → wall target: rejected', () => {
-    expect(canApplyMaterial('floor', { kind: 'wall', wallId: 'w1' })).toBe(false);
-  });
-
-  it('wall material → wall target: allowed', () => {
+  it('any material → wall target: allowed', () => {
+    expect(canApplyMaterial('floor', { kind: 'wall', wallId: 'w1' })).toBe(true);
     expect(canApplyMaterial('wall', { kind: 'wall', wallId: 'w1' })).toBe(true);
   });
 
-  it('wall material → floor target: rejected', () => {
-    expect(canApplyMaterial('wall', { kind: 'floor' })).toBe(false);
+  it('any material → ceiling target: allowed', () => {
+    expect(canApplyMaterial('ceiling', { kind: 'ceiling' })).toBe(true);
+    expect(canApplyMaterial('floor', { kind: 'ceiling' })).toBe(true);
   });
 });
 
@@ -94,9 +93,9 @@ describe('encode/decode paint drag', () => {
   });
 
   it('decode returns null for valid JSON with wrong shape', () => {
-    expect(decodePaintDrag(JSON.stringify({ materialId: 'x' }))).toBeNull();
+    expect(decodePaintDrag(JSON.stringify({ other: 'x' }))).toBeNull();
     expect(
-      decodePaintDrag(JSON.stringify({ materialId: 'x', surfaceType: 'ceil' })),
+      decodePaintDrag(JSON.stringify({ materialId: 'x', surfaceType: 'invalid' })),
     ).toBeNull();
     expect(
       decodePaintDrag(JSON.stringify({ surfaceType: 'floor' })),
