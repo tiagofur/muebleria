@@ -39,7 +39,7 @@ export type AgregadoEditorFormProps = {
 };
 
 const TABS: { id: AgregadoEditorTab; label: string }[] = [
-  { id: 'general', label: 'General & Dimensiones' },
+  { id: 'general', label: 'General' },
   { id: 'components', label: 'Piezas' },
   { id: 'hardware', label: 'Herrajes' },
 ];

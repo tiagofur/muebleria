@@ -5,7 +5,7 @@
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { Hardware, HardwareUnit } from '@muebles/domain';
 import { HARDWARE_FINISHES } from '@muebles/domain';
-import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,
   EmptyState,
@@ -139,6 +139,7 @@ export function HardwareCatalog({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<HardwareDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
+  const [preview3dOpen, setPreview3dOpen] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -581,72 +582,97 @@ export function HardwareCatalog({
             </div>
           </fieldset>
 
-          {/* F069: 3D preview — shape + finish preset + color */}
-          <fieldset className="catalog-form__section">
-            <legend className="catalog-form__section-title">Vista 3D</legend>
-            <div className="catalog-form__row">
-              <label className="catalog-form__field">
-                <span>Forma (3D)</span>
-                <select
-                  value={draft.previewShape}
-                  onChange={(e) => setDraft({ ...draft, previewShape: e.target.value })}
-                  data-testid="hardware-form-shape"
-                >
-                  <option value="">— Sin forma —</option>
-                  <option value="knob">Tirador (perilla)</option>
-                  <option value="bar-pull">Tirador (barra)</option>
-                  <option value="cup-pull">Tirador (copa)</option>
-                  <option value="hinge">Bisagra</option>
-                  <option value="slide">Corredera</option>
-                  <option value="rail">Riel</option>
-                  <option value="leg">Pata</option>
-                </select>
-              </label>
-              <label className="catalog-form__field">
-                <span>Acabado</span>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const finish = HARDWARE_FINISHES.find((f) => f.id === e.target.value);
-                    if (finish) {
-                      setDraft({
-                        ...draft,
-                        previewColor: finish.color,
-                        previewMetalness: String(finish.metalness),
-                        previewRoughness: String(finish.roughness),
-                        previewClearcoat: String(finish.clearcoat),
-                      });
-                    }
-                  }}
-                  data-testid="hardware-form-finish"
-                >
-                  <option value="">— Personalizado —</option>
-                  {HARDWARE_FINISHES.map((f) => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="catalog-form__row">
-              <label className="catalog-form__field">
-                <span>Color</span>
-                <input
-                  type="color"
-                  value={draft.previewColor || '#9aa0a6'}
-                  onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
-                  data-testid="hardware-form-color"
-                />
-              </label>
-              {draft.previewColor ? (
-                <span
-                  className="material-color-swatch"
-                  style={{ backgroundColor: draft.previewColor }}
-                  aria-label={draft.previewColor}
-                  data-testid="hardware-form-color-swatch"
-                />
-              ) : null}
-            </div>
-          </fieldset>
+          {/* F069: 3D preview — shape + finish preset + color (progressive disclosure) */}
+          <div className="catalog-form__disclosure" data-testid="hardware-preview-3d">
+            <button
+              type="button"
+              className="catalog-form__disclosure-header"
+              aria-expanded={preview3dOpen}
+              onClick={() => setPreview3dOpen((o) => !o)}
+              data-testid="hardware-preview-3d-toggle"
+            >
+              {preview3dOpen ? (
+                <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
+              ) : (
+                <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
+              )}
+              <span className="catalog-form__disclosure-title">Vista 3D</span>
+              <span className="catalog-form__disclosure-summary">
+                {draft.previewShape
+                  ? 'Configurado'
+                  : 'Opcional — forma, acabado y color'}
+              </span>
+            </button>
+            {preview3dOpen ? (
+              <div
+                className="catalog-form__disclosure-body"
+                data-testid="hardware-preview-3d-body"
+              >
+                <div className="catalog-form__row">
+                  <label className="catalog-form__field">
+                    <span>Forma (3D)</span>
+                    <select
+                      value={draft.previewShape}
+                      onChange={(e) => setDraft({ ...draft, previewShape: e.target.value })}
+                      data-testid="hardware-form-shape"
+                    >
+                      <option value="">— Sin forma —</option>
+                      <option value="knob">Tirador (perilla)</option>
+                      <option value="bar-pull">Tirador (barra)</option>
+                      <option value="cup-pull">Tirador (copa)</option>
+                      <option value="hinge">Bisagra</option>
+                      <option value="slide">Corredera</option>
+                      <option value="rail">Riel</option>
+                      <option value="leg">Pata</option>
+                    </select>
+                  </label>
+                  <label className="catalog-form__field">
+                    <span>Acabado</span>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const finish = HARDWARE_FINISHES.find((f) => f.id === e.target.value);
+                        if (finish) {
+                          setDraft({
+                            ...draft,
+                            previewColor: finish.color,
+                            previewMetalness: String(finish.metalness),
+                            previewRoughness: String(finish.roughness),
+                            previewClearcoat: String(finish.clearcoat),
+                          });
+                        }
+                      }}
+                      data-testid="hardware-form-finish"
+                    >
+                      <option value="">— Personalizado —</option>
+                      {HARDWARE_FINISHES.map((f) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="catalog-form__row">
+                  <label className="catalog-form__field">
+                    <span>Color</span>
+                    <input
+                      type="color"
+                      value={draft.previewColor || '#9aa0a6'}
+                      onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
+                      data-testid="hardware-form-color"
+                    />
+                  </label>
+                  {draft.previewColor ? (
+                    <span
+                      className="material-color-swatch"
+                      style={{ backgroundColor: draft.previewColor }}
+                      aria-label={draft.previewColor}
+                      data-testid="hardware-form-color-swatch"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </form>
       </Modal>
     </section>
