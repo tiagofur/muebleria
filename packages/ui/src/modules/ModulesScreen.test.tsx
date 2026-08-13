@@ -318,24 +318,23 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('shows primary tabs General/Composición and composition subtabs (Costo is aside)', async () => {
+  it('shows flat tabs (General/Estructura/Componentes/Agregados/Medidas/Herrajes; Costo is aside)', async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
     expect(screen.getByTestId('module-editor-page')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tab-general')).toBeTruthy();
-    expect(screen.getByTestId('module-editor-tab-composition')).toBeTruthy();
-    // Full-page: Costo lives in sticky aside, not as a third primary tab.
+    expect(screen.getByTestId('module-editor-tab-structure')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-tab-components')).toBeTruthy();
+    // Full-page: Costo lives in sticky aside, not as a tab.
     expect(screen.queryByTestId('module-editor-tab-cost')).toBeNull();
     expect(screen.getByTestId('module-editor-cost-aside')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
 
-    await user.click(screen.getByTestId('module-editor-tab-composition'));
-    expect(screen.getByTestId('module-editor-composition-tabs')).toBeTruthy();
-    // No structure yet → badges on composition + structure subtab
+    // No structure yet → badge on structure tab.
     expect(screen.getByTestId('module-editor-structure-badge')).toBeTruthy();
-    expect(screen.getByTestId('module-editor-structure-sub-badge')).toBeTruthy();
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
     expect(screen.getByTestId('module-editor-panel-structure').hidden).toBe(
       false,
     );
@@ -373,7 +372,6 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     await user.click(screen.getByRole('button', { name: /^Editar$/ }));
     await screen.findByTestId('module-editor-page');
 
-    await user.click(screen.getByTestId('module-editor-tab-composition'));
     await user.click(screen.getByTestId('module-editor-tab-components'));
 
     const componentsPanel = screen.getByTestId(
@@ -422,7 +420,6 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     await screen.findByTestId('module-editor-page');
 
     // Pick a structure so composed mode is enabled, then open Components.
-    await user.click(screen.getByTestId('module-editor-tab-composition'));
     await user.click(screen.getByTestId('module-editor-tab-structure'));
     const structurePicker = screen.getByTestId('structure-picker') as HTMLSelectElement;
     await user.selectOptions(structurePicker, 'struct-1');
@@ -545,11 +542,11 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     };
     const { rerender } = render(<ModulesScreen {...baseProps} />);
 
-    // Leave general via Composición primary tab.
-    await user.click(screen.getByTestId('module-editor-tab-composition'));
+    // Leave general via Estructura tab.
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
     expect(
       screen
-        .getByTestId('module-editor-tab-composition')
+        .getByTestId('module-editor-tab-structure')
         .getAttribute('aria-selected'),
     ).toBe('true');
 

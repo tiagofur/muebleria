@@ -234,63 +234,14 @@
   background: var(--surface-hover);
 }
 
-/* Secondary composition tabs (Fase 4 UI) */
-.module-editor__subtabs {
-  position: sticky;
-  top: 2.75rem;
-  z-index: 4;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
-  padding: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-app, var(--surface-card));
-}
-
-.module-editor__subtab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  cursor: pointer;
-  transition: var(--transition-colors);
-  white-space: nowrap;
-  border-radius: 0;
-}
-
-.module-editor__subtab:hover {
-  color: var(--text-primary);
-}
-
-.module-editor__subtab:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.module-editor__subtab--active {
-  color: var(--text-brand);
-  border-bottom-color: var(--brand-500);
-  font-weight: var(--weight-semibold);
-}
-
 /* Tabs that require a structure base: muted when structure is not yet selected */
-.module-editor__subtab--gated {
+.module-editor__tab--gated {
   color: var(--text-muted);
   opacity: 0.55;
   cursor: help;
 }
 
-.module-editor__subtab--gated:hover {
+.module-editor__tab--gated:hover {
   color: var(--text-muted);
   background: transparent;
 }
