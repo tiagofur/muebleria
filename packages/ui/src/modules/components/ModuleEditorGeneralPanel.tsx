@@ -159,7 +159,7 @@ export function ModuleEditorGeneralPanel({
         </div>
 
         <div className="catalog-form__field" data-testid="module-base-mode-field">
-          <label htmlFor="mod-base-mode">Base (zoclo / patas)</label>
+          <label htmlFor="mod-base-mode">Zócalo: ¿cómo apoya en el piso?</label>
           <select
             id="mod-base-mode"
             value={draft.baseMode || 'none'}
@@ -173,18 +173,39 @@ export function ModuleEditorGeneralPanel({
             }}
             data-testid="module-base-mode"
           >
-            <option value="none">Sin base (solo cuerpo)</option>
+            <option value="none">Automático según tipo de mueble</option>
             <option value="plinth_board">
-              Zoclo de melamina (pieza de corte)
+              Zócalo de melamina (se corta y canta)
             </option>
             <option value="plinth_strip">
-              Zoclo perfil comprado (ml, sin corte)
+              Perfil comprado (por metro lineal)
             </option>
             <option value="legs">Patas / niveladores</option>
           </select>
-          <p className="module-editor__hint">
-            Melamina: componentes con rol ZOCLO (material hereda FRENTE si no hay choice). Perfil: herraje ZOCLO_PERFIL en metro lineal. Patas: herraje PATAS.
-          </p>
+          {draft.baseMode === 'plinth_board' ? (
+            <p className="module-editor__hint">
+              La pieza se genera sola al cotizar (largo = ancho del mueble,
+              alto = B, canto frontal). El acabado se elige en cada cotización;
+              si no se elige, hereda el del frente.
+            </p>
+          ) : draft.baseMode === 'plinth_strip' ? (
+            <p className="module-editor__hint">
+              Se factura por metro lineal. El perfil (aluminio, bronce,
+              negro…) se elige en cada cotización desde tu catálogo de
+              herrajes.
+            </p>
+          ) : draft.baseMode === 'legs' ? (
+            <p className="module-editor__hint">
+              Cantidad sugerida según el ancho. Las patas se eligen en cada
+              cotización desde tu catálogo de herrajes.
+            </p>
+          ) : (
+            <p className="module-editor__hint">
+              Inferiores y despensas se cotizan con zócalo de melamina
+              heredando el frente; superiores van sin zócalo. Fijá otra cosa
+              solo si este mueble se aparta de la regla.
+            </p>
+          )}
         </div>
 
         {(draft.baseMode && draft.baseMode !== 'none') ||
@@ -204,7 +225,8 @@ export function ModuleEditorGeneralPanel({
               data-testid="module-base-clearance"
             />
             <p className="module-editor__hint">
-              Altura de zoclo o pata. Entra en fórmulas de pieza como variable <code>B</code> y en el clearance 3D del plano.
+              Altura de zoclo o pata. Entra en fórmulas de pieza como variable <code>B</code>.
+              En Proyectar se ajusta por mueble (pestaña Posición).
             </p>
           </div>
         ) : null}

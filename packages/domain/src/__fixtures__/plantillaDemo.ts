@@ -59,6 +59,8 @@ export const IDS = {
   hwSoporte: 'hw-soporte-entrepano',
   /** Purchased plinth profile (plastic/aluminium look), unit meter. */
   hwZocloPerfil: 'hw-zoclo-perfil-alu',
+  hwZocloPerfilBronce: 'hw-zoclo-perfil-bronce',
+  hwZocloPerfilNegro: 'hw-zoclo-perfil-negro',
   ogInterior: 'og-interior',
   ogFrente: 'og-frente',
   ogFondo: 'og-fondo',
@@ -239,12 +241,35 @@ export const plantillaCatalog: Catalog = {
     {
       id: IDS.hwZocloPerfil,
       code: 'HER-ZOC-ALU',
-      name: 'Zoclo perfil plástico aluminio',
+      name: 'Zoclo perfil aluminio natural',
       unit: 'meter',
       costPerUnit: 18,
       packageSize: 4,
       active: true,
+      previewColor: '#c0c5cb',
       notes: 'Barra comercial 4 m — lista de compra redondea a barras.',
+    },
+    {
+      id: IDS.hwZocloPerfilBronce,
+      code: 'HER-ZOC-BRO',
+      name: 'Zoclo perfil bronce',
+      unit: 'meter',
+      costPerUnit: 22,
+      packageSize: 4,
+      active: true,
+      previewColor: '#8d6e42',
+      notes: 'Barra comercial 4 m — acabado bronce.',
+    },
+    {
+      id: IDS.hwZocloPerfilNegro,
+      code: 'HER-ZOC-NEG',
+      name: 'Zoclo perfil negro',
+      unit: 'meter',
+      costPerUnit: 22,
+      packageSize: 4,
+      active: true,
+      previewColor: '#2c2f34',
+      notes: 'Barra comercial 4 m — acabado negro mate.',
     },
   ],
   optionGroups: [
@@ -303,7 +328,13 @@ export const plantillaCatalog: Catalog = {
       name: 'Zoclo perfil (ml)',
       kind: 'hardware',
       required: false,
-      optionIds: [IDS.hwZocloPerfil],
+      // Catalog-driven finishes: the workshop registers its own profiles
+      // (aluminio / bronce / negro / …) as hardware options here.
+      optionIds: [
+        IDS.hwZocloPerfil,
+        IDS.hwZocloPerfilBronce,
+        IDS.hwZocloPerfilNegro,
+      ],
     },
   ],
   customers: [

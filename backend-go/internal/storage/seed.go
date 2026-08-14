@@ -30,6 +30,8 @@ var (
 	seedHwCorredera = "a0000003-0000-0000-0000-000000000005"
 	seedHwSoporte   = "a0000003-0000-0000-0000-000000000006"
 	seedHwZocloPerfil = "a0000003-0000-0000-0000-000000000007"
+	seedHwZocloBronce = "a0000003-0000-0000-0000-000000000008"
+	seedHwZocloNegro  = "a0000003-0000-0000-0000-000000000009"
 	// Option groups
 	seedOGInterior  = "a0000004-0000-0000-0000-000000000001"
 	seedOGFrente    = "a0000004-0000-0000-0000-000000000002"
@@ -126,21 +128,23 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 
 	// --- HARDWARE ---
 	for _, h := range []struct {
-		id, code, name, unit string
-		costPerUnit          float64
+		id, code, name, unit, previewColor string
+		costPerUnit                        float64
 	}{
-		{seedHwBisagra, "HER-BIS-CL", "Bisagra Cierre Lento", "piece", 35},
-		{seedHwJaladera, "HER-JAL-INOX", "Jaladera Acero Inox", "piece", 45},
-		{seedHwPata, "HER-PATA-REG", "Pata Regulable Plastica", "piece", 15},
-		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", 0.5},
-		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", 120},
-		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", 2},
-		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil plástico aluminio", "meter", 18},
+		{seedHwBisagra, "HER-BIS-CL", "Bisagra Cierre Lento", "piece", "", 35},
+		{seedHwJaladera, "HER-JAL-INOX", "Jaladera Acero Inox", "piece", "", 45},
+		{seedHwPata, "HER-PATA-REG", "Pata Regulable Plastica", "piece", "", 15},
+		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", "", 0.5},
+		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", "", 120},
+		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", "", 2},
+		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil aluminio natural", "meter", "#c0c5cb", 18},
+		{seedHwZocloBronce, "HER-ZOC-BRO", "Zoclo perfil bronce", "meter", "#8d6e42", 22},
+		{seedHwZocloNegro, "HER-ZOC-NEG", "Zoclo perfil negro", "meter", "#2c2f34", 22},
 	} {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active, created_at, updated_at)
-			VALUES ($1,$2,$3,$4,$5,true,$6,$7)`,
-			h.id, h.code, h.name, h.unit, h.costPerUnit, now, now)
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, preview_color, active, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),true,$7,$8)`,
+			h.id, h.code, h.name, h.unit, h.costPerUnit, h.previewColor, now, now)
 		if err != nil {
 			return fmt.Errorf("seed hardware %s: %w", h.code, err)
 		}
@@ -158,7 +162,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		{seedOGBisagra, "BISAGRA", "Bisagras", "hardware", true, []string{seedHwBisagra}},
 		{seedOGCorredera, "CORREDERA", "Correderas", "hardware", true, []string{seedHwCorredera}},
 		{seedOGZoclo, "ZOCLO", "Melamina de zoclo", "board", false, []string{seedMatMaderado, seedMatArauco}},
-		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil}},
+		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro}},
 	} {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO option_groups (id, code, name, kind, required)
@@ -468,22 +472,33 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	defer tx.Rollback(ctx)
 	now := time.Now().UTC()
 
-	// Hardware profile (ml), package 4 m bars
-	_, err = tx.Exec(ctx, `
-		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, notes, active, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9)
-		ON CONFLICT (code) DO UPDATE SET
-			name = EXCLUDED.name,
-			unit = EXCLUDED.unit,
-			cost_per_unit = EXCLUDED.cost_per_unit,
-			package_size = EXCLUDED.package_size,
-			notes = EXCLUDED.notes,
-			updated_at = EXCLUDED.updated_at`,
-		seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil plástico aluminio", "meter", 18.0, 4.0,
-		"Barra comercial 4 m — lista de compra redondea a barras.",
-		now, now)
-	if err != nil {
-		return fmt.Errorf("ensure plinth hardware: %w", err)
+	// Hardware profiles (ml), package 4 m bars. Catalog-driven finishes:
+	// aluminio / bronce / negro — the workshop manages its own from here.
+	for _, hw := range []struct {
+		id, code, name, previewColor string
+		cost                         float64
+	}{
+		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil aluminio natural", "#c0c5cb", 18.0},
+		{seedHwZocloBronce, "HER-ZOC-BRO", "Zoclo perfil bronce", "#8d6e42", 22.0},
+		{seedHwZocloNegro, "HER-ZOC-NEG", "Zoclo perfil negro", "#2c2f34", 22.0},
+	} {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, preview_color, notes, active, created_at, updated_at)
+			VALUES ($1,$2,$3,'meter',$4,4.0,NULLIF($5,''),$6,true,$7,$8)
+			ON CONFLICT (code) DO UPDATE SET
+				name = EXCLUDED.name,
+				unit = EXCLUDED.unit,
+				cost_per_unit = EXCLUDED.cost_per_unit,
+				package_size = EXCLUDED.package_size,
+				preview_color = EXCLUDED.preview_color,
+				notes = EXCLUDED.notes,
+				updated_at = EXCLUDED.updated_at`,
+			hw.id, hw.code, hw.name, hw.cost, hw.previewColor,
+			"Barra comercial 4 m — lista de compra redondea a barras.",
+			now, now)
+		if err != nil {
+			return fmt.Errorf("ensure plinth hardware: %w", err)
+		}
 	}
 
 	// Resolve material ids for option group members (may differ if not seed UUIDs).
@@ -503,7 +518,7 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 		optIDs               []string
 	}{
 		{seedOGZoclo, "ZOCLO", "Melamina de zoclo", "board", false, []string{matFrente, matInterior}},
-		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil}},
+		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro}},
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO option_groups (id, code, name, kind, required)
