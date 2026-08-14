@@ -38,6 +38,7 @@ export type ModuleDetailViewProps = {
   readonly structures?: readonly Structure[];
   readonly costPreview: QuoteBreakdown | null;
   readonly previewBlocked: boolean;
+  readonly previewError?: string | null;
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   readonly moduleEstimates: Readonly<Record<string, number | null>>;
@@ -64,6 +65,7 @@ export function ModuleDetailView({
   structures = [],
   costPreview,
   previewBlocked,
+  previewError,
   missingGroups,
   groupLabels,
   moduleEstimates,
@@ -237,6 +239,7 @@ export function ModuleDetailView({
         <CostPreviewPanel
           costPreview={costPreview}
           previewBlocked={previewBlocked}
+          previewError={previewError}
           missingGroups={missingGroups}
           groupLabels={groupLabels}
         />

@@ -92,3 +92,27 @@ acabado→tablero declarativo. No se parchea con un cast de ids.
   la UI real (tabs "Muebles/Materiales/Ambiente", inspector "Mueble/Posición",
   botón "Proyectar").
 - Referenciada desde `AGENTS.md` (mapa de docs) y `README.md`.
+
+## Fix post-feedback — preview de costo bloqueado al elegir zócalo (F087)
+
+Reporte del usuario: al poner baseMode "perfil" el preview se bloqueaba
+listando ZOCLO_PERFIL; con melamina listaba INTERIOR (grupo que sí tiene).
+
+Causas (3):
+
+1. `moduleHelpers.usedOptionRolesForModule` es un colector de roles duplicado
+   que no conocía los roles sintetizados por baseMode → los defaults del
+   preview nunca llenaban ZOCLO/ZOCLO_PERFIL/PATAS → el breakdown explotaba.
+   Fix: baseMode→rol (constantes de dominio) en el colector; el preview y el
+   3D llenan el primer miembro del grupo como default.
+2. El catch de `computeModuleCostPreview` devolvía `missingGroups: required`
+   (TODOS los requeridos) en vez de los realmente sin elección → señalaba
+   grupos sanos (el "INTERIOR" del reporte). Fix: lista honesta = grupos
+   usados (requeridos u opcionales) sin default.
+3. El error de dominio se descartaba en silencio. Fix: `previewError`
+   plumbeado App → ModulesScreen → ModuleEditorForm/DetailView →
+   CostPreviewPanel, que ahora muestra el mensaje real.
+
+Tests: defaults de roles de base (moduleHelpers), panel con error honesto
+(CostPreviewPanel.test). Suites: ui 763, web 232, resto intacto; typecheck
+monorepo verde.

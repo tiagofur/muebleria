@@ -10,6 +10,7 @@ export type ModuleEditorCostPanelProps = {
   readonly editingId: string | null;
   readonly costPreview: QuoteBreakdown | null;
   readonly previewBlocked: boolean;
+  readonly previewError?: string | null;
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   readonly hidden: boolean;
@@ -19,6 +20,7 @@ export function ModuleEditorCostPanel({
   editingId,
   costPreview,
   previewBlocked,
+  previewError,
   missingGroups,
   groupLabels,
   hidden,
@@ -35,6 +37,7 @@ export function ModuleEditorCostPanel({
         <CostPreviewPanel
           costPreview={costPreview}
           previewBlocked={previewBlocked}
+          previewError={previewError}
           missingGroups={missingGroups}
           groupLabels={groupLabels}
         />

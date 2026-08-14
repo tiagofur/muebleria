@@ -108,6 +108,7 @@ export interface ModulesScreenProps {
   /** Domain QuoteBreakdown from shell (MOD-06). Null when blocked/unavailable. */
   readonly costPreview?: QuoteBreakdown | null;
   readonly previewBlocked?: boolean;
+  readonly previewError?: string | null;
   readonly missingGroups?: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   /**
@@ -186,6 +187,7 @@ export function ModulesScreen({
   onEditingChange,
   costPreview = null,
   previewBlocked = false,
+  previewError = null,
   missingGroups = [],
   groupLabels,
   moduleEstimates = {},
@@ -964,6 +966,7 @@ export function ModulesScreen({
                 structures={structures}
                 costPreview={costPreview}
                 previewBlocked={previewBlocked}
+                previewError={previewError}
                 missingGroups={missingGroups}
                 groupLabels={groupLabels}
                 moduleEstimates={moduleEstimates}
@@ -1016,6 +1019,7 @@ export function ModulesScreen({
             editingId={editingId}
             costPreview={costPreview}
             previewBlocked={previewBlocked}
+            previewError={previewError}
             missingGroups={missingGroups}
             groupLabels={groupLabels}
             boardEditorSlot={resolvedBoardEditorSlot}
@@ -1035,6 +1039,7 @@ export function ModulesScreen({
                 <CostPreviewPanel
                   costPreview={costPreview}
                   previewBlocked={previewBlocked}
+                  previewError={previewError}
                   missingGroups={missingGroups}
                   groupLabels={groupLabels}
                   allowEmptyHint

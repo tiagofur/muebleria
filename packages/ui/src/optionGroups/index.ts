@@ -9,9 +9,11 @@ export {
   membersForKind,
   optionGroupKindLabel,
   requiredGroupCodesForModule,
+  selectableGroupCodesForModule,
   SEED_OPTION_GROUP_CODES,
   validateOptionGroupCode,
   type CatalogMember,
+  type ModuleLikeForRoles,
   type PricePreviewGateResult,
 } from './optionGroupHelpers';
 

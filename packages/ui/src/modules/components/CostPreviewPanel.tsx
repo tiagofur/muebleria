@@ -12,6 +12,8 @@ export type CostPreviewPanelProps = {
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   readonly allowEmptyHint?: boolean;
+  /** Domain resolution error behind a blocked preview (why it failed). */
+  readonly previewError?: string | null;
 };
 
 export function CostPreviewPanel({
@@ -20,6 +22,7 @@ export function CostPreviewPanel({
   missingGroups,
   groupLabels,
   allowEmptyHint,
+  previewError,
 }: CostPreviewPanelProps): ReactNode {
   if (allowEmptyHint && !costPreview && !previewBlocked) {
     return (
@@ -53,6 +56,11 @@ export function CostPreviewPanel({
                 <li key={code}>{groupLabels?.[code] ?? code}</li>
               ))}
             </ul>
+          ) : null}
+          {previewError ? (
+            <p className="module-cost-preview__blocked-msg">
+              {previewError}
+            </p>
           ) : null}
         </>
       ) : (

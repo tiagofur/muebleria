@@ -72,6 +72,7 @@ export type ModuleEditorFormProps = {
   readonly editingId: string | null;
   readonly costPreview: QuoteBreakdown | null;
   readonly previewBlocked: boolean;
+  readonly previewError?: string | null;
   readonly missingGroups: readonly string[];
   readonly groupLabels?: Readonly<Record<string, string>>;
   /**
@@ -116,6 +117,7 @@ export function ModuleEditorForm({
   editingId,
   costPreview,
   previewBlocked,
+  previewError,
   missingGroups,
   groupLabels,
   boardEditorSlot,
@@ -313,6 +315,7 @@ export function ModuleEditorForm({
           editingId={editingId}
           costPreview={costPreview}
           previewBlocked={previewBlocked}
+          previewError={previewError}
           missingGroups={missingGroups}
           groupLabels={groupLabels}
           hidden={editorTab !== 'cost'}

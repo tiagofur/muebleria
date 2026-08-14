@@ -310,6 +310,55 @@ describe('suggestPartCode / defaultOptionChoicesForModule', () => {
     expect(choices.FIXED).toBeUndefined();
   });
 
+  it('F087: fills defaults for base-treatment roles consumed by baseMode', () => {
+    const baseGroups = [
+      ...groups,
+      {
+        id: 'og-zoclo',
+        code: 'ZOCLO',
+        name: 'Melamina de zoclo',
+        kind: 'board' as const,
+        required: false,
+        optionIds: ['mat-a'],
+      },
+      {
+        id: 'og-perfil',
+        code: 'ZOCLO_PERFIL',
+        name: 'Zoclo perfil (ml)',
+        kind: 'hardware' as const,
+        required: false,
+        optionIds: ['hw-1'],
+      },
+      {
+        id: 'og-patas',
+        code: 'PATAS',
+        name: 'Patas',
+        kind: 'hardware' as const,
+        required: false,
+        optionIds: ['hw-1'],
+      },
+    ];
+    const strip = defaultOptionChoicesForModule(
+      { baseMode: 'plinth_strip', hardwareLines: [] },
+      baseGroups,
+    );
+    expect(strip.ZOCLO_PERFIL).toBe('hw-1');
+    expect(strip.ZOCLO).toBeUndefined();
+
+    const board = defaultOptionChoicesForModule(
+      { baseMode: 'plinth_board', hardwareLines: [] },
+      baseGroups,
+    );
+    expect(board.ZOCLO).toBe('mat-a');
+    expect(board.ZOCLO_PERFIL).toBeUndefined();
+
+    const legs = defaultOptionChoicesForModule(
+      { baseMode: 'legs', hardwareLines: [] },
+      baseGroups,
+    );
+    expect(legs.PATAS).toBe('hw-1');
+  });
+
   it('lists board finish picker groups with materials (not hardware)', () => {
     const catalogComponents = [
       {

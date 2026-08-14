@@ -99,6 +99,7 @@ import {
   edgesFromFlags,
   parseOptionalNumber,
   requiredGroupCodesForModule,
+  selectableGroupCodesForModule,
   resolveCustomerName,
   selectRecentProjects,
   sumMonthlyQuotedTotal,
@@ -208,6 +209,7 @@ function computeModuleCostPreview(
   costPreview: QuoteBreakdown | null;
   previewBlocked: boolean;
   missingGroups: readonly string[];
+  previewError: string | null;
 } {
   const required = requiredGroupCodesForModule(module, catalog.optionGroups, catalog.components, catalog.structures);
   const choices = defaultOptionChoicesForModule(
@@ -223,6 +225,7 @@ function computeModuleCostPreview(
       costPreview: null,
       previewBlocked: true,
       missingGroups: gate.missingGroups,
+      previewError: null,
     };
   }
 
@@ -249,12 +252,24 @@ function computeModuleCostPreview(
 
   try {
     const costPreview = calcProjectBreakdown(project, catalog);
-    return { costPreview, previewBlocked: false, missingGroups: [] };
-  } catch {
+    return { costPreview, previewBlocked: false, missingGroups: [], previewError: null };
+  } catch (e) {
+    // Honest missing list: every used group (required or optional) without a
+    // default choice — NOT a blanket dump of all required groups, which
+    // pointed users at groups that were fine (F087 follow-up).
+    const selectable = selectableGroupCodesForModule(
+      module,
+      catalog.optionGroups,
+      catalog.components,
+      catalog.structures,
+      catalog.agregados,
+    );
+    const missing = selectable.filter((code) => !choices[code]?.trim());
     return {
       costPreview: null,
       previewBlocked: true,
-      missingGroups: required,
+      missingGroups: missing,
+      previewError: e instanceof Error ? e.message : null,
     };
   }
 }
@@ -748,6 +763,7 @@ function AppContent({
         costPreview: null as QuoteBreakdown | null,
         previewBlocked: false,
         missingGroups: [] as readonly string[],
+        previewError: null as string | null,
       };
     }
     const mod = modules.find((m) => m.id === editingModuleId);
@@ -756,6 +772,7 @@ function AppContent({
         costPreview: null,
         previewBlocked: true,
         missingGroups: [] as readonly string[],
+        previewError: null as string | null,
       };
     }
     return computeModuleCostPreview(mod, catalog);
@@ -2215,6 +2232,7 @@ function AppContent({
           onRequestEdit={(id) => onEntityEditRequest('modules', id)}
           costPreview={showCosts ? modulePreview.costPreview : null}
           previewBlocked={modulePreview.previewBlocked}
+          previewError={modulePreview.previewError}
           missingGroups={modulePreview.missingGroups}
           groupLabels={groupLabels}
           moduleEstimates={moduleEstimates}

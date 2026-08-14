@@ -20,7 +20,13 @@ import type {
   OptionGroupKind,
   Structure,
 } from '@muebles/domain';
-import { childrenOf, isModuleBaseMode } from '@muebles/domain';
+import {
+  childrenOf,
+  isModuleBaseMode,
+  PATAS_ROLE,
+  ZOCLO_BOARD_ROLE,
+  ZOCLO_STRIP_ROLE,
+} from '@muebles/domain';
 import {
   matchesCodeOrName,
   normalizeCode,
@@ -616,6 +622,8 @@ export type ModuleRolesSource = {
     readonly optionRole: string;
     readonly hardwareId?: string;
   }[];
+  /** Base treatment consumes a role even when synthesized by the engine (F087). */
+  readonly baseMode?: ModuleBaseMode;
 };
 
 /**
@@ -679,6 +687,11 @@ export function usedOptionRolesForModule(
       }
     }
   }
+  // F087 — the base treatment consumes a role even when its part/line is
+  // synthesized by the engine (no manual component / hardware line).
+  if (module.baseMode === 'plinth_board') usedRoles.add(ZOCLO_BOARD_ROLE);
+  if (module.baseMode === 'plinth_strip') usedRoles.add(ZOCLO_STRIP_ROLE);
+  if (module.baseMode === 'legs') usedRoles.add(PATAS_ROLE);
   return usedRoles;
 }
 
