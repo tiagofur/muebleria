@@ -3,7 +3,21 @@
 .material-palette {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* Compact search inside the palette sidebar — the generic SearchInput is
+   taller (text-base + density padding) than its compact neighbors
+   (filter selects use text-xs + space-1). Scope it down to match. */
+.material-palette .ui-search {
+  min-width: 0;
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+.material-palette .ui-search__input {
+  padding: var(--space-1) var(--space-8) var(--space-1) 2.25rem;
+  font-size: var(--text-sm);
 }
 
 .material-palette__hint {

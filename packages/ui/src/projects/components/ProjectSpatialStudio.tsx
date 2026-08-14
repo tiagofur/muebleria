@@ -2092,7 +2092,7 @@ export function ProjectSpatialStudio({
                   }}
                 />
 
-                <div className="spatial-studio__field" style={{ marginTop: 'var(--space-4)' }}>
+                <div className="spatial-studio__field spatial-studio__field--block">
                   <label className="spatial-studio__field spatial-studio__check-row">
                     <input
                       type="checkbox"

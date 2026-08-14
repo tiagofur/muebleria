@@ -514,7 +514,7 @@
 }
 
 .spatial-studio__section {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .spatial-studio__section-title {
@@ -778,6 +778,11 @@
   flex-direction: column;
   gap: var(--space-1);
   font-size: var(--text-sm);
+}
+
+/* Stacked field after a section (was inline marginTop) */
+.spatial-studio__field--block {
+  margin-top: var(--space-3);
 }
 
 .spatial-studio__field input,
