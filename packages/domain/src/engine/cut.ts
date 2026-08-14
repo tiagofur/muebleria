@@ -7,6 +7,7 @@
 
 import { ResolutionError, ValidationError } from '../errors';
 import { effectiveOptionChoices } from '../optionChoices';
+import { baseContextForItem } from '../plinth';
 import type {
   Catalog,
   EdgeAssignment,
@@ -104,6 +105,7 @@ export function generateCutRows(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     for (const part of bom.boardParts) {
@@ -260,6 +262,7 @@ export function generatePieceLabels(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     for (const part of bom.boardParts) {

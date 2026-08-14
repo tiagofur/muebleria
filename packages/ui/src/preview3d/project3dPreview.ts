@@ -6,7 +6,9 @@ import type {
   Agregado,
   Catalog,
   Hardware,
+  MaterialBoard,
   Module,
+  ModuleBaseMode,
   ModuleComponentInstance,
   OptionChoices,
   Project,
@@ -18,9 +20,17 @@ import {
   defaultMeasurePresetId,
   layoutKitchenPlacements,
   resolveAgregadoInstance,
+  resolveBaseClearanceWithContext,
+  resolveBaseModeWithContext,
+  resolveBoardOptionChoiceId,
   resolveBom,
   resolveHardwarePlacement,
   resolveModuleMeasurePreset,
+  baseContextForItem,
+  type BaseResolutionContext,
+  ZOCLO_BOARD_ROLE,
+  ZOCLO_STRIP_ROLE,
+  PATAS_ROLE,
   type ResolvedHardwarePlacement,
   type ResolvedWallFrame,
 } from '@muebles/domain';
@@ -49,6 +59,12 @@ export type ProjectModule3DInstance = {
   readonly yawDeg: number;
   /** Plinth/legs clearance under floor units (mm); 0 if none / wall-hung. */
   readonly baseClearanceMm: number;
+  /** Base treatment mode driving the 3D base (F087). */
+  readonly baseMode: ModuleBaseMode;
+  /** Resolved melamine material for the plinth board (board mode, F087). */
+  readonly plinthMaterialId?: string;
+  /** Preview color for purchased profile / legs hardware (F087). */
+  readonly plinthHardwareColor?: string;
   readonly elevation: 'floor' | 'wall';
   /** Visual countertop slab (floor units only, presentation). */
   readonly showCountertop: boolean;
@@ -129,6 +145,10 @@ function resolveItemBom(
   height: number;
   depth: number;
   error: string | null;
+  baseMode: ModuleBaseMode;
+  baseClearanceMm: number;
+  plinthMaterialId?: string;
+  plinthHardwareColor?: string;
 } {
   const measurePresetId =
     item.measurePresetId?.trim() ||
@@ -168,8 +188,23 @@ function resolveItemBom(
     agregados: catalogInput.agregados,
   };
 
+  // F087 — base treatment for the 3D scene: mode (item → module) plus the
+  // melamine material / purchased-hardware color the meshes should wear.
+  const baseContext: BaseResolutionContext = baseContextForItem(project, item);
+  const baseMode = resolveBaseModeWithContext(module, baseContext);
+  const baseClearanceMm = resolveBaseClearanceWithContext(module, baseContext);
+  const plinthMaterialId = resolveBoardOptionChoiceId(
+    ZOCLO_BOARD_ROLE,
+    choices,
+  );
+  const plinthHardwareId =
+    choices[ZOCLO_STRIP_ROLE]?.trim() || choices[PATAS_ROLE]?.trim();
+  const plinthHardware = plinthHardwareId
+    ? catalogInput.hardware.find((h) => h.id === plinthHardwareId)
+    : undefined;
+
   try {
-    const bom = resolveBom(module, choices, catalog, measurePresetId);
+    const bom = resolveBom(module, choices, catalog, measurePresetId, undefined, baseContext);
     return {
       parts: bom.boardParts,
       resolvedHardwarePlacements: resolveModuleHardwarePlacements(
@@ -183,6 +218,12 @@ function resolveItemBom(
         },
       ),
       ...dims,
+      baseMode,
+      baseClearanceMm,
+      ...(plinthMaterialId ? { plinthMaterialId } : {}),
+      ...(plinthHardware?.previewColor
+        ? { plinthHardwareColor: plinthHardware.previewColor }
+        : {}),
       error:
         bom.boardParts.length === 0
           ? 'Sin piezas (faltan estructura/componentes).'
@@ -193,6 +234,12 @@ function resolveItemBom(
       parts: [],
       resolvedHardwarePlacements: [],
       ...dims,
+      baseMode,
+      baseClearanceMm,
+      ...(plinthMaterialId ? { plinthMaterialId } : {}),
+      ...(plinthHardware?.previewColor
+        ? { plinthHardwareColor: plinthHardware.previewColor }
+        : {}),
       error: e instanceof Error ? e.message : 'Error al resolver el mueble.',
     };
   }
@@ -373,6 +420,10 @@ export function resolveProject3DPreview(
     depth: number;
     error: string | null;
     label: string;
+    baseMode: ModuleBaseMode;
+    baseClearanceMm: number;
+    plinthMaterialId?: string;
+    plinthHardwareColor?: string;
   };
 
   const rows: ResolvedRow[] = items.map((item) => {
@@ -388,6 +439,8 @@ export function resolveProject3DPreview(
         depth: 560,
         error: `Mueble no encontrado (${item.moduleId}).`,
         label: item.moduleId,
+        baseMode: 'none' as const,
+        baseClearanceMm: 0,
       };
     }
     const resolved = resolveItemBom(item, module, project, catalogInput);
@@ -401,6 +454,14 @@ export function resolveProject3DPreview(
       depth: resolved.depth,
       error: resolved.error,
       label: `${module.code} — ${module.name}`,
+      baseMode: resolved.baseMode,
+      baseClearanceMm: resolved.baseClearanceMm,
+      ...(resolved.plinthMaterialId
+        ? { plinthMaterialId: resolved.plinthMaterialId }
+        : {}),
+      ...(resolved.plinthHardwareColor
+        ? { plinthHardwareColor: resolved.plinthHardwareColor }
+        : {}),
     };
   });
 
@@ -460,6 +521,13 @@ export function resolveProject3DPreview(
           originZ: place.originZ,
           yawDeg: place.yawDeg,
           baseClearanceMm: place.baseClearanceMm,
+          baseMode: row?.baseMode ?? 'none',
+          ...(row?.plinthMaterialId
+            ? { plinthMaterialId: row.plinthMaterialId }
+            : {}),
+          ...(row?.plinthHardwareColor
+            ? { plinthHardwareColor: row.plinthHardwareColor }
+            : {}),
           elevation: place.elevation,
           showCountertop:
             showCountertop && place.elevation === 'floor',
@@ -538,7 +606,14 @@ export function resolveProject3DPreview(
           originY: place.originY,
           originZ: place.originZ,
           yawDeg: 0,
-          baseClearanceMm: 0,
+          baseClearanceMm: row.baseClearanceMm,
+          baseMode: row.baseMode,
+          ...(row.plinthMaterialId
+            ? { plinthMaterialId: row.plinthMaterialId }
+            : {}),
+          ...(row.plinthHardwareColor
+            ? { plinthHardwareColor: row.plinthHardwareColor }
+            : {}),
           elevation: 'floor' as const,
           showCountertop: false,
           resolvedHardwarePlacements: row.resolvedHardwarePlacements,
@@ -581,7 +656,14 @@ export function resolveProject3DPreview(
         originY: place.originY,
         originZ: place.originZ,
         yawDeg: 0,
-        baseClearanceMm: 0,
+        baseClearanceMm: row.baseClearanceMm,
+        baseMode: row.baseMode,
+        ...(row.plinthMaterialId
+          ? { plinthMaterialId: row.plinthMaterialId }
+          : {}),
+        ...(row.plinthHardwareColor
+          ? { plinthHardwareColor: row.plinthHardwareColor }
+          : {}),
         elevation: 'floor' as const,
         showCountertop: false,
         resolvedHardwarePlacements: row.resolvedHardwarePlacements,

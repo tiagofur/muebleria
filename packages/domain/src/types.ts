@@ -577,6 +577,13 @@ export interface ProjectItem {
    */
   readonly measurePresetId?: string;
   /**
+   * Base treatment override for this line (F087): how the unit meets the floor
+   * (zoclo board / purchased profile / legs / none). Wins over the catalog
+   * module's `baseMode`; written at add-to-project time from the furniture
+   * type default and editable per item in Proyectar.
+   */
+  readonly baseMode?: ModuleBaseMode;
+  /**
    * Pinned structure revision (#108). Pegged onto the item when the project is
    * closed (quoted/accepted/produced) so later structure edits don't mutate the
    * frozen BOM. Re-resolving uses `resolveStructureRevision(structure, pin)`.

@@ -8,10 +8,16 @@ import type {
   EdgeBand,
   Hardware,
   MaterialBoard,
+  ModuleBaseMode,
   OptionChoices,
   OptionGroup,
   OptionGroupKind,
   Structure,
+} from '@muebles/domain';
+import {
+  PATAS_ROLE,
+  ZOCLO_BOARD_ROLE,
+  ZOCLO_STRIP_ROLE,
 } from '@muebles/domain';
 import { filterActiveForPicker, normalizeCode } from '../catalogs/catalogHelpers';
 
@@ -162,6 +168,18 @@ export function canShowPricePreview(
   return { ok: false, missingGroups: missing };
 }
 
+/** Module shape the role collectors read (hardware, components, base mode). */
+export type ModuleLikeForRoles = {
+  readonly hardwareLines: readonly {
+    readonly optionRole: string;
+    readonly hardwareId?: string;
+  }[];
+  readonly components?: readonly { readonly componentId: string }[];
+  readonly structureId?: string;
+  readonly agregados?: readonly { readonly agregadoId: string }[];
+  readonly baseMode?: ModuleBaseMode;
+};
+
 /**
  * Codes of groups that are `required` and appear as an optionRole used by the
  * module — via hardware lines without a fixed hardwareId, or via the optionRoles
@@ -169,20 +187,32 @@ export function canShowPricePreview(
  * Modules no longer carry board parts directly.
  */
 export function requiredGroupCodesForModule(
-  module: {
-    readonly hardwareLines: readonly {
-      readonly optionRole: string;
-      readonly hardwareId?: string;
-    }[];
-    readonly components?: readonly { readonly componentId: string }[];
-    readonly structureId?: string;
-    readonly agregados?: readonly { readonly agregadoId: string }[];
-  },
+  module: ModuleLikeForRoles,
   optionGroups: readonly OptionGroup[],
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
 ): string[] {
+  const usedRoles = collectUsedOptionRoles(
+    module,
+    catalogComponents,
+    catalogStructures,
+    catalogAgregados,
+  );
+
+  const required = optionGroups
+    .filter((g) => g.required && usedRoles.has(g.code))
+    .map((g) => g.code);
+
+  return [...new Set(required)];
+}
+
+function collectUsedOptionRoles(
+  module: ModuleLikeForRoles,
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
+): Set<string> {
   const usedRoles = new Set<string>();
   for (const line of module.hardwareLines) {
     if (line.hardwareId) continue;
@@ -200,12 +230,36 @@ export function requiredGroupCodesForModule(
       usedRoles,
     );
   }
+  // F087 — the base treatment consumes a role even when its part/line is
+  // synthesized by the engine (no manual component / hardware line).
+  if (module.baseMode === 'plinth_board') usedRoles.add(ZOCLO_BOARD_ROLE);
+  if (module.baseMode === 'plinth_strip') usedRoles.add(ZOCLO_STRIP_ROLE);
+  if (module.baseMode === 'legs') usedRoles.add(PATAS_ROLE);
+  return usedRoles;
+}
 
-  const required = optionGroups
-    .filter((g) => g.required && usedRoles.has(g.code))
+/**
+ * F087 — groups the item picker offers for a module: every group whose code is
+ * a used role, required OR optional. Optional groups (ZOCLO material, purchased
+ * profile finishes, legs) render with an inherit/default empty option; the
+ * price gate still only demands the required ones.
+ */
+export function selectableGroupCodesForModule(
+  module: Parameters<typeof requiredGroupCodesForModule>[0],
+  optionGroups: readonly OptionGroup[],
+  catalogComponents?: readonly Component[],
+  catalogStructures?: readonly Structure[],
+  catalogAgregados?: readonly Agregado[],
+): string[] {
+  const usedRoles = collectUsedOptionRoles(
+    module,
+    catalogComponents,
+    catalogStructures,
+    catalogAgregados,
+  );
+  return optionGroups
+    .filter((g) => usedRoles.has(g.code))
     .map((g) => g.code);
-
-  return [...new Set(required)];
 }
 
 export const SEED_OPTION_GROUP_CODES = [

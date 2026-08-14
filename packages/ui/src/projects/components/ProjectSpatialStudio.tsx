@@ -45,6 +45,7 @@ import {
   reorderPlacementOnWall,
   resolveAmbientMaterials,
   resolveBaseClearanceMm,
+  resolveModuleBaseMode,
   resolveModuleMeasurePreset,
   resolveWallCabinetZMm,
   resolveWallFrames,
@@ -53,6 +54,9 @@ import {
   setActiveKitchenSpace,
   snapOffsetOnWall,
   syncActiveKitchenSpace,
+  PATAS_ROLE,
+  ZOCLO_BOARD_ROLE,
+  ZOCLO_STRIP_ROLE,
   WALL_CABINET_Z_PRESETS_MM,
 } from '@muebles/domain';
 import {
@@ -109,7 +113,7 @@ import {
   optionsForGroup,
   setItemOptionChoice,
 } from '../projectHelpers';
-import type { Catalog } from '@muebles/domain';
+import type { Catalog, ModuleBaseMode } from '@muebles/domain';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -605,8 +609,9 @@ export function ProjectSpatialStudio({
         catalog.components,
         catalog.structures,
         catalog.agregados,
+        selectedItem?.baseMode,
       ),
-    [selectedModule, catalog],
+    [selectedModule, catalog, selectedItem],
   );
 
   const pickerCatalogs = useMemo(
@@ -1119,6 +1124,11 @@ export function ProjectSpatialStudio({
     originZ: m.originZ,
     yawDeg: m.yawDeg,
     baseClearanceMm: m.baseClearanceMm,
+    baseMode: m.baseMode,
+    ...(m.plinthMaterialId ? { plinthMaterialId: m.plinthMaterialId } : {}),
+    ...(m.plinthHardwareColor
+      ? { plinthHardwareColor: m.plinthHardwareColor }
+      : {}),
     showCountertop: m.showCountertop,
     showOuterGhost: true,
     resolvedHardwarePlacements: m.resolvedHardwarePlacements,
@@ -3105,12 +3115,21 @@ export function ProjectSpatialStudio({
                     </p>
                   )}
 
-                  {optionGroupsForItem.length > 0 ? (
+                  {(() => {
+                    const BASE_ROLE_CODES = new Set([
+                      ZOCLO_BOARD_ROLE,
+                      ZOCLO_STRIP_ROLE,
+                      PATAS_ROLE,
+                    ]);
+                    const nonBaseGroups = optionGroupsForItem.filter(
+                      (g) => !BASE_ROLE_CODES.has(g.code),
+                    );
+                    return nonBaseGroups.length > 0 ? (
                     <div className="spatial-studio__finishes">
                       <span className="spatial-studio__field-label">
                         Acabados y herrajes
                       </span>
-                      {optionGroupsForItem.map((group) => {
+                      {nonBaseGroups.map((group) => {
                         const options = optionsForGroup(group, pickerCatalogs);
                         const lineValue =
                           selectedItem.optionChoices[group.code]?.trim() ?? '';
@@ -3153,11 +3172,132 @@ export function ProjectSpatialStudio({
                         );
                       })}
                     </div>
-                  ) : (
-                    <p className="spatial-studio__hint">
-                      Sin grupos de opción requeridos para este mueble.
-                    </p>
-                  )}
+                    ) : (
+                      <p className="spatial-studio__hint">
+                        Sin más acabados para este mueble.
+                      </p>
+                    );
+                  })()}
+
+                  {(() => {
+                    // F087 — Zócalo: una sola decisión (tipo + acabado).
+                    // La altura vive en la pestaña Posición (plano).
+                    const itemBaseMode: ModuleBaseMode =
+                      selectedItem.baseMode ??
+                      (selectedModule
+                        ? resolveModuleBaseMode(selectedModule)
+                        : 'none');
+                    const finishRole =
+                      itemBaseMode === 'plinth_board'
+                        ? ZOCLO_BOARD_ROLE
+                        : itemBaseMode === 'plinth_strip'
+                          ? ZOCLO_STRIP_ROLE
+                          : itemBaseMode === 'legs'
+                            ? PATAS_ROLE
+                            : null;
+                    const finishGroup = finishRole
+                      ? catalog.optionGroups.find((g) => g.code === finishRole)
+                      : undefined;
+                    const finishOptions = finishGroup
+                      ? optionsForGroup(finishGroup, pickerCatalogs)
+                      : [];
+                    const finishValue = finishRole
+                      ? (selectedItem.optionChoices[finishRole]?.trim() ??
+                        project.projectLevelChoices?.[finishRole]?.trim() ??
+                        '')
+                      : '';
+                    const finishInherit =
+                      finishRole && finishValue === ''
+                        ? (project.projectLevelChoices?.[finishRole]?.trim() ??
+                          '')
+                        : '';
+                    return (
+                    <div className="spatial-studio__finishes">
+                      <span className="spatial-studio__field-label">
+                        Zócalo (base del mueble)
+                      </span>
+                      <label className="spatial-studio__field">
+                        <span>¿Cómo apoya en el piso?</span>
+                        <select
+                          value={itemBaseMode}
+                          disabled={!canEdit || !onUpdateItem}
+                          onChange={(e) => {
+                            if (!onUpdateItem) return;
+                            onUpdateItem({
+                              ...selectedItem,
+                              baseMode: e.target.value as ModuleBaseMode,
+                            });
+                          }}
+                          data-testid="spatial-studio-base-mode"
+                        >
+                          <option value="plinth_board">
+                            Zócalo de melamina (se corta y canta)
+                          </option>
+                          <option value="plinth_strip">
+                            Perfil comprado (por metro lineal)
+                          </option>
+                          <option value="legs">Patas / niveladores</option>
+                          <option value="none">Sin zócalo</option>
+                        </select>
+                      </label>
+                      {finishGroup && finishOptions.length > 0 ? (
+                        <label className="spatial-studio__field">
+                          <span>
+                            {itemBaseMode === 'plinth_board'
+                              ? 'Acabado del zócalo'
+                              : itemBaseMode === 'plinth_strip'
+                                ? 'Perfil (de tu catálogo)'
+                                : 'Patas (de tu catálogo)'}
+                          </span>
+                          <select
+                            value={finishValue}
+                            disabled={!canEdit || !onUpdateItem}
+                            onChange={(e) => {
+                              if (!onUpdateItem || !finishRole) return;
+                              onUpdateItem({
+                                ...selectedItem,
+                                optionChoices: setItemOptionChoice(
+                                  selectedItem.optionChoices,
+                                  finishRole,
+                                  e.target.value,
+                                ),
+                              });
+                            }}
+                            data-testid={`spatial-studio-base-finish-${finishRole}`}
+                          >
+                            {itemBaseMode === 'plinth_board' ? (
+                              <option value="">
+                                {finishInherit
+                                  ? `Igual que el proyecto (${optionLabelForId(finishInherit, finishGroup, pickerCatalogs)})`
+                                  : 'Igual que el frente'}
+                              </option>
+                            ) : (
+                              <option value="">
+                                {finishInherit
+                                  ? `Proyecto (${optionLabelForId(finishInherit, finishGroup, pickerCatalogs)})`
+                                  : 'Default del proyecto'}
+                              </option>
+                            )}
+                            {finishOptions.map((opt) => (
+                              <option key={opt.id} value={opt.id}>
+                                {opt.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : finishRole ? (
+                        <p className="spatial-studio__hint">
+                          {itemBaseMode === 'plinth_board'
+                            ? 'Sin material propio: hereda el acabado del frente.'
+                            : 'Creá la opción en tu catálogo (Herrajes + Grupos) para elegirla acá.'}
+                        </p>
+                      ) : null}
+                      <p className="spatial-studio__hint">
+                        La altura del zócalo se ajusta en la pestaña Posición.
+                      </p>
+                    </div>
+                    );
+                  })()}
                 </div>
               ) : null}
 

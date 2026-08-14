@@ -334,6 +334,16 @@ export {
   isZocloBoardRole,
   isZocloStripRole,
   isPatasRole,
+  defaultBaseModeForFurnitureType,
+  resolveBaseModeWithContext,
+  resolveBaseClearanceWithContext,
+  synthesizeBaseBoardPart,
+  synthesizeBaseHardwareLine,
+  applyBaseTreatment,
+  baseContextForItem,
+  SYNTHETIC_ZOCLO_PART_ID_SUFFIX,
+  SYNTHETIC_ZOCLO_PART_CODE,
+  type BaseResolutionContext,
 } from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';

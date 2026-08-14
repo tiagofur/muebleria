@@ -8,6 +8,7 @@
 
 import { ResolutionError, ValidationError } from '../errors';
 import { effectiveOptionChoices } from '../optionChoices';
+import { baseContextForItem } from '../plinth';
 import {
   captureProjectItemStructurePins,
 } from '../structures/versioning';
@@ -258,6 +259,7 @@ function calcLiveProjectBreakdown(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     for (const part of bom.boardParts) {
@@ -326,6 +328,7 @@ function collectUsedUnitPrices(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     for (const part of bom.boardParts) {

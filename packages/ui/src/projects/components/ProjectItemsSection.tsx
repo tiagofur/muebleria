@@ -199,6 +199,8 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
               optionGroups,
               catalogComponents,
               catalogStructures,
+              undefined,
+              item.baseMode,
             );
 
             // Drop indicator classes

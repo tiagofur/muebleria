@@ -11,6 +11,7 @@ import {
   findOptionGroupCodeConflict,
   membersForKind,
   requiredGroupCodesForModule,
+  selectableGroupCodesForModule,
   SEED_OPTION_GROUP_CODES,
   validateOptionGroupCode,
 } from './optionGroupHelpers';
@@ -358,5 +359,61 @@ describe('SEED_OPTION_GROUP_CODES (OPT-03)', () => {
       'BISAGRA',
       'CORREDERA',
     ]);
+  });
+});
+
+describe('selectableGroupCodesForModule (F087)', () => {
+  const baseGroups: OptionGroup[] = [
+    ...groups,
+    {
+      id: 'og-zoclo',
+      code: 'ZOCLO',
+      name: 'Zoclo',
+      kind: 'board',
+      required: false,
+      optionIds: ['m1'],
+    },
+    {
+      id: 'og-perfil',
+      code: 'ZOCLO_PERFIL',
+      name: 'Zoclo perfil',
+      kind: 'hardware',
+      required: false,
+      optionIds: ['h1'],
+    },
+  ];
+  const bareModule = {
+    hardwareLines: [] as { optionRole: string; hardwareId?: string }[],
+    components: [],
+  };
+
+  it('includes optional base-role groups when the base mode consumes them', () => {
+    expect(
+      selectableGroupCodesForModule(
+        { ...bareModule, baseMode: 'plinth_strip' },
+        baseGroups,
+      ),
+    ).toEqual(expect.arrayContaining(['ZOCLO_PERFIL']));
+    expect(
+      selectableGroupCodesForModule(
+        { ...bareModule, baseMode: 'plinth_board' },
+        baseGroups,
+      ),
+    ).toEqual(expect.arrayContaining(['ZOCLO']));
+  });
+
+  it('excludes base groups for modes that do not consume them', () => {
+    const codes = selectableGroupCodesForModule(
+      { ...bareModule, baseMode: 'legs' },
+      baseGroups,
+    );
+    expect(codes).not.toContain('ZOCLO');
+    expect(codes).not.toContain('ZOCLO_PERFIL');
+  });
+
+  it('keeps required groups out of scope when unused and optional groups of unused roles hidden', () => {
+    const codes = selectableGroupCodesForModule(bareModule, baseGroups);
+    expect(codes).not.toContain('BISAGRA');
+    expect(codes).not.toContain('EDGE-OPT');
   });
 });

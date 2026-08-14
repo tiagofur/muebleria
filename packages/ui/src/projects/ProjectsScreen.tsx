@@ -21,6 +21,7 @@ import type {
   Hardware,
   MaterialBoard,
   Module,
+  ModuleBaseMode,
   ModuleCategory,
   OptionChoices,
   OptionGroup,
@@ -125,6 +126,7 @@ export interface ProjectsScreenProps {
       quantity: number;
       optionChoices: OptionChoices;
       measurePresetId?: string;
+      baseMode?: ModuleBaseMode;
     },
   ) => void;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
@@ -613,6 +615,7 @@ export function ProjectsScreen({
     quantity: number;
     optionChoices: OptionChoices;
     measurePresetId?: string;
+    baseMode?: ModuleBaseMode;
   }) => {
     if (!selectedId) return;
     onAddItem(selectedId, payload);

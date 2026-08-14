@@ -12,6 +12,7 @@ import type {
   Hardware,
   MaterialBoard,
   Module,
+  ModuleBaseMode,
   OptionChoices,
   OptionGroup,
   Project,
@@ -29,6 +30,7 @@ import {
   canShowPricePreview,
   membersForKind,
   requiredGroupCodesForModule,
+  selectableGroupCodesForModule,
   type CatalogMember,
   type PricePreviewGateResult,
 } from '../optionGroups/optionGroupHelpers';
@@ -364,7 +366,9 @@ export function optionsForGroup(
 }
 
 /**
- * PRJ-03: option groups required by this module (roles used + group.required).
+ * PRJ-03 + F087: option groups offered for this module — required groups for
+ * used roles plus optional ones (ZOCLO material, purchased profile, legs)
+ * whose role the module (or the item's base-mode override) consumes.
  */
 export function groupsForModuleItem(
   module: Module | undefined,
@@ -372,10 +376,16 @@ export function groupsForModuleItem(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  /** Item-level base-mode override (F087) — synthesized roles count as used. */
+  baseModeOverride?: ModuleBaseMode,
 ): OptionGroup[] {
   if (!module) return [];
-  const codes = requiredGroupCodesForModule(
-    module,
+  const effectiveModule =
+    baseModeOverride !== undefined
+      ? { ...module, baseMode: baseModeOverride }
+      : module;
+  const codes = selectableGroupCodesForModule(
+    effectiveModule,
     optionGroups,
     catalogComponents,
     catalogStructures,

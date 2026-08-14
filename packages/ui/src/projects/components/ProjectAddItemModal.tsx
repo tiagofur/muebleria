@@ -23,6 +23,7 @@ import type {
   Hardware,
   MaterialBoard,
   Module,
+  ModuleBaseMode,
   ModuleCategory,
   OptionChoices,
   OptionGroup,
@@ -31,6 +32,7 @@ import type {
 import {
   cascadeOptions,
   cascadeSelectedCategoryId,
+  defaultBaseModeForFurnitureType,
   effectiveOptionChoices,
   filterModulesByCategory,
   pickPresetByMeasureDefaults,
@@ -54,6 +56,8 @@ export interface ProjectAddItemPayload {
   readonly quantity: number;
   readonly optionChoices: OptionChoices;
   readonly measurePresetId?: string;
+  /** Base treatment written at creation (F087): module default → type default. */
+  readonly baseMode?: ModuleBaseMode;
 }
 
 export interface ProjectAddItemModalProps {
@@ -237,7 +241,7 @@ export function ProjectAddItemModal({
       optionGroups,
       catalogComponents,
       catalogStructures,
-    );
+    ).filter((g) => g.required);
     const effective = effectiveOptionChoices(addItem.optionChoices, projectLevelChoices);
     for (const group of groups) {
       if (!effective[group.code]) {
@@ -260,6 +264,8 @@ export function ProjectAddItemModal({
       quantity: addItem.quantity,
       optionChoices: addItem.optionChoices,
       measurePresetId: addItem.measurePresetId,
+      baseMode:
+        mod.baseMode ?? defaultBaseModeForFurnitureType(mod.furnitureType),
     });
   }
 

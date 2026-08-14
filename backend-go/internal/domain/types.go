@@ -429,6 +429,9 @@ type ProjectItem struct {
 	OptionChoices map[string]string `json:"option_choices"` // group_code -> choice_id
 	// MeasurePresetID selects Module.Presets entry for quotation (H09 / #104).
 	MeasurePresetID string `json:"measure_preset_id,omitempty"`
+	// BaseMode is the line's base treatment override (F087):
+	// none|plinth_board|plinth_strip|legs. Empty = module default.
+	BaseMode string `json:"base_mode,omitempty"`
 	// StructureRevisionPin freezes the structure revision used by this line item
 	// (#108). nil = live (current revision). Pinned at close time so the BOM of
 	// a closed quote is not silently mutated by later structure edits.

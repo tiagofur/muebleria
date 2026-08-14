@@ -626,3 +626,86 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
     expect(placements.every((p) => p.hardwareId === 'hw-knob')).toBe(true);
   });
 });
+
+describe('resolveProject3DPreview — base treatment (F087)', () => {
+  const perfilHw: Hardware = {
+    id: 'hw-perfil',
+    code: 'ZOC-ALU',
+    name: 'Zoclo perfil aluminio',
+    unit: 'meter',
+    costPerUnit: 12,
+    active: true,
+    previewColor: '#c0c5cb',
+  };
+  const catalogWithBase = {
+    ...catalog,
+    hardware: [perfilHw] as readonly Hardware[],
+    optionGroups: [
+      ...optionGroups,
+      {
+        id: 'og-front',
+        code: 'FRENTE',
+        name: 'Frente',
+        kind: 'board' as const,
+        required: true,
+        optionIds: ['mat-a'],
+      },
+      {
+        id: 'og-perfil',
+        code: 'ZOCLO_PERFIL',
+        name: 'Zoclo perfil',
+        kind: 'hardware' as const,
+        required: false,
+        optionIds: ['hw-perfil'],
+      },
+    ],
+  };
+
+  it('defaults to none (no base fields) for modules without base mode', () => {
+    const preview = resolveProject3DPreview(project, catalogWithBase);
+    expect(preview.modules.every((m) => m.baseMode === 'none')).toBe(true);
+    expect(preview.modules.every((m) => m.baseClearanceMm === 0)).toBe(true);
+  });
+
+  it('item baseMode plinth_board resolves the melamine material via FRENTE', () => {
+    const withBase: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-a',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a', FRENTE: 'mat-a' },
+          measurePresetId: 'p600',
+          baseMode: 'plinth_board',
+        },
+      ],
+    };
+    const preview = resolveProject3DPreview(withBase, catalogWithBase);
+    const mod = preview.modules[0]!;
+    expect(mod.baseMode).toBe('plinth_board');
+    expect(mod.baseClearanceMm).toBe(100);
+    expect(mod.plinthMaterialId).toBe('mat-a');
+  });
+
+  it('item baseMode plinth_strip carries the chosen profile color', () => {
+    const withStrip: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-a',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a', ZOCLO_PERFIL: 'hw-perfil' },
+          measurePresetId: 'p600',
+          baseMode: 'plinth_strip',
+        },
+      ],
+    };
+    const preview = resolveProject3DPreview(withStrip, catalogWithBase);
+    const mod = preview.modules[0]!;
+    expect(mod.baseMode).toBe('plinth_strip');
+    expect(mod.plinthHardwareColor).toBe('#c0c5cb');
+    expect(mod.plinthMaterialId).toBeUndefined();
+  });
+});

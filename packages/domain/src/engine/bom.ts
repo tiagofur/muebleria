@@ -15,11 +15,12 @@ import {
   resolveAgregadoInstance,
 } from '../agregados';
 import {
-  applyBaseModeToHardwareLines,
+  applyBaseTreatment,
   filterComponentInstancesForBaseMode,
+  resolveBaseClearanceWithContext,
+  resolveBaseModeWithContext,
   resolveBoardOptionChoiceId,
-  resolveModuleBaseClearanceMm,
-  resolveModuleBaseMode,
+  type BaseResolutionContext,
   ZOCLO_BOARD_FALLBACK_ROLE,
   ZOCLO_BOARD_ROLE,
 } from '../plinth';
@@ -516,6 +517,8 @@ export interface ComposedModuleInput {
     Module,
     'baseMode' | 'baseClearanceMm' | 'furnitureType' | 'agregados'
   >;
+  /** Quote-line base context (F087): item baseMode + plan height B. */
+  readonly baseContext?: BaseResolutionContext;
 }
 
 export interface ComposedModuleResult {
@@ -526,16 +529,23 @@ export interface ComposedModuleResult {
 export function resolveComposedModule(
   input: ComposedModuleInput,
 ): ComposedModuleResult {
-  const { structure, componentInstances, catalog, dims, optionChoices, module } =
-    input;
+  const {
+    structure,
+    componentInstances,
+    catalog,
+    dims,
+    optionChoices,
+    module,
+    baseContext,
+  } = input;
 
   // Validate the selected dims against presets/externalDims (throws on mismatch).
   resolveStructure(structure, dims);
 
-  const baseMode = module ? resolveModuleBaseMode(module) : 'none';
-  const B = module
-    ? resolveModuleBaseClearanceMm(module)
-    : 0;
+  const baseMode = module
+    ? resolveBaseModeWithContext(module, baseContext)
+    : 'none';
+  const B = module ? resolveBaseClearanceWithContext(module, baseContext) : 0;
 
   const structureInstances = filterComponentInstancesForBaseMode(
     structure.components ?? [],
@@ -721,6 +731,11 @@ export function resolveBom(
    * revision rather than the live catalog structure. Omit for draft/live use.
    */
   structureRevisionPin?: number,
+  /**
+   * Quote-line base treatment context (F087): item baseMode override and the
+   * plinth height B resolved from the plan. Omit to use module defaults.
+   */
+  baseContext?: BaseResolutionContext,
 ): ResolvedBom {
   validateModule(module);
 
@@ -785,18 +800,23 @@ export function resolveBom(
       dims,
       optionChoices,
       module,
+      baseContext,
     });
     allParts = [...composed.boardParts];
     composedHardware = [...composed.hardwareLines];
 
-    // Apply base mode to module hardware (zoclo strip ml, legs qty).
-    const baseMode = resolveModuleBaseMode(module);
-    const widthMm = dims.width;
-    composedHardware = applyBaseModeToHardwareLines(
+    // Synthesize the base parts the mode needs, then apply mode rules
+    // (zoclo strip ml, legs qty) over composed + module hardware.
+    const treatment = applyBaseTreatment(
+      module.code,
+      allParts,
       [...composedHardware, ...(module.hardwareLines ?? [])],
-      baseMode,
-      widthMm,
+      resolveBaseModeWithContext(module, baseContext),
+      resolveBaseClearanceWithContext(module, baseContext),
+      dims.width,
     );
+    allParts = treatment.parts;
+    composedHardware = treatment.hardwareLines;
 
     for (const part of allParts) validateBoardPart(part, module.code);
     for (const line of composedHardware) validateHardwareLine(line, module.code);
@@ -843,16 +863,22 @@ export function resolveBom(
       dims: dimsFallback,
       optionChoices,
       module,
+      baseContext,
     });
     allParts = [...composed.boardParts];
     composedHardware = [...composed.hardwareLines];
   }
 
-  const allHardware = applyBaseModeToHardwareLines(
+  const treatment = applyBaseTreatment(
+    module.code,
+    allParts,
     [...composedHardware, ...(module.hardwareLines ?? [])],
-    resolveModuleBaseMode(module),
+    resolveBaseModeWithContext(module, baseContext),
+    resolveBaseClearanceWithContext(module, baseContext),
     dimsFallback.width,
   );
+  allParts = treatment.parts;
+  const allHardware = treatment.hardwareLines;
 
   for (const part of allParts) validateBoardPart(part, module.code);
   for (const line of allHardware) validateHardwareLine(line, module.code);

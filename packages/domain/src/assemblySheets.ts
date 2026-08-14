@@ -9,6 +9,7 @@ import {
   resolveModuleMeasurePreset,
 } from './measurePresets';
 import { effectiveOptionChoices } from './optionChoices';
+import { baseContextForItem } from './plinth';
 import { resolveBom } from './engine/bom';
 import { findModule } from './engine/shared';
 import { normalizeItemFloorStatus, type ItemFloorStatus } from './productionFloor';
@@ -118,6 +119,7 @@ export function buildAssemblySheets(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     const hardwareMap = new Map<

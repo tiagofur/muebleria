@@ -1092,6 +1092,134 @@ EOF
       expect.objectContaining({ id: 'it-a', measurePresetId: 'p800' }),
     );
   });
+
+  it('zoclo card writes the base mode on the item (F087)', () => {
+    const onUpdateItem = vi.fn();
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    const modeSelect = screen.getByTestId('spatial-studio-base-mode');
+    expect(modeSelect).toBeTruthy();
+    fireEvent.change(modeSelect, { target: { value: 'plinth_strip' } });
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', baseMode: 'plinth_strip' }),
+    );
+  });
+
+  it('zoclo card offers the purchased profiles from the user catalog (F087)', () => {
+    const onUpdateItem = vi.fn();
+    const projectStrip: Project = {
+      ...project,
+      items: [
+        {
+          id: 'it-a',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p600',
+          baseMode: 'plinth_strip',
+        },
+      ],
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    const catalogWithProfiles = {
+      ...catalog,
+      hardware: [
+        {
+          id: 'hw-perfil-alu',
+          code: 'ZOC-ALU',
+          name: 'Perfil aluminio',
+          unit: 'meter' as const,
+          costPerUnit: 12,
+          active: true,
+        },
+        {
+          id: 'hw-perfil-bronce',
+          code: 'ZOC-BRO',
+          name: 'Perfil bronce',
+          unit: 'meter' as const,
+          costPerUnit: 15,
+          active: true,
+        },
+      ],
+      optionGroups: [
+        {
+          id: 'og-perfil',
+          code: 'ZOCLO_PERFIL',
+          name: 'Zoclo perfil',
+          kind: 'hardware' as const,
+          required: false,
+          optionIds: ['hw-perfil-alu', 'hw-perfil-bronce'],
+        },
+      ],
+    };
+
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectStrip}
+        modules={[modA]}
+        catalog={catalogWithProfiles}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    const finishSelect = screen.getByTestId(
+      'spatial-studio-base-finish-ZOCLO_PERFIL',
+    );
+    expect(finishSelect).toBeTruthy();
+    fireEvent.change(finishSelect, { target: { value: 'hw-perfil-bronce' } });
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'it-a',
+        optionChoices: expect.objectContaining({
+          ZOCLO_PERFIL: 'hw-perfil-bronce',
+        }),
+      }),
+    );
+  });
 });
 
 describe('ProjectSpatialStudio — ambient scene materials', () => {

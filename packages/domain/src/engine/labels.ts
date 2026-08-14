@@ -7,6 +7,7 @@
 
 import { ResolutionError, ValidationError } from '../errors';
 import { effectiveOptionChoices } from '../optionChoices';
+import { baseContextForItem } from '../plinth';
 import type {
   Catalog,
   EdgeUsageRow,
@@ -85,6 +86,7 @@ export function generateProjectMaterialSummary(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     for (const part of bom.boardParts) {
@@ -276,6 +278,7 @@ export function generateHardwareList(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
+      baseContextForItem(project, item),
     );
 
     for (const line of bom.hardwareLines) {

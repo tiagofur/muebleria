@@ -1390,6 +1390,8 @@ export function projectToApi(p: Project): Record<string, unknown> {
       quantity: item.quantity,
       option_choices: { ...item.optionChoices },
       measure_preset_id: item.measurePresetId ?? '',
+      // F087 — base treatment override; '' = module default.
+      base_mode: item.baseMode ?? '',
       // #108 — null when unpinned (live revision). 0 is not a valid revision,
       // but we still emit it verbatim if someone sets it; the resolver rejects
       // unknown pins loudly rather than silently degrading.
@@ -1540,6 +1542,12 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         floorRaw === 'installed'
           ? (floorRaw as ProjectItem['floorStatus'])
           : undefined;
+      const baseModeRaw = str(row.base_mode ?? row.baseMode);
+      const baseMode = (
+        ['none', 'plinth_board', 'plinth_strip', 'legs'] as const
+      ).includes(baseModeRaw as never)
+        ? (baseModeRaw as ProjectItem['baseMode'])
+        : undefined;
       return {
         id: str(row.id),
         moduleId: str(row.module_id ?? row.moduleId),
@@ -1549,6 +1557,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
             ? (choices as ProjectItem['optionChoices'])
             : {},
         measurePresetId,
+        ...(baseMode ? { baseMode } : {}),
         // #108 — undefined when null/absent (live revision). Only finite numbers
         // survive; that's what `resolveStructureRevision` expects.
         structureRevisionPin,
@@ -1587,6 +1596,7 @@ export function projectTemplateToApi(
       quantity: item.quantity,
       option_choices: { ...item.optionChoices },
       measure_preset_id: item.measurePresetId ?? '',
+      base_mode: item.baseMode ?? '',
     })),
   };
 }
@@ -1631,6 +1641,12 @@ export function projectTemplateFromApi(
     items: itemsRaw.map((item) => {
       const r = item as Record<string, unknown>;
       const choices = r.option_choices ?? r.optionChoices;
+      const baseModeTplRaw = str(r.base_mode ?? r.baseMode);
+      const baseModeTpl = (
+        ['none', 'plinth_board', 'plinth_strip', 'legs'] as const
+      ).includes(baseModeTplRaw as never)
+        ? (baseModeTplRaw as ProjectItem['baseMode'])
+        : undefined;
       return {
         id: str(r.id),
         moduleId: str(r.module_id ?? r.moduleId),
@@ -1641,6 +1657,7 @@ export function projectTemplateFromApi(
             : {},
         measurePresetId:
           str(r.measure_preset_id ?? r.measurePresetId) || undefined,
+        ...(baseModeTpl ? { baseMode: baseModeTpl } : {}),
       };
     }),
     createdAt: str(raw.created_at ?? raw.createdAt, ''),

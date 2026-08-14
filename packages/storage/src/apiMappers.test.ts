@@ -700,6 +700,67 @@ describe('apiMappers', () => {
     });
     expect(fromNull.items[0]?.structureRevisionPin).toBeUndefined();
   });
+
+  it('round-trips project item baseMode (F087)', () => {
+    const p: Project = {
+      id: 'pr-base',
+      name: 'Cotiz',
+      customerId: 'c1',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft',
+      items: [
+        {
+          id: 'i-strip',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: {},
+          baseMode: 'plinth_strip',
+        },
+        {
+          id: 'i-default',
+          moduleId: 'm2',
+          quantity: 1,
+          optionChoices: {},
+          // no baseMode — module default
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const items = api.items as Record<string, unknown>[];
+    expect(items[0]?.base_mode).toBe('plinth_strip');
+    // No override → '' on the wire (module default).
+    expect(items[1]?.base_mode).toBe('');
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.items[0]?.baseMode).toBe('plinth_strip');
+    expect(round.items[1]?.baseMode).toBeUndefined();
+  });
+
+  it('projectFromApi rejects unknown base_mode values (F087)', () => {
+    const round = projectFromApi({
+      id: 'p',
+      name: 'n',
+      customer_id: 'c',
+      currency: 'MXN',
+      margin_factor: 1.35,
+      labor_fixed_cost: 0,
+      status: 'draft',
+      items: [
+        {
+          id: 'i',
+          module_id: 'm',
+          quantity: 1,
+          option_choices: {},
+          base_mode: 'floating',
+        },
+      ],
+    });
+    expect(round.items[0]?.baseMode).toBeUndefined();
+  });
 });
 
 describe('component formula mappers', () => {

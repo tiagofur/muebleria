@@ -516,7 +516,7 @@ func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, pres
 // loadProjectItems returns all line items + option choices for a project.
 func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) ([]domain.ProjectItem, error) {
 	itemQuery := `
-		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin
+		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode
 		FROM project_items
 		WHERE project_id = $1;
 	`
@@ -531,7 +531,7 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		var item domain.ProjectItem
 		var measurePresetID *string
 		var structureRevisionPin *int
-		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin); err != nil {
+		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin, &item.BaseMode); err != nil {
 			return nil, err
 		}
 		if measurePresetID != nil {
@@ -578,17 +578,18 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		var err error
 		measureArg := nullIfEmpty(item.MeasurePresetID)
 		pinArg := structurePinArg(item.StructureRevisionPin)
+		baseModeArg := nullIfEmpty(item.BaseMode)
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin)
-				VALUES ($1, $2, $3, $4, $5, $6)
-			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg)
+				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg)
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
+				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING id
-			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg).Scan(&item.ID)
+			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg).Scan(&item.ID)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting project item: %w", err)

@@ -1653,6 +1653,27 @@
         "docs/design.md"
       ],
       "status": "done"
+    },
+    {
+      "id": "F087",
+      "phase": 18,
+      "name": "zoclo_terminacion_automatica",
+      "title": "Zócalo como terminación automática: una sola decisión con acabado elegible y 3D real",
+      "description": "El zócalo deja de armarse pieza por pieza (componente ZOCLO + herraje ZOCLO_PERFIL/PATAS + baseMode + altura B en lugares distintos) y pasa a ser una terminación de base con defaults automáticos por tipo de mueble. El dominio sintetiza la pieza de melamina o la línea de herraje (perfil comprado en ml / patas) cuando no hay piezas manuales, los grupos opcionales ZOCLO y ZOCLO_PERFIL se vuelven elegibles por ítem (el perfil con los acabados que el usuario registre en su catálogo: aluminio, bronce, negro, etc.), y el 3D renderiza el zócalo según el modo con el material real en vez de la caja gris decorativa.",
+      "acceptance": [
+        "resolveBaseTreatment en @muebles/domain resuelve modo+altura+elecciones con cascada ítem → proyecto → módulo → tipo de mueble (inferior/alto en piso → plinth_board; superior → none)",
+        "El BOM sintetiza la pieza de zócalo (rol ZOCLO, largo W, alto B, canto frontal) en plinth_board y la línea de herraje en plinth_strip/PATAS cuando el módulo no tiene piezas propias con ese rol (sin doble conteo con componentes ZOCLO existentes)",
+        "Los grupos de opción opcionales cuyo rol está en uso (ZOCLO, ZOCLO_PERFIL, PATAS) son visibles y elegibles por ítem en Proyectar con opción de heredar del proyecto",
+        "El perfil de zócalo comprado se elige del catálogo del usuario (herrajes del grupo ZOCLO_PERFIL que él cree: aluminio/bronce/negro/…), sin lista fija de colores",
+        "El 3D muestra el zócalo según el modo: melamina con el material resuelto, perfil como fleja metálica, patas como apoyo visible, none sin mesh (adiós caja gris hardcodeada)",
+        "Defaults estables: módulos existentes sin baseMode siguen dando el mismo BOM (compatibilidad fixtures golden)"
+      ],
+      "references": [
+        "docs/prd.md",
+        "docs/projectar-super-3d-plan.md",
+        "packages/domain/src/plinth.ts"
+      ],
+      "status": "in_progress"
     }
   ]
 }

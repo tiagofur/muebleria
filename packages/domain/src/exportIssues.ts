@@ -9,6 +9,7 @@ import {
   validateHardwareLine,
 } from './engine';
 import { effectiveOptionChoices } from './optionChoices';
+import { baseContextForItem, type BaseResolutionContext } from './plinth';
 import type {
   Catalog,
   Module,
@@ -140,6 +141,7 @@ function collectItemStructuralIssues(
   catalog: Catalog,
   issues: ExportIssue[],
   projectLevelChoices?: OptionChoices,
+  baseContext?: BaseResolutionContext,
 ): Module | undefined {
   const before = issues.length;
   const choices = effectiveOptionChoices(
@@ -183,7 +185,7 @@ function collectItemStructuralIssues(
   // Resolve BOM only when local structure/options look complete (VAL-06, refs, edges).
     if (issues.length === before) {
     try {
-      resolveBom(module, choices, catalog, item.measurePresetId, item.structureRevisionPin);
+      resolveBom(module, choices, catalog, item.measurePresetId, item.structureRevisionPin, baseContext);
     } catch (error) {
       pushDomainError(issues, error, {
         moduleCode: module.code,
@@ -220,6 +222,7 @@ export function collectExportIssues(
       catalog,
       issues,
       project.projectLevelChoices,
+      baseContextForItem(project, item),
     );
     if (module) {
       // Count resolved board parts (component instances expanded) instead of a
@@ -231,6 +234,7 @@ export function collectExportIssues(
           catalog,
           item.measurePresetId,
           item.structureRevisionPin,
+          baseContextForItem(project, item),
         );
         boardPartSlots += bom.boardParts.length;
       } catch {

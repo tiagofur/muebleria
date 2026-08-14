@@ -22,6 +22,7 @@ import type {
   Customer,
   InstallationChecklistItem,
   ItemFloorStatus,
+  ModuleBaseMode,
   OptionChoices,
   Project,
   ProjectItem,
@@ -220,6 +221,8 @@ export interface ProjectState {
       readonly quantity: number;
       readonly optionChoices: OptionChoices;
       readonly measurePresetId?: string;
+      /** Base treatment default resolved by the caller (F087). */
+      readonly baseMode?: ModuleBaseMode;
     },
   ) => void;
   readonly updateProjectItem: (projectId: string, item: ProjectItem) => void;
@@ -649,6 +652,7 @@ export function createProjectStore(options: InternalOptions) {
         quantity: input.quantity,
         optionChoices: input.optionChoices,
         measurePresetId: input.measurePresetId,
+        ...(input.baseMode ? { baseMode: input.baseMode } : {}),
       };
       patch(set, get, (ps) =>
         ps.map((p) =>

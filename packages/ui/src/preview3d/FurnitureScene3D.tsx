@@ -27,8 +27,11 @@ import {
 import * as THREE from 'three';
 import {
   offsetMmFromPlanPoint,
+  suggestLegCount,
+  DEFAULT_MATERIAL_PREVIEW_COLOR,
   type AmbientMaterial,
   type Hardware,
+  type ModuleBaseMode,
   type ResolvedBoardPart,
   type ResolvedHardwarePlacement,
 } from '@muebles/domain';
@@ -98,9 +101,19 @@ export type FurnitureSceneModule = {
   readonly yawDeg?: number;
   /**
    * Plinth/legs height under the cabinet (mm). Group originZ already sits on
-   * top of this clearance; a recessed toe-kick is drawn below when > 0.
+   * top of this clearance; the base treatment is drawn below when > 0.
    */
   readonly baseClearanceMm?: number;
+  /**
+   * Base treatment mode driving what is drawn under the cabinet (F087):
+   * plinth_board (melamine with material color), plinth_strip (purchased
+   * metallic profile), legs (feet), none (nothing).
+   */
+  readonly baseMode?: ModuleBaseMode;
+  /** Melamine material id for the plinth board — color/texture via lookups. */
+  readonly plinthMaterialId?: string;
+  /** Preview color of the chosen profile / legs hardware (user catalog). */
+  readonly plinthHardwareColor?: string;
   /** Visual countertop slab on top of floor cabinets (presentation). */
   readonly showCountertop?: boolean;
   readonly showOuterGhost?: boolean;
@@ -540,23 +553,63 @@ function GhostModuleMesh({
 }
 
 /**
- * Recessed toe-kick under a floor cabinet (local space).
- * Front face (local Z=0) is open by ~50 mm; mass sits toward the back.
+ * Base treatment under a floor cabinet (local space), driven by the base mode
+ * (F087): melamine board with the resolved material color, purchased profile
+ * as a slim metallic strip, or visible legs. `none` renders nothing.
  */
 function PlinthMesh({
   width,
   depth,
   height,
+  mode,
+  materialId,
+  hardwareColor,
+  materialColors,
 }: {
   readonly width: number;
   readonly depth: number;
   readonly height: number;
+  readonly mode: ModuleBaseMode;
+  /** Melamine material id (board mode) — resolved via materialColors. */
+  readonly materialId?: string;
+  /** Hex preview color of the chosen profile / legs hardware. */
+  readonly hardwareColor?: string;
+  readonly materialColors?: MaterialColorLookup;
 }): ReactNode {
+  if (height <= 0 || mode === 'none') return null;
+
+  if (mode === 'legs') {
+    return (
+      <LegsMesh width={width} depth={depth} height={height} color={hardwareColor} />
+    );
+  }
+
+  if (mode === 'plinth_strip') {
+    const thickness = 16;
+    const H = Math.max(height, 1);
+    return (
+      <mesh
+        position={[width / 2, -H / 2, depth - thickness / 2]}
+        userData={{ plinth: true }}
+      >
+        <boxGeometry args={[width, H, thickness]} />
+        <meshStandardMaterial
+          color={hardwareColor ?? '#b9bec4'}
+          roughness={0.35}
+          metalness={0.85}
+        />
+      </mesh>
+    );
+  }
+
+  // plinth_board — recessed melamine strip wearing the resolved material.
   const recess = Math.min(50, Math.max(20, depth * 0.1));
   const W = Math.max(width * 0.98, 1);
   const H = Math.max(height, 1);
   const D = Math.max(depth - recess, 1);
-  // Group origin is already at clearance height; plinth sits below local Y=0.
+  const boardColor = materialId
+    ? materialColors?.[materialId] ?? DEFAULT_MATERIAL_PREVIEW_COLOR
+    : DEFAULT_MATERIAL_PREVIEW_COLOR;
   return (
     <mesh
       position={[width / 2, -H / 2, recess + D / 2]}
@@ -564,11 +617,63 @@ function PlinthMesh({
     >
       <boxGeometry args={[W, H, D]} />
       <meshStandardMaterial
-        color="#2c2f34"
+        color={boardColor}
         roughness={0.92}
         metalness={0.02}
       />
     </mesh>
+  );
+}
+
+/** Visible feet / levelers under the cabinet (base mode `legs`, F087). */
+function LegsMesh({
+  width,
+  depth,
+  height,
+  color,
+}: {
+  readonly width: number;
+  readonly depth: number;
+  readonly height: number;
+  readonly color?: string;
+}): ReactNode {
+  const H = Math.max(height, 1);
+  const count = suggestLegCount(width);
+  const radius = 12;
+  const insetX = Math.max(50, width * 0.08);
+  const insetZ = Math.max(40, depth * 0.1);
+  const positions: [number, number][] = [];
+  if (count <= 4) {
+    positions.push(
+      [insetX, insetZ],
+      [width - insetX, insetZ],
+      [insetX, depth - insetZ],
+      [width - insetX, depth - insetZ],
+    );
+  } else {
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0.5 : i / (count - 1);
+      const x = insetX + t * (width - insetX * 2);
+      positions.push([x, insetZ], [x, depth - insetZ]);
+    }
+  }
+  return (
+    <group>
+      {positions.map(([x, z], i) => (
+        <mesh
+          key={i}
+          position={[x, -H / 2, z]}
+          userData={{ plinth: true }}
+        >
+          <cylinderGeometry args={[radius, radius * 0.85, H, 12]} />
+          <meshStandardMaterial
+            color={color ?? '#3a3d42'}
+            roughness={0.5}
+            metalness={0.6}
+          />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
@@ -1063,6 +1168,10 @@ function ModuleGroup({
           width={mod.width}
           depth={mod.depth}
           height={mod.baseClearanceMm!}
+          mode={mod.baseMode ?? 'plinth_board'}
+          materialId={mod.plinthMaterialId}
+          hardwareColor={mod.plinthHardwareColor}
+          materialColors={materialColors}
         />
       ) : null}
       {mod.showCountertop ? (
