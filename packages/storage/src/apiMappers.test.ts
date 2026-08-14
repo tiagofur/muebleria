@@ -1120,6 +1120,7 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
             floorMaterialId: 'amb-floor',
             wallMaterialId: 'amb-wall',
             ceilingMaterialId: 'amb-ceiling',
+            countertopMaterialId: 'amb-countertop',
             showCeiling: true,
           },
         ],
@@ -1135,6 +1136,7 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
     expect(space.floor_material_id).toBe('amb-floor');
     expect(space.wall_material_id).toBe('amb-wall');
     expect(space.ceiling_material_id).toBe('amb-ceiling');
+    expect(space.countertop_material_id).toBe('amb-countertop');
     expect(space.show_ceiling).toBe(true);
     expect(wall1.wall_material_id).toBe('amb-wall-accent');
 
@@ -1142,6 +1144,7 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
     expect(round.kitchenLayout?.spaces?.[0]?.floorMaterialId).toBe('amb-floor');
     expect(round.kitchenLayout?.spaces?.[0]?.wallMaterialId).toBe('amb-wall');
     expect(round.kitchenLayout?.spaces?.[0]?.ceilingMaterialId).toBe('amb-ceiling');
+    expect(round.kitchenLayout?.spaces?.[0]?.countertopMaterialId).toBe('amb-countertop');
     expect(round.kitchenLayout?.spaces?.[0]?.showCeiling).toBe(true);
     expect(round.kitchenLayout?.spaces?.[0]?.walls[0]?.wallMaterialId).toBe('amb-wall-accent');
   });
@@ -1174,6 +1177,7 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
     const round = projectFromApi(projectToApi(p) as Record<string, unknown>);
     expect(round.kitchenLayout?.spaces?.[0]?.floorMaterialId).toBeUndefined();
     expect(round.kitchenLayout?.spaces?.[0]?.wallMaterialId).toBeUndefined();
+    expect(round.kitchenLayout?.spaces?.[0]?.countertopMaterialId).toBeUndefined();
     expect(round.kitchenLayout?.spaces?.[0]?.showCeiling).toBeUndefined();
   });
 

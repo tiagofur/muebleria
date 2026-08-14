@@ -24,7 +24,7 @@ import {
 } from './paintMaterial';
 import './materialPalette.css';
 
-export type TargetSurface = 'floor' | 'wall' | 'ceiling';
+export type TargetSurface = 'floor' | 'wall' | 'ceiling' | 'countertop';
 
 export type MaterialPaletteProps = {
   readonly materials: readonly AmbientMaterial[];
@@ -32,6 +32,7 @@ export type MaterialPaletteProps = {
   readonly activeFloorId?: string;
   readonly activeWallId?: string;
   readonly activeCeilingId?: string;
+  readonly activeCountertopId?: string;
   readonly testId?: string;
   readonly onOpenCatalog?: () => void;
   readonly onSelectMaterial?: (material: AmbientMaterial, targetSurface?: TargetSurface) => void;
@@ -74,6 +75,7 @@ function MaterialChip({
   isFloor,
   isWall,
   isCeiling,
+  isCountertop,
   testId,
   onSelect,
 }: {
@@ -82,6 +84,7 @@ function MaterialChip({
   readonly isFloor: boolean;
   readonly isWall: boolean;
   readonly isCeiling: boolean;
+  readonly isCountertop?: boolean;
   readonly testId: string;
   readonly onSelect?: (material: AmbientMaterial) => void;
 }): ReactNode {
@@ -117,7 +120,7 @@ function MaterialChip({
           <span className="material-palette__code">{material.code}</span>
         ) : null}
       </span>
-      {(isFloor || isWall || isCeiling) && (
+      {(isFloor || isWall || isCeiling || isCountertop) && (
         <span className="material-palette__badges">
           {isFloor && (
             <span className="material-palette__badge material-palette__badge--floor" title="Aplicado en Suelo">
@@ -134,6 +137,11 @@ function MaterialChip({
               Techo
             </span>
           )}
+          {isCountertop && (
+            <span className="material-palette__badge material-palette__badge--countertop" title="Aplicado en Mesada">
+              Mesada
+            </span>
+          )}
         </span>
       )}
     </button>
@@ -146,6 +154,7 @@ export function MaterialPalette({
   activeFloorId,
   activeWallId,
   activeCeilingId,
+  activeCountertopId,
   testId = 'material-palette',
   onOpenCatalog,
   onSelectMaterial,
@@ -300,6 +309,18 @@ export function MaterialPalette({
           >
             Techo
           </button>
+          <button
+            type="button"
+            className={
+              'material-palette__target-pill' +
+              (targetSurface === 'countertop' ? ' material-palette__target-pill--active' : '')
+            }
+            onClick={() => setTargetSurface('countertop')}
+            aria-pressed={targetSurface === 'countertop'}
+            data-testid={`${testId}-target-countertop`}
+          >
+            Mesada
+          </button>
         </div>
       </div>
 
@@ -421,10 +442,12 @@ export function MaterialPalette({
                 const isFloor = m.id === activeFloorId;
                 const isWall = m.id === activeWallId;
                 const isCeiling = m.id === activeCeilingId;
+                const isCountertop = m.id === activeCountertopId;
                 const isCurrentTargetActive =
                   (targetSurface === 'floor' && isFloor) ||
                   (targetSurface === 'wall' && isWall) ||
-                  (targetSurface === 'ceiling' && isCeiling);
+                  (targetSurface === 'ceiling' && isCeiling) ||
+                  (targetSurface === 'countertop' && isCountertop);
 
                 return (
                   <li key={m.id}>
@@ -434,6 +457,7 @@ export function MaterialPalette({
                       isFloor={isFloor}
                       isWall={isWall}
                       isCeiling={isCeiling}
+                      isCountertop={isCountertop}
                       testId={`${testId}-chip-${m.id}`}
                       onSelect={handleChipSelect}
                     />

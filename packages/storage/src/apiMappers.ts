@@ -1079,6 +1079,16 @@ function kitchenLayoutToApi(
       layout.wallCabinetZMm === undefined ? null : layout.wallCabinetZMm,
     show_countertop:
       layout.showCountertop === undefined ? null : layout.showCountertop,
+    countertop_material_id:
+      layout.countertopMaterialId === undefined ? null : layout.countertopMaterialId,
+    floor_material_id:
+      layout.floorMaterialId === undefined ? null : layout.floorMaterialId,
+    wall_material_id:
+      layout.wallMaterialId === undefined ? null : layout.wallMaterialId,
+    ceiling_material_id:
+      layout.ceilingMaterialId === undefined ? null : layout.ceilingMaterialId,
+    show_ceiling:
+      layout.showCeiling === undefined ? null : layout.showCeiling,
     underlay: kitchenUnderlayToApi(layout.underlay),
     active_space_id: layout.activeSpaceId ?? null,
     spaces: layout.spaces?.length
@@ -1093,6 +1103,7 @@ function kitchenLayoutToApi(
             s.wallCabinetZMm === undefined ? null : s.wallCabinetZMm,
           show_countertop:
             s.showCountertop === undefined ? null : s.showCountertop,
+          countertop_material_id: s.countertopMaterialId ?? null,
           floor_material_id: s.floorMaterialId ?? null,
           wall_material_id: s.wallMaterialId ?? null,
           ceiling_material_id: s.ceilingMaterialId ?? null,
@@ -1203,6 +1214,7 @@ function kitchenLayoutFromApi(
     const sBc = optionalPlanMm(sr.base_clearance_mm ?? sr.baseClearanceMm);
     const sWz = optionalPlanMm(sr.wall_cabinet_z_mm ?? sr.wallCabinetZMm);
     const sCt = sr.show_countertop ?? sr.showCountertop;
+    const sCtM = str(sr.countertop_material_id ?? sr.countertopMaterialId);
     const sFloorM = str(sr.floor_material_id ?? sr.floorMaterialId);
     const sWallM = str(sr.wall_material_id ?? sr.wallMaterialId);
     const sCeilM = str(sr.ceiling_material_id ?? sr.ceilingMaterialId);
@@ -1218,6 +1230,7 @@ function kitchenLayoutFromApi(
       ...(sCt === null || sCt === undefined || sCt === ''
         ? {}
         : { showCountertop: Boolean(sCt) }),
+      ...(sCtM ? { countertopMaterialId: sCtM } : {}),
       ...(sFloorM ? { floorMaterialId: sFloorM } : {}),
       ...(sWallM ? { wallMaterialId: sWallM } : {}),
       ...(sCeilM ? { ceilingMaterialId: sCeilM } : {}),
@@ -1241,6 +1254,11 @@ function kitchenLayoutFromApi(
     ctRaw === null || ctRaw === undefined || ctRaw === ''
       ? undefined
       : Boolean(ctRaw);
+  const ctMatRaw = row.countertop_material_id ?? row.countertopMaterialId;
+  const countertopMaterialId =
+    ctMatRaw === null || ctMatRaw === undefined || ctMatRaw === ''
+      ? undefined
+      : str(ctMatRaw);
   const activeSpaceIdRaw = row.active_space_id ?? row.activeSpaceId;
   const activeSpaceId =
     activeSpaceIdRaw === null ||
@@ -1257,6 +1275,7 @@ function kitchenLayoutFromApi(
     ...(layoutBc === undefined ? {} : { baseClearanceMm: layoutBc }),
     ...(wallCabinetZMm === undefined ? {} : { wallCabinetZMm }),
     ...(showCountertop === undefined ? {} : { showCountertop }),
+    ...(countertopMaterialId ? { countertopMaterialId } : {}),
     ...(underlay ? { underlay } : {}),
     ...(hasSpaces ? { spaces } : {}),
     ...(activeSpaceId ? { activeSpaceId } : {}),

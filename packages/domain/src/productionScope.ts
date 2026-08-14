@@ -112,6 +112,7 @@ export function projectScopedToProductionSpace(
       baseClearanceMm: space.baseClearanceMm ?? ensured.baseClearanceMm,
       wallCabinetZMm: space.wallCabinetZMm ?? ensured.wallCabinetZMm,
       showCountertop: space.showCountertop ?? ensured.showCountertop,
+      countertopMaterialId: space.countertopMaterialId ?? ensured.countertopMaterialId,
     },
   };
 }

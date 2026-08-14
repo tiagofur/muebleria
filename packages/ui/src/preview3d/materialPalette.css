@@ -159,6 +159,11 @@
   color: #7c3aed;
 }
 
+.material-palette__badge--countertop {
+  background: color-mix(in srgb, #0d9488 15%, transparent);
+  color: #0f766e;
+}
+
 .material-palette__list {
   list-style: none;
   margin: 0;

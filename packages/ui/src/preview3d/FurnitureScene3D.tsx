@@ -22,6 +22,7 @@ import {
   PerspectiveCamera,
   OrthographicCamera,
   Edges,
+  useTexture,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import {
@@ -42,7 +43,7 @@ import {
   type MaterialSurfaceMode,
   type MaterialTextureLookup,
 } from './boardPartVisual';
-import { BoardMeshMaterial } from './BoardMeshMaterial';
+import { BoardMeshMaterial, textureUvRepeat } from './BoardMeshMaterial';
 import { MeasurementTool } from './MeasurementTool';
 import { KeyboardNav } from './KeyboardNav';
 import { ModelExporter, type ModelFormat } from './ModelExporter';
@@ -62,6 +63,7 @@ import {
   WALL_DEFAULT_COLOR,
   WallAmbientMesh,
   planAmbientScene,
+  resolveCountertopPhysical,
 } from './AmbientMeshes';
 import { isPastDragThreshold } from './moduleDragGesture';
 import {
@@ -244,6 +246,10 @@ export type FurnitureScene3DProps = {
    * instead of the white default.
    */
   readonly ambientCeiling?: AmbientMaterial;
+  /**
+   * Ambient (presentation-only) countertop material for floor cabinet slabs.
+   */
+  readonly ambientCountertop?: AmbientMaterial;
   /**
    * Catalog ambient materials used for looking up per-wall wallMaterialId overrides.
    */
@@ -566,31 +572,109 @@ function PlinthMesh({
   );
 }
 
+/** Textured countertop surface (photo material + UV repeat). */
+function CountertopTextureMaterial({
+  url,
+  widthMm,
+  depthMm,
+  tileWidthMm,
+  tileLengthMm,
+  phys,
+}: {
+  readonly url: string;
+  readonly widthMm: number;
+  readonly depthMm: number;
+  readonly tileWidthMm?: number;
+  readonly tileLengthMm?: number;
+  readonly phys: ReturnType<typeof resolveCountertopPhysical>;
+}): ReactNode {
+  const map = useTexture(url);
+  useEffect(() => {
+    const [u, v] = textureUvRepeat(widthMm, depthMm, tileWidthMm, tileLengthMm);
+    map.wrapS = THREE.RepeatWrapping;
+    map.wrapT = THREE.RepeatWrapping;
+    map.repeat.set(u, v);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.anisotropy = 4;
+    map.needsUpdate = true;
+  }, [map, widthMm, depthMm, tileWidthMm, tileLengthMm]);
+  return (
+    <meshPhysicalMaterial
+      map={map}
+      color="#ffffff"
+      roughness={phys.roughness}
+      metalness={phys.metalness}
+      clearcoat={phys.clearcoat}
+      clearcoatRoughness={phys.clearcoatRoughness}
+      envMapIntensity={phys.envMapIntensity}
+    />
+  );
+}
+
 /** Simple countertop slab (presentation only). */
 function CountertopMesh({
   width,
   height,
   depth,
+  material,
+  paintHover = false,
+  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
 }: {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+  readonly material?: AmbientMaterial;
+  readonly paintHover?: boolean;
+  readonly lightingMode?: SceneLightingMode;
 }): ReactNode {
   const thickness = 38;
   const overhangFront = 25;
   const W = Math.max(width + 8, 1);
   const D = Math.max(depth + overhangFront, 1);
+  const color = material?.previewColor ?? '#c4c0b8';
+  const phys = resolveCountertopPhysical(material, lightingMode);
   return (
     <mesh
       position={[width / 2, height + thickness / 2, D / 2 - overhangFront / 2]}
       userData={{ countertop: true }}
     >
       <boxGeometry args={[W, thickness, D]} />
-      <meshStandardMaterial
-        color="#c4c0b8"
-        roughness={0.45}
-        metalness={0.08}
-      />
+      {paintHover ? (
+        <meshStandardMaterial
+          color={PAINT_HOVER_COLOR}
+          roughness={0.45}
+          metalness={0.08}
+          transparent
+          opacity={0.85}
+        />
+      ) : (
+        <Suspense
+          fallback={
+            <meshStandardMaterial
+              color={color}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+            />
+          }
+        >
+          {material?.previewTextureUrl ? (
+            <CountertopTextureMaterial
+              url={material.previewTextureUrl}
+              widthMm={W}
+              depthMm={D}
+              tileWidthMm={material.previewTextureTileWidthMm}
+              tileLengthMm={material.previewTextureTileLengthMm}
+              phys={phys}
+            />
+          ) : (
+            <meshStandardMaterial
+              color={color}
+              roughness={phys.roughness}
+              metalness={phys.metalness}
+            />
+          )}
+        </Suspense>
+      )}
     </mesh>
   );
 }
@@ -701,6 +785,8 @@ function ModuleGroup({
   draggingInvalid = false,
   hardwareCatalog,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
+  ambientCountertop,
+  paintHoverCountertop = false,
   controlsRef,
   setOrbitSuppressed,
 }: {
@@ -717,6 +803,8 @@ function ModuleGroup({
   readonly moduleSelected?: boolean;
   readonly onSelectModule?: (moduleKey: string) => void;
   readonly lightingMode?: SceneLightingMode;
+  readonly ambientCountertop?: AmbientMaterial;
+  readonly paintHoverCountertop?: boolean;
   readonly wallDrag?: {
     readonly originXMm: number;
     readonly originYMm: number;
@@ -982,6 +1070,9 @@ function ModuleGroup({
           width={mod.width}
           height={mod.height}
           depth={mod.depth}
+          material={ambientCountertop}
+          paintHover={paintHoverCountertop}
+          lightingMode={lightingMode}
         />
       ) : null}
       {visuals.map((v) => {
@@ -1093,6 +1184,7 @@ function SceneContent({
   ambientFloor,
   ambientWall,
   ambientCeiling,
+  ambientCountertop,
   availableAmbientMaterials,
   showCeiling,
   paintHoverSurface = null,
@@ -1145,6 +1237,7 @@ function SceneContent({
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
   readonly ambientCeiling?: AmbientMaterial;
+  readonly ambientCountertop?: AmbientMaterial;
   readonly availableAmbientMaterials?: readonly AmbientMaterial[];
   readonly showCeiling?: boolean;
   readonly paintHoverSurface?: PaintSurface | null;
@@ -1194,7 +1287,7 @@ function SceneContent({
 
   /**
    * Register the paint-hit resolver so the canvas wrapper can raycast during
-   * HTML5 dragOver/drop (F067). Resolves which ambient surface (floor/wall/ceiling)
+   * HTML5 dragOver/drop (F067). Resolves which ambient surface (floor/wall/ceiling/countertop)
    * is under the cursor.
    */
   useEffect(() => {
@@ -1210,23 +1303,32 @@ function SceneContent({
 
       const wallMeshes: THREE.Object3D[] = [];
       const ceilingMeshes: THREE.Object3D[] = [];
+      const countertopMeshes: THREE.Object3D[] = [];
 
       scene.traverse((obj) => {
         if (obj.userData?.wallId && !obj.userData?.paintHoverOverlay) {
           wallMeshes.push(obj);
         } else if (obj.userData?.surface === 'ceiling' && !obj.userData?.paintHoverOverlay) {
           ceilingMeshes.push(obj);
+        } else if (obj.userData?.countertop && !obj.userData?.paintHoverOverlay) {
+          countertopMeshes.push(obj);
         }
       });
 
       const wallHits = wallMeshes.length > 0 ? paintRaycaster.intersectObjects(wallMeshes, false) : [];
       const ceilingHits = ceilingMeshes.length > 0 ? paintRaycaster.intersectObjects(ceilingMeshes, false) : [];
+      const countertopHits = countertopMeshes.length > 0 ? paintRaycaster.intersectObjects(countertopMeshes, false) : [];
 
-      let closestKind: 'floor' | 'wall' | 'ceiling' | null = null;
+      let closestKind: 'floor' | 'wall' | 'ceiling' | 'countertop' | null = null;
       let closestWallId: string | undefined = undefined;
       let minDistance = Infinity;
 
-      if (wallHits.length > 0) {
+      if (countertopHits.length > 0) {
+        minDistance = countertopHits[0]!.distance;
+        closestKind = 'countertop';
+      }
+
+      if (wallHits.length > 0 && wallHits[0]!.distance < minDistance) {
         minDistance = wallHits[0]!.distance;
         closestKind = 'wall';
         closestWallId = wallHits[0]!.object.userData.wallId as string;
@@ -1252,6 +1354,9 @@ function SceneContent({
         }
       }
 
+      if (closestKind === 'countertop') {
+        return { kind: 'countertop' };
+      }
       if (closestKind === 'wall' && closestWallId) {
         return { kind: 'wall', wallId: closestWallId };
       }
@@ -1558,6 +1663,8 @@ function SceneContent({
               onModuleFreeDragEnd={onModuleFreeDragEnd}
               draggingInvalid={draggingInvalid}
               lightingMode={lightMode}
+              ambientCountertop={ambientCountertop}
+              paintHoverCountertop={paintHoverSurface?.kind === 'countertop'}
               hardwareCatalog={hardwareById}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
@@ -1713,6 +1820,7 @@ export function FurnitureScene3D({
   ambientFloor,
   ambientWall,
   ambientCeiling,
+  ambientCountertop,
   availableAmbientMaterials,
   showCeiling,
   onPaintDrop,
@@ -1941,122 +2049,125 @@ export function FurnitureScene3D({
             </div>
           )}
         >
-        <Suspense fallback={
-          <div className="module-scene-3d__loading" role="status" aria-label="Cargando vista 3D">
-            <div className="module-scene-3d__loading-spinner" />
-            <p className="module-scene-3d__loading-text">
-              Cargando escena 3D…
-            </p>
-          </div>
-        }>
-        <Canvas
-          shadows
-          dpr={[1, 2]}
-          style={
-            fillViewport
-              ? { width: '100%', height: '100%', display: 'block' }
-              : undefined
-          }
-          gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
-          onPointerMissed={() => {
-            if (selectionEnabled) {
-              onSelectPart?.(null);
-              onSelectModule?.(null);
+          <Suspense
+            fallback={
+              <div className="module-scene-3d__loading" role="status" aria-label="Cargando vista 3D">
+                <div className="module-scene-3d__loading-spinner" />
+                <p className="module-scene-3d__loading-text">
+                  Cargando escena 3D…
+                </p>
+              </div>
             }
-          }}
-        >
-          {cameraType === 'orthographic' ? (
-            <OrthographicCamera
-              makeDefault
-              position={[...defaultCameraPosition]}
-              zoom={1.5}
-              near={1}
-              far={cameraFar}
-            />
-          ) : (
-            <PerspectiveCamera
-              makeDefault
-              position={[...defaultCameraPosition]}
-              fov={40}
-              near={1}
-              far={cameraFar}
-            />
-          )}
-          <Suspense fallback={null}>
-             <SceneContent
-              modules={sceneModules}
-              walls={walls}
-              totalWidth={totalWidth}
-              totalHeight={totalHeight}
-              totalDepth={totalDepth}
-              showFloor={showFloor}
-              showAxes={axesVisible}
-              colorMode={colorMode}
-              materialColors={materialColors}
-              materialTextures={materialTextures}
-              surfaceMode={surfaceMode}
-              cameraView={cameraView}
-              showWireframe={showWireframe}
-              showOutlines={showOutlines}
-              measurementMode={measurementMode}
-              controlsRef={controlsRef}
-              exportFormat={exportFormat}
-              onExportComplete={onExportComplete}
-              exportProjectName={exportProjectName}
-              selectedPartId={selectedPartId}
-              isolateSelected={isolateSelected}
-              onSelectPart={
-                selectionEnabled && onSelectPart ? onSelectPart : undefined
-              }
-              selectedModuleKey={selectedModuleKey}
-              onSelectModule={
-                selectionEnabled && onSelectModule
-                  ? onSelectModule
+          >
+            <Canvas
+              shadows
+              dpr={[1, 2]}
+              style={
+                fillViewport
+                  ? { width: '100%', height: '100%', display: 'block' }
                   : undefined
               }
-              wallDragByKey={wallDragByKey}
-              onModuleWallOffset={onModuleWallOffset}
-              onModuleWallDragStart={onModuleWallDragStart}
-              onModuleWallDragEnd={onModuleWallDragEnd}
-              wallDragEnabled={wallDragEnabled && !measurementMode}
-              freeDragByKey={freeDragByKey}
-              planShiftMm={planShiftMm}
-              onModuleFreeMove={onModuleFreeMove}
-              onModuleFreeDragStart={onModuleFreeDragStart}
-              onModuleFreeDragEnd={onModuleFreeDragEnd}
-              selectedWallId={selectedWallId}
-              onSelectWall={onSelectWall}
-              showFloorGrid={showFloorGrid}
-              lightingMode={lightingMode}
-              ambientFloor={ambientFloor}
-              ambientWall={ambientWall}
-              ambientCeiling={ambientCeiling}
-              availableAmbientMaterials={availableAmbientMaterials}
-              showCeiling={showCeiling}
-              paintHoverSurface={paintHoverSurface}
-              registerResolvePaintHit={
-                onPaintDrop || onPaintHover
-                  ? (fn) => {
-                      resolvePaintHitRef.current = fn;
-                    }
-                  : undefined
-              }
-              registerResolveUnplacedHit={
-                onUnplacedDrop || onUnplacedHover
-                  ? (fn) => {
-                      resolveUnplacedHitRef.current = fn;
-                    }
-                  : undefined
-              }
-              ghostModule={ghostModule}
-              ghostDropValid={ghostDropValid}
-              ghostPosition={ghostPosition}
-              draggingInvalid={draggingInvalid}
-              hardwareCatalog={hardwareCatalog}
-            />
+              gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
+              onPointerMissed={() => {
+                if (selectionEnabled) {
+                  onSelectPart?.(null as any);
+                  onSelectModule?.(null);
+                }
+              }}
+            >
+              {cameraType === 'orthographic' ? (
+                <OrthographicCamera
+                  makeDefault
+                  position={[...defaultCameraPosition]}
+                  zoom={1.5}
+                  near={1}
+                  far={cameraFar}
+                />
+              ) : (
+                <PerspectiveCamera
+                  makeDefault
+                  position={[...defaultCameraPosition]}
+                  fov={40}
+                  near={1}
+                  far={cameraFar}
+                />
+              )}
+              <Suspense fallback={null}>
+                <SceneContent
+                  modules={sceneModules}
+                  walls={walls}
+                  totalWidth={totalWidth}
+                  totalHeight={totalHeight}
+                  totalDepth={totalDepth}
+                  showFloor={showFloor}
+                  showAxes={axesVisible}
+                  colorMode={colorMode}
+                  materialColors={materialColors}
+                  materialTextures={materialTextures}
+                  surfaceMode={surfaceMode}
+                  cameraView={cameraView}
+                  showWireframe={showWireframe}
+                  showOutlines={showOutlines}
+                  measurementMode={measurementMode}
+                  controlsRef={controlsRef}
+                  exportFormat={exportFormat}
+                  onExportComplete={onExportComplete}
+                  exportProjectName={exportProjectName}
+                  selectedPartId={selectedPartId}
+                  isolateSelected={isolateSelected}
+                  onSelectPart={
+                    selectionEnabled && onSelectPart ? onSelectPart : undefined
+                  }
+                  selectedModuleKey={selectedModuleKey}
+                  onSelectModule={
+                    selectionEnabled && onSelectModule
+                      ? onSelectModule
+                      : undefined
+                  }
+                  wallDragByKey={wallDragByKey}
+                  onModuleWallOffset={onModuleWallOffset}
+                  onModuleWallDragStart={onModuleWallDragStart}
+                  onModuleWallDragEnd={onModuleWallDragEnd}
+                  wallDragEnabled={wallDragEnabled && !measurementMode}
+                  freeDragByKey={freeDragByKey}
+                  planShiftMm={planShiftMm}
+                  onModuleFreeMove={onModuleFreeMove}
+                  onModuleFreeDragStart={onModuleFreeDragStart}
+                  onModuleFreeDragEnd={onModuleFreeDragEnd}
+                  selectedWallId={selectedWallId}
+                  onSelectWall={onSelectWall}
+                  showFloorGrid={showFloorGrid}
+                  lightingMode={lightingMode}
+                  ambientFloor={ambientFloor}
+                  ambientWall={ambientWall}
+                  ambientCeiling={ambientCeiling}
+                  ambientCountertop={ambientCountertop}
+                  availableAmbientMaterials={availableAmbientMaterials}
+                  showCeiling={showCeiling}
+                  paintHoverSurface={paintHoverSurface}
+                  registerResolvePaintHit={
+                    onPaintDrop || onPaintHover
+                      ? (fn) => {
+                          resolvePaintHitRef.current = fn;
+                        }
+                      : undefined
+                  }
+                  registerResolveUnplacedHit={
+                    onUnplacedDrop || onUnplacedHover
+                      ? (fn) => {
+                          resolveUnplacedHitRef.current = fn;
+                        }
+                      : undefined
+                  }
+                  ghostModule={ghostModule}
+                  ghostDropValid={ghostDropValid}
+                  ghostPosition={ghostPosition}
+                  draggingInvalid={draggingInvalid}
+                  hardwareCatalog={hardwareCatalog}
+                />
+              </Suspense>
+            </Canvas>
           </Suspense>
-          </Canvas>
-        </Suspense>
         </ErrorBoundary>
       </div>
     </div>

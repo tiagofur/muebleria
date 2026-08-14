@@ -536,6 +536,12 @@ export function ProjectSpatialStudio({
     return availableAmbientMaterials.find((m) => m.id === id) ?? undefined;
   }, [availableAmbientMaterials, layout.ceilingMaterialId]);
 
+  const ambientCountertop = useMemo(() => {
+    const id = layout.countertopMaterialId;
+    if (!id) return undefined;
+    return availableAmbientMaterials.find((m) => m.id === id) ?? undefined;
+  }, [availableAmbientMaterials, layout.countertopMaterialId]);
+
   const selectedRef = useMemo(() => {
     if (!selectedKey) return null;
     const hash = selectedKey.lastIndexOf('#');
@@ -774,6 +780,8 @@ export function ProjectSpatialStudio({
       commit({ ...layout, walls: updatedWalls });
     } else if (drop.surface.kind === 'ceiling') {
       commit({ ...layout, ceilingMaterialId: drop.materialId, showCeiling: true });
+    } else if (drop.surface.kind === 'countertop') {
+      commit({ ...layout, countertopMaterialId: drop.materialId, showCountertop: true });
     }
   };
 
@@ -2072,6 +2080,7 @@ export function ProjectSpatialStudio({
                   activeFloorId={layout.floorMaterialId}
                   activeWallId={layout.wallMaterialId}
                   activeCeilingId={layout.ceilingMaterialId}
+                  activeCountertopId={layout.countertopMaterialId}
                   testId="spatial-studio-material-palette"
                   onSelectMaterial={(mat, targetSurface) => {
                     if (!canEdit) return;
@@ -2088,6 +2097,8 @@ export function ProjectSpatialStudio({
                       }
                     } else if (targetSurface === 'ceiling') {
                       commit({ ...layout, ceilingMaterialId: mat.id, showCeiling: true });
+                    } else if (targetSurface === 'countertop') {
+                      commit({ ...layout, countertopMaterialId: mat.id, showCountertop: true });
                     }
                   }}
                 />
@@ -2712,6 +2723,7 @@ export function ProjectSpatialStudio({
                 ambientFloor={ambientFloor}
                 ambientWall={ambientWall}
                 ambientCeiling={ambientCeiling}
+                ambientCountertop={ambientCountertop}
                 availableAmbientMaterials={availableAmbientMaterials}
                 showCeiling={layout.showCeiling}
                 selectedModuleKey={selectedKey}

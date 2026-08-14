@@ -111,6 +111,7 @@ function spacePlanFields(
     readonly baseClearanceMm?: number;
     readonly wallCabinetZMm?: number;
     readonly showCountertop?: boolean;
+    readonly countertopMaterialId?: string;
     readonly floorMaterialId?: string;
     readonly wallMaterialId?: string;
     readonly ceilingMaterialId?: string;
@@ -122,6 +123,7 @@ function spacePlanFields(
   | 'baseClearanceMm'
   | 'wallCabinetZMm'
   | 'showCountertop'
+  | 'countertopMaterialId'
   | 'floorMaterialId'
   | 'wallMaterialId'
   | 'ceilingMaterialId'
@@ -138,6 +140,9 @@ function spacePlanFields(
     ...(source.showCountertop === undefined
       ? {}
       : { showCountertop: source.showCountertop }),
+    ...(source.countertopMaterialId === undefined
+      ? {}
+      : { countertopMaterialId: source.countertopMaterialId }),
     ...(source.floorMaterialId === undefined
       ? {}
       : { floorMaterialId: source.floorMaterialId }),

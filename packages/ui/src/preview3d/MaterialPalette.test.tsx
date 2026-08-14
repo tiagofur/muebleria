@@ -176,5 +176,30 @@ describe('MaterialPalette', () => {
     const svg = chipWithColor.querySelector('svg.material-palette__swatch');
     expect(svg).toBeTruthy();
   });
+
+  it('handles countertop target selection and renders Mesada badge', () => {
+    const onSelect = vi.fn();
+    render(
+      <MaterialPalette
+        materials={sampleMaterials}
+        categories={sampleCategories}
+        activeCountertopId="am-2"
+        onSelectMaterial={onSelect}
+      />,
+    );
+
+    expect(screen.getByTestId('material-palette-target-countertop')).toBeTruthy();
+
+    // Verify badge for active countertop material
+    const chip2 = screen.getByTestId('material-palette-chip-am-2');
+    expect(chip2.textContent).toContain('Mesada');
+
+    // Switch target to countertop and click chip
+    fireEvent.click(screen.getByTestId('material-palette-target-countertop'));
+    expect(chip2.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('material-palette-chip-am-1'));
+    expect(onSelect).toHaveBeenCalledWith(sampleMaterials[0], 'countertop');
+  });
 });
 

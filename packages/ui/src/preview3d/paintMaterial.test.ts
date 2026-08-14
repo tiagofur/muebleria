@@ -26,6 +26,14 @@ describe('resolvePaintSurface', () => {
     expect(resolvePaintSurface(hits)).toEqual({ kind: 'wall', wallId: 'w1' });
   });
 
+  it('returns countertop when the closest intersect is countertop', () => {
+    const hits: ResolvedIntersect[] = [
+      { kind: 'countertop', distance: 50 },
+      { kind: 'floor', distance: 100 },
+    ];
+    expect(resolvePaintSurface(hits)).toEqual({ kind: 'countertop' });
+  });
+
   it('skips non-paintable intersects and finds the next paintable', () => {
     const hits: ResolvedIntersect[] = [
       { kind: 'part' as unknown as 'floor', distance: 50 },
@@ -58,6 +66,11 @@ describe('canApplyMaterial', () => {
   it('any material → ceiling target: allowed', () => {
     expect(canApplyMaterial('ceiling', { kind: 'ceiling' })).toBe(true);
     expect(canApplyMaterial('floor', { kind: 'ceiling' })).toBe(true);
+  });
+
+  it('any material → countertop target: allowed', () => {
+    expect(canApplyMaterial('floor', { kind: 'countertop' })).toBe(true);
+    expect(canApplyMaterial(undefined, { kind: 'countertop' })).toBe(true);
   });
 });
 

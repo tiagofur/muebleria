@@ -400,6 +400,15 @@ export function validateAmbientRefs(
       );
       if (err) errors.push(err);
     }
+    if (sp.countertopMaterialId) {
+      const err = resolveAmbientRef(
+        ambientMaterials,
+        sp.countertopMaterialId,
+        sp.id,
+        'countertopMaterialId',
+      );
+      if (err) errors.push(err);
+    }
   }
   return errors;
 }

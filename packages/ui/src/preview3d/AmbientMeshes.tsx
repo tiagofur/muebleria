@@ -150,6 +150,14 @@ export function resolveWallPhysical(
   return resolveAmbientPhysical(material, lightingMode);
 }
 
+/** Countertop PBR — mirrors ambient resolution. */
+export function resolveCountertopPhysical(
+  material?: AmbientMaterial,
+  lightingMode: SceneLightingMode = 'present',
+): AmbientPhysical {
+  return resolveAmbientPhysical(material, lightingMode);
+}
+
 function resolveAmbientPhysical(
   material: AmbientMaterial | undefined,
   lightingMode: SceneLightingMode,

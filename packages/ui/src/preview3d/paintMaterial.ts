@@ -13,7 +13,8 @@ import type { AmbientSurfaceType } from '@muebles/domain';
 export type PaintSurface =
   | { readonly kind: 'floor' }
   | { readonly kind: 'wall'; readonly wallId: string }
-  | { readonly kind: 'ceiling' };
+  | { readonly kind: 'ceiling' }
+  | { readonly kind: 'countertop' };
 
 /** Resultado de un drop válido. */
 export type PaintDrop = {
@@ -27,7 +28,7 @@ export type PaintDrop = {
  * extrae `userData` del mesh golpeado y lo pasa como `kind` + `wallId`.
  */
 export type ResolvedIntersect = {
-  readonly kind: 'floor' | 'wall' | 'ceiling';
+  readonly kind: 'floor' | 'wall' | 'ceiling' | 'countertop';
   readonly wallId?: string;
   readonly distance: number;
 };
@@ -35,7 +36,7 @@ export type ResolvedIntersect = {
 /**
  * Dado una lista de intersects resueltos (ordenados por distancia, el más
  * cercano primero), devuelve la superficie de pintura golpeada o null si
- * ninguno es una superficie pintable (piso/muro/techo).
+ * ninguno es una superficie pintable (piso/muro/techo/mesada).
  */
 export function resolvePaintSurface(
   intersects: readonly ResolvedIntersect[],
@@ -49,6 +50,9 @@ export function resolvePaintSurface(
     }
     if (hit.kind === 'ceiling') {
       return { kind: 'ceiling' };
+    }
+    if (hit.kind === 'countertop') {
+      return { kind: 'countertop' };
     }
   }
   return null;

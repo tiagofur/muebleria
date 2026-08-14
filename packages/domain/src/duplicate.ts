@@ -214,6 +214,9 @@ export function duplicateProject(
         ...(project.kitchenLayout.showCountertop === undefined
           ? {}
           : { showCountertop: project.kitchenLayout.showCountertop }),
+        ...(project.kitchenLayout.countertopMaterialId === undefined
+          ? {}
+          : { countertopMaterialId: project.kitchenLayout.countertopMaterialId }),
         ...(project.kitchenLayout.activeSpaceId
           ? { activeSpaceId: project.kitchenLayout.activeSpaceId }
           : {}),
