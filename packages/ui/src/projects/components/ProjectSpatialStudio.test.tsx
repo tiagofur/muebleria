@@ -1009,7 +1009,7 @@ EOF
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ wallCabinetZMm: 1500 }),
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-materials'));
+    // Countertop toggle lives in the room tab (ambience settings, not materials).
     fireEvent.click(screen.getByTestId('spatial-studio-toggle-countertop'));
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ showCountertop: false }),
@@ -1175,7 +1175,8 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
         onChangeLayout={onChangeLayout}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-materials'));
+    // Ceiling toggle lives in the room tab (ambience settings, not materials).
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-toggle-ceiling'));
     expect(onChangeLayout).toHaveBeenCalled();
     const next = onChangeLayout.mock.calls.at(-1)![0] as {

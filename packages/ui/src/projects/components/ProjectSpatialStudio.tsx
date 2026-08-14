@@ -2091,40 +2091,6 @@ export function ProjectSpatialStudio({
                     }
                   }}
                 />
-
-                <div className="spatial-studio__field spatial-studio__field--block">
-                  <label className="spatial-studio__field spatial-studio__check-row">
-                    <input
-                      type="checkbox"
-                      checked={layout.showCountertop !== false}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        commit({
-                          ...layout,
-                          showCountertop: e.target.checked,
-                        })
-                      }
-                      data-testid="spatial-studio-toggle-countertop"
-                    />
-                    <span>Mesada visual sobre bajos</span>
-                  </label>
-
-                  <label className="spatial-studio__field spatial-studio__check-row">
-                    <input
-                      type="checkbox"
-                      checked={layout.showCeiling === true}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        commit({
-                          ...layout,
-                          showCeiling: e.target.checked,
-                        })
-                      }
-                      data-testid="spatial-studio-toggle-ceiling"
-                    />
-                    <span>Mostrar techo</span>
-                  </label>
-                </div>
               </section>
             </>
           ) : null}
@@ -2174,6 +2140,40 @@ export function ProjectSpatialStudio({
                     ambiente
                   </button>
                 ) : null}
+
+                <div className="spatial-studio__field spatial-studio__field--block">
+                  <label className="spatial-studio__field spatial-studio__check-row">
+                    <input
+                      type="checkbox"
+                      checked={layout.showCountertop !== false}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          showCountertop: e.target.checked,
+                        })
+                      }
+                      data-testid="spatial-studio-toggle-countertop"
+                    />
+                    <span>Mesada visual sobre bajos</span>
+                  </label>
+
+                  <label className="spatial-studio__field spatial-studio__check-row">
+                    <input
+                      type="checkbox"
+                      checked={layout.showCeiling === true}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          showCeiling: e.target.checked,
+                        })
+                      }
+                      data-testid="spatial-studio-toggle-ceiling"
+                    />
+                    <span>Mostrar techo</span>
+                  </label>
+                </div>
 
                 {canEdit ? (
                   <div className="spatial-studio__import">
