@@ -5,6 +5,8 @@ gestión de catálogos de materiales, definición de módulos reutilizables,
 cotización con grupos de opciones y export directo al optimizador de corte.
 
 > Ver `docs/prd.md` para el detalle completo del producto.
+> Ver `docs/guia-de-uso.md` para el manual de uso de la app (roles, catálogo,
+> cotizar, Proyectar, zócalos, producción).
 
 ---
 

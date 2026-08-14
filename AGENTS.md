@@ -63,6 +63,7 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `progress/current.md` | Estado de la sesión activa | Al empezar |
 | `progress/history.md` | Bitácora de sesiones anteriores | Si necesitas contexto histórico |
 | `docs/prd.md` | Producto, usuarios del taller, dominio, fórmulas, anti-scope | Antes de dominio o producto |
+| `docs/guia-de-uso.md` | **Guía de uso de la app para el usuario final** (roles, catálogo, cotizar, Proyectar, zócalos, producción) | Onboarding / capacitación / demo |
 | `docs/app-excellence.md` | Plan post-horizonte: ventas/ingeniería/producción, layout cocina, CNC policy, issues | Roadmap de excelencia / issues #125+ |
 | `docs/production-module.md` | **Módulo Producción:** separación diseño vs fábrica, pantallas, pack, optimización, roadmap e issues | Antes de tocar nav/UI Producción, elevaciones PDF, pack ampliado o nesting visual |
 | `docs/judgment-day-wip-3d-2026-07-17.md` | Findings JD Round 1 (WIP 3D/espacial) | Antes de tocar preview 3D o mappers espaciales |

@@ -80,3 +80,15 @@ acabado→tablero declarativo. No se parchea con un cast de ids.
 - Drag-paint del zócalo (ver decisión arriba — requiere definir el puente
   acabado→tablero o paleta de tableros).
 - Textura del tablero en el zócalo 3D (hoy color del material).
+
+## Guía de uso (post-F087)
+
+- `docs/guia-de-uso.md`: manual de usuario final de toda la app (roles,
+  sesión, catálogo en orden de armado, cotizar, Proyectar, producción,
+  vitrina, administración, tips) con **sección dedicada a zócalos** (§8):
+  automático al cotizar, tarjeta en el inspector, cómo registrar acabados de
+  perfil propios (paso a paso Herrajes + Grupos) y qué pasa detrás
+  (síntesis, ml, patas, precedencia de altura). Etiquetas verificadas contra
+  la UI real (tabs "Muebles/Materiales/Ambiente", inspector "Mueble/Posición",
+  botón "Proyectar").
+- Referenciada desde `AGENTS.md` (mapa de docs) y `README.md`.
