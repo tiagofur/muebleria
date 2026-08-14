@@ -116,3 +116,20 @@ Causas (3):
 Tests: defaults de roles de base (moduleHelpers), panel con error honesto
 (CostPreviewPanel.test). Suites: ui 763, web 232, resto intacto; typecheck
 monorepo verde.
+
+## Fix 2 post-feedback — "Elegí un preset de medida" en el preview
+
+Segundo reporte del usuario: con los defaults de zócalo ya resueltos, el
+preview avanzó hasta chocar con el gate de presets comerciales — el proyecto
+sintético del preview no llevaba measurePresetId y MOD-GAB-01 define presets
+(resolveModuleMeasurePreset exige selección). Antes este error estaba
+enmascarado por el gate de grupos.
+
+Fix: el ítem sintético usa `defaultMeasurePresetId(module)` (primer preset),
+igual que el flujo de alta de ítems. `computeModuleCostPreview` exportada
+para tests.
+
+Tests (apps/web/src/modulePreview.test.ts): preset default desbloquea el
+preview; plinth_strip calcula y factura 0.6 m × 18 = 10.8; grupo sin
+miembros → blocked con lista honesta (ZOCLO_PERFIL sí, INTERIOR no).
+Suites: web 235, init.sh verde.

@@ -40,6 +40,7 @@ import {
   bumpStructureRevision,
   calcMaterialCostPerM2,
   calcProjectBreakdown,
+  defaultMeasurePresetId,
   generateCutRows,
   generateHardwareList,
   generateProjectMaterialSummary,
@@ -201,8 +202,9 @@ function optionalNotes(notes: string): string | undefined {
 /**
  * MOD-06: domain cost preview for a single saved module using default option choices.
  * Pure wiring in the shell — UI only receives QuoteBreakdown props.
+ * Exported for unit tests (preset default + honest missing groups).
  */
-function computeModuleCostPreview(
+export function computeModuleCostPreview(
   module: Module,
   catalog: Workspace['catalog'],
 ): {
@@ -244,6 +246,9 @@ function computeModuleCostPreview(
         moduleId: module.id,
         quantity: 1,
         optionChoices: choices,
+        // Modules with commercial presets demand a selection — preview with
+        // the default one (first), like the add-item flow does.
+        measurePresetId: defaultMeasurePresetId(module),
       },
     ],
     createdAt: now,
