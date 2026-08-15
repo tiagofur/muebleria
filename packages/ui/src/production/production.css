@@ -1263,6 +1263,11 @@
   color: var(--text-muted);
 }
 
+.prod-labels__printer-input {
+  flex: 1;
+  min-width: 10rem;
+}
+
 .prod-labels__actions {
   display: flex;
   flex-wrap: wrap;

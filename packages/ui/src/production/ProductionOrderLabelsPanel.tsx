@@ -19,6 +19,22 @@ import {
   writeLabelPrinterSettings,
 } from './labelPrinterSettings';
 
+/** Raw-print bridge — only injected by the desktop shell (zpl:printRaw). */
+type PrintRawBridge = (
+  printerName: string,
+  payload: string,
+) => Promise<{ ok: boolean; error?: string }>;
+
+type ElectronPrintHost = {
+  readonly electronAPI?: { readonly printRaw?: PrintRawBridge };
+};
+
+function readPrintRawBridge(): PrintRawBridge | null {
+  const host = (globalThis as { window?: ElectronPrintHost }).window;
+  const bridge = host?.electronAPI?.printRaw;
+  return typeof bridge === 'function' ? bridge : null;
+}
+
 export type ProductionOrderLabelsPanelProps = {
   readonly project: Project;
   /** Resolved labels (domain generatePieceLabels); null = resolve error. */
@@ -67,6 +83,10 @@ export function ProductionOrderLabelsPanel({
   const [printer, setPrinter] = useState(() => readLabelPrinterSettings());
   const [activeIdx, setActiveIdx] = useState(0);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [printRaw] = useState<PrintRawBridge | null>(() => readPrintRawBridge());
+  const [printFeedback, setPrintFeedback] = useState<
+    { ok: boolean; message: string } | null
+  >(null);
 
   useEffect(() => {
     writeLabelPrinterSettings(printer);
@@ -185,6 +205,23 @@ export function ProductionOrderLabelsPanel({
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handlePrintRaw = async () => {
+    if (!printRaw || printLabels.length === 0) return;
+    setPrintFeedback(null);
+    const content = pieceBatchToZpl(printLabels, printer.preset, {
+      dpi: printer.dpi,
+      includeBorder: printer.includeBorder,
+      projectId: project.id,
+      revision,
+    });
+    const result = await printRaw(printer.printerName ?? '', content);
+    setPrintFeedback(
+      result.ok
+        ? { ok: true, message: `Enviadas ${printLabels.length} etiquetas a ${printer.printerName}.` }
+        : { ok: false, message: result.error ?? 'No se pudo imprimir' },
+    );
   };
 
   return (
@@ -379,14 +416,61 @@ export function ProductionOrderLabelsPanel({
               />
               <span>Borde en la etiqueta</span>
             </label>
+            {printRaw ? (
+              <label className="prod-labels__filter">
+                <span className="prod-labels__filter-label">
+                  Impresora (nombre)
+                </span>
+                <input
+                  type="text"
+                  className="prod-modulos__floor-select prod-labels__printer-input"
+                  value={printer.printerName ?? ''}
+                  onChange={(e) =>
+                    setPrinter((p) => ({ ...p, printerName: e.target.value }))
+                  }
+                  placeholder="Zebra-GK420"
+                  data-testid="prod-labels-printer-name"
+                />
+              </label>
+            ) : null}
             <p className="prod-labels__printer-hint">
-              Se guarda para tu próximo ingreso. Para imprimir, enviá el archivo
-              .zpl a la Zebra con el driver en modo raw (o Zebra Browser Print) —
-              no lo imprimas como documento.
+              {printRaw
+                ? 'Imprimí directo a la Zebra (raw). En navegador, descargá el .zpl y enviálo con el driver en modo raw.'
+                : 'Para imprimir directo a la Zebra usá la app de escritorio. En navegador, descargá el .zpl y enviálo con el driver en modo raw (o Zebra Browser Print) — no lo imprimas como documento.'}
             </p>
           </div>
 
+          {printFeedback ? (
+            <p
+              className={
+                printFeedback.ok
+                  ? 'prod-modulos__footnote'
+                  : 'catalog-form__error'
+              }
+              role={printFeedback.ok ? 'status' : 'alert'}
+              data-testid="prod-labels-print-feedback"
+            >
+              {printFeedback.message}
+            </p>
+          ) : null}
+
           <div className="prod-labels__actions">
+            {printRaw ? (
+              <button
+                type="button"
+                className="btn"
+                disabled={
+                  printLabels.length === 0 || !(printer.printerName ?? '').trim()
+                }
+                onClick={() => {
+                  void handlePrintRaw();
+                }}
+                data-testid="prod-labels-print-raw"
+              >
+                <Printer size={16} strokeWidth={1.5} aria-hidden />
+                Imprimir en {(printer.printerName || 'Zebra').trim()}
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn btn--primary"

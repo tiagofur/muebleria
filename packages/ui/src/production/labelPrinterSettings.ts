@@ -9,6 +9,8 @@ export type LabelPrinterSettings = {
   readonly preset: ZplSizePreset;
   readonly dpi: ZplDpi;
   readonly includeBorder: boolean;
+  /** Thermal printer name for raw ZPL printing (desktop shell only). */
+  readonly printerName?: string;
 };
 
 const LABEL_PRINTER_STORAGE_KEY = 'muebles_label_printer_v1';
@@ -17,6 +19,7 @@ export const DEFAULT_LABEL_PRINTER_SETTINGS: LabelPrinterSettings = {
   preset: '100x50',
   dpi: 203,
   includeBorder: true,
+  printerName: '',
 };
 
 function isZplSizePreset(value: unknown): value is ZplSizePreset {
@@ -37,6 +40,8 @@ export function readLabelPrinterSettings(): LabelPrinterSettings {
         : DEFAULT_LABEL_PRINTER_SETTINGS.preset,
       dpi: parsed.dpi === 300 ? 300 : 203,
       includeBorder: parsed.includeBorder !== false,
+      printerName:
+        typeof parsed.printerName === 'string' ? parsed.printerName : '',
     };
   } catch {
     return DEFAULT_LABEL_PRINTER_SETTINGS;

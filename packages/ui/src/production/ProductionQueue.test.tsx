@@ -29,6 +29,39 @@ function project(
 afterEach(() => cleanup());
 
 describe('ProductionQueue (F038)', () => {
+  it('shows pack/nesting signals on the card when they exist', () => {
+    const withSignals: Project = {
+      ...project('p9', 'accepted', 'Obra con señales'),
+      production: {
+        revision: 2,
+        revisionAt: '2026-08-14T00:00:00.000Z',
+        lastExportAt: '2026-08-15T00:00:00.000Z',
+      },
+      nestingImport: {
+        rows: [{ materialCode: 'MAT', sheetsUsed: 3 }],
+        importedAt: '2026-08-15T01:00:00.000Z',
+        sourceName: 'nesting.csv',
+      },
+    } as Project;
+    render(
+      <ProductionQueue
+        projects={[withSignals, project('p10', 'accepted', 'Obra nueva')]}
+        customerLabelFor={() => 'Ana'}
+        salePriceFor={() => null}
+        onOpenOrder={vi.fn()}
+        onMarkProduced={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('prod-signal-pack-p9').textContent).toContain(
+      'Pack generado',
+    );
+    expect(screen.getByTestId('prod-signal-nesting-p9').textContent).toContain(
+      'Nesting',
+    );
+    // Fresh order shows no signals.
+    expect(screen.queryByTestId('prod-signal-pack-p10')).toBeNull();
+  });
+
   it('lists accepted jobs and marks produced', async () => {
     const user = userEvent.setup();
     const onMark = vi.fn();

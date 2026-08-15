@@ -30,22 +30,21 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     const user = userEvent.setup();
     const onPack = vi.fn();
     const onTab = vi.fn();
+    const cutRow = {
+      quantity: 2,
+      lengthMm: 720,
+      widthMm: 560,
+      description: 'Lateral',
+      materialName: 'Blanco',
+      grain: 0,
+      L1: 1,
+      L2: 0,
+      W1: 0,
+      W2: 0,
+    };
     const readiness = buildProductionOrderReadiness({
       project: project(),
-      cutRows: [
-        {
-          quantity: 2,
-          lengthMm: 720,
-          widthMm: 560,
-          description: 'Lateral',
-          materialName: 'Blanco',
-          grain: 0,
-          L1: 0,
-          L2: 0,
-          W1: 0,
-          W2: 0,
-        },
-      ],
+      cutRows: [cutRow],
     });
 
     render(
@@ -61,6 +60,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
         onExportOptimizer={vi.fn()}
         onExportHardware={vi.fn()}
         onExportProductionPack={onPack}
+        cutRows={[cutRow]}
       />,
     );
 
@@ -72,6 +72,11 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(screen.getByTestId('prod-hub-pieces').textContent).toBe('1');
     expect(screen.getByTestId('prod-hub-ready')).toBeTruthy();
     expect(screen.getByTestId('prod-hub-checklist')).toBeTruthy();
+    // Factory totals: board m² + edge ml from the resolved cut rows.
+    const totals = screen.getByTestId('prod-hub-factory-totals');
+    expect(totals.textContent).toContain('Tablero');
+    expect(totals.textContent).toContain('m²');
+    expect(totals.textContent).toContain('ml');
 
     await user.click(screen.getByTestId('prod-hub-export-pack'));
     expect(onPack).toHaveBeenCalled();
