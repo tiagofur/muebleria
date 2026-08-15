@@ -16,6 +16,19 @@ export interface ElectronAPI {
     options: ElectronSaveDialogOptions,
   ) => Promise<string | undefined>;
   writeExcelFile: (filePath: string, buffer: ArrayBuffer) => Promise<void>;
+  /**
+   * Raw ZPL print to a thermal printer (Etiquetas tab). Only present when
+   * the desktop shell wired it — the web app never shows the print button.
+   */
+  printRaw?: (
+    printerName: string,
+    payload: string,
+  ) => Promise<ElectronPrintRawResult>;
+}
+
+export interface ElectronPrintRawResult {
+  readonly ok: boolean;
+  readonly error?: string;
 }
 
 /** Host object that may carry preload-injected ElectronAPI (renderer window). */
