@@ -1694,7 +1694,50 @@
         "packages/domain/src/plinth.ts"
       ],
       "status": "done"
+    },
+    {
+      "id": "F089",
+      "phase": 19,
+      "name": "produccion_escaneo_qr_piso",
+      "title": "Escaneo QR en Piso de Fábrica (Lector USB / Cámara y transiciones de estado)",
+      "description": "Modo Paperless de Piso (docs/production-module.md §PROD-3.1, PROD-4.2, Issue #240). Entrada de datos rápida por escáner de códigos de barra / QR (emulación de teclado USB / Bluetooth o stream de cámara web/móvil) para leer el payload v2 (PROJ|ITEM|MOD o id de pieza) de las etiquetas ZPL/PDF. Al escanear una pieza o módulo, transiciona automáticamente su estado de fabricación (ItemFloorStatus: pending → cutting → banded → assembled) con feedback sonoro/visual y registro de operario sin requerir interacción táctil o mouse.",
+      "acceptance": [
+        "Listener global de escáner USB/HID (captura de secuencias rápidas de teclado con Enter final)",
+        "Modal o componente de escaneo por cámara de dispositivo con selector de cámara y detección de QR/Code128",
+        "Parser y validador de payloads v2 de etiquetas (formato estándar y fallback legacy)",
+        "Transición atómica de ItemFloorStatus con debounce y feedback visual (toast/sonido/animación de check)",
+        "Compatibilidad con el Hub de Producción y vista de Piso existente",
+        "Tests unitarios de parseo de payloads y transiciones en packages/domain y packages/ui",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/production-module.md PROD-3.1, PROD-4.2, Issue #240",
+        "packages/excel/src/pieceLabelsZpl.ts",
+        "packages/ui/src/production/ProductionOrderFloorView.tsx"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "F090",
+      "phase": 20,
+      "name": "metricas_analytics_taller_conversion_garantias",
+      "title": "Métricas y Analytics del Taller (Tasas de Conversión Comercial y Garantías Post-Venta)",
+      "description": "Reportes y métricas analíticas del taller (docs/prd.md §16 y docs/app-excellence.md). Extiende el Dashboard de Inicio y panel de Reportes con: 1) Métricas de Conversión Comercial (pipeline de cotizaciones, tiempo promedio de cierre, tasa de aceptación por tipo de mueble/acabado, cotizaciones estancadas/antigüedad). 2) Métricas de Post-Venta y Garantías (historial de reclamos, piezas/mecanismos con mayor incidencia de garantía, costo acumulado de reposiciones vs margen del proyecto).",
+      "acceptance": [
+        "Funciones de dominio puras en packages/domain para cálculo de embudo comercial (lead time, conversion rate, ticket promedio)",
+        "Funciones de dominio puras para agregación de garantías (frecuencia de falla por componente/material/herraje y costo de reclamos)",
+        "Componente visual de Analytics en Dashboard / Reportes con tarjetas resumen, gráficos y filtros temporales",
+        "Endpoints o mappers de almacenamiento local/backend para persistencia de eventos de garantía y fechas de pipeline",
+        "Tests unitarios en packages/domain y packages/ui",
+        "pnpm test + typecheck + init.sh verde"
+      ],
+      "references": [
+        "docs/prd.md §16",
+        "docs/app-excellence.md",
+        "packages/domain/src/crm/"
+      ],
+      "status": "pending"
     }
-
   ]
 }
+
