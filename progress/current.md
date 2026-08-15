@@ -1,8 +1,9 @@
-# Sesión — F087 Zócalo como terminación automática
+# Sesión — F075 Build y Release Desktop (Instalador .exe/.dmg + Auto-Updater)
 
-- **Fecha:** 2026-08-14
-- **Feature:** F087 — `zoclo_terminacion_automatica`
-- **Estado:** Implementada + pulido Fase 3. init.sh + typecheck + Go verde. Pendiente de revisión.
+- **Fecha:** 2026-08-15
+- **Feature:** F075 — `build_release_desktop`
+- **Estado:** En progreso (Plan de implementación presentado).
+
 
 ## Qué se implementó (F087 núcleo)
 

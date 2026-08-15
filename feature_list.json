@@ -1461,8 +1461,9 @@
         "docs/prd.md §11 (arquitectura desktop)",
         "apps/desktop/electron/main.mjs"
       ],
-      "status": "pending"
+      "status": "in_progress"
     },
+
     {
       "id": "F076",
       "phase": 15,

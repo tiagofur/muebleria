@@ -161,14 +161,25 @@ describe('plinth', () => {
     expect(plinthReturnDepthMm(580)).toBe(530);
 
     const layout = {
-      walls: [{ id: 'w1', name: 'Muro Principal', lengthMm: 3000, thicknessMm: 150, heightMm: 2400 }],
+      walls: [
+        {
+          id: 'w1',
+          name: 'Muro Principal',
+          lengthMm: 3000,
+          thicknessMm: 150,
+          heightMm: 2400,
+          angleDeg: 0,
+        },
+      ],
       placements: [
-        { itemId: 'i1', wallId: 'w1', offsetMm: 200, elevationMm: 0 },
-        { itemId: 'i2', wallId: 'w1', offsetMm: 800, elevationMm: 0 },
-        { itemId: 'island', mode: 'free' as const, offsetMm: 0, elevationMm: 0, x: 1000, y: 1000, rotationDeg: 0 },
+        { itemId: 'i1', wallId: 'w1', offsetMm: 200, instanceIndex: 0, elevation: 'floor' as const },
+        { itemId: 'i2', wallId: 'w1', offsetMm: 800, instanceIndex: 0, elevation: 'floor' as const },
+        { itemId: 'island', wallId: '', mode: 'free' as const, offsetMm: 0, instanceIndex: 0, elevation: 'floor' as const, freeXMm: 1000, freeYMm: 1000, freeYawDeg: 0 },
       ],
 
+
     };
+
 
     const widthOf = (id: string) => (id === 'i1' || id === 'i2' ? 600 : 1200);
 
