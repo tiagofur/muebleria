@@ -63,16 +63,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": ["arm64"]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": ["arm64"]
         }
       ],
       "icon": "build/icon.png",
       "category": "public.app-category.business"
     },
+
     "linux": {
       "target": [
         {
