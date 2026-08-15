@@ -14,6 +14,7 @@
 
 import type {
   BoardPart,
+  Catalog,
   Component,
   FurnitureType,
   HardwareLine,
@@ -22,8 +23,15 @@ import type {
   ModuleBaseMode,
   Project,
   ProjectItem,
+  ProjectItemPlacement,
+  ProjectKitchenLayout,
 } from './types';
-import { DEFAULT_BASE_CLEARANCE_MM, resolveBaseClearanceMm } from './kitchenLayout';
+import {
+  DEFAULT_BASE_CLEARANCE_MM,
+  isFreePlacement,
+  resolveBaseClearanceMm,
+} from './kitchenLayout';
+import { resolveModuleMeasurePreset } from './measurePresets';
 import { suggestLegCount } from './workshopRules';
 
 /** Board option role for melamine plinth parts. Fallback material: FRENTE. */
@@ -203,6 +211,72 @@ export interface BaseResolutionContext {
   readonly baseMode?: ModuleBaseMode;
   /** Effective plinth height B (mm), normally resolved from the plan. */
   readonly baseClearanceMm?: number;
+  /**
+   * Exposed plinth sides for the line's plan placement (F088). Omitted when
+   * the item is unplaced — engines then add no side returns.
+   */
+  readonly plinthSides?: PlinthSides;
+}
+
+/** Which zócalo sides are visible (need a return). Back = islands / free. */
+export interface PlinthSides {
+  readonly left: boolean;
+  readonly right: boolean;
+  readonly back: boolean;
+}
+
+/** Gap under which a neighbor / wall end counts as covering a side (mm). */
+export const PLINTH_SIDE_GAP_MM = 30;
+
+/** Front recess of the toe-kick: the return wraps this much less than D. */
+export function plinthReturnDepthMm(cabinetDepthMm: number): number {
+  const recess = Math.min(50, Math.max(20, cabinetDepthMm * 0.1));
+  return Math.max(50, Math.round(cabinetDepthMm - recess));
+}
+
+/**
+ * F088 — exposed plinth sides for a placement. A side needs a return when
+ * nothing covers it: no neighboring cabinet on the same wall within the gap
+ * tolerance, and not against a wall end. Free placements (islands) expose
+ * left, right and back.
+ */
+export function plinthSidesForPlacement(
+  layout: Pick<ProjectKitchenLayout, 'walls' | 'placements'>,
+  placement: ProjectItemPlacement,
+  /** Plan width (mm) per item id — used for neighbor footprints. */
+  widthOf: (itemId: string) => number | undefined,
+): PlinthSides {
+  if (isFreePlacement(placement)) {
+    return { left: true, right: true, back: true };
+  }
+  const wall = layout.walls.find((w) => w.id === placement.wallId);
+  const onWall = layout.placements
+    .filter(
+      (p) =>
+        p.wallId === placement.wallId &&
+        p.itemId !== placement.itemId &&
+        !isFreePlacement(p),
+    )
+    .map((p) => {
+      const w = widthOf(p.itemId) ?? 600;
+      return { start: p.offsetMm, end: p.offsetMm + w };
+    });
+
+  const width = widthOf(placement.itemId) ?? 600;
+  const start = placement.offsetMm;
+  const end = start + width;
+  const tol = PLINTH_SIDE_GAP_MM;
+
+  const coveredByNeighbor = (from: number, to: number) =>
+    onWall.some((f) => f.start < to && f.end > from);
+  const wallLength = wall?.lengthMm ?? Number.POSITIVE_INFINITY;
+
+  return {
+    left: !coveredByNeighbor(start - tol, start) && start > tol,
+    right:
+      !coveredByNeighbor(end, end + tol) && end < wallLength - tol,
+    back: false,
+  };
 }
 
 export function resolveBaseModeWithContext(
@@ -242,6 +316,7 @@ export function resolveBaseClearanceWithContext(
 /** id / code of the synthesized melamine plinth part (skip-if-present key). */
 export const SYNTHETIC_ZOCLO_PART_ID_SUFFIX = '-zoclo-auto';
 export const SYNTHETIC_ZOCLO_PART_CODE = 'ZOCLO-AUTO';
+export const SYNTHETIC_ZOCLO_SIDE_CODE = 'ZOCLO-LADO-AUTO';
 
 /**
  * Melamine plinth part synthesized by the engine when the base mode asks for
@@ -290,7 +365,9 @@ export function synthesizeBaseHardwareLine(
 /**
  * Append the synthesized base parts/lines a base mode needs and apply the
  * mode's quantity rules. Modules that already carry their own ZOCLO part or
- * ZOCLO_PERFIL/PATAS lines are left untouched (no double count).
+ * ZOCLO_PERFIL/PATAS lines are left untouched (no double count — and no
+ * synthesized side returns either: modeled fronts own their sides).
+ * F088: exposed sides add melamine return parts / strip ml.
  */
 export function applyBaseTreatment(
   moduleCode: string,
@@ -299,9 +376,16 @@ export function applyBaseTreatment(
   mode: ModuleBaseMode,
   baseClearanceMm: number,
   widthMm: number,
+  depthMm: number,
+  plinthSides?: PlinthSides,
 ): { parts: BoardPart[]; hardwareLines: HardwareLine[] } {
   let partsOut = [...parts];
   let hardwareOut = [...hardwareLines];
+
+  const exposedSides: ('left' | 'right' | 'back')[] = plinthSides
+    ? (['left', 'right', 'back'] as const).filter((s) => plinthSides[s])
+    : [];
+  const returnDepth = plinthReturnDepthMm(depthMm);
 
   if (
     mode === 'plinth_board' &&
@@ -310,12 +394,31 @@ export function applyBaseTreatment(
     !partsOut.some((p) => isZocloBoardRole(p.optionRole))
   ) {
     partsOut.push(synthesizeBaseBoardPart(moduleCode, widthMm, baseClearanceMm));
+    for (const side of exposedSides) {
+      partsOut.push({
+        id: `${moduleCode}${SYNTHETIC_ZOCLO_PART_ID_SUFFIX}-lado-${side}`,
+        code: SYNTHETIC_ZOCLO_SIDE_CODE,
+        description: 'Zócalo lateral (vuelta)',
+        quantity: 1,
+        lengthMm: returnDepth,
+        widthMm: baseClearanceMm,
+        edges: [
+          { side: 'L1', enabled: true },
+          { side: 'L2', enabled: false },
+          { side: 'W1', enabled: false },
+          { side: 'W2', enabled: false },
+        ],
+        optionRole: ZOCLO_BOARD_ROLE,
+      });
+    }
   }
-  if (
-    mode === 'plinth_strip' &&
-    !hardwareOut.some((l) => isZocloStripRole(l.optionRole ?? ''))
-  ) {
-    hardwareOut.push(synthesizeBaseHardwareLine(moduleCode, ZOCLO_STRIP_ROLE));
+  if (mode === 'plinth_strip' && !hardwareOut.some((l) => isZocloStripRole(l.optionRole ?? ''))) {
+    // Placeholder quantity doubles as the ml factor (front + returns).
+    const returnsMm = exposedSides.length * returnDepth;
+    hardwareOut.push({
+      ...synthesizeBaseHardwareLine(moduleCode, ZOCLO_STRIP_ROLE),
+      ...(returnsMm > 0 ? { quantity: (widthMm + returnsMm) / widthMm } : {}),
+    });
   }
   if (
     mode === 'legs' &&
@@ -330,14 +433,15 @@ export function applyBaseTreatment(
   };
 }
 
-/**
- * Engine context for a quote line: the item's base-mode override plus the
- * plinth height B resolved from the kitchen plan (placement → layout).
+/** Engine context for a quote line: the item's base-mode override plus the
+ * plinth state resolved from the kitchen plan (placement → layout).
  * Undefined fields fall back to the module catalog defaults.
  */
 export function baseContextForItem(
-  project: Pick<Project, 'kitchenLayout'>,
+  project: Pick<Project, 'items' | 'kitchenLayout'>,
   item: Pick<ProjectItem, 'id' | 'baseMode'>,
+  /** With a catalog the plan side exposure is resolved from module widths. */
+  catalog?: Pick<Catalog, 'modules' | 'structures'>,
 ): BaseResolutionContext {
   const layout = project.kitchenLayout;
   const planB = layout
@@ -346,8 +450,43 @@ export function baseContextForItem(
         layout.placements.find((p) => p.itemId === item.id),
       )
     : undefined;
+  let plinthSides: PlinthSides | undefined;
+  if (layout && catalog) {
+    const placement = layout.placements.find((p) => p.itemId === item.id);
+    if (placement) {
+      const widthOf = (itemId: string): number | undefined => {
+        const other = project.items.find((i) => i.id === itemId);
+        if (!other) return undefined;
+        return modulePlanWidthMm(
+          catalog.modules.find((m) => m.id === other.moduleId),
+          catalog,
+          other.measurePresetId,
+        );
+      };
+      plinthSides = plinthSidesForPlacement(layout, placement, widthOf);
+    }
+  }
   return {
     ...(item.baseMode ? { baseMode: item.baseMode } : {}),
     ...(planB !== undefined ? { baseClearanceMm: planB } : {}),
+    ...(plinthSides ? { plinthSides } : {}),
   };
+}
+
+/** Plan footprint width of a module (default preset → external dims → structure). */
+function modulePlanWidthMm(
+  module: Module | undefined,
+  catalog: Pick<Catalog, 'modules' | 'structures'>,
+  measurePresetId?: string,
+): number | undefined {
+  if (!module) return undefined;
+  try {
+    const preset = resolveModuleMeasurePreset(module, measurePresetId);
+    if (preset) return preset.width;
+  } catch {
+    /* invalid pin/preset — fall through */
+  }
+  if (module.externalDims) return module.externalDims.width;
+  const structure = catalog.structures?.find((s) => s.id === module.structureId);
+  return structure?.externalDims?.width;
 }

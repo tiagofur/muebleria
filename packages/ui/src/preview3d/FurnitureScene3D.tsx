@@ -32,6 +32,7 @@ import {
   type AmbientMaterial,
   type Hardware,
   type ModuleBaseMode,
+  type PlinthSides,
   type ResolvedBoardPart,
   type ResolvedHardwarePlacement,
 } from '@muebles/domain';
@@ -44,6 +45,7 @@ import {
   type BoardPartVisual,
   type MaterialColorLookup,
   type MaterialSurfaceMode,
+  type MaterialTextureEntry,
   type MaterialTextureLookup,
 } from './boardPartVisual';
 import { BoardMeshMaterial, textureUvRepeat } from './BoardMeshMaterial';
@@ -114,6 +116,10 @@ export type FurnitureSceneModule = {
   readonly plinthMaterialId?: string;
   /** Preview color of the chosen profile / legs hardware (user catalog). */
   readonly plinthHardwareColor?: string;
+  /** Material thickness for thin plinth panels (F088); profile = 16 mm. */
+  readonly plinthThicknessMm?: number;
+  /** Exposed plinth sides — side/back return panels (F088). */
+  readonly plinthSides?: PlinthSides;
   /** Visual countertop slab on top of floor cabinets (presentation). */
   readonly showCountertop?: boolean;
   readonly showOuterGhost?: boolean;
@@ -554,8 +560,12 @@ function GhostModuleMesh({
 
 /**
  * Base treatment under a floor cabinet (local space), driven by the base mode
- * (F087): melamine board with the resolved material color, purchased profile
- * as a slim metallic strip, or visible legs. `none` renders nothing.
+ * (F087/F088). Local Three z = workshop depth: z=depth is the cabinet FRONT,
+ * z=0 the back. The plinth renders as real thin panels wearing the resolved
+ * material (texture + grain along each panel's length):
+ * - front panel, recessed `recess` from the cabinet face
+ * - side returns where the run ends exposed (no neighbor cabinet / wall end)
+ * - back return for islands (free placements)
  */
 function PlinthMesh({
   width,
@@ -565,6 +575,9 @@ function PlinthMesh({
   materialId,
   hardwareColor,
   materialColors,
+  materialTextures,
+  thicknessMm,
+  sides,
 }: {
   readonly width: number;
   readonly depth: number;
@@ -575,6 +588,9 @@ function PlinthMesh({
   /** Hex preview color of the chosen profile / legs hardware. */
   readonly hardwareColor?: string;
   readonly materialColors?: MaterialColorLookup;
+  readonly materialTextures?: MaterialTextureLookup;
+  readonly thicknessMm?: number;
+  readonly sides?: PlinthSides;
 }): ReactNode {
   if (height <= 0 || mode === 'none') return null;
 
@@ -584,40 +600,118 @@ function PlinthMesh({
     );
   }
 
-  if (mode === 'plinth_strip') {
-    const thickness = 16;
-    const H = Math.max(height, 1);
-    return (
-      <mesh
-        position={[width / 2, -H / 2, depth - thickness / 2]}
-        userData={{ plinth: true }}
-      >
-        <boxGeometry args={[width, H, thickness]} />
-        <meshStandardMaterial
-          color={hardwareColor ?? '#b9bec4'}
-          roughness={0.35}
-          metalness={0.85}
-        />
-      </mesh>
-    );
+  const isStrip = mode === 'plinth_strip';
+  const T = Math.max(
+    1,
+    thicknessMm ?? (isStrip ? 16 : 18),
+  );
+  const H = Math.max(height, 1);
+  const recess = Math.min(50, Math.max(20, depth * 0.1));
+  const returnDepth = Math.max(depth - recess, 1);
+  const color = isStrip
+    ? hardwareColor ?? '#b9bec4'
+    : (materialId ? materialColors?.[materialId] : undefined) ??
+      DEFAULT_MATERIAL_PREVIEW_COLOR;
+  const texture =
+    !isStrip && materialId ? materialTextures?.[materialId] : undefined;
+
+  type Panel = {
+    readonly pos: readonly [number, number, number];
+    readonly size: readonly [number, number, number];
+    readonly longMm: number;
+  };
+  // Front panel: visible face `recess` behind the cabinet front (z=depth).
+  const panels: Panel[] = [
+    {
+      pos: [width / 2, -H / 2, depth - recess - T / 2],
+      size: [width, H, T],
+      longMm: width,
+    },
+  ];
+  if (sides?.left) {
+    panels.push({
+      pos: [T / 2, -H / 2, (depth - recess) / 2],
+      size: [T, H, returnDepth],
+      longMm: returnDepth,
+    });
+  }
+  if (sides?.right) {
+    panels.push({
+      pos: [width - T / 2, -H / 2, (depth - recess) / 2],
+      size: [T, H, returnDepth],
+      longMm: returnDepth,
+    });
+  }
+  if (sides?.back) {
+    panels.push({
+      pos: [width / 2, -H / 2, T / 2],
+      size: [width, H, T],
+      longMm: width,
+    });
   }
 
-  // plinth_board — recessed melamine strip wearing the resolved material.
-  const recess = Math.min(50, Math.max(20, depth * 0.1));
-  const W = Math.max(width * 0.98, 1);
-  const H = Math.max(height, 1);
-  const D = Math.max(depth - recess, 1);
-  const boardColor = materialId
-    ? materialColors?.[materialId] ?? DEFAULT_MATERIAL_PREVIEW_COLOR
-    : DEFAULT_MATERIAL_PREVIEW_COLOR;
   return (
-    <mesh
-      position={[width / 2, -H / 2, recess + D / 2]}
-      userData={{ plinth: true }}
-    >
-      <boxGeometry args={[W, H, D]} />
+    <group>
+      {panels.map((panel, i) =>
+        texture ? (
+          <PlinthPanelMesh
+            key={i}
+            position={panel.pos}
+            size={panel.size}
+            longMm={panel.longMm}
+            crossMm={H}
+            texture={texture}
+          />
+        ) : (
+          <mesh key={i} position={panel.pos as [number, number, number]} userData={{ plinth: true }}>
+            <boxGeometry args={panel.size as [number, number, number]} />
+            <meshStandardMaterial
+              color={color}
+              roughness={isStrip ? 0.35 : 0.92}
+              metalness={isStrip ? 0.85 : 0.02}
+            />
+          </mesh>
+        ),
+      )}
+    </group>
+  );
+}
+
+/** One textured plinth panel — grain (U) runs along the panel's length. */
+function PlinthPanelMesh({
+  position,
+  size,
+  longMm,
+  crossMm,
+  texture,
+}: {
+  readonly position: readonly [number, number, number];
+  readonly size: readonly [number, number, number];
+  readonly longMm: number;
+  readonly crossMm: number;
+  readonly texture: MaterialTextureEntry;
+}): ReactNode {
+  const map = useTexture(texture.url);
+  useEffect(() => {
+    const [u, v] = textureUvRepeat(
+      longMm,
+      crossMm,
+      texture.tileWidthMm,
+      texture.tileLengthMm,
+    );
+    map.wrapS = THREE.RepeatWrapping;
+    map.wrapT = THREE.RepeatWrapping;
+    map.repeat.set(u, v);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.anisotropy = 4;
+    map.needsUpdate = true;
+  }, [map, longMm, crossMm, texture]);
+  return (
+    <mesh position={position as [number, number, number]} userData={{ plinth: true }}>
+      <boxGeometry args={size as [number, number, number]} />
       <meshStandardMaterial
-        color={boardColor}
+        map={map}
+        color="#ffffff"
         roughness={0.92}
         metalness={0.02}
       />
@@ -1172,6 +1266,9 @@ function ModuleGroup({
           materialId={mod.plinthMaterialId}
           hardwareColor={mod.plinthHardwareColor}
           materialColors={materialColors}
+          materialTextures={materialTextures}
+          thicknessMm={mod.plinthThicknessMm}
+          sides={mod.plinthSides}
         />
       ) : null}
       {mod.showCountertop ? (

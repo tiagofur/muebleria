@@ -119,7 +119,7 @@ export function buildAssemblySheets(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
-      baseContextForItem(project, item),
+      baseContextForItem(project, item, catalog),
     );
 
     const hardwareMap = new Map<

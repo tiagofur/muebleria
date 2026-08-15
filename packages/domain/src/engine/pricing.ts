@@ -259,7 +259,7 @@ function calcLiveProjectBreakdown(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
-      baseContextForItem(project, item),
+      baseContextForItem(project, item, catalog),
     );
 
     for (const part of bom.boardParts) {
@@ -328,7 +328,7 @@ function collectUsedUnitPrices(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
-      baseContextForItem(project, item),
+      baseContextForItem(project, item, catalog),
     );
 
     for (const part of bom.boardParts) {

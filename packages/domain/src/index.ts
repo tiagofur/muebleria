@@ -341,9 +341,14 @@ export {
   synthesizeBaseHardwareLine,
   applyBaseTreatment,
   baseContextForItem,
+  plinthSidesForPlacement,
+  plinthReturnDepthMm,
+  PLINTH_SIDE_GAP_MM,
   SYNTHETIC_ZOCLO_PART_ID_SUFFIX,
   SYNTHETIC_ZOCLO_PART_CODE,
+  SYNTHETIC_ZOCLO_SIDE_CODE,
   type BaseResolutionContext,
+  type PlinthSides,
 } from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';

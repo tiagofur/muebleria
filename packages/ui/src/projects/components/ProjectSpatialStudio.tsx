@@ -1129,6 +1129,10 @@ export function ProjectSpatialStudio({
     ...(m.plinthHardwareColor
       ? { plinthHardwareColor: m.plinthHardwareColor }
       : {}),
+    ...(m.plinthMaterialThicknessMm
+      ? { plinthThicknessMm: m.plinthMaterialThicknessMm }
+      : {}),
+    ...(m.plinthSides ? { plinthSides: m.plinthSides } : {}),
     showCountertop: m.showCountertop,
     showOuterGhost: true,
     resolvedHardwarePlacements: m.resolvedHardwarePlacements,

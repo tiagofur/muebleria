@@ -814,6 +814,8 @@ export function resolveBom(
       resolveBaseModeWithContext(module, baseContext),
       resolveBaseClearanceWithContext(module, baseContext),
       dims.width,
+      dims.depth,
+      baseContext?.plinthSides,
     );
     allParts = treatment.parts;
     composedHardware = treatment.hardwareLines;
@@ -876,6 +878,8 @@ export function resolveBom(
     resolveBaseModeWithContext(module, baseContext),
     resolveBaseClearanceWithContext(module, baseContext),
     dimsFallback.width,
+    dimsFallback.depth,
+    baseContext?.plinthSides,
   );
   allParts = treatment.parts;
   const allHardware = treatment.hardwareLines;

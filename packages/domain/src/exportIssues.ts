@@ -222,7 +222,7 @@ export function collectExportIssues(
       catalog,
       issues,
       project.projectLevelChoices,
-      baseContextForItem(project, item),
+      baseContextForItem(project, item, catalog),
     );
     if (module) {
       // Count resolved board parts (component instances expanded) instead of a
@@ -234,7 +234,7 @@ export function collectExportIssues(
           catalog,
           item.measurePresetId,
           item.structureRevisionPin,
-          baseContextForItem(project, item),
+          baseContextForItem(project, item, catalog),
         );
         boardPartSlots += bom.boardParts.length;
       } catch {

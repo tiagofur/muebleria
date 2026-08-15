@@ -19,6 +19,7 @@ import type {
 import {
   defaultMeasurePresetId,
   layoutKitchenPlacements,
+  plinthSidesForPlacement,
   resolveAgregadoInstance,
   resolveBaseClearanceWithContext,
   resolveBaseModeWithContext,
@@ -28,6 +29,7 @@ import {
   resolveModuleMeasurePreset,
   baseContextForItem,
   type BaseResolutionContext,
+  type PlinthSides,
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
   PATAS_ROLE,
@@ -65,6 +67,10 @@ export type ProjectModule3DInstance = {
   readonly plinthMaterialId?: string;
   /** Preview color for purchased profile / legs hardware (F087). */
   readonly plinthHardwareColor?: string;
+  /** Material thickness for thin plinth panels (F088). */
+  readonly plinthMaterialThicknessMm?: number;
+  /** Exposed plinth sides for this placement — returns to render (F088). */
+  readonly plinthSides?: PlinthSides;
   readonly elevation: 'floor' | 'wall';
   /** Visual countertop slab (floor units only, presentation). */
   readonly showCountertop: boolean;
@@ -149,6 +155,7 @@ function resolveItemBom(
   baseClearanceMm: number;
   plinthMaterialId?: string;
   plinthHardwareColor?: string;
+  plinthMaterialThicknessMm?: number;
 } {
   const measurePresetId =
     item.measurePresetId?.trim() ||
@@ -202,6 +209,9 @@ function resolveItemBom(
   const plinthHardware = plinthHardwareId
     ? catalogInput.hardware.find((h) => h.id === plinthHardwareId)
     : undefined;
+  const plinthMaterial = plinthMaterialId
+    ? catalogInput.materials.find((m) => m.id === plinthMaterialId)
+    : undefined;
 
   try {
     const bom = resolveBom(module, choices, catalog, measurePresetId, undefined, baseContext);
@@ -224,6 +234,9 @@ function resolveItemBom(
       ...(plinthHardware?.previewColor
         ? { plinthHardwareColor: plinthHardware.previewColor }
         : {}),
+      ...(plinthMaterial?.thicknessMm
+        ? { plinthMaterialThicknessMm: plinthMaterial.thicknessMm }
+        : {}),
       error:
         bom.boardParts.length === 0
           ? 'Sin piezas (faltan estructura/componentes).'
@@ -239,6 +252,9 @@ function resolveItemBom(
       ...(plinthMaterialId ? { plinthMaterialId } : {}),
       ...(plinthHardware?.previewColor
         ? { plinthHardwareColor: plinthHardware.previewColor }
+        : {}),
+      ...(plinthMaterial?.thicknessMm
+        ? { plinthMaterialThicknessMm: plinthMaterial.thicknessMm }
         : {}),
       error: e instanceof Error ? e.message : 'Error al resolver el mueble.',
     };
@@ -424,6 +440,7 @@ export function resolveProject3DPreview(
     baseClearanceMm: number;
     plinthMaterialId?: string;
     plinthHardwareColor?: string;
+    plinthMaterialThicknessMm?: number;
   };
 
   const rows: ResolvedRow[] = items.map((item) => {
@@ -461,6 +478,9 @@ export function resolveProject3DPreview(
         : {}),
       ...(resolved.plinthHardwareColor
         ? { plinthHardwareColor: resolved.plinthHardwareColor }
+        : {}),
+      ...(resolved.plinthMaterialThicknessMm
+        ? { plinthMaterialThicknessMm: resolved.plinthMaterialThicknessMm }
         : {}),
     };
   });
@@ -504,9 +524,28 @@ export function resolveProject3DPreview(
     walls = layout.walls;
     layoutWarnings.push(...layout.warnings);
     const showCountertop = kitchen.showCountertop !== false;
+    // F088 — per-placement side exposure (neighbors / wall ends / islands).
+    const widthOf = (id: string): number | undefined => byItemId.get(id)?.width;
+    const plinthSidesForInstance = (
+      itemId: string,
+      instanceKey: string,
+    ): PlinthSides | undefined => {
+      const hash = instanceKey.lastIndexOf('#');
+      const idx = hash >= 0 ? Number(instanceKey.slice(hash + 1)) || 0 : 0;
+      const placement = kitchen.placements.find(
+        (p) => p.itemId === itemId && p.instanceIndex === idx,
+      );
+      return placement
+        ? plinthSidesForPlacement(kitchen, placement, widthOf)
+        : undefined;
+    };
     const placedModules: ProjectModule3DInstance[] = layout.placements.map(
       (place) => {
         const row = byItemId.get(place.itemId);
+        const plinthSides =
+          row && row.baseMode !== 'none'
+            ? plinthSidesForInstance(place.itemId, place.instanceKey)
+            : undefined;
         return {
           instanceKey: place.instanceKey,
           itemId: place.itemId,
@@ -528,6 +567,10 @@ export function resolveProject3DPreview(
           ...(row?.plinthHardwareColor
             ? { plinthHardwareColor: row.plinthHardwareColor }
             : {}),
+          ...(row?.plinthMaterialThicknessMm
+            ? { plinthMaterialThicknessMm: row.plinthMaterialThicknessMm }
+            : {}),
+          ...(plinthSides ? { plinthSides } : {}),
           elevation: place.elevation,
           showCountertop:
             showCountertop && place.elevation === 'floor',
@@ -614,6 +657,9 @@ export function resolveProject3DPreview(
           ...(row.plinthHardwareColor
             ? { plinthHardwareColor: row.plinthHardwareColor }
             : {}),
+          ...(row.plinthMaterialThicknessMm
+            ? { plinthMaterialThicknessMm: row.plinthMaterialThicknessMm }
+            : {}),
           elevation: 'floor' as const,
           showCountertop: false,
           resolvedHardwarePlacements: row.resolvedHardwarePlacements,
@@ -663,6 +709,9 @@ export function resolveProject3DPreview(
           : {}),
         ...(row.plinthHardwareColor
           ? { plinthHardwareColor: row.plinthHardwareColor }
+          : {}),
+        ...(row.plinthMaterialThicknessMm
+          ? { plinthMaterialThicknessMm: row.plinthMaterialThicknessMm }
           : {}),
         elevation: 'floor' as const,
         showCountertop: false,

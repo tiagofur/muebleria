@@ -5,6 +5,8 @@ import {
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
   SYNTHETIC_ZOCLO_PART_CODE,
+  SYNTHETIC_ZOCLO_SIDE_CODE,
+  plinthSidesForPlacement,
   applyBaseTreatment,
   baseContextForItem,
   defaultBaseModeForFurnitureType,
@@ -270,21 +272,21 @@ describe('resolveBom plinth modes', () => {
   });
 });
 
+function bajoModule(overrides: Partial<Module> = {}): Module {
+  return {
+    id: 'm1',
+    code: 'BAJO-600',
+    name: 'Bajo 600',
+    structureId: 'st1',
+    furnitureType: 'inferior',
+    externalDims: { width: 600, height: 720, depth: 560 },
+    hardwareLines: [],
+    ...overrides,
+  };
+}
+
 describe('F087 — zócalo como terminación automática', () => {
   const baseChoices = { INTERIOR: 'mat-body', FRENTE: 'mat-front' };
-
-  function bajoModule(overrides: Partial<Module> = {}): Module {
-    return {
-      id: 'm1',
-      code: 'BAJO-600',
-      name: 'Bajo 600',
-      structureId: 'st1',
-      furnitureType: 'inferior',
-      externalDims: { width: 600, height: 720, depth: 560 },
-      hardwareLines: [],
-      ...overrides,
-    };
-  }
 
   it('defaultBaseModeForFurnitureType: piso → melamina, superior → none', () => {
     expect(defaultBaseModeForFurnitureType('inferior')).toBe('plinth_board');
@@ -410,6 +412,7 @@ describe('F087 — zócalo como terminación automática', () => {
       'plinth_strip',
       100,
       600,
+      560,
     );
     expect(res.hardwareLines).toHaveLength(1);
     expect(res.hardwareLines[0]!.id).toBe('hl-fixed');
@@ -445,5 +448,134 @@ describe('F087 — zócalo como terminación automática', () => {
     );
     expect(noLayout.baseMode).toBeUndefined();
     expect(noLayout.baseClearanceMm).toBeUndefined();
+  });
+});
+
+describe('F088 — vueltas laterales del zócalo', () => {
+  const baseChoices = { INTERIOR: 'mat-body', FRENTE: 'mat-front' };
+  const wall = { id: 'w1', lengthMm: 3000, angleDeg: 0 };
+  const placement = (
+    itemId: string,
+    offsetMm: number,
+  ) => ({
+    itemId,
+    instanceIndex: 0,
+    wallId: 'w1',
+    offsetMm,
+    elevation: 'floor' as const,
+    mode: 'wall' as const,
+  });
+  const widthOf = () => 600;
+
+  it('expone solo los extremos del mueble en una corrida', () => {
+    const layout = {
+      walls: [wall],
+      placements: [placement('a', 0), placement('b', 600), placement('c', 1200)],
+    };
+    const sidesOf = (id: string, offset: number) =>
+      plinthSidesForPlacement(layout, placement(id, offset), widthOf);
+    // Mueble del medio: cubierto por vecinos a ambos lados.
+    expect(sidesOf('b', 600)).toEqual({ left: false, right: false, back: false });
+    // Primer mueble: izquierda contra el inicio del muro, derecha pegada a b.
+    expect(sidesOf('a', 0)).toEqual({ left: false, right: false, back: false });
+    // Último mueble: la corrida termina en 1800 sobre un muro de 3000 →
+    // derecha expuesta (sigue habiendo muro detrás, no al costado).
+    expect(sidesOf('c', 1200)).toEqual({ left: false, right: true, back: false });
+  });
+
+  it('islas (free) exponen ambos lados y la trasera', () => {
+    const layout = {
+      walls: [],
+      placements: [
+        {
+          itemId: 'a',
+          instanceIndex: 0,
+          wallId: '',
+          offsetMm: 0,
+          elevation: 'floor' as const,
+          mode: 'free' as const,
+          freeXMm: 1000,
+          freeYMm: 1000,
+          freeYawDeg: 0,
+        },
+      ],
+    };
+    expect(
+      plinthSidesForPlacement(layout, layout.placements[0]!, widthOf),
+    ).toEqual({ left: true, right: true, back: true });
+  });
+
+  it('melamina sintetiza una vuelta por lado expuesto', () => {
+    const bom = resolveBom(
+      bajoModule({ baseMode: 'plinth_board', baseClearanceMm: 100 }),
+      baseChoices,
+      catalog(),
+      undefined,
+      undefined,
+      { baseClearanceMm: 100, plinthSides: { left: true, right: true, back: false } },
+    );
+    const zoclos = bom.boardParts.filter(
+      (p) => p.optionRole === ZOCLO_BOARD_ROLE,
+    );
+    expect(zoclos).toHaveLength(3); // frontal + 2 vueltas
+    const vueltas = zoclos.filter((p) => p.code === SYNTHETIC_ZOCLO_SIDE_CODE);
+    expect(vueltas).toHaveLength(2);
+    // D=560, recepa 50 → vuelta de 510 de largo, 100 (B) de alto.
+    expect(vueltas[0]!.lengthMm).toBe(510);
+    expect(vueltas[0]!.widthMm).toBe(100);
+    expect(vueltas[0]!.materialId).toBe('mat-front');
+  });
+
+  it('perfil suma el ml de las vueltas', () => {
+    const bom = resolveBom(
+      bajoModule(),
+      { ...baseChoices, ZOCLO_PERFIL: 'hw-strip' },
+      catalog(),
+      undefined,
+      undefined,
+      {
+        baseMode: 'plinth_strip',
+        baseClearanceMm: 100,
+        plinthSides: { left: true, right: true, back: false },
+      },
+    );
+    const strip = bom.hardwareLines.find(
+      (h) => h.optionRole === ZOCLO_STRIP_ROLE,
+    );
+    // W=600 + 2 vueltas de 510 → 1.62 ml.
+    expect(strip!.quantity).toBe(1.62);
+  });
+
+  it('sin contexto de lados no hay vueltas (compatibilidad)', () => {
+    const bom = resolveBom(
+      bajoModule({ baseMode: 'plinth_board', baseClearanceMm: 100 }),
+      baseChoices,
+      catalog(),
+    );
+    expect(
+      bom.boardParts.filter((p) => p.code === SYNTHETIC_ZOCLO_SIDE_CODE),
+    ).toHaveLength(0);
+  });
+
+  it('módulo con zócalo propio no recibe vueltas sintetizadas', () => {
+    const bom = resolveBom(
+      bajoModule({
+        baseMode: 'plinth_board',
+        baseClearanceMm: 100,
+        components: [{ componentId: 'comp-zoclo', quantity: 1 }],
+      }),
+      baseChoices,
+      catalog(),
+      undefined,
+      undefined,
+      { plinthSides: { left: true, right: true, back: false } },
+    );
+    const zoclos = bom.boardParts.filter(
+      (p) => p.optionRole === ZOCLO_BOARD_ROLE,
+    );
+    expect(zoclos).toHaveLength(1); // solo la pieza propia
+    expect(
+      zoclos.filter((p) => p.code === SYNTHETIC_ZOCLO_SIDE_CODE),
+    ).toHaveLength(0);
   });
 });

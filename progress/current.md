@@ -133,3 +133,38 @@ Tests (apps/web/src/modulePreview.test.ts): preset default desbloquea el
 preview; plinth_strip calcula y factura 0.6 m × 18 = 10.8; grupo sin
 miembros → blocked con lista honesta (ZOCLO_PERFIL sí, INTERIOR no).
 Suites: web 235, init.sh verde.
+
+## F088 — Vueltas laterales automáticas + espesor + textura (nueva sesión)
+
+F087 marcada `done`; F088 `in_progress` → implementada y verificada.
+
+**Dominio (`plinth.ts`):**
+- `PlinthSides` { left, right, back }; `plinthSidesForPlacement` — vecinos por
+  muro (offsets + anchos, tolerancia 30 mm), extremos de muro cubren,
+  free/isla expone left+right+back.
+- `plinthReturnDepthMm` (D − recepa 50); `BaseResolutionContext.plinthSides`;
+  `baseContextForItem(project, item, catalog?)` resuelve exposición con anchos
+  de módulo (preset default → externalDims → estructura).
+- `applyBaseTreatment`: melamina sintetiza `ZOCLO-LADO-AUTO` por lado expuesto
+  (largo = vuelta 510 con D=560, alto = B, canto L1, material del frente);
+  perfil sintetizado con factor ml (W + vueltas)/W; módulos con zócalo propio
+  NO reciben vueltas sintetizadas.
+- Motores pasan `catalog` al contexto. Compatibilidad: sin baseMode o sin
+  placement el BOM no cambia (484 previos intactos).
+
+**3D:** convención verificada — en el grupo, z=depth es el FRENTE (la puerta se
+posa en y=PD; el grupo mapea [x, z_altura, y_prof]); el zócalo viejo (masa
+sólida) estaba orientado al revés de su comentario. `PlinthMesh` reescrito
+como paneles delgados: frontal retraído `recepa` del frente, laterales y
+trasera según `plinthSides`, espesor = material (melamina) o 16 mm (perfil,
+que además quedó retraído — antes a ras del frente). `PlinthPanelMesh` con
+textura del material y veta (U) a lo largo de cada panel.
+
+**Preview/studio:** `ProjectModule3DInstance` += `plinthSides` (por placement)
+y `plinthMaterialThicknessMm`; studio los mapea a la escena.
+
+**Tests:** domain 490 (+6: vecinos en corrida, isla, vuelta melamina, ml 1.62
+con dos vueltas, compatibilidad sin lados, sin vueltas con pieza propia).
+init.sh exit 0; typecheck monorepo verde. Guía §8.4 actualizada con vueltas.
+
+**Pendiente:** drag-paint (puente acabado→tablero); grano por cara si se pide.

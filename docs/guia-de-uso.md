@@ -172,8 +172,15 @@ veas el patrón; desactalos o editá sus precios como con cualquier herraje.
 - **Melamina:** el motor genera la pieza sola (largo = ancho del mueble,
   alto = B, canto frontal). Si tu mueble ya tiene su propio componente de
   zócalo, se usa ese — no se duplica.
-- **Perfil:** se factura por metro lineal según el ancho; la lista de compra
-  redondea a barras completas.
+- **Vueltas laterales (automáticas):** el plano sabe qué hay a cada lado del
+  mueble. Si un extremo queda a cielo abierto (no pega con otro mueble ni
+  con el final del muro), el zócalo suma la vuelta lateral de ese lado —
+  pieza de corte en melamina, o metros lineales extra si es perfil. Las
+  islas llevan también la trasera. En el 3D las vueltas se ven como paneles
+  reales, delgados al espesor del material y con la veta corrida a lo ancho
+  del mueble.
+- **Perfil:** se factura por metro lineal según el ancho (más las vueltas);
+  la lista de compra redondea a barras completas.
 - **Patas:** cantidad sugerida según el ancho (4 hasta 800 mm, +1 cada
   400 mm).
 - La altura del **plano** (Posición) manda sobre la del módulo: lo que ves

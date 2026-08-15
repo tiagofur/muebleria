@@ -1673,6 +1673,24 @@
         "docs/projectar-super-3d-plan.md",
         "packages/domain/src/plinth.ts"
       ],
+      "status": "done"
+    },
+    {
+      "id": "F088",
+      "phase": 18,
+      "name": "zoclo_vueltas_laterales_espesor_textura",
+      "title": "Zócalo con vueltas laterales automáticas, espesor real y textura/veta en 3D",
+      "description": "El zócalo gana vueltas laterales automáticas: frontal siempre (melamina con espesor del material o perfil comprado), y laterales solo en los extremos expuestos — cuando el lado no tiene otro mueble ni muro pegado (regla por placement en el plano; islas con vuelta trasera). El 3D pasa de masa sólida a paneles reales delgados con textura del material y veta corrida en W (la dirección del mueble), y el perfil renderiza sus vueltas.",
+      "acceptance": [
+        "Regla de vecinos en dominio (mismo muro por offset, extremos de muro, free/isla con trasera) compartida por BOM y 3D",
+        "BOM: melamina sintetiza pieza lateral por lado expuesto (largo = profundidad - recepa, alto = B); perfil suma ml de las vueltas; patas sin cambios",
+        "Compatibilidad: ítems sin baseMode o sin placement no cambian su BOM (golden estable); módulos con zócalo propio no reciben vueltas sintetizadas",
+        "3D: paneles delgados (espesor del material melamina / 16 mm perfil) con frontal + laterales + trasera en islas, con textura y veta a lo largo de cada panel"
+      ],
+      "references": [
+        "docs/prd.md",
+        "packages/domain/src/plinth.ts"
+      ],
       "status": "in_progress"
     }
   ]

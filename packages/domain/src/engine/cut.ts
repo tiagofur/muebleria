@@ -105,7 +105,7 @@ export function generateCutRows(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
-      baseContextForItem(project, item),
+      baseContextForItem(project, item, catalog),
     );
 
     for (const part of bom.boardParts) {
@@ -262,7 +262,7 @@ export function generatePieceLabels(
       catalog,
       item.measurePresetId,
       item.structureRevisionPin,
-      baseContextForItem(project, item),
+      baseContextForItem(project, item, catalog),
     );
 
     for (const part of bom.boardParts) {
