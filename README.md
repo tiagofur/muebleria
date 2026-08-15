@@ -90,21 +90,25 @@ pnpm test                             # todos los paquetes
 pnpm --filter @muebles/web dev        # UI en localhost:5173
 ```
 
-### Desktop Electron (dev)
+### Desktop Electron (dev y empaquetado)
 
 Misma UI que web; el host solo aporta ventana + diálogo nativo de guardar (EXP-06).
 
 ```bash
-# Terminal 1
+# Desarrollo local
 pnpm --filter @muebles/web dev
-
-# Terminal 2 (espera a Vite y abre Electron)
 pnpm --filter @muebles/desktop dev:app
+
+# Empaquetado / release (F075)
+pnpm build:desktop      # Genera bundle en apps/desktop/dist/ (--dir)
+pnpm release:desktop    # Genera instaladores (.dmg / .exe / .AppImage)
 ```
 
+Ver `docs/desktop-release.md` para firma de código (.pfx / Apple Developer ID) y auto-updater con GitHub Releases.
 Detalle y smoke: `docs/verification.md` § Nivel 6.
 
 ---
+
 
 ## Estructura del repositorio
 

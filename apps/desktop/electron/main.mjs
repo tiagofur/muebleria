@@ -5,19 +5,24 @@
 
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { execFile as execFileCb } from 'node:child_process';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const execFile = util.promisify(execFileCb);
 
 const CHANNELS = {
   showSaveDialog: 'excel:showSaveDialog',
   writeExcelFile: 'excel:writeExcelFile',
   printRaw: 'zpl:printRaw',
+  getAppVersion: 'app:getVersion',
+  checkForUpdates: 'app:checkForUpdates',
 };
 
 function isDev() {
@@ -26,6 +31,52 @@ function isDev() {
     process.env.ELECTRON_DEV === 'true' ||
     !app.isPackaged
   );
+}
+
+function resolveStaticIndexHtml() {
+  const candidates = [
+    path.join(app.getAppPath(), 'web/dist/index.html'),
+    path.join(__dirname, '../web/dist/index.html'),
+    path.join(__dirname, '../../web/dist/index.html'),
+    path.join(process.resourcesPath || '', 'app/web/dist/index.html'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fsSync.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {}
+  }
+  return candidates[0];
+}
+
+function setupAutoUpdater() {
+  if (isDev()) {
+    return;
+  }
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-available', (info) => {
+      console.log('Update available:', info?.version);
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('Update downloaded:', info?.version);
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.warn('AutoUpdater warning:', err?.message || err);
+    });
+
+    void autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.warn('AutoUpdater check error:', err?.message || err);
+    });
+  } catch (err) {
+    console.warn('AutoUpdater setup bypassed:', err?.message || err);
+  }
 }
 
 function createWindow() {
@@ -52,12 +103,13 @@ function createWindow() {
       win.webContents.openDevTools({ mode: 'detach' });
     }
   } else {
-    const indexHtml = path.join(__dirname, '../../web/dist/index.html');
+    const indexHtml = resolveStaticIndexHtml();
     void win.loadFile(indexHtml);
   }
 
   return win;
 }
+
 
 function registerIpc() {
   ipcMain.handle(CHANNELS.showSaveDialog, async (_event, options) => {
@@ -119,8 +171,10 @@ function registerIpc() {
 app.whenReady().then(() => {
   registerIpc();
   createWindow();
+  setupAutoUpdater();
 
   app.on('activate', () => {
+
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }

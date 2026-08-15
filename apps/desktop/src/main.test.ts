@@ -48,6 +48,37 @@ describe('Electron host files (F032 / #38)', () => {
     expect(pkg.main).toBe('./electron/main.mjs');
     expect(pkg.scripts?.dev).toContain('electron');
     expect(pkg.scripts?.['dev:app']).toBeTruthy();
+    expect(pkg.scripts?.package).toContain('electron-builder');
+    expect(pkg.scripts?.dist).toContain('electron-builder');
     expect(pkg.devDependencies?.electron).toBeTruthy();
+    expect(pkg.devDependencies?.['electron-builder']).toBeTruthy();
+  });
+
+  it('configures electron-builder and auto-updater (F075)', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(desktopRoot, 'package.json'), 'utf8'),
+    ) as {
+      build?: {
+        appId?: string;
+        productName?: string;
+        win?: { target?: unknown };
+        mac?: { target?: unknown };
+        publish?: { provider?: string; owner?: string; repo?: string };
+      };
+    };
+    expect(pkg.build?.appId).toBe('com.muebles.app');
+    expect(pkg.build?.productName).toBe('Muebles');
+    expect(pkg.build?.win).toBeTruthy();
+    expect(pkg.build?.mac).toBeTruthy();
+    expect(pkg.build?.publish?.provider).toBe('github');
+
+    const main = readFileSync(join(desktopRoot, 'electron/main.mjs'), 'utf8');
+    expect(main).toContain('electron-updater');
+    expect(main).toContain('resolveStaticIndexHtml');
+    expect(main).toContain('setupAutoUpdater');
+
+    const iconPath = join(desktopRoot, 'build/icon.png');
+    expect(existsSync(iconPath)).toBe(true);
   });
 });
+

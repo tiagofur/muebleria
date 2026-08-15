@@ -9,10 +9,13 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present run build",
+    "build:desktop": "pnpm --filter @muebles/desktop package",
+    "release:desktop": "pnpm --filter @muebles/desktop dist",
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "visual": "playwright test --config=playwright.config.ts"
   },
+
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "typescript": "^5.8.3",
@@ -22,7 +25,11 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "electron",
-      "playwright"
+      "playwright",
+      "electron-winstaller",
+      "7zip-bin",
+      "app-builder-bin"
     ]
   }
 }
+

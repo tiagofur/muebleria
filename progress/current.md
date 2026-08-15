@@ -2,23 +2,27 @@
 
 - **Fecha:** 2026-08-15
 - **Feature:** F075 — `build_release_desktop`
-- **Estado:** En progreso (Plan de implementación presentado).
+- **Estado:** Implementada y verificada. init.sh + typecheck + build:desktop verde.
 
+## Qué se implementó (F075 núcleo)
 
-## Qué se implementó (F087 núcleo)
+1. **Configuración `electron-builder` (`apps/desktop/package.json`):**
+   - Targets configurados: Windows NSIS (`.exe` instalador + portable), macOS (`.dmg` + `.zip`), Linux (`AppImage` + `.tar.gz`).
+   - Copia de assets de `apps/web/dist` empaquetados autónomamente para ejecución offline y standalone.
+   - Scripts de empaquetado: `pnpm build:desktop` (`--dir`), `pnpm release:desktop` (`dist`), `dist:win`, `dist:mac`, `dist:linux`.
 
-**Dominio:** `ProjectItem.baseMode` (override por línea), `BaseResolutionContext`
-+ resolvedores con contexto (el modo efectivo del ítem decide la altura B),
-síntesis automática en `resolveBom` (pieza ZOCLO-AUTO con L=W/W=B/canto L1,
-herraje ZOCLO_PERFIL en ml, PATAS con cantidad sugerida — skip-if-present),
-`defaultBaseModeForFurnitureType` (inferior/alto → melamina, superior → none)
-y `baseContextForItem` (modo del ítem + B del plano placement→layout).
-Motores pricing/cut/labels/exportIssues/assemblySheets pasan el contexto.
-Compatibilidad golden: sin baseMode el BOM no cambia.
+2. **Auto-Updater (`apps/desktop/electron/main.mjs`):**
+   - Integración con `electron-updater` apuntando al repositorio GitHub (`tiagofur/muebleria`).
+   - `checkForUpdatesAndNotify()` automático en segundo plano cuando la app está empaquetada.
+   - Carga resiliente de `index.html` compilado en modo empaquetado/producción y dev.
 
-**Picker:** `selectableGroupCodesForModule` — grupos requeridos + opcionales
-cuyo rol está en uso (incluidos los sintetizados por baseMode). El gate de
-precio sigue exigiendo solo requeridos.
+3. **Iconos de aplicación:**
+   - Script generador de icono oficial 512x512 RGBA (`apps/desktop/scripts/generate-icons.mjs`) produciendo `apps/desktop/build/icon.png`.
+
+4. **Documentación de Release:**
+   - Creado `docs/desktop-release.md` con guías de firma de código Authenticode `.pfx` (Windows) y Apple Developer ID (macOS) sin commitear credenciales, más flujo de publicación de releases en GitHub.
+   - Actualizado `README.md` con comandos de build y release.
+
 
 **Proyectar:** tarjeta "Zócalo (base del mueble)" en la pestaña props (tipo +
 acabado contextual; el perfil/patas salen del catálogo del usuario). Altura
