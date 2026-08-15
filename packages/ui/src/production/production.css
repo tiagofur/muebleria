@@ -997,6 +997,44 @@
   gap: var(--space-4);
 }
 
+.prod-paperless__scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+}
+
+.prod-paperless__scan-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.prod-paperless__scan-input {
+  flex: 1;
+  min-width: 12rem;
+  max-width: 22rem;
+}
+
+.prod-paperless__scan-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-md);
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
 .prod-paperless__filters {
   display: flex;
   flex-wrap: wrap;
@@ -1022,6 +1060,12 @@
   background: var(--surface-card);
   box-shadow: var(--shadow-sm);
   min-height: 10rem;
+}
+
+.prod-paperless__card--scan {
+  border-color: var(--border-brand);
+  outline: 2px solid var(--border-brand);
+  outline-offset: 2px;
 }
 
 .prod-paperless__code {
