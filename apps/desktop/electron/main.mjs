@@ -4,15 +4,20 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { execFile as execFileCb } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import util from 'node:util';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const execFile = util.promisify(execFileCb);
 
 const CHANNELS = {
   showSaveDialog: 'excel:showSaveDialog',
   writeExcelFile: 'excel:writeExcelFile',
+  printRaw: 'zpl:printRaw',
 };
 
 function isDev() {
@@ -77,6 +82,37 @@ function registerIpc() {
     }
     const data = Buffer.from(buffer);
     await fs.writeFile(filePath, data);
+  });
+
+  // Raw ZPL print (Etiquetas tab) — mirrors printHandlers.createPrintRawHandler
+  // with real node deps. Platform: CUPS lp (darwin/linux) / copy /b (win32).
+  ipcMain.handle(CHANNELS.printRaw, async (_event, printerName, payload) => {
+    const printer = String(printerName ?? '').trim();
+    const zpl = String(payload ?? '');
+    if (!printer) return { ok: false, error: 'Falta el nombre de la impresora' };
+    if (!zpl.trim()) return { ok: false, error: 'No hay etiquetas para imprimir' };
+    try {
+      if (process.platform === 'win32') {
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'muebles-zpl-'));
+        const file = path.join(dir, 'labels.zpl');
+        await fs.writeFile(file, zpl, 'utf8');
+        try {
+          await execFile('cmd', ['/c', 'copy', '/b', file, printer]);
+        } finally {
+          await fs.unlink(file).catch(() => undefined);
+        }
+        return { ok: true };
+      }
+      const { stderr } = await execFile('lp', ['-d', printer, '-o', 'raw', '-'], {
+        input: zpl,
+      });
+      if (stderr && /error|unable/i.test(stderr)) {
+        return { ok: false, error: stderr.trim() };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
 }
 
