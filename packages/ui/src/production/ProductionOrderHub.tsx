@@ -3,14 +3,18 @@
  * Read-only design; mutates only factory actions via callbacks.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type {
   HardwarePurchaseRow,
   ItemFloorStatus,
   Module,
+  PieceLabel,
   ProductionCutRow,
   ProductionStaleInfo,
   Project,
+} from '@muebles/domain';
+import {
+  generatePartDrillingData,
 } from '@muebles/domain';
 import {
   ArrowLeft,
@@ -46,6 +50,8 @@ import {
 } from './ProductionOrderDocumentsPanel';
 import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
 import { ProductionOrderPaperlessPanel } from './ProductionOrderPaperlessPanel';
+import { ProductionOrderLabelsPanel } from './ProductionOrderLabelsPanel';
+import { CsvExportConfigModal } from './CsvExportConfigModal';
 import type { Catalog, NestingImportResult } from '@muebles/domain';
 import type { ProductionSpaceOption } from '@muebles/domain';
 import { PRODUCTION_SCOPE_ALL } from '@muebles/domain';
@@ -63,7 +69,11 @@ export type ProductionOrderHubProps = {
   readonly onOpenDesign: () => void;
   readonly onExportOptimizer: () => void | Promise<void>;
   readonly onExportHardware: () => void | Promise<void>;
-  readonly onExportPieceLabels?: () => void | Promise<void>;
+  /** Etiquetas tab / labels PDF — hub passes scoped labels + copy mode. */
+  readonly onExportPieceLabels?: (
+    labels: readonly PieceLabel[],
+    options: { readonly perUnit: boolean },
+  ) => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
   readonly onExportElevations?: () => void | Promise<void>;
   readonly onExportCutListCsv?: () => void | Promise<void>;
@@ -73,6 +83,9 @@ export type ProductionOrderHubProps = {
   readonly modules?: readonly Module[];
   readonly cutRows?: readonly ProductionCutRow[] | null;
   readonly cutListError?: string | null;
+  /** Resolved piece labels for the Etiquetas tab (domain). */
+  readonly pieceLabels?: readonly PieceLabel[] | null;
+  readonly pieceLabelsError?: string | null;
   readonly hardwareRows?: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
   readonly catalog3d?: Module3DCatalogInput | null;
@@ -157,6 +170,8 @@ export function ProductionOrderHub({
   modules = [],
   cutRows = null,
   cutListError = null,
+  pieceLabels = null,
+  pieceLabelsError = null,
   hardwareRows = null,
   hardwareError = null,
   catalog3d = null,
@@ -175,11 +190,29 @@ export function ProductionOrderHub({
   productionScopeId = PRODUCTION_SCOPE_ALL,
   onProductionScopeChange,
 }: ProductionOrderHubProps): ReactNode {
+  const [isCsvConfigOpen, setIsCsvConfigOpen] = useState(false);
+
+  const downloadDrillingJson = () => {
+    if (!cutRows || cutRows.length === 0) return;
+    const data = generatePartDrillingData({ project, cutRows });
+    const content = JSON.stringify(data, null, 2);
+    const safeName = project.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '_');
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `perforaciones_${safeName}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const documents: readonly ProductionDocumentItem[] = [
     {
       id: 'pack',
       label: 'Pack de producción (ZIP)',
-      hint: 'Optimizer + herrajes + etiquetas + resumen + elevaciones + despiece',
+      hint: 'Optimizer + herrajes + etiquetas PDF y ZPL + resumen + elevaciones + despiece',
       available: readiness.packGenerable && Boolean(onExportProductionPack),
       reason: 'Requiere despiece de corte válido',
       onDownload: onExportProductionPack,
@@ -201,6 +234,15 @@ export function ProductionOrderHub({
       onDownload: onExportCutListCsv,
     },
     {
+      id: 'cutlist-csv-config',
+      label: 'CSV configurable (terceros)',
+      hint: 'Elegí preset de optimizador, separador y material antes de bajar',
+      available: readiness.materialsResolved && (cutRows?.length ?? 0) > 0,
+      reason: 'Requiere piezas de tablero',
+      actionLabel: 'Configurar',
+      onDownload: () => setIsCsvConfigOpen(true),
+    },
+    {
       id: 'hardware',
       label: 'Lista de herrajes',
       hint: 'Picking / compras (.xlsx)',
@@ -209,11 +251,23 @@ export function ProductionOrderHub({
     },
     {
       id: 'labels',
-      label: 'Etiquetas de pieza',
-      hint: 'PDF con encintado y QR',
-      available: Boolean(onExportPieceLabels) && readiness.materialsResolved,
+      label: 'Etiquetas de pieza (PDF)',
+      hint: 'A4 con encintado y QR — imprimir y cortar en oficina',
+      available:
+        Boolean(onExportPieceLabels) && (pieceLabels?.length ?? 0) > 0,
       reason: 'Requiere piezas de tablero',
-      onDownload: onExportPieceLabels,
+      onDownload: onExportPieceLabels
+        ? () => onExportPieceLabels(pieceLabels ?? [], { perUnit: false })
+        : undefined,
+    },
+    {
+      id: 'labels-zpl',
+      label: 'Etiquetas térmicas (ZPL)',
+      hint: 'Impresora Zebra — configurar tamaño/DPI y descargar .zpl',
+      available: (pieceLabels?.length ?? 0) > 0,
+      reason: 'Requiere piezas de tablero',
+      actionLabel: 'Configurar',
+      onDownload: () => onTabChange('etiquetas'),
     },
     {
       id: 'elevations',
@@ -229,7 +283,16 @@ export function ProductionOrderHub({
       hint: 'Lista de piezas en la pestaña Despiece',
       available: readiness.materialsResolved,
       reason: 'Sin piezas de tablero',
+      actionLabel: 'Ver tab',
       onDownload: () => onTabChange('despiece'),
+    },
+    {
+      id: 'drilling',
+      label: 'Perforaciones (JSON)',
+      hint: 'Metadatos de taladros por pieza para mecanizado',
+      available: readiness.materialsResolved && (cutRows?.length ?? 0) > 0,
+      reason: 'Requiere piezas de tablero',
+      onDownload: downloadDrillingJson,
     },
     {
       id: 'cnc-pilot',
@@ -558,6 +621,21 @@ export function ProductionOrderHub({
           />
         ) : null}
 
+        {activeTab === 'etiquetas' ? (
+          <ProductionOrderLabelsPanel
+            project={project}
+            labels={pieceLabels}
+            labelsError={pieceLabelsError}
+            onExportPdf={
+              onExportPieceLabels
+                ? (labels, perUnit) =>
+                    onExportPieceLabels(labels, { perUnit })
+                : undefined
+            }
+            exportBusy={exportBusy}
+          />
+        ) : null}
+
         {activeTab === 'herrajes' ? (
           <ProductionOrderHardwarePanel
             rows={hardwareRows}
@@ -597,7 +675,6 @@ export function ProductionOrderHub({
             project={project}
             catalog={catalog}
             cutRows={cutRows}
-            onExportOptimizer={onExportOptimizer}
             onImportNesting={onImportNesting}
             exportBusy={exportBusy}
             canImportNesting={canImportNesting}
@@ -612,6 +689,13 @@ export function ProductionOrderHub({
         ) : null}
 
       </div>
+
+      <CsvExportConfigModal
+        isOpen={isCsvConfigOpen}
+        onClose={() => setIsCsvConfigOpen(false)}
+        cutRows={cutRows ?? []}
+        projectName={project.name}
+      />
     </section>
   );
 }

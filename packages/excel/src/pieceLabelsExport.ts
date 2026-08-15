@@ -12,6 +12,13 @@ export interface PieceLabelsPdfInput {
   readonly projectName: string;
   readonly customerName?: string;
   readonly labels: readonly PieceLabel[];
+  /**
+   * Workshop copy mode: one physical label per unit instead of one per
+   * (identical) piece row — quantity 3 prints three labels.
+   */
+  readonly perUnit?: boolean;
+  /** Production order revision — printed in the header for traceability. */
+  readonly revision?: string;
 }
 
 const PAGE_WIDTH = 595.28; // A4
@@ -169,15 +176,25 @@ export async function pieceLabelsPdfExport(
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const contentWidth = PAGE_WIDTH - MARGIN * 2;
 
+  const printLabels: PieceLabel[] = input.perUnit
+    ? input.labels.flatMap((label) => {
+        const copies = Math.max(1, Math.floor(label.quantity));
+        return Array.from({ length: copies }, () => ({ ...label, quantity: 1 }));
+      })
+    : [...input.labels];
+
   const chunks: PieceLabel[][] = [];
-  for (let i = 0; i < input.labels.length; i += LABELS_PER_PAGE) {
-    chunks.push(input.labels.slice(i, i + LABELS_PER_PAGE));
+  for (let i = 0; i < printLabels.length; i += LABELS_PER_PAGE) {
+    chunks.push(printLabels.slice(i, i + LABELS_PER_PAGE));
   }
 
   for (const chunk of chunks) {
     const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     let headerY = PAGE_HEIGHT - MARGIN + 4;
-    page.drawText(`Etiquetas — ${input.projectName}`, {
+    const headerTitle = input.revision
+      ? `Etiquetas — ${input.projectName} · OP rev. ${input.revision}`
+      : `Etiquetas — ${input.projectName}`;
+    page.drawText(headerTitle, {
       x: MARGIN,
       y: headerY,
       size: 9,
@@ -204,6 +221,17 @@ export async function pieceLabelsPdfExport(
         materialCode: label.materialCode,
         lengthMm: label.lengthMm,
         widthMm: label.widthMm,
+        quantity: label.quantity,
+        edgeSides: [
+          label.L1 ? 'L1' : null,
+          label.L2 ? 'L2' : null,
+          label.W1 ? 'W1' : null,
+          label.W2 ? 'W2' : null,
+        ]
+          .filter(Boolean)
+          .join('+'),
+        edgeCode: label.edgeBandCode,
+        revision: input.revision,
       });
       let qrImage: PDFImage | null = null;
       try {

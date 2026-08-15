@@ -159,22 +159,12 @@
 .onboarding-tour__footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: var(--space-4) var(--space-6);
   background-color: var(--surface-app);
   border-top: 1px solid var(--border-subtle);
   gap: var(--space-3);
   flex-wrap: wrap;
-}
-
-.onboarding-tour__dont-show {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
 }
 
 .onboarding-tour__actions {

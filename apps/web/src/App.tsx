@@ -131,7 +131,10 @@ import {
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
-import { buildPieceLabelsExport } from './exportPieceLabels';
+import {
+  buildPieceLabelsExport,
+  type PieceLabelsExportOptions,
+} from './exportPieceLabels';
 import { buildProductionPackExport } from './exportProductionPack';
 import { buildWallElevationsExport } from './exportWallElevations';
 import { buildCutListCsvExport } from './exportCutListCsv';
@@ -391,6 +394,7 @@ function SessionGate(): ReactNode {
   const login = useWorkspaceStore((s) => s.login);
   const register = useWorkspaceStore((s) => s.register);
   const logout = useWorkspaceStore((s) => s.logout);
+  const sessionEndReason = useWorkspaceStore((s) => s.sessionEndReason);
 
   if (session === null) {
     if (authGate === 'register') {
@@ -416,6 +420,11 @@ function SessionGate(): ReactNode {
         }}
         loading={loginLoading}
         error={loginError}
+        notice={
+          sessionEndReason === 'expired'
+            ? 'Tu sesión expiró. Volvé a iniciar sesión para continuar donde estabas.'
+            : null
+        }
       />
     );
   }
@@ -680,11 +689,13 @@ function AppContent({
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
 
+  // Welcome tour auto-opens at Inicio only — never above factory routes
+  // (/produccion) or deep links. Any dismiss persists (see modal).
   useEffect(() => {
-    if (!getHasSeenOnboardingTour()) {
+    if (navId === 'home' && !getHasSeenOnboardingTour()) {
       setShowOnboardingTour(true);
     }
-  }, []);
+  }, [navId]);
 
   const handleLoadCocinaLopezDemo = useCallback(() => {
     const targetPath = projectPath('proj-cocina-lopez-demo');
@@ -1367,7 +1378,10 @@ function AppContent({
   );
 
   const handleExportPieceLabels = useCallback(
-    async (projectId?: string) => {
+    async (
+      projectId?: string,
+      labelOptions?: PieceLabelsExportOptions,
+    ) => {
       const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
@@ -1391,6 +1405,7 @@ function AppContent({
           project,
           catalog,
           customers,
+          labelOptions ?? {},
         );
         if (!result.ok) {
           setExportErrors(result.issues);
@@ -1683,12 +1698,17 @@ function AppContent({
         }
         // PROD-3.2 — stamp OP export revision so stale detection works.
         recordProductionExport(project.id);
+        // Optional annexes that failed are listed — never silently missing.
+        const omissionNote =
+          result.omissions.length > 0
+            ? ` (sin: ${result.omissions.join(', ')})`
+            : '';
         toast({
           type: 'success',
           message:
             delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
+              ? `✓ ${result.fileName} guardado${omissionNote}`
+              : `✓ ${result.fileName} descargado${omissionNote}`,
         });
       } finally {
         setExportBusy(false);
@@ -2006,8 +2026,8 @@ function AppContent({
           onExportHardware={(id) => {
             void handleExportHardwareList(id);
           }}
-          onExportPieceLabels={(id) => {
-            void handleExportPieceLabels(id);
+          onExportPieceLabels={(id, labels, options) => {
+            void handleExportPieceLabels(id, { labels, perUnit: options.perUnit });
           }}
           onExportProductionPack={(id) => {
             void handleExportProductionPack(id);

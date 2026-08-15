@@ -119,7 +119,20 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
   it('shows despiece panel when tab is despiece (PROD-1.3)', () => {
     const readiness = buildProductionOrderReadiness({
       project: project(),
-      cutRows: [],
+      cutRows: [
+        {
+          quantity: 2,
+          lengthMm: 720,
+          widthMm: 560,
+          description: 'Lateral',
+          materialName: 'Blanco',
+          grain: 1,
+          L1: 1,
+          L2: 0,
+          W1: 0,
+          W2: 1,
+        },
+      ],
     });
     render(
       <ProductionOrderHub
@@ -133,11 +146,33 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
         onOpenDesign={vi.fn()}
         onExportOptimizer={vi.fn()}
         onExportHardware={vi.fn()}
-        cutRows={[]}
+        cutRows={[
+          {
+            quantity: 2,
+            lengthMm: 720,
+            widthMm: 560,
+            description: 'Lateral',
+            materialName: 'Blanco',
+            grain: 1,
+            L1: 1,
+            L2: 0,
+            W1: 0,
+            W2: 1,
+          },
+        ]}
       />,
     );
     expect(screen.getByTestId('prod-hub-despiece')).toBeTruthy();
     expect(screen.queryByTestId('prod-hub-resumen')).toBeNull();
+    // D-lite: veta column, edge legend and per-group subtotals.
+    expect(screen.getByText('Veta')).toBeTruthy();
+    expect(screen.getByText('↗')).toBeTruthy();
+    expect(screen.getByText(/Cantos: lados L1\/L2/)).toBeTruthy();
+    const totals = screen.getByTestId(
+      'prod-despiece-totals-Blanco',
+    ).textContent;
+    expect(totals).toContain('2 piezas');
+    expect(totals).toContain('0.81 m²');
   });
 
   it('shows optimizacion panel with L0/L1/L2 layers (PROD-2.3)', () => {
@@ -164,6 +199,123 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(screen.getByTestId('prod-opt-l0')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-l1')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-l2')).toBeTruthy();
+    // Official exports moved to Documentos/Etiquetas — optimización only
+    // points at them.
+    expect(
+      screen.getByTestId('prod-opt-official-hint').textContent,
+    ).toContain('Documentos');
+    expect(
+      screen.queryByTestId('prod-opt-export-zpl'),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId('prod-opt-export-optimizer'),
+    ).toBeNull();
+  });
+
+  it('shows etiquetas tab with the labels panel', () => {
+    const readiness = buildProductionOrderReadiness({
+      project: project(),
+      cutRows: [],
+    });
+    render(
+      <ProductionOrderHub
+        project={project()}
+        customerLabel="Ana"
+        salePrice={null}
+        readiness={readiness}
+        activeTab="etiquetas"
+        onTabChange={vi.fn()}
+        onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()}
+        onExportOptimizer={vi.fn()}
+        onExportHardware={vi.fn()}
+        pieceLabels={[
+          {
+            moduleCode: 'GAB-01',
+            moduleName: 'Gabinete',
+            partCode: 'LAT',
+            description: 'Lateral',
+            quantity: 2,
+            lengthMm: 720,
+            widthMm: 560,
+            materialCode: 'MAT-BLA',
+            materialName: 'Blanco',
+            L1: true,
+            L2: false,
+            W1: false,
+            W2: false,
+            edgeBandingInstruction: 'Encintar L1 con ABS Blanco 1 mm',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('prod-hub-etiquetas')).toBeTruthy();
+    expect(screen.getByTestId('prod-labels-download-zpl')).toBeTruthy();
+  });
+
+  it('documentos buttons are honest: ZPL configures, despiece views the tab', async () => {
+    const user = userEvent.setup();
+    const onTab = vi.fn();
+    const readiness = buildProductionOrderReadiness({
+      project: project(),
+      cutRows: [
+        {
+          quantity: 1,
+          lengthMm: 720,
+          widthMm: 560,
+          description: 'Lateral',
+          materialName: 'Blanco',
+          grain: 0,
+          L1: 0,
+          L2: 0,
+          W1: 0,
+          W2: 0,
+        },
+      ],
+    });
+    render(
+      <ProductionOrderHub
+        project={project()}
+        customerLabel="Ana"
+        salePrice={null}
+        readiness={readiness}
+        activeTab="documentos"
+        onTabChange={onTab}
+        onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()}
+        onExportOptimizer={vi.fn()}
+        onExportHardware={vi.fn()}
+        pieceLabels={[
+          {
+            moduleCode: 'GAB-01',
+            moduleName: 'Gabinete',
+            description: 'Lateral',
+            quantity: 1,
+            lengthMm: 720,
+            widthMm: 560,
+            materialCode: 'MAT-BLA',
+            materialName: 'Blanco',
+            L1: false,
+            L2: false,
+            W1: false,
+            W2: false,
+            edgeBandingInstruction: 'Sin encintar',
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByTestId('prod-doc-labels-zpl').textContent,
+    ).toContain('Configurar');
+    expect(screen.getByTestId('prod-doc-despiece').textContent).toContain(
+      'Ver tab',
+    );
+
+    await user.click(screen.getByTestId('prod-doc-labels-zpl'));
+    expect(onTab).toHaveBeenCalledWith('etiquetas');
+
+    await user.click(screen.getByTestId('prod-doc-despiece'));
+    expect(onTab).toHaveBeenCalledWith('despiece');
   });
 
   it('shows not-ready banner on resumen when cut list empty', () => {

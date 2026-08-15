@@ -58,7 +58,7 @@ describe('pieceToZpl', () => {
     expect(zpl).toContain('Medida: 720x400 mm | Cant: 2');
     expect(zpl).toContain('Material: Melamina Blanco 18mm (MEL-18)');
     expect(zpl).toContain('Encintado: L1: Canto PVC 1mm');
-    expect(zpl).toContain('^BQN,2,3^FDMM,A{"v":1,"projectId":"PROJ-123","module":"MOD-01","part":"P001","desc":"Puerta Izquierda","material":"MEL-18","L":720,"W":400}^FS');
+    expect(zpl).toContain('^BQN,2,3^FDMM,A{"v":2,"projectId":"PROJ-123","module":"MOD-01","part":"P001","desc":"Puerta Izquierda","material":"MEL-18","L":720,"W":400,"qty":2,"edges":"L1","edge":"","rev":""}^FS');
     expect(zpl).toContain('^XZ');
   });
 

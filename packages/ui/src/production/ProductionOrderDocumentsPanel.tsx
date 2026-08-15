@@ -15,10 +15,13 @@ export type ProductionDocumentId =
   | 'pack'
   | 'optimizer'
   | 'cutlist-csv'
+  | 'cutlist-csv-config'
   | 'hardware'
   | 'labels'
+  | 'labels-zpl'
   | 'elevations'
   | 'despiece'
+  | 'drilling'
   | 'cnc-pilot'
   | 'assembly';
 
@@ -28,6 +31,8 @@ export type ProductionDocumentItem = {
   readonly hint: string;
   readonly available: boolean;
   readonly reason?: string;
+  /** Honest CTA — "Configurar"/"Ver tab" when the action is not a download. */
+  readonly actionLabel?: string;
   readonly onDownload?: () => void | Promise<void>;
 };
 
@@ -40,10 +45,13 @@ const ICONS: Record<ProductionDocumentId, typeof FileText> = {
   pack: Package,
   optimizer: FileSpreadsheet,
   'cutlist-csv': FileSpreadsheet,
+  'cutlist-csv-config': FileSpreadsheet,
   hardware: Wrench,
   labels: Tags,
+  'labels-zpl': Tags,
   elevations: FileText,
   despiece: FileText,
+  drilling: FileText,
   'cnc-pilot': FileText,
   assembly: FileText,
 };
@@ -86,7 +94,9 @@ export function ProductionOrderDocumentsPanel({
                 }}
                 data-testid={`prod-doc-${doc.id}`}
               >
-                {exportBusy ? 'Generando…' : 'Descargar'}
+                {exportBusy
+                  ? 'Generando…'
+                  : (doc.actionLabel ?? 'Descargar')}
               </button>
             </li>
           );

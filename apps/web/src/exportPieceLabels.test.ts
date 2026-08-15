@@ -5,6 +5,7 @@ import {
   plantillaChoices,
   plantillaProject,
 } from '@muebles/domain/fixtures';
+import { generatePieceLabels } from '@muebles/domain';
 import type { Project } from '@muebles/domain';
 import {
   buildPieceLabelsExport,
@@ -78,5 +79,35 @@ describe('buildPieceLabelsExport (F046)', () => {
       plantillaCatalogWithModules,
     );
     expect(result.ok).toBe(true);
+  });
+
+  it('uses the scoped labels passed by the hub (Etiquetas tab scope)', async () => {
+    const labels = generatePieceLabels(
+      plantillaProject,
+      plantillaCatalogWithModules,
+    );
+    expect(labels.length).toBeGreaterThan(0);
+
+    const scoped = await buildPieceLabelsExport(
+      plantillaProject,
+      plantillaCatalogWithModules,
+      [],
+      { labels: labels.slice(0, 1), perUnit: false },
+    );
+    expect(scoped.ok).toBe(true);
+  });
+
+  it('perUnit mode rejects an empty scoped selection honestly', async () => {
+    const result = await buildPieceLabelsExport(
+      plantillaProject,
+      plantillaCatalogWithModules,
+      [],
+      { labels: [], perUnit: true },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0]?.message).toContain(
+      'no hay piezas de tablero para etiquetar',
+    );
   });
 });

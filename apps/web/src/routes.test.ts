@@ -118,6 +118,13 @@ describe('app routes', () => {
       projectId: id,
       tab: 'vistas',
     });
+    expect(productionOrderFromPath(`/produccion/${id}/etiquetas`)).toEqual({
+      projectId: id,
+      tab: 'etiquetas',
+    });
+    expect(productionOrderPath(id, 'etiquetas')).toBe(
+      `/produccion/${id}/etiquetas`,
+    );
     expect(productionOrderFromPath(`/produccion/${id}/nope`)).toBeNull();
   });
 });

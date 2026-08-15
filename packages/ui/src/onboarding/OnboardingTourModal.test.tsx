@@ -99,6 +99,42 @@ describe('OnboardingTourModal', () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
+  it('marks the tour as seen when dismissed with the X button', async () => {
+    const user = userEvent.setup();
+    setHasSeenOnboardingTour(false);
+    const handleClose = vi.fn();
+
+    render(<OnboardingTourModal isOpen={true} onClose={handleClose} />);
+    await user.click(screen.getByTestId('onboarding-tour-close'));
+
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(getHasSeenOnboardingTour()).toBe(true);
+  });
+
+  it('marks the tour as seen when dismissed with Omitir', async () => {
+    const user = userEvent.setup();
+    setHasSeenOnboardingTour(false);
+    const handleClose = vi.fn();
+
+    render(<OnboardingTourModal isOpen={true} onClose={handleClose} />);
+    await user.click(screen.getByTestId('onboarding-tour-skip'));
+
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(getHasSeenOnboardingTour()).toBe(true);
+  });
+
+  it('closes with Escape and marks the tour as seen', async () => {
+    const user = userEvent.setup();
+    setHasSeenOnboardingTour(false);
+    const handleClose = vi.fn();
+
+    render(<OnboardingTourModal isOpen={true} onClose={handleClose} />);
+    await user.keyboard('{Escape}');
+
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(getHasSeenOnboardingTour()).toBe(true);
+  });
+
   it('manages onboarding tour preference in storage', () => {
     setHasSeenOnboardingTour(false);
     expect(getHasSeenOnboardingTour()).toBe(false);

@@ -78,6 +78,11 @@ export interface WorkspaceState {
   readonly loginError: string | null;
   readonly registerLoading: boolean;
   readonly registerError: string | null;
+  /**
+   * Set when the session ended because the token expired (401) — the login
+   * screen shows a notice instead of kicking the user out silently.
+   */
+  readonly sessionEndReason: 'expired' | null;
 
   // --- Workspace lifecycle ---
   /**
@@ -102,6 +107,8 @@ export interface WorkspaceState {
     password: string,
   ) => Promise<void>;
   readonly logout: () => void;
+  /** Logout with an "expired" reason so LoginScreen can explain it. */
+  readonly markSessionExpired: () => void;
 
   // --- Actions: workspace lifecycle ---
   readonly loadWorkspace: () => Promise<void>;
@@ -163,6 +170,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         loginError: null,
         registerLoading: false,
         registerError: null,
+        sessionEndReason: null,
 
         // --- Workspace lifecycle ---
         workspace: null,
@@ -184,6 +192,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             session: 'guest',
             loginError: null,
             registerError: null,
+            sessionEndReason: null,
             workspace: null,
             workspaceLoadError: null,
             assignableOwners: [],
@@ -204,6 +213,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               session: 'auth',
               loginLoading: false,
               loginError: null,
+              sessionEndReason: null,
               // Reset workspace so AppContent reloads for the new session.
               workspace: null,
               workspaceLoadError: null,
@@ -239,12 +249,18 @@ export function createWorkspaceStore(options?: InternalOptions) {
             authGate: 'login',
             loginError: null,
             registerError: null,
+            sessionEndReason: null,
             loginLoading: false,
             registerLoading: false,
             workspace: null,
             workspaceLoadError: null,
             assignableOwners: [],
           });
+        },
+
+        markSessionExpired: () => {
+          get().logout();
+          set({ sessionEndReason: 'expired' });
         },
 
         // --- Actions: workspace lifecycle ---
@@ -264,7 +280,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 ? err.message
                 : 'No se pudo cargar el espacio de trabajo';
             if (/401|unauthorized/i.test(message) && get().session === 'auth') {
-              get().logout();
+              get().markSessionExpired();
               return;
             }
             set({ workspaceLoading: false, workspaceLoadError: message });
@@ -314,7 +330,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             );
             if (!res.ok) {
               if (res.status === 401 && get().session === 'auth') {
-                get().logout();
+                get().markSessionExpired();
                 return;
               }
               throw new Error(`owners ${res.status}`);
@@ -336,7 +352,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (/401|unauthorized/i.test(msg)) {
-              get().logout();
+              get().markSessionExpired();
               return;
             }
             // Fall back to current authUser on fetch failure (#12).

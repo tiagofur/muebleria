@@ -302,6 +302,47 @@ describe('workspaceStore — setAuthGate', () => {
   });
 });
 
+describe('workspaceStore — markSessionExpired', () => {
+  it('logs out AND sets sessionEndReason expired', () => {
+    const store = createWorkspaceStore();
+    globalThis.sessionStorage.setItem(SESSION_STORAGE_KEY, 'auth');
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt');
+    store.setState({ session: 'auth', workspace: createSeedWorkspace() });
+
+    store.getState().markSessionExpired();
+
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().workspace).toBeNull();
+    expect(store.getState().sessionEndReason).toBe('expired');
+  });
+
+  it('manual logout does NOT set an expiry reason', () => {
+    const store = createWorkspaceStore();
+    globalThis.sessionStorage.setItem(SESSION_STORAGE_KEY, 'auth');
+    store.setState({ session: 'auth' });
+
+    store.getState().logout();
+
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().sessionEndReason).toBeNull();
+  });
+
+  it('loadWorkspace marks the session expired on 401 instead of a plain error', async () => {
+    const repo = makeStubRepo(createSeedWorkspace());
+    repo.setNext(new Error('API 401 Unauthorized'));
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    globalThis.sessionStorage.setItem(SESSION_STORAGE_KEY, 'auth');
+    store.setState({ session: 'auth' });
+
+    await store.getState().loadWorkspace();
+
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().sessionEndReason).toBe('expired');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Workspace lifecycle
 // ---------------------------------------------------------------------------

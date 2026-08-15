@@ -9,6 +9,7 @@ import type {
   ItemFloorStatus,
   Module,
   NestingImportResult,
+  PieceLabel,
   ProductionCutRow,
   Project,
 } from '@muebles/domain';
@@ -17,6 +18,7 @@ import {
   ensureProductionRevision,
   generateCutRows,
   generateHardwareList,
+  generatePieceLabels,
   getProductionStaleInfo,
   listProductionSpaceOptions,
   PRODUCTION_SCOPE_ALL,
@@ -58,7 +60,12 @@ export type ProductionWorkspaceProps = {
   };
   readonly onExportOptimizer: (projectId: string) => void | Promise<void>;
   readonly onExportHardware: (projectId: string) => void | Promise<void>;
-  readonly onExportPieceLabels?: (projectId: string) => void | Promise<void>;
+  /** Etiquetas tab / labels PDF — hub passes scoped labels + copy mode. */
+  readonly onExportPieceLabels?: (
+    projectId: string,
+    labels: readonly PieceLabel[],
+    options: { readonly perUnit: boolean },
+  ) => void | Promise<void>;
   readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
   readonly onExportElevations?: (projectId: string) => void | Promise<void>;
   readonly onExportCutListCsv?: (projectId: string) => void | Promise<void>;
@@ -210,6 +217,18 @@ export function ProductionWorkspace({
       }
     }
     const elevations = buildProductionElevations(scopedProject, modules);
+    // Piece labels resolve with the same domain engine the PDF uses — one
+    // data source for office PDF and plant ZPL (Etiquetas tab).
+    let pieceLabels: readonly PieceLabel[] | null = null;
+    let pieceLabelsError: string | null = null;
+    if (catalog) {
+      try {
+        pieceLabels = generatePieceLabels(scopedProject, catalog);
+      } catch (err) {
+        pieceLabelsError =
+          err instanceof Error ? err.message : 'Error al resolver etiquetas';
+      }
+    }
     // Ensure OP revision exists for plant-ready projects (display only; persist via store on export/floor).
     const projectForHubBase =
       orderProject.status === 'accepted' || orderProject.status === 'produced'
@@ -235,7 +254,8 @@ export function ProductionWorkspace({
         onExportHardware={() => onExportHardware(orderProject.id)}
         onExportPieceLabels={
           onExportPieceLabels
-            ? () => onExportPieceLabels(orderProject.id)
+            ? (labels, options) =>
+                onExportPieceLabels(orderProject.id, labels, options)
             : undefined
         }
         onExportProductionPack={
@@ -262,6 +282,8 @@ export function ProductionWorkspace({
         modules={modules}
         cutRows={scopedCutRows}
         cutListError={cut.error}
+        pieceLabels={pieceLabels}
+        pieceLabelsError={pieceLabelsError}
         hardwareRows={hardware.rows}
         hardwareError={hardware.error}
         catalog3d={catalog3d}
@@ -307,8 +329,6 @@ export function ProductionWorkspace({
       salePriceFor={salePriceFor}
       onOpenOrder={onOpenOrder}
       onExportOptimizer={onExportOptimizer}
-      onExportHardware={onExportHardware}
-      onExportPieceLabels={onExportPieceLabels}
       onExportProductionPack={onExportProductionPack}
       onMarkProduced={onMarkProduced}
       exportBusy={exportBusy}

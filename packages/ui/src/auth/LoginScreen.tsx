@@ -10,6 +10,8 @@ export interface LoginScreenProps {
   readonly onRegister?: () => void;
   readonly loading?: boolean;
   readonly error?: string | null;
+  /** Non-blocking info banner (e.g. session expired notice). */
+  readonly notice?: string | null;
 }
 
 export function LoginScreen({
@@ -18,6 +20,7 @@ export function LoginScreen({
   onRegister,
   loading = false,
   error = null,
+  notice = null,
 }: LoginScreenProps): ReactNode {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,6 +50,11 @@ export function LoginScreen({
         </header>
 
         <form className="login-form" onSubmit={handleSubmit}>
+          {notice ? (
+            <div className="login-notice" role="status">
+              {notice}
+            </div>
+          ) : null}
           {displayError ? (
             <div className="login-error" role="alert">
               {displayError}

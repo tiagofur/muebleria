@@ -109,6 +109,32 @@ describe('LoginScreen', () => {
     expect(screen.getByRole('alert').textContent).toContain('Credenciales inválidas');
   });
 
+  it('renders session-expired notice as a status banner', () => {
+    render(
+      <LoginScreen
+        onLogin={vi.fn()}
+        onGuestAccess={vi.fn()}
+        notice="Tu sesión expiró. Volvé a iniciar sesión para continuar donde estabas."
+      />,
+    );
+
+    const status = screen.getByRole('status');
+    expect(status.textContent).toContain('Tu sesión expiró');
+    // Notice is not an error alert — both can coexist.
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('does not render a notice banner without the notice prop', () => {
+    render(
+      <LoginScreen
+        onLogin={vi.fn()}
+        onGuestAccess={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('uses BrandMark not emoji (issue #53)', () => {
     const src = readFileSync(loginTsxPath, 'utf8');
     expect(src).toContain('BrandMark');

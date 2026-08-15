@@ -1,4 +1,4 @@
-import React, { useState, type ReactNode } from 'react';
+import React, { useEffect, useState, type ReactNode } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -93,17 +93,28 @@ export function OnboardingTourModal({
   onLoadDemoProject,
 }: OnboardingTourModalProps): ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setHasSeenOnboardingTour(true);
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   const currentStep = STEPS[currentStepIndex]!;
   const isLastStep = currentStepIndex === STEPS.length - 1;
 
+  // Any dismiss (finish, skip or Esc) marks the tour as seen — it must never
+  // interrupt the app again on subsequent page loads.
   const handleFinish = () => {
-    if (dontShowAgain) {
-      setHasSeenOnboardingTour(true);
-    }
+    setHasSeenOnboardingTour(true);
     if (onLoadDemoProject) {
       onLoadDemoProject();
     }
@@ -111,9 +122,7 @@ export function OnboardingTourModal({
   };
 
   const handleSkip = () => {
-    if (dontShowAgain) {
-      setHasSeenOnboardingTour(true);
-    }
+    setHasSeenOnboardingTour(true);
     onClose();
   };
 
@@ -168,25 +177,11 @@ export function OnboardingTourModal({
         </div>
 
         <footer className="onboarding-tour__footer">
-          <label className="onboarding-tour__dont-show">
-            <input
-              type="checkbox"
-              checked={dontShowAgain}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setDontShowAgain(checked);
-                setHasSeenOnboardingTour(checked);
-              }}
-              data-testid="onboarding-tour-dont-show-again"
-            />
-            <span>No volver a mostrar en el inicio</span>
-          </label>
-
           <div className="onboarding-tour__actions">
             {currentStepIndex > 0 ? (
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="btn"
                 onClick={() => setCurrentStepIndex((prev) => prev - 1)}
                 data-testid="onboarding-tour-prev"
               >

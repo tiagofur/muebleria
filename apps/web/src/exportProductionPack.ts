@@ -10,6 +10,7 @@ import {
   generateCutRows,
   generateHardwareList,
   generatePieceLabels,
+  pieceBatchToZpl,
   DomainError,
   domainErrorToExportIssue,
   type Catalog,
@@ -29,7 +30,13 @@ import {
 } from '@muebles/excel';
 
 export type ExportProductionPackResult =
-  | { readonly ok: true; readonly fileName: string; readonly bytes: Uint8Array }
+  | {
+      readonly ok: true;
+      readonly fileName: string;
+      readonly bytes: Uint8Array;
+      /** Optional annexes that failed to generate — surfaced, never silent. */
+      readonly omissions: readonly string[];
+    }
   | { readonly ok: false; readonly issues: readonly ExportIssue[] };
 
 /** Safe default file name: pack-produccion-{projectName}.zip */
@@ -118,6 +125,7 @@ export async function buildProductionPackExport(
     });
 
     // 7. Elevations PDF when layout has walls (best-effort)
+    const omissions: string[] = [];
     let elevationsBuffer: Uint8Array | null = null;
     const elevations = buildProductionElevations(
       project,
@@ -132,6 +140,7 @@ export async function buildProductionPackExport(
         });
       } catch {
         elevationsBuffer = null;
+        omissions.push('elevaciones');
       }
     }
 
@@ -159,7 +168,7 @@ export async function buildProductionPackExport(
       });
       zip.file(`preview_corte_visual_${baseName}.pdf`, toUint8Array(cutPreviewBuffer));
     } catch {
-      /* omit if cut rows empty / resolve error */
+      omissions.push('preview de corte');
     }
 
     // 9. Assembly sheets (PROD-4.1) best-effort
@@ -171,7 +180,22 @@ export async function buildProductionPackExport(
       });
       zip.file(`armado_${baseName}.pdf`, toUint8Array(assemblyBuffer));
     } catch {
-      /* omit if no modules / resolve error */
+      omissions.push('hojas de armado');
+    }
+
+    // 10. Thermal labels ZPL (default preset) for Zebra printers (F071).
+    // The Etiquetas tab lets the shop customize preset/DPI for direct
+    // downloads; the pack always carries the standard 100x50 @ 203 dpi.
+    try {
+      const zplContent = pieceBatchToZpl(labels, '100x50', {
+        dpi: 203,
+        includeBorder: true,
+        projectId: project.id,
+        revision: project.production?.revision?.toString(),
+      });
+      zip.file(`etiquetas_zpl_${baseName}.zpl`, zplContent);
+    } catch {
+      omissions.push('etiquetas ZPL');
     }
 
     const zipContent = await zip.generateAsync({ type: 'uint8array' });
@@ -180,6 +204,7 @@ export async function buildProductionPackExport(
       ok: true,
       fileName: productionPackFileName(project.name),
       bytes: zipContent,
+      omissions,
     };
   } catch (error) {
     if (error instanceof DomainError) {

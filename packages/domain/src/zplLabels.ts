@@ -18,6 +18,8 @@ export interface ZplExportOptions {
   readonly dpi?: ZplDpi;
   readonly includeBorder?: boolean;
   readonly projectId?: string;
+  /** Production order revision — printed into the QR payload (v2). */
+  readonly revision?: string;
 }
 
 export interface ZplSizeDimensions {
@@ -44,6 +46,17 @@ export function sanitizeZplText(text: string): string {
 /** Compute dots per millimeter for given DPI. */
 export function dotsPerMm(dpi: ZplDpi): number {
   return dpi === 300 ? 11.81 : 8.0;
+}
+
+/** "L1+W2" shorthand for the edge-banded sides of a label. */
+export function pieceLabelEdgeSides(label: PieceLabel): string {
+  const sides = [
+    label.L1 ? 'L1' : null,
+    label.L2 ? 'L2' : null,
+    label.W1 ? 'W1' : null,
+    label.W2 ? 'W2' : null,
+  ].filter(Boolean);
+  return sides.length > 0 ? sides.join('+') : '';
 }
 
 /**
@@ -78,6 +91,10 @@ export function pieceToZpl(
     materialCode: label.materialCode,
     lengthMm: label.lengthMm,
     widthMm: label.widthMm,
+    quantity: label.quantity,
+    edgeSides: pieceLabelEdgeSides(label),
+    edgeCode: label.edgeBandCode,
+    revision: options.revision,
   });
 
   const lines: string[] = [];

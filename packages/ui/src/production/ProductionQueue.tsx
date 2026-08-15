@@ -43,10 +43,6 @@ export type ProductionQueueProps = {
    * With `onOpenOrder`, cut/herrajes/etiquetas live only in the OP hub.
    */
   readonly onExportOptimizer?: (projectId: string) => void | Promise<void>;
-  /** @deprecated Queue no longer shows herrajes when hub is wired. */
-  readonly onExportHardware?: (projectId: string) => void | Promise<void>;
-  /** @deprecated Queue no longer shows etiquetas when hub is wired. */
-  readonly onExportPieceLabels?: (projectId: string) => void | Promise<void>;
   /** ZIP pack shortcut from the queue (optional). */
   readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
   readonly onMarkProduced: (projectId: string) => void;

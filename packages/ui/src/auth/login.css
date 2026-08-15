@@ -65,6 +65,16 @@
   text-align: center;
 }
 
+.login-notice {
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--warning-500) 40%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning-500) 14%, transparent);
+  color: var(--warning-50);
+  font-size: var(--text-base);
+  text-align: center;
+}
+
 .login-field {
   display: flex;
   flex-direction: column;

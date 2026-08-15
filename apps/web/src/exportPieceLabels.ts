@@ -10,6 +10,7 @@ import {
   type Catalog,
   type Customer,
   type ExportIssue,
+  type PieceLabel,
   type Project,
 } from '@muebles/domain';
 import { pieceLabelsPdfExport } from '@muebles/excel';
@@ -21,6 +22,16 @@ import {
 export type ExportPieceLabelsResult =
   | { readonly ok: true; readonly fileName: string; readonly bytes: Uint8Array }
   | { readonly ok: false; readonly issues: readonly ExportIssue[] };
+
+/** Scope + copy mode chosen in the Etiquetas tab (falls back to full set). */
+export type PieceLabelsExportOptions = {
+  /** Pre-filtered labels from the hub (scope by module/material/search). */
+  readonly labels?: readonly PieceLabel[];
+  /** One physical label per unit instead of one per piece row. */
+  readonly perUnit?: boolean;
+  /** Production order revision — header + QR traceability. */
+  readonly revision?: string;
+};
 
 /** Safe default file name: etiquetas-{projectName}.pdf */
 export function pieceLabelsFileName(projectName: string): string {
@@ -45,6 +56,7 @@ export async function buildPieceLabelsExport(
   project: Project,
   catalog: Catalog,
   customers: readonly Customer[] = [],
+  options: PieceLabelsExportOptions = {},
 ): Promise<ExportPieceLabelsResult> {
   const issues = collectExportIssues(project, catalog);
   if (issues.length > 0) {
@@ -52,13 +64,26 @@ export async function buildPieceLabelsExport(
   }
 
   try {
-    const labels = generatePieceLabels(project, catalog);
+    const labels = options.labels ?? generatePieceLabels(project, catalog);
+    if (labels.length === 0) {
+      return {
+        ok: false,
+        issues: [
+          {
+            message: 'no hay piezas de tablero para etiquetar',
+            field: 'labels',
+          },
+        ],
+      };
+    }
     const customer = customers.find((c) => c.id === project.customerId);
     const buffer = await pieceLabelsPdfExport({
       projectId: project.id,
       projectName: project.name,
       customerName: customer?.name,
       labels,
+      perUnit: options.perUnit ?? false,
+      revision: options.revision ?? project.production?.revision?.toString(),
     });
     const bytes = toUint8Array(buffer);
     return {

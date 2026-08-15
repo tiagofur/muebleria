@@ -484,6 +484,7 @@ export {
 export {
   pieceToZpl,
   pieceBatchToZpl,
+  pieceLabelEdgeSides,
   sanitizeZplText,
   dotsPerMm,
   ZPL_SIZE_PRESETS,

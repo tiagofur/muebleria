@@ -63,6 +63,18 @@ export {
 } from './ProductionOrderDespiecePanel';
 
 export {
+  ProductionOrderLabelsPanel,
+  type ProductionOrderLabelsPanelProps,
+} from './ProductionOrderLabelsPanel';
+
+export {
+  readLabelPrinterSettings,
+  writeLabelPrinterSettings,
+  DEFAULT_LABEL_PRINTER_SETTINGS,
+  type LabelPrinterSettings,
+} from './labelPrinterSettings';
+
+export {
   ProductionOrderHardwarePanel,
   type ProductionOrderHardwarePanelProps,
 } from './ProductionOrderHardwarePanel';

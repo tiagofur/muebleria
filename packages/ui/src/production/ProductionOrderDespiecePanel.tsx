@@ -23,6 +23,39 @@ function edgesLabel(row: ProductionCutRow): string {
   return parts.length > 0 ? parts.join('+') : '—';
 }
 
+function grainLabel(row: ProductionCutRow): string {
+  return row.grain === 1 ? '↗' : '—';
+}
+
+type GroupTotals = {
+  readonly lines: number;
+  readonly units: number;
+  readonly areaM2: number;
+};
+
+function groupTotals(rows: readonly ProductionCutRow[]): GroupTotals {
+  let units = 0;
+  let areaMm2 = 0;
+  for (const r of rows) {
+    units += r.quantity;
+    areaMm2 += r.lengthMm * r.widthMm * r.quantity;
+  }
+  return {
+    lines: rows.length,
+    units,
+    areaM2: Math.round((areaMm2 / 1_000_000) * 100) / 100,
+  };
+}
+
+function totalsLabel(totals: GroupTotals): string {
+  const parts = [
+    `${totals.lines} línea${totals.lines === 1 ? '' : 's'}`,
+    `${totals.units} pieza${totals.units === 1 ? '' : 's'}`,
+    `${totals.areaM2.toLocaleString('es-MX')} m²`,
+  ];
+  return parts.join(' · ');
+}
+
 function pieceCode(row: ProductionCutRow, index: number): string {
   if (row.partCode?.trim()) {
     return row.moduleCode
@@ -159,7 +192,16 @@ export function ProductionOrderDespiecePanel({
       {groups.map((g) => (
         <section key={g.key} className="prod-despiece__group-block">
           {groupBy !== 'none' ? (
-            <h3 className="prod-hub__section-title">{g.label}</h3>
+            <h3 className="prod-hub__section-title">
+              {g.label}
+              <span
+                className="prod-despiece__group-totals"
+                data-testid={`prod-despiece-totals-${g.key}`}
+              >
+                {' '}
+                · {totalsLabel(groupTotals(g.rows))}
+              </span>
+            </h3>
           ) : null}
           <div className="prod-modulos__table-wrap">
             <table className="prod-modulos__table">
@@ -170,6 +212,7 @@ export function ProductionOrderDespiecePanel({
                   <th scope="col">L × A</th>
                   <th scope="col">Material</th>
                   <th scope="col">Cantos</th>
+                  <th scope="col">Veta</th>
                   <th scope="col">Descripción</th>
                 </tr>
               </thead>
@@ -189,6 +232,9 @@ export function ProductionOrderDespiecePanel({
                       </td>
                       <td>{row.materialName}</td>
                       <td>{edgesLabel(row)}</td>
+                      <td aria-label={row.grain === 1 ? 'con veta' : 'sin veta'}>
+                        {grainLabel(row)}
+                      </td>
                       <td>{row.description}</td>
                     </tr>
                   );
@@ -201,6 +247,8 @@ export function ProductionOrderDespiecePanel({
 
       <p className="prod-modulos__footnote">
         Solo lectura. Misma población de piezas que el Optimizer (sin herrajes).
+        Cantos: lados L1/L2 (largos) y W1/W2 (anchos). Veta ↗ = respetar
+        dirección del grano.
       </p>
     </div>
   );

@@ -203,3 +203,120 @@ de tab.
 **No cambié (a propósito):** el código sigue editable al editar un agregado
 (en Componentes/Estructuras se congela) — decisión de producto pendiente;
 hay validación de unicidad al guardar.
+
+---
+
+## SUPER Judgment Day + Critique — Módulo Producción (2026-08-15)
+
+Sesión de evaluación (skill impeccable, critique; sin cambios de código). Pedido
+directo del usuario: revisión profunda de todo /produccion con foco especial en
+etiquetas (pantalla + diseño de etiqueta).
+
+**Método:** lectura completa de `packages/ui/src/production/` (18 archivos) +
+capa dominio/excel vía 2 exploradores (etiquetas PieceLabel/ZPL, pack, PDFs,
+Optimizer); recorrido autenticado en vivo con usuario de prueba admin (creado
+con `cmd/admin create` y **borrado al cerrar**); 20 screenshots + snapshots DOM;
+pruebas de interacción (Esc del modal ZPL, botón Descargar del doc Despiece,
+gate ZPL deshabilitado en Demo plantilla); `detect.mjs` sobre el módulo (limpio).
+
+**Resultado:** 24/40 (Acceptable). Snapshot completo en
+`.impeccable/critique/2026-08-15T17-17-10Z__localhost-produccion.md`.
+
+**Top findings:**
+1. [P1] Etiquetas partidas en 2 casas (PDF en Documentos, ZPL escondido en
+   Optimización) con datos degradados en ZPL (sin canto asignado, sin nombre de
+   módulo, QR con nombre en vez de id) + "Imprimir ZPL" imprime código fuente.
+   Propuesta: sistema de etiquetas unificado v2 (alcance→formato→preview
+   fiel→export PDF/ZPL), QR payload v2 con rev/cantos/veta/cantidad, layout con
+   medida gigante + banda de color por material + mini-diagrama de cantos.
+2. [P1] Botones/silencios: "Descargar" del doc Despiece navega de tab
+   (verificado); nesting CSV 0 filas = no-op; annexos del pack omitidos en
+   silencio.
+3. [P1] Interrupciones: tour overlay reaparece en cada full page-load y bloquea
+   /produccion; JWT 15 min sin refresh → expulsión silenciosa al login (2 veces
+   durante la revisión).
+4. [P2] Optimización mezcla 4 temas; exports "oficiales" deberían vivir en
+   Documentos; L1 board puede clipear piezas (sin paginar); merma default fija
+   10% engañoso.
+5. [P2] Despiece sin espesor/veta/canto-asignado, sin subtotales, sin filtro
+   "solo frentes" (prometido en production-module.md §6.3).
+Hallazgos menores: `.btn--secondary` inexistente usado 6+ veces; zpl css con
+paleta slate hardcodeada; cola sin señales pack/nesting (§6.0 las pide); totales
+de fábrica pobres (faltan m² por material y ML de canto); stale banner gris;
+Módulos sin ficha read-only (§6.2).
+
+**No toqué código** — el plan de acción queda en el snapshot para decidir con el
+usuario el orden (recomendado: shape del sistema de etiquetas → harden de
+interrupciones → clarify/harden de botones y silencios → craft despiece-v2).
+
+---
+
+## Producción — fixes del Judgment Day (2026-08-15, tarde)
+
+Implementación post-critique con el orden acordado con el usuario (A→B→C→D).
+Sin feature nueva de `feature_list.json` (pedido directo). OJO: hay trabajo CRM
+(fotos/garantías/mensajes) de OTRA sesión en el árbol — commiteé solo mis
+archivos/hunks (staging quirúrgico en App.tsx y domain/index.ts).
+
+### A — Harden interrupciones
+- Tour de bienvenida: persiste "visto" en CUALQUIER cierre (X/Omitir/Terminar/Esc);
+  checkbox eliminado (ya no tiene propósito); abre solo en Inicio (navId 'home'),
+  nunca sobre /produccion; Esc cierra. Files: `packages/ui/src/onboarding/*`,
+  App.tsx effect.
+- Sesión expirada: `markSessionExpired()` en workspaceStore (los 3 sitios 401 lo
+  usan) → `sessionEndReason: 'expired'` (memoria, no persist) → `LoginScreen`
+  muestra banner warning "Tu sesión expiró…". Se limpia al re-login/invitado.
+  (Verificado en vivo: el tour aparecía en cada full page-load bloqueando
+  /produccion; y la sesión JWT de 15 min expulsaba en silencio 2 veces.)
+
+### B — Etiquetas v2 (la casa única)
+- Nueva tab **Etiquetas** en el hub (entre Despiece y Herrajes; ruta
+  `/produccion/:id/etiquetas`). Alcance (módulo/material/búsqueda) → modo copias
+  (1 por pieza | 1 por unidad ×cant) → preview fiel (QR REAL renderizado con
+  `qrcode`) → export. Un solo builder de datos: `generatePieceLabels` del dominio
+  (moduleName real + edgeBand code/name; antes el ZPL usaba un mapping degradado).
+- **QR v2** (`pieceLabelQrPayload`): + qty, edges ("L1+W2"), edge (canto
+  asignado), rev (OP). Mismo payload en PDF y ZPL. En ZPL el projectId ahora es
+  el id real (antes: nombre del proyecto).
+- PDF (`pieceLabelsPdfExport`): `perUnit` multiplica etiquetas por cantidad;
+  header con `OP rev. N` para trazabilidad de regeneraciones.
+- ZPL: preset/DPI/borde **persistidos** por usuario
+  (`muebles_label_printer_v1`, helpers con fallback seguro); descarga batch
+  `etiquetas_{slug}_{preset}[_por_unidad].zpl`; hint honesto de impresión raw
+  (el botón "Imprimir ZPL" que imprimía código fuente fue ELIMINADO junto al
+  modal `ZplLabelPreviewModal*`).
+- **Pack ZIP**: ahora incluye `etiquetas_zpl_{base}.zpl` (preset default
+  100×50 @203) y el resultado lista `omissions[]` (elevaciones/preview/armado/zpl
+  que fallaron) → toast "(sin: …)".
+- Optimización: fuera exports oficiales/ZPL/CSV/perforaciones (migrados a
+  Documentos/Etiquetas); intro apunta a Documentos. Documentos: `actionLabel`
+  honesto ("Configurar" para ZPL/CSV-config → abre tab/modales; "Ver tab" para
+  despiece — antes decía "Descargar" y navegaba). + entradas CSV configurable y
+  Perforaciones JSON.
+
+### C — Silencios
+- Import nesting CSV con 0 filas válidas → error visible con nombre de archivo
+  y columnas esperadas (antes: no-op silencioso).
+
+### D-lite — Despiece
+- Columna **Veta** (↗), subtotales por grupo (líneas · piezas · m²) en el
+  título, leyenda de cantos (L1/L2 largos, W1/W2 anchos). Pendiente para v2
+  completo: espesor y canto asignado por fila (requiere enriquecer
+  `ProductionCutRow` en dominio — no hacerlo sin tocar el contrato Optimizer).
+
+### Verificación
+- domain 507 (+2 QR v2), excel 62 (+1 zpl v2), ui 799 (+9 labels panel/hub/onboarding/login),
+  web 242 (+4 pack zpl/omissions, labels scoped, routes, workspaceStore expiry),
+  storage 84, desktop 9 — todo verde. `pnpm typecheck` monorepo verde.
+- En vivo (browser, usuario de prueba admin creado/borrado): tour aparece solo
+  en Inicio una vez y NO reaparece tras full-load de /produccion ✓. La
+  verificación visual de la tab Etiquetas quedó cubierta por tests (la DB dev
+  estaba siendo mutada por la sesión CRM paralela y no había proyecto accepted
+  estable).
+
+### Pendiente / follow-ups
+- Despiece v2 completo (espesor + canto asignado → dominio).
+- Cola: señales pack/nesting + fecha aceptación (§6.0).
+- Resumen: totales m² por material y ML de canto.
+- Escaneo QR en Piso (paperless) usando payload v2.
+- Impresión ZPL raw desde Electron (killer feature taller).
