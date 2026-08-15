@@ -153,4 +153,64 @@ describe('plinth', () => {
     expect(legs.find((l) => l.optionRole === PATAS_ROLE)!.quantity).toBe(5); // 4 + 1 extra
     expect(legs.find((l) => l.optionRole === ZOCLO_STRIP_ROLE)).toBeUndefined();
   });
+
+  it('determines exposed plinth sides based on layout neighbors (F088)', async () => {
+    const { plinthSidesForPlacement, plinthReturnDepthMm } = await import('./plinth');
+
+    // Return depth calculation
+    expect(plinthReturnDepthMm(580)).toBe(530);
+
+    const layout = {
+      walls: [{ id: 'w1', name: 'Muro Principal', lengthMm: 3000, thicknessMm: 150, heightMm: 2400 }],
+      placements: [
+        { itemId: 'i1', wallId: 'w1', offsetMm: 200, elevationMm: 0 },
+        { itemId: 'i2', wallId: 'w1', offsetMm: 800, elevationMm: 0 },
+        { itemId: 'island', mode: 'free' as const, offsetMm: 0, elevationMm: 0, x: 1000, y: 1000, rotationDeg: 0 },
+      ],
+
+    };
+
+    const widthOf = (id: string) => (id === 'i1' || id === 'i2' ? 600 : 1200);
+
+    // Island: all 3 sides exposed
+    const islandSides = plinthSidesForPlacement(layout, layout.placements[2]!, widthOf);
+    expect(islandSides).toEqual({ left: true, right: true, back: true });
+
+    // Item 1 (offset 200..800): left is exposed (200mm to wall end), right is covered by item 2 (starts at 800)
+    const i1Sides = plinthSidesForPlacement(layout, layout.placements[0]!, widthOf);
+    expect(i1Sides.left).toBe(true);
+    expect(i1Sides.right).toBe(false);
+    expect(i1Sides.back).toBe(false);
+
+    // Item 2 (offset 800..1400): left is covered by item 1, right is exposed (1400 < 3000)
+    const i2Sides = plinthSidesForPlacement(layout, layout.placements[1]!, widthOf);
+    expect(i2Sides.left).toBe(false);
+    expect(i2Sides.right).toBe(true);
+    expect(i2Sides.back).toBe(false);
+  });
+
+  it('synthesizes side returns for plinth_board and strip when sides are exposed (F088)', async () => {
+    const { applyBaseTreatment, SYNTHETIC_ZOCLO_PART_CODE, SYNTHETIC_ZOCLO_SIDE_CODE } = await import('./plinth');
+
+    const result = applyBaseTreatment(
+      'MOD-01',
+      [],
+      [],
+      'plinth_board',
+      100, // height B
+      600, // width W
+      580, // depth D
+      { left: true, right: false, back: false },
+    );
+
+    expect(result.parts).toHaveLength(2); // 1 front + 1 left side return
+    expect(result.parts[0]!.code).toBe(SYNTHETIC_ZOCLO_PART_CODE);
+    expect(result.parts[0]!.lengthMm).toBe(600);
+    expect(result.parts[0]!.widthMm).toBe(100);
+
+    expect(result.parts[1]!.code).toBe(SYNTHETIC_ZOCLO_SIDE_CODE);
+    expect(result.parts[1]!.lengthMm).toBe(530); // 580 - 50 recess
+    expect(result.parts[1]!.widthMm).toBe(100);
+  });
 });
+
