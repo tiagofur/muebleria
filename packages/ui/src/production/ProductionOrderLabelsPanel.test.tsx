@@ -242,7 +242,9 @@ describe('ProductionOrderLabelsPanel', () => {
       preset: '50x25',
       dpi: 300,
       includeBorder: true,
+      printerName: '',
     });
+
 
     render(
       <ProductionOrderLabelsPanel
@@ -290,6 +292,49 @@ describe('ProductionOrderLabelsPanel', () => {
       preset: '100x150',
       dpi: 300,
       includeBorder: false,
+      printerName: '',
     });
+  });
+
+  it('shows raw-print controls only when the desktop bridge is present', async () => {
+    const host = window as unknown as {
+
+      electronAPI?: { printRaw?: unknown };
+    };
+    const render_ = () =>
+      render(
+        <ProductionOrderLabelsPanel
+          project={projectFixture()}
+          labels={LABELS}
+          onExportPdf={vi.fn()}
+        />,
+      );
+
+    // Web: no bridge, no print button.
+    delete host.electronAPI;
+    render_();
+    expect(screen.queryByTestId('prod-labels-print-raw')).toBeNull();
+    expect(screen.queryByTestId('prod-labels-printer-name')).toBeNull();
+    cleanup();
+
+    // Desktop: bridge present → printer name + print button + feedback.
+    const printRaw = vi.fn(async () => ({ ok: true }));
+    host.electronAPI = { printRaw };
+    const user = userEvent.setup();
+    render_();
+    const nameInput = screen.getByTestId(
+      'prod-labels-printer-name',
+    ) as HTMLInputElement;
+    await user.type(nameInput, 'Zebra-GK420');
+    await user.click(screen.getByTestId('prod-labels-print-raw'));
+
+    expect(printRaw).toHaveBeenCalledTimes(1);
+    const [printerName, payload] = printRaw.mock.calls[0]!;
+    expect(printerName).toBe('Zebra-GK420');
+    expect(payload).toContain('^XA');
+    expect(
+      screen.getByTestId('prod-labels-print-feedback').textContent,
+    ).toContain('Zebra-GK420');
+    delete host.electronAPI;
   });
 });

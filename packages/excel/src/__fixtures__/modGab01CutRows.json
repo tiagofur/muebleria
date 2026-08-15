@@ -12,7 +12,12 @@
     "W2": 1,
     "partName": "Costado Gabinete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-costado-copy-0"
+    "labelRef": "MOD-GAB-01/comp-gab-costado-copy-0",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15,
+    "edgeBandCode": "CAN-ARA-BLA",
+    "edgeBandName": "ARAUCO BLANCO",
+    "edgeBandThicknessMm": 0.5
   },
   {
     "quantity": 1,
@@ -27,7 +32,12 @@
     "W2": 1,
     "partName": "Costado Gabinete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-costado-copy-1"
+    "labelRef": "MOD-GAB-01/comp-gab-costado-copy-1",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15,
+    "edgeBandCode": "CAN-ARA-BLA",
+    "edgeBandName": "ARAUCO BLANCO",
+    "edgeBandThicknessMm": 0.5
   },
   {
     "quantity": 1,
@@ -42,7 +52,12 @@
     "W2": 1,
     "partName": "Entrepaño Gabinete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-entrepano-copy-0"
+    "labelRef": "MOD-GAB-01/comp-gab-entrepano-copy-0",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15,
+    "edgeBandCode": "CAN-ARA-BLA",
+    "edgeBandName": "ARAUCO BLANCO",
+    "edgeBandThicknessMm": 0.5
   },
   {
     "quantity": 1,
@@ -57,7 +72,12 @@
     "W2": 0,
     "partName": "Manguete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-manguete-copy-0"
+    "labelRef": "MOD-GAB-01/comp-gab-manguete-copy-0",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15,
+    "edgeBandCode": "CAN-ARA-BLA",
+    "edgeBandName": "ARAUCO BLANCO",
+    "edgeBandThicknessMm": 0.5
   },
   {
     "quantity": 1,
@@ -72,7 +92,12 @@
     "W2": 0,
     "partName": "Manguete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-manguete-copy-1"
+    "labelRef": "MOD-GAB-01/comp-gab-manguete-copy-1",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15,
+    "edgeBandCode": "CAN-ARA-BLA",
+    "edgeBandName": "ARAUCO BLANCO",
+    "edgeBandThicknessMm": 0.5
   },
   {
     "quantity": 1,
@@ -87,7 +112,12 @@
     "W2": 0,
     "partName": "Piso Gabinete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-piso-copy-0"
+    "labelRef": "MOD-GAB-01/comp-gab-piso-copy-0",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15,
+    "edgeBandCode": "CAN-ARA-BLA",
+    "edgeBandName": "ARAUCO BLANCO",
+    "edgeBandThicknessMm": 0.5
   },
   {
     "quantity": 1,
@@ -102,7 +132,12 @@
     "W2": 1,
     "partName": "Puerta Gabinete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-puerta-copy-0"
+    "labelRef": "MOD-GAB-01/comp-gab-puerta-copy-0",
+    "materialCode": "TAB-MAD-FRE",
+    "thicknessMm": 18,
+    "edgeBandCode": "CAN-MAD-FRE",
+    "edgeBandName": "MADERADO FRENTE",
+    "edgeBandThicknessMm": 2
   },
   {
     "quantity": 1,
@@ -117,6 +152,8 @@
     "W2": 0,
     "partName": "Respaldo Gabinete",
     "moduleCode": "MOD-GAB-01",
-    "labelRef": "MOD-GAB-01/comp-gab-respaldo-copy-0"
+    "labelRef": "MOD-GAB-01/comp-gab-respaldo-copy-0",
+    "materialCode": "TAB-ARA-BLA",
+    "thicknessMm": 15
   }
 ]
