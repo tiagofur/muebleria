@@ -1,12 +1,11 @@
 /**
- * Tests for AgregadoEditorForm live 3D preview wiring (Fase 3 UI).
- * Verifies the sticky preview mounts when the catalog slice is supplied and
- * gracefully degrades (single column) when it is not.
+ * Tests for AgregadoEditorForm: live 3D preview wiring (Fase 3 UI) and the
+ * General tab workspace (summary aside + dims readout + tab shortcuts).
  * @vitest-environment jsdom
  */
 
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Component, Hardware } from '@muebles/domain';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
@@ -87,9 +86,13 @@ function doorDraft(): AgregadoDraft {
 function renderForm({
   catalogInput,
   editorTab = 'components',
+  draft = doorDraft(),
+  onSetEditorTab,
 }: {
   readonly catalogInput?: Module3DCatalogInput;
   readonly editorTab?: AgregadoEditorTab;
+  readonly draft?: AgregadoDraft;
+  readonly onSetEditorTab?: Dispatch<SetStateAction<AgregadoEditorTab>>;
 }) {
   render(
     <AgregadoEditorForm
@@ -97,8 +100,11 @@ function renderForm({
       error={null}
       onSubmit={vi.fn() as (e: FormEvent) => void}
       editorTab={editorTab}
-      setEditorTab={vi.fn() as Dispatch<SetStateAction<AgregadoEditorTab>>}
-      draft={doorDraft()}
+      setEditorTab={
+        onSetEditorTab ??
+        (vi.fn() as Dispatch<SetStateAction<AgregadoEditorTab>>)
+      }
+      draft={draft}
       setDraft={vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>}
       editingId={null}
       catalogComponents={[mockComponent]}
@@ -118,6 +124,11 @@ describe('AgregadoEditorForm — live 3D preview', () => {
     expect(screen.getByTestId('agregado-editor-3d-preview')).toBeTruthy();
   });
 
+  it('renders the 3D preview panel in the Herrajes tab when catalogInput is provided', () => {
+    renderForm({ catalogInput: mockCatalogInput, editorTab: 'hardware' });
+    expect(screen.getByTestId('agregado-editor-3d-preview')).toBeTruthy();
+  });
+
   it('omits the 3D preview panel when catalogInput is missing (graceful degradation)', () => {
     renderForm({ catalogInput: undefined });
     expect(screen.queryByTestId('agregado-editor-3d-preview')).toBeNull();
@@ -126,5 +137,90 @@ describe('AgregadoEditorForm — live 3D preview', () => {
   it('does not render the 3D preview on the General tab', () => {
     renderForm({ catalogInput: mockCatalogInput, editorTab: 'general' });
     expect(screen.queryByTestId('agregado-editor-3d-preview')).toBeNull();
+  });
+});
+
+describe('AgregadoEditorForm — General tab', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows the reference dims readout and piece/hardware counts in the summary aside', () => {
+    const draft = doorDraft();
+    draft.hardwareLines = [
+      { id: 'hl-1', quantity: 2, optionRole: 'BISAGRA' },
+    ];
+    renderForm({ editorTab: 'general', draft });
+
+    expect(
+      screen.getByTestId('agregado-general-dims-readout').textContent,
+    ).toBe('600 × 720 × 18 mm');
+    expect(
+      screen.getByTestId('agregado-general-count-components').textContent,
+    ).toBe('1');
+    expect(
+      screen.getByTestId('agregado-general-count-hardware').textContent,
+    ).toBe('1');
+  });
+
+  it('omits the dims readout when the draft has no reference dims', () => {
+    renderForm({ editorTab: 'general', draft: createEmptyAgregadoDraft() });
+    expect(
+      screen.queryByTestId('agregado-general-dims-readout'),
+    ).toBeNull();
+    expect(screen.getByTestId('agregado-general-summary')).toBeTruthy();
+  });
+
+  it('summary shortcuts jump to the Piezas and Herrajes tabs', () => {
+    const setEditorTab = vi.fn() as Dispatch<
+      SetStateAction<AgregadoEditorTab>
+    >;
+    renderForm({ editorTab: 'general', onSetEditorTab: setEditorTab });
+
+    fireEvent.click(screen.getByTestId('agregado-general-goto-components'));
+    expect(setEditorTab).toHaveBeenCalledWith('components');
+
+    fireEvent.click(screen.getByTestId('agregado-general-goto-hardware'));
+    expect(setEditorTab).toHaveBeenCalledWith('hardware');
+  });
+
+  it('exposes the tabpanel contract (role + aria-labelledby)', () => {
+    renderForm({ editorTab: 'general' });
+    const panel = screen.getByTestId('agregado-tab-general');
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      'agregado-editor-tab-general',
+    );
+    expect(screen.getByTestId('agregado-editor-tab-general').id).toBe(
+      'agregado-editor-tab-general',
+    );
+  });
+
+  it('reflects combined bulk and positioned hardware in the Herrajes tab badge and general summary', () => {
+    const draft = doorDraft();
+    draft.hardwareLines = [{ id: 'hl-1', quantity: 1, optionRole: 'BISAGRA' }];
+    draft.components[0] = {
+      ...draft.components[0]!,
+      overrides: {
+        hardwarePlacements: [
+          {
+            hardwareId: 'hw-1',
+            anchorFace: 'front',
+            relativePosition: { xMm: 30, yMm: 50 },
+          },
+        ],
+      },
+    };
+
+    renderForm({ editorTab: 'general', draft });
+
+    // Herrajes tab button badge should display 2 (1 bulk + 1 positioned)
+    const hwTab = screen.getByTestId('agregado-editor-tab-hardware');
+    expect(hwTab.textContent).toContain('2');
+
+    // General summary count should also display 2
+    expect(
+      screen.getByTestId('agregado-general-count-hardware').textContent,
+    ).toBe('2');
   });
 });

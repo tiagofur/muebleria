@@ -79,7 +79,11 @@ export function AgregadoListView({
           {rows.map((item) => {
             const dims = item.externalDims ?? { width: 0, height: 0, depth: 0 };
             const piecesCount = (item.components ?? []).length;
-            const hardwareCount = (item.hardwareLines ?? []).length;
+            const placementsCount = (item.components ?? []).reduce(
+              (acc, c) => acc + (c.overrides?.hardwarePlacements?.length ?? 0),
+              0,
+            );
+            const hardwareCount = (item.hardwareLines ?? []).length + placementsCount;
             return (
               <li key={item.id}>
                 <button

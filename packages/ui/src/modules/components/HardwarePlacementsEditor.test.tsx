@@ -150,4 +150,37 @@ describe('HardwarePlacementsEditor', () => {
 
     expect(yInput.value).toBe('L - 80');
   });
+
+  it('supports long parametric formulas in both X and Y position fields without truncation', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={[
+          {
+            hardwareId: 'hw-1',
+            anchorFace: 'front',
+            relativePosition: { xMm: 50, yMm: 50 },
+          },
+        ]}
+      />,
+    );
+
+    const xInput = screen.getByTestId(
+      'instance-hardware-placement-0-x',
+    ) as HTMLInputElement;
+    const yInput = screen.getByTestId(
+      'instance-hardware-placement-0-y',
+    ) as HTMLInputElement;
+
+    await user.clear(xInput);
+    await user.type(xInput, 'PW / 2 - 30');
+
+    await user.clear(yInput);
+    await user.type(yInput, 'PH-30-HW/2');
+
+    expect(xInput.value).toBe('PW / 2 - 30');
+    expect(yInput.value).toBe('PH-30-HW/2');
+    expect(xInput.parentElement?.classList.contains('catalog-form__field--narrow')).toBe(false);
+    expect(yInput.parentElement?.classList.contains('catalog-form__field--narrow')).toBe(false);
+  });
 });

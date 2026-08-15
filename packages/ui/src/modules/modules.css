@@ -359,6 +359,15 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.module-editor__grid--rotations {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 320px;
+}
+
+.instance-hardware-placements .catalog-form__input {
+  width: 100%;
+}
+
 /* Board part row: code + description grow; qty / length / width stay compact. */
 .module-editor__grid--part {
   grid-template-columns:

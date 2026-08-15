@@ -126,6 +126,7 @@ export function StructureEditorAgregadosPanel<
     index: number;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
   const clearPending = useCallback(() => {
     if (pendingRemove) {
@@ -134,22 +135,52 @@ export function StructureEditorAgregadosPanel<
     }
   }, [pendingRemove]);
 
+  const toggleExpand = (key: string, defaultOpen: boolean) => {
+    setExpandedMap((prev) => {
+      const isCurrentlyExpanded =
+        prev[key] !== undefined ? prev[key] : defaultOpen;
+      return {
+        ...prev,
+        [key]: !isCurrentlyExpanded,
+      };
+    });
+  };
+
+  const handleExpandAll = () => {
+    const next: Record<string, boolean> = {};
+    (draft.agregados ?? []).forEach((inst, i) => {
+      const key = inst.id || `agr-${i}`;
+      next[key] = true;
+    });
+    setExpandedMap(next);
+  };
+
+  const handleCollapseAll = () => {
+    const next: Record<string, boolean> = {};
+    (draft.agregados ?? []).forEach((inst, i) => {
+      const key = inst.id || `agr-${i}`;
+      next[key] = false;
+    });
+    setExpandedMap(next);
+  };
+
   if (hidden) return null;
 
   const handleAddAgregado = () => {
     if (!selectedCatalogId) return;
 
     const template = catalogAgregados.find((a) => a.id === selectedCatalogId);
+    const newId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
 
     const newInst: ModuleAgregadoInstance = {
-      id:
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-              const r = (Math.random() * 16) | 0;
-              const v = c === 'x' ? r : (r & 0x3) | 0x8;
-              return v.toString(16);
-            }),
+      id: newId,
       agregadoId: selectedCatalogId,
       name: template?.name ?? '',
       quantity: 1,
@@ -172,6 +203,9 @@ export function StructureEditorAgregadosPanel<
       ...prev,
       agregados: [...(prev.agregados ?? []), newInst],
     }));
+
+    // Auto-expand newly added agregado
+    setExpandedMap((prev) => ({ ...prev, [newId]: true }));
   };
 
   const handleRemoveAgregado = (index: number) => {
@@ -200,6 +234,8 @@ export function StructureEditorAgregadosPanel<
       ),
     }));
   };
+
+  const agregadosCount = (draft.agregados ?? []).length;
 
   return (
     <div
@@ -250,9 +286,38 @@ export function StructureEditorAgregadosPanel<
         </div>
       )}
 
-      {(draft.agregados ?? []).length > 0 ? <FormulaLegend /> : null}
+      {agregadosCount > 0 ? <FormulaLegend /> : null}
 
-      {(draft.agregados ?? []).length === 0 ? (
+      {agregadosCount > 1 ? (
+        <div
+          className="structure-editor__agregados-toolbar"
+          data-testid="structure-agregados-toolbar"
+        >
+          <span className="structure-editor__agregados-count">
+            {agregadosCount} {agregadosCount === 1 ? 'agregado' : 'agregados'}
+          </span>
+          <div className="structure-editor__agregados-actions">
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={handleExpandAll}
+              data-testid="structure-agregados-expand-all"
+            >
+              Expandir todos
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={handleCollapseAll}
+              data-testid="structure-agregados-collapse-all"
+            >
+              Colapsar todos
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {agregadosCount === 0 ? (
         <div className="catalog-form__empty" data-testid="structure-agregados-empty">
           No hay agregados añadidos todavía.
         </div>
@@ -261,25 +326,117 @@ export function StructureEditorAgregadosPanel<
           {(draft.agregados ?? []).map((inst, idx) => {
             const template = catalogAgregados.find((a) => a.id === inst.agregadoId);
             const isPendingRemove = pendingRemove?.index === idx;
+            const itemKey = inst.id || `agr-${idx}`;
+            // Single agregado defaults to expanded; multiple agregados default to collapsed
+            const defaultOpen = agregadosCount === 1;
+            const isOpen =
+              expandedMap[itemKey] !== undefined
+                ? expandedMap[itemKey]
+                : defaultOpen;
+
+            const hasDimW = Boolean(inst.dimensions?.widthFormula?.trim());
+            const hasDimH = Boolean(inst.dimensions?.heightFormula?.trim());
+            const hasDimD = Boolean(inst.dimensions?.depthFormula?.trim());
+            const hasDimensions = hasDimW || hasDimH || hasDimD;
+
+            const hasPosX = Boolean(inst.position?.xFormula?.trim());
+            const hasPosY = Boolean(inst.position?.yFormula?.trim());
+            const hasPosZ = Boolean(inst.position?.zFormula?.trim());
+            const hasPosition = hasPosX || hasPosY || hasPosZ;
+
+            const overrideCount = Object.keys(inst.optionOverrides ?? {}).length;
+
             return (
               <div
-                key={inst.id ?? idx}
-                className={
-                  isPendingRemove
-                    ? 'structure-editor__agregado-card structure-editor__agregado-card--removing'
-                    : 'structure-editor__agregado-card'
-                }
+                key={itemKey}
+                className={[
+                  'structure-editor__agregado-card',
+                  !isOpen ? 'structure-editor__agregado-card--collapsed' : '',
+                  isPendingRemove ? 'structure-editor__agregado-card--removing' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 data-testid={`structure-agregado-item-${idx}`}
               >
                 <div className="structure-editor__agregado-header">
-                  <div className="structure-editor__agregado-title-group">
+                  <button
+                    type="button"
+                    className="structure-editor__agregado-toggle-btn"
+                    onClick={() => toggleExpand(itemKey, defaultOpen)}
+                    aria-expanded={isOpen}
+                    aria-controls={`structure-agr-body-${idx}`}
+                    data-testid={`structure-agregado-toggle-${idx}`}
+                  >
+                    {isOpen ? (
+                      <ChevronDown size={16} strokeWidth={1.75} aria-hidden />
+                    ) : (
+                      <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
+                    )}
                     <span className="structure-editor__agregado-code">
                       {template?.code ?? 'AGR'}
                     </span>
                     <strong className="structure-editor__agregado-name">
                       {inst.name || template?.name || 'Agregado'}
                     </strong>
-                  </div>
+
+                    {!isOpen && (
+                      <div
+                        className="structure-editor__agregado-summary"
+                        data-testid={`structure-agr-summary-${idx}`}
+                      >
+                        {hasDimensions && (
+                          <span
+                            className="structure-editor__agregado-chip"
+                            title="Dimensiones del hueco (W × H × D)"
+                          >
+                            <Maximize2 size={11} aria-hidden />{' '}
+                            {inst.dimensions?.widthFormula || '—'} ×{' '}
+                            {inst.dimensions?.heightFormula || '—'} ×{' '}
+                            {inst.dimensions?.depthFormula || '—'}
+                          </span>
+                        )}
+
+                        {hasPosition && (
+                          <span
+                            className="structure-editor__agregado-chip"
+                            title="Posición 3D (X, Y, Z)"
+                          >
+                            <Move size={11} aria-hidden /> (
+                            {inst.position?.xFormula || '0'},{' '}
+                            {inst.position?.yFormula || '0'},{' '}
+                            {inst.position?.zFormula || '0'})
+                          </span>
+                        )}
+
+                        <span
+                          className="structure-editor__agregado-chip"
+                          title="Cantidad y distribución"
+                        >
+                          <Layers size={11} aria-hidden /> Cant: {inst.quantity}
+                          {inst.layoutDirection && inst.layoutDirection !== 'none'
+                            ? ` (${inst.layoutDirection})`
+                            : ''}
+                        </span>
+
+                        {inst.mirrored && (
+                          <span className="structure-editor__agregado-chip structure-editor__agregado-chip--accent">
+                            Espejado
+                          </span>
+                        )}
+
+                        {overrideCount > 0 && (
+                          <span
+                            className="structure-editor__agregado-chip"
+                            title="Redefiniciones de opciones activas"
+                          >
+                            <Settings2 size={11} aria-hidden /> {overrideCount}{' '}
+                            {overrideCount === 1 ? 'override' : 'overrides'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+
                   <button
                     type="button"
                     className={
@@ -287,7 +444,10 @@ export function StructureEditorAgregadosPanel<
                         ? 'btn btn--icon btn--danger'
                         : 'btn btn--icon btn--danger-ghost'
                     }
-                    onClick={() => handleRemoveAgregado(idx)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveAgregado(idx);
+                    }}
                     title={
                       isPendingRemove
                         ? 'Hacer click de nuevo para confirmar eliminación'
@@ -304,6 +464,13 @@ export function StructureEditorAgregadosPanel<
                     ¿Eliminar? Hacé click de nuevo en el botón para confirmar.
                   </p>
                 ) : null}
+
+                {isOpen && (
+                  <div
+                    id={`structure-agr-body-${idx}`}
+                    className="structure-editor__agregado-body"
+                    data-testid={`structure-agr-body-${idx}`}
+                  >
 
                 <fieldset className="structure-editor__agregado-fieldset">
                   <legend className="structure-editor__agregado-legend">
@@ -606,6 +773,8 @@ export function StructureEditorAgregadosPanel<
                     </fieldset>
                   );
                 })()}
+                  </div>
+                )}
               </div>
             );
           })}

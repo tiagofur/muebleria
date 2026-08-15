@@ -158,7 +158,7 @@ export function HardwarePlacementsEditor({
                     ))}
                   </select>
                 </div>
-                <div className="catalog-form__field catalog-form__field--narrow">
+                <div className="catalog-form__field">
                   <label htmlFor={`hw-placement-x-${idx}${suffix}`}>X (mm o fórmula)</label>
                   <input
                     id={`hw-placement-x-${idx}${suffix}`}
@@ -181,7 +181,7 @@ export function HardwarePlacementsEditor({
                     data-testid={`instance-hardware-placement-${idx}${suffix}-x`}
                   />
                 </div>
-                <div className="catalog-form__field catalog-form__field--narrow">
+                <div className="catalog-form__field">
                   <label htmlFor={`hw-placement-y-${idx}${suffix}`}>Y (mm o fórmula)</label>
                   <input
                     id={`hw-placement-y-${idx}${suffix}`}
@@ -206,7 +206,7 @@ export function HardwarePlacementsEditor({
                 </div>
               </div>
 
-              <div className="module-editor__grid">
+              <div className="module-editor__grid module-editor__grid--rotations">
                 <div className="catalog-form__field catalog-form__field--narrow">
                   <label htmlFor={`hw-placement-rx-${idx}${suffix}`}>
                     Rot X (°)

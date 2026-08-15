@@ -208,4 +208,112 @@ describe('StructureEditorAgregadosPanel', () => {
     fireEvent.change(overrideSelect, { target: { value: '' } });
     expect(currentDraft.agregados[0]!.optionOverrides).toBeUndefined();
   });
+
+  it('collapses multiple agregados by default and displays compact summary chips', () => {
+    const multipleDraft: StructureDraft = {
+      ...emptyStructureDraft(),
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-1',
+          name: 'Cajón Superior',
+          quantity: 2,
+          layoutDirection: 'vertical',
+          gapMm: 3,
+          position: { xFormula: '18', yFormula: '0', zFormula: '100' },
+          dimensions: { widthFormula: 'W - 36', heightFormula: '200', depthFormula: 'D - 50' },
+          mirrored: false,
+        },
+        {
+          id: 'inst-2',
+          agregadoId: 'agr-2',
+          name: 'Puerta Lateral',
+          quantity: 1,
+          layoutDirection: 'none',
+          gapMm: 0,
+          position: { xFormula: '0', yFormula: '0', zFormula: '0' },
+          dimensions: { widthFormula: 'W/2', heightFormula: 'H', depthFormula: '18' },
+          mirrored: true,
+          optionOverrides: { BISAGRA: 'bis-1' },
+        },
+      ],
+    };
+
+    render(
+      <StructureEditorAgregadosPanel
+        draft={multipleDraft}
+        setDraft={vi.fn()}
+        catalogAgregados={mockAgregados}
+      />,
+    );
+
+    // Toolbar shows count and actions
+    expect(screen.getByTestId('structure-agregados-toolbar')).toBeDefined();
+    expect(screen.getByText('2 agregados')).toBeDefined();
+
+    // Both cards start collapsed -> bodies are not rendered
+    expect(screen.queryByTestId('structure-agr-body-0')).toBeNull();
+    expect(screen.queryByTestId('structure-agr-body-1')).toBeNull();
+
+    // Summaries are visible
+    const summary0 = screen.getByTestId('structure-agr-summary-0');
+    expect(summary0.textContent).toContain('W - 36 × 200 × D - 50');
+    expect(summary0.textContent).toContain('(18, 0, 100)');
+    expect(summary0.textContent).toContain('Cant: 2 (vertical)');
+
+    const summary1 = screen.getByTestId('structure-agr-summary-1');
+    expect(summary1.textContent).toContain('Espejado');
+    expect(summary1.textContent).toContain('1 override');
+  });
+
+  it('toggles expand/collapse when clicking card header, and supports expand/collapse all', () => {
+    const multipleDraft: StructureDraft = {
+      ...emptyStructureDraft(),
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-1',
+          name: 'Cajón Superior',
+          quantity: 1,
+        },
+        {
+          id: 'inst-2',
+          agregadoId: 'agr-2',
+          name: 'Puerta Lateral',
+          quantity: 1,
+        },
+      ],
+    };
+
+    render(
+      <StructureEditorAgregadosPanel
+        draft={multipleDraft}
+        setDraft={vi.fn()}
+        catalogAgregados={mockAgregados}
+      />,
+    );
+
+    // Initially collapsed
+    expect(screen.queryByTestId('structure-agr-body-0')).toBeNull();
+    expect(screen.queryByTestId('structure-agr-body-1')).toBeNull();
+
+    // Click toggle on item 0 -> expands item 0 only
+    fireEvent.click(screen.getByTestId('structure-agregado-toggle-0'));
+    expect(screen.getByTestId('structure-agr-body-0')).toBeDefined();
+    expect(screen.queryByTestId('structure-agr-body-1')).toBeNull();
+
+    // Click toggle on item 0 again -> collapses item 0
+    fireEvent.click(screen.getByTestId('structure-agregado-toggle-0'));
+    expect(screen.queryByTestId('structure-agr-body-0')).toBeNull();
+
+    // Expand all button
+    fireEvent.click(screen.getByTestId('structure-agregados-expand-all'));
+    expect(screen.getByTestId('structure-agr-body-0')).toBeDefined();
+    expect(screen.getByTestId('structure-agr-body-1')).toBeDefined();
+
+    // Collapse all button
+    fireEvent.click(screen.getByTestId('structure-agregados-collapse-all'));
+    expect(screen.queryByTestId('structure-agr-body-0')).toBeNull();
+    expect(screen.queryByTestId('structure-agr-body-1')).toBeNull();
+  });
 });

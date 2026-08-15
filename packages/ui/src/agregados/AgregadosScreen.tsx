@@ -38,6 +38,7 @@ import {
 import { AgregadoListView } from './editor/AgregadoListView';
 import { AgregadoDetailView } from './editor/AgregadoDetailView';
 import { AgregadoEditorForm, type AgregadoEditorTab } from './editor/AgregadoEditorForm';
+import { Agregado3DModal } from './editor/Agregado3DModal';
 import './agregados.css';
 
 export interface AgregadosScreenProps {
@@ -201,6 +202,8 @@ export function AgregadosScreen({
     forceCloseEditor();
   };
 
+  const [view3dItem, setView3dItem] = useState<Agregado | null>(null);
+
   const inlineEditMode = modalOpen;
 
   const selectedAgregado = expandedId
@@ -208,86 +211,99 @@ export function AgregadosScreen({
     : null;
 
   return (
-    <EntityEditorLayout
-      dataTestId="agregados-screen"
-      editorPageTestId="agregado-editor-page"
-      editorBackTestId="agregado-editor-back"
-      discardConfirmTestId="agregado-editor-discard-confirm"
-      modalTestId="agregado-modal"
-      entityTitle="agregado"
-      createTitle="Nuevo Agregado"
-      editTitle="Editar Agregado"
-      draftCode={draft.code}
-      formId={formId}
-      modalOpen={modalOpen}
-      confirmDiscard={confirmDiscard}
-      editingId={editingId}
-      inlineEditMode={inlineEditMode}
-      isSelected={!!selectedAgregado}
-      closeModal={closeModal}
-      setConfirmDiscard={setConfirmDiscard}
-      forceCloseEditor={forceCloseEditor}
-      headerActions={
-        <>
-          <button
-            type="button"
-            className="btn"
-            onClick={closeModal}
-            data-testid="agregado-editor-cancel"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="btn btn--primary"
-            form={formId}
-            data-testid="agregado-save-btn"
-          >
-            Guardar
-          </button>
-        </>
-      }
-      renderListView={() => (
-        <AgregadoListView
-          rows={rows}
-          search={search}
-          setSearch={setSearch}
-          canMutate={canMutate}
-          onCreate={handleCreateNew}
-          onOpenDetail={(item) => setSelectedId(item.id)}
+    <>
+      <EntityEditorLayout
+        dataTestId="agregados-screen"
+        editorPageTestId="agregado-editor-page"
+        editorBackTestId="agregado-editor-back"
+        discardConfirmTestId="agregado-editor-discard-confirm"
+        modalTestId="agregado-modal"
+        entityTitle="agregado"
+        createTitle="Nuevo Agregado"
+        editTitle="Editar Agregado"
+        draftCode={draft.code}
+        formId={formId}
+        modalOpen={modalOpen}
+        confirmDiscard={confirmDiscard}
+        editingId={editingId}
+        inlineEditMode={inlineEditMode}
+        isSelected={!!selectedAgregado}
+        closeModal={closeModal}
+        setConfirmDiscard={setConfirmDiscard}
+        forceCloseEditor={forceCloseEditor}
+        headerActions={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={closeModal}
+              data-testid="agregado-editor-cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              form={formId}
+              data-testid="agregado-save-btn"
+            >
+              Guardar
+            </button>
+          </>
+        }
+        renderListView={() => (
+          <AgregadoListView
+            rows={rows}
+            search={search}
+            setSearch={setSearch}
+            canMutate={canMutate}
+            onCreate={handleCreateNew}
+            onOpenDetail={(item) => setSelectedId(item.id)}
+          />
+        )}
+        renderDetailView={
+          selectedAgregado
+            ? () => (
+                <AgregadoDetailView
+                  agregado={selectedAgregado}
+                  catalogComponents={catalogComponents}
+                  catalogHardware={catalogHardware}
+                  onBack={() => setSelectedId(null)}
+                  onEdit={handleEdit}
+                  onView3D={catalogInput ? (item) => setView3dItem(item) : undefined}
+                  onDelete={canMutate && onDelete ? onDelete : undefined}
+                  canMutate={canMutate}
+                />
+              )
+            : undefined
+        }
+        renderEditorForm={() => (
+          <AgregadoEditorForm
+            formId={formId}
+            error={error}
+            onSubmit={onSubmit}
+            editorTab={editorTab as AgregadoEditorTab}
+            setEditorTab={setEditorTab as Dispatch<SetStateAction<AgregadoEditorTab>>}
+            draft={draft}
+            setDraft={setDraft}
+            editingId={editingId}
+            catalogComponents={catalogComponents}
+            catalogHardware={catalogHardware}
+            catalogInput={catalogInput}
+            resolveImageUrl={resolveImageUrl}
+          />
+        )}
+      />
+
+      {catalogInput ? (
+        <Agregado3DModal
+          open={Boolean(view3dItem)}
+          agregado={view3dItem}
+          catalog={catalogInput}
+          onClose={() => setView3dItem(null)}
+          resolveMediaUrl={resolveImageUrl}
         />
-      )}
-      renderDetailView={
-        selectedAgregado
-          ? () => (
-              <AgregadoDetailView
-                agregado={selectedAgregado}
-                catalogComponents={catalogComponents}
-                catalogHardware={catalogHardware}
-                onBack={() => setSelectedId(null)}
-                onEdit={handleEdit}
-                onDelete={canMutate && onDelete ? onDelete : undefined}
-                canMutate={canMutate}
-              />
-            )
-          : undefined
-      }
-      renderEditorForm={() => (
-        <AgregadoEditorForm
-          formId={formId}
-          error={error}
-          onSubmit={onSubmit}
-          editorTab={editorTab as AgregadoEditorTab}
-          setEditorTab={setEditorTab as Dispatch<SetStateAction<AgregadoEditorTab>>}
-          draft={draft}
-          setDraft={setDraft}
-          editingId={editingId}
-          catalogComponents={catalogComponents}
-          catalogHardware={catalogHardware}
-          catalogInput={catalogInput}
-          resolveImageUrl={resolveImageUrl}
-        />
-      )}
-    />
+      ) : null}
+    </>
   );
 }

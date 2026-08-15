@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type { Agregado, Component, Hardware } from '@muebles/domain';
-import { ChevronLeft, Layers, Pencil, Settings2, Trash2 } from 'lucide-react';
+import { Box, ChevronLeft, Layers, Pencil, Settings2, Trash2 } from 'lucide-react';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 
 export type AgregadoDetailViewProps = {
@@ -14,6 +14,7 @@ export type AgregadoDetailViewProps = {
   readonly catalogHardware: readonly Hardware[];
   readonly onBack: () => void;
   readonly onEdit: (a: Agregado) => void;
+  readonly onView3D?: (a: Agregado) => void;
   readonly onDelete?: (id: string) => void;
   readonly canMutate: boolean;
 };
@@ -30,11 +31,25 @@ export function AgregadoDetailView({
   catalogHardware,
   onBack,
   onEdit,
+  onView3D,
   onDelete,
   canMutate,
 }: AgregadoDetailViewProps): ReactNode {
   const compLookup = new Map(catalogComponents.map((c) => [c.id, c]));
   const hwLookup = new Map(catalogHardware.map((h) => [h.id, h]));
+
+  const bulkLines = a.hardwareLines ?? [];
+  const placementItems = (a.components ?? []).flatMap((inst, compIdx) => {
+    const comp = compLookup.get(inst.componentId);
+    const compName = comp ? `${comp.code} — ${comp.name}` : inst.componentId;
+    return (inst.overrides?.hardwarePlacements ?? []).map((p, pIdx) => ({
+      key: `placement-${compIdx}-${pIdx}`,
+      placement: p,
+      component: inst,
+      compName,
+    }));
+  });
+  const totalHardwareCount = bulkLines.length + placementItems.length;
 
   const chrome = (
     <header className="workspace-chrome" data-testid="agregado-detail-chrome">
@@ -62,11 +77,22 @@ export function AgregadoDetailView({
       <div className="workspace-chrome__total">
         <span className="workspace-chrome__total-label">Composición</span>
         <span className="workspace-chrome__total-value">
-          {(a.components ?? []).length} piezas · {(a.hardwareLines ?? []).length} herrajes
+          {(a.components ?? []).length} piezas · {totalHardwareCount} herrajes
         </span>
       </div>
 
       <div className="workspace-chrome__actions">
+        {onView3D ? (
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => onView3D(a)}
+            data-testid="agregado-detail-view-3d"
+          >
+            <Box size={16} strokeWidth={1.5} aria-hidden />
+            Vista 3D
+          </button>
+        ) : null}
         {canMutate ? (
           <>
             <button
@@ -132,20 +158,52 @@ export function AgregadoDetailView({
       <section className="surface-card surface-card--lg" aria-label="Herrajes incluidos">
         <h3 className="eng-detail__panel-title">
           <Settings2 size={15} style={{ display: 'inline', marginRight: 6 }} />
-          Herrajes incluidos ({(a.hardwareLines ?? []).length})
+          Herrajes incluidos ({totalHardwareCount})
         </h3>
-        {(a.hardwareLines ?? []).length === 0 ? (
+        {totalHardwareCount === 0 ? (
           <p className="eng-detail__empty">Sin herrajes definidos.</p>
         ) : (
           <ul className="eng-detail__list" data-testid="agregado-detail-hardware">
-            {(a.hardwareLines ?? []).map((line, idx) => {
+            {bulkLines.map((line, idx) => {
               const hw = line.hardwareId ? hwLookup.get(line.hardwareId) : undefined;
               return (
-                <li key={idx} className="eng-detail__list-item">
+                <li key={`bulk-${idx}`} className="eng-detail__list-item" data-testid={`agregado-detail-bulk-hw-${idx}`}>
                   <span className="eng-detail__list-main eng-detail__mono">
                     {hw ? `${hw.code} — ${hw.name}` : `Rol: ${line.optionRole}`}
+                    <small
+                      className="eng-detail__list-meta"
+                      style={{
+                        display: 'block',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      Presupuesto / Cantidad
+                    </small>
                   </span>
                   <span className="eng-detail__list-sub">× {line.quantity}</span>
+                </li>
+              );
+            })}
+            {placementItems.map(({ key, placement: p, component: inst, compName }) => {
+              const hw = p.hardwareId ? hwLookup.get(p.hardwareId) : undefined;
+              const posText = `Cara: ${p.anchorFace} · X: ${p.relativePosition.xFormula ?? p.relativePosition.xMm} · Y: ${p.relativePosition.yFormula ?? p.relativePosition.yMm}`;
+              return (
+                <li key={key} className="eng-detail__list-item" data-testid={`agregado-detail-${key}`}>
+                  <span className="eng-detail__list-main eng-detail__mono">
+                    {hw ? `${hw.code} — ${hw.name}` : p.hardwareId || 'Herraje'}
+                    <small
+                      className="eng-detail__list-meta"
+                      style={{
+                        display: 'block',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      Posicionado 3D en {compName} ({posText})
+                    </small>
+                  </span>
+                  <span className="eng-detail__list-sub">× {inst.quantity}</span>
                 </li>
               );
             })}
