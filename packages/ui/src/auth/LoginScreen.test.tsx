@@ -168,4 +168,26 @@ describe('LoginScreen', () => {
     expect(tsx).toContain('KeyRound');
     expect(tsx).toContain('WifiOff');
   });
+
+  it('toggles password visibility between password and text', () => {
+    render(
+      <LoginScreen
+        onLogin={vi.fn()}
+        onGuestAccess={vi.fn()}
+      />,
+    );
+
+    const passwordInput = screen.getByLabelText('Contraseña') as HTMLInputElement;
+    expect(passwordInput.type).toBe('password');
+
+    const toggleBtn = screen.getByRole('button', { name: 'Ver contraseña' });
+    fireEvent.click(toggleBtn);
+
+    expect(passwordInput.type).toBe('text');
+    expect(screen.getByRole('button', { name: 'Ocultar contraseña' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar contraseña' }));
+    expect(passwordInput.type).toBe('password');
+  });
 });
+

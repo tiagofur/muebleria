@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { KeyRound, Mail, LogIn, WifiOff } from 'lucide-react';
+import { KeyRound, Mail, LogIn, WifiOff, Eye, EyeOff } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
 import './login.css';
 
@@ -24,6 +24,7 @@ export function LoginScreen({
 }: LoginScreenProps): ReactNode {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = (e: FormEvent) => {
@@ -99,8 +100,8 @@ export function LoginScreen({
               />
               <input
                 id="login-password"
-                className="login-field__input"
-                type="password"
+                className="login-field__input login-field__input--with-toggle"
+                type={showPassword ? 'text' : 'password'}
                 required
                 autoComplete="current-password"
                 value={password}
@@ -108,8 +109,23 @@ export function LoginScreen({
                 placeholder="••••••••"
                 disabled={loading}
               />
+              <button
+                type="button"
+                className="login-field__toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+                title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                disabled={loading}
+              >
+                {showPassword ? (
+                  <EyeOff size={16} strokeWidth={1.5} aria-hidden />
+                ) : (
+                  <Eye size={16} strokeWidth={1.5} aria-hidden />
+                )}
+              </button>
             </div>
           </div>
+
 
           <button
             type="submit"

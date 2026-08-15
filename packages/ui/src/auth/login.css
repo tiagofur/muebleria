@@ -122,6 +122,40 @@
   box-shadow: var(--shadow-focus);
 }
 
+.login-field__input--with-toggle {
+  padding-right: calc(var(--space-3) + 2.25rem);
+}
+
+.login-field__toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-inverse) 55%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.login-field__toggle:hover:not(:disabled) {
+  color: var(--text-inverse);
+  background: color-mix(in srgb, var(--text-inverse) 12%, transparent);
+}
+
+.login-field__toggle:focus-visible {
+  outline: 2px solid var(--brand-400);
+  outline-offset: 1px;
+}
+
+
 .login-submit {
   display: inline-flex;
   align-items: center;

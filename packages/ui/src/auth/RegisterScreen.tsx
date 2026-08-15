@@ -1,8 +1,5 @@
-/**
- * RegisterScreen — solicitar acceso al sistema (pending admin approval).
- */
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { KeyRound, Mail, User, LogIn, ChevronLeft } from 'lucide-react';
+import { KeyRound, Mail, User, LogIn, ChevronLeft, Eye, EyeOff } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
 import './login.css';
 
@@ -23,8 +20,11 @@ export function RegisterScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [success, setSuccess] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -153,8 +153,8 @@ export function RegisterScreen({
               />
               <input
                 id="reg-password"
-                className="login-field__input"
-                type="password"
+                className="login-field__input login-field__input--with-toggle"
+                type={showPassword ? 'text' : 'password'}
                 required
                 autoComplete="new-password"
                 value={password}
@@ -162,6 +162,20 @@ export function RegisterScreen({
                 placeholder="Mín. 8 caracteres, letra y número"
                 disabled={loading}
               />
+              <button
+                type="button"
+                className="login-field__toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+                title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                disabled={loading}
+              >
+                {showPassword ? (
+                  <EyeOff size={16} strokeWidth={1.5} aria-hidden />
+                ) : (
+                  <Eye size={16} strokeWidth={1.5} aria-hidden />
+                )}
+              </button>
             </div>
           </div>
 
@@ -178,8 +192,8 @@ export function RegisterScreen({
               />
               <input
                 id="reg-confirm"
-                className="login-field__input"
-                type="password"
+                className="login-field__input login-field__input--with-toggle"
+                type={showConfirm ? 'text' : 'password'}
                 required
                 autoComplete="new-password"
                 value={confirm}
@@ -187,8 +201,23 @@ export function RegisterScreen({
                 placeholder="Repetí la contraseña"
                 disabled={loading}
               />
+              <button
+                type="button"
+                className="login-field__toggle"
+                onClick={() => setShowConfirm((prev) => !prev)}
+                title={showConfirm ? 'Ocultar contraseña' : 'Ver contraseña'}
+                aria-label={showConfirm ? 'Ocultar contraseña' : 'Ver contraseña'}
+                disabled={loading}
+              >
+                {showConfirm ? (
+                  <EyeOff size={16} strokeWidth={1.5} aria-hidden />
+                ) : (
+                  <Eye size={16} strokeWidth={1.5} aria-hidden />
+                )}
+              </button>
             </div>
           </div>
+
 
           <button type="submit" className="login-submit" disabled={loading}>
             <LogIn size={16} strokeWidth={1.5} aria-hidden />

@@ -91,4 +91,25 @@ describe('RegisterScreen', () => {
     expect(tsx).toContain("import './login.css'");
     expect(tsx).toContain('Solicitud enviada');
   });
+
+  it('toggles password and confirm visibility', () => {
+    render(<RegisterScreen onRegister={vi.fn()} onBack={vi.fn()} />);
+
+    const passwordInput = screen.getByLabelText('Contraseña') as HTMLInputElement;
+    const confirmInput = screen.getByLabelText('Confirmar contraseña') as HTMLInputElement;
+
+    expect(passwordInput.type).toBe('password');
+    expect(confirmInput.type).toBe('password');
+
+    const toggleButtons = screen.getAllByRole('button', { name: 'Ver contraseña' });
+    expect(toggleButtons).toHaveLength(2);
+
+    fireEvent.click(toggleButtons[0]!);
+    expect(passwordInput.type).toBe('text');
+    expect(confirmInput.type).toBe('password');
+
+    fireEvent.click(toggleButtons[1]!);
+    expect(confirmInput.type).toBe('text');
+  });
 });
+
