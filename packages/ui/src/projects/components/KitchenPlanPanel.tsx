@@ -27,7 +27,17 @@ import {
 } from '@muebles/domain';
 import type { PlacementElevation } from '@muebles/domain';
 import { Lock } from 'lucide-react';
-import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
+import {
+  allFootprints,
+  getCategoryTheme,
+  itemLabel,
+  moduleDepth,
+  moduleHeight,
+  moduleWidth,
+  resolvePlacement2D,
+  resolvePlanBounds,
+  type ResolvedPlacement2D,
+} from '../kitchenPlanHelpers';
 import './kitchenPlan.css';
 
 function defaultElevationForModule(
@@ -183,19 +193,55 @@ export function KitchenPlanPanel({
     );
   };
 
+  // Resolved 2D placements with exact workshop millimeter coordinates
+  const resolvedPlacements = useMemo(() => {
+    const list: ResolvedPlacement2D[] = [];
+    for (const p of layout.placements) {
+      const item = project.items.find((i) => i.id === p.itemId) ?? {
+        id: p.itemId,
+        moduleId: '',
+        quantity: 1,
+        optionChoices: {},
+      };
+      const mod = modules.find((m) => m.id === item.moduleId);
+      const w = moduleWidth(item, modules);
+      const d = moduleDepth(item, modules);
+      const h = moduleHeight(item, modules);
+      const label = itemLabel(p.itemId, p.instanceIndex, project, modules);
+      const shortCode = mod?.code ?? label.split('—')[0]?.trim() ?? '';
+      const wall = frames.find((f) => f.id === p.wallId);
 
+      const r = resolvePlacement2D({
+        placement: p,
+        wallFrame: wall,
+        widthMm: w,
+        depthMm: d,
+        heightMm: h,
+        furnitureType: mod?.furnitureType,
+        label,
+        shortCode,
+      });
+      if (r) list.push(r);
+    }
+    return list;
+  }, [layout.placements, frames, project.items, modules]);
+
+  const bounds = useMemo(
+    () => resolvePlanBounds({ wallFrames: frames, placements: resolvedPlacements }),
+    [frames, resolvedPlacements],
+  );
 
   // SVG plan scale
   const pad = 40;
   const scale = 0.08;
-  let maxX = 100;
-  let maxY = 100;
-  for (const f of frames) {
-    maxX = Math.max(maxX, f.originXMm, f.endXMm);
-    maxY = Math.max(maxY, f.originYMm, f.endYMm);
-  }
-  const svgW = Math.max(320, maxX * scale + pad * 2);
-  const svgH = Math.max(220, maxY * scale + pad * 2);
+  const svgW = Math.max(360, bounds.widthMm * scale + pad * 2);
+  const svgH = Math.max(240, bounds.heightMm * scale + pad * 2);
+
+  const toSvgX = (xMm: number) => pad + (xMm - bounds.minX) * scale;
+  const toSvgY = (yMm: number) => pad + (yMm - bounds.minY) * scale;
+
+  const hasAlto = resolvedPlacements.some((p) => p.category === 'alto');
+  const hasFree = resolvedPlacements.some((p) => p.isFree);
 
   // --- Drag state for placements (Fase 2) ---
   const dragRef = useRef<{
@@ -205,7 +251,7 @@ export function KitchenPlanPanel({
     startPx: number;
     startPy: number;
     origOffset: number;
-    isVertical: boolean;
+    wallAngleDeg: number;
     wallLength: number;
     itemWidth: number;
   } | null>(null);
@@ -228,10 +274,6 @@ export function KitchenPlanPanel({
         },
         modules,
       );
-      const angle = ((wall.angleDeg % 360) + 360) % 360;
-      // Walls along ±Y (90° / 270°) drag on the vertical SVG axis.
-      const isVertical =
-        (angle > 45 && angle < 135) || (angle > 225 && angle < 315);
       dragRef.current = {
         itemId: p.itemId,
         instanceIndex: p.instanceIndex,
@@ -239,7 +281,7 @@ export function KitchenPlanPanel({
         startPx: e.clientX,
         startPy: e.clientY,
         origOffset: p.offsetMm,
-        isVertical,
+        wallAngleDeg: wall.angleDeg,
         wallLength: wall.lengthMm,
         itemWidth: w,
       };
@@ -252,10 +294,22 @@ export function KitchenPlanPanel({
     (e: ReactPointerEvent<SVGRectElement>) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const deltaPx = drag.isVertical
-        ? e.clientY - drag.startPy
-        : e.clientX - drag.startPx;
-      const deltaMm = deltaPx / scale;
+      let deltaMm = 0;
+      const angle = ((drag.wallAngleDeg % 360) + 360) % 360;
+      if (angle > 45 && angle < 135) {
+        // Wall along +Y (downwards)
+        deltaMm = (e.clientY - drag.startPy) / scale;
+      } else if (angle > 225 && angle < 315) {
+        // Wall along -Y (upwards)
+        deltaMm = -(e.clientY - drag.startPy) / scale;
+      } else if (angle >= 135 && angle <= 225) {
+        // Wall along -X (leftwards)
+        deltaMm = -(e.clientX - drag.startPx) / scale;
+      } else {
+        // Wall along +X (rightwards)
+        deltaMm = (e.clientX - drag.startPx) / scale;
+      }
+
       let newOffset = drag.origOffset + deltaMm;
       // Clamp: 0 ≤ offset ≤ wallLength - itemWidth.
       newOffset = Math.max(0, Math.min(newOffset, drag.wallLength - drag.itemWidth));
@@ -354,7 +408,7 @@ export function KitchenPlanPanel({
       </div>
 
       <p className="catalog-form__hint">
-        Dibujá muros simples y colocá los muebles de la cotización. La vista 3D
+        Dibujá muros simples y colocá los muebles de la cotización en la cara interna del muro. La vista 3D
         usa este plano si hay colocaciones; si no, usa la corrida lineal.
       </p>
 
@@ -372,10 +426,10 @@ export function KitchenPlanPanel({
             data-testid="kitchen-plan-svg"
           >
             {frames.map((f) => {
-              const x1 = pad + f.originXMm * scale;
-              const y1 = pad + f.originYMm * scale;
-              const x2 = pad + f.endXMm * scale;
-              const y2 = pad + f.endYMm * scale;
+              const x1 = toSvgX(f.originXMm);
+              const y1 = toSvgY(f.originYMm);
+              const x2 = toSvgX(f.endXMm);
+              const y2 = toSvgY(f.endYMm);
               return (
                 <g key={f.id}>
                   <line
@@ -399,70 +453,116 @@ export function KitchenPlanPanel({
                 </g>
               );
             })}
-            {layout.placements.map((p) => {
-              const wall = frames.find((f) => f.id === p.wallId);
-              if (!wall) return null;
-              const w = moduleWidth(
-                project.items.find((i) => i.id === p.itemId) ?? {
-                  id: p.itemId,
-                  moduleId: '',
-                  quantity: 1,
-                  optionChoices: {},
-                },
-                modules,
+            {resolvedPlacements.map((p) => {
+              const rawPlacement = layout.placements.find(
+                (lp) => lp.itemId === p.itemId && lp.instanceIndex === p.instanceIndex,
               );
-              const angle = ((wall.angleDeg % 360) + 360) % 360;
-              let rx = pad + wall.originXMm * scale;
-              let ry = pad + wall.originYMm * scale;
-              let rw = Math.max(8, w * scale);
-              let rh = 14;
-              if (angle > 45 && angle < 135) {
-                // +Y wall: offset increases SVG Y
-                rx = pad + wall.originXMm * scale - 7;
-                ry = pad + (wall.originYMm + p.offsetMm) * scale;
-                rw = 14;
-                rh = Math.max(8, w * scale);
-              } else if (angle > 225 && angle < 315) {
-                // −Y wall: offset decreases plan Y
-                rx = pad + wall.originXMm * scale - 7;
-                ry = pad + (wall.originYMm - p.offsetMm - w) * scale;
-                rw = 14;
-                rh = Math.max(8, w * scale);
-              } else if (angle >= 135 && angle <= 225) {
-                // −X wall: offset decreases plan X
-                rx = pad + (wall.originXMm - p.offsetMm - w) * scale;
-                ry = pad + wall.originYMm * scale - 7;
-              } else {
-                // +X wall
-                rx = pad + (wall.originXMm + p.offsetMm) * scale;
-                ry = pad + wall.originYMm * scale - 7;
-              }
+              const rx = toSvgX(p.boxMm.minX);
+              const ry = toSvgY(p.boxMm.minY);
+              const rw = Math.max(8, (p.boxMm.maxX - p.boxMm.minX) * scale);
+              const rh = Math.max(8, (p.boxMm.maxY - p.boxMm.minY) * scale);
+
+              const fx1 = toSvgX(p.frontFaceMm.x1);
+              const fy1 = toSvgY(p.frontFaceMm.y1);
+              const fx2 = toSvgX(p.frontFaceMm.x2);
+              const fy2 = toSvgY(p.frontFaceMm.y2);
+
+              const theme = getCategoryTheme(p.category);
+
               return (
-                <rect
+                <g
                   key={`${p.itemId}#${p.instanceIndex}`}
-                  x={rx}
-                  y={ry}
-                  width={rw}
-                  height={rh}
-                  fill={
-                    p.elevation === 'wall'
-                      ? 'var(--accent-500)'
-                      : 'var(--success-500)'
-                  }
-                  opacity={0.75}
-                  data-testid={`kitchen-plan-box-${p.itemId}-${p.instanceIndex}`}
-                  onPointerDown={
-                    canEdit
-                      ? (e) => handlePlacementPointerDown(e, p)
-                      : undefined
-                  }
-                  onPointerMove={handlePlacementPointerMove}
-                  onPointerUp={handlePlacementPointerUp}
-                  className={`kitchen-plan__box ${canEdit ? 'kitchen-plan__box--draggable' : ''}`.trim()}
-                />
+                  className="kitchen-plan__module-group"
+                >
+                  <title>{p.label} ({p.widthMm} × {p.depthMm} mm)</title>
+                  {/* Cabinet Body Rect */}
+                  <rect
+                    x={rx}
+                    y={ry}
+                    width={rw}
+                    height={rh}
+                    fill={theme.fillColor}
+                    stroke={theme.strokeColor}
+                    strokeWidth={1.5}
+                    strokeDasharray={theme.isDashed ? '4 2' : undefined}
+                    opacity={0.88}
+                    rx={2}
+                    data-testid={`kitchen-plan-box-${p.itemId}-${p.instanceIndex}`}
+                    onPointerDown={
+                      canEdit && rawPlacement && !p.isFree
+                        ? (e) => handlePlacementPointerDown(e, rawPlacement)
+                        : undefined
+                    }
+                    onPointerMove={handlePlacementPointerMove}
+                    onPointerUp={handlePlacementPointerUp}
+                    className={`kitchen-plan__box ${canEdit && !p.isFree ? 'kitchen-plan__box--draggable' : ''}`.trim()}
+                  />
+
+                  {/* Front Face / Door Opening Indicator */}
+                  <path
+                    d={`M ${fx1} ${fy1} L ${fx2} ${fy2}`}
+                    className="kitchen-plan__front-face"
+                    stroke="var(--bg-card, #ffffff)"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    opacity={0.95}
+                    pointerEvents="none"
+                  />
+
+                  {/* Label inside cabinet */}
+                  {rw > 28 && rh > 12 ? (
+                    <text
+                      x={rx + rw / 2}
+                      y={ry + rh / 2 + 3}
+                      fontSize={rw > 45 ? 9 : 7.5}
+                      fill="white"
+                      textAnchor="middle"
+                      fontWeight={600}
+                      pointerEvents="none"
+                    >
+                      {p.shortCode || p.label.split('—')[0]?.trim()}
+                    </text>
+                  ) : null}
+                </g>
               );
             })}
           </svg>
+
+          {resolvedPlacements.length > 0 ? (
+            <div
+              className="kitchen-plan__legend"
+              data-testid="kitchen-plan-legend"
+            >
+              <span className="kitchen-plan__legend-item">
+                <span
+                  className="kitchen-plan__swatch kitchen-plan__swatch--floor"
+                  aria-hidden
+                />
+                Base (piso)
+              </span>
+              <span className="kitchen-plan__legend-item">
+                <span
+                  className="kitchen-plan__swatch kitchen-plan__swatch--wall"
+                  aria-hidden
+                />
+                Alacena (muro)
+              </span>
+              <span className="kitchen-plan__legend-item">
+                <span
+                  className="kitchen-plan__swatch kitchen-plan__swatch--alto"
+                  aria-hidden
+                />
+                Despensa (alto)
+              </span>
+              <span className="kitchen-plan__legend-item">
+                <span
+                  className="kitchen-plan__swatch kitchen-plan__swatch--free"
+                  aria-hidden
+                />
+                Isla (libre)
+              </span>
+            </div>
+          ) : null}
 
           <div className="module-editor__grid kitchen-plan__walls">
             {layout.walls.map((wall, wi) => (

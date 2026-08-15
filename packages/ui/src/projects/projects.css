@@ -1543,11 +1543,16 @@
 }
 
 .presentation-kitchen-plan__swatch--wall {
-  background: var(--accent-500);
+  background: var(--info-500);
+  border: 1px dashed var(--info-700);
+}
+
+.presentation-kitchen-plan__swatch--alto {
+  background: var(--brand-500);
 }
 
 .presentation-kitchen-plan__swatch--free {
-  background: var(--info-500);
+  background: var(--warning-500);
 }
 
 /* Options slide (presentation) */

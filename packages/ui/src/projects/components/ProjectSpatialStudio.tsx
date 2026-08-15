@@ -104,7 +104,17 @@ import {
 } from '../../preview3d/paintMaterial';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
-import { allFootprints, itemLabel, moduleWidth } from '../kitchenPlanHelpers';
+import {
+  allFootprints,
+  getCategoryTheme,
+  itemLabel,
+  moduleDepth,
+  moduleHeight,
+  moduleWidth,
+  resolvePlacement2D,
+  resolvePlanBounds,
+  type ResolvedPlacement2D,
+} from '../kitchenPlanHelpers';
 import {
   estimateLineSalePrice,
   formatProjectMoney,
@@ -684,50 +694,60 @@ export function ProjectSpatialStudio({
     [layout.walls],
   );
 
+  const planPlacements2D = useMemo(() => {
+    const list: ResolvedPlacement2D[] = [];
+    for (const p of layout.placements) {
+      const item = project.items.find((i) => i.id === p.itemId) ?? {
+        id: p.itemId,
+        moduleId: '',
+        quantity: 1,
+        optionChoices: {},
+      };
+      const mod = modules.find((m) => m.id === item.moduleId);
+      const w = moduleWidth(item, modules);
+      const d = moduleDepth(item, modules);
+      const h = moduleHeight(item, modules);
+      const label = itemLabel(p.itemId, p.instanceIndex, project, modules);
+      const shortCode = mod?.code ?? label.split('—')[0]?.trim() ?? '';
+      const wall = planFrames.find((f) => f.id === p.wallId);
+
+      const r = resolvePlacement2D({
+        placement: p,
+        wallFrame: wall,
+        widthMm: w,
+        depthMm: d,
+        heightMm: h,
+        furnitureType: mod?.furnitureType,
+        label,
+        shortCode,
+      });
+      if (r) list.push(r);
+    }
+    return list;
+  }, [layout.placements, planFrames, project.items, modules]);
+
   const planMini = useMemo(() => {
     const underlay = layout.underlay;
     if (
       planFrames.length === 0 &&
-      layout.placements.every((p) => !isFreePlacement(p)) &&
+      planPlacements2D.length === 0 &&
       !underlay
     ) {
       return null;
     }
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const f of planFrames) {
-      minX = Math.min(minX, f.originXMm, f.endXMm);
-      minY = Math.min(minY, f.originYMm, f.endYMm);
-      maxX = Math.max(maxX, f.originXMm, f.endXMm);
-      maxY = Math.max(maxY, f.originYMm, f.endYMm);
-    }
-    for (const p of layout.placements) {
-      if (!isFreePlacement(p)) continue;
-      const fx = p.freeXMm ?? 0;
-      const fy = p.freeYMm ?? 0;
-      minX = Math.min(minX, fx);
-      minY = Math.min(minY, fy);
-      maxX = Math.max(maxX, fx + 600);
-      maxY = Math.max(maxY, fy + 400);
-    }
-    if (underlay) {
-      const ox = underlay.originXMm ?? 0;
-      const oy = underlay.originYMm ?? 0;
-      minX = Math.min(minX, ox);
-      minY = Math.min(minY, oy);
-      maxX = Math.max(maxX, ox + underlay.widthMm);
-      maxY = Math.max(maxY, oy + underlay.heightMm);
-    }
-    if (!Number.isFinite(minX)) return null;
+    const bounds = resolvePlanBounds({
+      wallFrames: planFrames,
+      placements: planPlacements2D,
+      underlay,
+      minDimensionMm: 500,
+    });
     const pad = 24;
-    const spanX = Math.max(maxX - minX, 1);
-    const spanY = Math.max(maxY - minY, 1);
+    const spanX = Math.max(bounds.widthMm, 1);
+    const spanY = Math.max(bounds.heightMm, 1);
     const size = 200;
     const scale = (size - pad * 2) / Math.max(spanX, spanY);
-    return { minX, minY, pad, scale, size };
-  }, [planFrames, layout.placements, layout.underlay]);
+    return { minX: bounds.minX, minY: bounds.minY, pad, scale, size };
+  }, [planFrames, planPlacements2D, layout.underlay]);
 
   if (!open) return null;
 
@@ -2858,113 +2878,100 @@ export function ProjectSpatialStudio({
                     </g>
                   );
                 })}
-                {layout.placements.map((p) => {
+                {planPlacements2D.map((p) => {
                   const key = `${p.itemId}#${p.instanceIndex}`;
                   const selected = selectedKey === key;
-                  const itemStub =
-                    project.items.find((i) => i.id === p.itemId) ?? {
-                      id: p.itemId,
-                      moduleId: '',
-                      quantity: 1,
-                      optionChoices: {},
-                    };
-                  const w = moduleWidth(itemStub, modules);
-                  const item = project.items.find((i) => i.id === p.itemId);
-                  const mod = item
-                    ? modules.find((m) => m.id === item.moduleId)
-                    : undefined;
-                  const depth =
-                    resolveItemDims(itemStub, mod)?.depth ?? 560;
+                  const rx =
+                    planMini.pad + (p.boxMm.minX - planMini.minX) * planMini.scale;
+                  const ry =
+                    planMini.pad + (p.boxMm.minY - planMini.minY) * planMini.scale;
+                  const rw = Math.max(4, (p.boxMm.maxX - p.boxMm.minX) * planMini.scale);
+                  const rh = Math.max(4, (p.boxMm.maxY - p.boxMm.minY) * planMini.scale);
 
-                  if (isFreePlacement(p)) {
-                    const fx = p.freeXMm ?? 0;
-                    const fy = p.freeYMm ?? 0;
-                    const rx =
-                      planMini.pad + (fx - planMini.minX) * planMini.scale;
-                    const ry =
-                      planMini.pad + (fy - planMini.minY) * planMini.scale;
-                    const rw = Math.max(6, w * planMini.scale);
-                    const rh = Math.max(6, depth * planMini.scale * 0.35);
-                    return (
-                      <rect
-                        key={key}
-                        x={rx}
-                        y={ry}
-                        width={rw}
-                        height={rh}
-                        fill={
-                          selected
-                            ? 'var(--accent-500, #3b82f6)'
-                            : '#eab308'
-                        }
-                        opacity={0.9}
-                        rx={1}
-                        onClick={() => {
-                          setSelectedKey(key);
-                          setInspectorTab('position');
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      />
-                    );
-                  }
+                  const fx1 =
+                    planMini.pad + (p.frontFaceMm.x1 - planMini.minX) * planMini.scale;
+                  const fy1 =
+                    planMini.pad + (p.frontFaceMm.y1 - planMini.minY) * planMini.scale;
+                  const fx2 =
+                    planMini.pad + (p.frontFaceMm.x2 - planMini.minX) * planMini.scale;
+                  const fy2 =
+                    planMini.pad + (p.frontFaceMm.y2 - planMini.minY) * planMini.scale;
 
-                  const wall = planFrames.find((f) => f.id === p.wallId);
-                  if (!wall) return null;
-                  const angle = ((wall.angleDeg % 360) + 360) % 360;
-                  let rx =
-                    planMini.pad +
-                    (wall.originXMm - planMini.minX) * planMini.scale;
-                  let ry =
-                    planMini.pad +
-                    (wall.originYMm - planMini.minY) * planMini.scale;
-                  let rw = Math.max(6, w * planMini.scale);
-                  let rh = 10;
-                  if (angle > 45 && angle < 135) {
-                    rx =
-                      planMini.pad +
-                      (wall.originXMm - planMini.minX) * planMini.scale -
-                      5;
-                    ry =
-                      planMini.pad +
-                      (wall.originYMm + p.offsetMm - planMini.minY) *
-                        planMini.scale;
-                    rw = 10;
-                    rh = Math.max(6, w * planMini.scale);
-                  } else {
-                    rx =
-                      planMini.pad +
-                      (wall.originXMm + p.offsetMm - planMini.minX) *
-                        planMini.scale;
-                    ry =
-                      planMini.pad +
-                      (wall.originYMm - planMini.minY) * planMini.scale -
-                      5;
-                  }
+                  const theme = getCategoryTheme(p.category);
+                  const fillColor = selected
+                    ? 'var(--accent-500, #3b82f6)'
+                    : theme.fillColor;
+                  const strokeColor = selected
+                    ? 'var(--accent-600, #2563eb)'
+                    : theme.strokeColor;
+
                   return (
-                    <rect
+                    <g
                       key={key}
-                      x={rx}
-                      y={ry}
-                      width={rw}
-                      height={rh}
-                      fill={
-                        selected
-                          ? 'var(--accent-500, #3b82f6)'
-                          : p.elevation === 'wall'
-                            ? '#64748b'
-                            : '#22c55e'
-                      }
-                      opacity={0.85}
-                      rx={1}
                       onClick={() => {
                         setSelectedKey(key);
                         setInspectorTab('position');
                       }}
                       style={{ cursor: 'pointer' }}
-                    />
+                    >
+                      <title>{p.label} ({p.widthMm} × {p.depthMm} mm)</title>
+                      <rect
+                        x={rx}
+                        y={ry}
+                        width={rw}
+                        height={rh}
+                        fill={fillColor}
+                        opacity={selected ? 1 : 0.88}
+                        stroke={strokeColor}
+                        strokeWidth={selected ? 1.5 : 1}
+                        strokeDasharray={theme.isDashed ? '2 1' : undefined}
+                        rx={1}
+                      />
+                      <path
+                        d={`M ${fx1} ${fy1} L ${fx2} ${fy2}`}
+                        className="spatial-studio__plan-front-face"
+                        stroke="#ffffff"
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        opacity={0.9}
+                      />
+                    </g>
                   );
                 })}
               </svg>
+              <div
+                className="spatial-studio__plan-legend"
+                data-testid="spatial-studio-plan-legend"
+              >
+                <span className="spatial-studio__plan-legend-item">
+                  <span
+                    className="spatial-studio__plan-swatch spatial-studio__plan-swatch--floor"
+                    aria-hidden
+                  />
+                  Base
+                </span>
+                <span className="spatial-studio__plan-legend-item">
+                  <span
+                    className="spatial-studio__plan-swatch spatial-studio__plan-swatch--wall"
+                    aria-hidden
+                  />
+                  Alacena
+                </span>
+                <span className="spatial-studio__plan-legend-item">
+                  <span
+                    className="spatial-studio__plan-swatch spatial-studio__plan-swatch--alto"
+                    aria-hidden
+                  />
+                  Despensa
+                </span>
+                <span className="spatial-studio__plan-legend-item">
+                  <span
+                    className="spatial-studio__plan-swatch spatial-studio__plan-swatch--free"
+                    aria-hidden
+                  />
+                  Isla
+                </span>
+              </div>
             </div>
           ) : null}
         </main>

@@ -23,9 +23,14 @@ import { LayoutTemplate } from 'lucide-react';
 import { EmptyState } from '../../common';
 import {
   allFootprints,
+  getCategoryTheme,
   itemLabel,
   moduleDepth,
+  moduleHeight,
   moduleWidth,
+  resolvePlacement2D,
+  resolvePlanBounds,
+  type ResolvedPlacement2D,
 } from '../kitchenPlanHelpers';
 
 export type PresentationKitchenPlanSlideProps = {
@@ -105,32 +110,52 @@ function SpacePlanSvg({
     [space.walls],
   );
 
+  const resolvedPlacements = useMemo(() => {
+    const list: ResolvedPlacement2D[] = [];
+    for (const p of space.placements) {
+      const item =
+        project.items.find((i) => i.id === p.itemId) ??
+        placeholderItem(p.itemId);
+      const mod = modules.find((m) => m.id === item.moduleId);
+      const w = moduleWidth(item, modules);
+      const d = moduleDepth(item, modules);
+      const h = moduleHeight(item, modules);
+      const label = itemLabel(p.itemId, p.instanceIndex, project, modules);
+      const shortCode = mod?.code ?? label.split('—')[0]?.trim() ?? '';
+      const wall = frames.find((f) => f.id === p.wallId);
+
+      const r = resolvePlacement2D({
+        placement: p,
+        wallFrame: wall,
+        widthMm: w,
+        depthMm: d,
+        heightMm: h,
+        furnitureType: mod?.furnitureType,
+        label,
+        shortCode,
+      });
+      if (r) list.push(r);
+    }
+    return list;
+  }, [space.placements, frames, project.items, modules]);
+
+  const bounds = useMemo(
+    () => resolvePlanBounds({ wallFrames: frames, placements: resolvedPlacements }),
+    [frames, resolvedPlacements],
+  );
+
   const pad = 40;
   const scale = 0.08;
-  let maxX = 100;
-  let maxY = 100;
-  for (const f of frames) {
-    maxX = Math.max(maxX, f.originXMm, f.endXMm);
-    maxY = Math.max(maxY, f.originYMm, f.endYMm);
-  }
-  for (const p of space.placements) {
-    if (!isFreePlacement(p)) continue;
-    const item =
-      project.items.find((i) => i.id === p.itemId) ?? placeholderItem(p.itemId);
-    const w = moduleWidth(item, modules);
-    const d = moduleDepth(item, modules);
-    const fx = Number.isFinite(p.freeXMm) ? (p.freeXMm as number) : 0;
-    const fy = Number.isFinite(p.freeYMm) ? (p.freeYMm as number) : 0;
-    maxX = Math.max(maxX, fx + w, fx);
-    maxY = Math.max(maxY, fy + d, fy);
-  }
+  const svgW = Math.max(400, bounds.widthMm * scale + pad * 2);
+  const svgH = Math.max(280, bounds.heightMm * scale + pad * 2);
 
-  const svgW = Math.max(400, maxX * scale + pad * 2);
-  const svgH = Math.max(280, maxY * scale + pad * 2);
+  const toSvgX = (xMm: number) => pad + (xMm - bounds.minX) * scale;
+  const toSvgY = (yMm: number) => pad + (yMm - bounds.minY) * scale;
 
   const hasLayout = space.walls.length > 0 || space.placements.length > 0;
-  const hasPlacements = space.placements.length > 0;
-  const hasFree = space.placements.some((p) => isFreePlacement(p));
+  const hasPlacements = resolvedPlacements.length > 0;
+  const hasFree = resolvedPlacements.some((p) => p.isFree);
+  const hasAlto = resolvedPlacements.some((p) => p.category === 'alto');
 
   if (!hasLayout) {
     return (
@@ -163,10 +188,10 @@ function SpacePlanSvg({
         data-testid={`presentation-kitchen-svg-${space.id}`}
       >
         {frames.map((f) => {
-          const x1 = pad + f.originXMm * scale;
-          const y1 = pad + f.originYMm * scale;
-          const x2 = pad + f.endXMm * scale;
-          const y2 = pad + f.endYMm * scale;
+          const x1 = toSvgX(f.originXMm);
+          const y1 = toSvgY(f.originYMm);
+          const x2 = toSvgX(f.endXMm);
+          const y2 = toSvgY(f.endYMm);
           return (
             <g key={f.id}>
               <line
@@ -191,109 +216,66 @@ function SpacePlanSvg({
           );
         })}
 
-        {space.placements.map((p) => {
-          const item =
-            project.items.find((i) => i.id === p.itemId) ??
-            placeholderItem(p.itemId);
-          const w = moduleWidth(item, modules);
-          const d = moduleDepth(item, modules);
-          const label = itemLabel(
-            p.itemId,
-            p.instanceIndex,
-            project,
-            modules,
-          )
-            .split('—')[0]
-            ?.trim();
+        {resolvedPlacements.map((p) => {
+          const rx = toSvgX(p.boxMm.minX);
+          const ry = toSvgY(p.boxMm.minY);
+          const rw = Math.max(8, (p.boxMm.maxX - p.boxMm.minX) * scale);
+          const rh = Math.max(8, (p.boxMm.maxY - p.boxMm.minY) * scale);
 
-          if (isFreePlacement(p)) {
-            const fx = Number.isFinite(p.freeXMm) ? (p.freeXMm as number) : 0;
-            const fy = Number.isFinite(p.freeYMm) ? (p.freeYMm as number) : 0;
-            const rw = Math.max(8, w * scale);
-            const rh = Math.max(8, d * scale);
-            const rx = pad + fx * scale;
-            const ry = pad + fy * scale;
-            return (
-              <g
-                key={`free-${p.itemId}#${p.instanceIndex}`}
-                data-testid={`presentation-plan-free-${p.itemId}-${p.instanceIndex}`}
-              >
-                <rect
-                  x={rx}
-                  y={ry}
-                  width={rw}
-                  height={rh}
-                  fill="var(--info-500)"
-                  opacity={0.8}
-                  rx={2}
-                />
-                {rw > 30 && rh > 12 ? (
-                  <text
-                    x={rx + rw / 2}
-                    y={ry + rh / 2 + 3}
-                    fontSize={8}
-                    fill="white"
-                    textAnchor="middle"
-                    fontWeight={600}
-                  >
-                    {label}
-                  </text>
-                ) : null}
-              </g>
-            );
-          }
+          const fx1 = toSvgX(p.frontFaceMm.x1);
+          const fy1 = toSvgY(p.frontFaceMm.y1);
+          const fx2 = toSvgX(p.frontFaceMm.x2);
+          const fy2 = toSvgY(p.frontFaceMm.y2);
 
-          const wall = frames.find((f) => f.id === p.wallId);
-          if (!wall) return null;
-          const angle = ((wall.angleDeg % 360) + 360) % 360;
-          let rx = pad + wall.originXMm * scale;
-          let ry = pad + wall.originYMm * scale;
-          let rw = Math.max(8, w * scale);
-          let rh = 14;
-          if (angle > 45 && angle < 135) {
-            rx = pad + wall.originXMm * scale - 7;
-            ry = pad + (wall.originYMm + p.offsetMm) * scale;
-            rw = 14;
-            rh = Math.max(8, w * scale);
-          } else if (angle > 225 && angle < 315) {
-            rx = pad + wall.originXMm * scale - 7;
-            ry = pad + (wall.originYMm - p.offsetMm - w) * scale;
-            rw = 14;
-            rh = Math.max(8, w * scale);
-          } else if (angle >= 135 && angle <= 225) {
-            rx = pad + (wall.originXMm - p.offsetMm - w) * scale;
-            ry = pad + wall.originYMm * scale - 7;
-          } else {
-            rx = pad + (wall.originXMm + p.offsetMm) * scale;
-            ry = pad + wall.originYMm * scale - 7;
-          }
+          const theme = getCategoryTheme(p.category);
+
+          const testId = p.isFree
+            ? `presentation-plan-free-${p.itemId}-${p.instanceIndex}`
+            : `presentation-plan-wall-${p.itemId}-${p.instanceIndex}`;
+
           return (
             <g
               key={`${p.itemId}#${p.instanceIndex}`}
-              data-testid={`presentation-plan-wall-${p.itemId}-${p.instanceIndex}`}
+              data-testid={testId}
+              className={`presentation-kitchen-plan__module presentation-kitchen-plan__module--${p.category}`}
             >
+              <title>{p.label} ({p.widthMm} × {p.depthMm} mm)</title>
+              {/* Cabinet Body Rect */}
               <rect
                 x={rx}
                 y={ry}
                 width={rw}
                 height={rh}
-                fill={
-                  p.elevation === 'wall'
-                    ? 'var(--accent-500)'
-                    : 'var(--success-500)'
-                }
-                opacity={0.8}
+                fill={theme.fillColor}
+                stroke={theme.strokeColor}
+                strokeWidth={1.5}
+                strokeDasharray={theme.isDashed ? '4 2' : undefined}
+                opacity={0.88}
+                rx={2}
               />
-              {rw > 30 && rh > 12 ? (
+
+              {/* Front Face / Door Opening Indicator */}
+              <path
+                d={`M ${fx1} ${fy1} L ${fx2} ${fy2}`}
+                className="kitchen-plan__front-face"
+                stroke="var(--bg-card, #ffffff)"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                opacity={0.95}
+              />
+
+              {/* Label inside cabinet */}
+              {rw > 28 && rh > 12 ? (
                 <text
                   x={rx + rw / 2}
                   y={ry + rh / 2 + 3}
-                  fontSize={8}
+                  fontSize={rw > 45 ? 9 : 7.5}
                   fill="white"
                   textAnchor="middle"
                   fontWeight={600}
+                  pointerEvents="none"
                 >
-                  {label}
+                  {p.shortCode || p.label.split('—')[0]?.trim()}
                 </text>
               ) : null}
             </g>
@@ -321,15 +303,20 @@ function SpacePlanSvg({
             />
             Alacena (muro)
           </span>
-          {hasFree ? (
-            <span className="presentation-kitchen-plan__legend-item">
-              <span
-                className="presentation-kitchen-plan__swatch presentation-kitchen-plan__swatch--free"
-                aria-hidden
-              />
-              Isla (libre)
-            </span>
-          ) : null}
+          <span className="presentation-kitchen-plan__legend-item">
+            <span
+              className="presentation-kitchen-plan__swatch presentation-kitchen-plan__swatch--alto"
+              aria-hidden
+            />
+            Despensa (alto)
+          </span>
+          <span className="presentation-kitchen-plan__legend-item">
+            <span
+              className="presentation-kitchen-plan__swatch presentation-kitchen-plan__swatch--free"
+              aria-hidden
+            />
+            Isla (libre)
+          </span>
         </div>
       ) : null}
     </>

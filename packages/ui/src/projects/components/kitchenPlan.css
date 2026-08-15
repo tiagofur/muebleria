@@ -83,3 +83,44 @@
 .kitchen-unplaced__label {
   flex: 1;
 }
+
+.kitchen-plan__legend {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.kitchen-plan__legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.kitchen-plan__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.kitchen-plan__swatch--floor {
+  background: var(--success-500);
+}
+
+.kitchen-plan__swatch--wall {
+  background: var(--info-500);
+  border: 1px dashed var(--info-700);
+}
+
+.kitchen-plan__swatch--alto {
+  background: var(--brand-500);
+}
+
+.kitchen-plan__swatch--free {
+  background: var(--warning-500);
+}
+

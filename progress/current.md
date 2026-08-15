@@ -168,3 +168,38 @@ con dos vueltas, compatibilidad sin lados, sin vueltas con pieza propia).
 init.sh exit 0; typecheck monorepo verde. Guía §8.4 actualizada con vueltas.
 
 **Pendiente:** drag-paint (puente acabado→tablero); grano por cara si se pide.
+
+---
+
+## Polish UI — Tab General del editor de Agregados (2026-08-15)
+
+Sesión corta de polish (skill impeccable, register product) disparada por pedido
+directo del usuario. Sin feature nueva de `feature_list.json`.
+
+**Qué cambié** (`packages/ui/src/agregados/`):
+- Nuevo `editor/AgregadoEditorGeneralPanel.tsx`: la tab General pasa de pila
+  plana de campos a workspace 2-col (patrón de `ComponentEditorGeneralPanel`).
+  Columna principal: Identidad (código/nombre), Dimensiones de referencia con
+  hint que explica que W/H/D locales alimentan las fórmulas de piezas/herrajes
+  y la Vista 3D, descripción y notas. Aside: Resumen (readout vivo
+  `W × H × D mm` con badge de lista, conteos de piezas/herrajes con botones
+  que saltan a esas tabs) + guía "Cómo se define" (3 pasos: dims → piezas →
+  herrajes).
+- `AgregadoEditorForm.tsx`: tab General delega al panel; tabs con `id` para el
+  contrato `aria-labelledby`; panel con `role="tabpanel"` (drift a11y vs
+  Componentes/Estructuras). Inputs de dims muestran placeholder "Opcional"
+  en vez de `0` (antes de Estructuras).
+- `agregados.css`: bloque `.agregado-general__*` (grid 1fr → 1.4fr/1fr a
+  900px, cards, summary rows, steps numerados) — solo tokens del design
+  system.
+- Tests (`AgregadoEditorForm.test.tsx`): readout de dims, conteos, omisión
+  del readout sin dims, salto a tabs desde el resumen, contrato tabpanel.
+
+**Verificación:** `pnpm --filter @muebles/ui test` (769 ✓), `pnpm test` full
+monorepo ✓, `pnpm typecheck` ✓. En la app real (dev server + browser):
+layout 2-col a 1440px, readout `600 × 720 × 18 mm`, accesos directos cambian
+de tab.
+
+**No cambié (a propósito):** el código sigue editable al editar un agregado
+(en Componentes/Estructuras se congela) — decisión de producto pendiente;
+hay validación de unicidad al guardar.
