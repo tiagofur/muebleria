@@ -122,11 +122,26 @@ export {
   resolveCustomerName,
   validateItemQuantity,
   validateProjectDraft,
+  InternalCommsPanel,
+  ProjectPhotosGallery,
+  WarrantyTicketsPanel,
+  type InternalCommsPanelProps,
+  type ProjectPhotosGalleryProps,
+  type WarrantyTicketsPanelProps,
   type AddItemDraft,
   type ExportIssueListProps,
   type ProjectDraft,
   type ProjectsScreenProps,
 } from './projects';
+
+
+export {
+  WhatsAppButton,
+  WhatsAppModal,
+  type WhatsAppButtonProps,
+  type WhatsAppModalProps,
+} from './crm';
+
 
 export {
   AppShell,
@@ -312,4 +327,6 @@ export {
   setHasSeenOnboardingTour,
   type OnboardingTourModalProps,
 } from './onboarding/OnboardingTourModal';
+
+
 

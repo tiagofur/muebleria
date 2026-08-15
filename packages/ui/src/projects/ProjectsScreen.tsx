@@ -28,13 +28,27 @@ import type {
   Project,
   ProjectItem,
   ProjectMaterialSummary,
+  ProjectPhoto,
+  ProjectPhotoStage,
   ProjectStatus,
+  ProjectTechnicalStatus,
+  ProjectInternalMessage,
+  ProjectInternalMessageType,
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
   Agregado,
+  ProductionCutRow,
+  WarrantyPhotoKind,
+  WarrantyRefabricationPiece,
+  WarrantyTicket,
+  WarrantyTicketCategory,
+  WarrantyTicketPriority,
 } from '@muebles/domain';
+
+
+
 import {
   type DropdownMenuSection,
   PageLoading,
@@ -290,7 +304,72 @@ export interface ProjectsScreenProps {
   readonly autoPresentId?: string | null;
   /** Auth-aware media URL resolver for 3D textures. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+
+  // --- CRM & Project Photos (CRM Phase 1) ---
+  readonly photos?: readonly ProjectPhoto[];
+  readonly onUploadPhotos?: (
+    projectId: string,
+    files: File[],
+    stage: ProjectPhotoStage,
+    caption?: string,
+  ) => Promise<void>;
+  readonly onUpdatePhoto?: (
+    projectId: string,
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ) => Promise<void>;
+  readonly onDeletePhoto?: (projectId: string, photoId: string) => Promise<void>;
+  readonly workshopName?: string;
+
+  // --- CRM & Internal Comms (CRM Phase 2) ---
+  readonly internalMessages?: readonly ProjectInternalMessage[];
+  readonly onSendInternalMessage?: (msg: {
+    projectId: string;
+    messageType: ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+  }) => Promise<void> | void;
+  readonly onUpdateTechnicalWorkflow?: (
+    projectId: string,
+    updates: {
+      assignedEngineerId?: string;
+      technicalStatus?: ProjectTechnicalStatus;
+      surveyCompletedAt?: string;
+      installationScheduledDate?: string;
+      comment?: string;
+    },
+  ) => Promise<void> | void;
+  readonly currentUserId?: string;
+
+  // --- CRM & Warranty Desk (CRM Phase 3) ---
+  readonly warranties?: readonly WarrantyTicket[];
+  readonly availableCutRows?: readonly ProductionCutRow[];
+  readonly onCreateWarrantyTicket?: (
+    ticket: Partial<WarrantyTicket> & {
+      projectId: string;
+      title: string;
+      category: WarrantyTicketCategory;
+      priority: WarrantyTicketPriority;
+    },
+  ) => Promise<void>;
+
+  readonly onUpdateWarrantyTicket?: (
+    ticketId: string,
+    updates: Partial<WarrantyTicket>,
+  ) => Promise<void>;
+  readonly onDeleteWarrantyTicket?: (ticketId: string) => Promise<void>;
+  readonly onUploadWarrantyPhoto?: (
+    ticketId: string,
+    file: File,
+    kind?: WarrantyPhotoKind,
+    caption?: string,
+  ) => Promise<void>;
+  readonly onExportWarrantyRefabricationOptimizer?: (
+    ticket: WarrantyTicket,
+  ) => void;
 }
+
+
 
 export function ProjectsScreen({
   projects,
@@ -366,7 +445,25 @@ export function ProjectsScreen({
   showCosts = true,
   autoPresentId = null,
   resolveImageUrl = (u) => u,
+  photos,
+  onUploadPhotos,
+  onUpdatePhoto,
+  onDeletePhoto,
+  workshopName,
+  internalMessages,
+  onSendInternalMessage,
+  onUpdateTechnicalWorkflow,
+  currentUserId,
+  warranties,
+  availableCutRows,
+  onCreateWarrantyTicket,
+  onUpdateWarrantyTicket,
+  onDeleteWarrantyTicket,
+  onUploadWarrantyPhoto,
+  onExportWarrantyRefabricationOptimizer,
 }: ProjectsScreenProps): ReactNode {
+
+
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] =
@@ -940,7 +1037,47 @@ export function ProjectsScreen({
           canForceReopenClosed={canForceReopenClosed}
           canMarkProduced={canMarkProduced}
           projectTemplates={projectTemplates}
+          photos={photos}
+          onUploadPhotos={
+            onUploadPhotos
+              ? (files, stage, caption) => onUploadPhotos(selectedProject.id, files, stage, caption)
+              : undefined
+          }
+          onUpdatePhoto={
+            onUpdatePhoto
+              ? (photoId, updates) => onUpdatePhoto(selectedProject.id, photoId, updates)
+              : undefined
+          }
+          onDeletePhoto={
+            onDeletePhoto
+              ? (photoId) => onDeletePhoto(selectedProject.id, photoId)
+              : undefined
+          }
+          workshopName={workshopName}
+          internalMessages={internalMessages}
+          onSendInternalMessage={
+            onSendInternalMessage
+              ? (msg) => onSendInternalMessage({ projectId: selectedProject.id, ...msg })
+              : undefined
+          }
+          onUpdateTechnicalWorkflow={
+            onUpdateTechnicalWorkflow
+              ? (updates) => onUpdateTechnicalWorkflow(selectedProject.id, updates)
+              : undefined
+          }
+          assignableOwners={assignableOwners}
+          currentUserId={currentUserId}
+          warranties={warranties}
+          availableCutRows={availableCutRows}
+          onCreateWarrantyTicket={onCreateWarrantyTicket}
+          onUpdateWarrantyTicket={onUpdateWarrantyTicket}
+          onDeleteWarrantyTicket={onDeleteWarrantyTicket}
+          onUploadWarrantyPhoto={onUploadWarrantyPhoto}
+          onExportWarrantyRefabricationOptimizer={onExportWarrantyRefabricationOptimizer}
         />
+
+
+
       ) : (
         renderList()
       )}

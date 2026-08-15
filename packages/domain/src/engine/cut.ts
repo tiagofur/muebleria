@@ -130,6 +130,9 @@ export function generateCutRows(
         part.description,
         partCode,
       );
+      const edgeBand = part.edgeBandId
+        ? findEdgeBand(catalog, part.edgeBandId)
+        : undefined;
       sortable.push({
         moduleCode: module.code,
         partCode: partCode ?? '',
@@ -147,6 +150,11 @@ export function generateCutRows(
           partCode,
           moduleCode: module.code,
           labelRef,
+          materialCode: material.code,
+          thicknessMm: part.thicknessMm,
+          edgeBandCode: edgeBand?.code,
+          edgeBandName: edgeBand?.name,
+          edgeBandThicknessMm: edgeBand?.thicknessMm,
         },
       });
     }

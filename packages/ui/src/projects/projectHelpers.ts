@@ -18,6 +18,7 @@ import type {
   Project,
   ProjectItem,
   ProjectStatus,
+  ProjectTechnicalStatus,
   Structure,
   WorkshopSettings,
 } from '@muebles/domain';
@@ -60,7 +61,16 @@ export type ProjectDraft = {
   notes: string;
   /** Portfolio owner user id (F034). Empty = shell default (me). */
   ownerUserId: string;
+  /** Technical / Production engineer in charge (CRM Phase 2). */
+  assignedEngineerId?: string;
+  /** Technical workflow status (CRM Phase 2). */
+  technicalStatus?: ProjectTechnicalStatus;
+  /** Date/time when survey was completed. */
+  surveyCompletedAt?: string;
+  /** Planned installation date in Obra (YYYY-MM-DD). */
+  installationScheduledDate?: string;
 };
+
 
 export type AddItemDraft = {
   moduleId: string;
@@ -176,6 +186,10 @@ export function emptyProjectDraft(
     status: 'draft',
     notes: '',
     ownerUserId: '',
+    assignedEngineerId: '',
+    technicalStatus: 'pending_assignment',
+    surveyCompletedAt: '',
+    installationScheduledDate: '',
   };
 }
 
@@ -194,8 +208,13 @@ export function projectToDraft(
     status: project.status,
     notes: project.notes ?? '',
     ownerUserId: project.ownerUserId ?? '',
+    assignedEngineerId: project.assignedEngineerId ?? '',
+    technicalStatus: project.technicalStatus ?? 'pending_assignment',
+    surveyCompletedAt: project.surveyCompletedAt ?? '',
+    installationScheduledDate: project.installationScheduledDate ?? '',
   };
 }
+
 
 /**
  * Customers available in the project meta picker: active by default.

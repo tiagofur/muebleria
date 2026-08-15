@@ -21,10 +21,13 @@ import type {
   Project,
   ProjectItem,
   ProjectMaterialSummary,
+  ProjectPhoto,
+  ProjectPhotoStage,
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
 } from '@muebles/domain';
+
 import type { DropdownMenuSection } from '../../common';
 
 // ─── Catalogs ───────────────────────────────────────────────────────
@@ -217,7 +220,68 @@ export interface ProjectDetailContextValue {
   readonly canForceReopenClosed: boolean;
   readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
+
+  // --- CRM & Project Photos (CRM Phase 1) ---
+  readonly photos?: readonly ProjectPhoto[];
+  readonly onUploadPhotos?: (
+    files: File[],
+    stage: ProjectPhotoStage,
+    caption?: string,
+  ) => Promise<void>;
+  readonly onUpdatePhoto?: (
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ) => Promise<void>;
+  readonly onDeletePhoto?: (photoId: string) => Promise<void>;
+  readonly workshopName?: string;
+
+  // --- CRM & Internal Comms (CRM Phase 2) ---
+  readonly internalMessages?: readonly import('@muebles/domain').ProjectInternalMessage[];
+  readonly onSendInternalMessage?: (msg: {
+    messageType: import('@muebles/domain').ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+  }) => Promise<void> | void;
+  readonly onUpdateTechnicalWorkflow?: (updates: {
+    assignedEngineerId?: string;
+    technicalStatus?: import('@muebles/domain').ProjectTechnicalStatus;
+    surveyCompletedAt?: string;
+    installationScheduledDate?: string;
+    comment?: string;
+  }) => Promise<void> | void;
+  readonly assignableOwners?: readonly { readonly id: string; readonly name: string; readonly role?: string }[];
+  readonly currentUserId?: string;
+
+  // --- CRM & Warranty Desk (CRM Phase 3) ---
+  readonly warranties?: readonly import('@muebles/domain').WarrantyTicket[];
+  readonly availableCutRows?: readonly import('@muebles/domain').ProductionCutRow[];
+  readonly onCreateWarrantyTicket?: (
+    ticket: Partial<import('@muebles/domain').WarrantyTicket> & {
+      projectId: string;
+      title: string;
+      category: import('@muebles/domain').WarrantyTicketCategory;
+      priority: import('@muebles/domain').WarrantyTicketPriority;
+    },
+  ) => Promise<void>;
+
+  readonly onUpdateWarrantyTicket?: (
+    ticketId: string,
+    updates: Partial<import('@muebles/domain').WarrantyTicket>,
+  ) => Promise<void>;
+  readonly onDeleteWarrantyTicket?: (ticketId: string) => Promise<void>;
+  readonly onUploadWarrantyPhoto?: (
+    ticketId: string,
+    file: File,
+    kind?: import('@muebles/domain').WarrantyPhotoKind,
+    caption?: string,
+  ) => Promise<void>;
+  readonly onExportWarrantyRefabricationOptimizer?: (
+    ticket: import('@muebles/domain').WarrantyTicket,
+  ) => void;
 }
+
+
+
 
 // ─── Context + hook ─────────────────────────────────────────────────
 

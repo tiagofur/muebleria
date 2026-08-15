@@ -21,13 +21,29 @@ import type {
   ModuleCategory,
   OptionGroup,
   Project,
+  ProjectInternalMessage,
+  ProjectInternalMessageType,
   ProjectItem,
+  ProjectPhoto,
+  ProjectPhotoStage,
   ProjectStatus,
+  ProjectTechnicalStatus,
   ProjectTemplate,
   QuoteBreakdown,
+  WarrantyRefabricationPiece,
+  WarrantyTicket,
+  WarrantyTicketCategory,
+  WarrantyTicketPhoto,
+  WarrantyPhotoKind,
+  WarrantyTicketPriority,
+  WarrantyTicketStatus,
   WorkshopSettings,
 } from '@muebles/domain';
+
+
 import { resolveWorkshopSettings } from '@muebles/domain';
+
+
 
 function num(v: unknown, fallback = 0): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -1351,6 +1367,10 @@ export function projectToApi(p: Project): Record<string, unknown> {
     customer_id: p.customerId,
     created_by: p.createdBy ?? '',
     owner_user_id: p.ownerUserId ?? '',
+    assigned_engineer_id: p.assignedEngineerId ?? '',
+    technical_status: p.technicalStatus ?? 'pending_assignment',
+    survey_completed_at: p.surveyCompletedAt ?? null,
+    installation_scheduled_date: p.installationScheduledDate ?? null,
     currency: p.currency,
     margin_factor: p.marginFactor,
     labor_fixed_cost: p.laborFixedCost,
@@ -1424,18 +1444,31 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
       : undefined;
   const ownerUserId =
     str(raw.owner_user_id ?? raw.ownerUserId) || undefined;
+  const assignedEngineerId =
+    str(raw.assigned_engineer_id ?? raw.assignedEngineerId) || undefined;
+  const technicalStatusRaw =
+    str(raw.technical_status ?? raw.technicalStatus) || 'pending_assignment';
+  const surveyCompletedAt =
+    str(raw.survey_completed_at ?? raw.surveyCompletedAt) || undefined;
+  const installationScheduledDate =
+    str(raw.installation_scheduled_date ?? raw.installationScheduledDate) || undefined;
   return {
     id: str(raw.id),
     name: str(raw.name),
     customerId: str(raw.customer_id ?? raw.customerId),
     createdBy: str(raw.created_by ?? raw.createdBy) || undefined,
     ownerUserId,
+    assignedEngineerId,
+    technicalStatus: technicalStatusRaw as ProjectTechnicalStatus,
+    surveyCompletedAt,
+    installationScheduledDate,
     currency: str(raw.currency, 'MXN'),
     marginFactor: num(raw.margin_factor ?? raw.marginFactor, 1.35),
     laborFixedCost: num(raw.labor_fixed_cost ?? raw.laborFixedCost),
     status: (['draft', 'quoted', 'accepted', 'produced'].includes(status)
       ? status
       : 'draft') as ProjectStatus,
+
     notes: str(raw.notes) || undefined,
     projectLevelChoices:
       projectLevelChoices && Object.keys(projectLevelChoices).length > 0
@@ -1815,3 +1848,274 @@ export function sortCategoriesForSave<T extends { id: string; parentId?: string 
   };
   return [...categories].sort((a, b) => depth(a.id) - depth(b.id));
 }
+
+// --- Project Photos (CRM Gallery) ---
+
+export function projectPhotoFromApi(raw: unknown): ProjectPhoto {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const stageRaw = str(r.stage, 'installed');
+  const validStages: ProjectPhotoStage[] = [
+    'survey',
+    'in_workshop',
+    'installed',
+    'delivery_receipt',
+  ];
+  const stage = validStages.includes(stageRaw as ProjectPhotoStage)
+    ? (stageRaw as ProjectPhotoStage)
+    : 'installed';
+
+  return {
+    id: str(r.id),
+    projectId: str(r.project_id ?? r.projectId),
+    stage,
+    url: str(r.url),
+    thumbnailUrl:
+      r.thumbnail_url || r.thumbnailUrl
+        ? str(r.thumbnail_url ?? r.thumbnailUrl)
+        : undefined,
+    caption: r.caption ? str(r.caption) : undefined,
+    isShowcase: bool(r.is_showcase ?? r.isShowcase, false),
+    createdBy:
+      r.created_by || r.createdBy
+        ? str(r.created_by ?? r.createdBy)
+        : undefined,
+    createdAt: str(r.created_at ?? r.createdAt, new Date().toISOString()),
+    updatedAt:
+      r.updated_at || r.updatedAt ? str(r.updated_at ?? r.updatedAt) : undefined,
+  };
+}
+
+export function projectPhotoToApi(p: ProjectPhoto): Record<string, unknown> {
+  return {
+    id: p.id,
+    project_id: p.projectId,
+    stage: p.stage,
+    url: p.url,
+    thumbnail_url: p.thumbnailUrl,
+    caption: p.caption,
+    is_showcase: p.isShowcase,
+    created_by: p.createdBy,
+  };
+}
+
+export function projectInternalMessageToApi(
+  m: ProjectInternalMessage,
+): Record<string, unknown> {
+  return {
+    id: m.id,
+    project_id: m.projectId,
+    sender_id: m.senderId ?? null,
+    sender_name: m.senderName,
+    message_type: m.messageType,
+    content: m.content,
+    is_resolved: m.isResolved,
+    attachments: m.attachments ? [...m.attachments] : [],
+    created_at: m.createdAt,
+  };
+}
+
+export function projectInternalMessageFromApi(
+  raw: Record<string, unknown>,
+): ProjectInternalMessage {
+  const attachRaw = raw.attachments;
+  const validTypes: ProjectInternalMessageType[] = [
+    'comment',
+    'technical_query',
+    'query_response',
+    'design_change',
+    'production_alert',
+    'gate_approval',
+  ];
+  const typeRaw = str(raw.message_type ?? raw.messageType);
+  const messageType = validTypes.includes(typeRaw as ProjectInternalMessageType)
+    ? (typeRaw as ProjectInternalMessageType)
+    : 'comment';
+
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    senderId: str(raw.sender_id ?? raw.senderId) || undefined,
+    senderName: str(raw.sender_name ?? raw.senderName) || 'Usuario',
+    messageType,
+    content: str(raw.content),
+    isResolved: bool(raw.is_resolved ?? raw.isResolved, true),
+    attachments: Array.isArray(attachRaw) ? attachRaw.map(String) : undefined,
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Warranty Desk Mappers (CRM Phase 3)
+// ---------------------------------------------------------------------------
+
+function refabricationPieceToApi(
+  p: WarrantyRefabricationPiece,
+): Record<string, unknown> {
+  return {
+    piece_description: p.pieceDescription,
+    material_name: p.materialName,
+    length_mm: p.lengthMm,
+    width_mm: p.widthMm,
+    quantity: p.quantity,
+    grain: p.grain,
+    L1: p.L1,
+    L2: p.L2,
+    W1: p.W1,
+    W2: p.W2,
+    part_name: p.partName ?? '',
+    part_code: p.partCode ?? '',
+    module_code: p.moduleCode ?? '',
+    notes: p.notes ?? '',
+  };
+}
+
+function refabricationPieceFromApi(
+  raw: Record<string, unknown>,
+): WarrantyRefabricationPiece {
+  return {
+    pieceDescription: str(raw.piece_description ?? raw.pieceDescription),
+    materialName: str(raw.material_name ?? raw.materialName),
+    lengthMm: num(raw.length_mm ?? raw.lengthMm),
+    widthMm: num(raw.width_mm ?? raw.widthMm),
+    quantity: num(raw.quantity, 1),
+    grain: (num(raw.grain, 1) === 0 ? 0 : 1) as 0 | 1,
+    L1: (num(raw.L1, 0) === 1 ? 1 : 0) as 0 | 1,
+    L2: (num(raw.L2, 0) === 1 ? 1 : 0) as 0 | 1,
+    W1: (num(raw.W1, 0) === 1 ? 1 : 0) as 0 | 1,
+    W2: (num(raw.W2, 0) === 1 ? 1 : 0) as 0 | 1,
+    partName: str(raw.part_name ?? raw.partName) || undefined,
+    partCode: str(raw.part_code ?? raw.partCode) || undefined,
+    moduleCode: str(raw.module_code ?? raw.moduleCode) || undefined,
+    notes: str(raw.notes) || undefined,
+  };
+}
+
+export function warrantyTicketPhotoToApi(
+  p: WarrantyTicketPhoto,
+): Record<string, unknown> {
+  return {
+    id: p.id,
+    ticket_id: p.ticketId,
+    kind: p.kind,
+    url: p.url,
+    thumbnail_url: p.thumbnailUrl,
+    caption: p.caption ?? '',
+    created_at: p.createdAt,
+  };
+}
+
+export function warrantyTicketPhotoFromApi(
+  raw: Record<string, unknown>,
+): WarrantyTicketPhoto {
+  const validKinds: WarrantyPhotoKind[] = ['issue_report', 'resolution_proof'];
+  const kindRaw = str(raw.kind);
+  const kind = validKinds.includes(kindRaw as WarrantyPhotoKind)
+    ? (kindRaw as WarrantyPhotoKind)
+    : 'issue_report';
+
+  return {
+    id: str(raw.id),
+    ticketId: str(raw.ticket_id ?? raw.ticketId),
+    kind,
+    url: str(raw.url),
+    thumbnailUrl: str(raw.thumbnail_url ?? raw.thumbnailUrl, str(raw.url)),
+    caption: str(raw.caption) || undefined,
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+  };
+}
+
+export function warrantyTicketToApi(
+  t: WarrantyTicket,
+): Record<string, unknown> {
+  return {
+    id: t.id,
+    ticket_number: t.ticketNumber,
+    project_id: t.projectId,
+    customer_id: t.customerId ?? null,
+    title: t.title,
+    description: t.description,
+    category: t.category,
+    priority: t.priority,
+    status: t.status,
+    assigned_technician_id: t.assignedTechnicianId ?? null,
+    scheduled_date: t.scheduledDate ?? null,
+    resolved_at: t.resolvedAt ?? null,
+    resolution_notes: t.resolutionNotes ?? '',
+    refabrication_pieces: (t.refabricationPieces ?? []).map(
+      refabricationPieceToApi,
+    ),
+    photos: (t.photos ?? []).map(warrantyTicketPhotoToApi),
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
+  };
+}
+
+export function warrantyTicketFromApi(
+  raw: Record<string, unknown>,
+): WarrantyTicket {
+  const validCategories: WarrantyTicketCategory[] = [
+    'hardware_adjustment',
+    'damaged_part',
+    'finishing_defect',
+    'installation_issue',
+    'other',
+  ];
+  const validPriorities: WarrantyTicketPriority[] = ['low', 'normal', 'urgent'];
+  const validStatuses: WarrantyTicketStatus[] = [
+    'open',
+    'visit_scheduled',
+    'in_progress',
+    'resolved',
+    'cancelled',
+  ];
+
+  const catRaw = str(raw.category);
+  const prioRaw = str(raw.priority);
+  const statusRaw = str(raw.status);
+
+  const category = validCategories.includes(catRaw as WarrantyTicketCategory)
+    ? (catRaw as WarrantyTicketCategory)
+    : 'other';
+  const priority = validPriorities.includes(prioRaw as WarrantyTicketPriority)
+    ? (prioRaw as WarrantyTicketPriority)
+    : 'normal';
+  const status = validStatuses.includes(statusRaw as WarrantyTicketStatus)
+    ? (statusRaw as WarrantyTicketStatus)
+    : 'open';
+
+  const piecesRaw = raw.refabrication_pieces ?? raw.refabricationPieces;
+  const pieces = Array.isArray(piecesRaw)
+    ? piecesRaw.map((p) => refabricationPieceFromApi(p as Record<string, unknown>))
+    : [];
+
+  const photosRaw = raw.photos;
+  const photos = Array.isArray(photosRaw)
+    ? photosRaw.map((p) => warrantyTicketPhotoFromApi(p as Record<string, unknown>))
+    : [];
+
+  return {
+    id: str(raw.id),
+    ticketNumber: str(raw.ticket_number ?? raw.ticketNumber),
+    projectId: str(raw.project_id ?? raw.projectId),
+    customerId: str(raw.customer_id ?? raw.customerId) || undefined,
+    title: str(raw.title),
+    description: str(raw.description),
+    category,
+    priority,
+    status,
+    assignedTechnicianId:
+      str(raw.assigned_technician_id ?? raw.assignedTechnicianId) || undefined,
+    scheduledDate:
+      str(raw.scheduled_date ?? raw.scheduledDate) || undefined,
+    resolvedAt: str(raw.resolved_at ?? raw.resolvedAt) || undefined,
+    resolutionNotes:
+      str(raw.resolution_notes ?? raw.resolutionNotes) || undefined,
+    refabricationPieces: pieces,
+    photos,
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+    updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
+  };
+}
+
+
+

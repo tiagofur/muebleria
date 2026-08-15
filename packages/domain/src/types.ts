@@ -838,7 +838,24 @@ export interface Project {
    * Portfolio owner user id (F034 / OWN-*). May differ from createdBy after reassignment.
    */
   readonly ownerUserId?: string;
+  /**
+   * Technical / Production engineer in charge (CRM Phase 2).
+   */
+  readonly assignedEngineerId?: string;
+  /**
+   * Engineering & production lifecycle stage (CRM Phase 2).
+   */
+  readonly technicalStatus?: ProjectTechnicalStatus;
+  /**
+   * Date/time when site measurements/survey were completed.
+   */
+  readonly surveyCompletedAt?: string;
+  /**
+   * Planned installation date in Obra (YYYY-MM-DD).
+   */
+  readonly installationScheduledDate?: string;
   readonly currency: string;
+
   readonly marginFactor: number;
   readonly laborFixedCost: number;
   readonly status: ProjectStatus;
@@ -911,6 +928,58 @@ export interface Project {
    */
   readonly history?: readonly ProjectVersion[];
 }
+
+/** Lifecycle stage for a project photo. */
+export type ProjectPhotoStage = 'survey' | 'in_workshop' | 'installed' | 'delivery_receipt';
+
+/** Photo attached to a project gallery across its lifecycle. */
+export interface ProjectPhoto {
+  readonly id: string;
+  readonly projectId: string;
+  readonly stage: ProjectPhotoStage;
+  readonly url: string;
+  readonly thumbnailUrl?: string;
+  readonly caption?: string;
+  readonly isShowcase: boolean;
+  readonly createdBy?: string;
+  readonly createdAt: string;
+  readonly updatedAt?: string;
+}
+
+/** Technical status of a project in engineering and production. */
+export type ProjectTechnicalStatus =
+  | 'pending_assignment'
+  | 'in_review'
+  | 'changes_requested'
+  | 'approved_for_production'
+  | 'in_workshop'
+  | 'ready_to_install'
+  | 'installed'
+  | 'completed';
+
+/** Classification for internal messages and collaboration queries. */
+export type ProjectInternalMessageType =
+  | 'comment'
+  | 'technical_query'
+  | 'query_response'
+  | 'design_change'
+  | 'production_alert'
+  | 'gate_approval';
+
+/** Internal communication message between sales, engineering and workshop. */
+export interface ProjectInternalMessage {
+  readonly id: string;
+  readonly projectId: string;
+  readonly senderId?: string;
+  readonly senderName: string;
+  readonly messageType: ProjectInternalMessageType;
+  readonly content: string;
+  readonly isResolved: boolean;
+  readonly attachments?: readonly string[];
+  readonly createdAt: string;
+}
+
+
 
 /**
  * Immutable snapshot of a superseded Project version (#200).
@@ -1116,6 +1185,17 @@ export interface ProductionCutRow {
   readonly moduleCode?: string;
   /** Stable label key for matching piece labels (F046/F048). */
   readonly labelRef?: string;
+  /** Material identity for workshop lists (cut row stays name-compatible). */
+  readonly materialCode?: string;
+  /** Board thickness in mm from the resolved part. */
+  readonly thicknessMm?: number;
+  /**
+   * Assigned edge band for this row's banded sides — what to load in the
+   * edge bander. Undefined when no single band applies / part has none.
+   */
+  readonly edgeBandCode?: string;
+  readonly edgeBandName?: string;
+  readonly edgeBandThicknessMm?: number;
 }
 
 /** Aggregated hardware line for purchase-list export (EXP-08). */
@@ -1198,3 +1278,73 @@ export interface ProjectMaterialSummary {
   readonly totalEdgeCost: number;
   readonly totalHardwareCost: number;
 }
+
+// ---------------------------------------------------------------------------
+// Warranty Desk & Post-Sale Tickets (CRM Phase 3)
+// ---------------------------------------------------------------------------
+
+export type WarrantyTicketCategory =
+  | 'hardware_adjustment'
+  | 'damaged_part'
+  | 'finishing_defect'
+  | 'installation_issue'
+  | 'other';
+
+export type WarrantyTicketPriority = 'low' | 'normal' | 'urgent';
+
+export type WarrantyTicketStatus =
+  | 'open'
+  | 'visit_scheduled'
+  | 'in_progress'
+  | 'resolved'
+  | 'cancelled';
+
+export type WarrantyPhotoKind = 'issue_report' | 'resolution_proof';
+
+export interface WarrantyRefabricationPiece {
+  readonly pieceDescription: string;
+  readonly materialName: string;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly quantity: number;
+  readonly grain: Grain;
+  readonly L1: 0 | 1;
+  readonly L2: 0 | 1;
+  readonly W1: 0 | 1;
+  readonly W2: 0 | 1;
+  readonly partName?: string;
+  readonly partCode?: string;
+  readonly moduleCode?: string;
+  readonly notes?: string;
+}
+
+export interface WarrantyTicketPhoto {
+  readonly id: string;
+  readonly ticketId: string;
+  readonly kind: WarrantyPhotoKind;
+  readonly url: string;
+  readonly thumbnailUrl: string;
+  readonly caption?: string;
+  readonly createdAt: string;
+}
+
+export interface WarrantyTicket {
+  readonly id: string;
+  readonly ticketNumber: string;
+  readonly projectId: string;
+  readonly customerId?: string;
+  readonly title: string;
+  readonly description: string;
+  readonly category: WarrantyTicketCategory;
+  readonly priority: WarrantyTicketPriority;
+  readonly status: WarrantyTicketStatus;
+  readonly assignedTechnicianId?: string;
+  readonly scheduledDate?: string;
+  readonly resolvedAt?: string;
+  readonly resolutionNotes?: string;
+  readonly refabricationPieces: readonly WarrantyRefabricationPiece[];
+  readonly photos: readonly WarrantyTicketPhoto[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+

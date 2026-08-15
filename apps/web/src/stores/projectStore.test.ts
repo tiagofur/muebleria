@@ -767,3 +767,67 @@ describe('useBackendBreakdownEffect', () => {
     expect(typeof useBackendBreakdownEffect).toBe('function');
   });
 });
+
+describe('projectStore — Warranty Desk & Refabrication (CRM Phase 3)', () => {
+  it('loads, creates, updates and deletes warranty tickets', async () => {
+    const mockTicket: import('@muebles/domain').WarrantyTicket = {
+      id: 'ticket-1',
+      ticketNumber: 'GAR-001',
+      projectId: 'proj-1',
+      title: 'Puerta descuadrada',
+      description: 'Roza con el lateral',
+      category: 'damaged_part',
+      priority: 'normal',
+      status: 'open',
+      refabricationPieces: [],
+      photos: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { deps } = makeDeps({
+      getWarrantyTickets: async (filter) => [mockTicket],
+      createWarrantyTicket: async (ticket) => ({
+        ...mockTicket,
+        id: 'ticket-2',
+        ticketNumber: 'GAR-002',
+        title: ticket.title,
+        category: ticket.category ?? 'damaged_part',
+        priority: ticket.priority ?? 'normal',
+      }),
+      updateWarrantyTicket: async (id, updates) => ({
+        ...mockTicket,
+        ...updates,
+      }),
+      deleteWarrantyTicket: async () => {},
+    });
+
+
+    const store = createProjectStore({ deps });
+
+    // Load
+    await store.getState().loadProjectWarranties('proj-1');
+    expect(store.getState().warranties['proj-1']).toHaveLength(1);
+
+    // Create
+    await store.getState().createWarrantyTicket({
+      projectId: 'proj-1',
+      title: 'Placa rota',
+      description: 'Llegó partida',
+      category: 'damaged_part',
+      priority: 'urgent',
+    });
+    expect(store.getState().warranties['proj-1']).toHaveLength(2);
+    expect(store.getState().warranties['proj-1']![0]!.title).toBe('Placa rota');
+
+    // Update
+    await store.getState().updateWarrantyTicket('ticket-1', { status: 'resolved' });
+    expect(store.getState().warranties['proj-1']!.find((t) => t.id === 'ticket-1')!.status).toBe('resolved');
+
+    // Delete
+    await store.getState().deleteWarrantyTicket('ticket-1', 'proj-1');
+    expect(store.getState().warranties['proj-1']).toHaveLength(1);
+    expect(store.getState().warranties['proj-1']![0]!.id).toBe('ticket-2');
+  });
+});
+

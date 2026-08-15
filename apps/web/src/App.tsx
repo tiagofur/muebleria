@@ -70,6 +70,8 @@ import {
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
+
+
 import {
   AppShell,
   EdgesCatalog,
@@ -536,7 +538,77 @@ function AppContent({
       getRepository().deleteProjectTemplate(id) as Promise<void>,
     getAuthToken: () => useWorkspaceStore.getState().getAuthToken(),
     baseUrl: DEFAULT_API_BASE,
+    getProjectPhotos: (id) => {
+      const repo = getRepository();
+      return repo?.getProjectPhotos ? repo.getProjectPhotos(id) : Promise.resolve([]);
+    },
+    uploadProjectPhoto: (id, file, stage, caption) => {
+      const repo = getRepository();
+      return repo?.uploadProjectPhoto
+        ? repo.uploadProjectPhoto(id, file, { stage, caption })
+        : Promise.reject(new Error('No storage'));
+    },
+    updateProjectPhoto: (id, photoId, updates) => {
+      const repo = getRepository();
+      return repo?.updateProjectPhoto
+        ? repo.updateProjectPhoto(id, photoId, updates)
+        : Promise.reject(new Error('No storage'));
+    },
+    deleteProjectPhoto: (id, photoId) => {
+      const repo = getRepository();
+      return repo?.deleteProjectPhoto
+        ? repo.deleteProjectPhoto(id, photoId)
+        : Promise.resolve();
+    },
+    getProjectInternalMessages: (id) => {
+      const repo = getRepository();
+      return repo?.getProjectInternalMessages ? repo.getProjectInternalMessages(id) : Promise.resolve([]);
+    },
+    createProjectInternalMessage: (msg) => {
+      const repo = getRepository();
+      return repo?.createProjectInternalMessage
+        ? repo.createProjectInternalMessage(msg)
+        : Promise.reject(new Error('No storage'));
+    },
+    updateProjectTechnicalWorkflow: (id, updates) => {
+      const repo = getRepository();
+      return repo?.updateProjectTechnicalWorkflow
+        ? repo.updateProjectTechnicalWorkflow(id, updates)
+        : Promise.reject(new Error('No storage'));
+    },
+    getWarrantyTickets: (filter) => {
+      const repo = getRepository();
+      return repo?.getWarrantyTickets ? repo.getWarrantyTickets(filter) : Promise.resolve([]);
+    },
+    createWarrantyTicket: (ticket) => {
+      const repo = getRepository();
+      return repo?.createWarrantyTicket
+        ? repo.createWarrantyTicket(ticket)
+        : Promise.reject(new Error('No storage'));
+    },
+    updateWarrantyTicket: (id, updates) => {
+      const repo = getRepository();
+      return repo?.updateWarrantyTicket
+        ? repo.updateWarrantyTicket(id, updates)
+        : Promise.reject(new Error('No storage'));
+    },
+    deleteWarrantyTicket: (id) => {
+      const repo = getRepository();
+      return repo?.deleteWarrantyTicket
+        ? repo.deleteWarrantyTicket(id)
+        : Promise.resolve();
+    },
+    uploadWarrantyTicketPhoto: (ticketId, file, data) => {
+      const repo = getRepository();
+      return repo?.uploadWarrantyTicketPhoto
+        ? repo.uploadWarrantyTicketPhoto(ticketId, file, data)
+        : Promise.reject(new Error('No storage'));
+    },
   });
+
+
+
+
   const projects = useProjectStore((s) => s.projects);
   const projectTemplates = useProjectStore((s) => s.projectTemplates);
   const projectActions = useProjectStore();
@@ -742,6 +814,26 @@ function AppContent({
   }, [projects, selectedProjectId]);
 
   useBackendBreakdownEffect(selectedProjectId, selectedProject, session);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      void getProjectStoreState().loadProjectPhotos(selectedProjectId);
+      void getProjectStoreState().loadProjectMessages(selectedProjectId);
+      void getProjectStoreState().loadProjectWarranties(selectedProjectId);
+    }
+  }, [selectedProjectId]);
+
+  const selectedProjectCutRows = useMemo(() => {
+    if (!selectedProject || !catalog) return [];
+    try {
+      return generateCutRows(selectedProject, catalog);
+    } catch {
+      return [];
+    }
+  }, [selectedProject, catalog]);
+
+
+
 
   // Derive catalog slices safely so hooks below always run (Rules of Hooks).
   // Early return for loading MUST stay after every useCallback/useMemo.
@@ -2205,6 +2297,11 @@ function AppContent({
       {navId === 'customers' ? (
         <CustomersScreen
           customers={customers}
+          projects={projectsForRole}
+          onOpenProject={(projectId) => {
+            navigate(`/cotizaciones/${projectId}`);
+          }}
+          workshopName={workshopSettings?.workshopName}
           onCreate={createCustomer}
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}
@@ -2217,6 +2314,7 @@ function AppContent({
           ownerLabels={ownerLabels}
         />
       ) : null}
+
       {navId === 'users' && showAdminUsers && authToken ? (
         <UsersScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
       ) : null}
@@ -2465,7 +2563,38 @@ function AppContent({
           onRestoreVersion={restoreProjectVersion}
           showCosts={showCosts}
           autoPresentId={presentId}
+          photos={selectedProjectId ? projectActions.photos[selectedProjectId] : undefined}
+          onUploadPhotos={projectActions.uploadProjectPhotos}
+          onUpdatePhoto={projectActions.updateProjectPhoto}
+          onDeletePhoto={projectActions.deleteProjectPhoto}
+          workshopName={workshopSettings?.workshopName}
+          internalMessages={selectedProjectId ? projectActions.internalMessages[selectedProjectId] : undefined}
+          onSendInternalMessage={projectActions.sendProjectMessage}
+          onUpdateTechnicalWorkflow={projectActions.updateProjectTechnicalWorkflow}
+          currentUserId={authUser?.id}
+          warranties={selectedProjectId ? projectActions.warranties[selectedProjectId] : undefined}
+          availableCutRows={selectedProjectCutRows}
+          onCreateWarrantyTicket={projectActions.createWarrantyTicket}
+          onUpdateWarrantyTicket={projectActions.updateWarrantyTicket}
+          onDeleteWarrantyTicket={(ticketId) => {
+            if (selectedProjectId) {
+              return projectActions.deleteWarrantyTicket(ticketId, selectedProjectId);
+            }
+            return Promise.resolve();
+          }}
+          onUploadWarrantyPhoto={(ticketId, file, kind, caption) => {
+            if (selectedProjectId) {
+              return projectActions.uploadWarrantyPhoto(ticketId, selectedProjectId, file, kind, caption);
+            }
+            return Promise.resolve();
+          }}
+          onExportWarrantyRefabricationOptimizer={projectActions.exportWarrantyRefabricationOptimizer}
         />
+
+
+
+
+
       ) : null}
 
       <OnboardingTourModal

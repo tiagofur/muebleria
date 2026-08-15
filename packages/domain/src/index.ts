@@ -71,7 +71,24 @@ export type {
   MaterialUsageRow,
   EdgeUsageRow,
   ProjectMaterialSummary,
+  ProjectPhotoStage,
+  ProjectPhoto,
+  ProjectTechnicalStatus,
+  ProjectInternalMessageType,
+  ProjectInternalMessage,
+  WarrantyTicketCategory,
+  WarrantyTicketPriority,
+  WarrantyTicketStatus,
+  WarrantyPhotoKind,
+  WarrantyRefabricationPiece,
+  WarrantyTicketPhoto,
+  WarrantyTicket,
 } from './types';
+
+
+
+export * from './crm';
+
 
 export {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -372,6 +389,13 @@ export {
   setProjectItemFloorStatus,
   countFloorStatuses,
 } from './productionFloor';
+
+export {
+  summarizeProductionTotals,
+  type ProductionTotals,
+  type ProductionMaterialTotal,
+  type ProductionEdgeTotal,
+} from './productionTotals';
 
 export {
   computeProductionDesignFingerprint,

@@ -1582,6 +1582,31 @@ describe('generateCutRows', () => {
     });
   });
 
+  it('carries material code, thickness and the assigned edge band per row', () => {
+    const rows = generateCutRows(gabOnlyProject, plantillaCatalogWithModules);
+    const costado = rows.find((r) => r.partName === 'Costado Gabinete')!;
+    // Material identity + board thickness from the resolved part.
+    expect(costado.materialCode).toBe(
+      plantillaCatalogWithModules.materials.find(
+        (m) => m.name === 'ARAUCO BLANCO',
+      )?.code,
+    );
+    expect(costado.thicknessMm).toBeGreaterThan(0);
+    // When a band is assigned it must be a real catalog band with thickness.
+    if (costado.edgeBandCode) {
+      const band = plantillaCatalogWithModules.edges.find(
+        (e) => e.code === costado.edgeBandCode,
+      );
+      expect(band).toBeTruthy();
+      expect(costado.edgeBandName).toBe(band!.name);
+      expect(costado.edgeBandThicknessMm).toBe(band!.thicknessMm);
+    }
+    // Unbanded parts never carry a band.
+    const respaldo = rows.find((r) => r.partName === 'Respaldo Gabinete')!;
+    expect(respaldo.L1 + respaldo.L2 + respaldo.W1 + respaldo.W2).toBe(0);
+    expect(respaldo.edgeBandCode).toBeUndefined();
+  });
+
   it('VAL-05: throws when there are no board parts to export', () => {
     const emptyModule: Module = {
       id: 'mod-hw-only',

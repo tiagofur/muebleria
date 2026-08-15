@@ -30,23 +30,37 @@ import type {
   OptionGroup,
   Project,
   ProjectMaterialSummary,
+  ProjectPhoto,
+  ProjectPhotoStage,
   ProjectStatus,
+  ProjectTechnicalStatus,
+  ProjectInternalMessage,
+  ProjectInternalMessageType,
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
+  WarrantyPhotoKind,
+  WarrantyRefabricationPiece,
+  WarrantyTicket,
 } from '@muebles/domain';
+import { TECHNICAL_STATUS_METADATA } from '@muebles/domain';
+
 
 import {
+  Camera,
   Check,
   ChevronLeft,
   Copy,
   Factory,
+  HardHat,
   LayoutTemplate,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   RotateCcw,
   Send,
   Trash2,
+  Wrench,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -56,6 +70,10 @@ import {
 import { KitchenPlanPanel } from './KitchenPlanPanel';
 import { QuoteScenarioCompare } from './QuoteScenarioCompare';
 import { InstallationChecklistPanel } from './InstallationChecklistPanel';
+import { ProjectPhotosGallery } from './ProjectPhotosGallery';
+import { InternalCommsPanel } from './InternalCommsPanel';
+import { WarrantyTicketsPanel } from './WarrantyTicketsPanel';
+import { WhatsAppButton } from '../../crm/WhatsAppButton';
 import { StatusBadge } from './StatusBadge';
 import { ProjectItemsSection } from './ProjectItemsSection';
 import { ProjectOptionsSection } from './ProjectOptionsSection';
@@ -76,7 +94,10 @@ import {
 } from './projectDetailContext';
 
 /** Advanced quote tools — collapsed by default (progressive disclosure). */
-type QuoteToolsPanel = 'kitchen' | 'scenarios' | 'checklist' | null;
+type QuoteToolsPanel = 'kitchen' | 'scenarios' | 'checklist' | 'photos' | 'internal_comms' | 'warranties' | null;
+
+
+
 
 /**
  * Exactly one lifecycle/production primary per status (buttons.css rule).
@@ -228,7 +249,68 @@ export interface ProjectDetailViewProps {
   readonly canForceReopenClosed?: boolean;
   readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
+
+  // --- CRM & Project Photos (CRM Phase 1) ---
+  readonly photos?: readonly ProjectPhoto[];
+  readonly onUploadPhotos?: (
+    files: File[],
+    stage: ProjectPhotoStage,
+    caption?: string,
+  ) => Promise<void>;
+  readonly onUpdatePhoto?: (
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ) => Promise<void>;
+  readonly onDeletePhoto?: (photoId: string) => Promise<void>;
+  readonly workshopName?: string;
+
+  // --- CRM & Internal Comms (CRM Phase 2) ---
+  readonly internalMessages?: readonly ProjectInternalMessage[];
+  readonly onSendInternalMessage?: (msg: {
+    messageType: ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+  }) => Promise<void> | void;
+  readonly onUpdateTechnicalWorkflow?: (updates: {
+    assignedEngineerId?: string;
+    technicalStatus?: ProjectTechnicalStatus;
+    surveyCompletedAt?: string;
+    installationScheduledDate?: string;
+    comment?: string;
+  }) => Promise<void> | void;
+  readonly assignableOwners?: readonly { readonly id: string; readonly name: string; readonly role?: string }[];
+  readonly currentUserId?: string;
+
+  // --- CRM & Warranty Desk (CRM Phase 3) ---
+  readonly warranties?: readonly WarrantyTicket[];
+  readonly availableCutRows?: readonly import('@muebles/domain').ProductionCutRow[];
+  readonly onCreateWarrantyTicket?: (
+    ticket: Partial<WarrantyTicket> & {
+      projectId: string;
+      title: string;
+      category: import('@muebles/domain').WarrantyTicketCategory;
+      priority: import('@muebles/domain').WarrantyTicketPriority;
+    },
+  ) => Promise<void>;
+
+  readonly onUpdateWarrantyTicket?: (
+    ticketId: string,
+    updates: Partial<WarrantyTicket>,
+  ) => Promise<void>;
+  readonly onDeleteWarrantyTicket?: (ticketId: string) => Promise<void>;
+  readonly onUploadWarrantyPhoto?: (
+    ticketId: string,
+    file: File,
+    kind?: WarrantyPhotoKind,
+    caption?: string,
+  ) => Promise<void>;
+  readonly onExportWarrantyRefabricationOptimizer?: (
+    ticket: WarrantyTicket,
+  ) => void;
 }
+
+
+
 
 // ─── Inner component (consumes context) ─────────────────────────────
 
@@ -518,9 +600,37 @@ function ProjectDetailViewInner(): ReactNode {
             <div className="workspace-chrome__title-row">
               <h2 className="workspace-chrome__title">{project.name}</h2>
               <StatusBadge status={project.status} />
+              {project.technicalStatus && project.technicalStatus !== 'pending_assignment' ? (
+                <span
+                  className={`internal-comms__status-badge internal-comms__status-badge--${TECHNICAL_STATUS_METADATA[project.technicalStatus].color}`}
+                  style={{ marginLeft: '0.25rem', fontSize: '0.75rem' }}
+                  title={TECHNICAL_STATUS_METADATA[project.technicalStatus].description}
+                >
+                  <HardHat size={12} />
+                  {TECHNICAL_STATUS_METADATA[project.technicalStatus].shortLabel}
+                </span>
+              ) : null}
             </div>
+
             <p className="workspace-chrome__subtitle">
               {resolveCustomerName(project.customerId, customers)}
+              {(() => {
+                const cust = customers.find((c) => c.id === project.customerId);
+                return cust?.phone ? (
+                  <>
+                    <span className="workspace-chrome__dot" aria-hidden>·</span>
+                    <WhatsAppButton
+                      customerName={cust.name}
+                      phone={cust.phone}
+                      projectName={project.name}
+                      quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, project.currency) : undefined}
+                      workshopName={ctx.workshopName}
+                      compact
+                      label="WhatsApp"
+                    />
+                  </>
+                ) : null;
+              })()}
               <span className="workspace-chrome__dot" aria-hidden>·</span>
               {project.items.length} mueble{project.items.length === 1 ? '' : 's'}
               <span className="workspace-chrome__dot" aria-hidden>·</span>
@@ -532,6 +642,7 @@ function ProjectDetailViewInner(): ReactNode {
                 </>
               ) : null}
             </p>
+
           </div>
         </div>
         <div className="workspace-chrome__total" data-testid="project-detail-total">
@@ -716,6 +827,7 @@ function ProjectDetailViewInner(): ReactNode {
                 <button
                   type="button"
                   aria-pressed={toolsPanel === 'checklist'}
+
                   className={
                     toolsPanel === 'checklist'
                       ? 'project-detail__tools-tab project-detail__tools-tab--active'
@@ -726,8 +838,77 @@ function ProjectDetailViewInner(): ReactNode {
                 >
                   Checklist instalación
                 </button>
+                <button
+                  type="button"
+                  aria-pressed={toolsPanel === 'photos'}
+
+                  className={
+                    toolsPanel === 'photos'
+                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
+                      : 'project-detail__tools-tab'
+                  }
+                  data-testid="project-tools-photos"
+                  onClick={() => toggleTools('photos')}
+                >
+                  <Camera size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+                  Fotos / Galería
+                  {ctx.photos && ctx.photos.length > 0 ? (
+                    <span
+                      className="project-detail__tools-badge"
+                      title={`${ctx.photos.length} fotos`}
+                    >
+                      {ctx.photos.length}
+                    </span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={toolsPanel === 'internal_comms'}
+                  className={
+                    toolsPanel === 'internal_comms'
+                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
+                      : 'project-detail__tools-tab'
+                  }
+                  data-testid="project-tools-internal-comms"
+                  onClick={() => toggleTools('internal_comms')}
+                >
+                  <MessageSquare size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+                  Handoff & Chat
+                  {ctx.internalMessages && ctx.internalMessages.length > 0 ? (
+                    <span
+                      className="project-detail__tools-badge"
+                      title={`${ctx.internalMessages.length} mensajes`}
+                    >
+                      {ctx.internalMessages.length}
+                    </span>
+                  ) : null}
+                </button>
+
+                <button
+                  type="button"
+                  aria-pressed={toolsPanel === 'warranties'}
+                  className={
+                    toolsPanel === 'warranties'
+                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
+                      : 'project-detail__tools-tab'
+                  }
+                  data-testid="project-tools-warranties"
+                  onClick={() => toggleTools('warranties')}
+                >
+                  <Wrench size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+                  Garantías & Re-corte
+                  {ctx.warranties && ctx.warranties.length > 0 ? (
+                    <span
+                      className="project-detail__tools-badge"
+                      title={`${ctx.warranties.length} tickets de garantía`}
+                    >
+                      {ctx.warranties.length}
+                    </span>
+                  ) : null}
+                </button>
               </div>
             </div>
+
 
             {toolsPanel === null ? (
               <p className="project-detail__tools-hint">
@@ -829,7 +1010,62 @@ function ProjectDetailViewInner(): ReactNode {
                 />
               </div>
             ) : null}
+
+            {toolsPanel === 'photos' ? (
+              <div
+                className="project-detail__tools-panel"
+                data-testid="project-tools-panel-photos"
+              >
+                <ProjectPhotosGallery
+                  projectId={project.id}
+                  photos={ctx.photos ?? []}
+                  onUploadPhotos={ctx.onUploadPhotos ?? (async () => {})}
+                  onUpdatePhoto={ctx.onUpdatePhoto ?? (async () => {})}
+                  onDeletePhoto={ctx.onDeletePhoto ?? (async () => {})}
+                  readOnly={!canMutate}
+                />
+              </div>
+            ) : null}
+
+            {toolsPanel === 'internal_comms' ? (
+              <div
+                className="project-detail__tools-panel"
+                data-testid="project-tools-panel-internal-comms"
+              >
+                <InternalCommsPanel
+                  project={project}
+                  messages={ctx.internalMessages ?? []}
+                  assignableOwners={ctx.assignableOwners?.map((o) => ({ id: o.id, label: o.name })) ?? []}
+                  currentUserId={ctx.currentUserId}
+                  onSendMessage={ctx.onSendInternalMessage ?? (() => {})}
+                  onUpdateTechnicalWorkflow={ctx.onUpdateTechnicalWorkflow ?? (() => {})}
+                />
+              </div>
+            ) : null}
+
+            {toolsPanel === 'warranties' ? (
+              <div
+                className="project-detail__tools-panel"
+                data-testid="project-tools-panel-warranties"
+              >
+                <WarrantyTicketsPanel
+                  projectId={project.id}
+                  projectName={project.name}
+                  customerId={project.customerId}
+                  tickets={ctx.warranties ?? []}
+                  availableCutRows={ctx.availableCutRows ?? []}
+                  technicians={ctx.assignableOwners?.map((o) => ({ id: o.id, name: o.name })) ?? []}
+                  onCreateTicket={ctx.onCreateWarrantyTicket ?? (async () => {})}
+                  onUpdateTicket={ctx.onUpdateWarrantyTicket ?? (async () => {})}
+                  onDeleteTicket={ctx.onDeleteWarrantyTicket}
+                  onUploadPhoto={ctx.onUploadWarrantyPhoto}
+                  onExportRefabricationOptimizer={ctx.onExportWarrantyRefabricationOptimizer}
+                />
+              </div>
+            ) : null}
           </section>
+
+
         </div>
 
         <ProjectTotalsAside />
@@ -906,7 +1142,25 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     canMarkProduced: props.canMarkProduced,
     onRestoreVersion: props.onRestoreVersion,
     projectTemplates: props.projectTemplates,
+    photos: props.photos,
+    onUploadPhotos: props.onUploadPhotos,
+    onUpdatePhoto: props.onUpdatePhoto,
+    onDeletePhoto: props.onDeletePhoto,
+    workshopName: props.workshopName,
+    internalMessages: props.internalMessages,
+    onSendInternalMessage: props.onSendInternalMessage,
+    onUpdateTechnicalWorkflow: props.onUpdateTechnicalWorkflow,
+    assignableOwners: props.assignableOwners,
+    currentUserId: props.currentUserId,
+    warranties: props.warranties,
+    availableCutRows: props.availableCutRows,
+    onCreateWarrantyTicket: props.onCreateWarrantyTicket,
+    onUpdateWarrantyTicket: props.onUpdateWarrantyTicket,
+    onDeleteWarrantyTicket: props.onDeleteWarrantyTicket,
+    onUploadWarrantyPhoto: props.onUploadWarrantyPhoto,
+    onExportWarrantyRefabricationOptimizer: props.onExportWarrantyRefabricationOptimizer,
   };
+
 
   return (
     <div className="project-detail" data-testid="project-detail">
@@ -916,3 +1170,4 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     </div>
   );
 }
+

@@ -1,8 +1,17 @@
-/**
- * Storage port — UI and shells depend on this interface only (API-ready).
- */
-
-import type { Catalog, Project, ProjectTemplate, Workspace } from '@muebles/domain';
+import type {
+  Catalog,
+  Project,
+  ProjectInternalMessage,
+  ProjectInternalMessageType,
+  ProjectPhoto,
+  ProjectPhotoStage,
+  ProjectTechnicalStatus,
+  ProjectTemplate,
+  WarrantyPhotoKind,
+  WarrantyTicket,
+  WarrantyTicketPhoto,
+  Workspace,
+} from '@muebles/domain';
 
 export interface WorkspaceRepository {
   /** Load full workspace; missing file → seed workspace. */
@@ -29,4 +38,79 @@ export interface WorkspaceRepository {
   /** Update existing template (upsert PUT→POST fallback). */
   saveProjectTemplate(template: ProjectTemplate): Promise<void>;
   deleteProjectTemplate(templateId: string): Promise<void>;
+
+  // --- Project gallery photos (CRM Phase 1) ---
+
+  getProjectPhotos?(projectId: string): Promise<readonly ProjectPhoto[]>;
+  uploadProjectPhoto?(
+    projectId: string,
+    file: File | Blob,
+    data?: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ): Promise<ProjectPhoto>;
+  createProjectPhoto?(photo: {
+    projectId: string;
+    stage: ProjectPhotoStage;
+    url: string;
+    caption?: string;
+    isShowcase?: boolean;
+  }): Promise<ProjectPhoto>;
+  updateProjectPhoto?(
+    projectId: string,
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ): Promise<ProjectPhoto>;
+  deleteProjectPhoto?(projectId: string, photoId: string): Promise<void>;
+
+  // --- Internal messages & technical workflow (CRM Phase 2) ---
+
+  getProjectInternalMessages?(projectId: string): Promise<readonly ProjectInternalMessage[]>;
+  createProjectInternalMessage?(message: {
+    projectId: string;
+    messageType?: ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+    attachments?: readonly string[];
+  }): Promise<ProjectInternalMessage>;
+  updateProjectTechnicalWorkflow?(
+    projectId: string,
+    updates: {
+      assignedEngineerId?: string;
+      technicalStatus?: ProjectTechnicalStatus;
+      surveyCompletedAt?: string;
+      installationScheduledDate?: string;
+      comment?: string;
+    },
+  ): Promise<Project>;
+
+  // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
+
+  getWarrantyTickets?(filter?: {
+    projectId?: string;
+    customerId?: string;
+    status?: string;
+  }): Promise<readonly WarrantyTicket[]>;
+  getWarrantyTicket?(ticketId: string): Promise<WarrantyTicket | null>;
+  createWarrantyTicket?(
+    ticket: Partial<WarrantyTicket> & Pick<WarrantyTicket, 'projectId' | 'title'>,
+  ): Promise<WarrantyTicket>;
+  updateWarrantyTicket?(
+    ticketId: string,
+    updates: Partial<WarrantyTicket>,
+  ): Promise<WarrantyTicket>;
+  deleteWarrantyTicket?(ticketId: string): Promise<void>;
+  uploadWarrantyTicketPhoto?(
+    ticketId: string,
+    file: File | Blob,
+    data?: { kind?: WarrantyPhotoKind; caption?: string },
+  ): Promise<WarrantyTicketPhoto>;
+  createWarrantyTicketPhoto?(photo: {
+    ticketId: string;
+    url: string;
+    kind?: WarrantyPhotoKind;
+    caption?: string;
+  }): Promise<WarrantyTicketPhoto>;
+  deleteWarrantyTicketPhoto?(ticketId: string, photoId: string): Promise<void>;
 }
+
+
+

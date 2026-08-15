@@ -27,10 +27,28 @@ import type {
   Project,
   ProjectItem,
   ProjectKitchenLayout,
+  ProjectPhoto,
+  ProjectPhotoStage,
   ProjectStatus,
+  ProjectTechnicalStatus,
+  ProjectInternalMessage,
+  ProjectInternalMessageType,
   ProjectTemplate,
   QuoteBreakdown,
+  WarrantyPhotoKind,
+  WarrantyRefabricationPiece,
+  WarrantyTicket,
+  WarrantyTicketCategory,
+  WarrantyTicketPriority,
+  WarrantyTicketStatus,
 } from '@muebles/domain';
+import {
+  exportWarrantyRefabricationOptimizer,
+  warrantyRefabricationFilename,
+} from '@muebles/excel';
+
+
+
 import {
   acquirePlanEditSession as acquirePlanEditSessionDomain,
   applyRoleChoiceToProject,
@@ -80,6 +98,10 @@ function draftToProjectMeta(
   | 'laborFixedCost'
   | 'status'
   | 'notes'
+  | 'assignedEngineerId'
+  | 'technicalStatus'
+  | 'surveyCompletedAt'
+  | 'installationScheduledDate'
 > {
   return {
     name: draft.name.trim(),
@@ -89,8 +111,13 @@ function draftToProjectMeta(
     laborFixedCost: Number(draft.laborFixedCost),
     status: draft.status,
     notes: optionalNotes(draft.notes),
+    assignedEngineerId: draft.assignedEngineerId?.trim() || undefined,
+    technicalStatus: draft.technicalStatus,
+    surveyCompletedAt: draft.surveyCompletedAt || undefined,
+    installationScheduledDate: draft.installationScheduledDate || undefined,
   };
 }
+
 
 /**
  * Prefer an existing catalog customer id from the draft. Only create when the
@@ -151,7 +178,66 @@ export interface ProjectStoreDeps {
   readonly baseUrl: string;
   /** Fetch impl (for tests). */
   readonly fetchImpl?: typeof fetch;
+  /** Project photos (CRM Phase 1). */
+  readonly getProjectPhotos?: (projectId: string) => Promise<readonly ProjectPhoto[]>;
+  readonly uploadProjectPhoto?: (
+    projectId: string,
+    file: File,
+    stage: ProjectPhotoStage,
+    caption?: string,
+  ) => Promise<ProjectPhoto>;
+  readonly updateProjectPhoto?: (
+    projectId: string,
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ) => Promise<ProjectPhoto>;
+  readonly deleteProjectPhoto?: (
+    projectId: string,
+    photoId: string,
+  ) => Promise<void>;
+  /** Project internal messages and technical workflow (CRM Phase 2). */
+  readonly getProjectInternalMessages?: (projectId: string) => Promise<readonly ProjectInternalMessage[]>;
+  readonly createProjectInternalMessage?: (message: {
+    projectId: string;
+    messageType?: ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+    attachments?: readonly string[];
+  }) => Promise<ProjectInternalMessage>;
+  readonly updateProjectTechnicalWorkflow?: (
+    projectId: string,
+    updates: {
+      assignedEngineerId?: string;
+      technicalStatus?: ProjectTechnicalStatus;
+      surveyCompletedAt?: string;
+      installationScheduledDate?: string;
+      comment?: string;
+    },
+  ) => Promise<Project>;
+  /** Warranty Desk (CRM Phase 3). */
+  readonly getWarrantyTickets?: (filter?: {
+    projectId?: string;
+    customerId?: string;
+    status?: string;
+  }) => Promise<readonly WarrantyTicket[]>;
+  readonly createWarrantyTicket?: (
+    ticket: Partial<WarrantyTicket> & Pick<WarrantyTicket, 'projectId' | 'title'>,
+  ) => Promise<WarrantyTicket>;
+  readonly updateWarrantyTicket?: (
+    ticketId: string,
+    updates: Partial<WarrantyTicket>,
+  ) => Promise<WarrantyTicket>;
+  readonly deleteWarrantyTicket?: (ticketId: string) => Promise<void>;
+  readonly uploadWarrantyTicketPhoto?: (
+    ticketId: string,
+    file: File,
+    data?: { kind?: WarrantyPhotoKind; caption?: string },
+  ) => Promise<any>;
 }
+
+
+
+
 
 export type ProjectActor = {
   readonly id?: string;
@@ -281,7 +367,69 @@ export interface ProjectState {
     choiceId: string,
     onNavigateToNewProject?: (id: string) => void,
   ) => void;
+
+  // --- Project Photos (CRM Phase 1) ---
+  readonly photos: Readonly<Record<string, readonly ProjectPhoto[]>>;
+  readonly loadProjectPhotos: (projectId: string) => Promise<void>;
+  readonly uploadProjectPhotos: (
+    projectId: string,
+    files: File[],
+    stage: ProjectPhotoStage,
+    caption?: string,
+  ) => Promise<void>;
+  readonly updateProjectPhoto: (
+    projectId: string,
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ) => Promise<void>;
+  readonly deleteProjectPhoto: (projectId: string, photoId: string) => Promise<void>;
+
+  // --- Internal Communications & Technical Handoff (CRM Phase 2) ---
+  readonly internalMessages: Readonly<Record<string, readonly ProjectInternalMessage[]>>;
+  readonly loadProjectMessages: (projectId: string) => Promise<void>;
+  readonly sendProjectMessage: (message: {
+    projectId: string;
+    messageType?: ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+    attachments?: readonly string[];
+  }) => Promise<void>;
+  readonly updateProjectTechnicalWorkflow: (
+    projectId: string,
+    updates: {
+      assignedEngineerId?: string;
+      technicalStatus?: ProjectTechnicalStatus;
+      surveyCompletedAt?: string;
+      installationScheduledDate?: string;
+      comment?: string;
+    },
+  ) => Promise<void>;
+
+  // --- Warranty Desk & Refabrication (CRM Phase 3) ---
+  readonly warranties: Readonly<Record<string, readonly WarrantyTicket[]>>;
+  readonly loadProjectWarranties: (projectId: string) => Promise<void>;
+  readonly createWarrantyTicket: (
+    ticket: Partial<WarrantyTicket> & Pick<WarrantyTicket, 'projectId' | 'title'>,
+  ) => Promise<void>;
+  readonly updateWarrantyTicket: (
+    ticketId: string,
+    updates: Partial<WarrantyTicket>,
+  ) => Promise<void>;
+  readonly deleteWarrantyTicket: (ticketId: string, projectId: string) => Promise<void>;
+  readonly uploadWarrantyPhoto: (
+    ticketId: string,
+    projectId: string,
+    file: File,
+    kind?: WarrantyPhotoKind,
+    caption?: string,
+  ) => Promise<void>;
+  readonly exportWarrantyRefabricationOptimizer: (
+    ticket: WarrantyTicket,
+  ) => Promise<void>;
 }
+
+
+
 
 interface InternalOptions {
   readonly deps: ProjectStoreDeps;
@@ -335,8 +483,10 @@ export function createProjectStore(options: InternalOptions) {
     backendBreakdown: null,
     breakdownLoading: false,
     breakdownError: null,
+    photos: {},
 
     // --- Lifecycle ---
+
     setProjects: (projects) => set({ projects }),
     setProjectTemplates: (templates) =>
       set({ projectTemplates: templates }),
@@ -917,8 +1067,316 @@ export function createProjectStore(options: InternalOptions) {
       });
       onNavigateToNewProject?.(withB.id);
     },
+
+    // --- Project Photos (CRM Phase 1) ---
+    loadProjectPhotos: async (projectId: string) => {
+      if (!options.deps.getProjectPhotos) return;
+      try {
+        const items = await options.deps.getProjectPhotos(projectId);
+        set((state) => ({
+          photos: { ...state.photos, [projectId]: items },
+        }));
+      } catch (err) {
+        console.error('Error loading project photos:', err);
+      }
+    },
+
+    uploadProjectPhotos: async (
+      projectId: string,
+      files: File[],
+      stage: ProjectPhotoStage,
+      caption?: string,
+    ) => {
+      if (!options.deps.uploadProjectPhoto) return;
+      try {
+        const uploaded = await Promise.all(
+          files.map((f) => options.deps.uploadProjectPhoto!(projectId, f, stage, caption)),
+        );
+        set((state) => {
+          const existing = state.photos[projectId] ?? [];
+          return {
+            photos: {
+              ...state.photos,
+              [projectId]: [...uploaded, ...existing],
+            },
+          };
+        });
+        toast({ type: 'success', message: `${files.length} foto(s) subida(s) con éxito` });
+      } catch (err) {
+        console.error('Error uploading project photos:', err);
+        toast({ type: 'error', message: 'Error al subir fotos' });
+      }
+    },
+
+    updateProjectPhoto: async (
+      projectId: string,
+      photoId: string,
+      updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+    ) => {
+      // Optimistic update
+      set((state) => {
+        const existing = state.photos[projectId] ?? [];
+        const next = existing.map((p) => (p.id === photoId ? { ...p, ...updates } : p));
+        return {
+          photos: { ...state.photos, [projectId]: next },
+        };
+      });
+      if (options.deps.updateProjectPhoto) {
+        try {
+          await options.deps.updateProjectPhoto(projectId, photoId, updates);
+        } catch (err) {
+          console.error('Error updating project photo:', err);
+          void get().loadProjectPhotos(projectId);
+        }
+      }
+    },
+
+    deleteProjectPhoto: async (projectId: string, photoId: string) => {
+      // Optimistic delete
+      set((state) => {
+        const existing = state.photos[projectId] ?? [];
+        const next = existing.filter((p) => p.id !== photoId);
+        return {
+          photos: { ...state.photos, [projectId]: next },
+        };
+      });
+      if (options.deps.deleteProjectPhoto) {
+        try {
+          await options.deps.deleteProjectPhoto(projectId, photoId);
+          toast({ type: 'success', message: 'Foto eliminada' });
+        } catch (err) {
+          console.error('Error deleting project photo:', err);
+          toast({ type: 'error', message: 'Error al eliminar foto' });
+          void get().loadProjectPhotos(projectId);
+        }
+      }
+    },
+
+    // --- Internal Communications & Technical Handoff (CRM Phase 2) ---
+    internalMessages: {},
+
+    loadProjectMessages: async (projectId: string) => {
+      if (!options.deps.getProjectInternalMessages) return;
+      try {
+        const msgs = await options.deps.getProjectInternalMessages(projectId);
+        set((state) => ({
+          internalMessages: {
+            ...state.internalMessages,
+            [projectId]: msgs,
+          },
+        }));
+      } catch (err) {
+        console.error('Failed to load project internal messages', err);
+      }
+    },
+
+    sendProjectMessage: async (message) => {
+      if (!options.deps.createProjectInternalMessage) return;
+      try {
+        const created = await options.deps.createProjectInternalMessage(message);
+        set((state) => {
+          const current = state.internalMessages[message.projectId] ?? [];
+          return {
+            internalMessages: {
+              ...state.internalMessages,
+              [message.projectId]: [...current, created],
+            },
+          };
+        });
+        toast({ type: 'success', message: 'Mensaje enviado correctamente' });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: `Error al enviar mensaje: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
+
+    updateProjectTechnicalWorkflow: async (projectId, updates) => {
+      if (!options.deps.updateProjectTechnicalWorkflow) {
+        patch(set, get, (prev) =>
+          prev.map((p) => {
+            if (p.id !== projectId) return p;
+            return {
+              ...p,
+              assignedEngineerId:
+                updates.assignedEngineerId !== undefined
+                  ? updates.assignedEngineerId
+                  : p.assignedEngineerId,
+              technicalStatus: updates.technicalStatus ?? p.technicalStatus,
+              surveyCompletedAt: updates.surveyCompletedAt ?? p.surveyCompletedAt,
+              installationScheduledDate:
+                updates.installationScheduledDate ?? p.installationScheduledDate,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        );
+        return;
+      }
+      try {
+        const updated = await options.deps.updateProjectTechnicalWorkflow(
+          projectId,
+          updates,
+        );
+        patch(set, get, (prev) =>
+          prev.map((p) => (p.id === projectId ? updated : p)),
+        );
+
+        if (options.deps.getProjectInternalMessages) {
+          const msgs = await options.deps.getProjectInternalMessages(projectId);
+          set((state) => ({
+            internalMessages: {
+              ...state.internalMessages,
+              [projectId]: msgs,
+            },
+          }));
+        }
+        toast({ type: 'success', message: 'Flujo técnico actualizado' });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: `Error al actualizar flujo técnico: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
+
+    // --- Warranty Desk (CRM Phase 3) ---
+    warranties: {},
+
+    loadProjectWarranties: async (projectId: string) => {
+      if (!options.deps.getWarrantyTickets) return;
+      try {
+        const tickets = await options.deps.getWarrantyTickets({ projectId });
+        set((state) => ({
+          warranties: {
+            ...state.warranties,
+            [projectId]: tickets,
+          },
+        }));
+      } catch (err) {
+        console.error('Failed to load project warranty tickets', err);
+      }
+    },
+
+    createWarrantyTicket: async (ticket) => {
+      if (!options.deps.createWarrantyTicket) return;
+      try {
+        const created = await options.deps.createWarrantyTicket(ticket);
+        set((state) => {
+          const current = state.warranties[ticket.projectId] ?? [];
+          return {
+            warranties: {
+              ...state.warranties,
+              [ticket.projectId]: [created, ...current],
+            },
+          };
+        });
+        toast({ type: 'success', message: 'Ticket de garantía creado' });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: `Error al crear ticket: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
+
+    updateWarrantyTicket: async (ticketId, updates) => {
+      if (!options.deps.updateWarrantyTicket) return;
+      try {
+        const updated = await options.deps.updateWarrantyTicket(ticketId, updates);
+        set((state) => {
+          const projectId = updated.projectId;
+          const current = state.warranties[projectId] ?? [];
+          return {
+            warranties: {
+              ...state.warranties,
+              [projectId]: current.map((t) => (t.id === ticketId ? updated : t)),
+            },
+          };
+        });
+        toast({ type: 'success', message: 'Ticket de garantía actualizado' });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: `Error al actualizar ticket: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
+
+    deleteWarrantyTicket: async (ticketId, projectId) => {
+      if (!options.deps.deleteWarrantyTicket) return;
+      try {
+        await options.deps.deleteWarrantyTicket(ticketId);
+        set((state) => {
+          const current = state.warranties[projectId] ?? [];
+          return {
+            warranties: {
+              ...state.warranties,
+              [projectId]: current.filter((t) => t.id !== ticketId),
+            },
+          };
+        });
+        toast({ type: 'success', message: 'Ticket eliminado' });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: `Error al eliminar ticket: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
+
+    uploadWarrantyPhoto: async (ticketId, projectId, file, kind, caption) => {
+      if (!options.deps.uploadWarrantyTicketPhoto) return;
+      try {
+        await options.deps.uploadWarrantyTicketPhoto(ticketId, file, { kind, caption });
+        if (options.deps.getWarrantyTickets) {
+          const tickets = await options.deps.getWarrantyTickets({ projectId });
+          set((state) => ({
+            warranties: {
+              ...state.warranties,
+              [projectId]: tickets,
+            },
+          }));
+        }
+        toast({ type: 'success', message: 'Foto adjuntada al ticket' });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: `Error al subir foto: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
+
+    exportWarrantyRefabricationOptimizer: async (ticket) => {
+      try {
+        const bytes = await exportWarrantyRefabricationOptimizer(ticket);
+        const filename = warrantyRefabricationFilename(ticket);
+        const blob = new Blob([bytes as BlobPart], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({ type: 'success', message: `Descargado: ${filename}` });
+      } catch (err) {
+        console.error('Error exportando re-corte a optimizer:', err);
+        toast({
+          type: 'error',
+          message: `Error al exportar re-corte: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    },
   }));
 }
+
+
+
 
 // ---------------------------------------------------------------------------
 // Singleton + hook (same pattern as catalogStore)

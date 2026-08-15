@@ -182,6 +182,8 @@ export function ProductionQueue({
         <ul className="prod-queue__list" aria-label="Cola de fabricación">
           {rows.map((project) => {
             const sale = salePriceFor(project.id);
+            const lastExport = project.production?.lastExportAt;
+            const nestingAt = project.nestingImport?.importedAt;
             return (
               <li key={project.id} className="prod-queue-card">
                 <div className="prod-queue-card__row">
@@ -211,6 +213,26 @@ export function ProductionQueue({
                         </>
                       ) : null}
                     </p>
+                    {lastExport || nestingAt ? (
+                      <p className="prod-queue-card__signals">
+                        {lastExport ? (
+                          <span
+                            className="prod-queue-card__signal"
+                            data-testid={`prod-signal-pack-${project.id}`}
+                          >
+                            Pack generado {formatIsoDate(lastExport)}
+                          </span>
+                        ) : null}
+                        {nestingAt ? (
+                          <span
+                            className="prod-queue-card__signal"
+                            data-testid={`prod-signal-nesting-${project.id}`}
+                          >
+                            Nesting {formatIsoDate(nestingAt)}
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="prod-queue-card__actions">
                     {onOpenOrder ? (

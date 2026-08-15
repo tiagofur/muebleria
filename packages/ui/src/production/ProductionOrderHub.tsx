@@ -15,6 +15,7 @@ import type {
 } from '@muebles/domain';
 import {
   generatePartDrillingData,
+  summarizeProductionTotals,
 } from '@muebles/domain';
 import {
   ArrowLeft,
@@ -147,6 +148,60 @@ function CheckRow({
         {detail ? <p className="prod-hub__check-detail">{detail}</p> : null}
       </div>
     </li>
+  );
+}
+
+/** Factory purchase/load totals from the resolved cut rows (domain math). */
+function FactoryTotalsBlock({
+  rows,
+}: {
+  readonly rows: readonly ProductionCutRow[];
+}): ReactNode {
+  const totals = summarizeProductionTotals(rows);
+  if (totals.materials.length === 0) return null;
+  return (
+    <div
+      className="prod-hub__factory-totals"
+      data-testid="prod-hub-factory-totals"
+    >
+      <h3 className="prod-hub__section-title">Comprar / cargar</h3>
+      <div className="prod-hub__totals-grid">
+        <div className="prod-hub__totals-col">
+          <p className="prod-hub__totals-col-title">Tablero</p>
+          <ul className="prod-hub__totals-list">
+            {totals.materials.map((m) => (
+              <li key={m.key}>
+                <span>
+                  {m.name}
+                  {m.thicknessMm ? ` · ${m.thicknessMm} mm` : ''}
+                </span>
+                <span className="prod-hub__totals-num">
+                  {m.areaM2.toLocaleString('es-MX')} m²
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {totals.edges.length > 0 ? (
+          <div className="prod-hub__totals-col">
+            <p className="prod-hub__totals-col-title">Canto</p>
+            <ul className="prod-hub__totals-list">
+              {totals.edges.map((e) => (
+                <li key={e.key}>
+                  <span>
+                    {e.name}
+                    {e.thicknessMm ? ` · ${e.thicknessMm} mm` : ''}
+                  </span>
+                  <span className="prod-hub__totals-num">
+                    {e.ml.toLocaleString('es-MX')} ml
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -513,6 +568,10 @@ export function ProductionOrderHub({
                 </div>
               </div>
             </div>
+
+            {cutRows && cutRows.length > 0 ? (
+              <FactoryTotalsBlock rows={cutRows} />
+            ) : null}
 
             <div className="prod-hub__checklist-block">
               <h3 className="prod-hub__section-title">Listo para cortar</h3>

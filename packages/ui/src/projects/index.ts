@@ -12,6 +12,23 @@ export {
 } from './ProjectsScreen';
 
 export {
+  InternalCommsPanel,
+  type InternalCommsPanelProps,
+} from './components/InternalCommsPanel';
+
+export {
+  ProjectPhotosGallery,
+  type ProjectPhotosGalleryProps,
+} from './components/ProjectPhotosGallery';
+
+export {
+  WarrantyTicketsPanel,
+  type WarrantyTicketsPanelProps,
+} from './components/WarrantyTicketsPanel';
+
+
+
+export {
   PROJECT_STATUSES,
   statusOptionsForRole,
   canEditQuoteContent,

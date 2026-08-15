@@ -454,6 +454,60 @@ func (s *stubStore) DeleteProjectTemplate(_ context.Context, _ string) error {
 	return nil
 }
 
+func (s *stubStore) ListProjectPhotos(_ context.Context, _ string) ([]domain.ProjectPhoto, error) {
+	return []domain.ProjectPhoto{}, nil
+}
+func (s *stubStore) GetProjectPhotoByID(_ context.Context, _ string) (*domain.ProjectPhoto, error) {
+	return nil, nil
+}
+func (s *stubStore) CreateProjectPhoto(_ context.Context, _ *domain.ProjectPhoto) error {
+	return nil
+}
+func (s *stubStore) UpdateProjectPhoto(_ context.Context, _ string, _ string, _ bool, _ domain.ProjectPhotoStage) (*domain.ProjectPhoto, error) {
+	return nil, nil
+}
+func (s *stubStore) DeleteProjectPhoto(_ context.Context, _ string) error {
+	return nil
+}
+
+func (s *stubStore) ListProjectInternalMessages(_ context.Context, _ string) ([]domain.ProjectInternalMessage, error) {
+	return []domain.ProjectInternalMessage{}, nil
+}
+func (s *stubStore) CreateProjectInternalMessage(_ context.Context, _ *domain.ProjectInternalMessage) error {
+	return nil
+}
+func (s *stubStore) UpdateProjectTechnicalWorkflow(_ context.Context, _ string, _ *string, _ string, _ *string, _ *string) error {
+	return nil
+}
+
+func (s *stubStore) ListWarrantyTickets(_ context.Context, _, _, _ string) ([]domain.WarrantyTicket, error) {
+	return []domain.WarrantyTicket{}, nil
+}
+func (s *stubStore) GetWarrantyTicketByID(_ context.Context, _ string) (*domain.WarrantyTicket, error) {
+	return nil, nil
+}
+func (s *stubStore) CreateWarrantyTicket(_ context.Context, _ *domain.WarrantyTicket) error {
+	return nil
+}
+func (s *stubStore) UpdateWarrantyTicket(_ context.Context, _ *domain.WarrantyTicket) error {
+	return nil
+}
+func (s *stubStore) DeleteWarrantyTicket(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubStore) ListWarrantyTicketPhotos(_ context.Context, _ string) ([]domain.WarrantyTicketPhoto, error) {
+	return []domain.WarrantyTicketPhoto{}, nil
+}
+func (s *stubStore) AddWarrantyTicketPhoto(_ context.Context, _ *domain.WarrantyTicketPhoto) error {
+	return nil
+}
+func (s *stubStore) DeleteWarrantyTicketPhoto(_ context.Context, _, _ string) error {
+	return nil
+}
+
+
+
+
 // dupErr mimics the wrapped error the storage layer returns on a unique
 // violation: fmt.Errorf("error creating X: %w", pgErr).
 func dupErr(op string) error {

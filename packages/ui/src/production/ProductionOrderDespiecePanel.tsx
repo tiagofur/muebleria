@@ -4,6 +4,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import type { ProductionCutRow } from '@muebles/domain';
+import { summarizeProductionTotals } from '@muebles/domain';
 
 export type ProductionOrderDespiecePanelProps = {
   readonly cutRows: readonly ProductionCutRow[] | null;
@@ -27,10 +28,26 @@ function grainLabel(row: ProductionCutRow): string {
   return row.grain === 1 ? '↗' : '—';
 }
 
+function materialCell(row: ProductionCutRow): string {
+  return row.thicknessMm
+    ? `${row.materialName} · ${row.thicknessMm} mm`
+    : row.materialName;
+}
+
+function edgeCell(row: ProductionCutRow): string {
+  const flags = edgesLabel(row);
+  const band = row.edgeBandName
+    ? `${row.edgeBandName}${row.edgeBandThicknessMm ? ` ${row.edgeBandThicknessMm} mm` : ''}`
+    : null;
+  if (!band) return flags;
+  return flags === '—' ? band : `${flags} · ${band}`;
+}
+
 type GroupTotals = {
   readonly lines: number;
   readonly units: number;
   readonly areaM2: number;
+  readonly edgeMl: number;
 };
 
 function groupTotals(rows: readonly ProductionCutRow[]): GroupTotals {
@@ -40,10 +57,12 @@ function groupTotals(rows: readonly ProductionCutRow[]): GroupTotals {
     units += r.quantity;
     areaMm2 += r.lengthMm * r.widthMm * r.quantity;
   }
+  const { totalEdgeMl } = summarizeProductionTotals(rows);
   return {
     lines: rows.length,
     units,
     areaM2: Math.round((areaMm2 / 1_000_000) * 100) / 100,
+    edgeMl: totalEdgeMl,
   };
 }
 
@@ -53,6 +72,7 @@ function totalsLabel(totals: GroupTotals): string {
     `${totals.units} pieza${totals.units === 1 ? '' : 's'}`,
     `${totals.areaM2.toLocaleString('es-MX')} m²`,
   ];
+  if (totals.edgeMl > 0) parts.push(`${totals.edgeMl.toLocaleString('es-MX')} ml canto`);
   return parts.join(' · ');
 }
 
@@ -230,8 +250,8 @@ export function ProductionOrderDespiecePanel({
                       <td>
                         {row.lengthMm}×{row.widthMm}
                       </td>
-                      <td>{row.materialName}</td>
-                      <td>{edgesLabel(row)}</td>
+                      <td>{materialCell(row)}</td>
+                      <td>{edgeCell(row)}</td>
                       <td aria-label={row.grain === 1 ? 'con veta' : 'sin veta'}>
                         {grainLabel(row)}
                       </td>

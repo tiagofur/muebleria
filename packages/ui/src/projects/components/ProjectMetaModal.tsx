@@ -264,29 +264,76 @@ export function ProjectMetaModal({
             </p>
           </div>
         </div>
-        {canAssignOwner && assignableOwners.length > 0 ? (
+        {assignableOwners.length > 0 ? (
           <div
-            className="catalog-form__field"
-            style={{ marginTop: 'var(--space-3)' }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 'var(--space-3)',
+              marginTop: 'var(--space-3)',
+            }}
           >
-            <label htmlFor="prj-owner">Responsable</label>
-            <select
-              id="prj-owner"
-              value={draft.ownerUserId}
-              onChange={(e) =>
-                setDraft({ ...draft, ownerUserId: e.target.value })
-              }
-              data-testid="project-owner-select"
-            >
-              {assignableOwners.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                  {u.role ? ` (${u.role})` : ''}
-                </option>
-              ))}
-            </select>
+            {canAssignOwner ? (
+              <div className="catalog-form__field">
+                <label htmlFor="prj-owner">Responsable Comercial (Ventas)</label>
+                <select
+                  id="prj-owner"
+                  value={draft.ownerUserId}
+                  onChange={(e) =>
+                    setDraft({ ...draft, ownerUserId: e.target.value })
+                  }
+                  data-testid="project-owner-select"
+                >
+                  {assignableOwners.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                      {u.role ? ` (${u.role})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="catalog-form__field">
+              <label htmlFor="prj-engineer">Responsable Técnico / Ingeniero</label>
+              <select
+                id="prj-engineer"
+                value={draft.assignedEngineerId ?? ''}
+                onChange={(e) =>
+                  setDraft({ ...draft, assignedEngineerId: e.target.value })
+                }
+                data-testid="project-engineer-select"
+              >
+                <option value="">-- Sin asignar --</option>
+                {assignableOwners.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                    {u.role ? ` (${u.role})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         ) : null}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 'var(--space-3)',
+            marginTop: 'var(--space-3)',
+          }}
+        >
+          <div className="catalog-form__field">
+            <label htmlFor="prj-install-date">Fecha de Instalación en Obra</label>
+            <input
+              id="prj-install-date"
+              type="date"
+              value={draft.installationScheduledDate ?? ''}
+              onChange={(e) =>
+                setDraft({ ...draft, installationScheduledDate: e.target.value })
+              }
+            />
+          </div>
+        </div>
         <div className="catalog-form__field" style={{ marginTop: 'var(--space-3)' }}>
           <label htmlFor="prj-notes">Notas</label>
           <input
@@ -295,6 +342,7 @@ export function ProjectMetaModal({
             onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
           />
         </div>
+
       </form>
     </Modal>
   );

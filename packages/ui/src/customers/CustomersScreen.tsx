@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import type { Customer } from '@muebles/domain';
+import type { Customer, Project } from '@muebles/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Users } from 'lucide-react';
 import {
 	EmptyState,
@@ -16,7 +16,10 @@ import {
 	type CatalogStatusFilter,
 	validateRequiredName,
 } from '../catalogs/catalogHelpers';
+import { WhatsAppButton } from '../crm/WhatsAppButton';
+import { StatusBadge } from '../projects/components/StatusBadge';
 import '../catalogs/catalogs.css';
+
 
 export type CustomerDraft = {
 	name: string;
@@ -68,6 +71,9 @@ export interface CustomersScreenProps {
 	readonly currentUserId?: string;
 	/** Optional labels map for owner column (id → name). */
 	readonly ownerLabels?: Readonly<Record<string, string>>;
+	readonly projects?: readonly Project[];
+	readonly onOpenProject?: (projectId: string) => void;
+	readonly workshopName?: string;
 }
 
 export function CustomersScreen({
@@ -82,6 +88,9 @@ export function CustomersScreen({
 	assignableOwners = [],
 	currentUserId = '',
 	ownerLabels = {},
+	projects = [],
+	onOpenProject,
+	workshopName,
 }: CustomersScreenProps): ReactNode {
 	const formId = useId();
 	const [search, setSearch] = useState('');
@@ -165,8 +174,20 @@ export function CustomersScreen({
 			},
 			{
 				key: 'phone',
-				header: 'Teléfono',
-				render: (r) => formatEmpty(r.phone),
+				header: 'Teléfono / WhatsApp',
+				render: (r) => (
+					<div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+						<span>{formatEmpty(r.phone)}</span>
+						{r.phone ? (
+							<WhatsAppButton
+								phone={r.phone}
+								customerName={r.name}
+								workshopName={workshopName}
+								compact
+							/>
+						) : null}
+					</div>
+				),
 			},
 		];
 		if (canAssignOwner) {
@@ -186,7 +207,8 @@ export function CustomersScreen({
 			render: (r) => <ActiveBadge active={r.active} />,
 		});
 		return cols;
-	}, [canAssignOwner, ownerLabels]);
+	}, [canAssignOwner, ownerLabels, workshopName]);
+
 
 	const isTrulyEmpty = customers.length === 0;
 	const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
@@ -260,7 +282,19 @@ export function CustomersScreen({
 								</div>
 								<div className="catalog-row-detail__field">
 									<span className="catalog-row-detail__label">Teléfono</span>
-									<span className="catalog-row-detail__value">{row.phone || 'No especificado'}</span>
+									<span className="catalog-row-detail__value">
+										<div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+											<span>{row.phone || 'No especificado'}</span>
+											{row.phone ? (
+												<WhatsAppButton
+													phone={row.phone}
+													customerName={row.name}
+													workshopName={workshopName}
+													compact
+												/>
+											) : null}
+										</div>
+									</span>
 								</div>
 								<div className="catalog-row-detail__field">
 									<span className="catalog-row-detail__label">Dirección</span>
@@ -286,6 +320,54 @@ export function CustomersScreen({
 										<ActiveBadge active={row.active} />
 									</span>
 								</div>
+								{(() => {
+									const customerProjects = projects.filter((p) => p.customerId === row.id);
+									if (customerProjects.length === 0) return null;
+									return (
+										<div className="catalog-row-detail__field" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
+											<span className="catalog-row-detail__label">
+												Proyectos Asociados ({customerProjects.length})
+											</span>
+											<div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.375rem' }}>
+												{customerProjects.map((p) => (
+													<div
+														key={p.id}
+														style={{
+															display: 'flex',
+															alignItems: 'center',
+															justifyContent: 'space-between',
+															padding: '0.4rem 0.75rem',
+															background: 'var(--color-surface-subtle, #f8fafc)',
+															borderRadius: 'var(--radius-sm, 4px)',
+															border: '1px solid var(--color-border, #e2e8f0)',
+														}}
+													>
+														<div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+															<span style={{ fontWeight: 600, color: 'var(--color-text, #1e293b)' }}>{p.name}</span>
+															<StatusBadge status={p.status} />
+															<span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted, #64748b)' }}>
+																· {p.items.length} mueble{p.items.length === 1 ? '' : 's'}
+															</span>
+														</div>
+														{onOpenProject ? (
+															<button
+																type="button"
+																className="btn btn--small btn--ghost"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	onOpenProject(p.id);
+																}}
+															>
+																Ver cotización
+															</button>
+														) : null}
+													</div>
+												))}
+											</div>
+										</div>
+									);
+								})()}
+
 								<div className="catalog-row-detail__actions">
 									<button
 										type="button"

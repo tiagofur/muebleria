@@ -112,7 +112,29 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
+	// Project gallery photos (CRM Phase 1)
+	mux.Handle("GET /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
+	mux.Handle("POST /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
+	mux.Handle("PATCH /api/projects/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleProjectPhotoByID)))
+	mux.Handle("DELETE /api/projects/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleProjectPhotoByID)))
+
+	// Project internal messages & technical workflow (CRM Phase 2)
+	mux.Handle("GET /api/projects/{id}/messages", authMW(http.HandlerFunc(server.HandleProjectInternalMessages)))
+	mux.Handle("POST /api/projects/{id}/messages", authMW(http.HandlerFunc(server.HandleProjectInternalMessages)))
+	mux.Handle("PATCH /api/projects/{id}/technical-workflow", authMW(http.HandlerFunc(server.HandleProjectTechnicalWorkflow)))
+
+	// Warranty tickets (CRM Phase 3)
+	mux.Handle("GET /api/warranties", authMW(http.HandlerFunc(server.HandleWarrantyTickets)))
+	mux.Handle("POST /api/warranties", authMW(http.HandlerFunc(server.HandleWarrantyTickets)))
+	mux.Handle("GET /api/warranties/{id}", authMW(http.HandlerFunc(server.HandleWarrantyTicketByID)))
+	mux.Handle("PATCH /api/warranties/{id}", authMW(http.HandlerFunc(server.HandleWarrantyTicketByID)))
+	mux.Handle("DELETE /api/warranties/{id}", authMW(http.HandlerFunc(server.HandleWarrantyTicketByID)))
+	mux.Handle("GET /api/warranties/{id}/photos", authMW(http.HandlerFunc(server.HandleWarrantyTicketPhotos)))
+	mux.Handle("POST /api/warranties/{id}/photos", authMW(http.HandlerFunc(server.HandleWarrantyTicketPhotos)))
+	mux.Handle("DELETE /api/warranties/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleWarrantyTicketPhotoDelete)))
+
 	// Plantillas de proyecto (#110 / H15)
+
 	mux.Handle("GET /api/project-templates", authMW(http.HandlerFunc(server.HandleProjectTemplates)))
 	mux.Handle("POST /api/project-templates", authMW(http.HandlerFunc(server.HandleProjectTemplates)))
 	mux.Handle("GET /api/project-templates/{id}", authMW(http.HandlerFunc(server.HandleProjectTemplateByID)))

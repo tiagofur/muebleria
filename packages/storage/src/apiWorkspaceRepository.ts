@@ -1,4 +1,18 @@
-import type { Catalog, Project, ProjectTemplate, Workspace, WorkshopSettings } from '@muebles/domain';
+import type {
+  Catalog,
+  Project,
+  ProjectInternalMessage,
+  ProjectInternalMessageType,
+  ProjectPhoto,
+  ProjectPhotoStage,
+  ProjectTechnicalStatus,
+  ProjectTemplate,
+  WarrantyPhotoKind,
+  WarrantyTicket,
+  WarrantyTicketPhoto,
+  Workspace,
+  WorkshopSettings,
+} from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
   withWorkshopSettings,
@@ -19,13 +33,22 @@ import {
   structureToApi,
   optionGroupToApi,
   projectFromApi,
+  projectInternalMessageFromApi,
+  projectPhotoFromApi,
   projectTemplateFromApi,
   projectTemplateToApi,
   projectToApi,
   sortCategoriesForSave,
+  warrantyTicketFromApi,
+  warrantyTicketPhotoFromApi,
+  warrantyTicketPhotoToApi,
+  warrantyTicketToApi,
   workshopSettingsFromApi,
   workshopSettingsToApi,
 } from './apiMappers';
+
+
+
 import { SCHEMA_VERSION } from './seed';
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
@@ -438,7 +461,352 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       headers: this.getHeaders(),
     });
   }
+
+  // --- Project gallery photos (CRM Phase 1) ---
+
+  async getProjectPhotos(projectId: string): Promise<readonly ProjectPhoto[]> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      throw new Error(`Failed to load project photos: ${res.statusText}`);
+    }
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : [];
+    return list.map((p) => projectPhotoFromApi(p as Record<string, unknown>));
+  }
+
+  async uploadProjectPhoto(
+    projectId: string,
+    file: File | Blob,
+    data?: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ): Promise<ProjectPhoto> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (data?.stage) formData.append('stage', data.stage);
+    if (data?.caption) formData.append('caption', data.caption);
+    if (data?.isShowcase !== undefined) formData.append('is_showcase', String(data.isShowcase));
+
+    const headers: Record<string, string> = {};
+    if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
+      try {
+        const token = globalThis.localStorage.getItem('muebles_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      } catch {
+        // ignore
+      }
+    }
+
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to upload project photo: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return projectPhotoFromApi(raw as Record<string, unknown>);
+  }
+
+  async createProjectPhoto(photo: {
+    projectId: string;
+    stage: ProjectPhotoStage;
+    url: string;
+    caption?: string;
+    isShowcase?: boolean;
+  }): Promise<ProjectPhoto> {
+    const res = await fetch(`${this.baseUrl}/projects/${photo.projectId}/photos`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        stage: photo.stage,
+        url: photo.url,
+        caption: photo.caption,
+        is_showcase: photo.isShowcase,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to create project photo: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return projectPhotoFromApi(raw as Record<string, unknown>);
+  }
+
+  async updateProjectPhoto(
+    projectId: string,
+    photoId: string,
+    updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
+  ): Promise<ProjectPhoto> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos/${photoId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        stage: updates.stage,
+        caption: updates.caption,
+        is_showcase: updates.isShowcase,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to update project photo: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return projectPhotoFromApi(raw as Record<string, unknown>);
+  }
+
+  async deleteProjectPhoto(projectId: string, photoId: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos/${photoId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok && res.status !== 404) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to delete project photo: ${res.status} ${text}`);
+    }
+  }
+
+  async getProjectInternalMessages(projectId: string): Promise<readonly ProjectInternalMessage[]> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/messages`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to load project internal messages: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw.map((r) => projectInternalMessageFromApi(r as Record<string, unknown>));
+  }
+
+  async createProjectInternalMessage(message: {
+    projectId: string;
+    messageType?: ProjectInternalMessageType;
+    content: string;
+    senderName?: string;
+    attachments?: readonly string[];
+  }): Promise<ProjectInternalMessage> {
+    const res = await fetch(`${this.baseUrl}/projects/${message.projectId}/messages`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        message_type: message.messageType ?? 'comment',
+        content: message.content,
+        sender_name: message.senderName,
+        attachments: message.attachments ? [...message.attachments] : [],
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to create internal message: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return projectInternalMessageFromApi(raw as Record<string, unknown>);
+  }
+
+  async updateProjectTechnicalWorkflow(
+    projectId: string,
+    updates: {
+      assignedEngineerId?: string;
+      technicalStatus?: ProjectTechnicalStatus;
+      surveyCompletedAt?: string;
+      installationScheduledDate?: string;
+      comment?: string;
+    },
+  ): Promise<Project> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/technical-workflow`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        assigned_engineer_id: updates.assignedEngineerId,
+        technical_status: updates.technicalStatus,
+        survey_completed_at: updates.surveyCompletedAt,
+        installation_scheduled_date: updates.installationScheduledDate,
+        comment: updates.comment,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to update technical workflow: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return projectFromApi(raw as Record<string, unknown>);
+  }
+
+  // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
+
+  async getWarrantyTickets(filter?: {
+    projectId?: string;
+    customerId?: string;
+    status?: string;
+  }): Promise<readonly WarrantyTicket[]> {
+    const params = new URLSearchParams();
+    if (filter?.projectId) params.set('project_id', filter.projectId);
+    if (filter?.customerId) params.set('customer_id', filter.customerId);
+    if (filter?.status) params.set('status', filter.status);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${this.baseUrl}/warranties${query}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to list warranty tickets: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw.map((t) => warrantyTicketFromApi(t as Record<string, unknown>));
+  }
+
+  async getWarrantyTicket(ticketId: string): Promise<WarrantyTicket | null> {
+    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get warranty ticket: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return warrantyTicketFromApi(raw as Record<string, unknown>);
+  }
+
+  async createWarrantyTicket(
+    ticket: Partial<WarrantyTicket> & Pick<WarrantyTicket, 'projectId' | 'title'>,
+  ): Promise<WarrantyTicket> {
+    const res = await fetch(`${this.baseUrl}/warranties`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        id: ticket.id,
+        ticket_number: ticket.ticketNumber,
+        project_id: ticket.projectId,
+        customer_id: ticket.customerId,
+        title: ticket.title,
+        description: ticket.description,
+        category: ticket.category,
+        priority: ticket.priority,
+        status: ticket.status,
+        assigned_technician_id: ticket.assignedTechnicianId,
+        scheduled_date: ticket.scheduledDate,
+        refabrication_pieces: ticket.refabricationPieces,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to create warranty ticket: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return warrantyTicketFromApi(raw as Record<string, unknown>);
+  }
+
+  async updateWarrantyTicket(
+    ticketId: string,
+    updates: Partial<WarrantyTicket>,
+  ): Promise<WarrantyTicket> {
+    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        title: updates.title,
+        description: updates.description,
+        category: updates.category,
+        priority: updates.priority,
+        status: updates.status,
+        assigned_technician_id: updates.assignedTechnicianId,
+        scheduled_date: updates.scheduledDate,
+        resolved_at: updates.resolvedAt,
+        resolution_notes: updates.resolutionNotes,
+        refabrication_pieces: updates.refabricationPieces,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to update warranty ticket: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return warrantyTicketFromApi(raw as Record<string, unknown>);
+  }
+
+  async deleteWarrantyTicket(ticketId: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok && res.status !== 404) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to delete warranty ticket: ${res.status} ${text}`);
+    }
+  }
+
+  async uploadWarrantyTicketPhoto(
+    ticketId: string,
+    file: File | Blob,
+    data?: { kind?: WarrantyPhotoKind; caption?: string },
+  ): Promise<WarrantyTicketPhoto> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (data?.kind) formData.append('kind', data.kind);
+    if (data?.caption) formData.append('caption', data.caption);
+
+    const headers = this.getHeaders();
+    delete headers['Content-Type'];
+
+    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}/photos`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to upload warranty photo: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return warrantyTicketPhotoFromApi(raw as Record<string, unknown>);
+  }
+
+  async createWarrantyTicketPhoto(photo: {
+    ticketId: string;
+    url: string;
+    kind?: WarrantyPhotoKind;
+    caption?: string;
+  }): Promise<WarrantyTicketPhoto> {
+    const res = await fetch(`${this.baseUrl}/warranties/${photo.ticketId}/photos`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        kind: photo.kind,
+        url: photo.url,
+        caption: photo.caption,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to create warranty photo: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return warrantyTicketPhotoFromApi(raw as Record<string, unknown>);
+  }
+
+  async deleteWarrantyTicketPhoto(ticketId: string, photoId: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}/photos/${photoId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok && res.status !== 404) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to delete warranty photo: ${res.status} ${text}`);
+    }
+  }
 }
+
+
+
 
 /**
  * Reports whether a response indicates a duplicate/conflict — i.e. the entity
