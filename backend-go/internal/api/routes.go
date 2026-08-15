@@ -112,11 +112,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
-	// Project gallery photos (CRM Phase 1)
+	// Project gallery photos (CRM Phase 1) & Commercial Showcase (CRM Phase 4)
 	mux.Handle("GET /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
 	mux.Handle("POST /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
 	mux.Handle("PATCH /api/projects/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleProjectPhotoByID)))
 	mux.Handle("DELETE /api/projects/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleProjectPhotoByID)))
+	mux.Handle("GET /api/showcase/photos", authMW(http.HandlerFunc(server.HandleShowcasePhotos)))
+
 
 	// Project internal messages & technical workflow (CRM Phase 2)
 	mux.Handle("GET /api/projects/{id}/messages", authMW(http.HandlerFunc(server.HandleProjectInternalMessages)))

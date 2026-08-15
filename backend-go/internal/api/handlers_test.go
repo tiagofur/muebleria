@@ -504,6 +504,10 @@ func (s *stubStore) AddWarrantyTicketPhoto(_ context.Context, _ *domain.Warranty
 func (s *stubStore) DeleteWarrantyTicketPhoto(_ context.Context, _, _ string) error {
 	return nil
 }
+func (s *stubStore) ListShowcasePhotos(_ context.Context, _ bool) ([]domain.ShowcasePhotoItem, error) {
+	return []domain.ShowcasePhotoItem{}, nil
+}
+
 
 
 

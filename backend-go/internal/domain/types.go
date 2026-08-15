@@ -650,6 +650,21 @@ type ProjectPhoto struct {
 	UpdatedAt    time.Time         `json:"updated_at"`
 }
 
+// ShowcasePhotoItem is a photo enriched with project and customer names for commercial portfolio presentation.
+type ShowcasePhotoItem struct {
+	ID           string            `json:"id"`
+	ProjectID    string            `json:"project_id"`
+	ProjectName  string            `json:"project_name"`
+	CustomerName string            `json:"customer_name,omitempty"`
+	Stage        ProjectPhotoStage `json:"stage"`
+	URL          string            `json:"url"`
+	ThumbnailURL string            `json:"thumbnail_url,omitempty"`
+	Caption      string            `json:"caption,omitempty"`
+	IsShowcase   bool              `json:"is_showcase"`
+	CreatedAt    time.Time         `json:"created_at"`
+}
+
+
 // TechnicalStatus represents the engineering and production stage of a project.
 type TechnicalStatus string
 

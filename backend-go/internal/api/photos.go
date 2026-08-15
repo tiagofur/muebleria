@@ -11,8 +11,24 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
+// HandleShowcasePhotos handles GET /api/showcase/photos
+func (s *Server) HandleShowcasePhotos(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	onlyShowcase := r.URL.Query().Get("only_showcase") == "true"
+	items, err := s.Store.ListShowcasePhotos(r.Context(), onlyShowcase)
+	if err != nil {
+		respondWithInternalError(w, err, "list showcase photos")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, items)
+}
+
 // HandleProjectPhotos handles GET (list) and POST (upload photo) for /api/projects/{id}/photos
 func (s *Server) HandleProjectPhotos(w http.ResponseWriter, r *http.Request) {
+
 	projectID := r.PathValue("id")
 	if projectID == "" {
 		respondWithError(w, http.StatusBadRequest, "falta el id del proyecto")

@@ -10,6 +10,7 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicket,
   WarrantyTicketPhoto,
+  ShowcasePhotoItem,
   Workspace,
   WorkshopSettings,
 } from '@muebles/domain';
@@ -35,6 +36,7 @@ import {
   projectFromApi,
   projectInternalMessageFromApi,
   projectPhotoFromApi,
+  showcasePhotoItemFromApi,
   projectTemplateFromApi,
   projectTemplateToApi,
   projectToApi,
@@ -46,6 +48,7 @@ import {
   workshopSettingsFromApi,
   workshopSettingsToApi,
 } from './apiMappers';
+
 
 
 
@@ -568,6 +571,21 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Failed to delete project photo: ${res.status} ${text}`);
     }
   }
+
+  async listShowcasePhotos(onlyShowcase = false): Promise<readonly ShowcasePhotoItem[]> {
+    const url = `${this.baseUrl}/showcase/photos${onlyShowcase ? '?only_showcase=true' : ''}`;
+    const res = await fetch(url, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      throw new Error(`Failed to load showcase photos: ${res.statusText}`);
+    }
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : [];
+    return list.map((p) => showcasePhotoItemFromApi(p as Record<string, unknown>));
+  }
+
 
   async getProjectInternalMessages(projectId: string): Promise<readonly ProjectInternalMessage[]> {
     const res = await fetch(`${this.baseUrl}/projects/${projectId}/messages`, {

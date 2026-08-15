@@ -37,7 +37,9 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicketPriority,
   WarrantyTicketStatus,
+  ShowcasePhotoItem,
   WorkshopSettings,
+
 } from '@muebles/domain';
 
 
@@ -2116,6 +2118,25 @@ export function warrantyTicketFromApi(
     updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
   };
 }
+
+export function showcasePhotoItemFromApi(
+  raw: Record<string, unknown>,
+): ShowcasePhotoItem {
+  const stage = (raw.stage as ProjectPhotoStage) || 'installed';
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    projectName: str(raw.project_name ?? raw.projectName),
+    customerName: str(raw.customer_name ?? raw.customerName) || undefined,
+    stage,
+    url: str(raw.url),
+    thumbnailUrl: str(raw.thumbnail_url ?? raw.thumbnailUrl) || undefined,
+    caption: str(raw.caption) || undefined,
+    isShowcase: bool(raw.is_showcase ?? raw.isShowcase),
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+  };
+}
+
 
 
 

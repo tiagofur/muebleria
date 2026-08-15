@@ -33,7 +33,9 @@ describe('summarizeProductionTotals', () => {
     // 2 × (1000×500) = 1 m² ; 2000×500 = 1 m²
     expect(totals.materials).toHaveLength(2);
     expect(totals.totalAreaM2).toBe(2);
-    const bla = totals.materials.find((m) => m.materialCode === 'MAT-BLA')!;
+    const bla = totals.materials.find(
+      (m: { materialCode?: string }) => m.materialCode === 'MAT-BLA',
+    )!;
     expect(bla.pieces).toBe(2);
     expect(bla.lines).toBe(1);
     expect(bla.areaM2).toBe(1);
@@ -53,7 +55,10 @@ describe('summarizeProductionTotals', () => {
       row({ quantity: 1, L1: 1, L2: 1, edgeBandCode: 'CANT-ABS' }),
     ]);
     // First row: (1000 + 500) × 2 = 3000mm. Second: (1000+1000) × 1 = 2000mm.
-    const abs = totals.edges.find((e) => e.edgeBandCode === 'CANT-ABS')!;
+    const abs = totals.edges.find(
+      (e: { edgeBandCode?: string }) => e.edgeBandCode === 'CANT-ABS',
+    )!;
+
     expect(abs.ml).toBe(5);
     expect(abs.name).toBe('ABS Blanco 1 mm');
     expect(abs.thicknessMm).toBe(1);

@@ -10,7 +10,9 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicket,
   WarrantyTicketPhoto,
+  ShowcasePhotoItem,
   Workspace,
+
 } from '@muebles/domain';
 
 export interface WorkspaceRepository {
@@ -60,6 +62,8 @@ export interface WorkspaceRepository {
     updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
   ): Promise<ProjectPhoto>;
   deleteProjectPhoto?(projectId: string, photoId: string): Promise<void>;
+  listShowcasePhotos?(onlyShowcase?: boolean): Promise<readonly ShowcasePhotoItem[]>;
+
 
   // --- Internal messages & technical workflow (CRM Phase 2) ---
 

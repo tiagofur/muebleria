@@ -81,6 +81,33 @@ describe('commercialQuotePdfExport (F045 / #90)', () => {
     expect(bytes[2]).toBe(0x44); // D
     expect(bytes[3]).toBe(0x46); // F
   });
+
+  it('renders optional gallery page when photos are provided (CRM Phase 4)', async () => {
+    // 1x1 transparent PNG buffer
+    const png1x1 = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
+      0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120,
+      156, 99, 0, 1, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68,
+      174, 66, 96, 130,
+    ]);
+
+    const bytes = await commercialQuotePdfExport({
+      ...base,
+      variant: 'detailed',
+      photos: [
+        {
+          imageBytes: png1x1,
+          caption: 'Foto de cocina terminada',
+          isPng: true,
+        },
+      ],
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    // Base 1 page + 1 gallery page = 2 pages
+    expect(doc.getPageCount()).toBe(2);
+  });
 });
+
 
 

@@ -129,6 +129,8 @@ type Store interface {
 	CreateProjectPhoto(ctx context.Context, photo *domain.ProjectPhoto) error
 	UpdateProjectPhoto(ctx context.Context, photoID string, caption string, isShowcase bool, stage domain.ProjectPhotoStage) (*domain.ProjectPhoto, error)
 	DeleteProjectPhoto(ctx context.Context, photoID string) error
+	ListShowcasePhotos(ctx context.Context, onlyShowcase bool) ([]domain.ShowcasePhotoItem, error)
+
 
 	// Project internal messages & technical workflow (CRM Phase 2)
 	ListProjectInternalMessages(ctx context.Context, projectID string) ([]domain.ProjectInternalMessage, error)

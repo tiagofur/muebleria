@@ -318,8 +318,11 @@ describe('ProductionOrderLabelsPanel', () => {
     cleanup();
 
     // Desktop: bridge present → printer name + print button + feedback.
-    const printRaw = vi.fn(async () => ({ ok: true }));
+    const printRaw = vi.fn(
+      async (_printerName: string, _payload: string) => ({ ok: true }),
+    );
     host.electronAPI = { printRaw };
+
     const user = userEvent.setup();
     render_();
     const nameInput = screen.getByTestId(

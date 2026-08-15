@@ -13,6 +13,12 @@ import type { CommercialQuoteLine } from './commercialQuoteExport';
 
 export type CommercialQuotePdfVariant = 'detailed' | 'summary';
 
+export type CommercialQuotePdfPhoto = {
+  readonly imageBytes: Uint8Array | ArrayBuffer;
+  readonly caption?: string;
+  readonly isPng?: boolean;
+};
+
 export type CommercialQuotePdfInput = {
   readonly projectName: string;
   readonly customerName: string;
@@ -26,7 +32,10 @@ export type CommercialQuotePdfInput = {
   readonly variant: CommercialQuotePdfVariant;
   /** Workshop name shown in footer branding. */
   readonly workshopName?: string;
+  /** Optional project photos / renders attached to the commercial proposal (CRM Phase 4). */
+  readonly photos?: readonly CommercialQuotePdfPhoto[];
 };
+
 
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
@@ -455,7 +464,78 @@ export async function commercialQuotePdfExport(
     { size: 8, color: rgb(0.45, 0.47, 0.5) },
   );
 
+  // --- Optional Gallery / Project Reference Photos Page (CRM Phase 4) ---
+  if (input.photos && input.photos.length > 0) {
+    const galleryPage = doc.addPage([PAGE_W, PAGE_H]);
+    let gy = PAGE_H - MARGIN;
+
+    // Header banner matching design tokens
+    galleryPage.drawRectangle({
+      x: MARGIN,
+      y: gy - 36,
+      width: CONTENT_W,
+      height: 36,
+      color: BRAND_PRIMARY,
+    });
+
+    drawBrandMark(galleryPage, MARGIN + 8, gy - 28, 20, BRAND_LIGHT);
+
+    galleryPage.drawText('GALERÍA Y REFERENCIAS DEL PROYECTO', {
+      x: MARGIN + 36,
+      y: gy - 22,
+      size: 11,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    });
+
+    gy -= 56;
+
+    const maxPhotos = Math.min(input.photos.length, 4);
+    const photoW = (CONTENT_W - 16) / 2;
+    const photoH = 140;
+
+    for (let i = 0; i < maxPhotos; i++) {
+      const item = input.photos[i]!;
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const px = MARGIN + col * (photoW + 16);
+      const py = gy - (row + 1) * (photoH + 36);
+
+      try {
+        const img = item.isPng
+          ? await doc.embedPng(item.imageBytes)
+          : await doc.embedJpg(item.imageBytes);
+        galleryPage.drawImage(img, {
+          x: px,
+          y: py + 16,
+          width: photoW,
+          height: photoH,
+        });
+      } catch {
+        galleryPage.drawRectangle({
+          x: px,
+          y: py + 16,
+          width: photoW,
+          height: photoH,
+          borderColor: rgb(0.8, 0.8, 0.8),
+          borderWidth: 1,
+        });
+      }
+
+      if (item.caption) {
+        galleryPage.drawText(item.caption.slice(0, 45), {
+          x: px,
+          y: py,
+          size: 8,
+          font,
+          color: rgb(0.3, 0.3, 0.3),
+        });
+      }
+    }
+  }
+
   // --- Footer with branding (all pages) ---
+
   const pageCount = doc.getPageCount();
   for (let i = 0; i < pageCount; i++) {
     const p = doc.getPage(i);

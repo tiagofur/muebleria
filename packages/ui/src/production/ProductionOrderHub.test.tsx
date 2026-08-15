@@ -4,7 +4,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Project } from '@muebles/domain';
+import type { ProductionCutRow, Project } from '@muebles/domain';
 import { ProductionOrderHub } from './ProductionOrderHub';
 import { buildProductionOrderReadiness } from './productionOrderModel';
 
@@ -30,7 +30,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     const user = userEvent.setup();
     const onPack = vi.fn();
     const onTab = vi.fn();
-    const cutRow = {
+    const cutRow: ProductionCutRow = {
       quantity: 2,
       lengthMm: 720,
       widthMm: 560,
@@ -42,6 +42,8 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
       W1: 0,
       W2: 0,
     };
+
+
     const readiness = buildProductionOrderReadiness({
       project: project(),
       cutRows: [cutRow],

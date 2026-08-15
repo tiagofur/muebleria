@@ -41,7 +41,9 @@ import type {
   WarrantyTicketCategory,
   WarrantyTicketPriority,
   WarrantyTicketStatus,
+  ShowcasePhotoItem,
 } from '@muebles/domain';
+
 import {
   exportWarrantyRefabricationOptimizer,
   warrantyRefabricationFilename,
@@ -233,7 +235,10 @@ export interface ProjectStoreDeps {
     file: File,
     data?: { kind?: WarrantyPhotoKind; caption?: string },
   ) => Promise<any>;
+  /** Commercial Showcase / Portfolio (CRM Phase 4). */
+  readonly listShowcasePhotos?: (onlyShowcase?: boolean) => Promise<readonly ShowcasePhotoItem[]>;
 }
+
 
 
 
@@ -426,7 +431,13 @@ export interface ProjectState {
   readonly exportWarrantyRefabricationOptimizer: (
     ticket: WarrantyTicket,
   ) => Promise<void>;
+
+  // --- Showcase & Commercial Portfolio (CRM Phase 4) ---
+  readonly showcasePhotos: readonly ShowcasePhotoItem[];
+  readonly isLoadingShowcase: boolean;
+  readonly loadShowcasePhotos: (onlyShowcase?: boolean) => Promise<void>;
 }
+
 
 
 
@@ -1372,8 +1383,25 @@ export function createProjectStore(options: InternalOptions) {
         });
       }
     },
+
+    // --- Showcase & Commercial Portfolio (CRM Phase 4) ---
+    showcasePhotos: [],
+    isLoadingShowcase: false,
+
+    loadShowcasePhotos: async (onlyShowcase = false) => {
+      if (!options.deps.listShowcasePhotos) return;
+      set({ isLoadingShowcase: true });
+      try {
+        const photos = await options.deps.listShowcasePhotos(onlyShowcase);
+        set({ showcasePhotos: photos, isLoadingShowcase: false });
+      } catch (err) {
+        console.error('Error loading showcase photos:', err);
+        set({ isLoadingShowcase: false });
+      }
+    },
   }));
 }
+
 
 
 

@@ -79,8 +79,9 @@ import {
   AmbientMaterialsCatalog,
   MaterialsCatalog,
   ModulesScreen,
-  ModuleShowcase,
+  ShowcaseScreen,
   OptionGroupsScreen,
+
   ProjectsScreen,
   ProductionWorkspace,
   filterProductionVisible,
@@ -604,14 +605,20 @@ function AppContent({
         ? repo.uploadWarrantyTicketPhoto(ticketId, file, data)
         : Promise.reject(new Error('No storage'));
     },
+    listShowcasePhotos: (onlyShowcase) => {
+      const repo = getRepository();
+      return repo?.listShowcasePhotos
+        ? repo.listShowcasePhotos(onlyShowcase)
+        : Promise.resolve([]);
+    },
   });
-
-
-
 
   const projects = useProjectStore((s) => s.projects);
   const projectTemplates = useProjectStore((s) => s.projectTemplates);
+  const showcasePhotos = useProjectStore((s) => s.showcasePhotos);
+  const isLoadingShowcase = useProjectStore((s) => s.isLoadingShowcase);
   const projectActions = useProjectStore();
+
   // Keep projectStore in sync with workspace load (one-way: workspace → projectStore).
   // Project mutations go through projectStore only; workspace.projects becomes
   // stale after first mutation (intentional — F064 will fully decouple workspace).
@@ -768,6 +775,14 @@ function AppContent({
       setShowOnboardingTour(true);
     }
   }, [navId]);
+
+  // Load commercial portfolio photos when visiting showcase
+  useEffect(() => {
+    if (navId === 'showcase') {
+      getProjectStoreState().loadShowcasePhotos();
+    }
+  }, [navId]);
+
 
   const handleLoadCocinaLopezDemo = useCallback(() => {
     const targetPath = projectPath('proj-cocina-lopez-demo');
@@ -1027,6 +1042,22 @@ function AppContent({
     },
     [modules, navigate, toast],
   );
+
+  const onShowcaseUseProjectAsReference = useCallback(
+    (projectId: string) => {
+      const proj = projects.find((p) => p.id === projectId);
+      bumpProjectsCreateKey();
+      navigate(pathForNav('projects'));
+      toast({
+        type: 'info',
+        message: proj
+          ? `Nueva cotización inspirada en «${proj.name}».`
+          : 'Nueva cotización iniciada desde el portafolio.',
+      });
+    },
+    [projects, navigate, toast],
+  );
+
 
   const dashboardHomeMode = useMemo(():
     | 'default'
@@ -2326,15 +2357,21 @@ function AppContent({
         />
       ) : null}
       {navId === 'showcase' ? (
-        <ModuleShowcase
+        <ShowcaseScreen
+          photos={showcasePhotos}
           modules={modules}
           categories={categories}
           resolveImageUrl={resolveMediaUrl}
-          onUseInQuote={
+          isLoadingPhotos={isLoadingShowcase}
+          onUseModuleInQuote={
             canMutateProjects ? onShowcaseUseInQuote : undefined
+          }
+          onUseProjectAsReference={
+            canMutateProjects ? onShowcaseUseProjectAsReference : undefined
           }
         />
       ) : null}
+
       {navId === 'modules' ? (
         <ModulesScreen
           modules={modules}

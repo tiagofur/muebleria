@@ -136,8 +136,19 @@ export {
 
 
 export {
+  ShowcaseScreen,
+  type ShowcaseScreenProps,
+} from './showcase/ShowcaseScreen';
+export {
+  ProjectsPortfolioView,
+  type ProjectsPortfolioViewProps,
+} from './showcase/ProjectsPortfolioView';
+
+
+export {
   WhatsAppButton,
   WhatsAppModal,
+
   type WhatsAppButtonProps,
   type WhatsAppModalProps,
 } from './crm';

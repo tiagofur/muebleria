@@ -140,4 +140,12 @@ describe('@muebles/ui package surface', () => {
     expect(typeof selectRecentProjects).toBe('function');
     expect(typeof sumMonthlyQuotedTotal).toBe('function');
   });
+
+  it('exports ShowcaseScreen and ProjectsPortfolioView (CRM Phase 4)', async () => {
+    const { ShowcaseScreen, ProjectsPortfolioView } = await import('./index');
+    expect(typeof ShowcaseScreen).toBe('function');
+    expect(typeof ProjectsPortfolioView).toBe('function');
+  });
 });
+
+

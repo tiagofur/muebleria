@@ -28,6 +28,20 @@ func (m *photosTestStore) ListProjectPhotos(_ context.Context, projectID string)
 	return m.photos[projectID], nil
 }
 
+func (m *photosTestStore) ListShowcasePhotos(_ context.Context, onlyShowcase bool) ([]domain.ShowcasePhotoItem, error) {
+	return []domain.ShowcasePhotoItem{
+		{
+			ID:          "p-1",
+			ProjectID:   "proj-1",
+			ProjectName: "Cocina Moderna",
+			Stage:       domain.ProjectPhotoStageInstalled,
+			URL:         "/api/media/showcase.webp",
+			IsShowcase:  true,
+		},
+	}, nil
+}
+
+
 func (m *photosTestStore) GetProjectPhotoByID(_ context.Context, photoID string) (*domain.ProjectPhoto, error) {
 	if m.singlePhoto != nil && m.singlePhoto.ID == photoID {
 		return m.singlePhoto, nil
@@ -231,3 +245,26 @@ func TestProjectPhotos_PatchAndDelete(t *testing.T) {
 		t.Errorf("expected deleted ID photo-99, got %s", mockStore.deletedPhotoID)
 	}
 }
+
+func TestHandleShowcasePhotos(t *testing.T) {
+	mockStore := &photosTestStore{}
+	server := &Server{Store: mockStore}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/showcase/photos?only_showcase=true", nil)
+	w := httptest.NewRecorder()
+
+	server.HandleShowcasePhotos(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var items []domain.ShowcasePhotoItem
+	if err := json.NewDecoder(w.Body).Decode(&items); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(items) != 1 || items[0].ProjectName != "Cocina Moderna" {
+		t.Errorf("unexpected items: %+v", items)
+	}
+}
+

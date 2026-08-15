@@ -46,11 +46,29 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-export function summarizeProductionTotals(
+type MutableMaterialAcc = {
+  key: string;
+  name: string;
+  materialCode?: string;
+  thicknessMm?: number;
+  pieces: number;
+  lines: number;
+  areaMm2: number;
+};
+
+type MutableEdgeAcc = {
+  key: string;
+  name: string;
+  edgeBandCode?: string;
+  thicknessMm?: number;
+  mlmm: number;
+};
+
+export function computeProductionTotals(
   rows: readonly ProductionCutRow[],
 ): ProductionTotals {
-  const materials = new Map<string, ProductionMaterialTotal & { areaMm2: number }>();
-  const edges = new Map<string, ProductionEdgeTotal & { mlmm: number }>();
+  const materials = new Map<string, MutableMaterialAcc>();
+  const edges = new Map<string, MutableEdgeAcc>();
 
   for (const row of rows) {
     const mKey = row.materialCode ?? row.materialName ?? 'Sin material';
@@ -84,12 +102,18 @@ export function summarizeProductionTotals(
     }
   }
 
-  const materialTotals = [...materials.values()]
-    .map(({ areaMm2, ...rest }) => ({ ...rest, areaM2: round2(areaMm2 / 1_000_000) }))
+  const materialTotals: ProductionMaterialTotal[] = [...materials.values()]
+    .map(({ areaMm2, ...rest }) => ({
+      ...rest,
+      areaM2: round2(areaMm2 / 1_000_000),
+    }))
     .sort((a, b) => b.areaM2 - a.areaM2);
 
-  const edgeTotals = [...edges.values()]
-    .map(({ mlmm, ...rest }) => ({ ...rest, ml: round2(mlmm / 1_000) }))
+  const edgeTotals: ProductionEdgeTotal[] = [...edges.values()]
+    .map(({ mlmm, ...rest }) => ({
+      ...rest,
+      ml: round2(mlmm / 1_000),
+    }))
     .sort((a, b) => b.ml - a.ml);
 
   return {
@@ -99,3 +123,6 @@ export function summarizeProductionTotals(
     totalEdgeMl: round2(edgeTotals.reduce((s, e) => s + e.ml, 0)),
   };
 }
+
+export const summarizeProductionTotals = computeProductionTotals;
+

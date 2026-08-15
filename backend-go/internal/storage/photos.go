@@ -186,3 +186,65 @@ func (s *PostgresStore) DeleteProjectPhoto(ctx context.Context, photoID string) 
 	return nil
 }
 
+// ListShowcasePhotos returns photos marked as showcase or installed across projects.
+func (s *PostgresStore) ListShowcasePhotos(ctx context.Context, onlyShowcase bool) ([]domain.ShowcasePhotoItem, error) {
+	query := `
+		SELECT 
+			pp.id, pp.project_id, COALESCE(p.name, ''), COALESCE(c.name, ''),
+			pp.stage, pp.url, pp.thumbnail_url, pp.caption, pp.is_showcase, pp.created_at
+		FROM project_photos pp
+		LEFT JOIN projects p ON p.id = pp.project_id
+		LEFT JOIN customers c ON c.id = p.customer_id
+	`
+	if onlyShowcase {
+		query += ` WHERE pp.is_showcase = true `
+	} else {
+		query += ` WHERE pp.is_showcase = true OR pp.stage = 'installed' `
+	}
+	query += ` ORDER BY pp.is_showcase DESC, pp.created_at DESC;`
+
+	rows, err := s.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list showcase photos: %w", err)
+	}
+	defer rows.Close()
+
+	var items []domain.ShowcasePhotoItem
+	for rows.Next() {
+		var it domain.ShowcasePhotoItem
+		var thumbURL, caption, custName sql.NullString
+		if err := rows.Scan(
+			&it.ID,
+			&it.ProjectID,
+			&it.ProjectName,
+			&custName,
+			&it.Stage,
+			&it.URL,
+			&thumbURL,
+			&caption,
+			&it.IsShowcase,
+			&it.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan showcase photo: %w", err)
+		}
+		if custName.Valid {
+			it.CustomerName = custName.String
+		}
+		if thumbURL.Valid {
+			it.ThumbnailURL = thumbURL.String
+		}
+		if caption.Valid {
+			it.Caption = caption.String
+		}
+		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate showcase photos: %w", err)
+	}
+	if items == nil {
+		items = []domain.ShowcasePhotoItem{}
+	}
+	return items, nil
+}
+
+

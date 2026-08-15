@@ -557,6 +557,16 @@ export {
   seedCocinaEstandarTemplate,
 } from './__fixtures__/plantillaDemo';
 
+// --- CRM Showcase & Portfolio (CRM Phase 4) ---
+export {
+  filterShowcasePhotos,
+  groupShowcasePhotosByProject,
+  type ShowcasePhotoItem,
+  type ShowcaseFilter,
+  type ProjectShowcaseGroup,
+} from './crm/showcase';
+
+
 
 
 
