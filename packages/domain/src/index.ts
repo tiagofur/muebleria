@@ -452,8 +452,8 @@ export {
 } from './structures/versioning';
 export type { ResolvedStructureRevision } from './structures/versioning';
 
-export { pieceLabelQrPayload } from './pieceLabelQr';
-export type { PieceLabelQrFields } from './pieceLabelQr';
+export { parsePieceLabelScan, pieceLabelQrPayload } from './pieceLabelQr';
+export type { ParsedPieceLabelScan, PieceLabelQrFields } from './pieceLabelQr';
 
 export {
   parseNestingImportCsv,

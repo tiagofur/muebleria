@@ -1,27 +1,74 @@
-# Sesión — F075 Build y Release Desktop (Instalador .exe/.dmg + Auto-Updater)
+# Sesión — F089 Escaneo QR en Piso de Fábrica
 
-- **Fecha:** 2026-08-15
-- **Feature:** F075 — `build_release_desktop`
-- **Estado:** Implementada y verificada. init.sh + typecheck + build:desktop verde.
+- **Fecha:** 2026-08-15 (tarde-noche)
+- **Feature:** F089 — `produccion_escaneo_qr_piso`
+- **Estado:** Implementada y verificada. init.sh + typecheck + pnpm test verde.
 
-## Qué se implementó (F075 núcleo)
+## Qué se hizo antes (preservación)
 
-1. **Configuración `electron-builder` (`apps/desktop/package.json`):**
-   - Targets configurados: Windows NSIS (`.exe` instalador + portable), macOS (`.dmg` + `.zip`), Linux (`AppImage` + `.tar.gz`).
-   - Copia de assets de `apps/web/dist` empaquetados autónomamente para ejecución offline y standalone.
-   - Scripts de empaquetado: `pnpm build:desktop` (`--dir`), `pnpm release:desktop` (`dist`), `dist:win`, `dist:mac`, `dist:linux`.
+Al arrancar había 24 archivos sin commitear de la tanda "Judgment Day
+Producción" + fixes afines. Verificados (test/typecheck/go verde) y
+commiteados en 4 commits atómicos: `13fc893` (RBAC reopen #257 en Go),
+`966e291` (persistir base_mode), `f266ecd` (ambiente 3D en modal/presentación),
+`08d3c7a` (fixes Judgment Day producción). Todo pusheado.
 
-2. **Auto-Updater (`apps/desktop/electron/main.mjs`):**
-   - Integración con `electron-updater` apuntando al repositorio GitHub (`tiagofur/muebleria`).
-   - `checkForUpdatesAndNotify()` automático en segundo plano cuando la app está empaquetada.
-   - Carga resiliente de `index.html` compilado en modo empaquetado/producción y dev.
+## F089 — implementación
 
-3. **Iconos de aplicación:**
-   - Script generador de icono oficial 512x512 RGBA (`apps/desktop/scripts/generate-icons.mjs`) produciendo `apps/desktop/build/icon.png`.
+**Dominio (`pieceLabelQr.ts`):** `parsePieceLabelScan` — parsea payload v2,
+legacy v1 (sin `v` o `v:1`) y códigos planos (código de fábrica
+`GAB-01-L2`, nombre). JSON roto cae a plainCode (el lector pudo leer
+caracteres sueltos); null solo para blanco o JSON válido sin `module`.
+Coerción segura de L/W/qty. Exportado desde `index.ts`.
 
-4. **Documentación de Release:**
-   - Creado `docs/desktop-release.md` con guías de firma de código Authenticode `.pfx` (Windows) y Apple Developer ID (macOS) sin commitear credenciales, más flujo de publicación de releases en GitHub.
-   - Actualizado `README.md` con comandos de build y release.
+**UI (`packages/ui/src/production/`):**
+- `useHidScanner.ts`: listener global keydown que captura ráfagas de
+  escopeta USB/BT (gap < 80ms, Enter final). Ignora teclas con modificadores
+  y eventos apuntados a campos editables (el form manual sigue su curso);
+  Escape/reset por inactividad. `enabled` para desactivarlo con el modal
+  de cámara abierto.
+- `ScanCameraModal.tsx`: `BarcodeDetector` nativo (QR + Code128) con
+  selector de cámara (enumerateDevices, >1), lectura continua cada 250ms
+  sobre canvas, debounce de lecturas repetidas. Sin soporte nativo →
+  mensaje honesto + entrada manual (siempre disponible abajo). Sin lib
+  nueva (cero dependencias).
+- `ProductionOrderPaperlessPanel.tsx`: `matchModuleFromScan` ahora usa el
+  parser del dominio; HID + cámara + form manual confluyen en
+  `handleScanText`. **Auto-avance** al escanear (toggle "Auto-avanzar al
+  escanear", default on) con debounce por ítem (1500ms — doble Enter de la
+  pistola no doble-transiciona; verificado en test). Feedback: chip verde
+  animado "✓ → Cortado" en el resultado + beeps WebAudio
+  (`scanFeedback.ts`: hit/advance/miss, no-op sin AudioContext).
+  Botón "Cámara" junto al scan. Botón manual "Marcar:" intacto.
+- `production.css`: bloques `.prod-paperless__camera/auto/advance-chip` y
+  `.prod-scan-camera__*` — solo tokens; animación con
+  prefers-reduced-motion.
+
+**Decisiones:**
+- Sin `jsQR`/zxing: BarcodeDetector cubre tablet del taller (Chromium);
+  donde no existe, fallback manual honesto. Cero deps nuevas.
+- Estados reales del pipeline (`pending → cut → edged → assembled →
+  installed`); la descripción de F089 en el backlog nombraba estados
+  viejos (cutting/banded) — el código (`productionFloor.ts`) manda.
+- "Registro de operario" del description: fuera del acceptance list; el
+  floorStatus ya persiste vía `setItemFloorStatus` del shell. No se
+  inventó logging nuevo.
+
+## Verificación
+
+- domain 526 (+7 parser), ui 835 (+21: useHidScanner 6, ScanCameraModal 3,
+  PaperlessPanel 12), resto intacto (web 242, storage 84, excel 63,
+  desktop 14). `pnpm test` + `pnpm typecheck` + `./init.sh` verde.
+- Limitación: la decodificación real por cámara no es testeable en jsdom
+  (sin getUserMedia/BarcodeDetector); cubierto por feature detection,
+  fallback manual testeado y código defensivo en el loop (videoWidth 0,
+  detect transitorio).
+
+## Notas
+
+- Hay 10 stashes viejos en el repo (higiene de `git stash list`, ver
+  docs/git-workflow.md §5) — limpieza pendiente de acordar con el usuario.
+- Siguientes: F090 (métricas/analytics), F077 (prep venta).
+
 
 
 **Proyectar:** tarjeta "Zócalo (base del mueble)" en la pestaña props (tipo +

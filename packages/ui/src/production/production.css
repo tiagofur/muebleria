@@ -1412,3 +1412,138 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+/* F089 — scan-to-advance feedback + camera modal */
+
+.prod-paperless__camera-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.prod-paperless__auto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.prod-paperless__scan-result--advance {
+  border-color: var(--success-500);
+  background: var(--success-50);
+}
+
+.prod-paperless__advance-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--success-500);
+  color: var(--text-inverse);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .prod-paperless__advance-chip {
+    animation: prod-scan-pop var(--duration-normal) var(--ease-out);
+  }
+}
+
+@keyframes prod-scan-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.prod-scan-camera {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.prod-scan-camera__video-wrap {
+  position: relative;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-app);
+}
+
+.prod-scan-camera__video {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  object-fit: cover;
+}
+
+.prod-scan-camera__hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.prod-scan-camera__hint--corner {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.prod-scan-camera__device {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.prod-scan-camera__device select {
+  flex: 1;
+}
+
+.prod-scan-camera__last {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.prod-scan-camera__last code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.prod-scan-camera__manual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.prod-scan-camera__manual-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.prod-scan-camera__manual-input {
+  flex: 1;
+  min-width: 10rem;
+}

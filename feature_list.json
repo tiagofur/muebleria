@@ -1463,8 +1463,6 @@
       ],
       "status": "done"
     },
-
-
     {
       "id": "F076",
       "phase": 15,
@@ -1715,7 +1713,7 @@
         "packages/excel/src/pieceLabelsZpl.ts",
         "packages/ui/src/production/ProductionOrderFloorView.tsx"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F090",
@@ -1740,4 +1738,3 @@
     }
   ]
 }
-

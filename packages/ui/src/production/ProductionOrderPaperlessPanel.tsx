@@ -1,17 +1,30 @@
 /**
- * Paperless floor mode — large touch-friendly cards (PROD-4.2 / #240).
- * QR scan: piece-label payload v2 (or plain code) jumps to the module.
+ * Paperless floor mode — large touch-friendly cards (PROD-4.2 / #240, F089).
+ * QR scan: piece-label payload v2 (or plain code) jumps to the module and
+ * advances its floor status automatically. Input paths: HID scanner gun
+ * (global listener), camera modal, or manual typing.
  */
 
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import type { ItemFloorStatus, Module, Project } from '@muebles/domain';
 import {
   ITEM_FLOOR_STATUSES,
   ITEM_FLOOR_STATUS_LABELS_ES,
   nextItemFloorStatus,
+  parsePieceLabelScan,
 } from '@muebles/domain';
-import { ScanLine } from 'lucide-react';
+import { Camera, ScanLine } from 'lucide-react';
 import { buildProductionModuleRows } from './productionModuleRows';
+import { playScanFeedback } from './scanFeedback';
+import { ScanCameraModal } from './ScanCameraModal';
+import { useHidScanner } from './useHidScanner';
 
 export type ProductionOrderPaperlessPanelProps = {
   readonly project: Project;
@@ -21,6 +34,8 @@ export type ProductionOrderPaperlessPanelProps = {
     status: ItemFloorStatus,
   ) => void;
   readonly canSetFloorStatus?: boolean;
+  /** Ignore the same item scanned twice within this window (ms). Default 1500. */
+  readonly scanDebounceMs?: number;
 };
 
 export type ProductionModuleRow = ReturnType<
@@ -28,30 +43,22 @@ export type ProductionModuleRow = ReturnType<
 >[number];
 
 /**
- * A scanner gun types the QR payload and presses Enter. Payload v2 carries
- * `module`; anything else falls back to plain-text code search.
+ * Match a raw scan (payload v2/v1 JSON, factory code or module name)
+ * against the module rows of this order.
  */
 export function matchModuleFromScan(
   scan: string,
   rows: readonly ProductionModuleRow[],
 ): ProductionModuleRow | null {
-  const text = scan.trim();
-  if (!text) return null;
-  let moduleCode: string | null = null;
-  if (text.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(text) as { module?: unknown };
-      if (typeof parsed.module === 'string' && parsed.module) {
-        moduleCode = parsed.module;
-      }
-    } catch {
-      moduleCode = null;
-    }
-  }
-  const needle = (moduleCode ?? text).toLowerCase();
+  const parsed = parsePieceLabelScan(scan);
+  if (!parsed) return null;
+  const needle = (
+    parsed.kind === 'payload' ? parsed.fields.moduleCode : parsed.code
+  ).toLowerCase();
+  if (!needle) return null;
   return (
-    rows.find((r) => r.moduleCode.toLowerCase() === needle) ??
     rows.find((r) => r.factoryCode.toLowerCase() === needle) ??
+    rows.find((r) => r.moduleCode.toLowerCase() === needle) ??
     rows.find(
       (r) =>
         r.factoryCode.toLowerCase().includes(needle) ||
@@ -67,15 +74,61 @@ export function ProductionOrderPaperlessPanel({
   modules,
   onSetFloorStatus,
   canSetFloorStatus = false,
+  scanDebounceMs = 1500,
 }: ProductionOrderPaperlessPanelProps): ReactNode {
   const [filter, setFilter] = useState<ItemFloorStatus | 'all'>('all');
   const [scan, setScan] = useState('');
   const [scanMatchId, setScanMatchId] = useState<string | null>(null);
   const [scanMiss, setScanMiss] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [lastAdvanceLabel, setLastAdvanceLabel] = useState<string | null>(
+    null,
+  );
+  const lastScanAtRef = useRef<{ itemId: string; at: number } | null>(null);
   const rows = useMemo(
     () => buildProductionModuleRows(project, modules, null),
     [project, modules],
   );
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  const handleScanText = useCallback(
+    (text: string) => {
+      const currentRows = rowsRef.current;
+      const match = matchModuleFromScan(text, currentRows);
+      if (match) {
+        setScanMatchId(match.itemId);
+        setScanMiss(false);
+        setFilter('all');
+        const next = nextItemFloorStatus(match.floorStatus);
+        const now = Date.now();
+        const last = lastScanAtRef.current;
+        const debounced = last?.itemId === match.itemId && now - last.at < scanDebounceMs;
+        if (debounced) {
+          playScanFeedback('hit');
+          return;
+        }
+        lastScanAtRef.current = { itemId: match.itemId, at: now };
+        if (autoAdvance && canSetFloorStatus && onSetFloorStatus && next) {
+          onSetFloorStatus(match.itemId, next);
+          setLastAdvanceLabel(ITEM_FLOOR_STATUS_LABELS_ES[next]);
+          playScanFeedback('advance');
+        } else {
+          setLastAdvanceLabel(null);
+          playScanFeedback('hit');
+        }
+      } else {
+        setScanMatchId(null);
+        setLastAdvanceLabel(null);
+        setScanMiss(true);
+        playScanFeedback('miss');
+      }
+    },
+    [autoAdvance, canSetFloorStatus, onSetFloorStatus, scanDebounceMs],
+  );
+
+  useHidScanner({ onScan: handleScanText, enabled: !cameraOpen });
 
   const filtered = useMemo(() => {
     if (filter === 'all') return rows;
@@ -88,15 +141,8 @@ export function ProductionOrderPaperlessPanel({
 
   const handleScanSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const match = matchModuleFromScan(scan, rows);
-    if (match) {
-      setScanMatchId(match.itemId);
-      setScanMiss(false);
-      setFilter('all');
-    } else {
-      setScanMatchId(null);
-      setScanMiss(true);
-    }
+    if (!scan.trim()) return;
+    handleScanText(scan);
     setScan('');
   };
 
@@ -105,13 +151,15 @@ export function ProductionOrderPaperlessPanel({
     const next = nextItemFloorStatus(scanMatch.floorStatus);
     if (!next || !onSetFloorStatus) return;
     onSetFloorStatus(scanMatch.itemId, next);
+    setLastAdvanceLabel(ITEM_FLOOR_STATUS_LABELS_ES[next]);
     setScanMatchId(null);
   };
 
   return (
     <div className="prod-paperless" data-testid="prod-hub-piso">
       <p className="prod-hub__exports-hint">
-        Modo piso — avance de fábrica con botones grandes. Sin editar diseño.
+        Modo piso — escaneá el QR de la etiqueta (lector USB, cámara o a mano)
+        y el avance es automático. Sin editar diseño.
       </p>
 
       <form
@@ -132,7 +180,7 @@ export function ProductionOrderPaperlessPanel({
             setScan(e.target.value);
             setScanMiss(false);
           }}
-          placeholder="MOD-03, MOD-03-LAT o payload QR…"
+          placeholder="MOD-03, MOD-03-L2 o payload QR…"
           data-testid="prod-piso-scan-input"
         />
         <button
@@ -143,19 +191,49 @@ export function ProductionOrderPaperlessPanel({
         >
           Buscar
         </button>
+        <button
+          type="button"
+          className="btn btn--small prod-paperless__camera-btn"
+          onClick={() => setCameraOpen(true)}
+          data-testid="prod-piso-camera-open"
+        >
+          <Camera size={16} strokeWidth={1.5} aria-hidden /> Cámara
+        </button>
+        <label className="prod-paperless__auto">
+          <input
+            type="checkbox"
+            checked={autoAdvance}
+            onChange={(e) => setAutoAdvance(e.target.checked)}
+            data-testid="prod-piso-autoadvance-toggle"
+          />
+          Auto-avanzar al escanear
+        </label>
       </form>
 
       {scanMatch ? (
         <div
-          className="prod-paperless__scan-result"
+          className={
+            lastAdvanceLabel
+              ? 'prod-paperless__scan-result prod-paperless__scan-result--advance'
+              : 'prod-paperless__scan-result'
+          }
           data-testid="prod-piso-scan-result"
           role="status"
         >
           <span>
             <strong>{scanMatch.factoryCode}</strong> · {scanMatch.moduleName} —{' '}
             {ITEM_FLOOR_STATUS_LABELS_ES[scanMatch.floorStatus]}
+            {lastAdvanceLabel ? (
+              <span
+                className="prod-paperless__advance-chip"
+                data-testid="prod-piso-scan-advanced"
+              >
+                ✓ → {lastAdvanceLabel}
+              </span>
+            ) : null}
           </span>
           {canSetFloorStatus &&
+          !lastAdvanceLabel &&
           nextItemFloorStatus(scanMatch.floorStatus) ? (
             <button
               type="button"
@@ -260,6 +338,12 @@ export function ProductionOrderPaperlessPanel({
           })}
         </ul>
       )}
+
+      <ScanCameraModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onDetect={handleScanText}
+      />
     </div>
   );
 }

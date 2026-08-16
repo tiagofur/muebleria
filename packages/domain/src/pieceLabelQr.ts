@@ -38,3 +38,65 @@ export function pieceLabelQrPayload(fields: PieceLabelQrFields): string {
     rev: fields.revision ?? '',
   });
 }
+
+/**
+ * Parsed scan input for the shop floor (F089 / #240).
+ * - `payload`: structured label QR (v2 current, v1 legacy labels still in bins).
+ * - `plainCode`: raw text — factory code (`GAB-01-L2`), module code, or piece ref.
+ */
+export type ParsedPieceLabelScan =
+  | { readonly kind: 'payload'; readonly version: 1 | 2; readonly fields: PieceLabelQrFields }
+  | { readonly kind: 'plainCode'; readonly code: string };
+
+function scanString(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function scanNumber(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Parse a scanned string into a label payload or plain code.
+ * Returns null only for blank input, or JSON that parses but is not a
+ * label payload (missing module). Broken JSON falls back to plainCode —
+ * the scanner may still have read a bar code with stray characters.
+ */
+export function parsePieceLabelScan(text: string): ParsedPieceLabelScan | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith('{')) {
+    return { kind: 'plainCode', code: trimmed };
+  }
+  let parsed: Record<string, unknown>;
+  try {
+    const value = JSON.parse(trimmed) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return { kind: 'plainCode', code: trimmed };
+    }
+    parsed = value as Record<string, unknown>;
+  } catch {
+    return { kind: 'plainCode', code: trimmed };
+  }
+  const moduleCode = scanString(parsed.module);
+  if (!moduleCode) return null;
+  const version = parsed.v === 2 ? 2 : 1;
+  return {
+    kind: 'payload',
+    version,
+    fields: {
+      projectId: scanString(parsed.projectId),
+      moduleCode,
+      partCode: scanString(parsed.part) || undefined,
+      description: scanString(parsed.desc),
+      materialCode: scanString(parsed.material),
+      lengthMm: scanNumber(parsed.L),
+      widthMm: scanNumber(parsed.W),
+      quantity: version === 2 ? Math.max(1, scanNumber(parsed.qty) || 1) : undefined,
+      edgeSides: version === 2 ? scanString(parsed.edges) || undefined : undefined,
+      edgeCode: version === 2 ? scanString(parsed.edge) || undefined : undefined,
+      revision: version === 2 ? scanString(parsed.rev) || undefined : undefined,
+    },
+  };
+}
