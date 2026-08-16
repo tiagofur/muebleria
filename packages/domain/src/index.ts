@@ -88,6 +88,7 @@ export type {
 
 
 export * from './crm';
+export * from './metrics/workshopMetrics';
 
 
 export {
