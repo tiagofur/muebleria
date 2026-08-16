@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -53,10 +52,7 @@ func (s *Server) HandleProjectPhotos(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		claims := claimsFromRequest(r)
-		var userID string
-		if claims != nil {
-			userID = claims.Subject
-		}
+		userID := actorID(claims)
 
 		contentType := r.Header.Get("Content-Type")
 
@@ -69,8 +65,7 @@ func (s *Server) HandleProjectPhotos(w http.ResponseWriter, r *http.Request) {
 				Caption      string                   `json:"caption,omitempty"`
 				IsShowcase   bool                     `json:"is_showcase"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+			if !decodeJSONBody(w, r, &req) {
 				return
 			}
 			if strings.TrimSpace(req.URL) == "" {
@@ -222,8 +217,7 @@ func (s *Server) HandleProjectPhotoByID(w http.ResponseWriter, r *http.Request) 
 			Caption    *string                   `json:"caption,omitempty"`
 			IsShowcase *bool                     `json:"is_showcase,omitempty"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 

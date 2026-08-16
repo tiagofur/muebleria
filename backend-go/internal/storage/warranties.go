@@ -149,7 +149,7 @@ func (s *PostgresStore) GetWarrantyTicketByID(ctx context.Context, id string) (*
 		&t.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, fmt.Errorf("warranty ticket not found")
 		}
 		return nil, fmt.Errorf("get warranty ticket by id: %w", err)
 	}

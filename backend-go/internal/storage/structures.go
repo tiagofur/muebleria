@@ -571,5 +571,17 @@ func isValidUUID(id string) bool {
 	if len(id) != 36 {
 		return false
 	}
-	return id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-'
+	if id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
+		return false
+	}
+	for i := 0; i < 36; i++ {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		c := id[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }

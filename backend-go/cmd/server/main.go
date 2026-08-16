@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,17 +16,25 @@ import (
 )
 
 func main() {
-	log.Println("Starting Muebles Backend Server...")
+	// Configure structured logger (Google / 12-factor cloud standard)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting Muebles Backend Server...")
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Invalid configuration, refusing to start: %v", err)
+		slog.Error("Invalid configuration, refusing to start", "error", err)
+		os.Exit(1)
 	}
 
 	// Inicializar Base de Datos
 	store, err := storage.NewPostgresStore(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Critical error: failed to initialize database store: %v", err)
+		slog.Error("Critical error: failed to initialize database store", "error", err)
+		os.Exit(1)
 	}
 	defer store.Close()
 
@@ -36,7 +44,8 @@ func main() {
 	migCtx, migCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	if err := store.RunMigrations(migCtx); err != nil {
 		migCancel()
-		log.Fatalf("Critical error: failed to run database migrations: %v", err)
+		slog.Error("Critical error: failed to run database migrations", "error", err)
+		os.Exit(1)
 	}
 	migCancel()
 
@@ -48,7 +57,7 @@ func main() {
 	// Crear Server API (media dir for catalog images F040). Log the resolved
 	// path so operators know where uploads land (it lives outside the repo by
 	// default, so it survives clean/clone cycles but is not obvious from cwd).
-	log.Printf("Media store: %s", cfg.MediaDir)
+	slog.Info("Media storage configured", "media_dir", cfg.MediaDir)
 	serverAPI := api.NewServerWithMedia(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.MediaDir)
 	handler := api.RegisterRoutes(serverAPI)
 
@@ -67,9 +76,10 @@ func main() {
 
 	// Ejecución asíncrona del servidor
 	go func() {
-		log.Printf("Listening and serving HTTP on port %s", cfg.Port)
+		slog.Info("Listening and serving HTTP", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server ListenAndServe error: %v", err)
+			slog.Error("HTTP server ListenAndServe error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -77,14 +87,15 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down HTTP server gracefully...")
+	slog.Info("Shutting down HTTP server gracefully...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("HTTP server stopped. Goodbye!")
+	slog.Info("HTTP server stopped. Goodbye!")
 }

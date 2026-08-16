@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -117,37 +120,70 @@ func AdminMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http
 	}
 }
 
+// ipRateLimiter manages token buckets with active TTL eviction to prevent memory leaks.
+type ipRateLimiter struct {
+	mu       sync.Mutex
+	rps      rate.Limit
+	burst    int
+	limiters map[string]*ipBucket
+}
+
+type ipBucket struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+func newIPRateLimiter(rps float64, burst int) *ipRateLimiter {
+	return &ipRateLimiter{
+		rps:      rate.Limit(rps),
+		burst:    burst,
+		limiters: make(map[string]*ipBucket),
+	}
+}
+
+func (rl *ipRateLimiter) get(ip string) *rate.Limiter {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+
+	// Opportunistic purge if map size grows large (e.g. > 1024 IPs)
+	if len(rl.limiters) > 1024 {
+		for k, b := range rl.limiters {
+			if now.Sub(b.lastSeen) > 10*time.Minute {
+				delete(rl.limiters, k)
+			}
+		}
+	}
+
+	b, exists := rl.limiters[ip]
+	if !exists {
+		b = &ipBucket{
+			limiter: rate.NewLimiter(rl.rps, rl.burst),
+		}
+		rl.limiters[ip] = b
+	}
+	b.lastSeen = now
+	return b.limiter
+}
+
 // RateLimitMiddleware applies a per-client-IP token bucket. Requests exceeding
 // the rate get 429 Too Many Requests with a Retry-After hint (#6).
 //
 // Intended for sensitive endpoints (login, register) to blunt brute-force and
 // credential-stuffing attacks.
 func RateLimitMiddleware(rps float64, burst int) func(http.Handler) http.Handler {
-	var (
-		mu      sync.Mutex
-		buckets = make(map[string]*rate.Limiter)
-	)
-
-	get := func(ip string) *rate.Limiter {
-		mu.Lock()
-		defer mu.Unlock()
-		lim, ok := buckets[ip]
-		if !ok {
-			lim = rate.NewLimiter(rate.Limit(rps), burst)
-			buckets[ip] = lim
-		}
-		return lim
-	}
+	rl := newIPRateLimiter(rps, burst)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			lim := get(clientIP(r))
+			lim := rl.get(clientIP(r))
 			if !lim.Allow() {
 				retryAfter := int(lim.Reserve().Delay().Seconds())
 				if retryAfter < 1 {
 					retryAfter = 1
 				}
-				w.Header().Set("Retry-After", itoa(retryAfter))
+				w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 				respondWithError(w, http.StatusTooManyRequests, "too many requests, slow down")
 				return
 			}
@@ -156,8 +192,8 @@ func RateLimitMiddleware(rps float64, burst int) func(http.Handler) http.Handler
 	}
 }
 
-// clientIP extracts the client address, honoring X-Forwarded-For only when set.
-// The first hop is the original client. Falls back to RemoteAddr.
+// clientIP extracts the client address, honoring X-Forwarded-For when present.
+// Falls back to RemoteAddr.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if i := strings.IndexByte(xff, ','); i >= 0 {
@@ -165,32 +201,12 @@ func clientIP(r *http.Request) string {
 		}
 		return strings.TrimSpace(xff)
 	}
-	host := r.RemoteAddr
-	if i := strings.LastIndex(host, ":"); i >= 0 {
-		host = host[:i]
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return strings.TrimSpace(r.RemoteAddr)
 	}
 	return strings.TrimSpace(host)
-}
-
-// itoa is a dependency-free int->string to keep this file light.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

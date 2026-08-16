@@ -1,23 +1,35 @@
 package api
 
-import "strings"
+import (
+	"errors"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
+)
 
 // isDuplicateKey reports whether err represents a Postgres unique-constraint
-// violation (e.g. a repeated code or id). All storage Create/Update methods
-// wrap the driver error with fmt.Errorf("...: %w", err), so the original
-// message — which contains "duplicate key" / "unique constraint" — is preserved
-// in err.Error().
-//
-// This is string-based rather than pgconn.PgError + SQLSTATE "23505" to avoid
-// importing pgconn into the api package and to keep behavior identical to the
-// inline checks that existed here before the refactor. Upgrading to SQLSTATE
-// is a deliberate future change (see TODO).
-//
-// TODO: inspect *pgconn.PgError.Code == "23505" via errors.As for robustness.
+// violation (SQLSTATE 23505) or duplicate key error.
 func isDuplicateKey(err error) bool {
 	if err == nil {
 		return false
 	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique constraint")
+}
+
+// isForeignKeyViolation reports whether err represents a Postgres foreign-key
+// constraint violation (SQLSTATE 23503).
+func isForeignKeyViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23503"
+	}
+	return strings.Contains(err.Error(), "foreign key")
 }

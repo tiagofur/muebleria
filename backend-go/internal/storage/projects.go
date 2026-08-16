@@ -931,7 +931,9 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	// Closed statuses freeze prices (quoted/accepted/produced — F036).
 	if engine.IsProjectClosed(p.Status) {
 		// Eliminar snapshot previo
-		_, _ = tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id)
+		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {
+			return fmt.Errorf("delete previous quote snapshot: %w", err)
+		}
 
 		if p.PriceSnapshot != nil {
 			snapQuery := `
@@ -970,7 +972,9 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		}
 	} else {
 		// Si vuelve a borrador, eliminar snapshot (descongelar)
-		_, _ = tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id)
+		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {
+			return fmt.Errorf("delete quote snapshot: %w", err)
+		}
 	}
 
 	return tx.Commit(ctx)
@@ -978,8 +982,14 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 	query := `DELETE FROM projects WHERE id = $1;`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("project not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
@@ -1394,8 +1404,14 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 
 func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
 	query := `DELETE FROM modules WHERE id = $1;`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("module not found")
+	}
+	return nil
 }
 
 func nullKitchenLayout(b []byte) interface{} {

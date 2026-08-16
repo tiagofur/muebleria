@@ -124,8 +124,14 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 
 func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string) error {
 	query := `UPDATE agregados SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1;`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("agregado not found")
+	}
+	return nil
 }
 
 func scanAgregado(r rowScanner) (domain.Agregado, error) {

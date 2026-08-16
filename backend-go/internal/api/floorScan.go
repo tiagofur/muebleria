@@ -8,7 +8,6 @@ package api
  */
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,8 +62,7 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var body floorScanRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		respondWithError(w, http.StatusBadRequest, "cuerpo inválido")
+	if !decodeJSONBody(w, r, &body) {
 		return
 	}
 	moduleNeedle := strings.TrimSpace(body.Module)
@@ -178,7 +176,9 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 	}
 
 	var body patchItemFloorStatusRequest
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
 
 	targetStatus := strings.TrimSpace(body.Status)
 	if targetStatus == "" {

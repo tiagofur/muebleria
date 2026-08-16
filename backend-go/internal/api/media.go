@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -228,7 +228,7 @@ func deleteMediaFileByURL(mediaDir, url string) bool {
 		return true
 	}
 	if !os.IsNotExist(err) {
-		log.Printf("media cleanup: failed to remove %s: %v", path, err)
+		slog.Warn("media cleanup: failed to remove file", "path", path, "error", err)
 	}
 	return false
 }

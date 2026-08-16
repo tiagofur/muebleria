@@ -125,8 +125,9 @@ func resolveBomFromParts(
 		})
 	}
 
-	hardwareLines := make([]domain.ResolvedHardwareLine, 0, len(module.HardwareLines))
-	for _, line := range module.HardwareLines {
+	allHardware := collectAllHardwareLines(module, catalog)
+	hardwareLines := make([]domain.ResolvedHardwareLine, 0, len(allHardware))
+	for _, line := range allHardware {
 		hw, err := ResolveHardware(line, optionChoices, catalog.Hardware)
 		if err != nil {
 			return domain.ResolvedBom{}, err
@@ -144,6 +145,47 @@ func resolveBomFromParts(
 		BoardParts:    boardParts,
 		HardwareLines: hardwareLines,
 	}, nil
+}
+
+func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []domain.HardwareLine {
+	lines := make([]domain.HardwareLine, 0, len(module.HardwareLines))
+	lines = append(lines, module.HardwareLines...)
+
+	// Structure Agregados
+	if strings.TrimSpace(module.StructureID) != "" {
+		if st, ok := findStructure(catalog, module.StructureID); ok {
+			for _, inst := range st.Agregados {
+				if agr, ok := findAgregado(catalog, inst.AgregadoID); ok {
+					qty := inst.Quantity
+					if qty <= 0 {
+						qty = 1
+					}
+					for _, hl := range agr.HardwareLines {
+						copyHl := hl
+						copyHl.Quantity = hl.Quantity * qty
+						lines = append(lines, copyHl)
+					}
+				}
+			}
+		}
+	}
+
+	// Module Agregados
+	for _, inst := range module.Agregados {
+		if agr, ok := findAgregado(catalog, inst.AgregadoID); ok {
+			qty := inst.Quantity
+			if qty <= 0 {
+				qty = 1
+			}
+			for _, hl := range agr.HardwareLines {
+				copyHl := hl
+				copyHl.Quantity = hl.Quantity * qty
+				lines = append(lines, copyHl)
+			}
+		}
+	}
+
+	return lines
 }
 
 func expandComposedModuleParts(
@@ -179,11 +221,50 @@ func expandComposedModuleParts(
 	}
 	parts = append(parts, structureParts...)
 
+	// Expand Agregados from Structure
+	for _, agrInst := range structure.Agregados {
+		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+		if !ok {
+			continue
+		}
+		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-")
+		if err != nil {
+			return nil, err
+		}
+		qty := agrInst.Quantity
+		if qty <= 0 {
+			qty = 1
+		}
+		for q := 0; q < qty; q++ {
+			parts = append(parts, agrParts...)
+		}
+	}
+
 	moduleParts, err := expandComponentInstances(module.Components, catalog, dims, "mod-")
 	if err != nil {
 		return nil, err
 	}
 	parts = append(parts, moduleParts...)
+
+	// Expand Agregados from Module
+	for _, agrInst := range module.Agregados {
+		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
+		if !ok {
+			continue
+		}
+		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-")
+		if err != nil {
+			return nil, err
+		}
+		qty := agrInst.Quantity
+		if qty <= 0 {
+			qty = 1
+		}
+		for q := 0; q < qty; q++ {
+			parts = append(parts, agrParts...)
+		}
+	}
+
 	return parts, nil
 }
 
@@ -542,6 +623,15 @@ func findHardware(catalog domain.Catalog, id string) (domain.Hardware, bool) {
 		}
 	}
 	return domain.Hardware{}, false
+}
+
+func findAgregado(catalog domain.Catalog, id string) (domain.Agregado, bool) {
+	for _, a := range catalog.Agregados {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return domain.Agregado{}, false
 }
 
 // CalcHardwareLineCost multiplies line qty × item qty × unit cost (TS parity).

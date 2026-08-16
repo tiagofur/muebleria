@@ -107,7 +107,7 @@ func (s *PostgresStore) UpdateProjectTechnicalWorkflow(
 	}
 
 	now := time.Now()
-	_, err := s.Pool.Exec(ctx, `
+	tag, err := s.Pool.Exec(ctx, `
 		UPDATE projects
 		SET assigned_engineer_id = $1,
 		    technical_status = $2,
@@ -118,6 +118,9 @@ func (s *PostgresStore) UpdateProjectTechnicalWorkflow(
 	`, engineerID, status, surveyTime, installDate, now, projectID)
 	if err != nil {
 		return fmt.Errorf("update project technical workflow: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("project not found")
 	}
 	return nil
 }

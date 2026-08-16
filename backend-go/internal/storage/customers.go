@@ -140,6 +140,12 @@ func (s *PostgresStore) DeactivateCustomer(ctx context.Context, id string) error
 		SET active = false, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1;
 	`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("customer not found")
+	}
+	return nil
 }

@@ -49,8 +49,7 @@ func (s *Server) HandleProjectInternalMessages(w http.ResponseWriter, r *http.Re
 			IsResolved  *bool                             `json:"is_resolved,omitempty"`
 			Attachments json.RawMessage                   `json:"attachments,omitempty"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -125,8 +124,7 @@ func (s *Server) HandleProjectTechnicalWorkflow(w http.ResponseWriter, r *http.R
 		Comment                   string  `json:"comment,omitempty"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 

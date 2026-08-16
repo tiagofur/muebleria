@@ -204,8 +204,14 @@ func (s *PostgresStore) DeactivateMaterialBoard(ctx context.Context, id string) 
 		SET active = false, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1;
 	`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("material board not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) ReactivateMaterialBoard(ctx context.Context, id string) error {
@@ -214,8 +220,14 @@ func (s *PostgresStore) ReactivateMaterialBoard(ctx context.Context, id string) 
 		SET active = true, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1;
 	`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("material board not found")
+	}
+	return nil
 }
 
 // --- EDGE BANDS ---
@@ -411,14 +423,26 @@ func (s *PostgresStore) UpdateEdgeBand(ctx context.Context, id string, e *domain
 
 func (s *PostgresStore) DeactivateEdgeBand(ctx context.Context, id string) error {
 	query := `UPDATE edge_bands SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("edge band not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) ReactivateEdgeBand(ctx context.Context, id string) error {
 	query := `UPDATE edge_bands SET active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("edge band not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error) {
@@ -506,14 +530,26 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain
 
 func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string) error {
 	query := `UPDATE hardwares SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("hardware not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) ReactivateHardware(ctx context.Context, id string) error {
 	query := `UPDATE hardwares SET active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("hardware not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) GetOptionGroupByID(ctx context.Context, id string) (*domain.OptionGroup, error) {
@@ -623,6 +659,12 @@ func (s *PostgresStore) UpdateOptionGroup(ctx context.Context, id string, og *do
 
 func (s *PostgresStore) DeleteOptionGroup(ctx context.Context, id string) error {
 	query := `DELETE FROM option_groups WHERE id = $1`
-	_, err := s.Pool.Exec(ctx, query, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("option group not found")
+	}
+	return nil
 }

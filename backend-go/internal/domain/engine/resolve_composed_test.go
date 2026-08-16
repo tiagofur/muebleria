@@ -305,3 +305,98 @@ func TestResolveBomWithPin_NilPinMatchesLive(t *testing.T) {
 			len(live.BoardParts), len(pinned.BoardParts))
 	}
 }
+
+func TestResolveBom_ComposedModuleWithAgregados(t *testing.T) {
+	mat := domain.MaterialBoard{
+		ID: "mat-1", Code: "MAT", Name: "Melamina", Active: true,
+		WidthMm: 1830, LengthMm: 2440, ThicknessMm: 18, CostPerM2: 20,
+		DefaultEdgeBandID: "edge-1",
+	}
+	edge := domain.EdgeBand{ID: "edge-1", Code: "CAN", Name: "Canto", CostPerMl: 1, Active: true}
+	hw := domain.Hardware{ID: "hw-1", Code: "CORR", Name: "Correderas", CostPerUnit: 50, Active: true}
+
+	compFrente := domain.Component{
+		ID: "comp-frente", Code: "FCAJ", Name: "Frente Cajon", Placement: domain.PlacementFrenteCajon,
+		GeometryKind: "rectangular_board", LengthMm: 200, WidthMm: 500, ThicknessMm: 18,
+		OptionRoles: []string{"FRENTE"}, Active: true,
+	}
+
+	agrCajon := domain.Agregado{
+		ID: "agr-cajon", Code: "CAJ", Name: "Cajón", Active: true,
+		Components: []domain.ComponentInstance{
+			{ComponentID: "comp-frente", Quantity: 1},
+		},
+		HardwareLines: []domain.HardwareLine{
+			{ID: "hl-1", HardwareID: "hw-1", Quantity: 1, OptionRole: "HERRAJE"},
+		},
+	}
+
+	st := domain.Structure{
+		ID: "st-1", Code: "EST", Name: "Cuerpo", WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true,
+		Presets: []domain.DimensionPreset{{ID: "p1", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
+	}
+
+	mod := domain.Module{
+		ID: "mod-1", Code: "MOD", Name: "Mueble 2 Cajones",
+		StructureID: "st-1", WidthMm: 600, HeightMm: 720, DepthMm: 560,
+		Agregados: []domain.ModuleAgregadoInstance{
+			{AgregadoID: "agr-cajon", Quantity: 2},
+		},
+	}
+
+	catalog := domain.Catalog{
+		Materials:  []domain.MaterialBoard{mat},
+		Edges:      []domain.EdgeBand{edge},
+		Hardware:   []domain.Hardware{hw},
+		Structures: []domain.Structure{st},
+		Components: []domain.Component{compFrente},
+		Agregados:  []domain.Agregado{agrCajon},
+	}
+
+	choices := map[string]string{
+		"INTERIOR": "mat-1",
+		"FRENTE":   "mat-1",
+		"HERRAJE":  "hw-1",
+	}
+
+	bom, err := ResolveBom(mod, choices, catalog, "p1")
+	if err != nil {
+		t.Fatalf("unexpected error resolving module with agregados: %v", err)
+	}
+
+	// 2 drawer instances -> 2 board parts (one per instance)
+	if len(bom.BoardParts) != 2 {
+		t.Errorf("expected 2 board parts from agregados, got %d", len(bom.BoardParts))
+	}
+	// 2 drawer instances -> hardware quantity = 1 * 2 = 2
+	if len(bom.HardwareLines) != 1 {
+		t.Fatalf("expected 1 resolved hardware line, got %d", len(bom.HardwareLines))
+	}
+	if bom.HardwareLines[0].Quantity != 2 {
+		t.Errorf("expected hardware line quantity 2, got %d", bom.HardwareLines[0].Quantity)
+	}
+}
+
+func TestEvaluatePartFormula_ErrorGuards(t *testing.T) {
+	dims := formulaDims{W: 600, H: 720, D: 560}
+
+	// Division by zero
+	if _, err := evaluatePartFormula("W/0", dims); err == nil {
+		t.Error("expected division by zero error")
+	}
+
+	// Empty formula
+	if _, err := evaluatePartFormula("  ", dims); err == nil {
+		t.Error("expected empty formula error")
+	}
+
+	// Disallowed characters
+	if _, err := evaluatePartFormula("W + $100", dims); err == nil {
+		t.Error("expected error for disallowed characters")
+	}
+
+	// Unclosed parentheses
+	if _, err := evaluatePartFormula("(W + 10", dims); err == nil {
+		t.Error("expected error for unclosed parentheses")
+	}
+}

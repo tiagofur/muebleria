@@ -3,7 +3,6 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +17,9 @@ import (
 // generateTicketNumber creates a readable ticket code like GAR-20260815-A1B2
 func generateTicketNumber() string {
 	b := make([]byte, 2)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("GAR-%s-0001", time.Now().Format("20060102"))
+	}
 	return fmt.Sprintf("GAR-%s-%s", time.Now().Format("20060102"), strings.ToUpper(hex.EncodeToString(b)))
 }
 
@@ -53,8 +54,7 @@ func (s *Server) HandleWarrantyTickets(w http.ResponseWriter, r *http.Request) {
 			RefabricationPieces  []domain.WarrantyRefabricationPiece `json:"refabrication_pieces,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -69,9 +69,12 @@ func (s *Server) HandleWarrantyTickets(w http.ResponseWriter, r *http.Request) {
 
 		ticketID := strings.TrimSpace(req.ID)
 		if ticketID == "" {
-			b := make([]byte, 16)
-			_, _ = rand.Read(b)
-			ticketID = fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+			hexID, err := randomHex(16)
+			if err != nil {
+				respondWithInternalError(w, err, "warranty ticket id")
+				return
+			}
+			ticketID = hexID
 		}
 
 		ticketNum := strings.TrimSpace(req.TicketNumber)
@@ -132,6 +135,10 @@ func (s *Server) HandleWarrantyTicketByID(w http.ResponseWriter, r *http.Request
 
 	ticket, err := s.Store.GetWarrantyTicketByID(r.Context(), ticketID)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			respondWithError(w, http.StatusNotFound, "ticket de garantía no encontrado")
+			return
+		}
 		respondWithInternalError(w, err, "get warranty ticket")
 		return
 	}
@@ -146,20 +153,19 @@ func (s *Server) HandleWarrantyTicketByID(w http.ResponseWriter, r *http.Request
 
 	case http.MethodPatch:
 		var req struct {
-			Title                *string                             `json:"title,omitempty"`
-			Description          *string                             `json:"description,omitempty"`
-			Category             *domain.WarrantyCategory            `json:"category,omitempty"`
-			Priority             *domain.WarrantyPriority            `json:"priority,omitempty"`
-			Status               *domain.WarrantyStatus              `json:"status,omitempty"`
-			AssignedTechnicianID *string                             `json:"assigned_technician_id,omitempty"`
-			ScheduledDate        *string                             `json:"scheduled_date,omitempty"`
-			ResolvedAt           *string                             `json:"resolved_at,omitempty"`
-			ResolutionNotes      *string                             `json:"resolution_notes,omitempty"`
+			Title                *string                              `json:"title,omitempty"`
+			Description          *string                              `json:"description,omitempty"`
+			Category             *domain.WarrantyCategory             `json:"category,omitempty"`
+			Priority             *domain.WarrantyPriority             `json:"priority,omitempty"`
+			Status               *domain.WarrantyStatus               `json:"status,omitempty"`
+			AssignedTechnicianID *string                              `json:"assigned_technician_id,omitempty"`
+			ScheduledDate        *string                              `json:"scheduled_date,omitempty"`
+			ResolvedAt           *string                              `json:"resolved_at,omitempty"`
+			ResolutionNotes      *string                              `json:"resolution_notes,omitempty"`
 			RefabricationPieces  *[]domain.WarrantyRefabricationPiece `json:"refabrication_pieces,omitempty"`
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+		if !decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -231,6 +237,10 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 
 	ticket, err := s.Store.GetWarrantyTicketByID(r.Context(), ticketID)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			respondWithError(w, http.StatusNotFound, "ticket de garantía no encontrado")
+			return
+		}
 		respondWithInternalError(w, err, "get warranty ticket")
 		return
 	}
@@ -259,8 +269,7 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 				ThumbnailURL string                   `json:"thumbnail_url,omitempty"`
 				Caption      string                   `json:"caption,omitempty"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				respondWithError(w, http.StatusBadRequest, "cuerpo json inválido")
+			if !decodeJSONBody(w, r, &req) {
 				return
 			}
 			if strings.TrimSpace(req.URL) == "" {
@@ -276,9 +285,11 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 				thumb = req.URL
 			}
 
-			b := make([]byte, 16)
-			_, _ = rand.Read(b)
-			photoID := fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+			photoID, err := randomHex(16)
+			if err != nil {
+				respondWithInternalError(w, err, "warranty photo id")
+				return
+			}
 
 			photo := domain.WarrantyTicketPhoto{
 				ID:           photoID,
@@ -299,8 +310,18 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 
 		// Case 2: Multipart form upload
 		if strings.HasPrefix(contentType, "multipart/form-data") {
-			if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB limit
-				respondWithError(w, http.StatusBadRequest, "error al procesar multipart form")
+			if strings.TrimSpace(s.MediaDir) == "" {
+				respondWithError(w, http.StatusServiceUnavailable, "almacenamiento de medios no configurado")
+				return
+			}
+			if err := os.MkdirAll(s.MediaDir, 0o750); err != nil {
+				respondWithInternalError(w, err, "media mkdir")
+				return
+			}
+
+			r.Body = http.MaxBytesReader(w, r.Body, maxMediaBytes+512)
+			if err := r.ParseMultipartForm(maxMediaBytes); err != nil {
+				respondWithError(w, http.StatusRequestEntityTooLarge, "archivo demasiado grande (máx 3 MB)")
 				return
 			}
 
@@ -311,6 +332,59 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 			}
 			defer file.Close()
 
+			buf := make([]byte, 512)
+			n, _ := io.ReadFull(file, buf)
+			fileContentType := http.DetectContentType(buf[:n])
+			ext, ok := allowedMediaTypes[fileContentType]
+			if !ok {
+				name := strings.ToLower(header.Filename)
+				switch {
+				case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
+					ext = ".jpg"
+					ok = true
+				case strings.HasSuffix(name, ".png"):
+					ext = ".png"
+					ok = true
+				case strings.HasSuffix(name, ".webp"):
+					ext = ".webp"
+					ok = true
+				}
+			}
+			if !ok {
+				respondWithError(w, http.StatusBadRequest, "formato no permitido (jpg, png o webp)")
+				return
+			}
+
+			id, err := randomHex(16)
+			if err != nil {
+				respondWithInternalError(w, err, "media id")
+				return
+			}
+			filename := id + ext
+			destPath := filepath.Join(s.MediaDir, filename)
+
+			if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(s.MediaDir)+string(os.PathSeparator)) &&
+				filepath.Clean(destPath) != filepath.Clean(s.MediaDir) {
+				respondWithError(w, http.StatusBadRequest, "ruta inválida")
+				return
+			}
+
+			out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o640)
+			if err != nil {
+				respondWithInternalError(w, err, "media write")
+				return
+			}
+			defer out.Close()
+
+			if _, err := out.Write(buf[:n]); err != nil {
+				respondWithInternalError(w, err, "media write")
+				return
+			}
+			if _, err := io.Copy(out, file); err != nil {
+				respondWithInternalError(w, err, "media write")
+				return
+			}
+
 			kindStr := r.FormValue("kind")
 			kind := domain.WarrantyPhotoIssueReport
 			if kindStr == string(domain.WarrantyPhotoResolutionProof) {
@@ -318,39 +392,13 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 			}
 			caption := r.FormValue("caption")
 
-			uploadDir := filepath.Join("data", "uploads", "warranties", ticketID)
-			if err := os.MkdirAll(uploadDir, 0755); err != nil {
-				respondWithInternalError(w, err, "create upload dir")
-				return
-			}
-
-			b := make([]byte, 8)
-			_, _ = rand.Read(b)
-			randSuffix := hex.EncodeToString(b)
-			ext := filepath.Ext(header.Filename)
-			if ext == "" {
-				ext = ".jpg"
-			}
-			filename := fmt.Sprintf("%d_%s%s", time.Now().Unix(), randSuffix, ext)
-			destPath := filepath.Join(uploadDir, filename)
-
-			destFile, err := os.Create(destPath)
+			photoID, err := randomHex(16)
 			if err != nil {
-				respondWithInternalError(w, err, "save uploaded file")
-				return
-			}
-			defer destFile.Close()
-
-			if _, err := io.Copy(destFile, file); err != nil {
-				respondWithInternalError(w, err, "copy file content")
+				respondWithInternalError(w, err, "warranty photo id")
 				return
 			}
 
-			bUUID := make([]byte, 16)
-			_, _ = rand.Read(bUUID)
-			photoID := fmt.Sprintf("%x-%x-%x-%x-%x", bUUID[0:4], bUUID[4:6], bUUID[6:8], bUUID[8:10], bUUID[10:16])
-
-			fileURL := fmt.Sprintf("/uploads/warranties/%s/%s", ticketID, filename)
+			fileURL := "/api/media/" + filename
 
 			photo := domain.WarrantyTicketPhoto{
 				ID:           photoID,
@@ -392,9 +440,25 @@ func (s *Server) HandleWarrantyTicketPhotoDelete(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Capture photo URL before deleting record to clean up physical file if local
+	photos, err := s.Store.ListWarrantyTicketPhotos(r.Context(), ticketID)
+	var targetURL string
+	if err == nil {
+		for _, p := range photos {
+			if p.ID == photoID {
+				targetURL = p.URL
+				break
+			}
+		}
+	}
+
 	if err := s.Store.DeleteWarrantyTicketPhoto(r.Context(), ticketID, photoID); err != nil {
 		respondWithInternalError(w, err, "delete warranty photo")
 		return
+	}
+
+	if targetURL != "" {
+		deleteMediaFileByURL(s.MediaDir, targetURL)
 	}
 
 	respondWithJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

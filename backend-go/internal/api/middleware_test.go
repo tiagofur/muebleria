@@ -263,3 +263,71 @@ func TestAccessTokenTTLIsFifteenMinutes(t *testing.T) {
 		t.Errorf("AccessTokenTTL = %v, want 15 minutes", auth.AccessTokenTTL)
 	}
 }
+
+func TestRateLimitMiddleware(t *testing.T) {
+	// 1 RPS, burst 2
+	mw := RateLimitMiddleware(1.0, 2)
+	handler := mw(okHandler())
+
+	// Request 1 -> 200 (within burst)
+	req1 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	req1.RemoteAddr = "192.0.2.1:12345"
+	rr1 := httptest.NewRecorder()
+	handler.ServeHTTP(rr1, req1)
+	if rr1.Code != http.StatusOK {
+		t.Errorf("request 1: expected 200, got %d", rr1.Code)
+	}
+
+	// Request 2 -> 200 (within burst)
+	req2 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	req2.RemoteAddr = "192.0.2.1:12345"
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Errorf("request 2: expected 200, got %d", rr2.Code)
+	}
+
+	// Request 3 -> 429 (burst exceeded)
+	req3 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	req3.RemoteAddr = "192.0.2.1:12345"
+	rr3 := httptest.NewRecorder()
+	handler.ServeHTTP(rr3, req3)
+	if rr3.Code != http.StatusTooManyRequests {
+		t.Errorf("request 3: expected 429, got %d", rr3.Code)
+	}
+	if retry := rr3.Header().Get("Retry-After"); retry == "" {
+		t.Errorf("expected Retry-After header on 429")
+	}
+
+	// Different IP -> 200
+	reqOther := httptest.NewRequest("POST", "/api/auth/login", nil)
+	reqOther.RemoteAddr = "192.0.2.2:12345"
+	rrOther := httptest.NewRecorder()
+	handler.ServeHTTP(rrOther, reqOther)
+	if rrOther.Code != http.StatusOK {
+		t.Errorf("different IP: expected 200, got %d", rrOther.Code)
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	// X-Forwarded-For with multiple IPs -> first IP
+	req1 := httptest.NewRequest("GET", "/", nil)
+	req1.Header.Set("X-Forwarded-For", "203.0.113.195, 70.41.3.18, 150.172.238.178")
+	if got := clientIP(req1); got != "203.0.113.195" {
+		t.Errorf("XFF multiple: got %q, want 203.0.113.195", got)
+	}
+
+	// X-Real-IP
+	req2 := httptest.NewRequest("GET", "/", nil)
+	req2.Header.Set("X-Real-IP", "198.51.100.42")
+	if got := clientIP(req2); got != "198.51.100.42" {
+		t.Errorf("X-Real-IP: got %q, want 198.51.100.42", got)
+	}
+
+	// RemoteAddr with port
+	req3 := httptest.NewRequest("GET", "/", nil)
+	req3.RemoteAddr = "192.0.2.50:54321"
+	if got := clientIP(req3); got != "192.0.2.50" {
+		t.Errorf("RemoteAddr: got %q, want 192.0.2.50", got)
+	}
+}

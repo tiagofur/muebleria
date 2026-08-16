@@ -119,8 +119,14 @@ func (s *PostgresStore) UpdateProjectTemplate(ctx context.Context, id string, t 
 
 // DeleteProjectTemplate removes a template by id.
 func (s *PostgresStore) DeleteProjectTemplate(ctx context.Context, id string) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM project_templates WHERE id = $1`, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM project_templates WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("project template not found")
+	}
+	return nil
 }
 
 // scanner abstracts *pgx.Rows and *pgx.Row for the SELECT above.

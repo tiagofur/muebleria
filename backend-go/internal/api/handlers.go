@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -71,11 +71,11 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(response)
 }
 
-// respondWithInternalError logs the real error server-side but returns a generic
-// message to the client. Internal error strings (DB driver text, constraint
-// names, etc.) must never reach the client (#5).
+// respondWithInternalError logs the real error server-side via structured slog
+// but returns a generic message to the client. Internal error strings (DB driver text,
+// constraint names, etc.) must never reach the client (#5).
 func respondWithInternalError(w http.ResponseWriter, err error, op string) {
-	log.Printf("internal error in %s: %v", op, err)
+	slog.Error("internal server error", "op", op, "error", err)
 	respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 }
 
