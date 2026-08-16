@@ -20,6 +20,19 @@ const SIZE_CLASS: Record<NonNullable<CatalogImageProps['size']>, string> = {
   lg: 'catalog-image catalog-image--lg',
 };
 
+function isSafeUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const trimmed = url.trim().toLowerCase();
+  if (
+    trimmed.startsWith('javascript:') ||
+    trimmed.startsWith('vbscript:') ||
+    trimmed.startsWith('data:text/html')
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function CatalogImage({
   src,
   alt,
@@ -27,7 +40,7 @@ export function CatalogImage({
   size = 'md',
 }: CatalogImageProps): ReactNode {
   const base = `${SIZE_CLASS[size]}${className ? ` ${className}` : ''}`;
-  if (src) {
+  if (src && isSafeUrl(src)) {
     return (
       <img
         className={base}

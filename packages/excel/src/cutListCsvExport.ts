@@ -28,7 +28,10 @@ export const CUT_LIST_CSV_HEADERS = [
 export const CUT_LIST_CSV_SEPARATOR = ';' as const;
 
 function csvEscape(value: string | number): string {
-  const text = String(value);
+  let text = String(value);
+  if (typeof value === 'string' && /^[=@+]/.test(text)) {
+    text = `'${text}`;
+  }
   if (/[";\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

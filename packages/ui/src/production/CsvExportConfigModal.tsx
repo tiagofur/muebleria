@@ -2,7 +2,7 @@
  * Modal dialog for pre-viewing and configuring CSV cut list exports for third-party optimizers (F073).
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type {
   CsvDelimiter,
   CsvOptimizerPreset,
@@ -31,6 +31,17 @@ export function CsvExportConfigModal({
   const [delimiter, setDelimiter] = useState<CsvDelimiter>(';');
   const [includeHeader, setIncludeHeader] = useState(true);
   const [materialFilter, setMaterialFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const uniqueMaterials = useMemo(() => {
     const list = cutRows
@@ -77,7 +88,15 @@ export function CsvExportConfigModal({
   };
 
   return (
-    <div className="csv-modal-overlay" data-testid="csv-modal-overlay">
+    <div
+      className="csv-modal-overlay"
+      data-testid="csv-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <div
         className="csv-modal"
         role="dialog"

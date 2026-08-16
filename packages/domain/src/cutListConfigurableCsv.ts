@@ -46,7 +46,10 @@ const PRESET_HEADERS: Record<CsvOptimizerPreset, readonly string[]> = {
 };
 
 function csvEscapeValue(value: string | number, delimiter: CsvDelimiter): string {
-  const text = String(value);
+  let text = String(value);
+  if (typeof value === 'string' && /^[=@+]/.test(text)) {
+    text = `'${text}`;
+  }
   const needsEscaping = text.includes(delimiter) || /[";\r\n]/.test(text);
   if (needsEscaping) {
     return `"${text.replace(/"/g, '""')}"`;
