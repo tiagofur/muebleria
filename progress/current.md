@@ -369,3 +369,38 @@ archivos/hunks (staging quirúrgico en App.tsx y domain/index.ts).
 
 
 
+## F089 addendum — escaneo por cámara en smartphones (2026-08-15)
+
+Pregunta del usuario: ¿funciona apuntar la cámara del celular al QR?
+
+Respuesta técnica: `BarcodeDetector` nativo NO existe en iOS (ningún
+navegador, todos WebKit), ni Firefox, y en Chromium desktop es
+platform-gated (ChromeOS/macOS). Solo Android/Chrome lo tiene por defecto.
+
+**Fix (commit siguiente):** fallback a `jsqr` (decoder QR puro JS, ~14KB,
+cero deps transitivas) en `ScanCameraModal` cuando no hay detector nativo:
+- `buildFrameDetector()`: BarcodeDetector (QR+Code128) si existe → si no,
+  jsQR sobre ImageData del canvas (QR only).
+- Estado `nocamera` separado de `permission`: si falta
+  `mediaDevices.getUserMedia` (típico: página servida por HTTP, no HTTPS)
+  → mensaje honesto que menciona el requisito de HTTPS.
+- `video.play()` envuelto en `Promise.resolve` (jsdom devuelve undefined).
+- Test nuevo: con getUserMedia mockeado y sin BarcodeDetector, el video
+  monta y NO aparece el aviso "no soportado" (camino jsQR).
+
+**Condiciones para que funcione en el celular del taller:**
+1. Servir la app por **HTTPS** (o localhost) — getUserMedia exige secure
+   context. HTTP en IP de LAN bloquea la cámara.
+2. iOS: ahora sí funciona vía jsQR (QR de las etiquetas; Code128 solo con
+   detector nativo).
+3. El escaneo debe hacerse DENTRO de la app (modal Piso): el payload es
+   JSON offline-friendly, no una URL — la app de cámara del sistema no
+   abre la app al escanear (decisión de diseño #141).
+
+**React Native (planes del usuario):** `parsePieceLabelScan` vive en
+`@muebles/domain` (TS puro, cero deps) → importable directamente desde una
+app RN; el payload JSON es agnóstico del cliente. Para deep-link desde la
+cámara del sistema habría que agregar variante URL del payload (futuro).
+
+Verificación: ui 836 (+1), init.sh verde, typecheck verde.
+

@@ -1,11 +1,12 @@
 /**
  * Camera scan modal for the shop floor (F089 / #240).
- * Uses the native BarcodeDetector (QR + Code128) when the device supports
- * it; otherwise shows an honest fallback with manual code entry. The modal
- * stays open for continuous scanning — each new reading fires onDetect,
- * repeated readings are debounced.
+ * Detection: native BarcodeDetector (QR + Code128) when the device has it
+ * (Android/Chrome); jsQR (pure JS, QR) everywhere else — notably iOS Safari,
+ * which will never ship BarcodeDetector. The modal stays open for continuous
+ * scanning; each new reading fires onDetect, repeats are debounced.
  */
 
+import jsQR from 'jsqr';
 import {
   useCallback,
   useEffect,
@@ -27,14 +28,37 @@ type BarcodeDetectorCtor = new (options?: {
   readonly formats?: readonly string[];
 }) => BarcodeDetectorLike;
 
-export function getBarcodeDetectorCtor():
-  | BarcodeDetectorCtor
-  | undefined {
+export function getBarcodeDetectorCtor(): BarcodeDetectorCtor | undefined {
   if (typeof window === 'undefined') return undefined;
   const w = window as unknown as {
     BarcodeDetector?: BarcodeDetectorCtor;
   };
   return w.BarcodeDetector;
+}
+
+type FrameDetector = (canvas: HTMLCanvasElement) => Promise<string | null>;
+
+/** Native detector (QR + Code128) or pure-JS jsQR (QR) — never null. */
+function buildFrameDetector(): FrameDetector {
+  const ctor = getBarcodeDetectorCtor();
+  if (ctor) {
+    try {
+      const detector = new ctor({ formats: ['qr_code', 'code_128'] });
+      return async (canvas) => {
+        const codes = await detector.detect(canvas);
+        return codes[0]?.rawValue ?? null;
+      };
+    } catch {
+      /* fall through to jsQR */
+    }
+  }
+  return (canvas) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return Promise.resolve(null);
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const found = jsQR(image.data, image.width, image.height);
+    return Promise.resolve(found?.data ?? null);
+  };
 }
 
 export type ScanCameraModalProps = {
@@ -62,7 +86,6 @@ export function ScanCameraModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastDetectRef = useRef<{ code: string; at: number } | null>(null);
-  const detectorCtor = getBarcodeDetectorCtor();
 
   const emit = useCallback(
     (code: string) => {
@@ -114,8 +137,9 @@ export function ScanCameraModal({
 
     const start = async () => {
       setError(null);
-      if (!detectorCtor || !navigator.mediaDevices?.getUserMedia) {
-        setError('unsupported');
+      if (!navigator.mediaDevices?.getUserMedia) {
+        // Most common cause: page not served over HTTPS (secure context).
+        setError('nocamera');
         return;
       }
       try {
@@ -132,37 +156,31 @@ export function ScanCameraModal({
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
-          await video.play().catch(() => undefined);
+          await Promise.resolve(video.play()).catch(() => undefined);
         }
         setStreaming(true);
         void listCameras();
-        try {
-          const detector = new detectorCtor({
-            formats: ['qr_code', 'code_128'],
-          });
-          const canvas = document.createElement('canvas');
-          interval = setInterval(async () => {
-            if (!videoRef.current || videoRef.current.videoWidth === 0) return;
-            const v = videoRef.current;
-            canvas.width = v.videoWidth;
-            canvas.height = v.videoHeight;
-            canvas.getContext('2d')?.drawImage(v, 0, 0);
-            try {
-              const codes = await detector.detect(canvas);
-              if (codes.length > 0 && codes[0]?.rawValue) {
-                const before = lastDetectRef.current?.code ?? null;
-                emit(codes[0].rawValue);
-                if (before !== codes[0].rawValue.trim()) {
-                  playScanFeedback('hit');
-                }
+        const detectFrame = buildFrameDetector();
+        const canvas = document.createElement('canvas');
+        interval = setInterval(async () => {
+          if (!videoRef.current || videoRef.current.videoWidth === 0) return;
+          const v = videoRef.current;
+          canvas.width = v.videoWidth;
+          canvas.height = v.videoHeight;
+          canvas.getContext('2d')?.drawImage(v, 0, 0);
+          try {
+            const raw = await detectFrame(canvas);
+            if (raw) {
+              const before = lastDetectRef.current?.code ?? null;
+              emit(raw);
+              if (before !== raw.trim()) {
+                playScanFeedback('hit');
               }
-            } catch {
-              /* transient decode errors are fine */
             }
-          }, 250);
-        } catch {
-          setError('detector');
-        }
+          } catch {
+            /* transient decode errors are fine */
+          }
+        }, 250);
       } catch {
         setError('permission');
       }
@@ -173,7 +191,7 @@ export function ScanCameraModal({
       cancelled = true;
       stopStream();
     };
-  }, [open, cameraId, detectorCtor, emit]);
+  }, [open, cameraId, emit]);
 
   useEffect(() => {
     if (!open) {
@@ -210,13 +228,14 @@ export function ScanCameraModal({
       }
     >
       <div className="prod-scan-camera">
-        {error === 'unsupported' || error === 'detector' ? (
+        {error === 'nocamera' ? (
           <p
             className="prod-hub__placeholder-body"
             data-testid="prod-piso-camera-unsupported"
           >
-            Este dispositivo no soporta detección de códigos por cámara.
-            Podés usar un lector USB o ingresar el código a mano.
+            Este navegador no da acceso a la cámara desde esta conexión (se
+            necesita HTTPS). Podés usar un lector USB o ingresar el código a
+            mano.
           </p>
         ) : error === 'permission' ? (
           <p className="catalog-form__error" role="alert">
@@ -225,7 +244,7 @@ export function ScanCameraModal({
           </p>
         ) : null}
 
-        {detectorCtor ? (
+        {!error ? (
           <>
             <div className="prod-scan-camera__video-wrap">
               <video
@@ -236,7 +255,7 @@ export function ScanCameraModal({
                 autoPlay
                 data-testid="prod-piso-camera-video"
               />
-              {!streaming && !error ? (
+              {!streaming ? (
                 <p className="prod-scan-camera__hint">Iniciando cámara…</p>
               ) : null}
               <p className="prod-scan-camera__hint prod-scan-camera__hint--corner">

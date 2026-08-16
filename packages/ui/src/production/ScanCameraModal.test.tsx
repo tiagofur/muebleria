@@ -2,14 +2,14 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ScanCameraModal } from './ScanCameraModal';
 
 afterEach(() => cleanup());
 
 describe('ScanCameraModal (F089)', () => {
-  it('shows honest fallback + manual entry when BarcodeDetector is unavailable', async () => {
+  it('shows honest fallback + manual entry when the camera API is unavailable', async () => {
     const onDetect = vi.fn();
     const user = userEvent.setup();
     render(
@@ -26,6 +26,40 @@ describe('ScanCameraModal (F089)', () => {
     expect(screen.getByTestId('prod-piso-camera-last').textContent).toContain(
       'GAB-01',
     );
+  });
+
+  it('runs the camera (jsQR path) when getUserMedia exists but BarcodeDetector does not', async () => {
+    const original = navigator.mediaDevices;
+    const stop = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop }] }),
+        enumerateDevices: vi.fn().mockResolvedValue([]),
+      },
+    });
+    try {
+      render(
+        <ScanCameraModal
+          open
+          onClose={() => undefined}
+          onDetect={() => undefined}
+        />,
+      );
+      // No native detector in jsdom — the video surface must still mount
+      // (jsQR fallback) instead of the unsupported notice.
+      await waitFor(() =>
+        expect(screen.getByTestId('prod-piso-camera-video')).toBeTruthy(),
+      );
+      expect(
+        screen.queryByTestId('prod-piso-camera-unsupported'),
+      ).toBeNull();
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: original,
+      });
+    }
   });
 
   it('debounces a repeated manual code within the window', async () => {
