@@ -62,6 +62,42 @@ export function formatOptimizerPartDescription(
   return `${name} · ${mod}`;
 }
 
+/** Check if a code is a raw internal ID / UUID or contains copy artifacts */
+function isInternalUuidOrCopy(code?: string): boolean {
+  if (!code || !code.trim()) return true;
+  const c = code.trim();
+  if (c.includes('-copy-') || c.includes('/copy-') || c.includes('_copy_')) return true;
+  // standard UUID or long 32+ hex pattern
+  if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}/.test(c)) return true;
+  if (/^[0-9a-fA-F]{24,}$/.test(c)) return true;
+  return false;
+}
+
+/**
+ * Format a human-readable, clean and unique piece code.
+ * Ex: MOD-CAJ-01-P01, MOD-CAJ-01-LAT-DER, or MOD-CAJ-01-L2-P01 for duplicate lines.
+ */
+export function resolveCleanPieceCode(
+  moduleCode: string,
+  partCode: string | undefined,
+  partIndexOneBased: number,
+  moduleLineSuffix?: string,
+): { partCode: string; labelRef: string } {
+  const mod = moduleCode.trim() || 'MOD';
+  const linePart = moduleLineSuffix?.trim() ? `-${moduleLineSuffix.trim()}` : '';
+  const seqCode = `P${String(partIndexOneBased).padStart(2, '0')}`;
+
+  let finalPartCode: string;
+  if (partCode && !isInternalUuidOrCopy(partCode)) {
+    finalPartCode = partCode.trim();
+  } else {
+    finalPartCode = seqCode;
+  }
+
+  const labelRef = `${mod}${linePart}-${finalPartCode}`;
+  return { partCode: finalPartCode, labelRef };
+}
+
 /**
  * Expand project board parts into Optimizer cut-list rows (PRD §14).
  * Board parts only (EXP-05). Quantity = part.quantity × item.quantity (EXP-02).
@@ -73,6 +109,7 @@ export function generateCutRows(
   catalog: Catalog,
 ): ProductionCutRow[] {
   const sortable: SortableCutRow[] = [];
+  const moduleCounts = new Map<string, number>();
 
   for (const item of project.items) {
     if (!(item.quantity > 0)) {
@@ -99,6 +136,10 @@ export function generateCutRows(
       );
     }
 
+    const seenMod = (moduleCounts.get(module.code) ?? 0) + 1;
+    moduleCounts.set(module.code, seenMod);
+    const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
+
     const bom = resolveBom(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
@@ -108,7 +149,9 @@ export function generateCutRows(
       baseContextForItem(project, item, catalog),
     );
 
+    let partIdx = 0;
     for (const part of bom.boardParts) {
+      partIdx++;
       const material = findMaterial(catalog, part.materialId);
       if (!material) {
         throw new ResolutionError(
@@ -123,19 +166,23 @@ export function generateCutRows(
       }
 
       const edgeBits = edgeBinaryFlags(part.edges);
-      const partCode = part.code;
-      const labelRef = partCode?.trim() || `${module.code}/${part.id}`;
+      const { partCode: cleanPartCode, labelRef } = resolveCleanPieceCode(
+        module.code,
+        part.code,
+        partIdx,
+        lineSuffix,
+      );
       const description = formatOptimizerPartDescription(
         module.code,
         part.description,
-        partCode,
+        part.code,
       );
       const edgeBand = part.edgeBandId
         ? findEdgeBand(catalog, part.edgeBandId)
         : undefined;
       sortable.push({
         moduleCode: module.code,
-        partCode: partCode ?? '',
+        partCode: part.code ?? '',
         partId: part.id,
         description: part.description,
         row: {
@@ -147,7 +194,7 @@ export function generateCutRows(
           grain: part.grain,
           ...edgeBits,
           partName: part.description,
-          partCode,
+          partCode: cleanPartCode,
           moduleCode: module.code,
           labelRef,
           materialCode: material.code,
@@ -238,6 +285,7 @@ export function generatePieceLabels(
   catalog: Catalog,
 ): PieceLabel[] {
   const sortable: SortablePieceLabel[] = [];
+  const moduleCounts = new Map<string, number>();
 
   for (const item of project.items) {
     if (!(item.quantity > 0)) {
@@ -264,6 +312,10 @@ export function generatePieceLabels(
       );
     }
 
+    const seenMod = (moduleCounts.get(module.code) ?? 0) + 1;
+    moduleCounts.set(module.code, seenMod);
+    const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
+
     const bom = resolveBom(
       module,
       effectiveOptionChoices(item.optionChoices, project.projectLevelChoices),
@@ -273,7 +325,9 @@ export function generatePieceLabels(
       baseContextForItem(project, item, catalog),
     );
 
+    let partIdx = 0;
     for (const part of bom.boardParts) {
+      partIdx++;
       const material = findMaterial(catalog, part.materialId);
       if (!material) {
         throw new ResolutionError(
@@ -325,23 +379,33 @@ export function generatePieceLabels(
         };
       }
 
+      const { partCode: cleanPartCode } = resolveCleanPieceCode(
+        module.code,
+        part.code,
+        partIdx,
+        lineSuffix,
+      );
+
       sortable.push({
         moduleCode: module.code,
-        partCode: part.code ?? '',
+        partCode: cleanPartCode,
         partId: part.id,
         description: part.description,
         label: {
           moduleCode: module.code,
           moduleName: module.name,
-          partCode: part.code,
+          partCode: cleanPartCode,
           description: part.description,
           quantity: part.quantity * item.quantity,
           lengthMm: part.lengthMm,
           widthMm: part.widthMm,
+          thicknessMm: part.thicknessMm,
+          grain: part.grain,
           materialCode: material.code,
           materialName: material.name,
           edgeBandCode,
           edgeBandName,
+          edgeBandThicknessMm: edgeForInstruction?.thicknessMm,
           L1: sides.L1,
           L2: sides.L2,
           W1: sides.W1,

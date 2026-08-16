@@ -95,15 +95,57 @@ function drawLabelCard(
   qrImage: PDFImage | null,
 ): void {
   const pad = 8;
+  // Base card background and subtle border
   page.drawRectangle({
     x,
     y: yTop - height,
     width,
     height,
-    borderColor: rgb(0.55, 0.58, 0.62),
-    borderWidth: 1,
+    borderColor: rgb(0.8, 0.82, 0.85),
+    borderWidth: 0.75,
     color: rgb(1, 1, 1),
   });
+
+  // Highlighted edge banding indicators on sides (L1=Top, L2=Bottom, W1=Left, W2=Right)
+  const edgeColor = rgb(0.1, 0.1, 0.12);
+  const edgeWidth = 2.5;
+
+  if (label.L1) {
+    // Top border
+    page.drawLine({
+      start: { x, y: yTop },
+      end: { x: x + width, y: yTop },
+      thickness: edgeWidth,
+      color: edgeColor,
+    });
+  }
+  if (label.L2) {
+    // Bottom border
+    page.drawLine({
+      start: { x, y: yTop - height },
+      end: { x: x + width, y: yTop - height },
+      thickness: edgeWidth,
+      color: edgeColor,
+    });
+  }
+  if (label.W1) {
+    // Left border
+    page.drawLine({
+      start: { x, y: yTop - height },
+      end: { x, y: yTop },
+      thickness: edgeWidth,
+      color: edgeColor,
+    });
+  }
+  if (label.W2) {
+    // Right border
+    page.drawLine({
+      start: { x: x + width, y: yTop - height },
+      end: { x: x + width, y: yTop },
+      thickness: edgeWidth,
+      color: edgeColor,
+    });
+  }
 
   const qrSize = qrImage ? Math.min(52, height - pad * 2) : 0;
   let cursorY = yTop - pad - 11;

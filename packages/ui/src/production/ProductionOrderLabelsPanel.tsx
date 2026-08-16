@@ -323,7 +323,11 @@ export function ProductionOrderLabelsPanel({
           aria-label="Preview y configuración de impresión"
         >
           <div
-            className={`prod-labels__card prod-labels__card--${printer.preset}`}
+            className={`prod-labels__card prod-labels__card--${printer.preset}${
+              active?.L1 ? ' prod-labels__card--edge-l1' : ''
+            }${active?.L2 ? ' prod-labels__card--edge-l2' : ''}${
+              active?.W1 ? ' prod-labels__card--edge-w1' : ''
+            }${active?.W2 ? ' prod-labels__card--edge-w2' : ''}`}
             style={{ aspectRatio: `${dims.widthMm} / ${dims.heightMm}` }}
             data-testid="prod-labels-preview-card"
           >
@@ -335,19 +339,55 @@ export function ProductionOrderLabelsPanel({
                   </p>
                   <p className="prod-labels__card-dims">
                     {active.lengthMm} × {active.widthMm} mm
+                    {active.thicknessMm ? ` × ${active.thicknessMm} mm` : ''}
                     {perUnit ? '' : ` · ×${active.quantity}`}
                   </p>
                   <p className="prod-labels__card-line">
                     {active.moduleCode} — {active.moduleName}
                   </p>
                   <p className="prod-labels__card-line">
-                    {active.materialName}
-                    {active.edgeBandCode ? ` · canto ${active.edgeBandCode}` : ''}
+                    <strong>Tablero:</strong> {active.materialName} ({active.materialCode})
                   </p>
+                  {active.edgeBandName || active.edgeBandCode ? (
+                    <p className="prod-labels__card-line">
+                      <strong>Canto:</strong> {active.edgeBandName || active.edgeBandCode}
+                      {active.edgeBandThicknessMm ? ` (${active.edgeBandThicknessMm} mm)` : ''}
+                    </p>
+                  ) : null}
                   {pieceLabelEdgeSides(active) ? (
                     <p className="prod-labels__card-edge">
                       Encintado: {pieceLabelEdgeSides(active)}
                     </p>
+                  ) : null}
+
+                  {printer.preset === '100x150' ? (
+                    <div className="prod-labels__diagram-box" data-testid="prod-labels-diagram">
+                      <div className="prod-labels__diagram-dim prod-labels__diagram-dim--top">
+                        L1: {active.lengthMm} mm {active.L1 ? '●' : ''}
+                      </div>
+                      <div className="prod-labels__diagram-middle">
+                        <div className="prod-labels__diagram-dim prod-labels__diagram-dim--left">
+                          W1 {active.W1 ? '●' : ''}
+                        </div>
+                        <div
+                          className={`prod-labels__diagram-rect${
+                            active.L1 ? ' prod-labels__diagram-rect--l1' : ''
+                          }${active.L2 ? ' prod-labels__diagram-rect--l2' : ''}${
+                            active.W1 ? ' prod-labels__diagram-rect--w1' : ''
+                          }${active.W2 ? ' prod-labels__diagram-rect--w2' : ''}`}
+                        >
+                          <span className="prod-labels__diagram-grain">
+                            {active.grain === 1 ? 'Veta ↗ Longitudinal' : 'Sin veta fija'}
+                          </span>
+                        </div>
+                        <div className="prod-labels__diagram-dim prod-labels__diagram-dim--right">
+                          W2 {active.W2 ? '●' : ''}
+                        </div>
+                      </div>
+                      <div className="prod-labels__diagram-dim prod-labels__diagram-dim--bottom">
+                        L2: {active.lengthMm} mm {active.L2 ? '●' : ''}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
                 <div className="prod-labels__card-qr">

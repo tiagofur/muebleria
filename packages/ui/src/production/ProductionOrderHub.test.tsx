@@ -72,6 +72,8 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     );
     expect(screen.getByTestId('prod-hub-modules').textContent).toBe('2');
     expect(screen.getByTestId('prod-hub-pieces').textContent).toBe('1');
+    expect(screen.getByTestId('prod-hub-board-m2').textContent).toBe('0.81');
+    expect(screen.getByTestId('prod-hub-edge-ml').textContent).toBe('1.44');
     expect(screen.getByTestId('prod-hub-ready')).toBeTruthy();
     expect(screen.getByTestId('prod-hub-checklist')).toBeTruthy();
     // Factory totals: board m² + edge ml from the resolved cut rows.

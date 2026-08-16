@@ -196,7 +196,15 @@ export function ProductionQueue({
                       {customerLabelFor(project.customerId) || '—'}
                     </p>
                     <p className="prod-queue-card__meta">
-                      Actualizado {formatIsoDate(project.updatedAt)}
+                      {project.priceSnapshot?.capturedAt ? (
+                        <>
+                          <span>Aceptado {formatIsoDate(project.priceSnapshot.capturedAt)}</span>
+                          <span className="prod-queue-card__dot" aria-hidden>
+                            ·
+                          </span>
+                        </>
+                      ) : null}
+                      <span>Actualizado {formatIsoDate(project.updatedAt)}</span>
                       <span className="prod-queue-card__dot" aria-hidden>
                         ·
                       </span>

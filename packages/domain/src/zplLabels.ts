@@ -107,7 +107,29 @@ export function pieceToZpl(
     const borderMargin = Math.round(2 * dpmm);
     const borderW = widthDots - borderMargin * 2;
     const borderH = heightDots - borderMargin * 2;
-    lines.push(`^FO${borderMargin},${borderMargin}^GB${borderW},${borderH},2^FS`);
+    // Base frame border
+    lines.push(`^FO${borderMargin},${borderMargin}^GB${borderW},${borderH},1^FS`);
+
+    // Edge banding indicator bars (L1=Top, L2=Bottom, W1=Left, W2=Right)
+    const edgeBarThick = Math.max(3, Math.round(1.0 * dpmm));
+    if (label.L1) {
+      // Top edge
+      lines.push(`^FO${borderMargin},${borderMargin}^GB${borderW},${edgeBarThick},${edgeBarThick}^FS`);
+    }
+    if (label.L2) {
+      // Bottom edge
+      const yBottom = borderMargin + borderH - edgeBarThick;
+      lines.push(`^FO${borderMargin},${yBottom}^GB${borderW},${edgeBarThick},${edgeBarThick}^FS`);
+    }
+    if (label.W1) {
+      // Left edge
+      lines.push(`^FO${borderMargin},${borderMargin}^GB${edgeBarThick},${borderH},${edgeBarThick}^FS`);
+    }
+    if (label.W2) {
+      // Right edge
+      const xRight = borderMargin + borderW - edgeBarThick;
+      lines.push(`^FO${xRight},${borderMargin}^GB${edgeBarThick},${borderH},${edgeBarThick}^FS`);
+    }
   }
 
   if (preset === '50x25') {
@@ -126,26 +148,91 @@ export function pieceToZpl(
     const qrX = widthDots - marginX - qrSize;
     lines.push(`^FO${qrX},${Math.round(4 * dpmm)}^BQN,2,${qrMag}^FDMM,A${qrPayload}^FS`);
   } else if (preset === '100x150') {
-    // Large 100x150 mm label
-    const fTitle = Math.round(7 * dpmm);
-    const fSub = Math.round(5 * dpmm);
-    const fBody = Math.round(4.5 * dpmm);
-    const marginX = Math.round(6 * dpmm);
-    const qrMag = dpi === 300 ? 5 : 4;
+    // Large 100x150 mm label — Rich Industrial Workshop Format
+    const fTitle = Math.round(6 * dpmm);
+    const fSub = Math.round(4.5 * dpmm);
+    const fBody = Math.round(3.8 * dpmm);
+    const fDetail = Math.round(3.2 * dpmm);
+    const marginX = Math.round(7 * dpmm);
 
+    // Header section
     let y = Math.round(8 * dpmm);
     lines.push(`^FO${marginX},${y}^A0N,${fTitle},${fTitle}^FD${title}^FS`);
-    y += Math.round(12 * dpmm);
+    y += Math.round(9 * dpmm);
     lines.push(`^FO${marginX},${y}^A0N,${fSub},${fSub}^FD${moduleStr}^FS`);
-    y += Math.round(10 * dpmm);
-    lines.push(`^FO${marginX},${y}^A0N,${fBody},${fBody}^FD${dimsStr}^FS`);
-    y += Math.round(9 * dpmm);
-    lines.push(`^FO${marginX},${y}^A0N,${fBody},${fBody}^FD${matStr}^FS`);
-    y += Math.round(9 * dpmm);
-    lines.push(`^FO${marginX},${y}^A0N,${fBody},${fBody}^FD${edgeStr}^FS`);
+    y += Math.round(8 * dpmm);
+    const thickStr = label.thicknessMm ? ` | Esp: ${label.thicknessMm} mm` : '';
+    lines.push(`^FO${marginX},${y}^A0N,${fBody},${fBody}^FD${dimsStr}${thickStr}^FS`);
+    y += Math.round(7 * dpmm);
+    lines.push(`^FO${marginX},${y}^A0N,${fDetail},${fDetail}^FD${matStr}^FS`);
+    y += Math.round(6 * dpmm);
+    lines.push(`^FO${marginX},${y}^A0N,${fDetail},${fDetail}^FD${edgeStr}^FS`);
 
-    y += Math.round(12 * dpmm);
-    lines.push(`^FO${marginX},${y}^BQN,2,${qrMag}^FDMM,A${qrPayload}^FS`);
+    // Divider
+    y += Math.round(8 * dpmm);
+    const contentW = widthDots - marginX * 2;
+    lines.push(`^FO${marginX},${y}^GB${contentW},2,2^FS`);
+
+    // Graphical Piece Diagram (Schematic Representation)
+    y += Math.round(6 * dpmm);
+    const diagX = marginX + Math.round(4 * dpmm);
+    const diagW = Math.round(45 * dpmm);
+    const diagH = Math.round(32 * dpmm);
+
+    // Outer piece rectangle box
+    lines.push(`^FO${diagX},${y}^GB${diagW},${diagH},2^FS`);
+
+    // Edge banding indicator on the schematic diagram
+    const barW = Math.round(1.5 * dpmm);
+    if (label.L1) {
+      // Top (L1)
+      lines.push(`^FO${diagX},${y}^GB${diagW},${barW},${barW}^FS`);
+    }
+    if (label.L2) {
+      // Bottom (L2)
+      lines.push(`^FO${diagX},${y + diagH - barW}^GB${diagW},${barW},${barW}^FS`);
+    }
+    if (label.W1) {
+      // Left (W1)
+      lines.push(`^FO${diagX},${y}^GB${barW},${diagH},${barW}^FS`);
+    }
+    if (label.W2) {
+      // Right (W2)
+      lines.push(`^FO${diagX + diagW - barW},${y}^GB${barW},${diagH},${barW}^FS`);
+    }
+
+    // Dimension labels & side names around diagram
+    lines.push(`^FO${diagX},${y - Math.round(4.5 * dpmm)}^A0N,${Math.round(2.6 * dpmm)},${Math.round(2.6 * dpmm)}^FDL1: ${label.lengthMm} mm${label.L1 ? ' [CANTO]' : ''}^FS`);
+    lines.push(`^FO${diagX},${y + diagH + Math.round(1.5 * dpmm)}^A0N,${Math.round(2.6 * dpmm)},${Math.round(2.6 * dpmm)}^FDL2: ${label.lengthMm} mm${label.L2 ? ' [CANTO]' : ''}^FS`);
+
+    // Grain direction inside diagram
+    const grainText = label.grain === 1 ? 'VETA: LONGITUDINAL (L)' : 'VETA: SIN DIRECCION';
+    lines.push(`^FO${diagX + Math.round(4 * dpmm)},${y + Math.round(14 * dpmm)}^A0N,${Math.round(2.8 * dpmm)},${Math.round(2.8 * dpmm)}^FD${grainText}^FS`);
+
+    // Right-side info block alongside diagram
+    const sideInfoX = diagX + diagW + Math.round(6 * dpmm);
+    const sideInfoW = widthDots - sideInfoX - marginX;
+    let infoY = y;
+    lines.push(`^FO${sideInfoX},${infoY}^A0N,${Math.round(2.6 * dpmm)},${Math.round(2.6 * dpmm)}^FDW1 (Izq): ${label.widthMm} mm${label.W1 ? ' [C]' : ''}^FS`);
+    infoY += Math.round(5 * dpmm);
+    lines.push(`^FO${sideInfoX},${infoY}^A0N,${Math.round(2.6 * dpmm)},${Math.round(2.6 * dpmm)}^FDW2 (Der): ${label.widthMm} mm${label.W2 ? ' [C]' : ''}^FS`);
+    infoY += Math.round(6 * dpmm);
+    if (label.edgeBandName) {
+      lines.push(`^FO${sideInfoX},${infoY}^A0N,${Math.round(2.5 * dpmm)},${Math.round(2.5 * dpmm)}^FDCanto: ${sanitizeZplText(label.edgeBandName)}^FS`);
+    }
+
+    // Lower section: QR Code + Barcode footer
+    y += diagH + Math.round(10 * dpmm);
+    lines.push(`^FO${marginX},${y}^GB${contentW},2,2^FS`);
+    y += Math.round(6 * dpmm);
+
+    const qrMag = dpi === 300 ? 5 : 4;
+    lines.push(`^FO${marginX + Math.round(6 * dpmm)},${y}^BQN,2,${qrMag}^FDMM,A${qrPayload}^FS`);
+
+    const scanHintX = marginX + Math.round(40 * dpmm);
+    lines.push(`^FO${scanHintX},${y + Math.round(4 * dpmm)}^A0N,${Math.round(4 * dpmm)},${Math.round(4 * dpmm)}^FDESCANEO CNC / PISO^FS`);
+    lines.push(`^FO${scanHintX},${y + Math.round(12 * dpmm)}^A0N,${Math.round(3.2 * dpmm)},${Math.round(3.2 * dpmm)}^FD${sanitizeZplText(label.partCode || '')}^FS`);
+    lines.push(`^FO${scanHintX},${y + Math.round(18 * dpmm)}^A0N,${Math.round(2.8 * dpmm)},${Math.round(2.8 * dpmm)}^FD${sanitizeZplText(label.moduleCode)}^FS`);
   } else {
     // Standard 100x50 mm label
     const fTitle = Math.round(5 * dpmm);

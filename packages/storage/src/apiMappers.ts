@@ -30,6 +30,7 @@ import type {
   ProjectTechnicalStatus,
   ProjectTemplate,
   QuoteBreakdown,
+  QuotePriceSnapshot,
   WarrantyRefabricationPiece,
   WarrantyTicket,
   WarrantyTicketCategory,
@@ -1362,6 +1363,58 @@ function measureDefaultsFromApi(
     : undefined;
 }
 
+function priceSnapshotToApi(
+  snapshot: QuotePriceSnapshot | undefined,
+): Record<string, unknown> | null {
+  if (!snapshot) return null;
+  return {
+    captured_at: snapshot.capturedAt,
+    breakdown: {
+      materials_cost: snapshot.breakdown.materialsCost,
+      edge_total: snapshot.breakdown.edgeTotal,
+      hardware_total: snapshot.breakdown.hardwareTotal,
+      direct_cost: snapshot.breakdown.directCost,
+      labor_modular: snapshot.breakdown.laborModular,
+      labor_fixed_cost: snapshot.breakdown.laborFixedCost,
+      margin_factor: snapshot.breakdown.marginFactor,
+      sale_price: snapshot.breakdown.salePrice,
+    },
+    material_cost_per_m2: snapshot.materialCostPerM2
+      ? { ...snapshot.materialCostPerM2 }
+      : undefined,
+    edge_cost_per_ml: snapshot.edgeCostPerMl
+      ? { ...snapshot.edgeCostPerMl }
+      : undefined,
+    hardware_cost_per_unit: snapshot.hardwareCostPerUnit
+      ? { ...snapshot.hardwareCostPerUnit }
+      : undefined,
+  };
+}
+
+function priceSnapshotFromApi(
+  raw: unknown,
+): QuotePriceSnapshot | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const s = raw as Record<string, unknown>;
+  const rawBreakdown = (s.breakdown ?? {}) as Record<string, unknown>;
+  return {
+    capturedAt: str(s.captured_at ?? s.capturedAt, new Date().toISOString()),
+    breakdown: {
+      materialsCost: num(rawBreakdown.materials_cost ?? rawBreakdown.materialsCost),
+      edgeTotal: num(rawBreakdown.edge_total ?? rawBreakdown.edgeTotal),
+      hardwareTotal: num(rawBreakdown.hardware_total ?? rawBreakdown.hardwareTotal),
+      directCost: num(rawBreakdown.direct_cost ?? rawBreakdown.directCost),
+      laborModular: num(rawBreakdown.labor_modular ?? rawBreakdown.laborModular),
+      laborFixedCost: num(rawBreakdown.labor_fixed_cost ?? rawBreakdown.laborFixedCost),
+      marginFactor: num(rawBreakdown.margin_factor ?? rawBreakdown.marginFactor, 1.35),
+      salePrice: num(rawBreakdown.sale_price ?? rawBreakdown.salePrice),
+    },
+    materialCostPerM2: s.material_cost_per_m2 as Record<string, number> | undefined,
+    edgeCostPerMl: s.edge_cost_per_ml as Record<string, number> | undefined,
+    hardwareCostPerUnit: s.hardware_cost_per_unit as Record<string, number> | undefined,
+  };
+}
+
 export function projectToApi(p: Project): Record<string, unknown> {
   return {
     id: p.id,
@@ -1381,6 +1434,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     measure_defaults: measureDefaultsToApi(p.measureDefaults),
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
+    price_snapshot: priceSnapshotToApi(p.priceSnapshot),
     plan_edit_session: p.planEditSession
       ? {
           user_id: p.planEditSession.userId,
@@ -1560,6 +1614,7 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     })(),
     createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
+    priceSnapshot: priceSnapshotFromApi(raw.price_snapshot ?? raw.priceSnapshot),
     items: itemsRaw.map((it): ProjectItem => {
       const row = it as Record<string, unknown>;
       const choices = row.option_choices ?? row.optionChoices;

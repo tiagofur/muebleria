@@ -1233,10 +1233,13 @@ export interface PieceLabel {
   readonly quantity: number;
   readonly lengthMm: number;
   readonly widthMm: number;
+  readonly thicknessMm?: number;
+  readonly grain?: 0 | 1;
   readonly materialCode: string;
   readonly materialName: string;
   readonly edgeBandCode?: string;
   readonly edgeBandName?: string;
+  readonly edgeBandThicknessMm?: number;
   readonly L1: boolean;
   readonly L2: boolean;
   readonly W1: boolean;

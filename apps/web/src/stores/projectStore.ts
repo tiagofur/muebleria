@@ -483,6 +483,10 @@ export function createProjectStore(options: InternalOptions) {
       if (prevById.get(p.id) !== p) {
         persistSaveProject(p).catch((err) => {
           console.error('Error al guardar proyecto:', err);
+          toast({
+            type: 'error',
+            message: 'No se pudieron guardar los cambios en el servidor.',
+          });
         });
       }
     }
@@ -661,7 +665,15 @@ export function createProjectStore(options: InternalOptions) {
       const project = get().projects.find((p) => p.id === id);
       if (!project || project.status !== 'accepted') return;
       const now = new Date().toISOString();
-      const withTransition = transitionProjectStatus(project, 'produced', catalog, now);
+      const cat = catalog ?? getCatalogStoreState().catalog ?? {
+        materials: [],
+        edges: [],
+        hardware: [],
+        categories: [],
+        optionGroups: [],
+        modules: [],
+      };
+      const withTransition = transitionProjectStatus(project, 'produced', cat, now);
       const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({ type: 'success', message: '✓ Marcada en producción' });
@@ -673,7 +685,15 @@ export function createProjectStore(options: InternalOptions) {
       const project = get().projects.find((p) => p.id === id);
       if (!project || project.status === status) return;
       const now = new Date().toISOString();
-      const withTransition = transitionProjectStatus(project, status, catalog, now);
+      const cat = catalog ?? getCatalogStoreState().catalog ?? {
+        materials: [],
+        edges: [],
+        hardware: [],
+        categories: [],
+        optionGroups: [],
+        modules: [],
+      };
+      const withTransition = transitionProjectStatus(project, status, cat, now);
       const updated = snapshotOnStatusChange(withTransition, status);
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       const label =
@@ -704,7 +724,15 @@ export function createProjectStore(options: InternalOptions) {
         return;
       }
       const now = new Date().toISOString();
-      const withTransition = transitionProjectStatus(project, 'draft', catalog, now);
+      const cat = catalog ?? getCatalogStoreState().catalog ?? {
+        materials: [],
+        edges: [],
+        hardware: [],
+        categories: [],
+        optionGroups: [],
+        modules: [],
+      };
+      const withTransition = transitionProjectStatus(project, 'draft', cat, now);
       const updated = snapshotOnStatusChange(withTransition, 'draft');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({

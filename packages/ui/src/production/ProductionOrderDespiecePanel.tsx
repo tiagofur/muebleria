@@ -28,19 +28,33 @@ function grainLabel(row: ProductionCutRow): string {
   return row.grain === 1 ? '↗' : '—';
 }
 
-function materialCell(row: ProductionCutRow): string {
-  return row.thicknessMm
-    ? `${row.materialName} · ${row.thicknessMm} mm`
-    : row.materialName;
+function isFrontPiece(row: ProductionCutRow): boolean {
+  const text = `${row.partCode ?? ''} ${row.partName ?? ''} ${row.description ?? ''}`.toLowerCase();
+  return (
+    text.includes('frente') ||
+    text.includes('puerta') ||
+    text.includes('tapa') ||
+    text.includes('cajon') ||
+    text.includes('cajón')
+  );
 }
 
-function edgeCell(row: ProductionCutRow): string {
+function edgeCell(row: ProductionCutRow): ReactNode {
   const flags = edgesLabel(row);
   const band = row.edgeBandName
-    ? `${row.edgeBandName}${row.edgeBandThicknessMm ? ` ${row.edgeBandThicknessMm} mm` : ''}`
+    ? `${row.edgeBandName}${row.edgeBandThicknessMm ? ` (${row.edgeBandThicknessMm}mm)` : ''}`
     : null;
-  if (!band) return flags;
-  return flags === '—' ? band : `${flags} · ${band}`;
+
+  if (flags === '—' && !band) {
+    return <span className="prod-modulos__muted">—</span>;
+  }
+
+  return (
+    <div className="prod-despiece__edge-cell">
+      <span className="prod-despiece__edge-flags">{flags}</span>
+      {band ? <span className="prod-despiece__edge-band">{band}</span> : null}
+    </div>
+  );
 }
 
 type GroupTotals = {
@@ -77,13 +91,16 @@ function totalsLabel(totals: GroupTotals): string {
 }
 
 function pieceCode(row: ProductionCutRow, index: number): string {
-  if (row.partCode?.trim()) {
-    return row.moduleCode
-      ? `${row.moduleCode}-${row.partCode}`
-      : row.partCode;
+  if (row.labelRef?.trim() && !row.labelRef.includes('copy-') && !row.labelRef.includes('/')) {
+    return row.labelRef.trim();
   }
-  if (row.labelRef?.trim()) return row.labelRef;
-  return `P${index + 1}`;
+  if (row.partCode?.trim() && !row.partCode.includes('copy-')) {
+    return row.moduleCode
+      ? `${row.moduleCode}-${row.partCode.trim()}`
+      : row.partCode.trim();
+  }
+  const prefix = row.moduleCode ? `${row.moduleCode}-` : '';
+  return `${prefix}P${String(index + 1).padStart(2, '0')}`;
 }
 
 export function ProductionOrderDespiecePanel({
@@ -94,12 +111,17 @@ export function ProductionOrderDespiecePanel({
 }: ProductionOrderDespiecePanelProps): ReactNode {
   const [groupBy, setGroupBy] = useState<GroupBy>('material');
   const [query, setQuery] = useState('');
+  const [onlyFronts, setOnlyFronts] = useState(false);
 
   const filtered = useMemo(() => {
     if (!cutRows) return [];
+    let list = cutRows;
+    if (onlyFronts) {
+      list = list.filter(isFrontPiece);
+    }
     const q = query.trim().toLowerCase();
-    if (!q) return [...cutRows];
-    return cutRows.filter((r) => {
+    if (!q) return [...list];
+    return list.filter((r) => {
       const hay = [
         r.description,
         r.materialName,
@@ -112,7 +134,7 @@ export function ProductionOrderDespiecePanel({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [cutRows, query]);
+  }, [cutRows, query, onlyFronts]);
 
   const groups = useMemo(() => {
     if (groupBy === 'none') {
@@ -191,6 +213,15 @@ export function ProductionOrderDespiecePanel({
             </button>
           ))}
         </div>
+        <label className="prod-labels__check prod-despiece__fronts-check">
+          <input
+            type="checkbox"
+            checked={onlyFronts}
+            onChange={(e) => setOnlyFronts(e.target.checked)}
+            data-testid="prod-despiece-filter-fronts"
+          />
+          <span>Solo frentes</span>
+        </label>
         <p className="prod-modulos__count" data-testid="prod-despiece-count">
           {filtered.length} línea{filtered.length === 1 ? '' : 's'}
         </p>
@@ -224,12 +255,13 @@ export function ProductionOrderDespiecePanel({
             </h3>
           ) : null}
           <div className="prod-modulos__table-wrap">
-            <table className="prod-modulos__table">
+            <table className="prod-modulos__table" data-testid="prod-despiece-table">
               <thead>
                 <tr>
                   <th scope="col">Código</th>
                   <th scope="col">Cant.</th>
                   <th scope="col">L × A</th>
+                  <th scope="col">Espesor</th>
                   <th scope="col">Material</th>
                   <th scope="col">Cantos</th>
                   <th scope="col">Veta</th>
@@ -250,12 +282,22 @@ export function ProductionOrderDespiecePanel({
                       <td>
                         {row.lengthMm}×{row.widthMm}
                       </td>
-                      <td>{materialCell(row)}</td>
+                      <td>
+                        {row.thicknessMm ? `${row.thicknessMm} mm` : <span className="prod-modulos__muted">—</span>}
+                      </td>
+                      <td>{row.materialName}</td>
                       <td>{edgeCell(row)}</td>
                       <td aria-label={row.grain === 1 ? 'con veta' : 'sin veta'}>
                         {grainLabel(row)}
                       </td>
-                      <td>{row.description}</td>
+                      <td>
+                        <div className="prod-despiece__desc-cell">
+                          <span className="prod-despiece__desc-name">{row.partName || row.description}</span>
+                          {groupBy !== 'module' && row.moduleCode ? (
+                            <span className="prod-despiece__desc-mod">{row.moduleCode}</span>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}

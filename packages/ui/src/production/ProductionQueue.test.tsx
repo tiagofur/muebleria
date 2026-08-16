@@ -62,6 +62,37 @@ describe('ProductionQueue (F038)', () => {
     expect(screen.queryByTestId('prod-signal-pack-p10')).toBeNull();
   });
 
+  it('shows accepted date when priceSnapshot exists', () => {
+    const acceptedProj: Project = {
+      ...project('p11', 'accepted', 'Obra Aceptada'),
+      priceSnapshot: {
+        capturedAt: '2026-08-10T14:30:00.000Z',
+        breakdown: {
+          materialsCost: 100,
+          edgeTotal: 20,
+          hardwareTotal: 30,
+          directCost: 150,
+          laborModular: 50,
+          laborFixedCost: 0,
+          marginFactor: 1.35,
+          discountPercent: 0,
+          discountAmount: 0,
+          salePrice: 270,
+        },
+      },
+    };
+    render(
+      <ProductionQueue
+        projects={[acceptedProj]}
+        customerLabelFor={() => 'Ana'}
+        salePriceFor={() => 270}
+        onOpenOrder={vi.fn()}
+        onMarkProduced={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Aceptado 10\/08\/2026/)).toBeTruthy();
+  });
+
   it('lists accepted jobs and marks produced', async () => {
     const user = userEvent.setup();
     const onMark = vi.fn();

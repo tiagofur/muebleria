@@ -303,25 +303,22 @@ archivos/hunks (staging quirúrgico en App.tsx y domain/index.ts).
 - Import nesting CSV con 0 filas válidas → error visible con nombre de archivo
   y columnas esperadas (antes: no-op silencioso).
 
-### D-lite — Despiece
-- Columna **Veta** (↗), subtotales por grupo (líneas · piezas · m²) en el
-  título, leyenda de cantos (L1/L2 largos, W1/W2 anchos). Pendiente para v2
-  completo: espesor y canto asignado por fila (requiere enriquecer
-  `ProductionCutRow` en dominio — no hacerlo sin tocar el contrato Optimizer).
+### D — Despiece v2 + Códigos Limpios + Contornos y Etiquetas 100x150 Ricas (completados)
+- **Códigos de Pieza Limpios y Únicos (CNC-ready)**: Eliminados por completo los UUIDs y sufijos internos (`-copy-0`, hashes de 36 caracteres). Ahora las piezas generan códigos secuenciales y legibles `{moduleCode}-P01..PN` o `{moduleCode}-{partCode}` con discriminador de línea para repeticiones (`MOD-01-L2-P01`), garantizando unicidad global por proyecto para archivos de CNC, código de barras/QR y etiquetas ZPL/PDF.
+- **Contorno Visual de Enchapado (ZPL, PDF, UI Preview)**: En las etiquetas de 50×25 mm, 100×50 mm y hojas de etiquetas PDF/pantalla, se añadieron barras de contorno de alto contraste en los bordes correspondientes a los lados encintados (`L1` superior, `L2` inferior, `W1` izquierdo, `W2` derecho).
+- **Etiqueta 100×150 mm Industrial Enriquecida**: Rediseñada la etiqueta grande de taller para incluir diagrama esquemático de la pieza con cotas (`L1`, `L2`, `W1`, `W2`), indicadores gráficos de canto en cada lado, dirección de veta longitudinal (`grain`), bloque de espesor, y zona inferior con QR grande de escaneo para máquinas CNC / control de piso.
+- **Despiece v2**: tabla enriquecida con columna de **Espesor** (`thicknessMm` explícito), renderizado de **Cantos asignados** (código/nombre + espesor en mm de la cintilla junto a los flags `L1/L2/W1/W2`), checkbox de filtro rápido **"Solo frentes"** (puertas, frentes de cajón, tapas), y descripción limpia de pieza con módulo en subtítulo sutil.
+- **Cola de producción**: tarjetas de obra muestran fecha de **Aceptación** (`Aceptado DD/MM/YYYY`) derivada de `priceSnapshot.capturedAt`, junto a la fecha de actualización y las señales de Pack/Nesting.
+- **Resumen OP**: stat cards principales (`prod-hub__totals`) ampliadas para incluir **m² totales de tablero** y **ml totales de canto** agregados de toda la obra (`summarizeProductionTotals`), manteniendo el desglose por material/canto en el bloque inferior.
 
 ### Verificación
-- domain 507 (+2 QR v2), excel 62 (+1 zpl v2), ui 799 (+9 labels panel/hub/onboarding/login),
-  web 242 (+4 pack zpl/omissions, labels scoped, routes, workspaceStore expiry),
-  storage 84, desktop 9 — todo verde. `pnpm typecheck` monorepo verde.
-- En vivo (browser, usuario de prueba admin creado/borrado): tour aparece solo
-  en Inicio una vez y NO reaparece tras full-load de /produccion ✓. La
-  verificación visual de la tab Etiquetas quedó cubierta por tests (la DB dev
-  estaba siendo mutada por la sesión CRM paralela y no había proyecto accepted
-  estable).
+- domain 519, excel 63, ui 814, web 242, storage 84, desktop 14 — todo verde en `./init.sh` y `pnpm test`.
+- `pnpm typecheck` monorepo verde (0 errores).
 
 ### Pendiente / follow-ups
-- Despiece v2 completo (espesor + canto asignado → dominio).
-- Cola: señales pack/nesting + fecha aceptación (§6.0).
-- Resumen: totales m² por material y ML de canto.
-- Escaneo QR en Piso (paperless) usando payload v2.
-- Impresión ZPL raw desde Electron (killer feature taller).
+- Escaneo QR en Piso (paperless) usando payload v2 (F089).
+- Métricas y Analytics del Taller (F090).
+
+
+
+

@@ -24,8 +24,10 @@ import {
   ExternalLink,
   Factory,
   FileSpreadsheet,
+  Layers,
   LayoutGrid,
   Package,
+  Ruler,
   AlertTriangle,
 } from 'lucide-react';
 import {
@@ -565,6 +567,28 @@ export function ProductionOrderHub({
                     {readiness.cutListOk ? readiness.cutRowCount : '—'}
                   </p>
                   <p className="prod-hub__total-label">piezas de tablero</p>
+                </div>
+              </div>
+              <div className="prod-hub__total-card">
+                <Layers size={18} strokeWidth={1.5} aria-hidden />
+                <div>
+                  <p className="prod-hub__total-value" data-testid="prod-hub-board-m2">
+                    {cutRows && cutRows.length > 0
+                      ? summarizeProductionTotals(cutRows).totalAreaM2.toLocaleString('es-MX')
+                      : '—'}
+                  </p>
+                  <p className="prod-hub__total-label">m² de tablero</p>
+                </div>
+              </div>
+              <div className="prod-hub__total-card">
+                <Ruler size={18} strokeWidth={1.5} aria-hidden />
+                <div>
+                  <p className="prod-hub__total-value" data-testid="prod-hub-edge-ml">
+                    {cutRows && cutRows.length > 0
+                      ? summarizeProductionTotals(cutRows).totalEdgeMl.toLocaleString('es-MX')
+                      : '—'}
+                  </p>
+                  <p className="prod-hub__total-label">ml de canto</p>
                 </div>
               </div>
             </div>
