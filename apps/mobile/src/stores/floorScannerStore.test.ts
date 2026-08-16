@@ -187,3 +187,87 @@ describe('floorScannerStore Mobile (server-backed, F089-RN)', () => {
   });
 });
 
+
+// --- F091 item 2: persistent offline queue ------------------------------------
+
+import {
+  loadPendingScans,
+  savePendingScans,
+  setOfflineQueueStorage,
+} from '../services/offlineQueueStorage';
+
+function memoryStorage() {
+  const map = new Map<string, string>();
+  return {
+    getItem: (k: string) => Promise.resolve(map.get(k) ?? null),
+    setItem: (k: string, v: string) => {
+      map.set(k, v);
+      return Promise.resolve();
+    },
+    removeItem: (k: string) => {
+      map.delete(k);
+      return Promise.resolve();
+    },
+    __dump: () => map,
+  };
+}
+
+describe('floorScannerStore offline persistence (F091 item 2)', () => {
+  beforeEach(() => {
+    useFloorScannerStore.setState({
+      pendingScans: [],
+      itemStatuses: {},
+      activeProjectId: null,
+      syncing: false,
+      lastScanTime: 0,
+      lastScannedText: null,
+    });
+    postMock.mockReset();
+  });
+
+  it('queues offline scans and survives a restart via hydrateFromStorage', async () => {
+    const storage = memoryStorage();
+    setOfflineQueueStorage(storage);
+    postMock.mockRejectedValueOnce(
+      new Error('Error de red al conectar con el servidor: sótano sin señal'),
+    );
+    await useFloorScannerStore.getState().processScan(qrFor());
+
+    // "App restart": fresh store state, same persisted queue.
+    useFloorScannerStore.setState({ pendingScans: [], itemStatuses: {} });
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+
+    await useFloorScannerStore.getState().hydrateFromStorage();
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(1);
+    expect(useFloorScannerStore.getState().pendingScans[0]?.rawText).toBe(qrFor());
+
+    // Connectivity returns → sync drains and persists the empty queue.
+    postMock.mockResolvedValueOnce(apiResponse());
+    await useFloorScannerStore.getState().syncPending();
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+    const persisted = await loadPendingScans();
+    expect(persisted).toHaveLength(0);
+
+    setOfflineQueueStorage(null);
+  });
+
+  it('dedupes the same QR scanned twice offline', async () => {
+    const storage = memoryStorage();
+    setOfflineQueueStorage(storage);
+    postMock.mockRejectedValue(
+      new Error('Error de red al conectar con el servidor: sin señal'),
+    );
+    await useFloorScannerStore.getState().processScan(qrFor(), true);
+    await useFloorScannerStore.getState().processScan(qrFor(), true);
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(1);
+
+    savePendingScans(useFloorScannerStore.getState().pendingScans);
+    setOfflineQueueStorage(null);
+  });
+
+  it('hydrate without storage configured is a safe no-op', async () => {
+    setOfflineQueueStorage(null);
+    await useFloorScannerStore.getState().hydrateFromStorage();
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+  });
+});

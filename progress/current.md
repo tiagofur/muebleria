@@ -601,3 +601,34 @@ typecheck monorepo 0 errores; init.sh OK.
 **Nota de coordinación:** la sesión paralela sigue activa — commiteó una
 rada de hardening (fb47f09..ccfd4b5) ANTES de este trabajo; el árbol
 estaba limpio al arrancar. Este commit toca solo archivos F091.
+
+## F091 ítem 2 — Cola offline persistente (2026-08-16, tarde)
+
+Contexto: la sesión paralela entregó meanwhile etiquetas de MÓDULO/bulto
+con checklist de producción y carga (Fases 1-5: dual QR contracts,
+pipeline extendido a 7 estados con packaged/loaded, target_status en
+floor-scan, panel de despacho y release gate de entrega). Este ítem se
+construyó SOBRE ese estado (el store ya maneja modulePayload + debounce).
+
+**Nuevo** (`apps/mobile/src/services/offlineQueueStorage.ts`): AsyncStorage
+versionado (muebles_floor_{queue,statuses,active_project}_v1) con
+setOfflineQueueStorage inyectable (App inyecta AsyncStorage real con
+require-guard; tests inyectan mock; web/no-native → null = comportamiento
+anterior en memoria).
+
+**Store:** `hydrateFromStorage()` restaura cola + estados optimistas + obra
+activa (App la llama al autenticar, ANTES de syncPending — el efecto ya
+existía, ahora hidrata primero). Enqueue offline: dedupe por rawText (sin
+importar cuántas veces se escaneó el mismo QR sin señal) + persistencia
+inmediata de cola y estados. syncPending: persiste lo que quede sin drenar
++ envía target_status cuando el scan encolado lo traía (módulo labels).
+
+**Ciclo verificado por test:** scan sin señal → "reiniciar app" (estado
+fresco + hydrate) → cola restaurada → vuelve señal → sync drena →
+persistencia queda vacía. Tests: 13 en el store (10 previos + 3 nuevos:
+survive-restart, dedupe con force=true para saltear el debounce de 800ms,
+hydrate sin storage = no-op).
+
+**Verificación:** mobile 36, typecheck monorepo 0 errores, init.sh OK.
+**F091 marcada done** (ambos ítems completos; universal links iOS quedan
+como configuración de deploy documentada en D7).

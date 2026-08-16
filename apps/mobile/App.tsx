@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from './src/stores/authStore';
 import { useCatalogStore } from './src/stores/catalogStore';
 import { unwrapPieceLabelQrUrl } from '@muebles/domain';
+import { setOfflineQueueStorage } from './src/services/offlineQueueStorage';
 import { useFloorScannerStore } from './src/stores/floorScannerStore';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -40,6 +41,16 @@ export type ActiveScreen =
   | 'bench'
   | 'queue';
 
+// Persistent offline queue storage (F091 item 2). Web/test builds mock or
+// skip this — setOfflineQueueStorage(null) keeps the in-memory behavior.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  setOfflineQueueStorage(AsyncStorage);
+} catch {
+  setOfflineQueueStorage(null);
+}
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('home');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -53,12 +64,13 @@ export default function App() {
   // Real workshop catalog + pending floor-scan sync once authenticated.
   const loadCatalogFromApi = useCatalogStore((s) => s.loadFromApi);
   const syncPendingFloorScans = useFloorScannerStore((s) => s.syncPending);
+  const hydrateFloorQueue = useFloorScannerStore((s) => s.hydrateFromStorage);
   useEffect(() => {
     if (isAuthenticated) {
+      void hydrateFloorQueue().then(() => syncPendingFloorScans());
       void loadCatalogFromApi();
-      void syncPendingFloorScans();
     }
-  }, [isAuthenticated, loadCatalogFromApi, syncPendingFloorScans]);
+  }, [isAuthenticated, hydrateFloorQueue, syncPendingFloorScans, loadCatalogFromApi]);
 
   // F091 deep links: OS camera scans a URL-form label QR → the OS opens the
   // app → we jump to the scanner and process the wrapped payload directly.

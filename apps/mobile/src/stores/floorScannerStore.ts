@@ -8,6 +8,14 @@ import {
   nextItemFloorStatus,
 } from '@muebles/domain';
 import { apiClient } from '../services/apiClient';
+import {
+  loadActiveProjectId,
+  loadItemStatuses,
+  loadPendingScans,
+  saveActiveProjectId,
+  saveItemStatuses,
+  savePendingScans,
+} from '../services/offlineQueueStorage';
 
 /**
  * Server-backed floor scanner (F089-RN parity).
@@ -47,6 +55,8 @@ export interface PendingScan {
   rawText: string;
   advance: boolean;
   at: string;
+  /** Direct target for module-label scans (Fase 3 target_status). */
+  targetStatus?: ItemFloorStatus;
 }
 
 export interface FloorScannerState {
@@ -69,6 +79,8 @@ export interface FloorScannerState {
   advanceScan: (record: ScannedPieceRecord) => Promise<void>;
   patchItemFloorStatus: (projectId: string, itemId: string, status?: ItemFloorStatus) => Promise<ItemFloorStatus | null>;
   syncPending: () => Promise<void>;
+  /** Restore the persisted offline queue/statuses (call once on app start). */
+  hydrateFromStorage: () => Promise<void>;
   setAutoAdvance: (on: boolean) => void;
   setActiveProjectId: (projectId: string | null) => void;
   setActiveScan: (scan: ScannedPieceRecord | null) => void;
@@ -141,7 +153,10 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
   },
 
   setAutoAdvance: (on) => set({ autoAdvance: on }),
-  setActiveProjectId: (projectId) => set({ activeProjectId: projectId }),
+  setActiveProjectId: (projectId) => {
+    set({ activeProjectId: projectId });
+    saveActiveProjectId(projectId);
+  },
   setActiveScan: (scan) => set({ activeScan: scan }),
   clearHistory: () =>
     set({
@@ -225,15 +240,33 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
         record.error = 'Sin conexión — guardado para sincronizar.';
         const next = nextItemFloorStatus(record.currentStatus);
         if (advance && next) record.currentStatus = next;
-        set((s) => ({
-          itemStatuses: {
+        set((s) => {
+          // Dedupe: same QR already queued offline → keep the first timestamp.
+          const alreadyQueued = s.pendingScans.some((p) => p.rawText === trimmed);
+          const nextStatuses = {
             ...s.itemStatuses,
             [moduleCode]: record.currentStatus,
-          },
-          pendingScans: [...s.pendingScans, { rawText: trimmed, advance, at: new Date().toISOString() }],
-          history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
-          activeScan: { ...record },
-        }));
+          };
+          saveItemStatuses(nextStatuses);
+          if (!alreadyQueued) {
+            const queue = [
+              ...s.pendingScans,
+              { rawText: trimmed, advance, at: new Date().toISOString() },
+            ];
+            savePendingScans(queue);
+            return {
+              itemStatuses: nextStatuses,
+              pendingScans: queue,
+              history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
+              activeScan: { ...record },
+            };
+          }
+          return {
+            itemStatuses: nextStatuses,
+            history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
+            activeScan: { ...record },
+          };
+        });
         await haptic('warning');
       } else {
         record.error =
@@ -301,6 +334,19 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
     }
   },
 
+  hydrateFromStorage: async () => {
+    const [pending, statuses, activeProjectId] = await Promise.all([
+      loadPendingScans(),
+      loadItemStatuses(),
+      loadActiveProjectId(),
+    ]);
+    set((s) => ({
+      pendingScans: pending.length > 0 ? pending : s.pendingScans,
+      itemStatuses: Object.keys(statuses).length > 0 ? statuses : s.itemStatuses,
+      activeProjectId: activeProjectId ?? s.activeProjectId,
+    }));
+  },
+
   syncPending: async () => {
     const { pendingScans, syncing } = get();
     if (syncing || pendingScans.length === 0) return;
@@ -327,11 +373,15 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
         await apiClient.post(`/projects/${encodeURIComponent(projectId)}/floor-scan`, {
           module: moduleCode,
           advance: pending.advance,
+          ...(pending.targetStatus
+            ? { target_status: pending.targetStatus }
+            : {}),
         });
       } catch (err) {
         if (isNetworkError(err)) remaining.push(pending);
       }
     }
+    savePendingScans(remaining);
     set({ pendingScans: remaining, syncing: false });
   },
 }));
