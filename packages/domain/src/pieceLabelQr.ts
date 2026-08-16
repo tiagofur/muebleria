@@ -1,6 +1,13 @@
 /**
  * Compact QR payload for workshop piece labels (#141).
  * Offline-friendly JSON (not a URL) for scanner apps / future deep links.
+ *
+ * IMPORTANT for the future React Native app (F089/F091): this payload is
+ * deliberately NOT a URL, so the OS camera app cannot deep-link into any
+ * app. When deep links are needed, add a URL VARIANT that wraps this same
+ * JSON (e.g. https://<host>/scan#<json>) and teach parsePieceLabelScan to
+ * accept both forms — never change the JSON shape or drop the plain-JSON
+ * form: printed QRs must keep parsing forever.
  */
 
 export type PieceLabelQrFields = {

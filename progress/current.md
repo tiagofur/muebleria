@@ -400,7 +400,9 @@ cero deps transitivas) en `ScanCameraModal` cuando no hay detector nativo:
 **React Native (planes del usuario):** `parsePieceLabelScan` vive en
 `@muebles/domain` (TS puro, cero deps) → importable directamente desde una
 app RN; el payload JSON es agnóstico del cliente. Para deep-link desde la
-cámara del sistema habría que agregar variante URL del payload (futuro).
+cámara del sistema habrá que agregar variante URL del payload →
+**documentado (2026-08-15): F091 en el backlog + decisión D7 en
+docs/production-module.md §8 + nota en pieceLabelQr.ts.**
 
 Verificación: ui 836 (+1), init.sh verde, typecheck verde.
 

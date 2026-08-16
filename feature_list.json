@@ -1735,6 +1735,27 @@
         "packages/domain/src/crm/"
       ],
       "status": "pending"
+    },
+    {
+      "id": "F091",
+      "phase": 20,
+      "name": "app_rn_companera_deep_link_qr",
+      "title": "App compañera React Native + variante URL del payload QR (deep link)",
+      "description": "App móvil nativa (React Native) para las partes 'burocráticas' del taller: escaneo QR en piso, cola de producción, métricas — SIN Proyectar/3D al inicio (posible después para tablets). Reuso clave ya disponible: parsePieceLabelScan y productionFloor.ts viven en packages/domain (TS puro, cero dependencias) y se importan directo en RN; el payload JSON de las etiquetas no cambia y el backend es el mismo Go. DECISIÓN A RECORDAR (2026-08-15): el QR actual es JSON offline-friendly, NO una URL (decisión #141) — la cámara del sistema operativo lee el QR pero no puede abrir la app. Para deep links (escanear desde la app de cámara / cámara roll y abrir la app RN) hay que agregar una VARIANTE URL del payload (p. ej. https://<host>/scan#<json> o scheme muebleria://) que envuelva el mismo JSON v2, con parsePieceLabelScan aceptando AMBAS formas (JSON directo para escáneres in-app y URL para deep links). Los QR ya impresos deben seguir funcionando (compatibilidad hacia atrás: la forma JSON pura nunca se quita). Cámara en RN: react-native-vision-camera + plugin barcode. La cámara web ya tiene fallback jsQR para iOS (F089).",
+      "acceptance": [
+        "Variante URL del payload definida (host/scheme) que envuelve el JSON v2 sin cambiar su forma interna",
+        "parsePieceLabelScan acepta ambas formas: JSON directo (QRs impresos existentes) y envuelto en URL",
+        "Test de compatibilidad: payload JSON v2 puro (pre-F091) sigue parseando idéntico",
+        "Scanner in-app (web/RN) y deep link del SO llegan al mismo flujo de transición de piso",
+        "Los QR impresos antes de esta feature no requieren reimpresión"
+      ],
+      "references": [
+        "packages/domain/src/pieceLabelQr.ts",
+        "packages/domain/src/productionFloor.ts",
+        "docs/production-module.md D7 (contrato payload QR)",
+        "F089 (escaneo QR piso web + jsQR iOS)"
+      ],
+      "status": "pending"
     }
   ]
 }
