@@ -4,7 +4,7 @@
  * Role-focused home variants (F043 / #88).
  */
 
-import type { ProjectStatus } from '@muebles/domain';
+import type { AnalyticsPeriodDays, ProjectStatus, WorkshopAnalytics } from '@muebles/domain';
 import type { ReactNode } from 'react';
 import {
   CheckCircle2,
@@ -31,6 +31,7 @@ import {
   shouldShowGettingStarted,
   type OwnerPortfolioRow,
 } from './dashboardHelpers';
+import { WorkshopAnalyticsPanel } from './WorkshopAnalyticsPanel';
 import './dashboard.css';
 
 export type DashboardRecentProject = {
@@ -86,6 +87,14 @@ export type DashboardProps = {
   readonly onOpenModules?: () => void;
   /** Engineering: count of module templates without imageUrl. */
   readonly modulesWithoutPhotoCount?: number;
+  /**
+   * Workshop analytics (F090) — shell-computed via domain functions.
+   * Omit for roles without the analytics dashboard.
+   */
+  readonly analytics?: WorkshopAnalytics | null;
+  readonly analyticsPeriod?: AnalyticsPeriodDays;
+  readonly onAnalyticsPeriodChange?: (period: AnalyticsPeriodDays) => void;
+  readonly analyticsLoading?: boolean;
 };
 
 function StatusBadge({ status }: { readonly status: ProjectStatus }): ReactNode {
@@ -125,6 +134,10 @@ export function Dashboard({
   onOpenMaterials,
   onOpenModules,
   modulesWithoutPhotoCount = 0,
+  analytics,
+  analyticsPeriod,
+  onAnalyticsPeriodChange,
+  analyticsLoading = false,
 }: DashboardProps): ReactNode {
   if (loading) {
     return (
@@ -478,6 +491,15 @@ export function Dashboard({
                 </table>
               </div>
             </section>
+          ) : null}
+
+          {analytics && onAnalyticsPeriodChange ? (
+            <WorkshopAnalyticsPanel
+              analytics={analytics}
+              period={analyticsPeriod ?? 'all'}
+              onPeriodChange={onAnalyticsPeriodChange}
+              loading={analyticsLoading}
+            />
           ) : null}
 
           <section

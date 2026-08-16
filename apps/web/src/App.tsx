@@ -64,6 +64,9 @@ import {
   roleCanReopenProject,
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,
+  computeWorkshopAnalytics,
+  type AnalyticsPeriodDays,
+  type WarrantyTicket,
   roleLabelEs,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
@@ -993,6 +996,40 @@ function AppContent({
     projectEstimates,
     assignableOwners,
   ]);
+
+  /** F090: workshop analytics — funnel + warranties for gerente/admin. */
+  const [analyticsPeriod, setAnalyticsPeriod] =
+    useState<AnalyticsPeriodDays>('all');
+  const [warrantyTickets, setWarrantyTickets] = useState<
+    readonly WarrantyTicket[] | null
+  >(null);
+  useEffect(() => {
+    if (!canViewPortfolioDashboard) return;
+    let cancelled = false;
+    const repo = getRepository();
+    if (!repo?.getWarrantyTickets) {
+      setWarrantyTickets([]);
+      return;
+    }
+    repo
+      .getWarrantyTickets()
+      .then((tickets) => {
+        if (!cancelled) setWarrantyTickets(tickets);
+      })
+      .catch(() => {
+        if (!cancelled) setWarrantyTickets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewPortfolioDashboard, getRepository]);
+
+  const workshopAnalytics = useMemo(() => {
+    if (!canViewPortfolioDashboard) return undefined;
+    return computeWorkshopAnalytics(projects, warrantyTickets ?? [], {
+      period: analyticsPeriod,
+    });
+  }, [canViewPortfolioDashboard, projects, warrantyTickets, analyticsPeriod]);
 
   const onDashboardOpenProject = useCallback(
     (projectId: string) => {
@@ -2077,6 +2114,12 @@ function AppContent({
           onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
           ownerBreakdown={dashboardOwnerBreakdown}
           homeMode={dashboardHomeMode}
+          analytics={workshopAnalytics}
+          analyticsPeriod={analyticsPeriod}
+          onAnalyticsPeriodChange={
+            workshopAnalytics ? setAnalyticsPeriod : undefined
+          }
+          analyticsLoading={warrantyTickets === null}
           onOpenShowcase={
             dashboardHomeMode === 'sales'
               ? onDashboardOpenShowcase

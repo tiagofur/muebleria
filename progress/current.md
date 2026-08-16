@@ -473,3 +473,45 @@ parser de F089 y tiene errores de narrowing (pnpm typecheck monorepo
 ROJO por apps/mobile — no es de F080). Su sesión también agregó el
 fixture partFinishes a catalogStore.test.ts (correcto; endurecí
 catalogStore con guards `?.`). Este commit EXCLUYE todo lo de mobile.
+
+## F090 — Métricas y Analytics del Taller (2026-08-16)
+
+Implementada y verificada. Nota de modelo: ProjectStatus NO tiene
+'rejected' (draft→quoted→accepted→produced; reopen→draft) — la "tasa de
+aceptación" honesta es **cotizado→ganado** (drafts fuera del denominador).
+design.md §5.2 menciona badge rejected: legacy, ignorar.
+
+**Dominio** (`packages/domain/src/metrics/workshopMetrics.ts`, export
+`./metrics/workshopMetrics`):
+- `computeCommercialFunnel(projects, {now, period, stalledAfterDays=14})`:
+  counts por estado, pipeline abierto (count + $ de snapshots),
+  quoteToWonRate, avgDaysToClose (createdAt→capturedAt), avgTicket,
+  estancadas (updatedAt > 14d) + más vieja.
+- `computeWarrantyAnalytics(tickets, projects, {now, period})`: totales
+  open/resolved, por categoría, piezas refabricadas + m² (Σ L×W×qty),
+  topPieces (hasta 5, por ocurrencias entre tickets), obras afectadas,
+  **margenEnRiesgo** = Σ(salePrice−directCost) de obras con reclamo
+  (distintas, sin duplicar por ticket; null sin snapshots).
+- `computeWorkshopAnalytics` compone ambas; `ANALYTICS_PERIODS`
+  30d/90d/12m/Todo; períodos bucket por createdAt del proyecto/ticket.
+- Honestidad de fechas documentada: avgDaysToClose usa
+  priceSnapshot.capturedAt (se reescribe en cada transición ≈ fecha de
+  aceptación).
+
+**UI** (`packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx`):
+- Props-driven (shell computa, UI renderea — regla del Dashboard).
+- Cards de conversión + barras de embudo por estado; cards de garantía +
+  barras por categoría (labels de WARRANTY_CATEGORY_METADATA) + top piezas.
+- Gráficos = barras CSS (cero libs); chips de período; estados
+  loading/empty. CSS `.analytics__*` en dashboard.css (solo tokens).
+
+**Shell** (App.tsx): fetch de tickets vía `getRepository().getWarrantyTickets()`
+(CRM Phase 3) con cancelación + fallback []; memo de analytics SOLO para
+`canViewPortfolioDashboard` (gerente/admin/guest); período en estado local.
+
+**Verificación:** domain 548 (+12), ui 847 (+5 panel), web 242, mobile 24
+(sesión paralela, intacta), typecheck monorepo 0 errores (incluye mobile —
+ellos arreglaron su narrowing), init.sh verde.
+
+**Sesión paralela RN:** sigue activa (apps/mobile + docs). Este commit
+excluye sus archivos.

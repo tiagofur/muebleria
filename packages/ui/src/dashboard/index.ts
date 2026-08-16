@@ -25,3 +25,5 @@ export {
   type OwnerPortfolioRow,
   type ProjectLike,
 } from './dashboardHelpers';
+
+export { WorkshopAnalyticsPanel, type WorkshopAnalyticsPanelProps } from './WorkshopAnalyticsPanel';
