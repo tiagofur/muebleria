@@ -34,6 +34,11 @@ export {
 } from './pieceLabelsExport';
 
 export {
+  moduleLabelsPdfExport,
+  type ModuleLabelsPdfInput,
+} from './moduleLabelsExport';
+
+export {
   materialSummaryPdfExport,
   type MaterialSummaryPdfInput,
 } from './materialSummaryPdfExport';
@@ -72,6 +77,8 @@ export {
 export {
   pieceToZpl,
   pieceBatchToZpl,
+  moduleToZpl,
+  moduleBatchToZpl,
   sanitizeZplText,
   dotsPerMm,
   ZPL_SIZE_PRESETS,

@@ -168,9 +168,15 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
 
     const advance = get().autoAdvance;
     const projectId =
-      parsed.kind === 'payload' ? parsed.fields.projectId : get().activeProjectId;
+      parsed.kind === 'payload' || parsed.kind === 'modulePayload'
+        ? parsed.fields.projectId
+        : get().activeProjectId;
     const moduleCode =
-      parsed.kind === 'payload' ? parsed.fields.moduleCode : parsed.code;
+      parsed.kind === 'payload'
+        ? parsed.fields.moduleCode
+        : parsed.kind === 'modulePayload'
+          ? parsed.fields.factoryCode || parsed.fields.moduleCode
+          : parsed.code;
 
     const record: ScannedPieceRecord = {
       id: recordId(),
@@ -303,9 +309,17 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
     for (const pending of pendingScans) {
       const parsed = parsePieceLabelScan(pending.rawText);
       const projectId =
-        parsed?.kind === 'payload' ? parsed.fields.projectId : get().activeProjectId;
+        parsed?.kind === 'payload' || parsed?.kind === 'modulePayload'
+          ? parsed.fields.projectId
+          : get().activeProjectId;
       const moduleCode =
-        parsed?.kind === 'payload' ? parsed.fields.moduleCode : parsed?.kind === 'plainCode' ? parsed.code : '';
+        parsed?.kind === 'payload'
+          ? parsed.fields.moduleCode
+          : parsed?.kind === 'modulePayload'
+            ? parsed.fields.factoryCode || parsed.fields.moduleCode
+            : parsed?.kind === 'plainCode'
+              ? parsed.code
+              : '';
       if (!projectId || !moduleCode) {
         continue; // unresolvable offline scan — drop silently
       }

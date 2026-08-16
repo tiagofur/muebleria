@@ -10,7 +10,9 @@ import {
   generateCutRows,
   generateHardwareList,
   generatePieceLabels,
+  generateModuleLabels,
   pieceBatchToZpl,
+  moduleBatchToZpl,
   DomainError,
   domainErrorToExportIssue,
   type Catalog,
@@ -21,6 +23,7 @@ import {
   optimizerExport,
   hardwareListExport,
   pieceLabelsPdfExport,
+  moduleLabelsPdfExport,
   materialSummaryPdfExport,
   wallElevationsPdfExport,
   productionDespiecePdfExport,
@@ -196,6 +199,38 @@ export async function buildProductionPackExport(
       zip.file(`etiquetas_zpl_${baseName}.zpl`, zplContent);
     } catch {
       omissions.push('etiquetas ZPL');
+    }
+
+    // 11. Module / Package Labels PDF & ZPL (F092)
+    try {
+      const modLabels = generateModuleLabels(project, catalog, {
+        customerName,
+        revision: project.production?.revision?.toString(),
+      });
+      if (modLabels.length > 0) {
+        const modLabelsBuffer = await moduleLabelsPdfExport({
+          projectId: project.id,
+          projectName: project.name,
+          customerName,
+          labels: modLabels,
+          revision: project.production?.revision?.toString(),
+        });
+        zip.file(`etiquetas_muebles_${baseName}.pdf`, toUint8Array(modLabelsBuffer));
+
+        try {
+          const modZpl = moduleBatchToZpl(modLabels, '100x150', {
+            dpi: 203,
+            includeBorder: true,
+            projectId: project.id,
+            revision: project.production?.revision?.toString(),
+          });
+          zip.file(`etiquetas_muebles_zpl_${baseName}.zpl`, modZpl);
+        } catch {
+          // best effort
+        }
+      }
+    } catch {
+      omissions.push('etiquetas de muebles');
     }
 
     const zipContent = await zip.generateAsync({ type: 'uint8array' });

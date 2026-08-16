@@ -8,6 +8,8 @@ export {
   dotsPerMm,
   pieceBatchToZpl,
   pieceToZpl,
+  moduleToZpl,
+  moduleBatchToZpl,
   sanitizeZplText,
   ZPL_SIZE_PRESETS,
   type ZplDpi,

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { PieceLabel } from '@muebles/domain';
+import type { PieceLabel, ModuleLabel } from '@muebles/domain';
 import { ValidationError } from '@muebles/domain';
 import {
   dotsPerMm,
   pieceBatchToZpl,
   pieceToZpl,
+  moduleToZpl,
+  moduleBatchToZpl,
   sanitizeZplText,
   ZPL_SIZE_PRESETS,
 } from './zplLabelExport';
@@ -91,5 +93,60 @@ describe('pieceBatchToZpl', () => {
 
   it('throws ValidationError when labels array is empty', () => {
     expect(() => pieceBatchToZpl([])).toThrow(ValidationError);
+  });
+});
+
+const mockModuleLabel: ModuleLabel = {
+  itemId: 'item-101',
+  factoryCode: 'GAB-01',
+  moduleCode: 'GAB-01',
+  moduleName: 'Bajo Fregadero 2P',
+  projectId: 'proj-999',
+  projectName: 'Cocina Residencial',
+  customerName: 'Cliente Juan Pérez',
+  packageIndex: 3,
+  totalPackages: 8,
+  unitIndex: 1,
+  unitQuantity: 2,
+  widthMm: 800,
+  heightMm: 850,
+  depthMm: 600,
+  measuresLabel: '800×850×600 mm',
+  spaceName: 'Cocina Principal',
+  wallName: 'Muro Norte',
+  floorStatus: 'cut',
+  boardPartCount: 6,
+  hardwareCount: 8,
+  revision: '2',
+};
+
+describe('moduleToZpl and moduleBatchToZpl', () => {
+  it('generates 100x150 mm package label with Bulto header and module QR', () => {
+    const zpl = moduleToZpl(mockModuleLabel, '100x150');
+    expect(zpl).toContain('^XA');
+    expect(zpl).toContain('^PW800');
+    expect(zpl).toContain('^LL1200');
+    expect(zpl).toContain('BULTO 3 DE 8');
+    expect(zpl).toContain('Obra: Cocina Residencial');
+    expect(zpl).toContain('Cliente: Cliente Juan Pérez');
+    expect(zpl).toContain('GAB-01 - Bajo Fregadero 2P');
+    expect(zpl).toContain('Medidas: 800×850×600 mm');
+    expect(zpl).toContain('Ambiente: Cocina Principal | Muro Norte');
+    expect(zpl).toContain('^BQN,2,4^FDMM,A{"v":2,"k":"mod"');
+    expect(zpl).toContain('^XZ');
+  });
+
+  it('generates 100x50 mm horizontal package label', () => {
+    const zpl = moduleToZpl(mockModuleLabel, '100x50');
+    expect(zpl).toContain('^PW800');
+    expect(zpl).toContain('^LL400');
+    expect(zpl).toContain('BULTO 3 DE 8');
+    expect(zpl).toContain('GAB-01 - Bajo Fregadero 2P');
+  });
+
+  it('moduleBatchToZpl concatenates batch labels or throws on empty', () => {
+    const batch = moduleBatchToZpl([mockModuleLabel, { ...mockModuleLabel, packageIndex: 4 }]);
+    expect(batch.split('^XA').length - 1).toBe(2);
+    expect(() => moduleBatchToZpl([])).toThrow(ValidationError);
   });
 });

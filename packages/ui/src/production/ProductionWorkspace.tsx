@@ -10,6 +10,7 @@ import type {
   Module,
   NestingImportResult,
   PieceLabel,
+  ModuleLabel,
   ProductionCutRow,
   Project,
 } from '@muebles/domain';
@@ -19,6 +20,7 @@ import {
   generateCutRows,
   generateHardwareList,
   generatePieceLabels,
+  generateModuleLabels,
   getProductionStaleInfo,
   listProductionSpaceOptions,
   PRODUCTION_SCOPE_ALL,
@@ -66,6 +68,10 @@ export type ProductionWorkspaceProps = {
     labels: readonly PieceLabel[],
     options: { readonly perUnit: boolean },
   ) => void | Promise<void>;
+  readonly onExportModuleLabels?: (
+    projectId: string,
+    labels: readonly ModuleLabel[],
+  ) => void | Promise<void>;
   readonly onExportProductionPack?: (projectId: string) => void | Promise<void>;
   readonly onExportElevations?: (projectId: string) => void | Promise<void>;
   readonly onExportCutListCsv?: (projectId: string) => void | Promise<void>;
@@ -108,6 +114,7 @@ export function ProductionWorkspace({
   onExportOptimizer,
   onExportHardware,
   onExportPieceLabels,
+  onExportModuleLabels,
   onExportProductionPack,
   onExportElevations,
   onExportCutListCsv,
@@ -221,12 +228,23 @@ export function ProductionWorkspace({
     // data source for office PDF and plant ZPL (Etiquetas tab).
     let pieceLabels: readonly PieceLabel[] | null = null;
     let pieceLabelsError: string | null = null;
+    let moduleLabels: readonly ModuleLabel[] | null = null;
+    let moduleLabelsError: string | null = null;
     if (catalog) {
       try {
         pieceLabels = generatePieceLabels(scopedProject, catalog);
       } catch (err) {
         pieceLabelsError =
-          err instanceof Error ? err.message : 'Error al resolver etiquetas';
+          err instanceof Error ? err.message : 'Error al resolver etiquetas de piezas';
+      }
+      try {
+        moduleLabels = generateModuleLabels(scopedProject, catalog, {
+          customerName: customerLabelFor(orderProject.customerId),
+          revision: orderProject.production?.revision?.toString(),
+        });
+      } catch (err) {
+        moduleLabelsError =
+          err instanceof Error ? err.message : 'Error al resolver etiquetas de muebles';
       }
     }
     // Ensure OP revision exists for plant-ready projects (display only; persist via store on export/floor).
@@ -252,10 +270,21 @@ export function ProductionWorkspace({
         onOpenDesign={() => onOpenDesign(orderProject.id)}
         onExportOptimizer={() => onExportOptimizer(orderProject.id)}
         onExportHardware={() => onExportHardware(orderProject.id)}
+        pieceLabels={pieceLabels}
+        pieceLabelsError={pieceLabelsError}
+        moduleLabels={moduleLabels}
+        moduleLabelsError={moduleLabelsError}
         onExportPieceLabels={
           onExportPieceLabels
             ? (labels, options) =>
-                onExportPieceLabels(orderProject.id, labels, options)
+                onExportPieceLabels(orderProject.id, labels, {
+                  perUnit: options?.perUnit ?? false,
+                })
+            : undefined
+        }
+        onExportModuleLabels={
+          onExportModuleLabels
+            ? (labels) => onExportModuleLabels(orderProject.id, labels)
             : undefined
         }
         onExportProductionPack={
@@ -282,8 +311,6 @@ export function ProductionWorkspace({
         modules={modules}
         cutRows={scopedCutRows}
         cutListError={cut.error}
-        pieceLabels={pieceLabels}
-        pieceLabelsError={pieceLabelsError}
         hardwareRows={hardware.rows}
         hardwareError={hardware.error}
         catalog3d={catalog3d}

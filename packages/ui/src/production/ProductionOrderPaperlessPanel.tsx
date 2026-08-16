@@ -52,8 +52,16 @@ export function matchModuleFromScan(
 ): ProductionModuleRow | null {
   const parsed = parsePieceLabelScan(scan);
   if (!parsed) return null;
+  if (parsed.kind === 'modulePayload' && parsed.fields.itemId) {
+    const directMatch = rows.find((r) => r.itemId === parsed.fields.itemId);
+    if (directMatch) return directMatch;
+  }
   const needle = (
-    parsed.kind === 'payload' ? parsed.fields.moduleCode : parsed.code
+    parsed.kind === 'payload'
+      ? parsed.fields.moduleCode
+      : parsed.kind === 'modulePayload'
+        ? parsed.fields.factoryCode || parsed.fields.moduleCode
+        : parsed.code
   ).toLowerCase();
   if (!needle) return null;
   return (

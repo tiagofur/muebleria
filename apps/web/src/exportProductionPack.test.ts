@@ -28,6 +28,7 @@ describe('buildProductionPackExport (Issue #134)', () => {
     expect(filenames).toContain('optimizer_Demo_plantilla.xlsx');
     expect(filenames).toContain('herrajes_Demo_plantilla.xlsx');
     expect(filenames).toContain('etiquetas_Demo_plantilla.pdf');
+    expect(filenames).toContain('etiquetas_muebles_Demo_plantilla.pdf');
     expect(filenames).toContain('resumen_materiales_Demo_plantilla.pdf');
   });
 

@@ -24,11 +24,13 @@ export function PieceScanCard({
   onStatusUpdated,
   onDismiss,
 }: PieceScanCardProps) {
-  const isPayload = parsedScan.kind === 'payload';
-  const itemId = isPayload
+  const isPiecePayload = parsedScan.kind === 'payload';
+  const isModulePayload = parsedScan.kind === 'modulePayload';
+  const itemId = isPiecePayload
     ? parsedScan.fields.partCode || parsedScan.fields.moduleCode
-    : parsedScan.code;
-  const projectId = isPayload ? parsedScan.fields.projectId : 'active';
+    : isModulePayload
+      ? parsedScan.fields.itemId || parsedScan.fields.factoryCode
+      : parsedScan.code;
 
   const currentStatus = useFloorScannerStore((s) => s.getItemStatus(itemId));
 
@@ -40,6 +42,10 @@ export function PieceScanCard({
         return 'warning';
       case 'assembled':
         return 'success';
+      case 'packaged':
+        return 'primary';
+      case 'loaded':
+        return 'success';
       case 'installed':
         return 'primary';
       default:
@@ -47,7 +53,7 @@ export function PieceScanCard({
     }
   };
 
-  if (!isPayload) {
+  if (!isPiecePayload && !isModulePayload) {
     return (
       <Card style={styles.card} elevated>
         <View style={styles.header}>
@@ -62,6 +68,56 @@ export function PieceScanCard({
 
         <View style={styles.footer}>
           <Badge label="Completado ✓" variant="success" />
+        </View>
+      </Card>
+    );
+  }
+
+  if (isModulePayload) {
+    const { fields } = parsedScan;
+    const bultoLabel = fields.packageIndex && fields.totalPackages
+      ? `Bulto ${fields.packageIndex} de ${fields.totalPackages}`
+      : 'Mueble Armado';
+
+    return (
+      <Card style={styles.card} elevated>
+        <View style={styles.header}>
+          <View style={styles.titleColumn}>
+            <Text style={styles.moduleCode}>{fields.factoryCode}</Text>
+            <Text style={styles.partCode}>{bultoLabel}</Text>
+          </View>
+          <Badge
+            label={ITEM_FLOOR_STATUS_LABELS_ES[currentStatus]}
+            variant={getStatusBadgeVariant(currentStatus)}
+          />
+        </View>
+
+        <Text style={styles.description}>{fields.moduleName}</Text>
+
+        <View style={styles.badgeRow}>
+          {fields.widthMm && fields.heightMm && fields.depthMm ? (
+            <View style={styles.metricBadge}>
+              <Text style={styles.metricLabel}>Medidas</Text>
+              <Text style={styles.metricValue}>
+                {fields.widthMm} × {fields.heightMm} × {fields.depthMm} mm
+              </Text>
+            </View>
+          ) : null}
+
+          {fields.revision ? (
+            <View style={styles.metricBadge}>
+              <Text style={styles.metricLabel}>Revisión OP</Text>
+              <Text style={styles.metricValue}>Rev {fields.revision}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.footer}>
+          <View style={styles.completedBadge}>
+            <Text style={styles.completedText}>
+              Etiqueta de Mueble Verificada ✓
+            </Text>
+          </View>
         </View>
       </Card>
     );

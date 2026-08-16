@@ -141,6 +141,10 @@ import {
   buildPieceLabelsExport,
   type PieceLabelsExportOptions,
 } from './exportPieceLabels';
+import {
+  buildModuleLabelsExport,
+  type ModuleLabelsExportOptions,
+} from './exportModuleLabels';
 import { buildProductionPackExport } from './exportProductionPack';
 import { buildWallElevationsExport } from './exportWallElevations';
 import { buildCutListCsvExport } from './exportCutListCsv';
@@ -1596,6 +1600,65 @@ function AppContent({
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
   );
 
+  const handleExportModuleLabels = useCallback(
+    async (
+      projectId?: string,
+      labelOptions?: ModuleLabelsExportOptions,
+    ) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await buildModuleLabelsExport(
+          project,
+          catalog,
+          customers,
+          labelOptions ?? {},
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          if (projectId != null) {
+            toast({
+              type: 'error',
+              message: 'No se pudo exportar etiquetas de muebles: revisá el pedido',
+            });
+          }
+          return;
+        }
+        const delivery = await deliverExcelFile(result.bytes, result.fileName);
+        if (delivery === 'cancelled') {
+          toast({ type: 'info', message: 'Export cancelado' });
+          return;
+        }
+        toast({
+          type: 'success',
+          message:
+            delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole],
+  );
+
   const handleExportElevations = useCallback(
     async (projectId?: string) => {
       const project =
@@ -2194,6 +2257,9 @@ function AppContent({
           }}
           onExportPieceLabels={(id, labels, options) => {
             void handleExportPieceLabels(id, { labels, perUnit: options.perUnit });
+          }}
+          onExportModuleLabels={(id, labels) => {
+            void handleExportModuleLabels(id, { labels });
           }}
           onExportProductionPack={(id) => {
             void handleExportProductionPack(id);

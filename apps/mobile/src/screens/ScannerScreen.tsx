@@ -156,7 +156,9 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
               const code =
                 parsed.kind === 'payload'
                   ? `${parsed.fields.moduleCode} - ${parsed.fields.partCode || 'Base'}`
-                  : parsed.code;
+                  : parsed.kind === 'modulePayload'
+                    ? `${parsed.fields.factoryCode} (Bulto ${parsed.fields.packageIndex ?? 1})`
+                    : parsed.code;
 
               return (
                 <Pressable
@@ -173,6 +175,10 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
                       <Text style={styles.historyDesc}>
                         {parsed.fields.lengthMm}×{parsed.fields.widthMm} mm •{' '}
                         {parsed.fields.materialCode}
+                      </Text>
+                    ) : parsed.kind === 'modulePayload' ? (
+                      <Text style={styles.historyDesc}>
+                        {parsed.fields.moduleName}
                       </Text>
                     ) : null}
                   </View>

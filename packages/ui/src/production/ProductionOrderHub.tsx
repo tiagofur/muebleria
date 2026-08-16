@@ -9,6 +9,7 @@ import type {
   ItemFloorStatus,
   Module,
   PieceLabel,
+  ModuleLabel,
   ProductionCutRow,
   ProductionStaleInfo,
   Project,
@@ -72,11 +73,6 @@ export type ProductionOrderHubProps = {
   readonly onOpenDesign: () => void;
   readonly onExportOptimizer: () => void | Promise<void>;
   readonly onExportHardware: () => void | Promise<void>;
-  /** Etiquetas tab / labels PDF — hub passes scoped labels + copy mode. */
-  readonly onExportPieceLabels?: (
-    labels: readonly PieceLabel[],
-    options: { readonly perUnit: boolean },
-  ) => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
   readonly onExportElevations?: () => void | Promise<void>;
   readonly onExportCutListCsv?: () => void | Promise<void>;
@@ -89,6 +85,15 @@ export type ProductionOrderHubProps = {
   /** Resolved piece labels for the Etiquetas tab (domain). */
   readonly pieceLabels?: readonly PieceLabel[] | null;
   readonly pieceLabelsError?: string | null;
+  readonly moduleLabels?: readonly ModuleLabel[] | null;
+  readonly moduleLabelsError?: string | null;
+  readonly onExportPieceLabels?: (
+    labels: readonly PieceLabel[],
+    options?: { readonly perUnit?: boolean },
+  ) => void | Promise<void>;
+  readonly onExportModuleLabels?: (
+    labels: readonly ModuleLabel[],
+  ) => void | Promise<void>;
   readonly hardwareRows?: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
   readonly catalog3d?: Module3DCatalogInput | null;
@@ -229,6 +234,9 @@ export function ProductionOrderHub({
   cutListError = null,
   pieceLabels = null,
   pieceLabelsError = null,
+  moduleLabels = null,
+  moduleLabelsError = null,
+  onExportModuleLabels,
   hardwareRows = null,
   hardwareError = null,
   catalog3d = null,
@@ -709,12 +717,15 @@ export function ProductionOrderHub({
             project={project}
             labels={pieceLabels}
             labelsError={pieceLabelsError}
+            moduleLabels={moduleLabels}
+            moduleLabelsError={moduleLabelsError}
             onExportPdf={
               onExportPieceLabels
                 ? (labels, perUnit) =>
                     onExportPieceLabels(labels, { perUnit })
                 : undefined
             }
+            onExportModulePdf={onExportModuleLabels}
             exportBusy={exportBusy}
           />
         ) : null}

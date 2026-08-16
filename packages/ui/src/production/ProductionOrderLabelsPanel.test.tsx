@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { PieceLabel, Project } from '@muebles/domain';
+import type { PieceLabel, ModuleLabel, Project } from '@muebles/domain';
 import { ProductionOrderLabelsPanel } from './ProductionOrderLabelsPanel';
 import {
   readLabelPrinterSettings,
@@ -59,6 +59,55 @@ const LABELS: readonly PieceLabel[] = [
     materialName: 'Roble',
     materialCode: 'MAT-ROB',
   }),
+];
+
+const MODULE_LABELS: readonly ModuleLabel[] = [
+  {
+    itemId: 'item-1',
+    factoryCode: 'GAB-01',
+    moduleCode: 'GAB-01',
+    moduleName: 'Bajo Fregadero',
+    projectId: 'p1',
+    projectName: 'Cocina Ana',
+    customerName: 'Cliente Ana',
+    packageIndex: 1,
+    totalPackages: 2,
+    unitIndex: 1,
+    unitQuantity: 1,
+    widthMm: 800,
+    heightMm: 850,
+    depthMm: 600,
+    measuresLabel: '800×850×600 mm',
+    spaceName: 'Cocina',
+    wallName: 'Muro Norte',
+    floorStatus: 'cut',
+    boardPartCount: 4,
+    hardwareCount: 6,
+    revision: '1',
+  },
+  {
+    itemId: 'item-2',
+    factoryCode: 'ALAC-01',
+    moduleCode: 'ALAC-01',
+    moduleName: 'Alacena Superior',
+    projectId: 'p1',
+    projectName: 'Cocina Ana',
+    customerName: 'Cliente Ana',
+    packageIndex: 2,
+    totalPackages: 2,
+    unitIndex: 1,
+    unitQuantity: 1,
+    widthMm: 600,
+    heightMm: 720,
+    depthMm: 350,
+    measuresLabel: '600×720×350 mm',
+    spaceName: 'Cocina',
+    wallName: 'Muro Sur',
+    floorStatus: 'pending',
+    boardPartCount: 2,
+    hardwareCount: 4,
+    revision: '1',
+  },
 ];
 
 const localStorageMock = (() => {
@@ -343,5 +392,39 @@ describe('ProductionOrderLabelsPanel', () => {
       screen.getByTestId('prod-labels-print-feedback').textContent,
     ).toContain('Zebra-GK420');
     delete host.electronAPI;
+  });
+
+  it('switches between piece labels and module labels modes', async () => {
+    const user = userEvent.setup();
+    const onExportModulePdf = vi.fn();
+    render(
+      <ProductionOrderLabelsPanel
+        project={projectFixture()}
+        labels={LABELS}
+        moduleLabels={MODULE_LABELS}
+        onExportPdf={vi.fn()}
+        onExportModulePdf={onExportModulePdf}
+      />,
+    );
+
+    // Initial mode: pieces
+    expect(screen.getByTestId('prod-labels-count').textContent).toContain('2 etiquetas');
+
+    // Switch to modules mode
+    await user.click(screen.getByTestId('prod-labels-mode-modules'));
+
+    expect(screen.getByTestId('prod-module-labels-count').textContent).toContain('2 bultos');
+    expect(screen.getByTestId('prod-module-labels-preview-card').textContent).toContain('BULTO 1 DE 2');
+    expect(screen.getByTestId('prod-module-labels-preview-card').textContent).toContain('GAB-01 — Bajo Fregadero');
+
+    // Search within module labels
+    await user.type(screen.getByTestId('prod-module-labels-search'), 'Alacena');
+    expect(screen.getByTestId('prod-module-labels-count').textContent).toContain('1 bulto');
+
+    // Export PDF button calls onExportModulePdf
+    await user.click(screen.getByTestId('prod-module-labels-download-pdf'));
+    expect(onExportModulePdf).toHaveBeenCalledTimes(1);
+    expect(onExportModulePdf.mock.calls[0]![0]).toHaveLength(1);
+    expect(onExportModulePdf.mock.calls[0]![0][0].moduleName).toBe('Alacena Superior');
   });
 });
