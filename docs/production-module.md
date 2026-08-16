@@ -181,12 +181,14 @@ Producción                          ← sección de nav (no sub-tab de un proye
 └── (al abrir una obra)
     ├── Resumen (hub)
     ├── Módulos                     ← listado read-only de ítems de la obra
-    ├── Despiece                    ← cut-list rica
-    ├── Herrajes
+    ├── Piso                        ← modo paperless de taller (escaneo y avance)
+    ├── Control de Carga (Despacho) ← checklist de bultos físicos y liberación a entrega
+    ├── Despiece                    ← cut-list rica con export CSV
+    ├── Etiquetas                   ← etiquetas de piezas y de módulos (PDF / ZPL)
+    ├── Herrajes                    ← lista de compras y herrajes por mueble
     ├── Vistas                      ← planta / elevaciones / 3D read-only
     ├── Optimización                ← pliegos estimados + preview + import
-    ├── Documentos                  ← PDFs generados / regenerar
-    └── Exports                     ← Optimizer, CSV, pack ZIP, (futuro CNC)
+    └── Documentos                  ← PDFs y pack ZIP maestro de producción
 ```
 
 **Nombre de nav:** `Producción` (ya existe entrada para cola).  

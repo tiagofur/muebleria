@@ -186,18 +186,24 @@ veas el patrón; desactalos o editá sus precios como con cualquier herraje.
 - La altura del **plano** (Posición) manda sobre la del módulo: lo que ves
   en 3D es lo que se cotiza.
 
-## 9. Producción
+## 9. Producción y Taller
 
 Con la cotización **aceptada**:
 
 1. **Producción** (o "Abrir en Producción" desde la cotización): la cola de
-   órdenes.
-2. **Abrir orden**: hub con Resumen, Módulos, Piso (avance de fábrica),
-   Despiece, Herrajes, Vistas, Optimización y Documentos.
-3. **Documentos** concentra los exports: pack completo (Optimizer +
-   etiquetas + hojas de armado + elevaciones), plan de corte oficial
-   (Optimizer), listas de herrajes, etiquetas, etc.
-4. El banner de la orden avisa si el diseño cambió después del último pack.
+   órdenes de trabajo para planta.
+2. **Abrir orden**: sala de control con pestañas especializadas:
+   - **Resumen:** checklist técnico "listo para cortar" y totales de fábrica.
+   - **Módulos:** inventario de muebles y estado de piso.
+   - **Piso:** modo paperless para taller; escaneo continuo de piezas y módulos con lector USB, cámara o teclado para avanzar de estado (`cortado` → `encintado` → `armado` → `embalado`).
+   - **Control de Carga / Despacho:** checklist de bultos físicos para verificación de flete. Al cargar el camión, se escanean los bultos; la barra de progreso calcula el % de carga en tiempo real. **La liberación de salida a entrega está bloqueada hasta que el 100% de los muebles estén a bordo.**
+   - **Despiece:** lista detallada de piezas de tablero con export CSV.
+   - **Etiquetas:** selector dual para generar e imprimir tanto **Etiquetas de Piezas de Tablero** como **Etiquetas de Muebles / Bultos**, con preview en vivo, descarga ZPL térmico (Zebra) y PDF A4. Tanto el rol `ingeniero` como `produccion` pueden imprimirlas.
+   - **Herrajes:** lista de compras y herrajes por mueble.
+   - **Vistas / Elevaciones:** planos 2D acotados por muro de cocina.
+   - **Optimización:** estimación y preview de pliegos de melamina.
+   - **Documentos:** pack ZIP maestro de producción (incluye Optimizer, herrajes, elevaciones, hojas de armado y etiquetas de piezas y bultos).
+3. El banner de la orden avisa si el diseño cambió después del último pack.
 
 ## 10. Vitrina y clientes
 
