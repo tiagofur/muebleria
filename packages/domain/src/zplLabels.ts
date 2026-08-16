@@ -6,7 +6,7 @@
  * ZPL QR code rendering (^BQ).
  */
 
-import { pieceLabelQrPayload } from './pieceLabelQr';
+import { pieceLabelQrPayload, pieceLabelQrPayloadUrl } from './pieceLabelQr';
 import type { PieceLabel } from './types';
 import { ValidationError } from './errors';
 
@@ -20,6 +20,12 @@ export interface ZplExportOptions {
   readonly projectId?: string;
   /** Production order revision — printed into the QR payload (v2). */
   readonly revision?: string;
+  /**
+   * QR form (F091 / D7): 'json' (default) or 'url' deep link wrapping the
+   * same JSON. qrHost switches the URL form to https://<host>/scan#…
+   */
+  readonly qrFormat?: 'json' | 'url';
+  readonly qrHost?: string;
 }
 
 export interface ZplSizeDimensions {
@@ -83,7 +89,7 @@ export function pieceToZpl(
   const matStr = sanitizeZplText(`Material: ${label.materialName} (${label.materialCode})`);
   const edgeStr = sanitizeZplText(`Encintado: ${label.edgeBandingInstruction}`);
 
-  const qrPayload = pieceLabelQrPayload({
+  const labelQrFields = {
     projectId: options.projectId ?? 'PROJ',
     moduleCode: label.moduleCode,
     partCode: label.partCode,
@@ -95,7 +101,10 @@ export function pieceToZpl(
     edgeSides: pieceLabelEdgeSides(label),
     edgeCode: label.edgeBandCode,
     revision: options.revision,
-  });
+  };
+  const qrPayload = options.qrFormat === 'url'
+    ? pieceLabelQrPayloadUrl(labelQrFields, { host: options.qrHost })
+    : pieceLabelQrPayload(labelQrFields);
 
   const lines: string[] = [];
   lines.push('^XA');

@@ -11,6 +11,14 @@ export type LabelPrinterSettings = {
   readonly includeBorder: boolean;
   /** Thermal printer name for raw ZPL printing (desktop shell only). */
   readonly printerName?: string;
+  /**
+   * QR payload format (F091 / D7): 'json' (default — offline-friendly,
+   * smaller QR, pre-F091 labels) or 'url' (deep link wrapping the same JSON
+   * so the OS camera can open the mobile app).
+   */
+  readonly qrFormat?: 'json' | 'url';
+  /** Domain for the https deep-link form; empty = custom scheme muebles:// */
+  readonly qrHost?: string;
 };
 
 const LABEL_PRINTER_STORAGE_KEY = 'muebles_label_printer_v1';
@@ -20,6 +28,8 @@ export const DEFAULT_LABEL_PRINTER_SETTINGS: LabelPrinterSettings = {
   dpi: 203,
   includeBorder: true,
   printerName: '',
+  qrFormat: 'json',
+  qrHost: '',
 };
 
 function isZplSizePreset(value: unknown): value is ZplSizePreset {
@@ -42,6 +52,8 @@ export function readLabelPrinterSettings(): LabelPrinterSettings {
       includeBorder: parsed.includeBorder !== false,
       printerName:
         typeof parsed.printerName === 'string' ? parsed.printerName : '',
+      qrFormat: parsed.qrFormat === 'url' ? 'url' : 'json',
+      qrHost: typeof parsed.qrHost === 'string' ? parsed.qrHost : '',
     };
   } catch {
     return DEFAULT_LABEL_PRINTER_SETTINGS;

@@ -458,7 +458,13 @@ export {
 } from './structures/versioning';
 export type { ResolvedStructureRevision } from './structures/versioning';
 
-export { parsePieceLabelScan, pieceLabelQrPayload } from './pieceLabelQr';
+export {
+  PIECE_LABEL_QR_SCHEME,
+  parsePieceLabelScan,
+  pieceLabelQrPayload,
+  pieceLabelQrPayloadUrl,
+  unwrapPieceLabelQrUrl,
+} from './pieceLabelQr';
 export type { ParsedPieceLabelScan, PieceLabelQrFields } from './pieceLabelQr';
 
 export {

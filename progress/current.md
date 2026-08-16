@@ -562,3 +562,42 @@ Go ok; init.sh OK.
 
 **F091 pendiente:** variante URL payload (deep link, D7) y cola offline
 persistente (hoy memoria).
+
+## F091 ítem 1 — Variante URL del payload QR (deep links) (2026-08-16)
+
+**Dominio** (`pieceLabelQr.ts`): `pieceLabelQrPayloadUrl(fields, {host})` —
+envuelve el MISMO JSON v2 en `muebles://scan#<encodeURIComponent(json)>`
+(scheme default) o `https://<host>/scan#…` (universal/app links; host
+sanitizado). `unwrapPieceLabelQrUrl` extrae el fragment (regex
+https?/muebles, decode defensivo). `parsePieceLabelScan` acepta las tres
+formas (JSON puro, scheme, https) — compatibilidad garantizada por tests:
+payload pre-F091 parsea idéntico, garbage fragment → plainCode sin crash.
+`PIECE_LABEL_QR_SCHEME = 'muebles'` exportado.
+
+**Etiquetas (3 generadores):** settings persistidos del usuario ganan
+`qrFormat: 'json'|'url'` + `qrHost` (default json — nada cambia para
+etiquetas existentes; el JSON es QR más chico). Tab Etiquetas →
+Impresora térmica → select "QR: JSON (offline, recomendado) | Deep link
+(abre la app móvil)" + campo dominio cuando url. Aplica a preview fiel,
+ZPL (`pieceBatchToZpl`) y PDF (`pieceLabelsExport`) — los tres aceptan
+`qrFormat`/`qrHost` en sus options.
+
+**RN deep link:** el scheme `muebles` ya estaba registrado en app.json (lo
+preparó la sesión paralela). App.tsx: `Linking.getInitialURL()` +
+addEventListener('url') → `unwrapPieceLabelQrUrl` → si hay payload:
+navega a scanner + `processScan(payload)` — la cámara del SO escanea la
+etiqueta URL-form, el SO abre la app, y el escaneo ya está procesado.
+(iOS nota: la app de cámara ofrece abrir links https; el scheme custom lo
+abren apps de QR. Universal links completos requieren apple-app-site-
+association en el dominio — configuración de deploy, documentado en D7.)
+
+**Tests:** domain 554 (+6: round-trip scheme/https, paridad de parseo
+entre formas, compat pre-F091, garbage fragment, URL sin fragment, no-URL).
+Panel: 2 expectativas de settings actualizadas por los campos nuevos (9 ✓).
+
+**Verificación:** domain 554, ui 847, excel 63, mobile 33, web 242;
+typecheck monorepo 0 errores; init.sh OK.
+
+**Nota de coordinación:** la sesión paralela sigue activa — commiteó una
+rada de hardening (fb47f09..ccfd4b5) ANTES de este trabajo; el árbol
+estaba limpio al arrancar. Este commit toca solo archivos F091.

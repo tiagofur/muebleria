@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { Linking, View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from './src/stores/authStore';
 import { useCatalogStore } from './src/stores/catalogStore';
+import { unwrapPieceLabelQrUrl } from '@muebles/domain';
 import { useFloorScannerStore } from './src/stores/floorScannerStore';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -58,6 +59,23 @@ export default function App() {
       void syncPendingFloorScans();
     }
   }, [isAuthenticated, loadCatalogFromApi, syncPendingFloorScans]);
+
+  // F091 deep links: OS camera scans a URL-form label QR → the OS opens the
+  // app → we jump to the scanner and process the wrapped payload directly.
+  const processScan = useFloorScannerStore((s) => s.processScan);
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      const payload = unwrapPieceLabelQrUrl(url);
+      if (payload) {
+        setCurrentScreen('scanner');
+        void processScan(payload);
+      }
+    };
+    Linking.getInitialURL().then(handleUrl).catch(() => undefined);
+    const sub = Linking.addEventListener('url', (e) => handleUrl(e.url));
+    return () => sub.remove();
+  }, [processScan]);
 
   if (isLoading) {
     return (

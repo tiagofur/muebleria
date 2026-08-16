@@ -5,7 +5,11 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type PDFImage } from 'pdf-lib';
 import QRCode from 'qrcode';
 import type { PieceLabel } from '@muebles/domain';
-import { pieceLabelQrPayload, ValidationError } from '@muebles/domain';
+import {
+  pieceLabelQrPayload,
+  pieceLabelQrPayloadUrl,
+  ValidationError,
+} from '@muebles/domain';
 
 export interface PieceLabelsPdfInput {
   readonly projectId: string;
@@ -19,6 +23,9 @@ export interface PieceLabelsPdfInput {
   readonly perUnit?: boolean;
   /** Production order revision — printed in the header for traceability. */
   readonly revision?: string;
+  /** QR form (F091 / D7): 'json' (default) or 'url' deep link. */
+  readonly qrFormat?: 'json' | 'url';
+  readonly qrHost?: string;
 }
 
 const PAGE_WIDTH = 595.28; // A4
@@ -255,7 +262,7 @@ export async function pieceLabelsPdfExport(
 
     let top = PAGE_HEIGHT - MARGIN - 8;
     for (const label of chunk) {
-      const payload = pieceLabelQrPayload({
+      const pdfQrFields = {
         projectId: input.projectId,
         moduleCode: label.moduleCode,
         partCode: label.partCode,
@@ -274,7 +281,11 @@ export async function pieceLabelsPdfExport(
           .join('+'),
         edgeCode: label.edgeBandCode,
         revision: input.revision,
-      });
+      };
+      const payload =
+        input.qrFormat === 'url'
+          ? pieceLabelQrPayloadUrl(pdfQrFields, { host: input.qrHost })
+          : pieceLabelQrPayload(pdfQrFields);
       let qrImage: PDFImage | null = null;
       try {
         const png = await qrPngBytes(payload);

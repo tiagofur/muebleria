@@ -435,7 +435,7 @@ Mismo ZIP **más**, cuando existan generadores:
 | D4 | ¿Re-export después de editar diseño en accepted? | Permitido técnicamente hoy; UI debe **advertir** regenerar pack. v1: bump de revision. |
 | D5 | Nesting nativo | **Fuera** hasta demanda + decisión explícita; no sneaky-scope en PRs de UI. |
 | D6 | Post-procesador CNC de marca | Solo con hardware real del usuario (#111). |
-| D7 | Contrato del payload QR de etiquetas | **JSON offline-friendly, NO URL** (#141, F089): la cámara del SO lee el QR pero no abre la app — el escaneo ocurre dentro de la app (modal Piso / lector USB). Deep links (escanear desde la cámara del sistema y abrir una app nativa RN) requieren una **variante URL** que envuelva el mismo JSON v2; `parsePieceLabelScan` debe aceptar ambas formas y los QR ya impresos nunca dejan de parsear (F091). El parser vive en `@muebles/domain` (TS puro) — importable directo desde React Native. |
+| D7 | Contrato del payload QR de etiquetas | **JSON offline-friendly por default** (#141, F089). **F091 (2026-08-16): variante URL implementada** — `pieceLabelQrPayloadUrl` envuelve el MISMO JSON v2 en `muebles://scan#<json>` (o `https://<host>/scan#<json>` con dominio registrado); `unwrapPieceLabelQrUrl` + `parsePieceLabelScan` aceptan AMBAS formas; los QR impresos pre-F091 (JSON puro) siguen parseando igual — sin reimpresión. Etiquetas: opción persistida por usuario `qrFormat` json\|url + `qrHost` (tab Etiquetas → Impresora térmica → QR); aplica a preview, ZPL y PDF. Deep link RN: el scheme `muebles` está registrado (app.json) y App.tsx procesa links entrantes → scanner. Parser en `@muebles/domain` (TS puro), importable desde RN. |
 
 ---
 

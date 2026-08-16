@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parsePieceLabelScan, pieceLabelQrPayload } from './pieceLabelQr';
+import {
+  parsePieceLabelScan,
+  pieceLabelQrPayload,
+  pieceLabelQrPayloadUrl,
+  unwrapPieceLabelQrUrl,
+} from './pieceLabelQr';
 
 describe('pieceLabelQrPayload', () => {
   it('encodes project and part identifiers as JSON', () => {
@@ -156,5 +161,69 @@ describe('parsePieceLabelScan (F089)', () => {
       expect(parsed.fields.quantity).toBe(1);
       expect(parsed.fields.projectId).toBe('');
     }
+  });
+});
+
+describe('pieceLabelQrPayloadUrl / unwrapPieceLabelQrUrl (F091 deep links)', () => {
+  const fields = {
+    projectId: 'proj-1',
+    moduleCode: 'MOD-GAB-01',
+    partCode: 'P03',
+    description: 'Costado',
+    materialCode: 'TAB-1',
+    lengthMm: 720,
+    widthMm: 560,
+  };
+
+  it('wraps the same JSON v2 in the custom scheme by default', () => {
+    const url = pieceLabelQrPayloadUrl(fields);
+    expect(url.startsWith('muebles://scan#')).toBe(true);
+    const inner = unwrapPieceLabelQrUrl(url);
+    expect(inner).toBe(pieceLabelQrPayload(fields));
+  });
+
+  it('emits https://<host>/scan# when a host is provided', () => {
+    const url = pieceLabelQrPayloadUrl(fields, { host: 'taller.midominio.com' });
+    expect(url.startsWith('https://taller.midominio.com/scan#')).toBe(true);
+    // host is sanitized: scheme prefixes and trailing slashes are stripped
+    const sloppy = pieceLabelQrPayloadUrl(fields, {
+      host: 'https://taller.midominio.com/',
+    });
+    expect(sloppy).toBe(url);
+  });
+
+  it('parsePieceLabelScan accepts BOTH forms identically', () => {
+    const fromJson = parsePieceLabelScan(pieceLabelQrPayload(fields));
+    const fromScheme = parsePieceLabelScan(pieceLabelQrPayloadUrl(fields));
+    const fromHttps = parsePieceLabelScan(
+      pieceLabelQrPayloadUrl(fields, { host: 'taller.example.com' }),
+    );
+    expect(fromScheme).toEqual(fromJson);
+    expect(fromHttps).toEqual(fromJson);
+    expect(fromJson?.kind).toBe('payload');
+  });
+
+  it('pre-F091 plain JSON payloads still parse identically (no reprint needed)', () => {
+    const legacy = pieceLabelQrPayload(fields);
+    const parsed = parsePieceLabelScan(legacy);
+    expect(parsed).toMatchObject({ kind: 'payload', version: 2 });
+    expect(parsed && parsed.kind === 'payload' && parsed.fields.moduleCode).toBe(
+      'MOD-GAB-01',
+    );
+  });
+
+  it('URL with garbage fragment falls back to plainCode, not a crash', () => {
+    expect(unwrapPieceLabelQrUrl('muebles://scan#%ZZ-broken')).toBe('%ZZ-broken');
+    const parsed = parsePieceLabelScan('muebles://scan#%ZZ-broken');
+    expect(parsed).toEqual({ kind: 'plainCode', code: 'muebles://scan#%ZZ-broken' });
+  });
+
+  it('URL without fragment and non-QR URLs return null/plainCode safely', () => {
+    expect(unwrapPieceLabelQrUrl('muebles://scan')).toBeNull();
+    expect(unwrapPieceLabelQrUrl('https://example.com/other#x')).toBe('x'); // forma válida, contenido ajeno
+    expect(unwrapPieceLabelQrUrl('GAB-01')).toBeNull();
+    // A non-label fragment degrades to plainCode of the whole URL
+    const parsed = parsePieceLabelScan('muebles://scan#hello');
+    expect(parsed?.kind).toBe('plainCode');
   });
 });

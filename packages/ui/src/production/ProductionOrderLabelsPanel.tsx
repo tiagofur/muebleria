@@ -11,6 +11,7 @@ import {
   pieceBatchToZpl,
   pieceLabelEdgeSides,
   pieceLabelQrPayload,
+  pieceLabelQrPayloadUrl,
   ZPL_SIZE_PRESETS,
 } from '@muebles/domain';
 import { FileDown, Printer, Search, Tags } from 'lucide-react';
@@ -137,7 +138,9 @@ export function ProductionOrderLabelsPanel({
       return;
     }
     let cancelled = false;
-    const payload = pieceLabelQrPayload({
+    const payload = (
+      printer.qrFormat === 'url' ? pieceLabelQrPayloadUrl : pieceLabelQrPayload
+    )({
       projectId: project.id,
       moduleCode: active.moduleCode,
       partCode: active.partCode,
@@ -149,7 +152,7 @@ export function ProductionOrderLabelsPanel({
       edgeSides: pieceLabelEdgeSides(active),
       edgeCode: active.edgeBandCode,
       revision,
-    });
+    }, printer.qrFormat === 'url' ? { host: printer.qrHost || undefined } : undefined);
     QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 1 })
       .then((url) => {
         if (!cancelled) setQrDataUrl(url);
@@ -215,6 +218,8 @@ export function ProductionOrderLabelsPanel({
       includeBorder: printer.includeBorder,
       projectId: project.id,
       revision,
+      qrFormat: printer.qrFormat,
+      qrHost: printer.qrHost || undefined,
     });
     const result = await printRaw(printer.printerName ?? '', content);
     setPrintFeedback(
@@ -456,6 +461,40 @@ export function ProductionOrderLabelsPanel({
               />
               <span>Borde en la etiqueta</span>
             </label>
+            <label className="prod-labels__filter">
+              <span className="prod-labels__filter-label">QR</span>
+              <select
+                className="prod-modulos__floor-select"
+                value={printer.qrFormat ?? 'json'}
+                onChange={(e) =>
+                  setPrinter((p) => ({
+                    ...p,
+                    qrFormat: e.target.value as 'json' | 'url',
+                  }))
+                }
+                data-testid="prod-labels-qr-format"
+              >
+                <option value="json">JSON (offline, recomendado)</option>
+                <option value="url">Deep link (abre la app móvil)</option>
+              </select>
+            </label>
+            {printer.qrFormat === 'url' ? (
+              <label className="prod-labels__filter">
+                <span className="prod-labels__filter-label">
+                  Dominio del link
+                </span>
+                <input
+                  type="text"
+                  className="prod-modulos__floor-select"
+                  value={printer.qrHost ?? ''}
+                  onChange={(e) =>
+                    setPrinter((p) => ({ ...p, qrHost: e.target.value }))
+                  }
+                  placeholder="taller.tudominio.com (vacío = muebles://)"
+                  data-testid="prod-labels-qr-host"
+                />
+              </label>
+            ) : null}
             {printRaw ? (
               <label className="prod-labels__filter">
                 <span className="prod-labels__filter-label">

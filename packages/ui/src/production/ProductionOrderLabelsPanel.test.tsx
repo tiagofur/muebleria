@@ -243,6 +243,8 @@ describe('ProductionOrderLabelsPanel', () => {
       dpi: 300,
       includeBorder: true,
       printerName: '',
+      qrFormat: 'json',
+      qrHost: '',
     });
 
 
@@ -293,6 +295,8 @@ describe('ProductionOrderLabelsPanel', () => {
       dpi: 300,
       includeBorder: false,
       printerName: '',
+      qrFormat: 'json',
+      qrHost: '',
     });
   });
 

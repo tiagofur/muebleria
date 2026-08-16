@@ -2,12 +2,11 @@
  * Compact QR payload for workshop piece labels (#141).
  * Offline-friendly JSON (not a URL) for scanner apps / future deep links.
  *
- * IMPORTANT for the future React Native app (F089/F091): this payload is
- * deliberately NOT a URL, so the OS camera app cannot deep-link into any
- * app. When deep links are needed, add a URL VARIANT that wraps this same
- * JSON (e.g. https://<host>/scan#<json>) and teach parsePieceLabelScan to
- * accept both forms — never change the JSON shape or drop the plain-JSON
- * form: printed QRs must keep parsing forever.
+ * F091 deep links: `pieceLabelQrPayloadUrl` wraps this same JSON v2 in a URL
+ * (`muebles://scan#<json>` by default, or `https://<host>/scan#<json>` when
+ * the workshop registers a domain for universal/app links). Both forms parse
+ * forever: plain JSON stays the default for printed labels (smaller QR), and
+ * pre-F091 QRs never require reprinting — never change the JSON shape.
  */
 
 export type PieceLabelQrFields = {
@@ -46,6 +45,46 @@ export function pieceLabelQrPayload(fields: PieceLabelQrFields): string {
   });
 }
 
+/** Deep-link scheme registered by the mobile app (F091). */
+export const PIECE_LABEL_QR_SCHEME = 'muebles';
+
+/**
+ * URL variant of the payload (F091 / D7): wraps the SAME JSON v2 in a deep
+ * link. Default `muebles://scan#<json>` (custom scheme, no domain setup);
+ * pass `host` to emit `https://<host>/scan#<json>` once universal/app links
+ * are configured. The JSON lives in the fragment (#) so it never hits a
+ * server log if the URL is ever opened in a browser.
+ */
+export function pieceLabelQrPayloadUrl(
+  fields: PieceLabelQrFields,
+  opts: { readonly host?: string } = {},
+): string {
+  const base = opts.host
+    ? `https://${opts.host.replace(/^https?:\/\//, '').replace(/\/+$/, '')}/scan`
+    : `${PIECE_LABEL_QR_SCHEME}://scan`;
+  return `${base}#${encodeURIComponent(pieceLabelQrPayload(fields))}`;
+}
+
+const QR_URL_RE = /^(?:https?:\/\/|muebles:\/\/)\S+$/i;
+
+/**
+ * Extract the wrapped JSON payload from a deep-link URL, or null when the
+ * text is not a QR URL form. Used by parsePieceLabelScan and by the mobile
+ * app's link handler (an incoming link navigates + scans in one step).
+ */
+export function unwrapPieceLabelQrUrl(text: string): string | null {
+  const trimmed = text.trim();
+  if (!QR_URL_RE.test(trimmed)) return null;
+  const hashIdx = trimmed.indexOf('#');
+  const fragment = hashIdx >= 0 ? trimmed.slice(hashIdx + 1) : '';
+  if (!fragment) return null;
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
+}
+
 /**
  * Parsed scan input for the shop floor (F089 / #240).
  * - `payload`: structured label QR (v2 current, v1 legacy labels still in bins).
@@ -73,12 +112,15 @@ function scanNumber(raw: unknown): number {
 export function parsePieceLabelScan(text: string): ParsedPieceLabelScan | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  if (!trimmed.startsWith('{')) {
+  // Deep-link form first (F091): unwrap the URL, then parse the JSON inside.
+  const unwrapped = unwrapPieceLabelQrUrl(trimmed);
+  const jsonText = unwrapped ?? trimmed;
+  if (!jsonText.startsWith('{')) {
     return { kind: 'plainCode', code: trimmed };
   }
   let parsed: Record<string, unknown>;
   try {
-    const value = JSON.parse(trimmed) as unknown;
+    const value = JSON.parse(jsonText) as unknown;
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return { kind: 'plainCode', code: trimmed };
     }
