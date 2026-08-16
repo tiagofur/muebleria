@@ -1636,6 +1636,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         floorRaw === 'cut' ||
         floorRaw === 'edged' ||
         floorRaw === 'assembled' ||
+        floorRaw === 'packaged' ||
+        floorRaw === 'loaded' ||
         floorRaw === 'installed'
           ? (floorRaw as ProjectItem['floorStatus'])
           : undefined;

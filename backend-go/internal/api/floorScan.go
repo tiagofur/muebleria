@@ -1,10 +1,10 @@
 package api
 
 /**
- * Floor scan endpoint (PROD-3.1 / F089-RN): the mobile companion scans a
- * piece-label QR, the server resolves the project line item and (optionally)
- * advances its shop-floor status atomically — one row, no project rewrite,
- * so phone scans can never clobber concurrent web edits.
+ * Floor scan endpoint (PROD-3.1 / F089-RN / F092): the mobile or web companion
+ * scans a piece or module label QR, the server resolves the project line item
+ * and atomically updates its shop-floor status — one row, no project rewrite,
+ * returning the updated loading checklist progress.
  */
 
 import (
@@ -16,21 +16,24 @@ import (
 )
 
 type floorScanRequest struct {
-	Module      string `json:"module"`
-	FactoryCode string `json:"factory_code"`
-	Advance     bool   `json:"advance"`
+	Module       string `json:"module"`
+	FactoryCode  string `json:"factory_code"`
+	ItemID       string `json:"item_id"`
+	TargetStatus string `json:"target_status"`
+	Advance      bool   `json:"advance"`
 }
 
 type floorScanResponse struct {
-	ProjectID    string `json:"project_id"`
-	ProjectName  string `json:"project_name"`
-	ItemID       string `json:"item_id"`
-	FactoryCode  string `json:"factory_code"`
-	ModuleCode   string `json:"module_code"`
-	ModuleName   string `json:"module_name"`
-	StatusBefore string `json:"status_before"`
-	StatusAfter  string `json:"status_after"`
-	NextStatus   string `json:"next_status"`
+	ProjectID       string                 `json:"project_id"`
+	ProjectName     string                 `json:"project_name"`
+	ItemID          string                 `json:"item_id"`
+	FactoryCode     string                 `json:"factory_code"`
+	ModuleCode      string                 `json:"module_code"`
+	ModuleName      string                 `json:"module_name"`
+	StatusBefore    string                 `json:"status_before"`
+	StatusAfter     string                 `json:"status_after"`
+	NextStatus      string                 `json:"next_status"`
+	LoadingProgress domain.LoadingProgress `json:"loading_progress"`
 }
 
 // factoryCodeFor mirrors the TS row builder: first line of a module code
@@ -67,8 +70,9 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 	}
 	moduleNeedle := strings.TrimSpace(body.Module)
 	factoryNeedle := strings.TrimSpace(body.FactoryCode)
-	if moduleNeedle == "" && factoryNeedle == "" {
-		respondWithError(w, http.StatusBadRequest, "falta el código de módulo")
+	itemIDNeedle := strings.TrimSpace(body.ItemID)
+	if moduleNeedle == "" && factoryNeedle == "" && itemIDNeedle == "" {
+		respondWithError(w, http.StatusBadRequest, "falta el código de módulo o id de pieza")
 		return
 	}
 
@@ -102,18 +106,30 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 		lines = append(lines, resolved{item: item, moduleCode: code, moduleName: name, factoryCode: fc})
 	}
 
-	want := strings.ToLower(factoryNeedle)
-	if want == "" {
-		want = strings.ToLower(moduleNeedle)
-	}
 	var match *resolved
-	for i := range lines {
-		lc := strings.ToLower(lines[i].factoryCode)
-		if lc == want || strings.ToLower(lines[i].moduleCode) == want {
-			match = &lines[i]
-			break
+	if itemIDNeedle != "" {
+		for i := range lines {
+			if lines[i].item.ID == itemIDNeedle {
+				match = &lines[i]
+				break
+			}
 		}
 	}
+
+	if match == nil {
+		want := strings.ToLower(factoryNeedle)
+		if want == "" {
+			want = strings.ToLower(moduleNeedle)
+		}
+		for i := range lines {
+			lc := strings.ToLower(lines[i].factoryCode)
+			if lc == want || strings.ToLower(lines[i].moduleCode) == want {
+				match = &lines[i]
+				break
+			}
+		}
+	}
+
 	if match == nil {
 		respondWithError(w, http.StatusNotFound, "módulo no encontrado en esta obra")
 		return
@@ -121,7 +137,15 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 
 	before := domain.NormalizeItemFloorStatus(match.item.FloorStatus)
 	after := before
-	if body.Advance {
+
+	if body.TargetStatus != "" {
+		target := domain.NormalizeItemFloorStatus(strings.TrimSpace(body.TargetStatus))
+		if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, target); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar el estado")
+			return
+		}
+		after = target
+	} else if body.Advance {
 		if next := domain.NextItemFloorStatus(before); next != "" {
 			if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, next); err != nil {
 				respondWithError(w, http.StatusInternalServerError, "no se pudo avanzar el estado")
@@ -131,16 +155,46 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	match.item.FloorStatus = after
+	progress := domain.CalculateLoadingProgress(project)
+
 	respondWithJSON(w, http.StatusOK, floorScanResponse{
-		ProjectID:    project.ID,
-		ProjectName:  project.Name,
-		ItemID:       match.item.ID,
-		FactoryCode:  match.factoryCode,
-		ModuleCode:   match.moduleCode,
-		ModuleName:   match.moduleName,
-		StatusBefore: before,
-		StatusAfter:  after,
-		NextStatus:   domain.NextItemFloorStatus(after),
+		ProjectID:       project.ID,
+		ProjectName:     project.Name,
+		ItemID:          match.item.ID,
+		FactoryCode:     match.factoryCode,
+		ModuleCode:      match.moduleCode,
+		ModuleName:      match.moduleName,
+		StatusBefore:    before,
+		StatusAfter:     after,
+		NextStatus:      domain.NextItemFloorStatus(after),
+		LoadingProgress: progress,
+	})
+}
+
+// HandleProjectLoadingStatus handles GET /api/projects/{id}/loading-status
+func (s *Server) HandleProjectLoadingStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
+		return
+	}
+	projectID := r.PathValue("id")
+	if projectID == "" {
+		respondWithError(w, http.StatusBadRequest, "missing project id")
+		return
+	}
+
+	project, err := s.Store.GetProjectByID(r.Context(), projectID)
+	if err != nil || project == nil {
+		respondWithError(w, http.StatusNotFound, "obra no encontrada")
+		return
+	}
+
+	progress := domain.CalculateLoadingProgress(project)
+	respondWithJSON(w, http.StatusOK, map[string]any{
+		"project_id":       project.ID,
+		"project_name":     project.Name,
+		"loading_progress": progress,
 	})
 }
 
@@ -222,4 +276,3 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 		NextStatus:  domain.NextItemFloorStatus(targetStatus),
 	})
 }
-

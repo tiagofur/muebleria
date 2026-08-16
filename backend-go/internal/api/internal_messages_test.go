@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,10 +15,11 @@ import (
 
 type messagesTestStore struct {
 	stubStore
-	messages       map[string][]domain.ProjectInternalMessage
-	createdMessage *domain.ProjectInternalMessage
-	updatedStatus  string
-	assignedEngID  *string
+	messages        map[string][]domain.ProjectInternalMessage
+	createdMessage  *domain.ProjectInternalMessage
+	updatedStatus   string
+	assignedEngID   *string
+	projectReturned *domain.Project
 }
 
 func (m *messagesTestStore) ListProjectInternalMessages(_ context.Context, projectID string) ([]domain.ProjectInternalMessage, error) {
@@ -45,6 +47,9 @@ func (m *messagesTestStore) UpdateProjectTechnicalWorkflow(
 }
 
 func (m *messagesTestStore) GetProjectByID(_ context.Context, id string) (*domain.Project, error) {
+	if m.projectReturned != nil {
+		return m.projectReturned, nil
+	}
 	return &domain.Project{
 		ID:              id,
 		Name:            "Cocina Moderna",
@@ -145,5 +150,74 @@ func TestHandleProjectTechnicalWorkflow_Update(t *testing.T) {
 	}
 	if store.createdMessage == nil || store.createdMessage.MessageType != domain.InternalMsgGateApproval {
 		t.Errorf("expected automatic gate approval message, got %+v", store.createdMessage)
+	}
+}
+
+func TestHandleProjectTechnicalWorkflow_DeliveryReleaseValidation(t *testing.T) {
+	// Project with 2 items, only 1 loaded
+	proj := &domain.Project{
+		ID:              "proj-2",
+		Name:            "Cocina Completa",
+		TechnicalStatus: "in_workshop",
+		Items: []domain.ProjectItem{
+			{ID: "i1", ModuleID: "m1", Quantity: 1, FloorStatus: "loaded"},
+			{ID: "i2", ModuleID: "m2", Quantity: 1, FloorStatus: "assembled"},
+		},
+	}
+
+	store := &messagesTestStore{projectReturned: proj}
+	server := &Server{
+		Store:     store,
+		JWTSecret: "test-secret",
+	}
+
+	// 1. Attempting to release to ready_to_install without all loaded must fail with 400
+	bodyBlocked, _ := json.Marshal(map[string]interface{}{
+		"technical_status": "ready_to_install",
+	})
+	reqBlocked := httptest.NewRequest(http.MethodPatch, "/api/projects/proj-2/technical-workflow", bytes.NewReader(bodyBlocked))
+	reqBlocked.Header.Set("Content-Type", "application/json")
+	reqBlocked.SetPathValue("id", "proj-2")
+	wBlocked := httptest.NewRecorder()
+	server.HandleProjectTechnicalWorkflow(wBlocked, reqBlocked)
+
+	if wBlocked.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request when releasing with missing loaded modules, got %d: %s", wBlocked.Code, wBlocked.Body.String())
+	}
+	if !strings.Contains(wBlocked.Body.String(), "faltan 1 de 2 muebles") {
+		t.Fatalf("expected error message mentioning missing packages, got %s", wBlocked.Body.String())
+	}
+
+	// 2. Passing force_release: true bypasses the block
+	bodyForced, _ := json.Marshal(map[string]interface{}{
+		"technical_status": "ready_to_install",
+		"force_release":    true,
+	})
+	reqForced := httptest.NewRequest(http.MethodPatch, "/api/projects/proj-2/technical-workflow", bytes.NewReader(bodyForced))
+	reqForced.Header.Set("Content-Type", "application/json")
+	reqForced.SetPathValue("id", "proj-2")
+	wForced := httptest.NewRecorder()
+	server.HandleProjectTechnicalWorkflow(wForced, reqForced)
+
+	if wForced.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK with force_release: true, got %d: %s", wForced.Code, wForced.Body.String())
+	}
+	if store.updatedStatus != "ready_to_install" {
+		t.Fatalf("expected updatedStatus ready_to_install, got %s", store.updatedStatus)
+	}
+
+	// 3. When 100% loaded, normal release succeeds without force_release
+	proj.Items[1].FloorStatus = "loaded"
+	bodyClean, _ := json.Marshal(map[string]interface{}{
+		"technical_status": "ready_to_install",
+	})
+	reqClean := httptest.NewRequest(http.MethodPatch, "/api/projects/proj-2/technical-workflow", bytes.NewReader(bodyClean))
+	reqClean.Header.Set("Content-Type", "application/json")
+	reqClean.SetPathValue("id", "proj-2")
+	wClean := httptest.NewRecorder()
+	server.HandleProjectTechnicalWorkflow(wClean, reqClean)
+
+	if wClean.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when 100%% loaded, got %d: %s", wClean.Code, wClean.Body.String())
 	}
 }

@@ -198,3 +198,57 @@ func TestPatchItemFloorStatus_ForbiddenRole(t *testing.T) {
 	}
 }
 
+func TestFloorScan_DirectTargetStatusAndProgress(t *testing.T) {
+	store, srv := floorScanTestFixtures()
+	rr := doFloorScan(srv, domain.RoleProduccion, `{"item_id":"i1","target_status":"loaded"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp floorScanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if resp.ItemID != "i1" || resp.StatusAfter != "loaded" {
+		t.Fatalf("expected i1 loaded, got %+v", resp)
+	}
+	if len(store.floorStatusWrites) != 1 || store.floorStatusWrites[0].status != "loaded" {
+		t.Fatalf("expected write to loaded, got %+v", store.floorStatusWrites)
+	}
+	if resp.LoadingProgress.TotalPackages != 4 {
+		t.Fatalf("expected 4 total packages (1+1+2), got %d", resp.LoadingProgress.TotalPackages)
+	}
+	if resp.LoadingProgress.LoadedPackages != 1 {
+		t.Fatalf("expected 1 loaded package, got %d", resp.LoadingProgress.LoadedPackages)
+	}
+}
+
+func TestGetProjectLoadingStatus(t *testing.T) {
+	_, srv := floorScanTestFixtures()
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1/loading-status", nil), "u1", string(domain.RoleProduccion))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectLoadingStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		ProjectID       string                 `json:"project_id"`
+		ProjectName     string                 `json:"project_name"`
+		LoadingProgress domain.LoadingProgress `json:"loading_progress"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if resp.ProjectID != "p1" || resp.ProjectName != "Cocina López" {
+		t.Fatalf("unexpected project info: %+v", resp)
+	}
+	if resp.LoadingProgress.TotalPackages != 4 {
+		t.Fatalf("expected 4 packages, got %d", resp.LoadingProgress.TotalPackages)
+	}
+	if resp.LoadingProgress.CanReleaseToDelivery {
+		t.Fatalf("should not be ready for delivery yet")
+	}
+}
+
+

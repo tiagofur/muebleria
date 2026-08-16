@@ -2,8 +2,20 @@
  * LocalStorage implementation of WorkspaceRepository for Guest mode.
  */
 
-import type { Catalog, Project, ProjectTemplate, Workspace } from '@muebles/domain';
-import { withWorkshopSettings } from '@muebles/domain';
+import type {
+  Catalog,
+  Project,
+  ProjectTemplate,
+  Workspace,
+  ItemFloorStatus,
+  LoadingProgress,
+} from '@muebles/domain';
+import {
+  withWorkshopSettings,
+  calculateLoadingProgress,
+  nextItemFloorStatus,
+  normalizeItemFloorStatus,
+} from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import { createSeedWorkspace } from './seed';
 
@@ -110,5 +122,126 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
         (t) => t.id !== templateId,
       ),
     });
+  }
+
+  // --- Floor scan & Loading status (PROD-3.1 / F092) ---
+
+  async floorScan(
+    projectId: string,
+    payload: {
+      module?: string;
+      factoryCode?: string;
+      itemId?: string;
+      targetStatus?: ItemFloorStatus;
+      advance?: boolean;
+    },
+  ): Promise<{
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    factoryCode: string;
+    moduleCode: string;
+    moduleName: string;
+    statusBefore: ItemFloorStatus;
+    statusAfter: ItemFloorStatus;
+    nextStatus: string;
+    loadingProgress: LoadingProgress;
+  }> {
+    const ws = this.getWorkspace();
+    const project = ws.projects.find((p) => p.id === projectId);
+    if (!project) throw new Error('Obra no encontrada');
+
+    const item = payload.itemId
+      ? project.items.find((it) => it.id === payload.itemId)
+      : project.items[0];
+    if (!item) throw new Error('Item no encontrado');
+
+    const before = normalizeItemFloorStatus(item.floorStatus);
+    let after = before;
+    if (payload.targetStatus) {
+      after = normalizeItemFloorStatus(payload.targetStatus);
+    } else if (payload.advance) {
+      const next = nextItemFloorStatus(before);
+      if (next) after = next;
+    }
+
+    const updatedItems = project.items.map((it) =>
+      it.id === item.id ? { ...it, floorStatus: after } : it,
+    );
+    const updatedProject = { ...project, items: updatedItems };
+    const updatedWs = {
+      ...ws,
+      projects: ws.projects.map((p) => (p.id === projectId ? updatedProject : p)),
+    };
+    this.saveWorkspace(updatedWs);
+
+    const progress = calculateLoadingProgress(updatedProject);
+    const mod = ws.catalog.modules.find((m) => m.id === item.moduleId);
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      itemId: item.id,
+      factoryCode: mod?.code ?? item.moduleId,
+      moduleCode: mod?.code ?? item.moduleId,
+      moduleName: mod?.name ?? '',
+      statusBefore: before,
+      statusAfter: after,
+      nextStatus: nextItemFloorStatus(after) ?? '',
+      loadingProgress: progress,
+    };
+  }
+
+  async getProjectLoadingStatus(projectId: string): Promise<{
+    projectId: string;
+    projectName: string;
+    loadingProgress: LoadingProgress;
+  }> {
+    const ws = this.getWorkspace();
+    const project = ws.projects.find((p) => p.id === projectId);
+    if (!project) throw new Error('Obra no encontrada');
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      loadingProgress: calculateLoadingProgress(project),
+    };
+  }
+
+  async setProjectItemFloorStatus(
+    projectId: string,
+    itemId: string,
+    status?: ItemFloorStatus,
+  ): Promise<{
+    projectId: string;
+    itemId: string;
+    floorStatus: ItemFloorStatus;
+    nextStatus: string;
+  }> {
+    const ws = this.getWorkspace();
+    const project = ws.projects.find((p) => p.id === projectId);
+    if (!project) throw new Error('Obra no encontrada');
+    const item = project.items.find((it) => it.id === itemId);
+    if (!item) throw new Error('Item no encontrado');
+
+    const currentStatus = normalizeItemFloorStatus(item.floorStatus);
+    const targetStatus = status
+      ? normalizeItemFloorStatus(status)
+      : (nextItemFloorStatus(currentStatus) ?? currentStatus);
+
+    const updatedItems = project.items.map((it) =>
+      it.id === itemId ? { ...it, floorStatus: targetStatus } : it,
+    );
+    const updatedProject = { ...project, items: updatedItems };
+    this.saveWorkspace({
+      ...ws,
+      projects: ws.projects.map((p) => (p.id === projectId ? updatedProject : p)),
+    });
+
+    return {
+      projectId,
+      itemId,
+      floorStatus: targetStatus,
+      nextStatus: nextItemFloorStatus(targetStatus) ?? '',
+    };
   }
 }

@@ -13,6 +13,8 @@ import type {
   ShowcasePhotoItem,
   Workspace,
   WorkshopSettings,
+  ItemFloorStatus,
+  LoadingProgress,
 } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -634,6 +636,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       surveyCompletedAt?: string;
       installationScheduledDate?: string;
       comment?: string;
+      forceRelease?: boolean;
     },
   ): Promise<Project> {
     const res = await fetch(`${this.baseUrl}/projects/${projectId}/technical-workflow`, {
@@ -645,6 +648,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         survey_completed_at: updates.surveyCompletedAt,
         installation_scheduled_date: updates.installationScheduledDate,
         comment: updates.comment,
+        force_release: updates.forceRelease,
       }),
     });
     if (!res.ok) {
@@ -653,6 +657,143 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
     const raw = await res.json();
     return projectFromApi(raw as Record<string, unknown>);
+  }
+
+  // --- Floor scan & Loading status (PROD-3.1 / F092) ---
+
+  async floorScan(
+    projectId: string,
+    payload: {
+      module?: string;
+      factoryCode?: string;
+      itemId?: string;
+      targetStatus?: ItemFloorStatus;
+      advance?: boolean;
+    },
+  ): Promise<{
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    factoryCode: string;
+    moduleCode: string;
+    moduleName: string;
+    statusBefore: ItemFloorStatus;
+    statusAfter: ItemFloorStatus;
+    nextStatus: string;
+    loadingProgress: LoadingProgress;
+  }> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/floor-scan`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        module: payload.module,
+        factory_code: payload.factoryCode,
+        item_id: payload.itemId,
+        target_status: payload.targetStatus,
+        advance: payload.advance,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Floor scan failed: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    const progressRaw = (raw.loading_progress ?? {}) as Record<string, unknown>;
+    return {
+      projectId: String(raw.project_id ?? ''),
+      projectName: String(raw.project_name ?? ''),
+      itemId: String(raw.item_id ?? ''),
+      factoryCode: String(raw.factory_code ?? ''),
+      moduleCode: String(raw.module_code ?? ''),
+      moduleName: String(raw.module_name ?? ''),
+      statusBefore: (raw.status_before as ItemFloorStatus) ?? 'pending',
+      statusAfter: (raw.status_after as ItemFloorStatus) ?? 'pending',
+      nextStatus: String(raw.next_status ?? ''),
+      loadingProgress: {
+        totalUnits: Number(progressRaw.total_packages ?? 0),
+        loadedUnits: Number(progressRaw.loaded_packages ?? 0),
+        percentage: Number(progressRaw.loading_percentage ?? 0),
+        isComplete: Boolean(progressRaw.all_loaded),
+        totalPackages: Number(progressRaw.total_packages ?? 0),
+        packagedPackages: Number(progressRaw.packaged_packages ?? 0),
+        loadedPackages: Number(progressRaw.loaded_packages ?? 0),
+        installedPackages: Number(progressRaw.installed_packages ?? 0),
+        packagingPercentage: Number(progressRaw.packaging_percentage ?? 0),
+        loadingPercentage: Number(progressRaw.loading_percentage ?? 0),
+        allPackaged: Boolean(progressRaw.all_packaged),
+        allLoaded: Boolean(progressRaw.all_loaded),
+        canReleaseToDelivery: Boolean(progressRaw.can_release_to_delivery),
+      },
+    };
+  }
+
+  async getProjectLoadingStatus(projectId: string): Promise<{
+    projectId: string;
+    projectName: string;
+    loadingProgress: LoadingProgress;
+  }> {
+    const res = await fetch(
+      `${this.baseUrl}/projects/${projectId}/loading-status`,
+      {
+        headers: this.getHeaders(),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get loading status: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    const progressRaw = (raw.loading_progress ?? {}) as Record<string, unknown>;
+    return {
+      projectId: String(raw.project_id ?? ''),
+      projectName: String(raw.project_name ?? ''),
+      loadingProgress: {
+        totalUnits: Number(progressRaw.total_packages ?? 0),
+        loadedUnits: Number(progressRaw.loaded_packages ?? 0),
+        percentage: Number(progressRaw.loading_percentage ?? 0),
+        isComplete: Boolean(progressRaw.all_loaded),
+        totalPackages: Number(progressRaw.total_packages ?? 0),
+        packagedPackages: Number(progressRaw.packaged_packages ?? 0),
+        loadedPackages: Number(progressRaw.loaded_packages ?? 0),
+        installedPackages: Number(progressRaw.installed_packages ?? 0),
+        packagingPercentage: Number(progressRaw.packaging_percentage ?? 0),
+        loadingPercentage: Number(progressRaw.loading_percentage ?? 0),
+        allPackaged: Boolean(progressRaw.all_packaged),
+        allLoaded: Boolean(progressRaw.all_loaded),
+        canReleaseToDelivery: Boolean(progressRaw.can_release_to_delivery),
+      },
+    };
+  }
+
+  async setProjectItemFloorStatus(
+    projectId: string,
+    itemId: string,
+    status?: ItemFloorStatus,
+  ): Promise<{
+    projectId: string;
+    itemId: string;
+    floorStatus: ItemFloorStatus;
+    nextStatus: string;
+  }> {
+    const res = await fetch(
+      `${this.baseUrl}/projects/${projectId}/items/${itemId}/floor-status`,
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to set floor status: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    return {
+      projectId: String(raw.project_id ?? ''),
+      itemId: String(raw.item_id ?? ''),
+      floorStatus: (raw.floor_status as ItemFloorStatus) ?? 'pending',
+      nextStatus: String(raw.next_status ?? ''),
+    };
   }
 
   // --- Warranty Desk & Post-Sale (CRM Phase 3) ---

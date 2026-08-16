@@ -112,8 +112,9 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
-	// Floor scan & item floor status (PROD-3.1 / F089-RN): mobile scan-to-advance, atomic write.
+	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(http.HandlerFunc(server.HandleProjectFloorScan)))
+	mux.Handle("GET /api/projects/{id}/loading-status", authMW(http.HandlerFunc(server.HandleProjectLoadingStatus)))
 	mux.Handle("PATCH /api/projects/{id}/items/{itemId}/floor-status", authMW(http.HandlerFunc(server.HandleProjectItemFloorStatus)))
 
 	// Project gallery photos (CRM Phase 1) & Commercial Showcase (CRM Phase 4)

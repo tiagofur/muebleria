@@ -12,7 +12,8 @@ import type {
   WarrantyTicketPhoto,
   ShowcasePhotoItem,
   Workspace,
-
+  ItemFloorStatus,
+  LoadingProgress,
 } from '@muebles/domain';
 
 export interface WorkspaceRepository {
@@ -83,8 +84,50 @@ export interface WorkspaceRepository {
       surveyCompletedAt?: string;
       installationScheduledDate?: string;
       comment?: string;
+      forceRelease?: boolean;
     },
   ): Promise<Project>;
+
+  // --- Floor scan & Loading status (PROD-3.1 / F092) ---
+
+  floorScan?(
+    projectId: string,
+    payload: {
+      module?: string;
+      factoryCode?: string;
+      itemId?: string;
+      targetStatus?: ItemFloorStatus;
+      advance?: boolean;
+    },
+  ): Promise<{
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    factoryCode: string;
+    moduleCode: string;
+    moduleName: string;
+    statusBefore: ItemFloorStatus;
+    statusAfter: ItemFloorStatus;
+    nextStatus: string;
+    loadingProgress: LoadingProgress;
+  }>;
+
+  getProjectLoadingStatus?(projectId: string): Promise<{
+    projectId: string;
+    projectName: string;
+    loadingProgress: LoadingProgress;
+  }>;
+
+  setProjectItemFloorStatus?(
+    projectId: string,
+    itemId: string,
+    status?: ItemFloorStatus,
+  ): Promise<{
+    projectId: string;
+    itemId: string;
+    floorStatus: ItemFloorStatus;
+    nextStatus: string;
+  }>;
 
   // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
 

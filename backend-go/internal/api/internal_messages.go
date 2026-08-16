@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -122,6 +123,7 @@ func (s *Server) HandleProjectTechnicalWorkflow(w http.ResponseWriter, r *http.R
 		SurveyCompletedAt         *string `json:"survey_completed_at"`
 		InstallationScheduledDate *string `json:"installation_scheduled_date"`
 		Comment                   string  `json:"comment,omitempty"`
+		ForceRelease              bool    `json:"force_release,omitempty"`
 	}
 
 	if !decodeJSONBody(w, r, &req) {
@@ -139,6 +141,17 @@ func (s *Server) HandleProjectTechnicalWorkflow(w http.ResponseWriter, r *http.R
 	}
 	if req.TechnicalStatus != nil && strings.TrimSpace(*req.TechnicalStatus) != "" {
 		targetStatus = *req.TechnicalStatus
+	}
+
+	// Guard: Transitioning to ready_to_install, installing or completed requires 100% of modules loaded on transport
+	if (targetStatus == "ready_to_install" || targetStatus == "installing" || targetStatus == "completed") && len(project.Items) > 0 {
+		progress := domain.CalculateLoadingProgress(project)
+		if !progress.AllLoaded && !req.ForceRelease {
+			missing := progress.TotalPackages - progress.LoadedPackages
+			respondWithError(w, http.StatusBadRequest,
+				fmt.Sprintf("No se puede liberar a despacho / entrega: faltan %d de %d muebles por escanear y cargar al transporte", missing, progress.TotalPackages))
+			return
+		}
 	}
 
 	var surveyStr *string

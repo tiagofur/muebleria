@@ -453,4 +453,86 @@ describe('APIWorkspaceRepository', () => {
     expect(putBodies[0]!.body['code']).toBe('AGR-CAJON-3');
     expect(putBodies[0]!.body['name']).toBe('Cuerpo 3 Cajones');
   });
+
+  it('performs floorScan and parses response with loading progress', async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.includes('/projects/p1/floor-scan')) {
+        const parsed = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            project_id: 'p1',
+            project_name: 'Cocina Ana',
+            item_id: parsed.item_id ?? 'it-1',
+            factory_code: 'GAB-01',
+            module_code: 'GAB-01',
+            module_name: 'Gabinete Bajo',
+            status_before: 'pending',
+            status_after: parsed.target_status ?? 'cut',
+            next_status: 'edged',
+            loading_progress: {
+              total_packages: 4,
+              packaged_packages: 2,
+              loaded_packages: 1,
+              installed_packages: 0,
+              packaging_percentage: 50,
+              loading_percentage: 25,
+              all_packaged: false,
+              all_loaded: false,
+              can_release_to_delivery: false,
+            },
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const result = await repo.floorScan('p1', {
+      itemId: 'it-1',
+      targetStatus: 'loaded',
+    });
+
+    expect(result.projectId).toBe('p1');
+    expect(result.statusAfter).toBe('loaded');
+    expect(result.loadingProgress.totalPackages).toBe(4);
+    expect(result.loadingProgress.loadedPackages).toBe(1);
+    expect(result.loadingProgress.canReleaseToDelivery).toBe(false);
+  });
+
+  it('gets loading status for a project', async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/projects/p1/loading-status')) {
+        return {
+          ok: true,
+          json: async () => ({
+            project_id: 'p1',
+            project_name: 'Cocina Ana',
+            loading_progress: {
+              total_packages: 2,
+              packaged_packages: 2,
+              loaded_packages: 2,
+              installed_packages: 0,
+              packaging_percentage: 100,
+              loading_percentage: 100,
+              all_packaged: true,
+              all_loaded: true,
+              can_release_to_delivery: true,
+            },
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const result = await repo.getProjectLoadingStatus('p1');
+
+    expect(result.projectId).toBe('p1');
+    expect(result.loadingProgress.allLoaded).toBe(true);
+    expect(result.loadingProgress.canReleaseToDelivery).toBe(true);
+  });
 });
+
