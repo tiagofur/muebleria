@@ -48,3 +48,5 @@ tmp/
 /blob-report/
 /playwright/.cache/
 .freebuff/
+# Local AI runtime state
+.atl/
