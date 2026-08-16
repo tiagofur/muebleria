@@ -595,7 +595,7 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		var err error
 		measureArg := nullIfEmpty(item.MeasurePresetID)
 		pinArg := structurePinArg(item.StructureRevisionPin)
-		baseModeArg := nullIfEmpty(item.BaseMode)
+		baseModeArg := item.BaseMode
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
@@ -828,11 +828,11 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id;
 	`
-	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin)).Scan(&item.ID)
+	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin), item.BaseMode).Scan(&item.ID)
 	if err != nil {
 		return err
 	}
