@@ -3,7 +3,7 @@
  * Loads the shared web UI (Vite dev server or built dist). No domain formulas here.
  */
 
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile as execFileCb } from 'node:child_process';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
@@ -91,11 +91,47 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: false,
+      navigateOnDragDrop: false,
     },
   });
 
   const devUrl =
     process.env.VITE_DEV_SERVER_URL?.trim() || 'http://localhost:5173';
+
+  // Secure navigation & window opening:
+  // 1. Intercept all window.open() or <a target="_blank"> and open in default OS browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (
+      url.startsWith('https:') ||
+      url.startsWith('http:') ||
+      url.startsWith('mailto:')
+    ) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  // 2. Intercept in-window navigation attempts.
+  win.webContents.on('will-navigate', (event, navigationUrl) => {
+    try {
+      const parsed = new URL(navigationUrl);
+      const isAllowedDev = isDev() && parsed.origin === new URL(devUrl).origin;
+      const isAllowedFile = parsed.protocol === 'file:';
+      if (!isAllowedDev && !isAllowedFile) {
+        event.preventDefault();
+        if (
+          navigationUrl.startsWith('https:') ||
+          navigationUrl.startsWith('http:') ||
+          navigationUrl.startsWith('mailto:')
+        ) {
+          void shell.openExternal(navigationUrl);
+        }
+      }
+    } catch {
+      event.preventDefault();
+    }
+  });
 
   if (isDev()) {
     void win.loadURL(devUrl);
@@ -129,10 +165,23 @@ function registerIpc() {
   });
 
   ipcMain.handle(CHANNELS.writeExcelFile, async (_event, filePath, buffer) => {
-    if (typeof filePath !== 'string' || !filePath) {
+    if (
+      typeof filePath !== 'string' ||
+      !filePath.trim() ||
+      filePath.includes('\0')
+    ) {
       throw new Error('filePath required');
     }
+    if (
+      !buffer ||
+      !(buffer instanceof ArrayBuffer || ArrayBuffer.isView(buffer))
+    ) {
+      throw new Error('buffer must be a valid ArrayBuffer or typed array');
+    }
     const data = Buffer.from(buffer);
+    if (data.length > 100 * 1024 * 1024) {
+      throw new Error('buffer exceeds maximum allowed size (100MB)');
+    }
     await fs.writeFile(filePath, data);
   });
 
@@ -142,6 +191,9 @@ function registerIpc() {
     const printer = String(printerName ?? '').trim();
     const zpl = String(payload ?? '');
     if (!printer) return { ok: false, error: 'Falta el nombre de la impresora' };
+    if (/[&|;<>^%"\r\n\0]/.test(printer) || printer.startsWith('-')) {
+      return { ok: false, error: 'Nombre de impresora no válido' };
+    }
     if (!zpl.trim()) return { ok: false, error: 'No hay etiquetas para imprimir' };
     try {
       if (process.platform === 'win32') {
@@ -152,6 +204,7 @@ function registerIpc() {
           await execFile('cmd', ['/c', 'copy', '/b', file, printer]);
         } finally {
           await fs.unlink(file).catch(() => undefined);
+          await fs.rmdir(dir).catch(() => undefined);
         }
         return { ok: true };
       }

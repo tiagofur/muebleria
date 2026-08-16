@@ -75,6 +75,18 @@ describe('createExcelIpcHandlers', () => {
       expect.any(Uint8Array),
     );
   });
+
+  it('rejects empty filePath or null byte in writeExcelFile', async () => {
+    const writeFile = vi.fn(async () => undefined);
+    const api = createExcelIpcHandlers({
+      showSaveDialog: async () => ({ canceled: true }),
+      writeFile,
+    });
+    const bytes = new Uint8Array([1]).buffer;
+    await expect(api.writeExcelFile('', bytes)).rejects.toThrow(/filePath required/);
+    await expect(api.writeExcelFile('file\0.xlsx', bytes)).rejects.toThrow(/filePath required/);
+    expect(writeFile).not.toHaveBeenCalled();
+  });
 });
 
 describe('getElectronAPI', () => {

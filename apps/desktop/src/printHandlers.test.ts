@@ -29,8 +29,9 @@ describe('createPrintRawHandler', () => {
     const execFile = vi.fn(async () => ({ stdout: '', stderr: '' }));
     const writeFile = vi.fn(async () => undefined);
     const unlink = vi.fn(async () => undefined);
+    const rmdir = vi.fn(async () => undefined);
     const handler = createPrintRawHandler(
-      deps({ platform: 'win32', execFile, writeFile, unlink }),
+      deps({ platform: 'win32', execFile, writeFile, unlink, rmdir }),
     );
     const result = await handler('\\\\server\\zebra', '^XA^XZ');
     expect(result.ok).toBe(true);
@@ -41,6 +42,7 @@ describe('createPrintRawHandler', () => {
       {},
     );
     expect(unlink).toHaveBeenCalled();
+    expect(rmdir).toHaveBeenCalledWith('/tmp/muebles-zpl-xxx');
   });
 
   it('rejects an empty printer name or payload without spawning', async () => {
@@ -48,6 +50,17 @@ describe('createPrintRawHandler', () => {
     const handler = createPrintRawHandler(deps({ execFile }));
     expect((await handler('  ', '^XA')).ok).toBe(false);
     expect((await handler('Zebra', '  ')).ok).toBe(false);
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects printer names with shell injection characters or leading dash', async () => {
+    const execFile = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const handler = createPrintRawHandler(deps({ execFile }));
+    expect((await handler('Zebra & calc.exe', '^XA')).ok).toBe(false);
+    expect((await handler('Zebra | calc.exe', '^XA')).ok).toBe(false);
+    expect((await handler('Zebra; calc.exe', '^XA')).ok).toBe(false);
+    expect((await handler('-o evil_option', '^XA')).ok).toBe(false);
+    expect((await handler('Zebra"with"quotes', '^XA')).ok).toBe(false);
     expect(execFile).not.toHaveBeenCalled();
   });
 

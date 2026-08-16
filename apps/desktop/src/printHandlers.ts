@@ -20,6 +20,7 @@ export interface PrintRawDeps {
   readonly mkdtemp: (prefix: string) => Promise<string>;
   readonly writeFile: (path: string, data: string) => Promise<void>;
   readonly unlink: (path: string) => Promise<void>;
+  readonly rmdir?: (path: string) => Promise<void>;
 }
 
 export function createPrintRawHandler(deps: PrintRawDeps) {
@@ -30,6 +31,10 @@ export function createPrintRawHandler(deps: PrintRawDeps) {
     const printer = printerName.trim();
     if (!printer) {
       return { ok: false, error: 'Falta el nombre de la impresora' };
+    }
+    // Reject shell meta-characters or leading hyphens that could manipulate CLI flags or shell pipelines
+    if (/[&|;<>^%"\r\n\0]/.test(printer) || printer.startsWith('-')) {
+      return { ok: false, error: 'Nombre de impresora no válido' };
     }
     if (!payload.trim()) {
       return { ok: false, error: 'No hay etiquetas para imprimir' };
@@ -43,6 +48,9 @@ export function createPrintRawHandler(deps: PrintRawDeps) {
           await deps.execFile('cmd', ['/c', 'copy', '/b', file, printer], {});
         } finally {
           await deps.unlink(file).catch(() => undefined);
+          if (deps.rmdir) {
+            await deps.rmdir(dir).catch(() => undefined);
+          }
         }
         return { ok: true };
       }

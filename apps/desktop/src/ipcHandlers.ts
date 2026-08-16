@@ -40,6 +40,9 @@ export function createExcelIpcHandlers(deps: ExcelIpcDeps): ElectronAPI {
       filePath: string,
       buffer: ArrayBuffer,
     ): Promise<void> {
+      if (!filePath || typeof filePath !== 'string' || filePath.includes('\0')) {
+        throw new Error('filePath required');
+      }
       await deps.writeFile(filePath, new Uint8Array(buffer));
     },
   };

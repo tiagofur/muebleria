@@ -3,7 +3,7 @@
  * Requires electron at runtime; unit tests do not load this module.
  */
 
-import type { ElectronAPI } from './electronApi';
+import type { ElectronAPI, ElectronPrintRawResult } from './electronApi';
 
 type IpcRendererLike = {
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
@@ -28,11 +28,16 @@ export function registerElectronApi(
       >,
     writeExcelFile: (filePath, buffer) =>
       ipcRenderer.invoke('excel:writeExcelFile', filePath, buffer) as Promise<void>,
+    printRaw: (printerName, payload) =>
+      ipcRenderer.invoke('zpl:printRaw', printerName, payload) as Promise<ElectronPrintRawResult>,
   };
   contextBridge.exposeInMainWorld('electronAPI', api);
 }
 
-export const EXCEL_IPC_CHANNELS = {
+export const DESKTOP_IPC_CHANNELS = {
   showSaveDialog: 'excel:showSaveDialog',
   writeExcelFile: 'excel:writeExcelFile',
+  printRaw: 'zpl:printRaw',
 } as const;
+
+export const EXCEL_IPC_CHANNELS = DESKTOP_IPC_CHANNELS;
