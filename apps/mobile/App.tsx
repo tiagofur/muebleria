@@ -153,6 +153,7 @@ export default function App() {
         return (
           <HomeScreen
             onOpenScanner={() => setCurrentScreen('scanner')}
+            onOpenQueue={() => setCurrentScreen('queue')}
             onOpenSurvey={() => setCurrentScreen('survey')}
             onOpenPhotos={() => setCurrentScreen('photos')}
             onOpenChat={() => setCurrentScreen('chat')}

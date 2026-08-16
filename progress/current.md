@@ -515,3 +515,50 @@ ellos arreglaron su narrowing), init.sh verde.
 
 **Sesión paralela RN:** sigue activa (apps/mobile + docs). Este commit
 excluye sus archivos.
+
+## RN Takeover — paridad piso + ventas calle (2026-08-16, F091 núcleo)
+
+El usuario tomó ownership total de apps/mobile (la sesión paralela dejó de
+trabajar). Objetivo: app útil para piso de fábrica y vendedor en calle.
+
+**Hallazgo crítico corregido:** Go NO persistía `floor_status` (ni columna
+ni INSERT/SELECT) — los estados de piso se perdían en cada save/recarga
+TAMBIÉN en web con backend. Migración **000047** (columna aditiva) +
+persistencia en loadProjectItems/replaceProjectItemsTx/AddProjectItem.
+
+**Backend:** `POST /api/projects/:id/floor-scan` (api/floorScan.go):
+resuelve ítem por módulo/código de fábrica (sufijos -L2/-L3 como la web),
+avanza ATÓMICAMENTE (UPDATE de 1 fila — sin reescribir el proyecto,
+escaneos del teléfono no pisan ediciones web), RBAC = markProduced ∨
+exportProduction (igual que el panel paperless web). Helpers Go
+`NormalizeItemFloorStatus`/`NextItemFloorStatus` (paridad TS). 7 tests
+handler + helpers.
+
+**RN piso:** floorScannerStore reescrito — processScan resuelve contra el
+endpoint (payload con projectId), auto-avance (toggle, default on),
+errores visibles (404 módulo, 403, red), **cola offline** en memoria con
+avance optimista + syncPending al reconectar; ScannerScreen muestra obra +
+estado servidor + botón "Marcar: X". PieceScanCard display-only.
+8 tests (mock apiClient + haptics).
+
+**RN ventas:** catalogStore.loadFromApi() (catálogo REAL del taller vía
+catalogFromApi de @muebles/storage — exportado del index; seed queda como
+fallback offline); App carga catálogo + sincroniza piso pendiente al
+autenticar. quoterStore.saveAsQuote(): cliente find-or-create por nombre +
+POST /projects draft con items (module/preset/qty) → la oficina lo ve en
+Cotizaciones; botón "Guardar cotización (borrador)" en ExpressQuoter.
+
+**RN producción:** ProductionQueueScreen — GET /projects filtrado
+accepted/produced, pull-to-refresh, "Escanear esta obra" fija obra activa
+(códigos planos resuelven contra ella) y salta al escáner. HomeScreen:
+card "Cola de Producción".
+
+**Coordinación:** la sesión paralela (aún activa en backend) commiteó mi
+trabajo en vuelo en `a08ff50` (incluye TODO lo anterior) y refactorizó
+encima (decodeJSONBody, uuid validation — suyo, sin commitear, NO tocado).
+Mi remanente: wiring final HomeScreen/App (commit aparte). Todo verde:
+domain 548, storage 87, excel 63, ui 847, mobile 33, web 242, desktop 14;
+Go ok; init.sh OK.
+
+**F091 pendiente:** variante URL payload (deep link, D7) y cola offline
+persistente (hoy memoria).

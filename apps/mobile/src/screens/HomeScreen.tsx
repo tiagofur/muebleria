@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import {
   QrCode,
+  Factory,
   Users,
   Camera,
   Layers,
@@ -30,6 +31,7 @@ import { useAuthStore } from '../stores/authStore';
 
 export interface HomeScreenProps {
   onOpenScanner?: () => void;
+  onOpenQueue?: () => void;
   onOpenSurvey?: () => void;
   onOpenPhotos?: () => void;
   onOpenChat?: () => void;
@@ -46,6 +48,7 @@ export interface HomeScreenProps {
 
 export function HomeScreen({
   onOpenScanner,
+  onOpenQueue,
   onOpenSurvey,
   onOpenPhotos,
   onOpenChat,
@@ -119,6 +122,25 @@ export function HomeScreen({
           </View>
           <ChevronRight size={20} color={colors.textMuted} />
         </Card>
+
+        {/* Cola de producción: obras activas para escanear (F089-RN) */}
+        {onOpenQueue ? (
+          <Card style={styles.heroActionCard} elevated onPress={onOpenQueue}>
+            <View style={styles.actionIconContainer}>
+              <Factory size={28} color="#ffffff" />
+            </View>
+            <View style={styles.actionTextContainer}>
+              <View style={styles.actionTitleRow}>
+                <Text style={styles.heroActionTitle}>Cola de Producción</Text>
+                <Badge label="Fábrica" variant="info" />
+              </View>
+              <Text style={styles.actionSubtitle}>
+                Obras aceptadas para escanear desde el piso, con avance al servidor.
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} />
+          </Card>
+        ) : null}
 
         <View style={styles.grid}>
           {/* Action 2: Express Quoter */}
