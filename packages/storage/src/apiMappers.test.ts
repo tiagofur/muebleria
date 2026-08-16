@@ -1360,3 +1360,50 @@ describe('hardwareToApi / hardwareFromApi — PBR round-trip (F069)', () => {
     expect(round.previewShape).toBeUndefined();
   });
 });
+
+describe('hardwareToApi / hardwareFromApi — part finishes (F080)', () => {
+  it('round-trips part finishes (role → preset id)', () => {
+    const hw: Hardware = {
+      id: 'hw-pf',
+      code: 'HW-BAR-MIX',
+      name: 'Tirador barra bicolor',
+      unit: 'piece',
+      costPerUnit: 8,
+      active: true,
+      previewShape: 'bar-pull',
+      previewColor: '#c0c0c0',
+      partFinishes: { grip: 'gold', base: 'black-matte' },
+    };
+    const api = hardwareToApi(hw);
+    expect(api.part_finishes).toEqual({ grip: 'gold', base: 'black-matte' });
+
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.partFinishes).toEqual({ grip: 'gold', base: 'black-matte' });
+  });
+
+  it('null part_finishes stays undefined (legacy rows)', () => {
+    const round = hardwareFromApi({
+      id: 'hw-legacy',
+      code: 'HW-L',
+      name: 'Legacy',
+      unit: 'piece',
+      cost_per_unit: 1,
+      active: true,
+      part_finishes: null,
+    });
+    expect(round.partFinishes).toBeUndefined();
+  });
+
+  it('drops unknown roles and preset ids from the API payload', () => {
+    const round = hardwareFromApi({
+      id: 'hw-dirty',
+      code: 'HW-D',
+      name: 'Dirty',
+      unit: 'piece',
+      cost_per_unit: 1,
+      active: true,
+      part_finishes: { body: 'chrome', rotor: 'gold', base: 'no-existe' },
+    });
+    expect(round.partFinishes).toEqual({ body: 'chrome' });
+  });
+});

@@ -16,7 +16,7 @@
 
 import { type ReactNode } from 'react';
 import type { Hardware, HardwarePlacement, ResolvedHardwarePlacement } from '@muebles/domain';
-import { normalizePreviewColor } from '@muebles/domain';
+import { normalizePreviewColor, resolveHardwarePartFinish } from '@muebles/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
 
 // --- pure geometry helpers (jsdom-tested) ---------------------------------
@@ -200,12 +200,65 @@ type HandleMaterialProps = {
   readonly envMapIntensity: number;
 };
 
+/** Materials per F080 part role: body / base / grip. */
+export type HardwarePartMaterials = {
+  readonly body: HandleMaterialProps;
+  readonly base: HandleMaterialProps;
+  readonly grip: HandleMaterialProps;
+};
+
+/**
+ * Per-part materials (F080): a part with an assigned preset uses its
+ * color + PBR; otherwise it inherits the hardware's global preview* finish
+ * (legacy behavior). Selection tints every part. Pure — jsdom-testable.
+ */
+export function hardwarePartMaterials(
+  geom: HardwareGeometry,
+  hardware: Hardware,
+  lightingMode: SceneLightingMode,
+  selected = false,
+): HardwarePartMaterials {
+  const build = (
+    finishColor: string | undefined,
+    finishRoughness: number | undefined,
+    finishMetalness: number | undefined,
+    finishClearcoat: number | undefined,
+  ): HandleMaterialProps => {
+    const phys = boardPhysicalResponse({
+      hasMap: false,
+      hasGrain: false,
+      lightingMode,
+      previewRoughness: finishRoughness ?? geom.previewRoughness,
+      previewMetalness: finishMetalness ?? geom.previewMetalness,
+      previewClearcoat: finishClearcoat ?? geom.previewClearcoat,
+    });
+    return {
+      color: selected ? '#3b82f6' : (finishColor ?? geom.color),
+      roughness: phys.roughness,
+      metalness: phys.metalness,
+      clearcoat: phys.clearcoat,
+      clearcoatRoughness: phys.clearcoatRoughness,
+      envMapIntensity: phys.envMapIntensity,
+    };
+  };
+  const forRole = (role: 'body' | 'base' | 'grip'): HandleMaterialProps => {
+    const finish = resolveHardwarePartFinish(hardware, role);
+    return build(
+      finish?.color,
+      finish?.roughness,
+      finish?.metalness,
+      finish?.clearcoat,
+    );
+  };
+  return { body: forRole('body'), base: forRole('base'), grip: forRole('grip') };
+}
+
 function KnobPrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const headRadius = geom.headDiameterMm / 2;
   const postLen = Math.max(geom.projectionMm, headRadius * 0.5);
@@ -215,11 +268,11 @@ function KnobPrimitive({
     <>
       <mesh position={[0, 0, 0]} castShadow>
         <sphereGeometry args={[headRadius, 24, 16]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.body} />
       </mesh>
       <mesh position={[0, -postLen / 2, 0]} castShadow>
         <cylinderGeometry args={[postRadius, postRadius, postLen, 14]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.base} />
       </mesh>
     </>
   );
@@ -227,10 +280,10 @@ function KnobPrimitive({
 
 function BarPullPrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const gripRadius = Math.max(geom.gripDiameterMm / 2, 1);
   const gripLen = geom.gripLengthMm;
@@ -243,15 +296,15 @@ function BarPullPrimitive({
     <>
       <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
         <cylinderGeometry args={[gripRadius, gripRadius, gripLen, 16]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.grip} />
       </mesh>
       <mesh position={[gripLen / 2, -postLen / 2, 0]} castShadow>
         <cylinderGeometry args={[supportRadius, supportRadius, postLen, 10]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.base} />
       </mesh>
       <mesh position={[-gripLen / 2, -postLen / 2, 0]} castShadow>
         <cylinderGeometry args={[supportRadius, supportRadius, postLen, 10]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.base} />
       </mesh>
     </>
   );
@@ -259,10 +312,10 @@ function BarPullPrimitive({
 
 function CupPullPrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const cupRadius = Math.max(geom.headDiameterMm / 2, 1);
   const cupDepth = Math.max(geom.projectionMm, cupRadius * 0.5);
@@ -270,7 +323,7 @@ function CupPullPrimitive({
   return (
     <mesh position={[0, -cupDepth / 2, 0]} castShadow>
       <cylinderGeometry args={[cupRadius, cupRadius * 0.8, cupDepth, 20]} />
-      <meshPhysicalMaterial {...mat} />
+      <meshPhysicalMaterial {...mats.body} />
     </mesh>
   );
 }
@@ -283,10 +336,10 @@ function CupPullPrimitive({
  */
 function HingePrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const cupRadius = Math.max(geom.headDiameterMm / 2, 1);
   const cupDepth = Math.max(geom.cupDepthMm, 2);
@@ -298,17 +351,17 @@ function HingePrimitive({
       {/* Cup (cazoleta) — recessed cylinder at the face */}
       <mesh position={[0, cupDepth / 2, 0]} castShadow>
         <cylinderGeometry args={[cupRadius, cupRadius, cupDepth, 20]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.body} />
       </mesh>
       {/* Arm — thin box from cup center outward along +Y */}
       <mesh position={[0, cupDepth + armLen / 2, 0]} castShadow>
         <boxGeometry args={[armW, armLen, armT]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.body} />
       </mesh>
       {/* Mounting plate at the arm tip */}
       <mesh position={[0, cupDepth + armLen, 0]} castShadow>
         <boxGeometry args={[armW * 1.5, armT, armT * 1.5]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.base} />
       </mesh>
     </>
   );
@@ -320,10 +373,10 @@ function HingePrimitive({
  */
 function SlidePrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const len = Math.max(geom.railLengthMm, 50);
   const h = Math.max(geom.railHeightMm, 10);
@@ -333,12 +386,12 @@ function SlidePrimitive({
       {/* Outer rail profile */}
       <mesh position={[0, t / 2, 0]} castShadow>
         <boxGeometry args={[t, h, len]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.body} />
       </mesh>
       {/* Inner track (slightly thinner, offset inward) */}
       <mesh position={[t * 0.8, t / 2, 0]} castShadow>
         <boxGeometry args={[t * 0.6, h * 0.8, len * 0.9]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.base} />
       </mesh>
     </>
   );
@@ -350,10 +403,10 @@ function SlidePrimitive({
  */
 function RailPrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const len = Math.max(geom.railLengthMm, 50);
   const h = Math.max(geom.railHeightMm, 10);
@@ -361,7 +414,7 @@ function RailPrimitive({
   return (
     <mesh position={[0, t / 2, 0]} castShadow>
       <boxGeometry args={[t, h, len]} />
-      <meshPhysicalMaterial {...mat} />
+      <meshPhysicalMaterial {...mats.body} />
     </mesh>
   );
 }
@@ -372,10 +425,10 @@ function RailPrimitive({
  */
 function LegPrimitive({
   geom,
-  mat,
+  mats,
 }: {
   readonly geom: HardwareGeometry;
-  readonly mat: HandleMaterialProps;
+  readonly mats: HardwarePartMaterials;
 }): ReactNode {
   const radius = Math.max(geom.headDiameterMm / 2, 2);
   const height = Math.max(geom.legHeightMm, 20);
@@ -386,12 +439,12 @@ function LegPrimitive({
       {/* Main shaft */}
       <mesh position={[0, -height / 2, 0]} castShadow>
         <cylinderGeometry args={[radius, radius, height, 16]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.body} />
       </mesh>
       {/* Leveling base (wider foot) */}
       <mesh position={[0, -height + baseH / 2, 0]} castShadow>
         <cylinderGeometry args={[baseRadius, baseRadius * 0.8, baseH, 16]} />
-        <meshPhysicalMaterial {...mat} />
+        <meshPhysicalMaterial {...mats.base} />
       </mesh>
     </>
   );
@@ -427,22 +480,7 @@ export function HardwareMesh({
   const geom = resolveHardwareGeometry(hardware, placement.standoffMm);
   if (!geom) return null;
 
-  const phys = boardPhysicalResponse({
-    hasMap: false,
-    hasGrain: false,
-    lightingMode,
-    previewRoughness: geom.previewRoughness,
-    previewMetalness: geom.previewMetalness,
-    previewClearcoat: geom.previewClearcoat,
-  });
-  const mat: HandleMaterialProps = {
-    color: selected ? '#3b82f6' : geom.color,
-    roughness: phys.roughness,
-    metalness: phys.metalness,
-    clearcoat: phys.clearcoat,
-    clearcoatRoughness: phys.clearcoatRoughness,
-    envMapIntensity: phys.envMapIntensity,
-  };
+  const mats = hardwarePartMaterials(geom, hardware, lightingMode, selected);
 
   const handleClick = (e: { stopPropagation: () => void }) => {
     if (onSelect) {
@@ -461,19 +499,19 @@ export function HardwareMesh({
     >
       <group quaternion={normalOrientationQuaternion(placement.localNormal)}>
         {geom.shape === 'knob' ? (
-          <KnobPrimitive geom={geom} mat={mat} />
+          <KnobPrimitive geom={geom} mats={mats} />
         ) : geom.shape === 'bar-pull' ? (
-          <BarPullPrimitive geom={geom} mat={mat} />
+          <BarPullPrimitive geom={geom} mats={mats} />
         ) : geom.shape === 'cup-pull' ? (
-          <CupPullPrimitive geom={geom} mat={mat} />
+          <CupPullPrimitive geom={geom} mats={mats} />
         ) : geom.shape === 'hinge' ? (
-          <HingePrimitive geom={geom} mat={mat} />
+          <HingePrimitive geom={geom} mats={mats} />
         ) : geom.shape === 'slide' ? (
-          <SlidePrimitive geom={geom} mat={mat} />
+          <SlidePrimitive geom={geom} mats={mats} />
         ) : geom.shape === 'rail' ? (
-          <RailPrimitive geom={geom} mat={mat} />
+          <RailPrimitive geom={geom} mats={mats} />
         ) : (
-          <LegPrimitive geom={geom} mat={mat} />
+          <LegPrimitive geom={geom} mats={mats} />
         )}
       </group>
     </group>

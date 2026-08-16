@@ -3,7 +3,13 @@
  * values that get loaded into the existing Hardware preview* fields when
  * selected — no new table, no migration. The 3D renderer (HardwareMesh) already
  * consumes these fields via boardPhysicalResponse.
+ *
+ * F080 extends this with per-part finishes: a hardware piece is composed of
+ * structural parts (body / base / grip) and each part can override the
+ * global finish with one of these same presets.
  */
+
+import type { Hardware, HardwarePartRole } from './types';
 
 export type HardwareFinishId =
   | 'chrome'
@@ -116,3 +122,82 @@ export function matchHardwareFinish(pbr: {
   return '';
 }
 
+
+// --- F080: per-part finishes -------------------------------------------------
+
+export const HARDWARE_PART_ROLES: readonly HardwarePartRole[] = [
+  'body',
+  'base',
+  'grip',
+];
+
+export const HARDWARE_PART_ROLE_LABELS_ES: Readonly<
+  Record<HardwarePartRole, string>
+> = {
+  body: 'Cuerpo',
+  base: 'Base',
+  grip: 'Empuñadura',
+};
+
+/**
+ * Part roles each preview shape actually renders (F080):
+ * - knob: head (body) + post (base)
+ * - bar-pull: grip tube (grip) + supports (base)
+ * - cup-pull / rail: single body piece
+ * - hinge: cup + arm (body) + mounting plate (base)
+ * - slide: outer rail (body) + inner track (base)
+ * - leg: shaft (body) + leveling foot (base)
+ */
+export function hardwarePartRolesForShape(
+  shape: NonNullable<Hardware['previewShape']>,
+): readonly HardwarePartRole[] {
+  switch (shape) {
+    case 'bar-pull':
+      return ['grip', 'base'];
+    case 'cup-pull':
+    case 'rail':
+      return ['body'];
+    case 'knob':
+    case 'hinge':
+    case 'slide':
+    case 'leg':
+      return ['body', 'base'];
+  }
+}
+
+/**
+ * Finish preset for one part, or undefined when the part should use the
+ * hardware's global preview* finish (legacy behavior / unconfigured part /
+ * unknown preset id). Pure.
+ */
+export function resolveHardwarePartFinish(
+  hardware: Hardware,
+  role: HardwarePartRole,
+): HardwareFinish | undefined {
+  const id = hardware.partFinishes?.[role];
+  if (!id) return undefined;
+  return getHardwareFinish(id);
+}
+
+/**
+ * Drop entries with an unknown role or preset id and return a clean
+ * partFinishes map, or undefined when nothing survives. Used by mappers and
+ * stores so garbage never round-trips into the catalog.
+ */
+export function normalizeHardwarePartFinishes(
+  raw: unknown,
+): Readonly<Partial<Record<HardwarePartRole, HardwareFinishId>>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  let out: Partial<Record<HardwarePartRole, HardwareFinishId>> | undefined;
+  for (const role of HARDWARE_PART_ROLES) {
+    const value = (raw as Record<string, unknown>)[role];
+    if (
+      typeof value === 'string' &&
+      HARDWARE_FINISHES.some((f) => f.id === value)
+    ) {
+      out = out ?? {};
+      out[role] = value as HardwareFinishId;
+    }
+  }
+  return out;
+}

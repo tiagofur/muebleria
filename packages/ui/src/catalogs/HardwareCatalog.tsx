@@ -4,7 +4,12 @@
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { Hardware, HardwareUnit } from '@muebles/domain';
-import { HARDWARE_FINISHES, matchHardwareFinish } from '@muebles/domain';
+import {
+  HARDWARE_FINISHES,
+  HARDWARE_PART_ROLE_LABELS_ES,
+  hardwarePartRolesForShape,
+  matchHardwareFinish,
+} from '@muebles/domain';
 import { ChevronDown, ChevronRight, Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,
@@ -54,7 +59,17 @@ export type HardwareDraft = {
   previewRoughness: string;
   previewMetalness: string;
   previewClearcoat: string;
+  /**
+   * F080: per-part finish preset ids ('' = inherit the global finish).
+   */
+  partFinishes: { body: string; base: string; grip: string };
 };
+
+const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
+  body: '',
+  base: '',
+  grip: '',
+});
 
 const emptyDraft = (): HardwareDraft => ({
   code: '',
@@ -72,6 +87,7 @@ const emptyDraft = (): HardwareDraft => ({
   previewRoughness: '',
   previewMetalness: '',
   previewClearcoat: '',
+  partFinishes: emptyPartFinishes(),
 });
 
 function toDraft(item: Hardware): HardwareDraft {
@@ -92,6 +108,11 @@ function toDraft(item: Hardware): HardwareDraft {
     previewRoughness: item.previewRoughness !== undefined ? String(item.previewRoughness) : '',
     previewMetalness: item.previewMetalness !== undefined ? String(item.previewMetalness) : '',
     previewClearcoat: item.previewClearcoat !== undefined ? String(item.previewClearcoat) : '',
+    partFinishes: {
+      body: item.partFinishes?.body ?? '',
+      base: item.partFinishes?.base ?? '',
+      grip: item.partFinishes?.grip ?? '',
+    },
   };
 }
 
@@ -147,6 +168,24 @@ export function HardwareCatalog({
     roughness: draft.previewRoughness,
     clearcoat: draft.previewClearcoat,
   });
+
+  /** F080: part-finish selectors appear for multi-part shapes only. */
+  const partRoles = useMemo(() => {
+    const validShapes: readonly string[] = [
+      'knob',
+      'bar-pull',
+      'cup-pull',
+      'hinge',
+      'slide',
+      'rail',
+      'leg',
+    ];
+    if (!validShapes.includes(draft.previewShape)) return [];
+    const roles = hardwarePartRolesForShape(
+      draft.previewShape as NonNullable<Hardware['previewShape']>,
+    );
+    return roles.length >= 2 ? roles : [];
+  }, [draft.previewShape]);
 
   const rows = useMemo(
     () =>
@@ -677,6 +716,47 @@ export function HardwareCatalog({
                     />
                   ) : null}
                 </div>
+                {partRoles.length > 0 ? (
+                  <>
+                    <div
+                      className="catalog-form__row"
+                      data-testid="hardware-form-part-finishes"
+                    >
+                      {partRoles.map((role) => (
+                        <label
+                          key={role}
+                          className="catalog-form__field"
+                        >
+                          <span>Acabado · {HARDWARE_PART_ROLE_LABELS_ES[role]}</span>
+                          <select
+                            value={draft.partFinishes[role]}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                partFinishes: {
+                                  ...draft.partFinishes,
+                                  [role]: e.target.value,
+                                },
+                              })
+                            }
+                            data-testid={`hardware-form-finish-${role}`}
+                          >
+                            <option value="">Igual al acabado general</option>
+                            {HARDWARE_FINISHES.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="catalog-form__hint">
+                      Cada parte puede llevar su propio acabado (F080). Vacío =
+                      usa el acabado general de arriba.
+                    </p>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>

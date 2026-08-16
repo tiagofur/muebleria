@@ -35,6 +35,7 @@ import {
   bumpStructureRevision,
   calcMaterialCostPerM2,
   duplicateModule as deepCopyModule,
+  normalizeHardwarePartFinishes,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   suggestDuplicateCode,
@@ -227,11 +228,17 @@ function hardwarePreviewFields(
   | 'previewRoughness'
   | 'previewMetalness'
   | 'previewClearcoat'
+  | 'partFinishes'
 > {
   const shape = HARDWARE_SHAPES.includes(draft.previewShape)
     ? (draft.previewShape as Hardware['previewShape'])
     : undefined;
   const color = draft.previewColor?.trim() || undefined;
+  const partFinishes = normalizeHardwarePartFinishes({
+    body: draft.partFinishes?.body || undefined,
+    base: draft.partFinishes?.base || undefined,
+    grip: draft.partFinishes?.grip || undefined,
+  });
   return {
     ...(shape ? { previewShape: shape } : {}),
     ...(color ? { previewColor: color } : {}),
@@ -241,6 +248,7 @@ function hardwarePreviewFields(
     ...(draft.previewRoughness ? { previewRoughness: parseDraftNum(draft.previewRoughness, true) } : {}),
     ...(draft.previewMetalness ? { previewMetalness: parseDraftNum(draft.previewMetalness, true) } : {}),
     ...(draft.previewClearcoat ? { previewClearcoat: parseDraftNum(draft.previewClearcoat, true) } : {}),
+    ...(partFinishes ? { partFinishes } : {}),
   };
 }
 
@@ -561,6 +569,7 @@ export function createCatalogStore(options: InternalOptions) {
             previewRoughness: _dr,
             previewMetalness: _dm,
             previewClearcoat: _dcl,
+            partFinishes: _dpf,
             ...rest
           } = h;
           return {

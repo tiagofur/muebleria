@@ -322,6 +322,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
       previewRoughness: '',
       previewMetalness: '',
       previewClearcoat: '',
+      partFinishes: { body: '', base: '', grip: '' },
     });
     expect(
       store.getState().catalog!.hardware.some((h) => h.code === 'HW-1'),

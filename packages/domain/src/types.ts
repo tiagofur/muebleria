@@ -2,6 +2,8 @@
  * Domain entity types — pure structural contracts (no calculation logic).
  */
 
+import type { HardwareFinishId } from './hardwareFinishes';
+
 // --- Literal unions ---
 
 export type HardwareUnit = 'piece' | 'set' | 'meter';
@@ -160,7 +162,22 @@ export interface Hardware {
    * `MaterialBoard.previewClearcoat`.
    */
   readonly previewClearcoat?: number;
+  /**
+   * Per-part finish overrides (F080): role → finish preset id. Parts without
+   * an entry (or an unknown id) fall back to the hardware's global preview*
+   * finish — legacy catalogs render exactly as before.
+   */
+  readonly partFinishes?: Readonly<
+    Partial<Record<HardwarePartRole, HardwareFinishId>>
+  >;
 }
+
+/**
+ * Structural parts of a hardware piece that can carry independent finishes
+ * (F080). Which roles apply depends on the preview shape — see
+ * `hardwarePartRolesForShape` in hardwareFinishes.ts.
+ */
+export type HardwarePartRole = 'body' | 'base' | 'grip';
 
 /**
  * Product account roles (F035).

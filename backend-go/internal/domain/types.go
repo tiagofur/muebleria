@@ -141,8 +141,11 @@ type Hardware struct {
 	PreviewRoughness    *float64  `json:"preview_roughness,omitempty"`
 	PreviewMetalness    *float64  `json:"preview_metalness,omitempty"`
 	PreviewClearcoat    *float64  `json:"preview_clearcoat,omitempty"`
-	Active              bool      `json:"active"`
-	CreatedAt           time.Time `json:"created_at"`
+	// PartFinishes maps a structural part role (body/base/grip) to a finish
+	// preset id (F080). Nil/empty = every part uses the global preview finish.
+	PartFinishes map[string]string `json:"part_finishes,omitempty"`
+	Active       bool      `json:"active"`
+	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 

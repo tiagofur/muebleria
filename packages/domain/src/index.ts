@@ -202,8 +202,13 @@ export {
 } from './hardwarePlacement';
 export {
   HARDWARE_FINISHES,
+  HARDWARE_PART_ROLES,
+  HARDWARE_PART_ROLE_LABELS_ES,
   getHardwareFinish,
+  hardwarePartRolesForShape,
   matchHardwareFinish,
+  normalizeHardwarePartFinishes,
+  resolveHardwarePartFinish,
   type HardwareFinish,
   type HardwareFinishId,
 } from './hardwareFinishes';

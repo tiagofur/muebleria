@@ -226,3 +226,66 @@ describe('HardwareMesh component', () => {
     expect(typeof HardwareMesh).toBe('function');
   });
 });
+
+// --- F080: per-part materials -------------------------------------------------
+
+import { hardwarePartMaterials } from './HardwareMesh';
+
+describe('hardwarePartMaterials (F080)', () => {
+  const base: Hardware = {
+    id: 'h1',
+    code: 'HER-BAR-01',
+    name: 'Tirador barra',
+    unit: 'piece',
+    costPerUnit: 10,
+    active: true,
+    previewShape: 'bar-pull',
+    previewColor: '#123456',
+    previewRoughness: 0.4,
+    previewMetalness: 0.2,
+    previewClearcoat: 0.1,
+  };
+  const placementStandoff = 25;
+  const geom = resolveHardwareGeometry(base, placementStandoff)!;
+
+  it('without partFinishes every part uses the global finish (legacy)', () => {
+    const mats = hardwarePartMaterials(geom, base, 'present');
+    expect(mats.body.color).toBe('#123456');
+    expect(mats.base.color).toBe('#123456');
+    expect(mats.grip.color).toBe('#123456');
+  });
+
+  it('an assigned part uses its preset color and PBR', () => {
+    const mats = hardwarePartMaterials(
+      geom,
+      { ...base, partFinishes: { grip: 'gold', base: 'black-matte' } },
+      'present',
+    );
+    expect(mats.grip.color).toBe('#d4a838');
+    expect(mats.base.color).toBe('#1a1a1a');
+    expect(mats.body.color).toBe('#123456'); // sin override → global
+    // PBR follows the preset (gold: metal 0.9), no longer the global 0.2
+    expect(mats.grip.metalness).toBeGreaterThan(mats.body.metalness);
+  });
+
+  it('unknown preset id falls back to the global finish', () => {
+    const mats = hardwarePartMaterials(
+      geom,
+      { ...base, partFinishes: { body: 'no-existe' as never } },
+      'present',
+    );
+    expect(mats.body.color).toBe('#123456');
+  });
+
+  it('selection tints every part regardless of overrides', () => {
+    const mats = hardwarePartMaterials(
+      geom,
+      { ...base, partFinishes: { grip: 'gold' } },
+      'present',
+      true,
+    );
+    expect(mats.body.color).toBe('#3b82f6');
+    expect(mats.grip.color).toBe('#3b82f6');
+    expect(mats.base.color).toBe('#3b82f6');
+  });
+});

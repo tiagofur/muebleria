@@ -44,7 +44,7 @@ import type {
 } from '@muebles/domain';
 
 
-import { resolveWorkshopSettings } from '@muebles/domain';
+import { normalizeHardwarePartFinishes, resolveWorkshopSettings } from '@muebles/domain';
 
 
 
@@ -275,6 +275,8 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     preview_roughness: h.previewRoughness ?? null,
     preview_metalness: h.previewMetalness ?? null,
     preview_clearcoat: h.previewClearcoat ?? null,
+    // Per-part finishes (F080); null keeps the column empty for legacy rows.
+    part_finishes: h.partFinishes ? { ...h.partFinishes } : null,
   };
 }
 
@@ -287,6 +289,9 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
       : Math.max(0, num(pkgRaw));
   const shapeRaw = str(raw.preview_shape ?? raw.previewShape);
   const validShapes = ['knob', 'bar-pull', 'cup-pull', 'hinge', 'slide', 'rail', 'leg'];
+  const partFinishes = normalizeHardwarePartFinishes(
+    raw.part_finishes ?? raw.partFinishes,
+  );
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -308,6 +313,8 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     previewRoughness: optionalNum(raw.preview_roughness ?? raw.previewRoughness),
     previewMetalness: optionalNum(raw.preview_metalness ?? raw.previewMetalness),
     previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
+    // Per-part finishes (F080) — validated, garbage never enters the catalog.
+    ...(partFinishes ? { partFinishes } : {}),
   };
 }
 

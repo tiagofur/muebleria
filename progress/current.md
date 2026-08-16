@@ -428,3 +428,48 @@ stash de agregados + hash de main antes de operar).
 
 **Estado final:** `git stash list` vacío; working tree limpio; main intacto
 (aa20d64 == origin/main); ambas ramas wip/ en origin.
+
+## F080 — Capas de acabado por componente de herraje (2026-08-15, noche)
+
+Descongelada por decisión del usuario (el disparador era "demanda de
+catálogo complejo" — el usuario decide). Implementación completa:
+
+**Dominio:** `HardwarePartRole` (body/base/grip) en types.ts +
+`Hardware.partFinishes` (rol → preset id, opcional). En
+hardwareFinishes.ts: `hardwarePartRolesForShape` (mapea cada forma 3D a
+sus partes reales: bar-pull→grip+base, knob/hinge/slide/leg→body+base,
+cup-pull/rail→body), `resolveHardwarePartFinish` (parte→preset, undefined
+= global), `normalizeHardwarePartFinishes` (validación para mappers).
+Sin partFinishes → comportamiento F069 exacto (test de fallback).
+
+**3D (HardwareMesh):** primitivos refactorizados a materiales por rol
+(`hardwarePartMaterials`, puro testeado): bar-pull tubo=grip +
+soportes=base; bisagra cazoleta+brazo=body + placa=base; pata asta=body
++ pie=base; knob cabeza=body + poste=base; slide riel=body +
+riel interno=base. Selección tiñe todo (igual que antes).
+
+**Catálogo:** draft + toDraft + selects "Acabado · {Cuerpo|Base|Empuñadura}"
+solo para formas multi-parte (mono-parte duplicaría el acabado global),
+opción vacía "Igual al acabado general". catalogStore valida con
+normalizeHardwarePartFinishes y updateHardware dropea partFinishes viejo
+antes del spread (clear funciona).
+
+**Persistencia:** apiMappers part_finishes round-trip con validación;
+Go `Hardware.PartFinishes` (map json part_finishes) + helpers
+scanHardwarePartFinishes/hardwarePartFinishesArg + SELECT/INSERT/UPDATE +
+migración aditiva **000046** (JSONB, NULL = legacy).
+
+**Verificación:** domain 536 (+10), ui 842 (+8), storage 87 (+3), web
+242 ✓; go build + go test ✓ (storage integration test contra Postgres
+local: create con NULL, update con overrides, clear a NULL — pasó con
+migración aplicada). Typecheck de workspaces tocados ✓.
+
+**OJO — sesión concurrente:** mientras implementaba apareció
+`apps/mobile/` (untracked, React Native + Expo: Login/Scanner/Survey/
+WarrantyTickets/ProjectChat/ProjectPhotos) + docs mobile (roadmap_RN,
+mobile-architecture, mobile-code-sharing, mobile-ui-ux) + AGENTS.md/
+architecture.md actualizados por ESA sesión. Su ScannerScreen usa el
+parser de F089 y tiene errores de narrowing (pnpm typecheck monorepo
+ROJO por apps/mobile — no es de F080). Su sesión también agregó el
+fixture partFinishes a catalogStore.test.ts (correcto; endurecí
+catalogStore con guards `?.`). Este commit EXCLUYE todo lo de mobile.
