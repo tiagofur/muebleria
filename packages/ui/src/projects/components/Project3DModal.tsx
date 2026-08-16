@@ -67,6 +67,44 @@ export function Project3DModal({
     });
   }, [project, catalog, focus?.item.id]);
 
+  const sceneWalls = useMemo(
+    () =>
+      (preview?.walls ?? []).map((w) => ({
+        id: w.id,
+        originXMm: w.originXMm,
+        originYMm: w.originYMm,
+        endXMm: w.endXMm,
+        endYMm: w.endYMm,
+        heightMm: 2400,
+        wallMaterialId: w.wallMaterialId,
+      })),
+    [preview?.walls],
+  );
+
+  const ambientFloor = useMemo(() => {
+    const id = project?.kitchenLayout?.floorMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, project?.kitchenLayout?.floorMaterialId]);
+
+  const ambientWall = useMemo(() => {
+    const id = project?.kitchenLayout?.wallMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, project?.kitchenLayout?.wallMaterialId]);
+
+  const ambientCeiling = useMemo(() => {
+    const id = project?.kitchenLayout?.ceilingMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, project?.kitchenLayout?.ceilingMaterialId]);
+
+  const ambientCountertop = useMemo(() => {
+    const id = project?.kitchenLayout?.countertopMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, project?.kitchenLayout?.countertopMaterialId]);
+
   const materialColors = useMemo(
     () => materialColorMap(catalog.materials),
     [catalog.materials],
@@ -171,6 +209,7 @@ export function Project3DModal({
                 showOuterGhost: true,
                 resolvedHardwarePlacements: m.resolvedHardwarePlacements,
               }))}
+              walls={sceneWalls}
               totalWidth={preview.totalWidth}
               totalHeight={preview.totalHeight}
               totalDepth={preview.totalDepth}
@@ -182,6 +221,12 @@ export function Project3DModal({
               surfaceMode={surfaceMode}
               showOutlines={showOutlines}
               hardwareCatalog={catalog.hardware}
+              ambientFloor={ambientFloor}
+              ambientWall={ambientWall}
+              ambientCeiling={ambientCeiling}
+              ambientCountertop={ambientCountertop}
+              availableAmbientMaterials={catalog.ambientMaterials}
+              showCeiling={project?.kitchenLayout?.showCeiling}
             />
           ) : (
             <div

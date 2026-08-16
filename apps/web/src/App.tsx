@@ -2205,10 +2205,13 @@ function AppContent({
                   modules,
                   structures,
                   components,
+                  agregados,
                   materials,
                   edges,
                   hardware,
                   optionGroups,
+                  ambientMaterials,
+                  ambientCategories,
                 }
               : null
           }

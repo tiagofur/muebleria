@@ -318,6 +318,44 @@ export function ProjectPresentationMode({
     });
   }, [preview.modules, explodeFactor]);
 
+  const sceneWalls = useMemo(
+    () =>
+      (preview?.walls ?? []).map((w) => ({
+        id: w.id,
+        originXMm: w.originXMm,
+        originYMm: w.originYMm,
+        endXMm: w.endXMm,
+        endYMm: w.endYMm,
+        heightMm: 2400,
+        wallMaterialId: w.wallMaterialId,
+      })),
+    [preview?.walls],
+  );
+
+  const ambientFloor = useMemo(() => {
+    const id = presentationProject?.kitchenLayout?.floorMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, presentationProject?.kitchenLayout?.floorMaterialId]);
+
+  const ambientWall = useMemo(() => {
+    const id = presentationProject?.kitchenLayout?.wallMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, presentationProject?.kitchenLayout?.wallMaterialId]);
+
+  const ambientCeiling = useMemo(() => {
+    const id = presentationProject?.kitchenLayout?.ceilingMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, presentationProject?.kitchenLayout?.ceilingMaterialId]);
+
+  const ambientCountertop = useMemo(() => {
+    const id = presentationProject?.kitchenLayout?.countertopMaterialId;
+    if (!id) return undefined;
+    return catalog.ambientMaterials?.find((m) => m.id === id);
+  }, [catalog.ambientMaterials, presentationProject?.kitchenLayout?.countertopMaterialId]);
+
   const materialColors = useMemo(
     () => materialColorMap(catalog.materials),
     [catalog.materials],
@@ -872,6 +910,7 @@ export function ProjectPresentationMode({
                     showOuterGhost: true,
                     resolvedHardwarePlacements: m.resolvedHardwarePlacements,
                   }))}
+                  walls={sceneWalls}
                   totalWidth={preview.totalWidth}
                   totalHeight={preview.totalHeight}
                   totalDepth={preview.totalDepth}
@@ -887,6 +926,12 @@ export function ProjectPresentationMode({
                   onExportComplete={() => setExportFormat(null)}
                   exportProjectName={project.name}
                   hardwareCatalog={catalog.hardware}
+                  ambientFloor={ambientFloor}
+                  ambientWall={ambientWall}
+                  ambientCeiling={ambientCeiling}
+                  ambientCountertop={ambientCountertop}
+                  availableAmbientMaterials={catalog.ambientMaterials}
+                  showCeiling={presentationProject?.kitchenLayout?.showCeiling}
                 />
               </Suspense>
             ) : (
