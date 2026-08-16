@@ -16,6 +16,8 @@ import {
   ChevronRight,
   MessageSquare,
   BookOpen,
+  Ruler,
+  Maximize2,
 } from 'lucide-react-native';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
@@ -32,6 +34,8 @@ export interface HomeScreenProps {
   onOpenCatalog?: () => void;
   onOpenQuoter?: () => void;
   onOpenCustomers?: () => void;
+  onOpenLaser?: () => void;
+  onOpenAnnotation?: () => void;
 }
 
 export function HomeScreen({
@@ -43,6 +47,8 @@ export function HomeScreen({
   onOpenCatalog,
   onOpenQuoter,
   onOpenCustomers,
+  onOpenLaser,
+  onOpenAnnotation,
 }: HomeScreenProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -176,6 +182,30 @@ export function HomeScreen({
             </View>
             <Text style={styles.gridCardTitle}>Garantías & Service</Text>
             <Text style={styles.gridCardDesc}>Reporte de reclamos</Text>
+          </Card>
+
+          {/* Action 8: BLE Laser Measure */}
+          <Card
+            style={styles.gridCard}
+            onPress={onOpenLaser}
+          >
+            <View style={[styles.gridIconBadge, { backgroundColor: '#e0f2fe' }]}>
+              <Ruler size={22} color="#0284c7" />
+            </View>
+            <Text style={styles.gridCardTitle}>Medición Láser BLE</Text>
+            <Text style={styles.gridCardDesc}>Bosch & Leica Disto</Text>
+          </Card>
+
+          {/* Action 9: Photo Annotation */}
+          <Card
+            style={styles.gridCard}
+            onPress={onOpenAnnotation}
+          >
+            <View style={[styles.gridIconBadge, { backgroundColor: '#fef3c7' }]}>
+              <Maximize2 size={22} color="#d97706" />
+            </View>
+            <Text style={styles.gridCardTitle}>Acotar sobre Foto</Text>
+            <Text style={styles.gridCardDesc}>Cotas visuales en obra</Text>
           </Card>
         </View>
 

@@ -170,12 +170,12 @@ La aplicación móvil **Muebles Native** no es un clon reducido de la versión w
 - [x] **3.3 Generación de Propuesta PDF:** Generación/descarga de resumen comercial en PDF y botón de "Compartir por WhatsApp" con mensaje predeterminado.
 - [x] **3.4 Ficha 360° del Cliente:** Vista de clientes con proyectos asociados, saldos y acceso directo a llamada o WhatsApp.
 
-### Fase 4 — Medición Asistida con Láser BLE (Sprints 9-10)
+### Fase 4 — Medición Asistida con Láser BLE (Completada)
 **Objetivo:** Automatizar la toma de medidas en obra para eliminar errores manuales.
 
-- [ ] **4.1 Integración BLE:** Escaneo y conexión con distanciómetros láser compatibles con protocolo estándar Bluetooth (Bosch GLM 50 C / 100 C, Leica Disto D2 / X3).
-- [ ] **4.2 Modo Medición de Muros:** Al presionar el botón del distanciómetro, el valor en milímetros se vuelca automáticamente en la cota activa de la app.
-- [ ] **4.3 Anotación sobre Fotos:** Herramienta simple para dibujar flechas y escribir cotas sobre fotos tomadas en el relevamiento de obra.
+- [x] **4.1 Integración BLE:** Escaneo y conexión con distanciómetros láser compatibles con protocolo estándar Bluetooth (Bosch GLM 50 C / 100 C, Leica Disto D2 / X3).
+- [x] **4.2 Modo Medición de Muros:** Al presionar el botón del distanciómetro, el valor en milímetros se vuelca automáticamente en la cota activa de la app.
+- [x] **4.3 Anotación sobre Fotos:** Herramienta simple para dibujar flechas y escribir cotas sobre fotos tomadas en el relevamiento de obra.
 
 ### Fase 5 — Modo Presentación 3D, Firma Digital & Release (Sprints 11-12)
 **Objetivo:** Pulir la experiencia de presentación para clientes y preparar el lanzamiento.

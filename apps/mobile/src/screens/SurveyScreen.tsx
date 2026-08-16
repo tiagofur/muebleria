@@ -32,6 +32,8 @@ export interface SurveyScreenProps {
   projectName?: string;
   onBack: () => void;
   onViewGallery?: () => void;
+  onNavigateToLaser?: () => void;
+  onNavigateToAnnotation?: () => void;
 }
 
 export function SurveyScreen({
@@ -39,6 +41,8 @@ export function SurveyScreen({
   projectName = 'Cocina Residencia Pérez',
   onBack,
   onViewGallery,
+  onNavigateToLaser,
+  onNavigateToAnnotation,
 }: SurveyScreenProps) {
   const [activeStage, setActiveStage] = useState<PhotoStage>('survey');
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
@@ -141,24 +145,34 @@ export function SurveyScreen({
         </Card>
 
         {/* Laser Measure Quick Card */}
-        <Card style={styles.laserCard}>
+        <Card style={styles.laserCard} elevated>
           <View style={styles.laserHeader}>
             <View style={styles.laserIconBadge}>
               <Ruler size={20} color="#0284c7" />
             </View>
             <View style={styles.laserTitleCol}>
-              <Text style={styles.laserTitle}>Distanciómetro Láser</Text>
-              <Text style={styles.laserSubtitle}>Conexión Bluetooth BLE (Fase 4)</Text>
+              <Text style={styles.laserTitle}>Distanciómetro Láser BLE</Text>
+              <Text style={styles.laserSubtitle}>Conexión inalámbrica y acotación sobre fotos</Text>
             </View>
-            <Badge label="BLE" variant="info" />
+            <Badge label="LÁSER BLE" variant="info" />
           </View>
 
-          <Input
-            placeholder="Anotar medida manual en mm (ej. 3,250 mm)"
-            value={measureNotes}
-            onChangeText={setMeasureNotes}
-            keyboardType="numeric"
-          />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <Button
+              title="Medir con Láser"
+              size="sm"
+              icon={<Ruler size={16} color="#ffffff" />}
+              onPress={onNavigateToLaser}
+              style={{ flex: 1, backgroundColor: '#0284c7' }}
+            />
+            <Button
+              title="Anotar Foto"
+              size="sm"
+              variant="secondary"
+              onPress={onNavigateToAnnotation}
+              style={{ flex: 1 }}
+            />
+          </View>
         </Card>
 
         {/* Photos in this stage */}

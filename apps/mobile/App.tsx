@@ -12,7 +12,9 @@ import { WarrantyTicketsScreen } from './src/screens/WarrantyTicketsScreen';
 import { CatalogScreen } from './src/screens/CatalogScreen';
 import { ExpressQuoterScreen } from './src/screens/ExpressQuoterScreen';
 import { CustomersScreen } from './src/screens/CustomersScreen';
-import { colors, radius, typography } from './src/theme';
+import { LaserMeasureScreen } from './src/screens/LaserMeasureScreen';
+import { PhotoAnnotationScreen } from './src/screens/PhotoAnnotationScreen';
+import { colors, radius, typography, spacing } from './src/theme';
 
 export type ActiveScreen =
   | 'home'
@@ -23,7 +25,9 @@ export type ActiveScreen =
   | 'warranties'
   | 'catalog'
   | 'quoter'
-  | 'customers';
+  | 'customers'
+  | 'laser'
+  | 'annotation';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('home');
@@ -66,6 +70,8 @@ export default function App() {
           <SurveyScreen
             onBack={() => setCurrentScreen('home')}
             onViewGallery={() => setCurrentScreen('photos')}
+            onNavigateToLaser={() => setCurrentScreen('laser')}
+            onNavigateToAnnotation={() => setCurrentScreen('annotation')}
           />
         );
       case 'photos':
@@ -90,6 +96,15 @@ export default function App() {
         );
       case 'customers':
         return <CustomersScreen onBack={() => setCurrentScreen('home')} />;
+      case 'laser':
+        return (
+          <LaserMeasureScreen
+            onBack={() => setCurrentScreen('home')}
+            onNavigateToAnnotation={() => setCurrentScreen('annotation')}
+          />
+        );
+      case 'annotation':
+        return <PhotoAnnotationScreen onBack={() => setCurrentScreen('home')} />;
       case 'home':
       default:
         return (
@@ -102,6 +117,8 @@ export default function App() {
             onOpenCatalog={() => setCurrentScreen('catalog')}
             onOpenQuoter={() => setCurrentScreen('quoter')}
             onOpenCustomers={() => setCurrentScreen('customers')}
+            onOpenLaser={() => setCurrentScreen('laser')}
+            onOpenAnnotation={() => setCurrentScreen('annotation')}
           />
         );
     }
@@ -109,7 +126,9 @@ export default function App() {
 
   return (
     <View style={styles.appContainer}>
-      <StatusBar style={currentScreen === 'scanner' ? 'light' : 'dark'} />
+      <StatusBar
+        style={currentScreen === 'scanner' || currentScreen === 'laser' ? 'light' : 'dark'}
+      />
       {renderScreen()}
     </View>
   );
@@ -133,19 +152,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   logoText: {
-    color: '#ffffff',
     fontSize: 36,
-    fontWeight: '800',
+    fontWeight: '900',
+    color: '#ffffff',
   },
   splashTitle: {
     ...typography.h2,
-    color: '#f8fafc',
-    marginBottom: 24,
+    color: '#ffffff',
+    marginBottom: spacing.lg,
   },
   spinner: {
-    marginTop: 8,
+    marginTop: spacing.md,
   },
 });
