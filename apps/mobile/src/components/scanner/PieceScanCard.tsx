@@ -113,11 +113,58 @@ export function PieceScanCard({
         </View>
 
         <View style={styles.footer}>
-          <View style={styles.completedBadge}>
-            <Text style={styles.completedText}>
-              Etiqueta de Mueble Verificada ✓
-            </Text>
-          </View>
+          {currentStatus === 'loaded' ? (
+            <View style={styles.completedBadge}>
+              <Text style={styles.completedText}>
+                ✓ Cargado en Transporte
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.actionRow}>
+              <Pressable
+                style={styles.loadButton}
+                onPress={() => {
+                  if (fields.projectId && fields.itemId) {
+                    void Haptics.notificationAsync(
+                      Haptics.NotificationFeedbackType.Success,
+                    );
+                    void useFloorScannerStore
+                      .getState()
+                      .patchItemFloorStatus(
+                        fields.projectId,
+                        fields.itemId,
+                        'loaded',
+                      );
+                    onStatusUpdated?.();
+                  }
+                }}
+              >
+                <Text style={styles.loadButtonText}>Marcar Cargado ✓</Text>
+              </Pressable>
+              {currentStatus !== 'packaged' ? (
+                <Pressable
+                  style={styles.packageButton}
+                  onPress={() => {
+                    if (fields.projectId && fields.itemId) {
+                      void Haptics.impactAsync(
+                        Haptics.ImpactFeedbackStyle.Medium,
+                      );
+                      void useFloorScannerStore
+                        .getState()
+                        .patchItemFloorStatus(
+                          fields.projectId,
+                          fields.itemId,
+                          'packaged',
+                        );
+                      onStatusUpdated?.();
+                    }
+                  }}
+                >
+                  <Text style={styles.packageButtonText}>📦 Embalado</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
         </View>
       </Card>
     );
@@ -275,5 +322,40 @@ const styles = StyleSheet.create({
   completedText: {
     ...typography.bodyBold,
     color: colors.success,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  loadButton: {
+    flex: 1.2,
+    backgroundColor: colors.success,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  loadButtonText: {
+    ...typography.bodyBold,
+    color: '#ffffff',
+  },
+  packageButton: {
+    flex: 0.8,
+    backgroundColor: colors.surfaceHover,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  packageButtonText: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
   },
 });

@@ -39,6 +39,7 @@ export const PRODUCTION_PATH_TABS = [
   'resumen',
   'modulos',
   'piso',
+  'despacho',
   'despiece',
   'etiquetas',
   'herrajes',

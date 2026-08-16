@@ -98,6 +98,9 @@ export type ProductionWorkspaceProps = {
   readonly canSetFloorStatus?: boolean;
   readonly onExportCncPilot?: (projectId: string) => void | Promise<void>;
   readonly onExportAssemblySheets?: (projectId: string) => void | Promise<void>;
+  readonly onReleaseToDelivery?: (projectId: string) => void | Promise<void>;
+  readonly canReleaseToDelivery?: boolean;
+  readonly isReleasing?: boolean;
 };
 
 export function ProductionWorkspace({
@@ -134,6 +137,9 @@ export function ProductionWorkspace({
   canSetFloorStatus = false,
   onExportCncPilot,
   onExportAssemblySheets,
+  onReleaseToDelivery,
+  canReleaseToDelivery = true,
+  isReleasing = false,
 }: ProductionWorkspaceProps): ReactNode {
   const [productionScopeId, setProductionScopeId] =
     useState<string>(PRODUCTION_SCOPE_ALL);
@@ -331,6 +337,13 @@ export function ProductionWorkspace({
             : undefined
         }
         canSetFloorStatus={canSetFloorStatus}
+        onReleaseToDelivery={
+          onReleaseToDelivery
+            ? () => onReleaseToDelivery(orderProject.id)
+            : undefined
+        }
+        canReleaseToDelivery={canReleaseToDelivery}
+        isReleasing={isReleasing}
         staleInfo={staleInfo}
         onExportCncPilot={
           onExportCncPilot

@@ -238,6 +238,8 @@ export {
   type ProductionOrderHubProps,
   ProductionBoardView,
   type ProductionBoardViewProps,
+  ProductionOrderDispatchPanel,
+  type ProductionOrderDispatchPanelProps,
   PRODUCTION_ORDER_TABS,
   parseProductionOrderTab,
   projectAllowsProductionOrder,

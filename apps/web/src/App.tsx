@@ -1879,6 +1879,32 @@ function AppContent({
     [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
+  const handleReleaseToDelivery = useCallback(
+    async (projectId: string) => {
+      const project = projects.find((p) => p.id === projectId);
+      if (!project) return;
+      try {
+        await projectActions.updateProjectTechnicalWorkflow(projectId, {
+          technicalStatus: 'ready_to_install',
+          comment:
+            '✓ 100% de los bultos cargados en el transporte. Orden liberada para entrega.',
+        });
+        toast({
+          type: 'success',
+          message: '✓ Orden liberada exitosamente a entrega / transporte',
+        });
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : 'Error al liberar orden a entrega';
+        toast({
+          type: 'error',
+          message: msg,
+        });
+      }
+    },
+    [projects, projectActions, toast],
+  );
+
   const handleExportProductionPack = useCallback(
     async (projectId?: string) => {
       const project =
@@ -2340,6 +2366,9 @@ function AppContent({
           }}
           onExportAssemblySheets={(id) => {
             void handleExportAssemblySheets(id);
+          }}
+          onReleaseToDelivery={(id) => {
+            void handleReleaseToDelivery(id);
           }}
         />
       ) : null}

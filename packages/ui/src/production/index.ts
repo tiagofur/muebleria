@@ -101,6 +101,11 @@ export {
 } from './ProductionOrderPaperlessPanel';
 
 export {
+  ProductionOrderDispatchPanel,
+  type ProductionOrderDispatchPanelProps,
+} from './ProductionOrderDispatchPanel';
+
+export {
   CsvExportConfigModal,
   type CsvExportConfigModalProps,
 } from './CsvExportConfigModal';
