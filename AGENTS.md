@@ -76,6 +76,10 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `docs/technical_design.md` | Decisiones técnicas de implementación | Cuando el diseño de solución no está claro |
 | `docs/verification.md` | Cómo demostrar que funciona | Antes de declarar `done` |
 | `docs/git-workflow.md` | **Preservación de trabajo**: cómo guardar/cerrar sesión, por qué NO usar `git stash` como depósito, recuperación de commits perdidos | **OBLIGATORIO** antes de cerrar sesión o tocar `git stash` |
+| `docs/roadmap_RN.md` | **Roadmap React Native:** Estrategia, fases 0-5 y valor de la app móvil de taller/campo | Antes de trabajar en `apps/mobile` |
+| `docs/mobile-architecture.md` | **Arquitectura React Native:** Monorepo Expo, offline-first SQLite, hardware nativo y Go API | Antes de tocar código de `apps/mobile` |
+| `docs/mobile-code-sharing.md` | **Reutilización de Código:** Cómo consumir `@muebles/domain` y `@muebles/storage` sin duplicar | Antes de implementar features en mobile |
+| `docs/mobile-ui-ux.md` | **Diseño UI/UX Móvil:** Ergonomía táctil de taller, touch targets ≥48px, tokens | Antes de diseñar pantallas móviles |
 | `CHECKPOINTS.md` | Criterios del revisor | Para auto-evaluarte |
 | `.agents/skills/` | Cómo actuar según tu rol (leader / implementer / reviewer) | Lee tu rol |
 | `README.md` | Stack, env vars, arranque backend | Setup / ops |
@@ -88,6 +92,7 @@ Detalle de niveles de verificación → `docs/verification.md`.
 muebles/
 ├── apps/web/          # shell React + Vite
 ├── apps/desktop/      # shell Electron
+├── apps/mobile/       # shell React Native + Expo (iOS & Android)
 ├── packages/domain/   # lógica de negocio pura
 ├── packages/ui/       # componentes React compartidos
 ├── packages/excel/    # export Optimizer

@@ -33,6 +33,7 @@ packages/
 apps/
   web/        → shell React + Vite
   desktop/    → shell Electron
+  mobile/     → shell React Native + Expo (iOS & Android)
 ```
 
 ## Flujo de datos (solo lectura)
