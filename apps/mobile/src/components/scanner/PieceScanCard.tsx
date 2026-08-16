@@ -31,18 +31,6 @@ export function PieceScanCard({
   const projectId = isPayload ? parsedScan.fields.projectId : 'active';
 
   const currentStatus = useFloorScannerStore((s) => s.getItemStatus(itemId));
-  const advanceItemStatus = useFloorScannerStore((s) => s.advanceItemStatus);
-  const nextStatus = nextItemFloorStatus(currentStatus);
-
-  const handleAdvance = async () => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      // ignore
-    }
-    advanceItemStatus(projectId, itemId);
-    onStatusUpdated?.();
-  };
 
   const getStatusBadgeVariant = (status: ItemFloorStatus) => {
     switch (status) {
@@ -73,16 +61,7 @@ export function PieceScanCard({
         <Text style={styles.plainCodeText}>{parsedScan.code}</Text>
 
         <View style={styles.footer}>
-          {nextStatus ? (
-            <Button
-              title={`Avanzar a ${ITEM_FLOOR_STATUS_LABELS_ES[nextStatus]}`}
-              size="md"
-              onPress={handleAdvance}
-              style={styles.advanceButton}
-            />
-          ) : (
-            <Badge label="Completado ✓" variant="success" />
-          )}
+          <Badge label="Completado ✓" variant="success" />
         </View>
       </Card>
     );
@@ -140,18 +119,11 @@ export function PieceScanCard({
 
       {/* Action Footer */}
       <View style={styles.footer}>
-        {nextStatus ? (
-          <Button
-            title={`Avanzar a ${ITEM_FLOOR_STATUS_LABELS_ES[nextStatus]}`}
-            size="lg"
-            onPress={handleAdvance}
-            style={styles.advanceButton}
-          />
-        ) : (
-          <View style={styles.completedBadge}>
-            <Text style={styles.completedText}>✨ Pieza Instalada y Verificada</Text>
-          </View>
-        )}
+        <View style={styles.completedBadge}>
+          <Text style={styles.completedText}>
+            El avance se registra desde el escaneo (servidor)
+          </Text>
+        </View>
       </View>
     </Card>
   );

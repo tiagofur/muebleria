@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useFloorScannerStore } from './floorScannerStore';
 import { pieceLabelQrPayload } from '@muebles/domain';
 
-// Mock expo-haptics
+// Mock expo-haptics (non-native test env)
 vi.mock('expo-haptics', () => ({
   notificationAsync: vi.fn(async () => {}),
   impactAsync: vi.fn(async () => {}),
@@ -10,104 +10,180 @@ vi.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Medium: 'medium' },
 }));
 
-describe('floorScannerStore Mobile (Fase 1)', () => {
+const postMock = vi.fn();
+const patchMock = vi.fn();
+vi.mock('../services/apiClient', () => ({
+  apiClient: {
+    post: (...args: unknown[]) => postMock(...args),
+    get: vi.fn(),
+    put: vi.fn(),
+    patch: (...args: unknown[]) => patchMock(...args),
+    delete: vi.fn(),
+  },
+}));
+
+const qrFor = (moduleCode = 'GAB-01') =>
+  pieceLabelQrPayload({
+    projectId: 'p1',
+    moduleCode,
+    description: 'Costado',
+    materialCode: 'TAB-1',
+    lengthMm: 720,
+    widthMm: 560,
+  });
+
+const apiResponse = (over: Partial<Record<string, string>> = {}) => ({
+  project_id: 'p1',
+  project_name: 'Cocina López',
+  item_id: 'i1',
+  factory_code: 'GAB-01',
+  module_code: 'GAB-01',
+  module_name: 'Gabinete base',
+  status_before: 'pending',
+  status_after: 'cut',
+  next_status: 'edged',
+  ...over,
+});
+
+describe('floorScannerStore Mobile (server-backed, F089-RN)', () => {
   beforeEach(() => {
-    useFloorScannerStore.getState().clearHistory();
     useFloorScannerStore.setState({
       history: [],
       activeScan: null,
       itemStatuses: {},
+      pendingScans: [],
+      activeProjectId: null,
+      autoAdvance: true,
+      syncing: false,
+      lastScanTime: 0,
+      lastScannedText: null,
     });
-    vi.clearAllMocks();
+    postMock.mockReset();
+    patchMock.mockReset();
   });
 
-  it('procesa payload QR v2 oficial de @muebles/domain', async () => {
-    const rawQr = pieceLabelQrPayload({
-      projectId: 'proj-123',
-      moduleCode: 'GAB-01',
-      partCode: 'COST-IZQ',
-      description: 'Costado Izquierdo 18mm',
-      materialCode: 'BLANCO-18',
-      lengthMm: 720,
-      widthMm: 564,
-      quantity: 1,
-      edgeSides: 'L1+W2',
-      edgeCode: 'CANTO-BL-2',
-      revision: '1',
+  it('resuelve el escaneo contra el endpoint floor-scan y auto-avanza', async () => {
+    postMock.mockResolvedValueOnce(apiResponse());
+    const record = await useFloorScannerStore.getState().processScan(qrFor());
+
+    expect(postMock).toHaveBeenCalledWith('/projects/p1/floor-scan', {
+      module: 'GAB-01',
+      advance: true,
+    });
+    expect(record?.resolution).toMatchObject({
+      projectId: 'p1',
+      projectName: 'Cocina López',
+      itemId: 'i1',
+      statusAfter: 'cut',
+      nextStatus: 'edged',
+    });
+    expect(record?.currentStatus).toBe('cut');
+    expect(useFloorScannerStore.getState().itemStatuses['i1']).toBe('cut');
+  });
+
+  it('sin auto-avance hace lookup sin escribir', async () => {
+    useFloorScannerStore.setState({ autoAdvance: false });
+    postMock.mockResolvedValueOnce(
+      apiResponse({ status_after: 'pending', next_status: 'cut' }),
+    );
+    const record = await useFloorScannerStore.getState().processScan(qrFor());
+
+    expect(postMock).toHaveBeenCalledWith('/projects/p1/floor-scan', {
+      module: 'GAB-01',
+      advance: false,
+    });
+    expect(record?.resolution?.statusAfter).toBe('pending');
+  });
+
+  it('código plano sin obra activa → error visible y sin llamada', async () => {
+    const record = await useFloorScannerStore.getState().processScan('GAB-01');
+    expect(postMock).not.toHaveBeenCalled();
+    expect(record?.error).toContain('obra');
+  });
+
+  it('código plano CON obra activa resuelve contra esa obra', async () => {
+    useFloorScannerStore.setState({ activeProjectId: 'p9' });
+    postMock.mockResolvedValueOnce(apiResponse());
+    await useFloorScannerStore.getState().processScan('GAB-01-L2');
+    expect(postMock).toHaveBeenCalledWith('/projects/p9/floor-scan', {
+      module: 'GAB-01-L2',
+      advance: true,
+    });
+  });
+
+  it('fallo de red → cola offline con avance optimista', async () => {
+    postMock.mockRejectedValueOnce(
+      new Error('Error de red al conectar con el servidor: sin cobertura'),
+    );
+    const record = await useFloorScannerStore.getState().processScan(qrFor());
+
+    expect(record?.error).toContain('Sin conexión');
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(1);
+    // Optimistic advance: pending → cut locally
+    expect(record?.currentStatus).toBe('cut');
+  });
+
+  it('error de dominio (404 módulo) NO se encola', async () => {
+    postMock.mockRejectedValueOnce(new Error('módulo no encontrado en esta obra'));
+    const record = await useFloorScannerStore.getState().processScan(qrFor());
+    expect(record?.error).toContain('módulo no encontrado');
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+  });
+
+  it('syncPending drena la cola cuando vuelve la conexión', async () => {
+    useFloorScannerStore.setState({
+      pendingScans: [{ rawText: qrFor(), advance: true, at: new Date().toISOString() }],
+    });
+    postMock.mockResolvedValueOnce(apiResponse());
+    await useFloorScannerStore.getState().syncPending();
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+  });
+
+  it('advanceScan avanza explícitamente y actualiza el registro', async () => {
+    postMock.mockResolvedValueOnce(apiResponse());
+    const record = await useFloorScannerStore.getState().processScan(qrFor());
+    postMock.mockResolvedValueOnce(
+      apiResponse({ status_before: 'cut', status_after: 'edged', next_status: 'assembled' }),
+    );
+    await useFloorScannerStore.getState().advanceScan(record!);
+
+    const updated = useFloorScannerStore.getState().activeScan;
+    expect(updated?.resolution?.statusAfter).toBe('edged');
+    expect(updated?.currentStatus).toBe('edged');
+  });
+
+  it('debounce: ignora lecturas duplicadas idénticas recibidas en menos de 800ms', async () => {
+    postMock.mockResolvedValueOnce(apiResponse());
+    const qr = qrFor('MOD-DEBOUNCE');
+    const first = await useFloorScannerStore.getState().processScan(qr);
+    expect(postMock).toHaveBeenCalledTimes(1);
+
+    // Immediate second scan of the same QR (e.g. video frame spam)
+    const second = await useFloorScannerStore.getState().processScan(qr);
+    // Should return cached activeScan without a second HTTP request
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(second?.id).toBe(first?.id);
+  });
+
+  it('patchItemFloorStatus actualiza atómicamente el estado del item por ID', async () => {
+    patchMock.mockResolvedValueOnce({
+      project_id: 'p1',
+      item_id: 'i1',
+      floor_status: 'assembled',
+      next_status: 'installed',
     });
 
-    const parsed = await useFloorScannerStore.getState().processScan(rawQr);
+    const status = await useFloorScannerStore
+      .getState()
+      .patchItemFloorStatus('p1', 'i1', 'assembled');
 
-    expect(parsed).not.toBeNull();
-    expect(parsed?.kind).toBe('payload');
-    if (parsed?.kind === 'payload') {
-      expect(parsed.fields.moduleCode).toBe('GAB-01');
-      expect(parsed.fields.partCode).toBe('COST-IZQ');
-      expect(parsed.fields.lengthMm).toBe(720);
-      expect(parsed.fields.widthMm).toBe(564);
-      expect(parsed.fields.edgeSides).toBe('L1+W2');
-    }
-
-    const state = useFloorScannerStore.getState();
-    expect(state.history.length).toBe(1);
-    expect(state.activeScan).not.toBeNull();
-  });
-
-  it('procesa códigos simples o de texto plano', async () => {
-    const plainText = 'GAB-01-COSTADO';
-    const parsed = await useFloorScannerStore.getState().processScan(plainText);
-
-    expect(parsed).not.toBeNull();
-    expect(parsed?.kind).toBe('plainCode');
-    if (parsed?.kind === 'plainCode') {
-      expect(parsed.code).toBe('GAB-01-COSTADO');
-    }
-  });
-
-  it('avanza el estado de piso de fabricación secuencialmente', async () => {
-    const itemId = 'PIEZA-01';
-    const store = useFloorScannerStore.getState();
-
-    // Default is pending
-    expect(store.getItemStatus(itemId)).toBe('pending');
-
-    // Advance: pending -> cut
-    store.advanceItemStatus('proj-1', itemId);
-    expect(useFloorScannerStore.getState().getItemStatus(itemId)).toBe('cut');
-
-    // Advance: cut -> edged
-    useFloorScannerStore.getState().advanceItemStatus('proj-1', itemId);
-    expect(useFloorScannerStore.getState().getItemStatus(itemId)).toBe('edged');
-
-    // Advance: edged -> assembled
-    useFloorScannerStore.getState().advanceItemStatus('proj-1', itemId);
-    expect(useFloorScannerStore.getState().getItemStatus(itemId)).toBe('assembled');
-
-    // Advance: assembled -> installed
-    useFloorScannerStore.getState().advanceItemStatus('proj-1', itemId);
-    expect(useFloorScannerStore.getState().getItemStatus(itemId)).toBe('installed');
-
-    // Advance when already installed remains installed
-    useFloorScannerStore.getState().advanceItemStatus('proj-1', itemId);
-    expect(useFloorScannerStore.getState().getItemStatus(itemId)).toBe('installed');
-  });
-
-  it('actualiza el estado de las piezas en el historial', async () => {
-    const rawQr = pieceLabelQrPayload({
-      projectId: 'proj-123',
-      moduleCode: 'GAB-01',
-      partCode: 'COST-IZQ',
-      description: 'Costado Izquierdo',
-      materialCode: 'BLANCO-18',
-      lengthMm: 720,
-      widthMm: 564,
+    expect(patchMock).toHaveBeenCalledWith('/projects/p1/items/i1/floor-status', {
+      status: 'assembled',
     });
-
-    await useFloorScannerStore.getState().processScan(rawQr);
-    useFloorScannerStore.getState().updateItemStatus('proj-123', 'COST-IZQ', 'cut');
-
-    const state = useFloorScannerStore.getState();
-    expect(state.history[0].currentStatus).toBe('cut');
-    expect(state.activeScan?.currentStatus).toBe('cut');
+    expect(status).toBe('assembled');
+    expect(useFloorScannerStore.getState().itemStatuses['i1']).toBe('assembled');
   });
 });
+

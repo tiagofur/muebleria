@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { catalogFromApi } from '@muebles/storage';
+import { apiClient } from '../services/apiClient';
 import {
   type MaterialBoard,
   type EdgeBand,
@@ -51,8 +53,12 @@ export interface CatalogState {
   searchQuery: string;
   selectedCategory: string | null;
   activeTab: CatalogTab;
+  /** True while fetching the real workshop catalog from the API. */
+  loadingFromApi: boolean;
+  apiCatalogLoaded: boolean;
 
   // Actions
+  loadFromApi: () => Promise<void>;
   setSearchQuery: (query: string) => void;
   setSelectedCategory: (cat: string | null) => void;
   setActiveTab: (tab: CatalogTab) => void;
@@ -74,7 +80,54 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   optionGroups: seedCatalogExpandedLatAm.optionGroups,
   searchQuery: '',
   selectedCategory: null,
+  loadingFromApi: false,
+  apiCatalogLoaded: false,
   activeTab: 'modules',
+
+  loadFromApi: async () => {
+    if (get().loadingFromApi || get().apiCatalogLoaded) return;
+    set({ loadingFromApi: true });
+    try {
+      const [materials, edges, hardware, optionGroups, modules, customers] =
+        await Promise.all([
+          apiClient.get<unknown[]>('/catalog/materials'),
+          apiClient.get<unknown[]>('/catalog/edges'),
+          apiClient.get<unknown[]>('/catalog/hardware'),
+          apiClient.get<unknown[]>('/catalog/option-groups'),
+          apiClient.get<unknown[]>('/catalog/modules'),
+          apiClient.get<unknown[]>('/customers'),
+        ]);
+      const catalog = catalogFromApi({
+        materials,
+        edges,
+        hardware,
+        optionGroups,
+        modules,
+        customers,
+        structures: [],
+        categories: [],
+        components: [],
+        agregados: [],
+        ambientMaterials: [],
+        ambientCategories: [],
+      });
+      set({
+        materials: catalog.materials,
+        edgeBands: catalog.edges,
+        hardware: catalog.hardware,
+        modules: catalog.modules,
+        optionGroups: catalog.optionGroups,
+        ...((catalog.customers?.length ?? 0) > 0
+          ? { customers: [...(catalog.customers ?? [])] }
+          : {}),
+        apiCatalogLoaded: true,
+      });
+    } catch {
+      // Offline or old backend: keep the seed catalog (demo data) usable.
+    } finally {
+      set({ loadingFromApi: false });
+    }
+  },
 
   setSearchQuery: (query) => set({ searchQuery: query }),
   setSelectedCategory: (cat) => set({ selectedCategory: cat }),

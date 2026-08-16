@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { apiClient } from '../services/apiClient';
 import {
   type Module,
   type ProjectItem,
@@ -58,6 +59,12 @@ export interface QuoterState {
   clearCart: () => void;
   getTotals: () => QuoterTotals;
   generateWhatsAppText: () => string;
+  /**
+   * Persist the street quote as a DRAFT project on the server so the office
+   * picks it up in the web app: find-or-create customer by name, then POST
+   * the project with one line item per cart row. Returns the project id.
+   */
+  saveAsQuote: () => Promise<{ projectId: string; customerName: string }>;
 }
 
 function calculateItemCosts(
@@ -312,5 +319,53 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
     lines.push(`_Presupuesto emitido desde Muebles App Taller. Válido por 15 días._`);
 
     return lines.join('\n');
+  },
+
+  // --- saveAsQuote (server persistence) ----------------------------------------
+// Appended separately: find-or-create the customer by name, then POST the
+// draft project. Item option choices are empty — the office finishes them
+// in the web editor; module/preset/quantity carry over intact.
+
+  saveAsQuote: async () => {
+    const { customerName, projectTitle, items, commercialMarginPercent } = get();
+    if (items.length === 0) {
+      throw new Error('El carrito está vacío');
+    }
+    const trimmedName = customerName.trim() || 'Cliente Particular';
+
+    // Find-or-create customer by exact name (case-insensitive).
+    const customers = await apiClient
+      .get<{ id: string; name: string }[]>('/customers')
+      .catch(() => [] as { id: string; name: string }[]);
+    const existing = customers.find(
+      (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    );
+    let customerId = existing?.id;
+    if (!customerId) {
+      const created = await apiClient.post<{ id: string }>('/customers', {
+        name: trimmedName,
+        active: true,
+      });
+      customerId = created.id;
+    }
+
+    const created = await apiClient.post<{ id: string }>('/projects', {
+      name: projectTitle.trim() || `Cotización ${trimmedName}`,
+      customer_id: customerId,
+      currency: 'MXN',
+      margin_factor: 1 + commercialMarginPercent / 100,
+      labor_fixed_cost: 0,
+      status: 'draft',
+      items: items.map((it) => ({
+        module_id: it.moduleId,
+        quantity: it.quantity,
+        ...(it.selectedPresetId
+          ? { measure_preset_id: it.selectedPresetId }
+          : {}),
+        option_choices: {},
+      })),
+    });
+
+    return { projectId: created.id, customerName: trimmedName };
   },
 }));

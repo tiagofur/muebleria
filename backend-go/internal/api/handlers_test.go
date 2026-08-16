@@ -75,6 +75,10 @@ type stubStore struct {
 	updateHardwareCalled   bool
 	updateHardwareReceived *domain.Hardware
 	moduleReturnedByID     *domain.Module
+	// Floor scan (F089-RN): per-id modules + floor status write log.
+	modulesByID             map[string]*domain.Module
+	floorStatusWrites       []floorStatusWrite
+	floorStatusErr          error
 	updateModuleCalled     bool
 	updateModuleReceived   *domain.Module
 	deleteModuleCalled     bool
@@ -319,8 +323,27 @@ func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
 	}
 	return domain.Catalog{}, nil
 }
-func (s *stubStore) GetModuleByID(context.Context, string) (*domain.Module, error) {
+func (s *stubStore) GetModuleByID(_ context.Context, id string) (*domain.Module, error) {
+	if s.modulesByID != nil {
+		if m, ok := s.modulesByID[id]; ok {
+			return m, nil
+		}
+	}
 	return s.moduleReturnedByID, nil
+}
+
+type floorStatusWrite struct {
+	projectID string
+	itemID    string
+	status    string
+}
+
+func (s *stubStore) SetProjectItemFloorStatus(_ context.Context, projectID, itemID, status string) error {
+	if s.floorStatusErr != nil {
+		return s.floorStatusErr
+	}
+	s.floorStatusWrites = append(s.floorStatusWrites, floorStatusWrite{projectID, itemID, status})
+	return nil
 }
 func (s *stubStore) CreateModule(context.Context, *domain.Module) error {
 	s.stubNotUsed("CreateModule")

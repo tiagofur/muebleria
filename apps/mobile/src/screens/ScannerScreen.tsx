@@ -27,6 +27,11 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
   const setActiveScan = useFloorScannerStore((s) => s.setActiveScan);
   const history = useFloorScannerStore((s) => s.history);
   const clearHistory = useFloorScannerStore((s) => s.clearHistory);
+  const autoAdvance = useFloorScannerStore((s) => s.autoAdvance);
+  const setAutoAdvance = useFloorScannerStore((s) => s.setAutoAdvance);
+  const advanceScan = useFloorScannerStore((s) => s.advanceScan);
+  const pendingCount = useFloorScannerStore((s) => s.pendingScans.length);
+  const syncPending = useFloorScannerStore((s) => s.syncPending);
 
   const handleScan = async (data: string) => {
     await processScan(data);
@@ -72,6 +77,32 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
               onPress={() => setActiveScan(null)}
             />
           </View>
+          {activeScan.resolution ? (
+            <View style={styles.resolutionBox}>
+              <Text style={styles.resolutionProject}>
+                {activeScan.resolution.projectName} · {activeScan.resolution.factoryCode}
+              </Text>
+              <Text style={styles.resolutionStatus}>
+                {ITEM_FLOOR_STATUS_LABELS_ES[activeScan.resolution.statusBefore]}
+                {activeScan.resolution.statusAfter !== activeScan.resolution.statusBefore
+                  ? ` → ${ITEM_FLOOR_STATUS_LABELS_ES[activeScan.resolution.statusAfter]}`
+                  : ''}
+              </Text>
+              {activeScan.resolution.nextStatus ? (
+                <Button
+                  title={`Marcar: ${ITEM_FLOOR_STATUS_LABELS_ES[activeScan.resolution.nextStatus!]}`}
+                  variant="primary"
+                  size="sm"
+                  onPress={() => advanceScan(activeScan)}
+                />
+              ) : (
+                <Text style={styles.resolutionDone}>Completo ✓</Text>
+              )}
+            </View>
+          ) : null}
+          {activeScan.error ? (
+            <Text style={styles.scanError}>{activeScan.error}</Text>
+          ) : null}
           <PieceScanCard
             parsedScan={activeScan.parsed}
             onDismiss={() => setActiveScan(null)}
@@ -82,6 +113,18 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
           <Text style={styles.idleText}>
             💡 Listo para escanear. Acerca una etiqueta con código QR.
           </Text>
+          <Pressable
+            style={styles.autoAdvanceToggle}
+            onPress={() => setAutoAdvance(!autoAdvance)}
+          >
+            <Text style={styles.autoAdvanceText}>
+              {autoAdvance ? '✓ Auto-avanzar' : 'Auto-avanzar'} · {history.length} escaneos
+              {pendingCount > 0 ? ` · ${pendingCount} sin sincronizar` : ''}
+            </Text>
+          </Pressable>
+          {pendingCount > 0 ? (
+            <Button title="Sincronizar" variant="primary" size="sm" onPress={syncPending} />
+          ) : null}
         </View>
       )}
 
@@ -196,6 +239,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.9)',
     padding: spacing.lg,
     alignItems: 'center',
+  },
+  autoAdvanceToggle: {
+    paddingVertical: spacing.sm,
+  },
+  autoAdvanceText: {
+    color: '#cbd5e1',
+    fontSize: typography.body.fontSize,
+  },
+  resolutionBox: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  resolutionProject: {
+    color: '#ffffff',
+    fontSize: typography.h3.fontSize,
+    fontWeight: '600',
+  },
+  resolutionStatus: {
+    color: '#34d399',
+    fontSize: typography.body.fontSize,
+  },
+  resolutionDone: {
+    color: '#94a3b8',
+    fontSize: typography.body.fontSize,
+  },
+  scanError: {
+    color: '#f87171',
+    fontSize: typography.body.fontSize,
+    marginBottom: spacing.sm,
   },
   idleText: {
     ...typography.body,

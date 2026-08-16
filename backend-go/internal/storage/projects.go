@@ -533,7 +533,7 @@ func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, pres
 // loadProjectItems returns all line items + option choices for a project.
 func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) ([]domain.ProjectItem, error) {
 	itemQuery := `
-		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode
+		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status
 		FROM project_items
 		WHERE project_id = $1;
 	`
@@ -548,11 +548,15 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		var item domain.ProjectItem
 		var measurePresetID *string
 		var structureRevisionPin *int
-		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin, &item.BaseMode); err != nil {
+		var floorStatus *string
+		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin, &item.BaseMode, &floorStatus); err != nil {
 			return nil, err
 		}
 		if measurePresetID != nil {
 			item.MeasurePresetID = *measurePresetID
+		}
+		if floorStatus != nil {
+			item.FloorStatus = domain.NormalizeItemFloorStatus(*floorStatus)
 		}
 		if structureRevisionPin != nil {
 			pin := *structureRevisionPin
@@ -596,17 +600,18 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		measureArg := nullIfEmpty(item.MeasurePresetID)
 		pinArg := structurePinArg(item.StructureRevisionPin)
 		baseModeArg := item.BaseMode
+		floorArg := nullIfEmpty(item.FloorStatus)
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
-			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg)
+				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg)
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
-				VALUES ($1, $2, $3, $4, $5, $6)
+				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
 				RETURNING id
-			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg).Scan(&item.ID)
+			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg).Scan(&item.ID)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting project item: %w", err)
@@ -828,11 +833,11 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id;
 	`
-	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin), item.BaseMode).Scan(&item.ID)
+	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin), item.BaseMode, nullIfEmpty(item.FloorStatus)).Scan(&item.ID)
 	if err != nil {
 		return err
 	}
@@ -1398,4 +1403,39 @@ func nullKitchenLayout(b []byte) interface{} {
 		return nil
 	}
 	return b
+}
+
+// SetProjectItemFloorStatus atomically advances one item's shop-floor status
+// (PROD-3.1 / F089-RN). Single-row UPDATE — no full project rewrite, so a
+// phone scan can never clobber concurrent edits elsewhere in the project.
+func (s *PostgresStore) SetProjectItemFloorStatus(ctx context.Context, projectID, itemID, status string) error {
+	if !isValidItemFloorStatus(status) {
+		return fmt.Errorf("invalid floor status %q", status)
+	}
+	tag, err := s.Pool.Exec(ctx, `
+		UPDATE project_items
+		SET floor_status = $1
+		WHERE id = $2 AND project_id = $3;
+	`, status, itemID, projectID)
+	if err != nil {
+		return fmt.Errorf("error updating floor status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("project item not found")
+	}
+	if _, err := s.Pool.Exec(ctx, `
+		UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;
+	`, projectID); err != nil {
+		return fmt.Errorf("error touching project updated_at: %w", err)
+	}
+	return nil
+}
+
+func isValidItemFloorStatus(s string) bool {
+	for _, v := range domain.ItemFloorStatuses {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

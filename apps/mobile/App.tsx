@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from './src/stores/authStore';
+import { useCatalogStore } from './src/stores/catalogStore';
+import { useFloorScannerStore } from './src/stores/floorScannerStore';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ScannerScreen } from './src/screens/ScannerScreen';
@@ -17,6 +19,7 @@ import { PhotoAnnotationScreen } from './src/screens/PhotoAnnotationScreen';
 import { Presentation3DScreen } from './src/screens/Presentation3DScreen';
 import { DigitalSignatureScreen } from './src/screens/DigitalSignatureScreen';
 import { BenchPaperlessScreen } from './src/screens/BenchPaperlessScreen';
+import { ProductionQueueScreen } from './src/screens/ProductionQueueScreen';
 import { colors, radius, typography, spacing } from './src/theme';
 
 export type ActiveScreen =
@@ -33,7 +36,8 @@ export type ActiveScreen =
   | 'annotation'
   | '3d'
   | 'signature'
-  | 'bench';
+  | 'bench'
+  | 'queue';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('home');
@@ -44,6 +48,16 @@ export default function App() {
   useEffect(() => {
     loadSession();
   }, [loadSession]);
+
+  // Real workshop catalog + pending floor-scan sync once authenticated.
+  const loadCatalogFromApi = useCatalogStore((s) => s.loadFromApi);
+  const syncPendingFloorScans = useFloorScannerStore((s) => s.syncPending);
+  useEffect(() => {
+    if (isAuthenticated) {
+      void loadCatalogFromApi();
+      void syncPendingFloorScans();
+    }
+  }, [isAuthenticated, loadCatalogFromApi, syncPendingFloorScans]);
 
   if (isLoading) {
     return (
@@ -125,6 +139,13 @@ export default function App() {
           <BenchPaperlessScreen
             onBack={() => setCurrentScreen('home')}
             onOpen3D={() => setCurrentScreen('3d')}
+          />
+        );
+      case 'queue':
+        return (
+          <ProductionQueueScreen
+            onBack={() => setCurrentScreen('home')}
+            onScanProject={() => setCurrentScreen('scanner')}
           />
         );
       case 'home':

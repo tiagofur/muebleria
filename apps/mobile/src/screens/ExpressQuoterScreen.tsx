@@ -78,6 +78,31 @@ export function ExpressQuoterScreen({
     }
   };
 
+  const saveAsQuote = useQuoterStore((s) => s.saveAsQuote);
+  const [savingQuote, setSavingQuote] = useState(false);
+
+  const handleSaveQuote = async () => {
+    if (items.length === 0) {
+      Alert.alert('Cotización vacía', 'Agregá módulos antes de guardar.');
+      return;
+    }
+    setSavingQuote(true);
+    try {
+      const result = await saveAsQuote();
+      Alert.alert(
+        '✓ Cotización guardada',
+        `Se creó el borrador para ${result.customerName}. La oficina lo ve en Cotizaciones.`,
+      );
+    } catch (err) {
+      Alert.alert(
+        'No se pudo guardar',
+        err instanceof Error ? err.message : 'Revisá la conexión e intentá de nuevo.',
+      );
+    } finally {
+      setSavingQuote(false);
+    }
+  };
+
   const handleAdjustWidth = (itemId: string, currentWidth: number, delta: number) => {
     const newWidth = Math.max(300, Math.min(2400, currentWidth + delta));
     updateItemDimensions(itemId, { lengthMm: newWidth });
@@ -335,6 +360,12 @@ export function ExpressQuoterScreen({
               </Text>
             </View>
 
+            <Button
+              title={savingQuote ? 'Guardando…' : 'Guardar cotización (borrador)'}
+              onPress={handleSaveQuote}
+              disabled={savingQuote}
+              style={styles.saveQuoteBtn}
+            />
             <Button
               title="Compartir por WhatsApp"
               size="lg"
@@ -629,6 +660,9 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.primary,
     fontSize: 22,
+  },
+  saveQuoteBtn: {
+    marginTop: spacing.sm,
   },
   whatsappBtn: {
     width: '100%',

@@ -115,6 +115,8 @@ type Store interface {
 	CreateProject(ctx context.Context, p *domain.Project) error
 	UpdateProject(ctx context.Context, id string, p *domain.Project) error
 	DeleteProject(ctx context.Context, id string) error
+	// Floor scan (PROD-3.1 / F089-RN): atomic single-item floor status write.
+	SetProjectItemFloorStatus(ctx context.Context, projectID, itemID, status string) error
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)
