@@ -6,8 +6,13 @@
  * ZPL QR code rendering (^BQ).
  */
 
-import { pieceLabelQrPayload, pieceLabelQrPayloadUrl } from './pieceLabelQr';
-import type { PieceLabel } from './types';
+import {
+  pieceLabelQrPayload,
+  pieceLabelQrPayloadUrl,
+  moduleLabelQrPayload,
+  moduleLabelQrPayloadUrl,
+} from './pieceLabelQr';
+import type { PieceLabel, ModuleLabel } from './types';
 import { ValidationError } from './errors';
 
 export type ZplSizePreset = '100x50' | '100x150' | '50x25';
@@ -279,4 +284,128 @@ export function pieceBatchToZpl(
     });
   }
   return labels.map((l) => pieceToZpl(l, preset, options)).join('\n');
+}
+
+/**
+ * Generate ZPL II format string for a single module / package label.
+ */
+export function moduleToZpl(
+  label: ModuleLabel,
+  preset: ZplSizePreset = '100x150',
+  options: ZplExportOptions = {},
+): string {
+  const dpi = options.dpi ?? 203;
+  const dpmm = dotsPerMm(dpi);
+  const dims = ZPL_SIZE_PRESETS[preset] ?? ZPL_SIZE_PRESETS['100x150'];
+  const widthDots = Math.round(dims.widthMm * dpmm);
+  const heightDots = Math.round(dims.heightMm * dpmm);
+
+  const qrFields = {
+    projectId: label.projectId,
+    itemId: label.itemId,
+    factoryCode: label.factoryCode,
+    moduleCode: label.moduleCode,
+    moduleName: label.moduleName,
+    packageIndex: label.packageIndex,
+    totalPackages: label.totalPackages,
+    unitIndex: label.unitIndex,
+    unitQuantity: label.unitQuantity,
+    widthMm: label.widthMm,
+    heightMm: label.heightMm,
+    depthMm: label.depthMm,
+    revision: options.revision ?? label.revision,
+  };
+  const qrPayload =
+    options.qrFormat === 'url'
+      ? moduleLabelQrPayloadUrl(qrFields, { host: options.qrHost })
+      : moduleLabelQrPayload(qrFields);
+
+  const lines: string[] = [];
+  lines.push('^XA');
+  lines.push(`^PW${widthDots}`);
+  lines.push(`^LL${heightDots}`);
+  lines.push('^CI28'); // UTF-8 character encoding
+
+  const marginX = Math.round(5 * dpmm);
+  if (options.includeBorder !== false) {
+    const borderMargin = Math.round(2 * dpmm);
+    const borderW = widthDots - borderMargin * 2;
+    const borderH = heightDots - borderMargin * 2;
+    lines.push(`^FO${borderMargin},${borderMargin}^GB${borderW},${borderH},2^FS`);
+  }
+
+  const bultoStr = `BULTO ${label.packageIndex} DE ${label.totalPackages}`;
+  const projStr = sanitizeZplText(`Obra: ${label.projectName}`);
+  const custStr = sanitizeZplText(label.customerName ? `Cliente: ${label.customerName}` : '');
+  const modTitle = sanitizeZplText(`${label.factoryCode} - ${label.moduleName}`);
+  const dimsStr = sanitizeZplText(`Medidas: ${label.measuresLabel}`);
+  const locStr = sanitizeZplText(
+    `Ambiente: ${label.spaceName || 'General'}${label.wallName ? ` | ${label.wallName}` : ''}`,
+  );
+  const summaryStr = sanitizeZplText(
+    `Unidad: ${label.unitIndex}/${label.unitQuantity} | ${label.boardPartCount} piezas | ${label.hardwareCount} herrajes`,
+  );
+
+  const qrMag = dpi === 300 ? 5 : 4;
+
+  if (preset === '100x150') {
+    // 100x150 mm large package label
+    const bultoBoxH = Math.round(18 * dpmm);
+    const bultoBoxW = widthDots - marginX * 2;
+    lines.push(`^FO${marginX},${Math.round(6 * dpmm)}^GB${bultoBoxW},${bultoBoxH},${bultoBoxH}^FS`);
+    lines.push(`^FO${marginX},${Math.round(8 * dpmm)}^FR^A0N,${Math.round(10 * dpmm)},${Math.round(10 * dpmm)}^FD  ${bultoStr}^FS`);
+
+    lines.push(`^FO${marginX},${Math.round(28 * dpmm)}^A0N,${Math.round(5.5 * dpmm)},${Math.round(5.5 * dpmm)}^FD${projStr}^FS`);
+    if (custStr) {
+      lines.push(`^FO${marginX},${Math.round(36 * dpmm)}^A0N,${Math.round(4.5 * dpmm)},${Math.round(4.5 * dpmm)}^FD${custStr}^FS`);
+    }
+
+    lines.push(`^FO${marginX},${Math.round(45 * dpmm)}^GB${bultoBoxW},1,1^FS`);
+
+    lines.push(`^FO${marginX},${Math.round(50 * dpmm)}^A0N,${Math.round(7 * dpmm)},${Math.round(7 * dpmm)}^FD${modTitle}^FS`);
+    lines.push(`^FO${marginX},${Math.round(60 * dpmm)}^A0N,${Math.round(5 * dpmm)},${Math.round(5 * dpmm)}^FD${dimsStr}^FS`);
+    lines.push(`^FO${marginX},${Math.round(68 * dpmm)}^A0N,${Math.round(4.5 * dpmm)},${Math.round(4.5 * dpmm)}^FD${locStr}^FS`);
+    lines.push(`^FO${marginX},${Math.round(76 * dpmm)}^A0N,${Math.round(4 * dpmm)},${Math.round(4 * dpmm)}^FD${summaryStr}^FS`);
+
+    const qrSize = Math.round(45 * dpmm);
+    const qrX = Math.round((widthDots - qrSize) / 2);
+    lines.push(`^FO${qrX},${Math.round(88 * dpmm)}^BQN,2,${qrMag}^FDMM,A${qrPayload}^FS`);
+
+    lines.push(`^FO${marginX},${Math.round(140 * dpmm)}^A0N,${Math.round(3.5 * dpmm)},${Math.round(3.5 * dpmm)}^FDCONTROL DE DESPACHO / ENTREGA^FS`);
+  } else {
+    // 100x50 mm horizontal package label
+    const fBig = Math.round(5.5 * dpmm);
+    const fBody = Math.round(3.5 * dpmm);
+    const qrSmallMag = dpi === 300 ? 4 : 3;
+
+    lines.push(`^FO${marginX},${Math.round(4 * dpmm)}^A0N,${fBig},${fBig}^FD${bultoStr}^FS`);
+    lines.push(`^FO${marginX},${Math.round(11 * dpmm)}^A0N,${fBig},${fBig}^FD${modTitle}^FS`);
+    lines.push(`^FO${marginX},${Math.round(18 * dpmm)}^A0N,${fBody},${fBody}^FD${projStr}^FS`);
+    lines.push(`^FO${marginX},${Math.round(24 * dpmm)}^A0N,${fBody},${fBody}^FD${dimsStr}^FS`);
+    lines.push(`^FO${marginX},${Math.round(30 * dpmm)}^A0N,${fBody},${fBody}^FD${locStr}^FS`);
+    lines.push(`^FO${marginX},${Math.round(36 * dpmm)}^A0N,${fBody},${fBody}^FD${summaryStr}^FS`);
+
+    const qrSize = Math.round(32 * dpmm);
+    const qrX = widthDots - marginX - qrSize;
+    lines.push(`^FO${qrX},${Math.round(6 * dpmm)}^BQN,2,${qrSmallMag}^FDMM,A${qrPayload}^FS`);
+  }
+
+  lines.push('^XZ');
+  return lines.join('\n');
+}
+
+/**
+ * Generate ZPL II format string for a batch of module / package labels.
+ */
+export function moduleBatchToZpl(
+  labels: readonly ModuleLabel[],
+  preset: ZplSizePreset = '100x150',
+  options: ZplExportOptions = {},
+): string {
+  if (labels.length === 0) {
+    throw new ValidationError('no hay muebles para generar etiquetas ZPL', {
+      field: 'labels',
+    });
+  }
+  return labels.map((l) => moduleToZpl(l, preset, options)).join('\n');
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  moduleLabelQrPayload,
+  moduleLabelQrPayloadUrl,
   parsePieceLabelScan,
   pieceLabelQrPayload,
   pieceLabelQrPayloadUrl,
@@ -54,8 +56,78 @@ describe('pieceLabelQrPayload', () => {
   });
 });
 
-describe('parsePieceLabelScan (F089)', () => {
-  it('round-trips a v2 payload', () => {
+describe('moduleLabelQrPayload (Module / Package QR)', () => {
+  it('encodes module and package identifiers as compact JSON', () => {
+    const raw = moduleLabelQrPayload({
+      projectId: 'proj-10',
+      itemId: 'item-20',
+      factoryCode: 'GAB-01-L2',
+      moduleCode: 'GAB-01',
+      moduleName: 'Bajo Fregadero',
+      packageIndex: 3,
+      totalPackages: 8,
+      unitIndex: 2,
+      unitQuantity: 2,
+      widthMm: 800,
+      heightMm: 850,
+      depthMm: 600,
+      revision: '1',
+    });
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(parsed.v).toBe(2);
+    expect(parsed.k).toBe('mod');
+    expect(parsed.projectId).toBe('proj-10');
+    expect(parsed.itemId).toBe('item-20');
+    expect(parsed.fc).toBe('GAB-01-L2');
+    expect(parsed.mod).toBe('GAB-01');
+    expect(parsed.name).toBe('Bajo Fregadero');
+    expect(parsed.bulto).toBe(3);
+    expect(parsed.tot).toBe(8);
+    expect(parsed.uIdx).toBe(2);
+    expect(parsed.uQty).toBe(2);
+    expect(parsed.dims).toEqual([800, 850, 600]);
+    expect(parsed.rev).toBe('1');
+  });
+
+  it('supports deep link URLs with moduleLabelQrPayloadUrl', () => {
+    const fields = {
+      projectId: 'p1',
+      itemId: 'i1',
+      factoryCode: 'GAB-01',
+      moduleCode: 'GAB-01',
+      moduleName: 'Gabinete',
+      packageIndex: 1,
+      totalPackages: 4,
+    };
+    const url = moduleLabelQrPayloadUrl(fields);
+    expect(url.startsWith('muebles://scan#')).toBe(true);
+
+    const parsed = parsePieceLabelScan(url);
+    expect(parsed).toEqual({
+      kind: 'modulePayload',
+      version: 2,
+      target: 'module',
+      fields: {
+        projectId: 'p1',
+        itemId: 'i1',
+        factoryCode: 'GAB-01',
+        moduleCode: 'GAB-01',
+        moduleName: 'Gabinete',
+        packageIndex: 1,
+        totalPackages: 4,
+        unitIndex: 1,
+        unitQuantity: 1,
+        widthMm: null,
+        heightMm: null,
+        depthMm: null,
+        revision: undefined,
+      },
+    });
+  });
+});
+
+describe('parsePieceLabelScan (F089 + Module QR)', () => {
+  it('round-trips a v2 piece payload', () => {
     const raw = pieceLabelQrPayload({
       projectId: 'proj-1',
       moduleCode: 'MOD-GAB-01',
@@ -73,6 +145,7 @@ describe('parsePieceLabelScan (F089)', () => {
     expect(parsed).toEqual({
       kind: 'payload',
       version: 2,
+      target: 'piece',
       fields: {
         projectId: 'proj-1',
         moduleCode: 'MOD-GAB-01',
@@ -85,6 +158,45 @@ describe('parsePieceLabelScan (F089)', () => {
         edgeSides: 'L1+W2',
         edgeCode: 'CANT-ABS-BLA',
         revision: '3',
+      },
+    });
+  });
+
+  it('round-trips a module / package payload', () => {
+    const raw = moduleLabelQrPayload({
+      projectId: 'proj-1',
+      itemId: 'item-1',
+      factoryCode: 'ALAC-01-L1',
+      moduleCode: 'ALAC-01',
+      moduleName: 'Alacena 2P',
+      packageIndex: 2,
+      totalPackages: 5,
+      unitIndex: 1,
+      unitQuantity: 1,
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 350,
+      revision: '4',
+    });
+    const parsed = parsePieceLabelScan(raw);
+    expect(parsed).toEqual({
+      kind: 'modulePayload',
+      version: 2,
+      target: 'module',
+      fields: {
+        projectId: 'proj-1',
+        itemId: 'item-1',
+        factoryCode: 'ALAC-01-L1',
+        moduleCode: 'ALAC-01',
+        moduleName: 'Alacena 2P',
+        packageIndex: 2,
+        totalPackages: 5,
+        unitIndex: 1,
+        unitQuantity: 1,
+        widthMm: 800,
+        heightMm: 720,
+        depthMm: 350,
+        revision: '4',
       },
     });
   });

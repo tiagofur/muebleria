@@ -68,6 +68,7 @@ export type {
   ProductionCutRow,
   HardwarePurchaseRow,
   PieceLabel,
+  ModuleLabel,
   MaterialUsageRow,
   EdgeUsageRow,
   ProjectMaterialSummary,
@@ -394,7 +395,17 @@ export {
   nextItemFloorStatus,
   setProjectItemFloorStatus,
   countFloorStatuses,
+  allModulesPackaged,
+  allModulesLoaded,
+  calculateLoadingProgress,
+  type LoadingProgressResult,
+  type LoadingProgress,
 } from './productionFloor';
+
+export {
+  generateModuleLabels,
+  type GenerateModuleLabelsOptions,
+} from './moduleLabels';
 
 export {
   summarizeProductionTotals,
@@ -463,9 +474,15 @@ export {
   parsePieceLabelScan,
   pieceLabelQrPayload,
   pieceLabelQrPayloadUrl,
+  moduleLabelQrPayload,
+  moduleLabelQrPayloadUrl,
   unwrapPieceLabelQrUrl,
 } from './pieceLabelQr';
-export type { ParsedPieceLabelScan, PieceLabelQrFields } from './pieceLabelQr';
+export type {
+  ParsedPieceLabelScan,
+  PieceLabelQrFields,
+  ModuleLabelQrFields,
+} from './pieceLabelQr';
 
 export {
   parseNestingImportCsv,
@@ -520,6 +537,8 @@ export {
 export {
   pieceToZpl,
   pieceBatchToZpl,
+  moduleToZpl,
+  moduleBatchToZpl,
   pieceLabelEdgeSides,
   sanitizeZplText,
   dotsPerMm,

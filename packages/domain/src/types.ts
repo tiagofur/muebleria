@@ -581,6 +581,8 @@ export type ItemFloorStatus =
   | 'cut'
   | 'edged'
   | 'assembled'
+  | 'packaged'
+  | 'loaded'
   | 'installed';
 
 export interface ProjectItem {
@@ -1263,6 +1265,42 @@ export interface PieceLabel {
   readonly W2: boolean;
   /** Spanish workshop instruction (sides + edge band when known). */
   readonly edgeBandingInstruction: string;
+}
+
+/**
+ * Module / furniture / package label for workshop print, assembly, and dispatch tracking.
+ */
+export interface ModuleLabel {
+  readonly itemId: string;
+  /** Unique factory code within the project, e.g. "GAB-01" or "GAB-01-L2" */
+  readonly factoryCode: string;
+  readonly moduleCode: string;
+  readonly moduleName: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly customerName?: string;
+  /** Index of this unit among all physical module packages in the project (1-based) */
+  readonly packageIndex: number;
+  /** Total number of module packages in the project scope */
+  readonly totalPackages: number;
+  /** Physical unit copy number for this item line (1..item.quantity) */
+  readonly unitIndex: number;
+  /** Total quantity of this item line */
+  readonly unitQuantity: number;
+  readonly widthMm: number | null;
+  readonly heightMm: number | null;
+  readonly depthMm: number | null;
+  readonly measuresLabel: string;
+  /** Associated space / room / wall if placed in layout */
+  readonly spaceName?: string;
+  readonly wallName?: string;
+  /** Floor status at the time of resolution */
+  readonly floorStatus: string;
+  /** Count of board parts and hardware items inside this module */
+  readonly boardPartCount: number;
+  readonly hardwareCount: number;
+  /** Order revision when generated */
+  readonly revision?: string;
 }
 
 /** Aggregated board material usage for a project (F047 / #97). */
