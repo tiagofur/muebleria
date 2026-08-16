@@ -62,6 +62,22 @@ func RoleCanReopenProject(role UserRole) bool {
 	return role == RoleAdmin || role == RoleGerenteVentas
 }
 
+// ProjectAllowsReopenToDraft mirrors TS projectAllowsReopenToDraft (#257):
+// quoted → any mutate role (vendedor, gerente_ventas, admin);
+// accepted/produced → admin / gerente_ventas only.
+func ProjectAllowsReopenToDraft(currentStatus ProjectStatus, role UserRole) bool {
+	if currentStatus == StatusDraft {
+		return false
+	}
+	if currentStatus == StatusQuoted {
+		return RoleCanMutateProjects(role)
+	}
+	if currentStatus == StatusAccepted || currentStatus == StatusProduced {
+		return RoleCanReopenProject(role)
+	}
+	return false
+}
+
 // RoleCanMarkProduced — accepted → produced (click-only; no export gate).
 func RoleCanMarkProduced(role UserRole) bool {
 	switch role {

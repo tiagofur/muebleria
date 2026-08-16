@@ -596,7 +596,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			reopen := engine.IsProjectClosed(existing.Status) && p.Status == domain.StatusDraft
 			markProduced := p.Status == domain.StatusProduced
 			if reopen {
-				if !requirePermission(w, domain.RoleCanReopenProject(role), "no tenés permiso para reabrir cotizaciones") {
+				if !requirePermission(w, domain.ProjectAllowsReopenToDraft(existing.Status, role), "no tenés permiso para reabrir cotizaciones") {
 					return
 				}
 			} else if markProduced {

@@ -94,4 +94,28 @@ func TestRBAC_ReopenAndMarkProduced(t *testing.T) {
 	if RoleCanMarkProduced(RoleVendedor) {
 		t.Fatal("vendedor cannot mark produced")
 	}
+
+	// ProjectAllowsReopenToDraft (#257)
+	if ProjectAllowsReopenToDraft(StatusDraft, RoleAdmin) {
+		t.Fatal("cannot reopen draft")
+	}
+	if !ProjectAllowsReopenToDraft(StatusQuoted, RoleVendedor) {
+		t.Fatal("vendedor should be able to reopen quoted")
+	}
+	if !ProjectAllowsReopenToDraft(StatusQuoted, RoleAdmin) {
+		t.Fatal("admin should be able to reopen quoted")
+	}
+	if ProjectAllowsReopenToDraft(StatusAccepted, RoleVendedor) {
+		t.Fatal("vendedor cannot reopen accepted")
+	}
+	if !ProjectAllowsReopenToDraft(StatusAccepted, RoleAdmin) {
+		t.Fatal("admin can reopen accepted")
+	}
+	if ProjectAllowsReopenToDraft(StatusProduced, RoleVendedor) {
+		t.Fatal("vendedor cannot reopen produced")
+	}
+	if !ProjectAllowsReopenToDraft(StatusProduced, RoleGerenteVentas) {
+		t.Fatal("gerente can reopen produced")
+	}
 }
+

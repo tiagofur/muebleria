@@ -902,7 +902,7 @@ func TestRBAC_ExportProductionDeniedToVendedor_Domain(t *testing.T) {
 	}
 }
 
-func TestF036_VendedorCannotReopenProject(t *testing.T) {
+func TestF036_VendedorCannotReopenAcceptedProject(t *testing.T) {
 	store := &stubStore{
 		projectReturnedByID: &domain.Project{
 			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
@@ -918,6 +918,25 @@ func TestF036_VendedorCannotReopenProject(t *testing.T) {
 	srv.HandleProjectByID(rr, req)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status %d want 403 body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestF036_VendedorCanReopenQuotedProject(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{
+			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "v1",
+			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusQuoted,
+		},
+	}
+	srv := &Server{Store: store}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"draft","owner_user_id":"v1"}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d want 200 body=%s", rr.Code, rr.Body.String())
 	}
 }
 
