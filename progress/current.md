@@ -406,3 +406,25 @@ docs/production-module.md §8 + nota en pieceLabelQr.ts.**
 
 Verificación: ui 836 (+1), init.sh verde, typecheck verde.
 
+## Higiene de stashes (2026-08-15, noche) — lista vaciada
+
+Protocolo docs/git-workflow.md §5 ejecutado con backup físico previo en
+`/tmp/muebles-stash-backup-20260815/` (10 patches + árbol untracked del
+stash de agregados + hash de main antes de operar).
+
+**Preservado en ramas wip/ pusheadas (trabajo real):**
+- `wip/stash-agregados-20260808` — WIP temprano de agregados (22 archivos
+  +501 y untracked AgregadosScreen/AgregadoEditorModal/agregadoDraft);
+  probablemente supersede por F082-F085. Branch en su base original (81af3ed).
+- `wip/stash-modules-fase3a2-20260720` — ModulesScreen +291 L "fase3a2 en
+  rama equivocada" (base 4e6d206, julio). Probablemente obsoleto.
+
+**Dropeados sin rama (verificados como ruido, todos con .patch en backup):**
+- 6 × "atl": solo fingerprint/fecha de `.atl/skill-registry` (caché de tooling).
+- "temp skill+helpers": test de `buildPresentationShareUrl` YA presente en
+  main (verificado) + caché .atl.
+- "WIP stash before batch improvements": caché .atl + BD binaria .freebuff
+  (gitignored).
+
+**Estado final:** `git stash list` vacío; working tree limpio; main intacto
+(aa20d64 == origin/main); ambas ramas wip/ en origin.
