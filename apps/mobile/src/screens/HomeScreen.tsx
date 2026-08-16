@@ -18,6 +18,9 @@ import {
   BookOpen,
   Ruler,
   Maximize2,
+  Box,
+  PenTool,
+  CheckSquare,
 } from 'lucide-react-native';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
@@ -36,6 +39,9 @@ export interface HomeScreenProps {
   onOpenCustomers?: () => void;
   onOpenLaser?: () => void;
   onOpenAnnotation?: () => void;
+  onOpen3D?: () => void;
+  onOpenSignature?: () => void;
+  onOpenBench?: () => void;
 }
 
 export function HomeScreen({
@@ -49,6 +55,9 @@ export function HomeScreen({
   onOpenCustomers,
   onOpenLaser,
   onOpenAnnotation,
+  onOpen3D,
+  onOpenSignature,
+  onOpenBench,
 }: HomeScreenProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -206,6 +215,42 @@ export function HomeScreen({
             </View>
             <Text style={styles.gridCardTitle}>Acotar sobre Foto</Text>
             <Text style={styles.gridCardDesc}>Cotas visuales en obra</Text>
+          </Card>
+
+          {/* Action 10: 3D Presentation & Exploded View */}
+          <Card
+            style={styles.gridCard}
+            onPress={onOpen3D}
+          >
+            <View style={[styles.gridIconBadge, { backgroundColor: '#dbeafe' }]}>
+              <Box size={22} color="#2563eb" />
+            </View>
+            <Text style={styles.gridCardTitle}>Presentación 3D</Text>
+            <Text style={styles.gridCardDesc}>Despiece y acabados</Text>
+          </Card>
+
+          {/* Action 11: Digital Delivery Signature */}
+          <Card
+            style={styles.gridCard}
+            onPress={onOpenSignature}
+          >
+            <View style={[styles.gridIconBadge, { backgroundColor: '#dcfce7' }]}>
+              <PenTool size={22} color="#16a34a" />
+            </View>
+            <Text style={styles.gridCardTitle}>Firma de Acta</Text>
+            <Text style={styles.gridCardDesc}>Recepción de obra</Text>
+          </Card>
+
+          {/* Action 12: Paperless Workshop Bench */}
+          <Card
+            style={styles.gridCard}
+            onPress={onOpenBench}
+          >
+            <View style={[styles.gridIconBadge, { backgroundColor: '#ffedd5' }]}>
+              <CheckSquare size={22} color="#ea580c" />
+            </View>
+            <Text style={styles.gridCardTitle}>Banco Paperless</Text>
+            <Text style={styles.gridCardDesc}>Checklist de armado</Text>
           </Card>
         </View>
 

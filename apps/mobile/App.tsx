@@ -14,6 +14,9 @@ import { ExpressQuoterScreen } from './src/screens/ExpressQuoterScreen';
 import { CustomersScreen } from './src/screens/CustomersScreen';
 import { LaserMeasureScreen } from './src/screens/LaserMeasureScreen';
 import { PhotoAnnotationScreen } from './src/screens/PhotoAnnotationScreen';
+import { Presentation3DScreen } from './src/screens/Presentation3DScreen';
+import { DigitalSignatureScreen } from './src/screens/DigitalSignatureScreen';
+import { BenchPaperlessScreen } from './src/screens/BenchPaperlessScreen';
 import { colors, radius, typography, spacing } from './src/theme';
 
 export type ActiveScreen =
@@ -27,7 +30,10 @@ export type ActiveScreen =
   | 'quoter'
   | 'customers'
   | 'laser'
-  | 'annotation';
+  | 'annotation'
+  | '3d'
+  | 'signature'
+  | 'bench';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('home');
@@ -105,6 +111,22 @@ export default function App() {
         );
       case 'annotation':
         return <PhotoAnnotationScreen onBack={() => setCurrentScreen('home')} />;
+      case '3d':
+        return (
+          <Presentation3DScreen
+            onBack={() => setCurrentScreen('home')}
+            onOpenBench={() => setCurrentScreen('bench')}
+          />
+        );
+      case 'signature':
+        return <DigitalSignatureScreen onBack={() => setCurrentScreen('home')} />;
+      case 'bench':
+        return (
+          <BenchPaperlessScreen
+            onBack={() => setCurrentScreen('home')}
+            onOpen3D={() => setCurrentScreen('3d')}
+          />
+        );
       case 'home':
       default:
         return (
@@ -119,6 +141,9 @@ export default function App() {
             onOpenCustomers={() => setCurrentScreen('customers')}
             onOpenLaser={() => setCurrentScreen('laser')}
             onOpenAnnotation={() => setCurrentScreen('annotation')}
+            onOpen3D={() => setCurrentScreen('3d')}
+            onOpenSignature={() => setCurrentScreen('signature')}
+            onOpenBench={() => setCurrentScreen('bench')}
           />
         );
     }
@@ -127,7 +152,13 @@ export default function App() {
   return (
     <View style={styles.appContainer}>
       <StatusBar
-        style={currentScreen === 'scanner' || currentScreen === 'laser' ? 'light' : 'dark'}
+        style={
+          currentScreen === 'scanner' ||
+          currentScreen === 'laser' ||
+          currentScreen === '3d'
+            ? 'light'
+            : 'dark'
+        }
       />
       {renderScreen()}
     </View>

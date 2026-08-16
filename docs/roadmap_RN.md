@@ -177,13 +177,13 @@ La aplicación móvil **Muebles Native** no es un clon reducido de la versión w
 - [x] **4.2 Modo Medición de Muros:** Al presionar el botón del distanciómetro, el valor en milímetros se vuelca automáticamente en la cota activa de la app.
 - [x] **4.3 Anotación sobre Fotos:** Herramienta simple para dibujar flechas y escribir cotas sobre fotos tomadas en el relevamiento de obra.
 
-### Fase 5 — Modo Presentación 3D, Firma Digital & Release (Sprints 11-12)
+### Fase 5 — Modo Presentación 3D, Firma Digital & Release (Completada)
 **Objetivo:** Pulir la experiencia de presentación para clientes y preparar el lanzamiento.
 
-- [ ] **5.1 Viewport 3D en Tablet:** Renderizado ligero de módulos y muebles usando Three.js / Expo GL con controles de órbita táctiles.
-- [ ] **5.2 Firma Digital de Acta de Entrega:** Canvas táctil para firma del cliente al completar la instalación, guardándose como foto de tipo `delivery_receipt`.
-- [ ] **5.3 Modo Paperless de Banco:** Vista de pantalla completa para tablets fijadas en el taller con listado de cortes y hojas de armado.
-- [ ] **5.4 Testing E2E & CI/CD:** Automatización de builds con Expo Application Services (EAS Build) y pruebas de flujo crítico con Maestro.
+- [x] **5.1 Viewport 3D en Tablet:** Renderizado ligero de módulos y muebles usando Three.js / Expo GL con controles de órbita táctiles.
+- [x] **5.2 Firma Digital de Acta de Entrega:** Canvas táctil para firma del cliente al completar la instalación, guardándose como foto de tipo `delivery_receipt`.
+- [x] **5.3 Modo Paperless de Banco:** Vista de pantalla completa para tablets fijadas en el taller con listado de cortes y hojas de armado.
+- [x] **5.4 Testing E2E & CI/CD:** Automatización de builds con Expo Application Services (EAS Build) y pruebas de flujo crítico con Maestro.
 
 ---
 
