@@ -188,14 +188,17 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 
-	// Gerente producción — manage production staff (operadores, produccion)
+	// Gerente producción — manage production staff (operadores, produccion) + assign sectors
 	prodStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteProduccion)
 	mux.Handle("GET /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
 	mux.Handle("POST /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
 	mux.Handle("PUT /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
 	mux.Handle("DELETE /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
+	// Sector assignment for production staff
+	mux.Handle("GET /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
+	mux.Handle("PUT /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
 
-	// Gerente ventas — manage sales staff (vendedores)
+	// Gerente ventas — manage sales staff (vendedores) + create/block
 	salesStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteVentas)
 	mux.Handle("GET /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
 	mux.Handle("POST /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
