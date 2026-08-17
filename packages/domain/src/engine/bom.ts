@@ -816,6 +816,8 @@ export function resolveBom(
       dims.width,
       dims.depth,
       baseContext?.plinthSides,
+      optionChoices,
+      baseContext?.plinthRun,
     );
     allParts = treatment.parts;
     composedHardware = treatment.hardwareLines;
@@ -880,6 +882,8 @@ export function resolveBom(
     dimsFallback.width,
     dimsFallback.depth,
     baseContext?.plinthSides,
+    optionChoices,
+    baseContext?.plinthRun,
   );
   allParts = treatment.parts;
   const allHardware = treatment.hardwareLines;

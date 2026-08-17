@@ -158,13 +158,17 @@ export function filterComponentInstancesForBaseMode(
 /**
  * Filter + rewrite hardware lines for the active base mode.
  * - ZOCLO_PERFIL: only in plinth_strip; quantity becomes ml from width
- * - PATAS: only in legs; quantity uses suggestLegCount when line.quantity is 0/placeholder
+ * - PATAS: in legs, plinth_board and plinth_strip (legs always support
+ *   floor cabinets; the plinth/strip just covers them); quantity uses
+ *   suggestLegCount when line.quantity is 0/placeholder
  */
 export function applyBaseModeToHardwareLines(
   lines: readonly HardwareLine[],
   mode: ModuleBaseMode,
   widthMm: number,
 ): HardwareLine[] {
+  /** Modes where adjustable legs are present under the cabinet. */
+  const legsActive = mode === 'legs' || mode === 'plinth_board' || mode === 'plinth_strip';
   const out: HardwareLine[] = [];
   for (const line of lines) {
     const role = line.optionRole?.trim() ?? '';
@@ -181,7 +185,7 @@ export function applyBaseModeToHardwareLines(
       continue;
     }
     if (isPatasRole(role)) {
-      if (mode !== 'legs') continue;
+      if (!legsActive) continue;
       const qty =
         line.quantity > 0 ? line.quantity : suggestLegCount(widthMm);
       out.push({ ...line, quantity: qty });
@@ -216,6 +220,29 @@ export interface BaseResolutionContext {
    * the item is unplaced — engines then add no side returns.
    */
   readonly plinthSides?: PlinthSides;
+  /**
+   * Wall-run context for front plinth merging (F089).
+   * - `isRunAnchor: true`  → this item generates the merged front plinth for the whole run.
+   * - `isRunAnchor: false` → another item in the same run is the anchor; skip the front piece.
+   * - Absent                → no run context available; each cabinet generates its own plinth.
+   */
+  readonly plinthRun?: PlinthRunInfo;
+}
+
+/**
+ * Per-item run information for wall-run front plinth merging (F089).
+ * The first (leftmost) item in a contiguous run of floor cabinets is the
+ * "anchor": it generates ONE front plinth piece that covers the entire run.
+ * All other items in the same run skip the front piece.
+ */
+export interface PlinthRunInfo {
+  /** True only for the first item in the contiguous run. */
+  readonly isRunAnchor: boolean;
+  /**
+   * Total combined width of all cabinets in this run (mm).
+   * Only meaningful (and set) when `isRunAnchor` is true.
+   */
+  readonly runFrontWidthMm?: number;
 }
 
 /** Which zócalo sides are visible (need a return). Back = islands / free. */
@@ -277,6 +304,83 @@ export function plinthSidesForPlacement(
       !coveredByNeighbor(end, end + tol) && end < wallLength - tol,
     back: false,
   };
+}
+
+/**
+ * F089 — Compute per-item run context for front plinth merging.
+ *
+ * Groups floor-cabinet placements on the same wall into contiguous runs
+ * (gap ≤ PLINTH_SIDE_GAP_MM). The leftmost item in each run is the
+ * "anchor" and generates the merged front plinth; all others skip it.
+ *
+ * Returns a Map from itemId → PlinthRunInfo. Items without a wall
+ * placement (or free placements / islands) are absent from the map and
+ * each generates their own individual plinth as before.
+ *
+ * @param layout  Kitchen plan layout (walls + placements).
+ * @param items   All quote items with their ids.
+ * @param widthOf Resolves the plan footprint width (mm) for a given itemId.
+ */
+export function computeWallRunPlinthMap(
+  layout: Pick<ProjectKitchenLayout, 'walls' | 'placements'>,
+  items: readonly { readonly id: string }[],
+  widthOf: (itemId: string) => number | undefined,
+): Map<string, PlinthRunInfo> {
+  const result = new Map<string, PlinthRunInfo>();
+
+  // Group wall placements by wallId. Skip free placements — islands generate
+  // their own individual plinth (left + right + back returns already handled).
+  const byWall = new Map<string, ProjectItemPlacement[]>();
+  for (const p of layout.placements) {
+    if (isFreePlacement(p)) continue;
+    // Only include items present in the quote.
+    if (!items.some((i) => i.id === p.itemId)) continue;
+    const group = byWall.get(p.wallId) ?? [];
+    group.push(p);
+    byWall.set(p.wallId, group);
+  }
+
+  for (const wallPlacements of byWall.values()) {
+    // Sort left-to-right by offset.
+    const sorted = [...wallPlacements].sort((a, b) => a.offsetMm - b.offsetMm);
+
+    // Greedy run grouping: a new run starts when the gap between the end of
+    // the previous item and the start of the next exceeds PLINTH_SIDE_GAP_MM.
+    const runs: ProjectItemPlacement[][] = [];
+    let current: ProjectItemPlacement[] = [];
+    let currentEnd = -Infinity;
+
+    for (const p of sorted) {
+      const w = widthOf(p.itemId) ?? 0;
+      if (current.length === 0 || p.offsetMm - currentEnd <= PLINTH_SIDE_GAP_MM) {
+        current.push(p);
+        currentEnd = p.offsetMm + w;
+      } else {
+        runs.push(current);
+        current = [p];
+        currentEnd = p.offsetMm + w;
+      }
+    }
+    if (current.length > 0) runs.push(current);
+
+    // Annotate each run: anchor (idx=0) generates the merged front plinth,
+    // the rest suppress their own front piece.
+    for (const run of runs) {
+      const totalWidth = run.reduce(
+        (sum, p) => sum + (widthOf(p.itemId) ?? 0),
+        0,
+      );
+      run.forEach((p, idx) => {
+        if (idx === 0) {
+          result.set(p.itemId, { isRunAnchor: true, runFrontWidthMm: totalWidth });
+        } else {
+          result.set(p.itemId, { isRunAnchor: false });
+        }
+      });
+    }
+  }
+
+  return result;
 }
 
 export function resolveBaseModeWithContext(
@@ -368,6 +472,7 @@ export function synthesizeBaseHardwareLine(
  * ZOCLO_PERFIL/PATAS lines are left untouched (no double count — and no
  * synthesized side returns either: modeled fronts own their sides).
  * F088: exposed sides add melamine return parts / strip ml.
+ * F089: plinthRun controls wall-run front plinth merging.
  */
 export function applyBaseTreatment(
   moduleCode: string,
@@ -378,6 +483,20 @@ export function applyBaseTreatment(
   widthMm: number,
   depthMm: number,
   plinthSides?: PlinthSides,
+  /**
+   * Option choices for the quote line. When provided, legs are only synthesized
+   * if a PATAS hardware choice exists — avoiding ResolutionErrors for projects
+   * that haven't configured adjustable legs in their catalog.
+   */
+  optionChoices?: Readonly<Record<string, string | undefined>>,
+  /**
+   * Wall-run merging context (F089). When provided:
+   * - isRunAnchor=true  → this item generates the front plinth for the whole run
+   *   (length = runFrontWidthMm); side returns are still per this item's exposure.
+   * - isRunAnchor=false → this item is inside a run; skip the front plinth piece
+   *   (the anchor item already covers it); side returns are still generated.
+   */
+  plinthRun?: PlinthRunInfo,
 ): { parts: BoardPart[]; hardwareLines: HardwareLine[] } {
   let partsOut = [...parts];
   let hardwareOut = [...hardwareLines];
@@ -387,13 +506,23 @@ export function applyBaseTreatment(
     : [];
   const returnDepth = plinthReturnDepthMm(depthMm);
 
+  // Non-anchor items in a merged run skip the front plinth piece but still
+  // generate their own side returns at the wall extremes.
+  const skipFront = plinthRun?.isRunAnchor === false;
+  // Anchor items use the full run width for the merged piece.
+  const frontWidthMm = plinthRun?.isRunAnchor
+    ? (plinthRun.runFrontWidthMm ?? widthMm)
+    : widthMm;
+
   if (
     mode === 'plinth_board' &&
     baseClearanceMm > 0 &&
-    widthMm > 0 &&
+    frontWidthMm > 0 &&
     !partsOut.some((p) => isZocloBoardRole(p.optionRole))
   ) {
-    partsOut.push(synthesizeBaseBoardPart(moduleCode, widthMm, baseClearanceMm));
+    if (!skipFront) {
+      partsOut.push(synthesizeBaseBoardPart(moduleCode, frontWidthMm, baseClearanceMm));
+    }
     for (const side of exposedSides) {
       partsOut.push({
         id: `${moduleCode}${SYNTHETIC_ZOCLO_PART_ID_SUFFIX}-lado-${side}`,
@@ -414,15 +543,25 @@ export function applyBaseTreatment(
   }
   if (mode === 'plinth_strip' && !hardwareOut.some((l) => isZocloStripRole(l.optionRole ?? ''))) {
     // Placeholder quantity doubles as the ml factor (front + returns).
+    // For a merged run anchor: use runFrontWidthMm for the front ml.
     const returnsMm = exposedSides.length * returnDepth;
+    const baseForQuantity = skipFront ? 0 : frontWidthMm;
+    const ratio = widthMm > 0 ? (baseForQuantity + returnsMm) / widthMm : 0;
     hardwareOut.push({
       ...synthesizeBaseHardwareLine(moduleCode, ZOCLO_STRIP_ROLE),
-      ...(returnsMm > 0 ? { quantity: (widthMm + returnsMm) / widthMm } : {}),
+      ...(ratio > 0 ? { quantity: ratio } : {}),
     });
   }
+  // Adjustable legs always support floor cabinets regardless of plinth mode.
+  // In plinth_board / plinth_strip the plinth covers the legs; in legs mode
+  // they remain visible.  Only `none` omits them entirely.
+  // Guard: only synthesize when a PATAS choice exists (backwards-compatible —
+  // projects without PATAS configured in their catalog are unaffected).
+  const patasChoice = optionChoices?.[PATAS_ROLE];
   if (
-    mode === 'legs' &&
-    !hardwareOut.some((l) => isPatasRole(l.optionRole ?? ''))
+    mode !== 'none' &&
+    !hardwareOut.some((l) => isPatasRole(l.optionRole ?? '')) &&
+    patasChoice
   ) {
     hardwareOut.push(synthesizeBaseHardwareLine(moduleCode, PATAS_ROLE));
   }
@@ -433,15 +572,22 @@ export function applyBaseTreatment(
   };
 }
 
+
 /** Engine context for a quote line: the item's base-mode override plus the
  * plinth state resolved from the kitchen plan (placement → layout).
  * Undefined fields fall back to the module catalog defaults.
+ *
+ * @param plinthRunMap  Optional pre-computed run map from computeWallRunPlinthMap.
+ *   Provide this when rendering a full project BOM so adjacent front plinths are
+ *   merged into one piece per wall run (F089).  Omit for single-item previews.
  */
 export function baseContextForItem(
   project: Pick<Project, 'items' | 'kitchenLayout'>,
   item: Pick<ProjectItem, 'id' | 'baseMode'>,
   /** With a catalog the plan side exposure is resolved from module widths. */
   catalog?: Pick<Catalog, 'modules' | 'structures'>,
+  /** Pre-computed wall-run map for front plinth merging (F089). */
+  plinthRunMap?: ReadonlyMap<string, PlinthRunInfo>,
 ): BaseResolutionContext {
   const layout = project.kitchenLayout;
   const planB = layout
@@ -466,10 +612,12 @@ export function baseContextForItem(
       plinthSides = plinthSidesForPlacement(layout, placement, widthOf);
     }
   }
+  const plinthRun = plinthRunMap?.get(item.id);
   return {
     ...(item.baseMode ? { baseMode: item.baseMode } : {}),
     ...(planB !== undefined ? { baseClearanceMm: planB } : {}),
     ...(plinthSides ? { plinthSides } : {}),
+    ...(plinthRun ? { plinthRun } : {}),
   };
 }
 

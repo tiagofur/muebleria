@@ -72,14 +72,13 @@ export function suggestHandleCount(doorCount: number): number {
 /**
  * Suggested number of legs/levelers (patas/bases) based on cabinet width.
  *
- * Standard rule: 4 legs for cabinets ≤ 800mm wide, +1 leg per 400mm extra.
+ * Taller rule: 4 legs for cabinets ≤ 600 mm, 6 legs for wider cabinets.
  */
 export function suggestLegCount(cabinetWidthMm: number): number {
   if (cabinetWidthMm <= 0) return 0;
-  if (cabinetWidthMm <= 800) return 4;
-  const extra = Math.ceil((cabinetWidthMm - 800) / 400);
-  return 4 + extra;
+  return cabinetWidthMm <= 600 ? 4 : 6;
 }
+
 
 /**
  * Complete workshop suggestion for a single module based on its dimensions.

@@ -142,16 +142,24 @@ describe('plinth', () => {
         hardwareId: 'hw-hinge',
       },
     ];
+    // plinth_strip: keeps strip + patas (legs support the cabinet) + hinge
     const strip = applyBaseModeToHardwareLines(lines, 'plinth_strip', 800);
-    expect(strip).toHaveLength(2); // strip + hinge
+    expect(strip).toHaveLength(3); // strip + patas + hinge
     expect(strip.find((l) => l.optionRole === ZOCLO_STRIP_ROLE)!.quantity).toBe(
       0.8,
     );
+    expect(strip.find((l) => l.optionRole === PATAS_ROLE)!.quantity).toBe(6); // >600 → 6
     expect(strip.find((l) => l.optionRole === 'BISAGRA')).toBeTruthy();
 
+    // legs: keeps patas + hinge, drops strip
     const legs = applyBaseModeToHardwareLines(lines, 'legs', 900);
-    expect(legs.find((l) => l.optionRole === PATAS_ROLE)!.quantity).toBe(5); // 4 + 1 extra
+    expect(legs.find((l) => l.optionRole === PATAS_ROLE)!.quantity).toBe(6); // >600 → 6
     expect(legs.find((l) => l.optionRole === ZOCLO_STRIP_ROLE)).toBeUndefined();
+
+    // plinth_board: keeps patas + hinge, drops strip
+    const board = applyBaseModeToHardwareLines(lines, 'plinth_board', 600);
+    expect(board.find((l) => l.optionRole === PATAS_ROLE)!.quantity).toBe(4); // ≤600 → 4
+    expect(board.find((l) => l.optionRole === ZOCLO_STRIP_ROLE)).toBeUndefined();
   });
 
   it('determines exposed plinth sides based on layout neighbors (F088)', async () => {

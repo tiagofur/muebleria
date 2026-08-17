@@ -90,14 +90,22 @@ describe('suggestHandleCount', () => {
 });
 
 describe('suggestLegCount', () => {
-  it('returns 4 for narrow cabinets', () => {
+  it('returns 4 for cabinets up to 600mm', () => {
+    expect(suggestLegCount(300)).toBe(4);
     expect(suggestLegCount(600)).toBe(4);
-    expect(suggestLegCount(800)).toBe(4);
   });
 
-  it('adds 1 leg per 400mm extra', () => {
-    expect(suggestLegCount(1000)).toBe(5); // 4 + ceil(200/400) = 4+1
-    expect(suggestLegCount(1600)).toBe(6); // 4 + ceil(800/400) = 4+2
+  it('returns 6 for cabinets wider than 600mm', () => {
+    expect(suggestLegCount(601)).toBe(6);
+    expect(suggestLegCount(800)).toBe(6);
+    expect(suggestLegCount(1000)).toBe(6);
+    expect(suggestLegCount(1200)).toBe(6);
+    expect(suggestLegCount(1600)).toBe(6);
+  });
+
+  it('returns 0 for zero or negative width', () => {
+    expect(suggestLegCount(0)).toBe(0);
+    expect(suggestLegCount(-100)).toBe(0);
   });
 });
 

@@ -371,8 +371,10 @@ export {
   SYNTHETIC_ZOCLO_PART_ID_SUFFIX,
   SYNTHETIC_ZOCLO_PART_CODE,
   SYNTHETIC_ZOCLO_SIDE_CODE,
+  computeWallRunPlinthMap,
   type BaseResolutionContext,
   type PlinthSides,
+  type PlinthRunInfo,
 } from './plinth';
 
 export { estimateBoardSheets } from './boardSheetEstimate';

@@ -5,11 +5,13 @@ import {
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
   SYNTHETIC_ZOCLO_PART_CODE,
+  SYNTHETIC_ZOCLO_PART_ID_SUFFIX,
   SYNTHETIC_ZOCLO_SIDE_CODE,
   plinthSidesForPlacement,
   applyBaseTreatment,
   baseContextForItem,
   defaultBaseModeForFurnitureType,
+  computeWallRunPlinthMap,
 } from './plinth';
 import { suggestLegCount } from './workshopRules';
 import type {
@@ -378,7 +380,51 @@ describe('F087 — zócalo como terminación automática', () => {
     );
     expect(patas).toBeTruthy();
     expect(patas!.hardwareId).toBe('hw-leg');
-    expect(patas!.quantity).toBe(suggestLegCount(600));
+    expect(patas!.quantity).toBe(suggestLegCount(600)); // 600 ≤ 600 → 4
+  });
+
+  it('plinth_board con PATAS elegida sintetiza patas junto al zócalo de melamina', () => {
+    const bom = resolveBom(
+      bajoModule({ baseMode: 'plinth_board', baseClearanceMm: 100 }),
+      { ...baseChoices, PATAS: 'hw-leg' },
+      catalog(),
+    );
+    // Zócalo de melamina
+    const zoclo = bom.boardParts.find((p) => p.optionRole === ZOCLO_BOARD_ROLE);
+    expect(zoclo).toBeTruthy();
+    expect(zoclo!.widthMm).toBe(100);
+    // Patas coexisten con el zócalo
+    const patas = bom.hardwareLines.find((h) => h.optionRole === PATAS_ROLE);
+    expect(patas).toBeTruthy();
+    expect(patas!.hardwareId).toBe('hw-leg');
+    expect(patas!.quantity).toBe(4); // 600 ≤ 600 → 4
+  });
+
+  it('plinth_board sin PATAS elegida no sintetiza patas (compatibilidad)', () => {
+    // Projects that haven\'t configured PATAS in their catalog are unaffected.
+    const bom = resolveBom(
+      bajoModule({ baseMode: 'plinth_board', baseClearanceMm: 100 }),
+      baseChoices, // no PATAS choice
+      catalog(),
+    );
+    expect(
+      bom.hardwareLines.find((h) => h.optionRole === PATAS_ROLE),
+    ).toBeUndefined();
+  });
+
+  it('plinth_strip con PATAS elegida sintetiza patas junto al perfil', () => {
+    const bom = resolveBom(
+      bajoModule({ baseMode: 'plinth_strip', baseClearanceMm: 100 }),
+      { ...baseChoices, ZOCLO_PERFIL: 'hw-strip', PATAS: 'hw-leg' },
+      catalog(),
+    );
+    const strip = bom.hardwareLines.find((h) => h.optionRole === ZOCLO_STRIP_ROLE);
+    expect(strip).toBeTruthy();
+    expect(strip!.quantity).toBe(0.6); // 600mm
+    const patas = bom.hardwareLines.find((h) => h.optionRole === PATAS_ROLE);
+    expect(patas).toBeTruthy();
+    expect(patas!.hardwareId).toBe('hw-leg');
+    expect(patas!.quantity).toBe(4); // 600 ≤ 600 → 4
   });
 
   it('none no sintetiza nada', () => {
@@ -579,3 +625,163 @@ describe('F088 — vueltas laterales del zócalo', () => {
     ).toHaveLength(0);
   });
 });
+
+// ─── F089 — Fusión de zócalos frontales por corrida de muro ────────────────
+
+describe('F089 — computeWallRunPlinthMap', () => {
+  const mkItem = (id: string) => ({ id });
+  const mkPlacement = (
+    itemId: string,
+    wallId: string,
+    offsetMm: number,
+  ) => ({
+    itemId,
+    wallId,
+    offsetMm,
+    instanceIndex: 0,
+    elevation: 'floor' as const,
+    mode: 'wall' as const,
+    baseClearanceMm: 100,
+  });
+
+  const widthOf = (id: string) => ({ 'A': 600, 'B': 600, 'C': 900, 'D': 500 }[id]);
+
+  it('un solo ítem en un muro → es anchor de su propio run', () => {
+    const layout = {
+      walls: [{ id: 'w1', lengthMm: 3000 }],
+      placements: [mkPlacement('A', 'w1', 0)],
+    } as any;
+    const map = computeWallRunPlinthMap(layout, [mkItem('A')], widthOf);
+    expect(map.get('A')).toEqual({ isRunAnchor: true, runFrontWidthMm: 600 });
+  });
+
+  it('dos muebles contiguos → anchor=primero con ancho total, segundo=non-anchor', () => {
+    const layout = {
+      walls: [{ id: 'w1', lengthMm: 3000 }],
+      // A: 0-600, B: 600-1200 — gap = 0 (contiguous)
+      placements: [mkPlacement('A', 'w1', 0), mkPlacement('B', 'w1', 600)],
+    } as any;
+    const map = computeWallRunPlinthMap(
+      layout,
+      [mkItem('A'), mkItem('B')],
+      widthOf,
+    );
+    expect(map.get('A')).toEqual({ isRunAnchor: true, runFrontWidthMm: 1200 });
+    expect(map.get('B')).toEqual({ isRunAnchor: false });
+  });
+
+  it('tres muebles contiguos → anchor con suma de los tres', () => {
+    const layout = {
+      walls: [{ id: 'w1', lengthMm: 3000 }],
+      // A(600) + B(600) + C(900) = 2100
+      placements: [
+        mkPlacement('A', 'w1', 0),
+        mkPlacement('B', 'w1', 600),
+        mkPlacement('C', 'w1', 1200),
+      ],
+    } as any;
+    const map = computeWallRunPlinthMap(
+      layout,
+      [mkItem('A'), mkItem('B'), mkItem('C')],
+      widthOf,
+    );
+    expect(map.get('A')).toEqual({ isRunAnchor: true, runFrontWidthMm: 2100 });
+    expect(map.get('B')).toEqual({ isRunAnchor: false });
+    expect(map.get('C')).toEqual({ isRunAnchor: false });
+  });
+
+  it('gap mayor a tolerancia → dos runs separados', () => {
+    const layout = {
+      walls: [{ id: 'w1', lengthMm: 4000 }],
+      // A(600) termina en 600, D empieza en 800 → gap=200 > 30mm
+      placements: [mkPlacement('A', 'w1', 0), mkPlacement('D', 'w1', 800)],
+    } as any;
+    const map = computeWallRunPlinthMap(
+      layout,
+      [mkItem('A'), mkItem('D')],
+      widthOf,
+    );
+    expect(map.get('A')).toEqual({ isRunAnchor: true, runFrontWidthMm: 600 });
+    expect(map.get('D')).toEqual({ isRunAnchor: true, runFrontWidthMm: 500 });
+  });
+
+  it('muebles en diferentes muros → runs independientes por muro', () => {
+    const layout = {
+      walls: [
+        { id: 'w1', lengthMm: 3000 },
+        { id: 'w2', lengthMm: 3000 },
+      ],
+      placements: [
+        mkPlacement('A', 'w1', 0),
+        mkPlacement('B', 'w1', 600),
+        mkPlacement('C', 'w2', 0),
+      ],
+    } as any;
+    const map = computeWallRunPlinthMap(
+      layout,
+      [mkItem('A'), mkItem('B'), mkItem('C')],
+      widthOf,
+    );
+    expect(map.get('A')).toEqual({ isRunAnchor: true, runFrontWidthMm: 1200 });
+    expect(map.get('B')).toEqual({ isRunAnchor: false });
+    expect(map.get('C')).toEqual({ isRunAnchor: true, runFrontWidthMm: 900 });
+  });
+});
+
+describe('F089 — applyBaseTreatment con plinthRun', () => {
+  it('anchor genera la pieza frontal con el ancho total del run', () => {
+    const res = applyBaseTreatment(
+      'BAJO-600',
+      [],
+      [],
+      'plinth_board',
+      100,
+      600,
+      560,
+      undefined,
+      undefined,
+      { isRunAnchor: true, runFrontWidthMm: 1800 }, // 3 muebles de 600
+    );
+    const front = res.parts.filter((p) => p.optionRole === ZOCLO_BOARD_ROLE);
+    expect(front).toHaveLength(1);
+    expect(front[0]!.lengthMm).toBe(1800); // ancho total del run, no 600
+  });
+
+  it('non-anchor no genera pieza frontal pero sí genera vueltas laterales', () => {
+    const res = applyBaseTreatment(
+      'BAJO-601',
+      [],
+      [],
+      'plinth_board',
+      100,
+      600,
+      560,
+      { left: false, right: true, back: false }, // extremo derecho del run
+      undefined,
+      { isRunAnchor: false },
+    );
+    const parts = res.parts.filter((p) => p.optionRole === ZOCLO_BOARD_ROLE);
+    // No pieza frontal (la anchor la genera), pero sí la vuelta lateral derecha
+    const front = parts.filter((p) => p.id === `BAJO-601${SYNTHETIC_ZOCLO_PART_ID_SUFFIX}`);
+    const returns = parts.filter((p) => p.id.includes('-lado-'));
+    expect(front).toHaveLength(0);
+    expect(returns).toHaveLength(1);
+    expect(returns[0]!.id).toContain('right');
+  });
+
+  it('sin plinthRun → comportamiento original (cada mueble genera su propio frente)', () => {
+    const res = applyBaseTreatment(
+      'BAJO-602',
+      [],
+      [],
+      'plinth_board',
+      100,
+      600,
+      560,
+    );
+    const front = res.parts.filter((p) => p.optionRole === ZOCLO_BOARD_ROLE);
+    expect(front).toHaveLength(1);
+    expect(front[0]!.lengthMm).toBe(600);
+  });
+});
+
