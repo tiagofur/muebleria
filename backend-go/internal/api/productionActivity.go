@@ -16,6 +16,7 @@ package api
  */
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -99,6 +100,15 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	if !isValidSector(sector) {
 		respondWithError(w, http.StatusBadRequest, "sector inválido: "+body.Sector)
 		return
+	}
+
+	// For operadores, verify they have access to this sector
+	if domain.RoleIsOperador(role) {
+		actorID := actorID(claims)
+		if !s.userHasSectorAccess(r.Context(), actorID, sector) {
+			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
+			return
+		}
 	}
 
 	// Check if item is already claimed by someone else
@@ -206,6 +216,14 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// For operadores, verify they have access to this sector
+	if domain.RoleIsOperador(role) {
+		if !s.userHasSectorAccess(r.Context(), actorID, activity.Sector) {
+			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
+			return
+		}
+	}
+
 	var body finishRequest
 	if !decodeJSONBody(w, r, &body) {
 		return
@@ -252,6 +270,16 @@ func (s *Server) HandleProductionDamage(w http.ResponseWriter, r *http.Request) 
 	if body.ProjectID == "" || body.ItemID == "" || body.DamageType == "" {
 		respondWithError(w, http.StatusBadRequest, "faltan project_id, item_id o damage_type")
 		return
+	}
+
+	// For operadores, verify they have access to this sector
+	if domain.RoleIsOperador(role) {
+		actorID := actorID(claims)
+		sector := domain.ProductionSector(body.Sector)
+		if !s.userHasSectorAccess(r.Context(), actorID, sector) {
+			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
+			return
+		}
 	}
 
 	// Get project info
@@ -316,7 +344,7 @@ func (s *Server) HandleProductionDashboard(w http.ResponseWriter, r *http.Reques
 }
 
 // HandleProductionActiveJobs handles GET /api/production/active
-// All active jobs right now across all sectors.
+// All active jobs right now across all sectors (filtered by operator's sectors if operador).
 func (s *Server) HandleProductionActiveJobs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
@@ -326,17 +354,36 @@ func (s *Server) HandleProductionActiveJobs(w http.ResponseWriter, r *http.Reque
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
 	if !requirePermission(w,
-		domain.RoleCanAccessProductionDashboard(role),
+		domain.RoleCanAccessProductionDashboard(role) || domain.RoleCanClaimProductionJob(role),
 		"no tenés permiso para ver trabajos activos") {
 		return
 	}
 
-	sectors := []domain.ProductionSector{
-		domain.SectorCutting,
-		domain.SectorEdgeBanding,
-		domain.SectorCNC,
-		domain.SectorAssembly,
-		domain.SectorPackaging,
+	// Determine which sectors to query
+	var sectors []domain.ProductionSector
+	if domain.RoleIsOperador(role) {
+		// Operadores only see their assigned sectors
+		actorID := actorID(claims)
+		userSectors, err := s.Store.ListUserSectors(r.Context(), actorID)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "no se pudieron obtener tus sectores")
+			return
+		}
+		for _, us := range userSectors {
+			sectors = append(sectors, domain.ProductionSector(us.Sector))
+		}
+		if len(sectors) == 0 {
+			sectors = []domain.ProductionSector{}
+		}
+	} else {
+		// Gerente produccion and admin see all sectors
+		sectors = []domain.ProductionSector{
+			domain.SectorCutting,
+			domain.SectorEdgeBanding,
+			domain.SectorCNC,
+			domain.SectorAssembly,
+			domain.SectorPackaging,
+		}
 	}
 
 	var allJobs []domain.ActiveJob
@@ -467,4 +514,18 @@ func isValidSector(s domain.ProductionSector) bool {
 	default:
 		return false
 	}
+}
+
+// userHasSectorAccess checks if a user has access to a specific sector.
+func (s *Server) userHasSectorAccess(ctx context.Context, userID string, sector domain.ProductionSector) bool {
+	sectors, err := s.Store.ListUserSectors(ctx, userID)
+	if err != nil {
+		return false
+	}
+	for _, us := range sectors {
+		if domain.ProductionSector(us.Sector) == sector {
+			return true
+		}
+	}
+	return false
 }
