@@ -3,6 +3,7 @@ import {
   isValidUserRole,
   navIdsForRole,
   roleCanAccessCustomers,
+  roleCanAccessProjects,
   roleCanDeleteProject,
   canExportProductionForProject,
   projectAllowsProductionExport,
@@ -62,6 +63,22 @@ describe('rbac (F035)', () => {
     expect(roleCanAccessCustomers('produccion')).toBe(false);
     expect(navIdsForRole('produccion').has('customers')).toBe(false);
     expect(navIdsForRole('produccion').has('projects')).toBe(true);
+  });
+
+  it('F093 — Estado de Planta visible to every role (incl. vendedor/user)', () => {
+    for (const role of [
+      'vendedor',
+      'gerente_ventas',
+      'ingeniero',
+      'produccion',
+      'admin',
+      'user',
+    ]) {
+      expect(navIdsForRole(role).has('plantBoard')).toBe(true);
+    }
+    expect(navIdsForRole(null).has('plantBoard')).toBe(true);
+    // The production hub itself stays gated for export roles only.
+    expect(navIdsForRole('vendedor').has('production')).toBe(false);
   });
 
   it('Ingeniería Muebles/Estructuras/Componentes vs Trabajo Vitrina', () => {
@@ -148,5 +165,23 @@ describe('rbac (F035)', () => {
     expect(roleCanViewCosts('admin', { vendedorCanViewCosts: false })).toBe(
       true,
     );
+  });
+
+  it('gerente_produccion role is valid and has production access', () => {
+    expect(isValidUserRole('gerente_produccion')).toBe(true);
+    expect(roleCanAccessProjects('gerente_produccion')).toBe(true);
+    expect(roleCanExportProduction('gerente_produccion')).toBe(true);
+    expect(roleCanMarkProduced('gerente_produccion')).toBe(true);
+    expect(roleUsesProductionQueue('gerente_produccion')).toBe(true);
+    expect(roleCanViewCosts('gerente_produccion')).toBe(true);
+    expect(roleCanViewPortfolioDashboard('gerente_produccion')).toBe(true);
+    expect(roleLabelEs('gerente_produccion')).toBe('Gerente de producción');
+  });
+
+  it('gerente_produccion has production dashboard access', () => {
+    expect(navIdsForRole('gerente_produccion').has('productionDashboard')).toBe(true);
+    expect(navIdsForRole('admin').has('productionDashboard')).toBe(true);
+    expect(navIdsForRole('produccion').has('productionDashboard')).toBe(false);
+    expect(navIdsForRole('gerente_ventas').has('productionDashboard')).toBe(false);
   });
 });

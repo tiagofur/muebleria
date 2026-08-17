@@ -3,6 +3,12 @@
  */
 
 export {
+  ProjectFloorProgressStrip,
+  ProjectFloorStageChip,
+} from './ProjectFloorProgressStrip';
+export { PlantBoardScreen } from './PlantBoardScreen';
+
+export {
   ProductionQueue,
   type ProductionQueueProps,
   type ProductionQueueItem,
@@ -109,4 +115,6 @@ export {
   CsvExportConfigModal,
   type CsvExportConfigModalProps,
 } from './CsvExportConfigModal';
+
+export { ProductionManagerDashboard } from './ProductionManagerDashboard';
 

@@ -8,6 +8,7 @@ export type ProductRole =
   | 'user'
   | 'vendedor'
   | 'gerente_ventas'
+  | 'gerente_produccion'
   | 'ingeniero'
   | 'produccion';
 
@@ -16,6 +17,7 @@ export const PRODUCT_ROLES: readonly ProductRole[] = [
   'user',
   'vendedor',
   'gerente_ventas',
+  'gerente_produccion',
   'ingeniero',
   'produccion',
 ] as const;
@@ -29,6 +31,7 @@ export function isValidUserRole(role: string | null | undefined): role is Produc
     role === 'user' ||
     role === 'vendedor' ||
     role === 'gerente_ventas' ||
+    role === 'gerente_produccion' ||
     role === 'ingeniero' ||
     role === 'produccion'
   );
@@ -58,6 +61,7 @@ export function roleCanAccessProjects(role: string | null | undefined): boolean 
   return (
     role === 'admin' ||
     role === 'gerente_ventas' ||
+    role === 'gerente_produccion' ||
     role === 'vendedor' ||
     role === 'ingeniero' ||
     role === 'produccion'
@@ -94,6 +98,7 @@ export function roleCanMarkProduced(role: string | null | undefined): boolean {
   return (
     role === 'admin' ||
     role === 'gerente_ventas' ||
+    role === 'gerente_produccion' ||
     role === 'ingeniero' ||
     role === 'produccion'
   );
@@ -104,6 +109,7 @@ export function roleCanExportProduction(role: string | null | undefined): boolea
     role === 'admin' ||
     role === 'ingeniero' ||
     role === 'produccion' ||
+    role === 'gerente_produccion' ||
     role === 'gerente_ventas'
   );
 }
@@ -137,7 +143,25 @@ export function roleCanAccessSettings(role: string | null | undefined): boolean 
 export function roleCanViewPortfolioDashboard(
   role: string | null | undefined,
 ): boolean {
-  return role === 'admin' || role === 'gerente_ventas';
+  return role === 'admin' || role === 'gerente_ventas' || role === 'gerente_produccion';
+}
+
+/**
+ * Production Manager Dashboard: full visibility across all areas, operators,
+ * machines, queues, and metrics. Distinct from the basic plant board (F093)
+ * which is read-only for all roles.
+ * 
+ * The gerente_produccion can:
+ * - See all queues and who is working on what
+ * - Move items between queues
+ * - Reassign items to different operators
+ * - Change priorities
+ * - View metrics and time tracking
+ */
+export function roleCanAccessProductionDashboard(
+  role: string | null | undefined,
+): boolean {
+  return role === 'admin' || role === 'gerente_produccion';
 }
 
 /**
@@ -148,7 +172,7 @@ export function roleCanViewPortfolioDashboard(
 export function roleUsesProductionQueue(
   role: string | null | undefined,
 ): boolean {
-  return role === 'produccion';
+  return role === 'produccion' || role === 'gerente_produccion';
 }
 
 /**
@@ -187,6 +211,7 @@ export function roleCanViewCosts(
   return (
     role === 'admin' ||
     role === 'gerente_ventas' ||
+    role === 'gerente_produccion' ||
     role === 'ingeniero' ||
     role === 'produccion'
   );
@@ -228,6 +253,7 @@ export function roleLabelEs(role: string | null | undefined): string {
     user: 'Sin puesto',
     vendedor: 'Vendedor',
     gerente_ventas: 'Gerente de ventas',
+    gerente_produccion: 'Gerente de producción',
     ingeniero: 'Ingeniero',
     produccion: 'Producción',
   };
@@ -244,6 +270,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'projects',
       'customers',
       'showcase',
+      'plantBoard',
       'modules',
       'structures',
       'components',
@@ -258,6 +285,9 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
     ]);
   }
   const ids = new Set<string>(['home']);
+  // F093 — Estado de Planta: factory progress is visible to EVERY role
+  // (sales answers "where is my project"); read-only board.
+  ids.add('plantBoard');
   if (roleCanAccessProjects(role)) ids.add('projects');
   if (roleCanAccessCustomers(role)) ids.add('customers');
   if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
@@ -279,6 +309,8 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanManageUsers(role)) ids.add('users');
   // PROD-0.1: factory workspace nav for production-export roles.
   if (roleCanAccessProductionNav(role)) ids.add('production');
+  // Production Manager Dashboard: full visibility for gerente_produccion
+  if (roleCanAccessProductionDashboard(role)) ids.add('productionDashboard');
   return ids;
 }
 
