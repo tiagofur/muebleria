@@ -704,8 +704,8 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
 - **Patrón:** workspace de fábrica (no editor de cotización)
 - **Contenido:**
-  - Cola: tabs accepted / produced; CTA primario **Abrir orden**; Pack y Marcar en planta secundarios. **Sin** muro Optimizer/herrajes/etiquetas en la card (viven en el hub)
-  - Hub tabs: Resumen · Módulos · **Piso** · **Despiece** · **Herrajes** · **Vistas** · **Optimización** · **Documentos** (única pestaña de descargas; URL legacy `…/exports` redirige acá)
+  - Cola: tabs accepted / produced; CTA primario **Abrir orden**; Pack y Marcar en planta secundarios. **Sin** muro Optimizer/herrajes/etiquetas en la card (viven en el hub). Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
+  - Hub tabs: Resumen · Módulos · **Piso** · **Control de Carga** · **Despiece** · **Etiquetas** · **Herrajes** · **Vistas** · **Optimización** · **Documentos** (única pestaña de descargas; URL legacy `…/exports` redirige acá)
   - Optimización: capas L0/L1/L2; Optimizer Excel = plan de corte oficial
   - Módulos: estado de **piso** (pendiente→cortado→encintado→armado→instalado) — solo fábrica (PROD-3.1)
   - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint)
@@ -721,9 +721,25 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Hub Documentos: pack / Optimizer / herrajes / etiquetas / elevaciones / armado / CNC pilot
   - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas + resumen + despiece + elevaciones (si hay muros)
   - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome ni Más)
+  - Detalle de cotización accepted|produced: **franja de procesos** bajo el header (`ProjectFloorProgressStrip`, F093) — visible a cualquier rol con acceso a la obra (vendedor incluido)
 - **RBAC nav:** `roleCanAccessProductionNav` (= roles de export producción F041).  
   Filtro de lista de cotizaciones a solo plant-ready sigue siendo `roleUsesProductionQueue` (**solo** `produccion`).
 - **Icono:** `Factory`
+
+### 6.7b Estado de Planta (tablero de avance para todos — F093)
+
+- **Ruta nav:** `plantBoard` (sección TRABAJO, label **Estado de Planta**) — visible a **TODOS** los roles autenticados (vendedor y `user` incluidos) y a guest
+- **Path:** `/planta` (fuera de `/produccion/…` para no chocar con el deep link de orden)
+- **Patrón:** tabla matriz proyectos × sectores (`PlantBoardScreen`); solo lectura
+- **Contenido:**
+  - Filas: obras `accepted` | `produced` visibles para el rol (vendedor ve su portfolio vía ownership)
+  - Columnas: los 6 sectores del pipeline (Corte · Encintado · Armado · Embalaje · Despacho · Instalación) + Avance %
+  - Celda: `done/total` (verde al completar el sector) + "n en cola" (esperando ese sector); columna del cuello de botella resaltada (brand)
+  - Nombre de obra: botón a la orden de fábrica si el rol puede entrar al hub; si no, a la cotización (vendedor)
+  - Copy explícito "el avance se marca desde Producción" — nada se muta acá
+- **Dominio:** `buildProjectFloorSummary` / `PIPELINE_SECTORS` / `PRODUCTION_SECTOR_LABELS_ES` (`@muebles/domain`, `productionSectors.ts`) — UI no calcula
+- **Bitácora (F092):** cada transición de piso (web/escaneo/despacho) escribe un `FloorStatusEvent` inmutable (quién/cuándo/cómo, saltos anotados); `GET /api/projects/:id/floor-events`
+- **Icono:** `KanbanSquare`
 
 ### 6.8 Estructuras
 

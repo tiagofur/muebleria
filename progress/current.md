@@ -632,3 +632,110 @@ hydrate sin storage = no-op).
 **Verificación:** mobile 36, typecheck monorepo 0 errores, init.sh OK.
 **F091 marcada done** (ambos ítems completos; universal links iOS quedan
 como configuración de deploy documentada en D7).
+
+---
+
+## Judgment Day + Critique — Producción por sectores/roles (2026-08-17)
+
+Sesión de evaluación (impeccable critique + protocolo JD), sin cambios de
+código. Pedido del usuario: separar ingeniería de producción vs planta/piso,
+tracking de procesos por sector/rol (almacén, corte, CNC, encintado, armado,
+embarque) y visibilidad del avance para TODOS (incluye ventas).
+
+**Método:** 2 exploradores independientes (mapeo exhaustivo del módulo +
+roles/RBAC/visibilidad), detector limpio (0 hallazgos), recorrido autenticado
+en vivo (usuario admin de prueba creado con `cmd/admin create` y borrado al
+cerrar; cola + hub + Piso + Control de Carga sobre "Cocina Nellly" accepted).
+Snapshot: `.impeccable/critique/2026-08-17T14-28-26Z__packages-ui-src-production.md`
+(score 24/40, 3×P1; tendencia 28 → 24 — lente distinta, no regresión).
+
+**JD findings (vs la visión):**
+- C1: no existe concepto sector/estación; gate de piso binario
+  (markProduced ∨ export) → cualquier rol de planta avanza cualquier estado.
+- C2: avance invisible fuera del hub: vendedor sin nav production, detalle de
+  proyecto sin floorStatus, dashboard sin métricas de piso; loading-status sin
+  UI fuera del hub.
+- C3: sin bitácora de transiciones (quién/cuándo/cómo) — floor_status es
+  columna sobreescrita.
+- W: tres mecanismos de avance inconsistentes (Piso lineal / Módulos select
+  arbitrario / Despacho con saltos — verificado: "Cargado ✓" sobre Pendiente);
+  hub monolítico 10 tabs oficina+piso; estado por línea no por unidad; sin
+  paso CNC; mobile sin filtro por rol; technical-workflow gate sin gate de rol.
+
+**Propuesta (pendiente de decisión del usuario):** dominio `ProductionSector`
++ `FloorStatusEvent` (tabla aditiva), roles de estación en inglés
+(cutter/edge_bander/cnc_operator/assembler/warehouse/shipping),
+`roleCanAdvanceStation`, colas por estación ("Mi estación" en nav), tablero
+"Estado de Planta" para todos, franja de progreso en proyectos, split IA
+hub Ingeniería (8 tabs) vs workspace Planta. Fases 0-4 detalladas en el
+reporte de la conversación.
+
+**Decisión del usuario:** empezar por **Fase 0+1** (fundamentos + visibilidad).
+
+## F092 — Sectores + bitácora de piso (Fase 0 del plan, 2026-08-17)
+
+**Dominio** (`packages/domain/src/`):
+- `productionSectors.ts`: `ProductionSector` (warehouse|cutting|cnc|
+  edge_banding|assembly|packaging|shipping|installation) con labels ES,
+  `sectorForFloorStatus`/`floorStatusForSector` (cnc→null hasta `machined`,
+  Fase 3), `itemsWaitingForSector` (cola de estación; warehouse=pending),
+  `buildProjectFloorSummary` (done=alcanzó-o-pasó, waiting, activeSector=
+  primer sector incompleto = cuello de botella, % = media de avance por ítem).
+- `productionFloorEvents.ts`: `FloorStatusEvent` (id/projectId/itemId/from/to/
+  at/byUserId/byName/source scan|manual|dispatch|api/note), `advanceFloorStatus`
+  (transición UNIFICADA: target|advance, rechaza saltos salvo `allowJump`, el
+  salto queda anotado "salto X → Y"), `appendFloorEvent` (inmutable, dedupe
+  por id), `floorTimelineForItem`, `latestFloorEvent`. `Project.floorEvents`
+  en types.ts.
+- Tests: `productionSectors.test.ts` 17 casos (mapeo, colas, summary,
+  transiciones, saltos, log).
+
+**Storage TS:** puerto `listFloorEvents` + `event` en respuestas de
+floorScan/setProjectItemFloorStatus. localStorage repo usa advanceFloorStatus
+(allowJump preserva contrato vigente) + appendFloorEvent. apiMappers:
+`floor_events` en projectToApi/fromApi. projectStore.setItemFloorStatus
+(web local) idem — eventos viajan en el PUT.
+
+**Go:** migración aditiva **000048** `project_item_floor_events` (UUID PK,
+FK cascade, índice project+at) — aplicada y verificada en Postgres local.
+`InsertFloorEvent`/`ListFloorEvents`/`upsertFloorEventsTx` (ON CONFLICT
+DO NOTHING). floor-scan y PATCH floor-status escriben evento con usuario
+del JWT (nombre real vía GetUserByID, fallback email) y lo devuelven en la
+respuesta; PATCH ahora carga estado actual antes de escribir (from→to
+correcto). `GET /api/projects/:id/floor-events` (auth, sin gate de rol —
+visibilidad para todos). GetProjectByID embebe floor_events. UUID v4 con
+crypto/rand (cero deps nuevas). 6 tests handler nuevos.
+
+## F093 — Visibilidad para todos (Fase 1 del plan, 2026-08-17)
+
+**UI** (`packages/ui/src/production/`):
+- `ProjectFloorProgressStrip`: franja 6 sectores + %, role=img con aria-label
+  ("Proceso actual: Corte. Avance 0%..."), estados done(✓ verde)/active(brand).
+- `ProjectFloorStageChip`: cuello de botella + % para tarjetas de cola.
+- `PlantBoardScreen`: matriz obras × sectores (done/total, "n en cola",
+  columna activa resaltada, Avance %), EmptyState docente, botón obra→orden
+  (si rol puede) o →cotización (vendedor). CSS `.floor-strip/.floor-chip/
+  .plant-board` solo tokens (design.md §6.7b).
+
+**Wiring:** nav `plantBoard` **Estado de Planta** (TRABAJO, icono
+KanbanSquare, TODOS los roles + guest — rbac.ts navIdsForRole) + ruta
+`/planta` (sin conflicto con deep link de orden). Franja en
+ProjectDetailView (accepted|produced, cualquier rol con acceso). Chip en
+ProductionQueue cards (ahora `<p>` de señales siempre presente). appShell
+test actualizado (contrato TRABAJO ×6); rbac.test F093; routes.test /planta.
+
+**Verificación en vivo** (browser, admin de prueba borrado al cerrar):
+- `/planta`: fila "Cocina Nellly" 0/3 por sector, "3 en cola" en Corte, "0% en Corte" ✓
+- Detalle cotización: franja "Proceso actual: Corte. Avance 0%..." ✓
+- Cola: chip "Corte 0%" en la card ✓
+
+**Suites:** domain 594, storage 89, excel 70, ui 863, mobile 36, desktop 17,
+web 248 — todo verde. `pnpm typecheck` monorepo 0 errores. Go build + go
+test ./internal/... verde (api incl.). init.sh verde.
+
+**Nota:** el server Go en 8080 corre código previo — los endpoints de eventos
+activan al reiniciar (la migración ya está aplicada).
+
+**Pendiente (Fases 2-4 del plan):** roles de estación + RBAC por sector +
+"Mi estación" (Fase 2), split IA Ingeniería vs Planta + almacén staging +
+estado `machined` CNC (Fase 3), métricas de sector desde eventos (Fase 4).

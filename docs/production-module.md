@@ -134,6 +134,10 @@ Inventario **ya implementado** (no reabrir issues cerrados como “nuevo trabajo
 | QR en etiquetas | ✅ | **#141** |
 | Import CSV resultado nesting | ✅ | **#142** |
 | Vista tablero / cut rows en cola (board view) | 🔧 parcial | `ProductionBoardView` |
+| **Sectores de producción** (`ProductionSector`, mapeo estado→sector, colas por estación) | ✅ F092 | `productionSectors.ts` (dominio) |
+| **Bitácora de piso** (`FloorStatusEvent`: quién/cuándo/cómo; saltos anotados) | ✅ F092 | migración `000048`, `floorScan.go`, `GET …/floor-events` |
+| **Estado de Planta** (tablero proyectos × sectores, visible a todos los roles) | ✅ F093 | `PlantBoardScreen`, ruta `/planta` |
+| **Franja de procesos** en detalle de cotización (accepted/produced) + chip en cola | ✅ F093 | `ProjectFloorProgressStrip` / `ProjectFloorStageChip` |
 | Acciones de fábrica también en pantalla de proyecto | ⚠️ mezcla de modos | `ProjectsScreen` / detalle |
 | Elevaciones PDF por muro con medidas | ❌ | Roadmap Fase 1 |
 | Workspace Producción multi-pantalla (hub + vistas) | ❌ | Roadmap Fase 0 |
@@ -177,6 +181,7 @@ El vendedor **no** necesita la jungla de exports en el día a día (RBAC ya rest
 
 ```
 Producción                          ← sección de nav (no sub-tab de un proyecto de diseño)
+├── Estado de Planta                ← F093: matrix obras × sectores, TODOS los roles (vendedor incl.)
 ├── Cola de trabajo                 ← listado de OPs / proyectos accepted|produced
 └── (al abrir una obra)
     ├── Resumen (hub)
@@ -438,6 +443,7 @@ Mismo ZIP **más**, cuando existan generadores:
 | D5 | Nesting nativo | **Fuera** hasta demanda + decisión explícita; no sneaky-scope en PRs de UI. |
 | D6 | Post-procesador CNC de marca | Solo con hardware real del usuario (#111). |
 | D7 | Contrato del payload QR de etiquetas | **JSON offline-friendly por default** (#141, F089). **F091 (2026-08-16): variante URL implementada** — `pieceLabelQrPayloadUrl` envuelve el MISMO JSON v2 en `muebles://scan#<json>` (o `https://<host>/scan#<json>` con dominio registrado); `unwrapPieceLabelQrUrl` + `parsePieceLabelScan` aceptan AMBAS formas; los QR impresos pre-F091 (JSON puro) siguen parseando igual — sin reimpresión. Etiquetas: opción persistida por usuario `qrFormat` json\|url + `qrHost` (tab Etiquetas → Impresora térmica → QR); aplica a preview, ZPL y PDF. Deep link RN: el scheme `muebles` está registrado (app.json) y App.tsx procesa links entrantes → scanner. Parser en `@muebles/domain` (TS puro), importable desde RN. |
+| D8 | Sectores y bitácora de piso (F092/F093, plan JD 2026-08-17) | **`ProductionSector`** (`warehouse\|cutting\|cnc\|edge_banding\|assembly\|packaging\|shipping\|installation`) mapea 1:1 los estados del pipeline vigente; `cnc` queda declarado pero sin estado propio hasta que exista `machined` (Fase 3 del plan). **Cada transición escribe un `FloorStatusEvent` inmutable** (from/to/quién/cuándo/source scan\|manual\|dispatch\|api + nota de salto): tabla `project_item_floor_events` (migración aditiva 000048), INSERT en floor-scan/PATCH (con usuario del JWT), upsert ON CONFLICT desde el PUT de proyecto (eventos del cliente web), `GET /api/projects/:id/floor-events` (sin gate de rol — visibilidad para todos). `advanceFloorStatus` es la transición UNIFICADA del dominio: rechaza saltos salvo `allowJump` (despacho/select de Módulos lo usan hoy preservando comportamiento, pero quedan auditados). Los gates por sector/rol llegan con los roles de estación (Fase 2). **Visibilidad (F093):** franja de procesos en detalle de cotización accepted\|produced, chip de sector en tarjetas de cola, y tablero **Estado de Planta** (`/planta`, nav `plantBoard` visible a TODOS los roles — vendedor ve su portfolio). |
 
 ---
 
@@ -606,3 +612,6 @@ El módulo Producción se considera **sólido (Fase 0+1)** cuando:
 | 2026-08-06 | **Fase 2 implementada** (PROD-2.1–2.3): preview tableros, CSV cut-list, UI optimización L0/L1/L2. |
 | 2026-08-06 | **Fase 3 implementada** (PROD-3.1–3.3): floor status, OP revision/stale, CNC pilot JSON (#111). |
 | 2026-08-06 | **Fase 4 implementada** (PROD-4.1–4.4): assembly sheets, paperless piso, what-if merma, scope por ambiente. Nesting nativo sigue fuera (D5). |
+| 2026-08-17 | **Judgment Day sectores/roles**: crítica 24/40 con 3 CRITICAL (sin sector, invisible para ventas, sin bitácora). Plan de fases 0–4 aprobado (usuario eligió 0+1). |
+| 2026-08-17 | **F092 (Fase 0 del plan):** `ProductionSector` + `FloorStatusEvent` + `advanceFloorStatus` unificado; migración 000048; eventos en floor-scan/PATCH/PUT; `GET /floor-events`. |
+| 2026-08-17 | **F093 (Fase 1 del plan):** visibilidad para todos — franja de procesos en detalle de cotización, chip de sector en cola, tablero **Estado de Planta** (`/planta`, todos los roles). |
