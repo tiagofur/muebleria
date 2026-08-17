@@ -7,6 +7,16 @@ func RoleCanManageUsers(role UserRole) bool {
 	return role == RoleAdmin
 }
 
+// RoleCanManageProductionStaff — gerente_produccion can manage production operators.
+func RoleCanManageProductionStaff(role UserRole) bool {
+	return role == RoleAdmin || role == RoleGerenteProduccion
+}
+
+// RoleCanManageSalesStaff — gerente_ventas can manage vendedores.
+func RoleCanManageSalesStaff(role UserRole) bool {
+	return role == RoleAdmin || role == RoleGerenteVentas
+}
+
 // RoleCanMutateCatalog — materials, edges, hardware, option groups, categories.
 func RoleCanMutateCatalog(role UserRole) bool {
 	return role == RoleAdmin || role == RoleIngeniero

@@ -44,6 +44,14 @@ export function roleCanManageUsers(role: string | null | undefined): boolean {
   return role === 'admin';
 }
 
+export function roleCanManageProductionStaff(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_produccion';
+}
+
+export function roleCanManageSalesStaff(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas';
+}
+
 export function roleCanMutateCatalog(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'ingeniero';
 }

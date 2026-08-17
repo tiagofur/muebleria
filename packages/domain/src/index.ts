@@ -128,6 +128,8 @@ export {
   projectAllowsProductionExport,
   roleCanExportProduction,
   roleCanManageUsers,
+  roleCanManageProductionStaff,
+  roleCanManageSalesStaff,
   roleCanMarkProduced,
   roleCanMutateCatalog,
   roleCanMutateCustomers,

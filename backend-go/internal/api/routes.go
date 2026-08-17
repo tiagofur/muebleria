@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+
+	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 func RegisterRoutes(server *Server) http.Handler {
@@ -185,6 +187,20 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
+
+	// Gerente producción — manage production staff (operadores, produccion)
+	prodStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteProduccion)
+	mux.Handle("GET /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
+	mux.Handle("POST /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
+	mux.Handle("PUT /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
+	mux.Handle("DELETE /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
+
+	// Gerente ventas — manage sales staff (vendedores)
+	salesStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteVentas)
+	mux.Handle("GET /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
+	mux.Handle("POST /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
+	mux.Handle("PUT /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
+	mux.Handle("DELETE /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
 
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
 	return CORSMiddleware(server.allowedOrigins)(mux)

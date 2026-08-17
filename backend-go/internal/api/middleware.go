@@ -120,6 +120,29 @@ func AdminMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http
 	}
 }
 
+// RoleMiddleware wraps AuthMiddleware and requires the live DB role to be one of the allowed roles.
+func RoleMiddleware(jwtSecret string, users UserLookup, allowedRoles ...domain.UserRole) func(http.Handler) http.Handler {
+	authMW := AuthMiddleware(jwtSecret, users)
+	roleSet := make(map[string]struct{}, len(allowedRoles))
+	for _, r := range allowedRoles {
+		roleSet[string(r)] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return authMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
+			if !ok || claims == nil {
+				respondWithError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			if _, allowed := roleSet[claims.Role]; !allowed {
+				respondWithError(w, http.StatusForbidden, "insufficient permissions")
+				return
+			}
+			next.ServeHTTP(w, r)
+		}))
+	}
+}
+
 // ipRateLimiter manages token buckets with active TTL eviction to prevent memory leaks.
 type ipRateLimiter struct {
 	mu       sync.Mutex

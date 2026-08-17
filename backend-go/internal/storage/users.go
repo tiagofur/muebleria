@@ -146,6 +146,20 @@ func (s *PostgresStore) UpdateUserRole(ctx context.Context, id string, role doma
 	return nil
 }
 
+// UpdateUser updates a user's name, role, and active status.
+func (s *PostgresStore) UpdateUser(ctx context.Context, u *domain.User) error {
+	result, err := s.Pool.Exec(ctx,
+		`UPDATE users SET name = $1, role = $2, active = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4`,
+		u.Name, u.Role, u.Active, u.ID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
 // RejectUser deletes a pending user (hard delete — not yet approved).
 func (s *PostgresStore) RejectUser(ctx context.Context, id string) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1 AND active = false`, id)

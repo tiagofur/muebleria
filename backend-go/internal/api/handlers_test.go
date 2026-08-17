@@ -135,6 +135,10 @@ func (s *stubStore) GetUserByID(context.Context, string) (*domain.User, error) {
 func (s *stubStore) CreateUser(context.Context, *domain.User) error {
 	return s.createUserErr
 }
+func (s *stubStore) UpdateUser(_ context.Context, u *domain.User) error {
+	s.stubNotUsed("UpdateUser")
+	return nil
+}
 func (s *stubStore) ListUsers(context.Context) ([]domain.User, error) {
 	if s.listUsers != nil {
 		return s.listUsers, nil

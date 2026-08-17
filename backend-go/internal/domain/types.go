@@ -17,19 +17,20 @@ const (
 type UserRole string
 
 const (
-	RoleAdmin          UserRole = "admin"
-	RoleUser           UserRole = "user" // approved account without job title
-	RoleVendedor       UserRole = "vendedor"
-	RoleGerenteVentas  UserRole = "gerente_ventas"
-	RoleIngeniero      UserRole = "ingeniero"
-	RoleProduccion     UserRole = "produccion"
-	RoleOperador       UserRole = "operador" // production operator, scoped by user_sectors
+	RoleAdmin              UserRole = "admin"
+	RoleUser               UserRole = "user" // approved account without job title
+	RoleVendedor           UserRole = "vendedor"
+	RoleGerenteVentas      UserRole = "gerente_ventas"
+	RoleGerenteProduccion  UserRole = "gerente_produccion"
+	RoleIngeniero          UserRole = "ingeniero"
+	RoleProduccion         UserRole = "produccion"
+	RoleOperador           UserRole = "operador" // production operator, scoped by user_sectors
 )
 
 // IsValidUserRole reports whether role is an allowed account role (F035 product roles).
 func IsValidUserRole(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleUser, RoleVendedor, RoleGerenteVentas, RoleIngeniero, RoleProduccion, RoleOperador:
+	case RoleAdmin, RoleUser, RoleVendedor, RoleGerenteVentas, RoleGerenteProduccion, RoleIngeniero, RoleProduccion, RoleOperador:
 		return true
 	default:
 		return false
