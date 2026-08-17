@@ -1,0 +1,200 @@
+/* SectorAssignment — modal for assigning sectors to operators */
+
+.sector-assignment-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.sector-assignment-modal {
+  background: var(--bg-card, #fff);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: sector-assignment-slide-in 0.2s ease-out;
+}
+
+@keyframes sector-assignment-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sector-assignment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.sector-assignment-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.sector-assignment-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary, #6b7280);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sector-assignment-close:hover {
+  background: var(--bg-hover, #f3f4f6);
+  color: var(--text-primary, #111827);
+}
+
+.sector-assignment-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.sector-assignment-description {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.sector-assignment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sector-assignment-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sector-assignment-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.sector-assignment-checkbox:hover {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.sector-assignment-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary, #2563eb);
+}
+
+.sector-assignment-checkbox.sub {
+  padding-left: 32px;
+}
+
+.sector-assignment-label {
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+
+.sector-assignment-sub-sectors {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.sector-assignment-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.sector-assignment-cancel {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--bg-card, #fff);
+  color: var(--text-primary, #111827);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sector-assignment-cancel:hover {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.sector-assignment-save {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary, #2563eb);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sector-assignment-save:hover {
+  background: var(--primary-hover, #1d4ed8);
+}
+
+.sector-assignment-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sector-assignment-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary, #6b7280);
+}
+
+.sector-assignment-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text-primary, #111827);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  animation: sector-assignment-toast-in 0.2s ease-out;
+}
+
+@keyframes sector-assignment-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

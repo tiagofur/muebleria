@@ -11,10 +11,12 @@ import {
   Settings2,
   Trash2,
   Users,
+  MapPin,
 } from 'lucide-react';
 import { EmptyState, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
+import { SectorAssignment } from './SectorAssignment';
 
 export interface UserRow {
   readonly id: string;
@@ -40,6 +42,7 @@ const ROLES = [
   'gerente_ventas',
   'ingeniero',
   'produccion',
+  'operador',
 ] as const;
 
 const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
@@ -49,6 +52,7 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   gerente_ventas: 'Gerente de ventas',
   ingeniero: 'Ingeniero',
   produccion: 'Producción',
+  operador: 'Operador',
 };
 
 export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
@@ -57,6 +61,8 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserName, setSelectedUserName] = useState<string>('');
 
   const headers = useMemo(
     () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
@@ -259,6 +265,19 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         Aprobar
                       </button>
                     )}
+                    {u.active && (u.role === 'operador' || u.role === 'produccion') && (
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        onClick={() => {
+                          setSelectedUserId(u.id);
+                          setSelectedUserName(u.name);
+                        }}
+                        title="Asignar sectores"
+                      >
+                        <MapPin size={15} strokeWidth={1.5} />
+                      </button>
+                    )}
                     {u.active && (
                       <button
                         type="button"
@@ -286,6 +305,20 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedUserId && (
+        <SectorAssignment
+          baseUrl={baseUrl}
+          token={token}
+          userId={selectedUserId}
+          userName={selectedUserName}
+          onClose={() => {
+            setSelectedUserId(null);
+            setSelectedUserName('');
+            void load();
+          }}
+        />
       )}
     </div>
   );
