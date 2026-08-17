@@ -87,6 +87,9 @@ import {
 
   ProjectsScreen,
   ProductionWorkspace,
+  PlantBoardScreen,
+  ProductionManagerDashboard,
+  ProjectFloorProgressStrip,
   filterProductionVisible,
   parseProductionOrderTab,
   Dashboard,
@@ -2229,6 +2232,46 @@ function AppContent({
               ? modulesWithoutPhotoCount
               : undefined
           }
+        />
+      ) : null}
+      {navId === 'plantBoard' ? (
+        <PlantBoardScreen
+          projects={projectsForRole}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
+          }
+          onOpenOrder={
+            useProductionWorkspace
+              ? (id) => {
+                  const target = productionOrderPath(id);
+                  if (location.pathname !== target) navigate(target);
+                }
+              : undefined
+          }
+          onOpenProject={(id) => {
+            const target = projectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
+        />
+      ) : null}
+      {navId === 'productionDashboard' ? (
+        <ProductionManagerDashboard
+          projects={projectsForRole}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
+          }
+          onOpenOrder={
+            useProductionWorkspace
+              ? (id) => {
+                  const target = productionOrderPath(id);
+                  if (location.pathname !== target) navigate(target);
+                }
+              : undefined
+          }
+          onOpenProject={(id) => {
+            const target = projectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
         />
       ) : null}
       {navId === 'production' && useProductionWorkspace ? (

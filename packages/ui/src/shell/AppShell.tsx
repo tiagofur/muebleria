@@ -13,6 +13,7 @@ import {
 import {
   FileText,
   Factory,
+  KanbanSquare,
   LayoutDashboard,
   Layers,
   LayoutGrid,
@@ -33,6 +34,7 @@ import {
   X,
   Users,
   Palette,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
@@ -49,7 +51,9 @@ export type AppNavId =
   | 'projects'
   | 'customers'
   | 'showcase'
+  | 'plantBoard'
   | 'production'
+  | 'productionDashboard'
   | 'modules'
   | 'structures'
   | 'components'
@@ -153,11 +157,22 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       /** Commercial catalog — not engineering ABM. */
       { id: 'showcase', label: 'Vitrina', icon: Store },
       /**
+       * F093 — factory progress board. Visible to EVERY role (sales
+       * included): read-only "where is each project right now".
+       * Filtered only when allowedNavIds excludes it (never, today).
+       */
+      { id: 'plantBoard', label: 'Estado de Planta', icon: KanbanSquare },
+      /**
        * Plant production queue. Filtered out unless allowedNavIds includes it
        * (rbac.ts navIdsForRole adds 'production' only for roles with
        * roleUsesProductionQueue). design.md §6.7.
        */
       { id: 'production', label: 'Producción', icon: Factory },
+      /**
+       * Production Manager Dashboard: full visibility for gerente_produccion.
+       * Shows all queues, operators, metrics, and quick actions.
+       */
+      { id: 'productionDashboard', label: 'Dashboard Producción', icon: BarChart3 },
     ],
   },
   {
