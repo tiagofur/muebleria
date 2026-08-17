@@ -252,3 +252,118 @@ func TestGetProjectLoadingStatus(t *testing.T) {
 }
 
 
+
+// --- F092: audit trail of floor transitions ---
+
+func TestFloorScan_AdvanceWritesAuditEvent(t *testing.T) {
+	store, srv := floorScanTestFixtures()
+	rr := doFloorScan(srv, domain.RoleProduccion, `{"module":"GAB-01","advance":true}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp floorScanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if len(store.floorEventWrites) != 1 {
+		t.Fatalf("expected one audit event, got %+v", store.floorEventWrites)
+	}
+	ev := store.floorEventWrites[0]
+	if ev.ProjectID != "p1" || ev.ItemID != "i1" || ev.From != "pending" || ev.To != "cut" {
+		t.Fatalf("unexpected event: %+v", ev)
+	}
+	if ev.Source != domain.FloorEventSourceScan {
+		t.Fatalf("expected scan source, got %s", ev.Source)
+	}
+	if ev.ByUserID != "u1" {
+		t.Fatalf("expected actor u1, got %q", ev.ByUserID)
+	}
+	if resp.Event == nil || resp.Event.ID != ev.ID {
+		t.Fatalf("response must echo the event: %+v", resp.Event)
+	}
+}
+
+func TestFloorScan_LookupWritesNoEvent(t *testing.T) {
+	store, srv := floorScanTestFixtures()
+	rr := doFloorScan(srv, domain.RoleProduccion, `{"module":"ALT-01"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(store.floorEventWrites) != 0 {
+		t.Fatalf("lookup must not audit, got %+v", store.floorEventWrites)
+	}
+}
+
+func TestPatchItemFloorStatus_JumpRecordsNote(t *testing.T) {
+	store, srv := floorScanTestFixtures()
+	req := withClaims(httptest.NewRequest(http.MethodPatch, "/api/projects/p1/items/i1/floor-status",
+		strings.NewReader(`{"status":"loaded"}`)), "u1", string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	req.SetPathValue("itemId", "i1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectItemFloorStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(store.floorEventWrites) != 1 {
+		t.Fatalf("expected one audit event, got %+v", store.floorEventWrites)
+	}
+	ev := store.floorEventWrites[0]
+	if ev.From != "pending" || ev.To != "loaded" {
+		t.Fatalf("unexpected transition: %+v", ev)
+	}
+	if !strings.Contains(ev.Note, "salto pending → loaded") {
+		t.Fatalf("jump must be noted, got %q", ev.Note)
+	}
+	if ev.Source != domain.FloorEventSourceManual {
+		t.Fatalf("expected manual source, got %s", ev.Source)
+	}
+}
+
+func TestGetProjectFloorEvents(t *testing.T) {
+	store, srv := floorScanTestFixtures()
+	store.floorEventsList = []domain.FloorStatusEvent{
+		{ID: "e1", ProjectID: "p1", ItemID: "i1", From: "pending", To: "cut", Source: domain.FloorEventSourceScan},
+	}
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1/floor-events", nil), "u1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectFloorEvents(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var events []domain.FloorStatusEvent
+	if err := json.Unmarshal(rr.Body.Bytes(), &events); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if len(events) != 1 || events[0].ID != "e1" {
+		t.Fatalf("unexpected events: %+v", events)
+	}
+}
+
+func TestGetProjectFloorEvents_EmptyReturnsArray(t *testing.T) {
+	_, srv := floorScanTestFixtures()
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1/floor-events", nil), "u1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectFloorEvents(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(rr.Body.String()), "[") {
+		t.Fatalf("must return a JSON array, got %s", rr.Body.String())
+	}
+}
+
+func TestFloorEventJumpNoteHelper(t *testing.T) {
+	if got := domain.FloorEventJumpNote("", "pending", "loaded"); got != "salto pending → loaded" {
+		t.Fatalf("unexpected note: %q", got)
+	}
+	if got := domain.FloorEventJumpNote("carga directa", "pending", "loaded"); got != "carga directa (salto pending → loaded)" {
+		t.Fatalf("unexpected note: %q", got)
+	}
+}

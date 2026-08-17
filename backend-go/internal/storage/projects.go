@@ -703,6 +703,13 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	}
 	p.Items = items
 
+	// F092 — shop-floor log travels with the project detail.
+	events, err := s.ListFloorEvents(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	p.FloorEvents = events
+
 	level, err := s.loadProjectLevelChoices(ctx, p.ID)
 	if err != nil {
 		return nil, err
@@ -922,6 +929,9 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	}
 
 	if err := replaceProjectItemsTx(ctx, tx, id, p.Items); err != nil {
+		return err
+	}
+	if err := upsertFloorEventsTx(ctx, tx, id, p.FloorEvents); err != nil {
 		return err
 	}
 	if err := replaceProjectLevelChoicesTx(ctx, tx, id, p.ProjectLevelChoices); err != nil {
@@ -1454,4 +1464,98 @@ func isValidItemFloorStatus(s string) bool {
 		}
 	}
 	return false
+}
+
+// InsertFloorEvent appends one shop-floor transition to the audit log
+// (F092). Idempotent by event id — client re-saves and offline sync
+// retries never duplicate rows.
+func (s *PostgresStore) InsertFloorEvent(ctx context.Context, ev domain.FloorStatusEvent) error {
+	if ev.ID == "" || ev.ProjectID == "" || ev.ItemID == "" {
+		return fmt.Errorf("floor event requires id, project and item")
+	}
+	var byUser *string
+	if ev.ByUserID != "" {
+		byUser = &ev.ByUserID
+	}
+	var at interface{} = ev.At
+	if ev.At.IsZero() {
+		at = time.Now()
+	}
+	_, err := s.Pool.Exec(ctx, `
+		INSERT INTO project_item_floor_events
+			(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''))
+		ON CONFLICT (id) DO NOTHING;
+	`, ev.ID, ev.ProjectID, ev.ItemID, domain.NormalizeItemFloorStatus(ev.From),
+		domain.NormalizeItemFloorStatus(ev.To), at, byUser, ev.ByName,
+		string(domain.NormalizeFloorEventSource(string(ev.Source))), ev.Note)
+	if err != nil {
+		return fmt.Errorf("error inserting floor event: %w", err)
+	}
+	return nil
+}
+
+// ListFloorEvents returns the shop-floor log of a project, oldest first (F092).
+func (s *PostgresStore) ListFloorEvents(ctx context.Context, projectID string) ([]domain.FloorStatusEvent, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note
+		FROM project_item_floor_events
+		WHERE project_id = $1
+		ORDER BY at ASC, id ASC;
+	`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("error listing floor events: %w", err)
+	}
+	defer rows.Close()
+
+	events := []domain.FloorStatusEvent{}
+	for rows.Next() {
+		var ev domain.FloorStatusEvent
+		var byUser *string
+		var byName, note *string
+		if err := rows.Scan(&ev.ID, &ev.ProjectID, &ev.ItemID, &ev.From, &ev.To, &ev.At, &byUser, &byName, &ev.Source, &note); err != nil {
+			return nil, fmt.Errorf("error scanning floor event: %w", err)
+		}
+		if byUser != nil {
+			ev.ByUserID = *byUser
+		}
+		if byName != nil {
+			ev.ByName = *byName
+		}
+		if note != nil {
+			ev.Note = *note
+		}
+		events = append(events, ev)
+	}
+	return events, rows.Err()
+}
+
+// upsertFloorEventsTx merges client-supplied events (web project saves)
+// into the audit log inside a project update transaction. History rows
+// are never rewritten — ON CONFLICT keeps existing ids untouched.
+func upsertFloorEventsTx(ctx context.Context, tx pgx.Tx, projectID string, events []domain.FloorStatusEvent) error {
+	for _, ev := range events {
+		if ev.ID == "" || ev.ItemID == "" {
+			continue
+		}
+		var byUser *string
+		if ev.ByUserID != "" {
+			byUser = &ev.ByUserID
+		}
+		var at interface{} = ev.At
+		if ev.At.IsZero() {
+			at = time.Now()
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO project_item_floor_events
+				(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''))
+			ON CONFLICT (id) DO NOTHING;
+		`, ev.ID, projectID, ev.ItemID, domain.NormalizeItemFloorStatus(ev.From),
+			domain.NormalizeItemFloorStatus(ev.To), at, byUser, ev.ByName,
+			string(domain.NormalizeFloorEventSource(string(ev.Source))), ev.Note); err != nil {
+			return fmt.Errorf("error upserting floor event: %w", err)
+		}
+	}
+	return nil
 }

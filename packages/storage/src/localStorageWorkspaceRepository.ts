@@ -8,10 +8,13 @@ import type {
   ProjectTemplate,
   Workspace,
   ItemFloorStatus,
+  FloorStatusEvent,
   LoadingProgress,
 } from '@muebles/domain';
 import {
   withWorkshopSettings,
+  advanceFloorStatus,
+  appendFloorEvent,
   calculateLoadingProgress,
   nextItemFloorStatus,
   normalizeItemFloorStatus,
@@ -146,6 +149,7 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     statusAfter: ItemFloorStatus;
     nextStatus: string;
     loadingProgress: LoadingProgress;
+    event?: FloorStatusEvent | null;
   }> {
     const ws = this.getWorkspace();
     const project = ws.projects.find((p) => p.id === projectId);
@@ -157,18 +161,25 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     if (!item) throw new Error('Item no encontrado');
 
     const before = normalizeItemFloorStatus(item.floorStatus);
-    let after = before;
-    if (payload.targetStatus) {
-      after = normalizeItemFloorStatus(payload.targetStatus);
-    } else if (payload.advance) {
-      const next = nextItemFloorStatus(before);
-      if (next) after = next;
-    }
+    // Floor-scan contract keeps arbitrary targets (dispatch module labels):
+    // allowJump preserves behavior while the event records the skip (F092).
+    const advance = advanceFloorStatus({
+      projectId: project.id,
+      itemId: item.id,
+      current: before,
+      target: payload.targetStatus,
+      advance: payload.advance,
+      allowJump: true,
+      source: 'scan',
+    });
+    const after = advance.ok ? advance.status : before;
+    const event = advance.ok ? advance.event : null;
 
     const updatedItems = project.items.map((it) =>
       it.id === item.id ? { ...it, floorStatus: after } : it,
     );
-    const updatedProject = { ...project, items: updatedItems };
+    let updatedProject: Project = { ...project, items: updatedItems };
+    if (event) updatedProject = appendFloorEvent(updatedProject, event);
     const updatedWs = {
       ...ws,
       projects: ws.projects.map((p) => (p.id === projectId ? updatedProject : p)),
@@ -189,6 +200,7 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
       statusAfter: after,
       nextStatus: nextItemFloorStatus(after) ?? '',
       loadingProgress: progress,
+      event,
     };
   }
 
@@ -216,6 +228,7 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     itemId: string;
     floorStatus: ItemFloorStatus;
     nextStatus: string;
+    event?: FloorStatusEvent | null;
   }> {
     const ws = this.getWorkspace();
     const project = ws.projects.find((p) => p.id === projectId);
@@ -224,14 +237,24 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     if (!item) throw new Error('Item no encontrado');
 
     const currentStatus = normalizeItemFloorStatus(item.floorStatus);
-    const targetStatus = status
-      ? normalizeItemFloorStatus(status)
-      : (nextItemFloorStatus(currentStatus) ?? currentStatus);
+    // Arbitrary select (Modules tab) stays supported; jumps get audited.
+    const advance = advanceFloorStatus({
+      projectId,
+      itemId,
+      current: currentStatus,
+      target: status,
+      advance: !status,
+      allowJump: true,
+      source: 'manual',
+    });
+    const resolvedStatus = advance.ok ? advance.status : currentStatus;
+    const event = advance.ok ? advance.event : null;
 
     const updatedItems = project.items.map((it) =>
-      it.id === itemId ? { ...it, floorStatus: targetStatus } : it,
+      it.id === itemId ? { ...it, floorStatus: resolvedStatus } : it,
     );
-    const updatedProject = { ...project, items: updatedItems };
+    let updatedProject: Project = { ...project, items: updatedItems };
+    if (event) updatedProject = appendFloorEvent(updatedProject, event);
     this.saveWorkspace({
       ...ws,
       projects: ws.projects.map((p) => (p.id === projectId ? updatedProject : p)),
@@ -240,8 +263,17 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     return {
       projectId,
       itemId,
-      floorStatus: targetStatus,
-      nextStatus: nextItemFloorStatus(targetStatus) ?? '',
+      floorStatus: resolvedStatus,
+      nextStatus: nextItemFloorStatus(resolvedStatus) ?? '',
+      event,
     };
+  }
+
+  async listFloorEvents(
+    projectId: string,
+  ): Promise<readonly FloorStatusEvent[]> {
+    const ws = this.getWorkspace();
+    const project = ws.projects.find((p) => p.id === projectId);
+    return project?.floorEvents ?? [];
   }
 }

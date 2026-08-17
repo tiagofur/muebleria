@@ -67,6 +67,8 @@ import {
   renewPlanEditSession as renewPlanEditSessionDomain,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
+  advanceFloorStatus,
+  appendFloorEvent,
   setProjectItemFloorStatus,
   transitionProjectStatus,
   snapshotOnStatusChange,
@@ -1052,8 +1054,28 @@ export function createProjectStore(options: InternalOptions) {
     setItemFloorStatus: (projectId, itemId, status) => {
       const project = get().projects.find((p) => p.id === projectId);
       if (!project) return;
+      const item = project.items.find((it) => it.id === itemId);
+      if (!item) return;
       const now = new Date().toISOString();
-      const updated = setProjectItemFloorStatus(project, itemId, status, now);
+      // F092 — unified transition + audit event (manual path keeps arbitrary
+      // targets for the Modules select; jumps are recorded in the note).
+      const advance = advanceFloorStatus({
+        projectId,
+        itemId,
+        current: item.floorStatus,
+        target: status,
+        allowJump: true,
+        source: 'manual',
+        now,
+      });
+      if (!advance.ok) return;
+      let updated = setProjectItemFloorStatus(
+        project,
+        itemId,
+        advance.status,
+        now,
+      );
+      if (advance.event) updated = appendFloorEvent(updated, advance.event);
       if (updated === project) return;
       patch(set, get, (ps) =>
         ps.map((p) => (p.id === projectId ? updated : p)),

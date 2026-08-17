@@ -8,9 +8,14 @@ package api
  */
 
 import (
+	"crypto/rand"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -24,16 +29,17 @@ type floorScanRequest struct {
 }
 
 type floorScanResponse struct {
-	ProjectID       string                 `json:"project_id"`
-	ProjectName     string                 `json:"project_name"`
-	ItemID          string                 `json:"item_id"`
-	FactoryCode     string                 `json:"factory_code"`
-	ModuleCode      string                 `json:"module_code"`
-	ModuleName      string                 `json:"module_name"`
-	StatusBefore    string                 `json:"status_before"`
-	StatusAfter     string                 `json:"status_after"`
-	NextStatus      string                 `json:"next_status"`
-	LoadingProgress domain.LoadingProgress `json:"loading_progress"`
+	ProjectID       string                     `json:"project_id"`
+	ProjectName     string                     `json:"project_name"`
+	ItemID          string                     `json:"item_id"`
+	FactoryCode     string                     `json:"factory_code"`
+	ModuleCode      string                     `json:"module_code"`
+	ModuleName      string                     `json:"module_name"`
+	StatusBefore    string                     `json:"status_before"`
+	StatusAfter     string                     `json:"status_after"`
+	NextStatus      string                     `json:"next_status"`
+	LoadingProgress domain.LoadingProgress      `json:"loading_progress"`
+	Event           *domain.FloorStatusEvent   `json:"event,omitempty"`
 }
 
 // factoryCodeFor mirrors the TS row builder: first line of a module code
@@ -155,6 +161,12 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// F092 — audit every real transition (who/when/how from the JWT actor).
+	var event *domain.FloorStatusEvent
+	if after != before {
+		event = s.recordFloorEvent(r, projectID, match.item.ID, before, after, domain.FloorEventSourceScan)
+	}
+
 	match.item.FloorStatus = after
 	progress := domain.CalculateLoadingProgress(project)
 
@@ -169,7 +181,81 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 		StatusAfter:     after,
 		NextStatus:      domain.NextItemFloorStatus(after),
 		LoadingProgress: progress,
+		Event:           event,
 	})
+}
+
+// recordFloorEvent appends the transition to the audit log with the
+// authenticated actor. Failures are logged but never block the scan —
+// the status write already succeeded.
+func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {
+	claims := claimsFromRequest(r)
+	ev := domain.FloorStatusEvent{
+		ID:        newFloorEventID(),
+		ProjectID: projectID,
+		ItemID:    itemID,
+		From:      from,
+		To:        to,
+		At:        time.Now().UTC(),
+		ByUserID:  actorID(claims),
+		ByName:    claims.Email,
+		Source:    source,
+	}
+	// Prefer the display name; email is the honest fallback.
+	if ev.ByUserID != "" {
+		if user, err := s.Store.GetUserByID(r.Context(), ev.ByUserID); err == nil && user != nil && user.Name != "" {
+			ev.ByName = user.Name
+		}
+	}
+	if domain.FloorStatusRank(to)-domain.FloorStatusRank(from) != 1 {
+		ev.Note = domain.FloorEventJumpNote("", from, to)
+	}
+	if err := s.Store.InsertFloorEvent(r.Context(), ev); err != nil {
+		log.Printf("[floor-events] insert failed for project %s item %s: %v", projectID, itemID, err)
+	}
+	return &ev
+}
+
+func newFloorEventID() string {
+	// UUID v4 via crypto/rand — zero new dependencies.
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("fe-%d-%d", time.Now().UnixNano(), os.Getpid())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// HandleProjectFloorEvents handles GET /api/projects/{id}/floor-events —
+// the shop-floor log, oldest first. Visible to any authenticated user with
+// project access (visibility for the whole workshop, F092).
+func (s *Server) HandleProjectFloorEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
+		return
+	}
+	projectID := r.PathValue("id")
+	if projectID == "" {
+		respondWithError(w, http.StatusBadRequest, "missing project id")
+		return
+	}
+
+	project, err := s.Store.GetProjectByID(r.Context(), projectID)
+	if err != nil || project == nil {
+		respondWithError(w, http.StatusNotFound, "obra no encontrada")
+		return
+	}
+
+	events, err := s.Store.ListFloorEvents(r.Context(), projectID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "no se pudo leer el historial de piso")
+		return
+	}
+	if events == nil {
+		events = []domain.FloorStatusEvent{}
+	}
+	respondWithJSON(w, http.StatusOK, events)
 }
 
 // HandleProjectLoadingStatus handles GET /api/projects/{id}/loading-status
@@ -203,10 +289,11 @@ type patchItemFloorStatusRequest struct {
 }
 
 type patchItemFloorStatusResponse struct {
-	ProjectID   string `json:"project_id"`
-	ItemID      string `json:"item_id"`
-	FloorStatus string `json:"floor_status"`
-	NextStatus  string `json:"next_status"`
+	ProjectID   string                   `json:"project_id"`
+	ItemID      string                   `json:"item_id"`
+	FloorStatus string                   `json:"floor_status"`
+	NextStatus  string                   `json:"next_status"`
+	Event       *domain.FloorStatusEvent `json:"event,omitempty"`
 }
 
 // HandleProjectItemFloorStatus handles PATCH /api/projects/{id}/items/{itemId}/floor-status
@@ -234,31 +321,32 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// F092 — load current status first so the event records from → to.
+	project, err := s.Store.GetProjectByID(r.Context(), projectID)
+	if err != nil || project == nil {
+		respondWithError(w, http.StatusNotFound, "obra no encontrada")
+		return
+	}
+	var currentItem *domain.ProjectItem
+	for i := range project.Items {
+		if project.Items[i].ID == itemID {
+			currentItem = &project.Items[i]
+			break
+		}
+	}
+	if currentItem == nil {
+		respondWithError(w, http.StatusNotFound, "item no encontrado en esta obra")
+		return
+	}
+	before := domain.NormalizeItemFloorStatus(currentItem.FloorStatus)
+
 	targetStatus := strings.TrimSpace(body.Status)
 	if targetStatus == "" {
-		// If empty, look up current item and advance to next
-		project, err := s.Store.GetProjectByID(r.Context(), projectID)
-		if err != nil || project == nil {
-			respondWithError(w, http.StatusNotFound, "obra no encontrada")
-			return
-		}
-		var currentItem *domain.ProjectItem
-		for i := range project.Items {
-			if project.Items[i].ID == itemID {
-				currentItem = &project.Items[i]
-				break
-			}
-		}
-		if currentItem == nil {
-			respondWithError(w, http.StatusNotFound, "item no encontrado en esta obra")
-			return
-		}
-		currentStatus := domain.NormalizeItemFloorStatus(currentItem.FloorStatus)
-		next := domain.NextItemFloorStatus(currentStatus)
-		if next == "" {
-			targetStatus = currentStatus
-		} else {
+		// If empty, advance to next
+		if next := domain.NextItemFloorStatus(before); next != "" {
 			targetStatus = next
+		} else {
+			targetStatus = before
 		}
 	} else {
 		targetStatus = domain.NormalizeItemFloorStatus(targetStatus)
@@ -269,10 +357,16 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	var event *domain.FloorStatusEvent
+	if targetStatus != before {
+		event = s.recordFloorEvent(r, projectID, itemID, before, targetStatus, domain.FloorEventSourceManual)
+	}
+
 	respondWithJSON(w, http.StatusOK, patchItemFloorStatusResponse{
 		ProjectID:   projectID,
 		ItemID:      itemID,
 		FloorStatus: targetStatus,
 		NextStatus:  domain.NextItemFloorStatus(targetStatus),
+		Event:       event,
 	})
 }

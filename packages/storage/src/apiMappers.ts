@@ -14,6 +14,7 @@ import type {
   Customer,
   EdgeBand,
   EdgeAssignment,
+  FloorStatusEvent,
   Hardware,
   HardwareLine,
   MaterialBoard,
@@ -1493,6 +1494,18 @@ export function projectToApi(p: Project): Record<string, unknown> {
           last_export_fingerprint: p.production.lastExportFingerprint ?? '',
         }
       : null,
+    // F092 — shop-floor transition log (server upserts by id)
+    floor_events: (p.floorEvents ?? []).map((e) => ({
+      id: e.id,
+      item_id: e.itemId,
+      from_status: e.from,
+      to_status: e.to,
+      at: e.at,
+      by_user_id: e.byUserId ?? null,
+      by_name: e.byName ?? null,
+      source: e.source,
+      note: e.note ?? null,
+    })),
   };
 }
 
@@ -1663,7 +1676,36 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         floorStatus: floorStatus === 'pending' ? undefined : floorStatus,
       };
     }),
+    // F092 — shop-floor transition log (server serves it embedded; optional)
+    floorEvents: floorEventsFromApi(raw.floor_events ?? raw.floorEvents),
   };
+}
+
+function floorEventsFromApi(raw: unknown): FloorStatusEvent[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const events: FloorStatusEvent[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    const id = str(r.id);
+    const itemId = str(r.item_id ?? r.itemId);
+    const fromStatus = str(r.from_status ?? r.fromStatus) as FloorStatusEvent['from'];
+    const toStatus = str(r.to_status ?? r.toStatus) as FloorStatusEvent['to'];
+    if (!id || !itemId) continue;
+    events.push({
+      id,
+      projectId: str(r.project_id ?? r.projectId),
+      itemId,
+      from: fromStatus,
+      to: toStatus,
+      at: str(r.at),
+      byUserId: str(r.by_user_id ?? r.byUserId) || undefined,
+      byName: str(r.by_name ?? r.byName) || undefined,
+      source: (str(r.source) || 'api') as FloorStatusEvent['source'],
+      note: str(r.note) || undefined,
+    });
+  }
+  return events.length > 0 ? events : undefined;
 }
 
 // --- Project templates (#110 / H15) ---

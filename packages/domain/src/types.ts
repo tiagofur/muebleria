@@ -585,6 +585,28 @@ export type ItemFloorStatus =
   | 'loaded'
   | 'installed';
 
+/** How a floor transition was performed (F092). */
+export type FloorEventSource = 'scan' | 'manual' | 'dispatch' | 'api';
+
+/**
+ * Immutable entry of the shop-floor log (F092): one per floor status
+ * transition, answering who/when/how. Never mutated — history only.
+ */
+export interface FloorStatusEvent {
+  readonly id: string;
+  readonly projectId: string;
+  readonly itemId: string;
+  readonly from: ItemFloorStatus;
+  readonly to: ItemFloorStatus;
+  /** ISO timestamp of the transition. */
+  readonly at: string;
+  readonly byUserId?: string;
+  readonly byName?: string;
+  readonly source: FloorEventSource;
+  /** Reason when the transition skipped stages (jump), e.g. dispatch loading. */
+  readonly note?: string;
+}
+
 export interface ProjectItem {
   readonly id: string;
   readonly moduleId: string;
@@ -931,6 +953,13 @@ export interface Project {
    * Factory OP revision / export tracking (PROD-3.2 / #227).
    */
   readonly production?: ProjectProductionState;
+  /**
+   * Shop-floor transition log (F092), oldest first. Appended on every
+   * floor status change (web, floor-scan, dispatch) so the workshop can
+   * answer who/when/how. Local JSON repos persist it inside the project;
+   * the Go API serves it from `project_item_floor_events`.
+   */
+  readonly floorEvents?: readonly FloorStatusEvent[];
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
