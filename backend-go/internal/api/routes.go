@@ -188,27 +188,27 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 
-	// Gerente producción — manage production staff (produccion) + assign sectors
+	// Staff management — admin + gerente_produccion (production/warehouse) + gerente_ventas (sales)
+	// Uses {department} wildcard for production/warehouse; sales has its own routes.
 	prodStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteProduccion)
+	salesStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteVentas)
+
+	// Production + Warehouse (gerente_produccion)
 	mux.Handle("GET /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
 	mux.Handle("POST /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
 	mux.Handle("PUT /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
 	mux.Handle("DELETE /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
-	// Sector assignment for production staff
 	mux.Handle("GET /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
 	mux.Handle("PUT /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
 
-	// Gerente producción — manage warehouse staff (almacen) + assign sectors
 	mux.Handle("GET /api/staff/warehouse", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
 	mux.Handle("POST /api/staff/warehouse", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
 	mux.Handle("PUT /api/staff/warehouse/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
 	mux.Handle("DELETE /api/staff/warehouse/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
-	// Sector assignment for warehouse staff
 	mux.Handle("GET /api/staff/warehouse/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
 	mux.Handle("PUT /api/staff/warehouse/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
 
-	// Gerente ventas — manage sales staff (vendedores) + create/block
-	salesStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteVentas)
+	// Sales (gerente_ventas)
 	mux.Handle("GET /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
 	mux.Handle("POST /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
 	mux.Handle("PUT /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))

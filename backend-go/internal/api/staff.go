@@ -1,22 +1,21 @@
 package api
 
 /**
- * Staff management handlers — gerente_produccion manages production staff,
+ * Staff management handlers — gerente_produccion manages production/warehouse staff,
  * gerente_ventas manages sales staff, admin manages all.
  *
  * Endpoints:
- *   GET    /api/staff/production    — List production operators
- *   POST   /api/staff/production    — Create production operator
- *   PUT    /api/staff/production/{id} — Update production operator
- *   DELETE /api/staff/production/{id} — Delete production operator
- *   GET    /api/staff/sales         — List sales staff
- *   POST   /api/staff/sales         — Create sales staff
- *   PUT    /api/staff/sales/{id}    — Update sales staff
- *   DELETE /api/staff/sales/{id}    — Delete sales staff
+ *   GET    /api/staff/{department}          — List staff by department
+ *   POST   /api/staff/{department}          — Create staff
+ *   PUT    /api/staff/{department}/{id}     — Update staff
+ *   DELETE /api/staff/{department}/{id}     — Delete staff
+ *   GET    /api/staff/{department}/{id}/sectors — List user sectors
+ *   PUT    /api/staff/{department}/{id}/sectors — Set user sectors
  */
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -30,10 +29,24 @@ type staffRequest struct {
 	Active   *bool  `json:"active,omitempty"`
 }
 
+// extractDepartment extracts the department from the URL path.
+// e.g. /api/staff/production → "production"
+// e.g. /api/staff/warehouse/123/sectors → "warehouse"
+func extractDepartment(path string) string {
+	// /api/staff/{department}[/...]
+	parts := strings.Split(path, "/")
+	for i, p := range parts {
+		if p == "staff" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
 // HandleStaffByRole handles GET /api/staff/{department}
-// department = "production" or "sales"
+// department = "production", "warehouse", or "sales"
 func (s *Server) HandleStaffByRole(w http.ResponseWriter, r *http.Request) {
-	department := r.PathValue("department")
+	department := extractDepartment(r.URL.Path)
 	if department == "" {
 		respondWithError(w, http.StatusBadRequest, "department required")
 		return
@@ -75,7 +88,7 @@ func (s *Server) HandleStaffByRole(w http.ResponseWriter, r *http.Request) {
 
 // HandleStaffCreate handles POST /api/staff/{department}
 func (s *Server) HandleStaffCreate(w http.ResponseWriter, r *http.Request) {
-	department := r.PathValue("department")
+	department := extractDepartment(r.URL.Path)
 	if department == "" {
 		respondWithError(w, http.StatusBadRequest, "department required")
 		return
@@ -140,7 +153,7 @@ func (s *Server) HandleStaffCreate(w http.ResponseWriter, r *http.Request) {
 
 // HandleStaffUpdate handles PUT /api/staff/{department}/{id}
 func (s *Server) HandleStaffUpdate(w http.ResponseWriter, r *http.Request) {
-	department := r.PathValue("department")
+	department := extractDepartment(r.URL.Path)
 	userID := r.PathValue("id")
 	if department == "" || userID == "" {
 		respondWithError(w, http.StatusBadRequest, "department and user ID required")
@@ -200,7 +213,7 @@ func (s *Server) HandleStaffUpdate(w http.ResponseWriter, r *http.Request) {
 // HandleStaffDelete handles DELETE /api/staff/{department}/{id}
 // Soft delete: sets active = false
 func (s *Server) HandleStaffDelete(w http.ResponseWriter, r *http.Request) {
-	department := r.PathValue("department")
+	department := extractDepartment(r.URL.Path)
 	userID := r.PathValue("id")
 	if department == "" || userID == "" {
 		respondWithError(w, http.StatusBadRequest, "department and user ID required")
