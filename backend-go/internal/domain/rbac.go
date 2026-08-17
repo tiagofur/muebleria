@@ -81,7 +81,7 @@ func ProjectAllowsReopenToDraft(currentStatus ProjectStatus, role UserRole) bool
 // RoleCanMarkProduced — accepted → produced (click-only; no export gate).
 func RoleCanMarkProduced(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleGerenteVentas, RoleIngeniero, RoleProduccion:
+	case RoleAdmin, RoleGerenteVentas, RoleIngeniero, RoleProduccion, RoleOperador:
 		return true
 	default:
 		return false
@@ -102,7 +102,7 @@ func RoleCanViewCosts(role UserRole, vendedorCanViewCosts bool) bool {
 // RoleCanExportProduction — Optimizer / hardware list (not vendedor).
 func RoleCanExportProduction(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleIngeniero, RoleProduccion, RoleGerenteVentas:
+	case RoleAdmin, RoleIngeniero, RoleProduccion, RoleGerenteVentas, RoleOperador:
 		return true
 	default:
 		return false
@@ -152,4 +152,19 @@ func RoleCanAccessProductionDashboard(role UserRole) bool {
 	default:
 		return false
 	}
+}
+
+// RoleCanClaimProductionJob — operator can claim/finish jobs in their assigned sectors.
+func RoleCanClaimProductionJob(role UserRole) bool {
+	switch role {
+	case RoleAdmin, RoleProduccion, RoleOperador:
+		return true
+	default:
+		return false
+	}
+}
+
+// RoleIsOperador — check if role is an operator (for sector-scoped queries).
+func RoleIsOperador(role UserRole) bool {
+	return role == RoleOperador
 }

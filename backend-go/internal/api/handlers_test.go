@@ -586,6 +586,17 @@ func (s *stubStore) GetTodayDamageCount(_ context.Context) (int, error) {
 	return 0, nil
 }
 
+// User sector stubs
+func (s *stubStore) ListUserSectors(_ context.Context, _ string) ([]domain.UserSector, error) {
+	return []domain.UserSector{}, nil
+}
+func (s *stubStore) SetUserSectors(_ context.Context, _ string, _ []domain.UserSector) error {
+	return nil
+}
+func (s *stubStore) GetUsersBySector(_ context.Context, _ string) ([]domain.User, error) {
+	return []domain.User{}, nil
+}
+
 
 
 

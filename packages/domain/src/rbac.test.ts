@@ -17,6 +17,9 @@ import {
   roleCanViewPortfolioDashboard,
   roleLabelEs,
   roleUsesProductionQueue,
+  roleCanClaimProductionJob,
+  roleCanAccessProductionDashboard,
+  roleIsOperador,
 } from './rbac';
 
 describe('rbac (F035)', () => {
@@ -183,5 +186,24 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('admin').has('productionDashboard')).toBe(true);
     expect(navIdsForRole('produccion').has('productionDashboard')).toBe(false);
     expect(navIdsForRole('gerente_ventas').has('productionDashboard')).toBe(false);
+  });
+
+  it('operador role is valid and can claim production jobs', () => {
+    expect(isValidUserRole('operador')).toBe(true);
+    expect(roleCanClaimProductionJob('operador')).toBe(true);
+    expect(roleCanClaimProductionJob('produccion')).toBe(true);
+    expect(roleCanClaimProductionJob('admin')).toBe(true);
+    expect(roleCanClaimProductionJob('vendedor')).toBe(false);
+    expect(roleCanMarkProduced('operador')).toBe(true);
+    expect(roleCanExportProduction('operador')).toBe(true);
+    expect(roleCanAccessProductionDashboard('operador')).toBe(false);
+    expect(roleLabelEs('operador')).toBe('Operador');
+    expect(roleIsOperador('operador')).toBe(true);
+    expect(roleIsOperador('produccion')).toBe(false);
+  });
+
+  it('operador does NOT have full dashboard access (only gerente_produccion does)', () => {
+    expect(navIdsForRole('operador').has('productionDashboard')).toBe(false);
+    expect(navIdsForRole('operador').has('production')).toBe(true);
   });
 });

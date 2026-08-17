@@ -159,6 +159,11 @@ type Store interface {
 	GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error)
 	UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error)
 
+	// User sector assignments (operador role)
+	ListUserSectors(ctx context.Context, userID string) ([]domain.UserSector, error)
+	SetUserSectors(ctx context.Context, userID string, sectors []domain.UserSector) error
+	GetUsersBySector(ctx context.Context, sector string) ([]domain.User, error)
+
 	// Production activity tracking (gerente_produccion dashboard)
 	InsertProductionActivity(ctx context.Context, act domain.ProductionActivity) error
 	GetActiveActivitiesBySector(ctx context.Context, sector domain.ProductionSector) ([]domain.ProductionActivity, error)

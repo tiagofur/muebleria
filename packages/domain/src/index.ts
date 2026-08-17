@@ -43,6 +43,8 @@ export type {
   ModuleAgregadoInstance,
   ProjectItem,
   ItemFloorStatus,
+  FloorEventSource,
+  FloorStatusEvent,
   ProjectProductionState,
   Project,
   ProjectVersion,
@@ -137,7 +139,13 @@ export {
   roleLabelEs,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
+  roleCanAccessProductionDashboard,
+  roleCanClaimProductionJob,
+  roleIsOperador,
   type CostVisibilityOptions,
+  type WarehouseSubSector,
+  WAREHOUSE_SUB_SECTORS,
+  type UserSector,
 } from './rbac';
 
 export type { CategoryFilterId } from './categories';
@@ -403,6 +411,30 @@ export {
   type LoadingProgressResult,
   type LoadingProgress,
 } from './productionFloor';
+
+export {
+  PRODUCTION_SECTORS,
+  PIPELINE_SECTORS,
+  PRODUCTION_SECTOR_LABELS_ES,
+  isProductionSector,
+  sectorForFloorStatus,
+  floorStatusForSector,
+  itemsWaitingForSector,
+  buildProjectFloorSummary,
+  type ProductionSector,
+  type PipelineSector,
+  type FloorStageProgress,
+  type ProjectFloorSummary,
+} from './productionSectors';
+
+export {
+  advanceFloorStatus,
+  appendFloorEvent,
+  floorTimelineForItem,
+  latestFloorEvent,
+  type AdvanceFloorStatusInput,
+  type AdvanceFloorStatusResult,
+} from './productionFloorEvents';
 
 export {
   generateModuleLabels,

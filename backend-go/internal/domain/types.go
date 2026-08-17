@@ -17,18 +17,19 @@ const (
 type UserRole string
 
 const (
-	RoleAdmin         UserRole = "admin"
-	RoleUser          UserRole = "user" // approved account without job title
-	RoleVendedor      UserRole = "vendedor"
-	RoleGerenteVentas UserRole = "gerente_ventas"
-	RoleIngeniero     UserRole = "ingeniero"
-	RoleProduccion    UserRole = "produccion"
+	RoleAdmin          UserRole = "admin"
+	RoleUser           UserRole = "user" // approved account without job title
+	RoleVendedor       UserRole = "vendedor"
+	RoleGerenteVentas  UserRole = "gerente_ventas"
+	RoleIngeniero      UserRole = "ingeniero"
+	RoleProduccion     UserRole = "produccion"
+	RoleOperador       UserRole = "operador" // production operator, scoped by user_sectors
 )
 
 // IsValidUserRole reports whether role is an allowed account role (F035 product roles).
 func IsValidUserRole(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleUser, RoleVendedor, RoleGerenteVentas, RoleIngeniero, RoleProduccion:
+	case RoleAdmin, RoleUser, RoleVendedor, RoleGerenteVentas, RoleIngeniero, RoleProduccion, RoleOperador:
 		return true
 	default:
 		return false
@@ -56,6 +57,14 @@ type User struct {
 	Active       bool      `json:"active"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// UserSector maps an operator to one or more production sectors.
+type UserSector struct {
+	UserID    string `json:"user_id"`
+	Sector    string `json:"sector"`
+	SubSector string `json:"sub_sector,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Customer struct {
@@ -484,6 +493,7 @@ type Project struct {
 	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
 	// Shape: { revision, revision_at, fingerprint, last_export_* }.
 	Production    json.RawMessage     `json:"production,omitempty"`
+	FloorEvents   []FloorStatusEvent  `json:"floor_events,omitempty"`
 	Notes         string              `json:"notes,omitempty"`
 	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
 	CreatedAt     time.Time           `json:"created_at"`
