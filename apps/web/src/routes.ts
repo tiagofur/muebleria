@@ -12,8 +12,11 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   customers: '/customers',
   showcase: '/showcase',
   plantBoard: '/planta',
+  fabric: '/fabrica',
   production: '/produccion',
   productionDashboard: '/produccion/dashboard',
+  salesDashboard: '/ventas/dashboard',
+  engineering: '/ingenieria',
   modules: '/modules',
   structures: '/structures',
   components: '/components',
@@ -30,7 +33,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
 /** Sections that support `/section/:id` deep links for entity rows. */
 export type EntitySection = Exclude<
   AppNavId,
-  'home' | 'users' | 'settings' | 'showcase' | 'plantBoard' | 'production' | 'productionDashboard'
+  'home' | 'users' | 'settings' | 'showcase' | 'plantBoard' | 'fabric' | 'production' | 'productionDashboard' | 'engineering'
 >;
 
 /**
@@ -234,6 +237,30 @@ export function navFromPath(pathname: string): AppNavId | null {
     }
   }
   return null;
+}
+
+/**
+ * Engineering project deep link: `/ingenieria/:projectId`.
+ */
+export function engineeringProjectPath(projectId: string): string {
+  return `${NAV_PATHS.engineering}/${encodeURIComponent(projectId)}`;
+}
+
+export function engineeringProjectFromPath(pathname: string): string | null {
+  const base = NAV_PATHS.engineering;
+  const normalized = normalizePathname(pathname);
+  if (normalized === base) return null;
+  if (!normalized.startsWith(`${base}/`)) return null;
+  const rest = normalized.slice(base.length + 1);
+  if (!rest) return null;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(rest);
+  } catch {
+    decoded = rest;
+  }
+  if (decoded.includes('/')) return null;
+  return decoded;
 }
 
 /**

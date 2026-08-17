@@ -1,15 +1,24 @@
 /**
  * SectorAssignment — Component for assigning production sectors to operators.
  * Used by gerente_produccion and admin to manage operator sector access.
+ *
+ * All sectors are first-class — no sub-sector nesting. For almacen,
+ * herrajes/tableros/cintillas appear as direct checkboxes.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import {
+  PIPELINE_SECTORS,
+  PRODUCTION_SECTOR_LABELS_ES,
+  sectorsAllowedForRole,
+  type ProductionSector,
+  type ProductRole,
+} from '@muebles/domain';
 import './sectorAssignment.css';
 
 export interface UserSector {
   readonly userId: string;
   readonly sector: string;
-  readonly subSector?: string;
   readonly assignedAt: string;
 }
 
@@ -18,41 +27,52 @@ export interface SectorAssignmentProps {
   readonly token: string;
   readonly userId: string;
   readonly userName: string;
+  readonly role: ProductRole;
   readonly onClose: () => void;
 }
 
-/** Available production sectors */
-const SECTORS = [
-  { id: 'cutting', label: 'Corte' },
-  { id: 'edge_banding', label: 'Cantos' },
-  { id: 'cnc', label: 'CNC' },
-  { id: 'assembly', label: 'Ensamble' },
-  { id: 'packaging', label: 'Empaque' },
-  { id: 'warehouse', label: 'Almacén' },
-] as const;
-
-/** Warehouse sub-sectors */
-const WAREHOUSE_SUB_SECTORS = [
-  { id: 'herrajes', label: 'Herrajes' },
-  { id: 'tableros', label: 'Tableros' },
-  { id: 'cintillas', label: 'Cintillas' },
-] as const;
+/**
+ * Assignable sectors — the single domain vocabulary (F094): the pipeline
+ * stations in manufacturing order plus warehouse and material sectors.
+ * Filtered by role: produccion sees all; almacen sees only material types.
+ */
+function buildSectorList(role: ProductRole): readonly { id: ProductionSector; label: string }[] {
+  const allowed = sectorsAllowedForRole(role);
+  if (allowed.length === 0) {
+    // Supervisors: show all (they manage, not work)
+    return [
+      ...PIPELINE_SECTORS.map((sector) => ({
+        id: sector,
+        label: PRODUCTION_SECTOR_LABELS_ES[sector],
+      })),
+      { id: 'warehouse' as ProductionSector, label: PRODUCTION_SECTOR_LABELS_ES.warehouse },
+      { id: 'herrajes' as ProductionSector, label: PRODUCTION_SECTOR_LABELS_ES.herrajes },
+      { id: 'tableros' as ProductionSector, label: PRODUCTION_SECTOR_LABELS_ES.tableros },
+      { id: 'cintillas' as ProductionSector, label: PRODUCTION_SECTOR_LABELS_ES.cintillas },
+    ];
+  }
+  return allowed.map((sector) => ({
+    id: sector,
+    label: PRODUCTION_SECTOR_LABELS_ES[sector],
+  }));
+}
 
 export function SectorAssignment({
   baseUrl,
   token,
   userId,
   userName,
+  role,
   onClose,
 }: SectorAssignmentProps): ReactNode {
-  const [sectors, setSectors] = useState<UserSector[]>([]);
+  const sectors = useMemo(() => buildSectorList(role), [role]);
+  const [assignedSectors, setAssignedSectors] = useState<UserSector[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Local state for selected sectors
+  // Selected sectors — simple set of sector IDs
   const [selectedSectors, setSelectedSectors] = useState<Set<string>>(new Set());
-  const [selectedSubSectors, setSelectedSubSectors] = useState<Set<string>>(new Set());
 
   const headers = useMemo(
     () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
@@ -72,19 +92,14 @@ export function SectorAssignment({
         const res = await fetch(`${baseUrl}/admin/users/${userId}/sectors`, { headers });
         if (!res.ok) throw new Error('Error loading sectors');
         const data = (await res.json()) as UserSector[];
-        setSectors(data);
+        setAssignedSectors(data);
 
-        // Initialize selected state
+        // Initialize selected state from assigned sectors
         const sectorSet = new Set<string>();
-        const subSectorSet = new Set<string>();
         for (const s of data) {
           sectorSet.add(s.sector);
-          if (s.subSector) {
-            subSectorSet.add(`${s.sector}:${s.subSector}`);
-          }
         }
         setSelectedSectors(sectorSet);
-        setSelectedSubSectors(subSectorSet);
       } finally {
         setLoading(false);
       }
@@ -97,31 +112,8 @@ export function SectorAssignment({
       const next = new Set(prev);
       if (next.has(sectorId)) {
         next.delete(sectorId);
-        // Remove sub-sectors when removing parent
-        setSelectedSubSectors((subPrev) => {
-          const subNext = new Set(subPrev);
-          for (const sub of subNext) {
-            if (sub.startsWith(`${sectorId}:`)) {
-              subNext.delete(sub);
-            }
-          }
-          return subNext;
-        });
       } else {
         next.add(sectorId);
-      }
-      return next;
-    });
-  };
-
-  const toggleSubSector = (sectorId: string, subSectorId: string) => {
-    const key = `${sectorId}:${subSectorId}`;
-    setSelectedSubSectors((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
       }
       return next;
     });
@@ -130,25 +122,8 @@ export function SectorAssignment({
   const save = async () => {
     setSaving(true);
     try {
-      // Build sectors array
-      const sectorsPayload: Array<{ sector: string; sub_sector?: string }> = [];
-      for (const sectorId of selectedSectors) {
-        if (sectorId === 'warehouse') {
-          // Warehouse needs sub-sectors
-          const warehouseSubs = Array.from(selectedSubSectors)
-            .filter((s) => s.startsWith('warehouse:'))
-            .map((s) => s.split(':')[1]);
-          if (warehouseSubs.length === 0) {
-            showToast('Almacén requiere al menos un sub-sector');
-            return;
-          }
-          for (const sub of warehouseSubs) {
-            sectorsPayload.push({ sector: sectorId, sub_sector: sub });
-          }
-        } else {
-          sectorsPayload.push({ sector: sectorId });
-        }
-      }
+      // All sectors are first-class — no sub_sector
+      const sectorsPayload = Array.from(selectedSectors).map((sector) => ({ sector }));
 
       const res = await fetch(`${baseUrl}/admin/users/${userId}/sectors`, {
         method: 'PUT',
@@ -188,11 +163,13 @@ export function SectorAssignment({
 
         <div className="sector-assignment-body">
           <p className="sector-assignment-description">
-            Seleccioná los sectores donde este operador puede trabajar:
+            {role === 'almacen'
+              ? 'Seleccioná los tipos de material que este operador de almacén gestiona:'
+              : 'Seleccioná los sectores donde este operador puede trabajar:'}
           </p>
 
           <div className="sector-assignment-list">
-            {SECTORS.map((sector) => (
+            {sectors.map((sector) => (
               <div key={sector.id} className="sector-assignment-item">
                 <label className="sector-assignment-checkbox">
                   <input
@@ -202,21 +179,6 @@ export function SectorAssignment({
                   />
                   <span className="sector-assignment-label">{sector.label}</span>
                 </label>
-
-                {sector.id === 'warehouse' && selectedSectors.has('warehouse') && (
-                  <div className="sector-assignment-sub-sectors">
-                    {WAREHOUSE_SUB_SECTORS.map((sub) => (
-                      <label key={sub.id} className="sector-assignment-checkbox sub">
-                        <input
-                          type="checkbox"
-                          checked={selectedSubSectors.has(`warehouse:${sub.id}`)}
-                          onChange={() => toggleSubSector('warehouse', sub.id)}
-                        />
-                        <span className="sector-assignment-label">{sub.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
           </div>

@@ -10,6 +10,7 @@ import '@muebles/ui/common/catalogImage.css';
 import '@muebles/ui/common/surfaceCard.css';
 import '@muebles/ui/common/dataTable.css';
 import '@muebles/ui/common/pageHeader.css';
+import '@muebles/ui/common/tabs.css';
 import '@muebles/ui/common/entityCard.css';
 import '@muebles/ui/common/engineeringDetail.css';
 import { App } from './App';

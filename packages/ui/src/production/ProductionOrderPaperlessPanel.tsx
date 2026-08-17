@@ -267,7 +267,7 @@ export function ProductionOrderPaperlessPanel({
       ) : null}
 
       <div
-        className="prod-paperless__filters"
+        className="tab-bar tab-bar--compact"
         role="toolbar"
         aria-label="Filtrar por estado de piso"
       >
@@ -275,8 +275,8 @@ export function ProductionOrderPaperlessPanel({
           type="button"
           className={
             filter === 'all'
-              ? 'prod-hub__tab prod-hub__tab--active'
-              : 'prod-hub__tab'
+              ? 'tab-btn tab-btn--active'
+              : 'tab-btn'
           }
           onClick={() => setFilter('all')}
           data-testid="prod-piso-filter-all"
@@ -291,8 +291,8 @@ export function ProductionOrderPaperlessPanel({
               type="button"
               className={
                 filter === s
-                  ? 'prod-hub__tab prod-hub__tab--active'
-                  : 'prod-hub__tab'
+                  ? 'tab-btn tab-btn--active'
+                  : 'tab-btn'
               }
               onClick={() => setFilter(s)}
               data-testid={`prod-piso-filter-${s}`}

@@ -27,16 +27,9 @@ export function ShowcaseScreen({
 
   return (
     <div className="showcase-screen" data-testid="showcase-screen">
-      <div
-        className="prod-hub__tabs-wrap"
-        style={{
-          borderBottom: '1px solid var(--border-default)',
-          background: 'var(--surface-card)',
-          padding: 'var(--space-2) var(--space-6) 0 var(--space-6)',
-        }}
-      >
+      <div className="tab-bar">
         <nav
-          className="prod-hub__tabs"
+          className="tab-bar__inner"
           role="tablist"
           aria-label="Vistas de la Vitrina Comercial"
         >
@@ -46,8 +39,8 @@ export function ShowcaseScreen({
             aria-selected={activeTab === 'portfolio'}
             className={
               activeTab === 'portfolio'
-                ? 'prod-hub__tab prod-hub__tab--active'
-                : 'prod-hub__tab'
+                ? 'tab-btn tab-btn--active'
+                : 'tab-btn'
             }
             onClick={() => setActiveTab('portfolio')}
             data-testid="showcase-tab-portfolio"
@@ -61,8 +54,8 @@ export function ShowcaseScreen({
             aria-selected={activeTab === 'modules'}
             className={
               activeTab === 'modules'
-                ? 'prod-hub__tab prod-hub__tab--active'
-                : 'prod-hub__tab'
+                ? 'tab-btn tab-btn--active'
+                : 'tab-btn'
             }
             onClick={() => setActiveTab('modules')}
             data-testid="showcase-tab-modules"

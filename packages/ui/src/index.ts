@@ -233,6 +233,7 @@ export {
   ProjectFloorProgressStrip,
   ProjectFloorStageChip,
   PlantBoardScreen,
+  FabricScreen,
   ProductionManagerDashboard,
   filterProductionQueue,
   filterProductionVisible,
@@ -251,6 +252,15 @@ export {
   type ProductionOrderTab,
   type ProductionOrderReadiness,
 } from './production';
+
+export {
+  EngineeringScreen,
+  EngineeringWorkspace,
+} from './engineering';
+
+export {
+  SalesDashboard,
+} from './sales';
 
 export {
   LoginScreen,

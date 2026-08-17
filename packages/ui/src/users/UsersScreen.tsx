@@ -17,6 +17,7 @@ import { EmptyState, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
+import type { ProductRole } from '@muebles/domain';
 
 export interface UserRow {
   readonly id: string;
@@ -65,6 +66,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [toast, setToast] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUserName, setSelectedUserName] = useState<string>('');
+  const [selectedUserRole, setSelectedUserRole] = useState<string>('');
 
   const headers = useMemo(
     () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
@@ -274,6 +276,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         onClick={() => {
                           setSelectedUserId(u.id);
                           setSelectedUserName(u.name);
+                          setSelectedUserRole(u.role);
                         }}
                         title="Asignar sectores"
                       >
@@ -315,9 +318,11 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
           token={token}
           userId={selectedUserId}
           userName={selectedUserName}
+          role={selectedUserRole as ProductRole}
           onClose={() => {
             setSelectedUserId(null);
             setSelectedUserName('');
+            setSelectedUserRole('');
             void load();
           }}
         />

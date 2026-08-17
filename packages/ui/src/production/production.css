@@ -285,77 +285,7 @@
   }
 }
 
-/* Sticky horizontal tab strip — usable on phone with many sections */
-.prod-hub__tabs-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  margin: 0 calc(-1 * var(--space-2));
-  padding: var(--space-2) var(--space-2) 0;
-  background: var(--surface-app);
-  border-bottom: 1px solid var(--border-default);
-}
-
-.prod-hub__tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: var(--space-2);
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  padding-bottom: var(--space-2);
-}
-
-.prod-hub__tabs::-webkit-scrollbar {
-  height: 4px;
-}
-
-.prod-hub__tabs::-webkit-scrollbar-thumb {
-  background: var(--border-default);
-  border-radius: var(--radius-md);
-}
-
-.prod-hub__tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  min-height: 2.5rem;
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  color: var(--text-secondary);
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  scroll-snap-align: start;
-  white-space: nowrap;
-}
-
-.prod-hub__tab--active {
-  color: var(--text-brand);
-  border-color: var(--border-brand);
-  background: var(--surface-selected);
-}
-
-@media (min-width: 900px) {
-  .prod-hub__tabs-wrap {
-    margin: 0;
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  .prod-hub__tabs {
-    flex-wrap: wrap;
-    overflow: visible;
-    scroll-snap-type: none;
-  }
-}
+/* Tab styles moved to common/tabs.css — generic .tab-bar, .tab-btn classes */
 
 .prod-hub__body {
   display: flex;
@@ -2118,4 +2048,178 @@
 
 .plant-board__bottleneck--done {
   color: var(--success-700);
+}
+
+/* ==========================================================================
+   Fábrica — Tabbed work queue per production sector (replaces Mi Estación).
+   Solo tokens del design system.
+   ========================================================================== */
+
+.fabric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fabric__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.fabric__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.fabric__title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--text-inverse);
+  background: var(--brand-500);
+  border-radius: var(--radius-md, 10px);
+}
+
+.fabric__title {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
+.fabric__subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-secondary);
+}
+
+.fabric__total {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-full, 9999px);
+  white-space: nowrap;
+}
+
+/* --- Tab bar --- */
+.fabric__tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.fabric__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.fabric__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.fabric__tab:hover {
+  color: var(--text-primary);
+}
+
+.fabric__tab--active {
+  color: var(--text-brand);
+  border-bottom-color: var(--brand-500);
+  font-weight: var(--weight-semibold);
+}
+
+.fabric__tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-inverse);
+  background: var(--brand-500);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.fabric__tab:not(.fabric__tab--active) .fabric__tab-count {
+  background: var(--text-muted);
+}
+
+/* --- Tab panel --- */
+.fabric__panel {
+  min-height: 200px;
+}
+
+.fabric__empty-tab {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.fabric__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fabric__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 10px);
+}
+
+.fabric__row-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fabric__row-project {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.fabric__row-meta {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-muted);
+}
+
+.fabric__row-waiting {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }

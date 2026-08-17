@@ -1,0 +1,157 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { EngineeringScreen } from './EngineeringScreen';
+import type { Project } from '@muebles/domain';
+import type { EngineeringLog } from '@muebles/domain';
+
+type ProjectWithCustomer = Project & { readonly customerLabel?: string };
+
+const logInProgress: EngineeringLog = {
+  startedBy: 'u1',
+  startedAt: '2026-08-01T10:00:00Z',
+  revision: 1,
+};
+
+const logDocumented: EngineeringLog = {
+  startedBy: 'u1',
+  startedAt: '2026-08-01T10:00:00Z',
+  generatedBy: 'u1',
+  generatedAt: '2026-08-02T14:00:00Z',
+  revision: 2,
+};
+
+const mockProjects: ProjectWithCustomer[] = [
+  {
+    id: 'p1',
+    name: 'Cocina Moderna',
+    customerLabel: 'Cliente A',
+    status: 'accepted',
+    items: [],
+    currency: 'MXN',
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+  } as unknown as ProjectWithCustomer,
+  {
+    id: 'p2',
+    name: 'Placard Walk-in',
+    customerLabel: 'Cliente B',
+    status: 'accepted',
+    items: [],
+    currency: 'MXN',
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+    engineeringLog: logInProgress,
+  } as unknown as ProjectWithCustomer,
+  {
+    id: 'p3',
+    name: 'Escritorio Ejecutivo',
+    status: 'accepted',
+    items: [],
+    currency: 'MXN',
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+    engineeringLog: logDocumented,
+  } as unknown as ProjectWithCustomer,
+];
+
+describe('EngineeringScreen', () => {
+  afterEach(cleanup);
+
+  it('renders project list', () => {
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Cocina Moderna')).not.toBeNull();
+    expect(screen.getByText('Placard Walk-in')).not.toBeNull();
+    expect(screen.getByText('Escritorio Ejecutivo')).not.toBeNull();
+  });
+
+  it('shows engineering status badges', () => {
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    // Each status appears twice: once as a filter button, once as a row badge.
+    expect(screen.getAllByText('Pendiente').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('En proceso').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Documentado').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filters by search', () => {
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    const searchInput = screen.getByPlaceholderText('Buscar proyecto...');
+    fireEvent.change(searchInput, { target: { value: 'Escritorio' } });
+    expect(screen.queryByText('Cocina Moderna')).toBeNull();
+    expect(screen.queryByText('Placard Walk-in')).toBeNull();
+    expect(screen.getByText('Escritorio Ejecutivo')).not.toBeNull();
+  });
+
+  it('filters by status', () => {
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    // Click the "Documentado" stat card to filter.
+    const documentedButton = screen.getByTestId('eng-stat-documented');
+    fireEvent.click(documentedButton);
+    expect(screen.queryByText('Cocina Moderna')).toBeNull();
+    expect(screen.queryByText('Placard Walk-in')).toBeNull();
+    expect(screen.getByText('Escritorio Ejecutivo')).not.toBeNull();
+  });
+
+  it('"Iniciar ingeniería" button calls onStartEngineering', () => {
+    const onStart = vi.fn();
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={onStart}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    const startBtn = screen.getByRole('button', { name: /Iniciar$/i });
+    fireEvent.click(startBtn);
+    expect(onStart).toHaveBeenCalledWith('p1');
+  });
+
+  it('clicking project row calls onOpenProject', () => {
+    const onOpen = vi.fn();
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={onOpen}
+      />,
+    );
+    const row = screen.getByText('Placard Walk-in');
+    fireEvent.click(row);
+    expect(onOpen).toHaveBeenCalledWith('p2');
+  });
+
+  it('empty state when no projects', () => {
+    render(
+      <EngineeringScreen
+        projects={[]}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('No hay proyectos')).not.toBeNull();
+  });
+});

@@ -35,6 +35,8 @@ import {
   Users,
   Palette,
   BarChart3,
+  ClipboardList,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
@@ -52,8 +54,11 @@ export type AppNavId =
   | 'customers'
   | 'showcase'
   | 'plantBoard'
+  | 'fabric'
   | 'production'
   | 'productionDashboard'
+  | 'engineering'
+  | 'salesDashboard'
   | 'modules'
   | 'structures'
   | 'components'
@@ -129,7 +134,7 @@ type NavItemDef = {
 };
 
 type NavSectionDef = {
-  readonly id: 'trabajo' | 'ingenieria' | 'config';
+  readonly id: 'trabajo' | 'ventas' | 'ingenieria' | 'libreria' | 'catalogos' | 'config';
   readonly label: string;
   readonly items: readonly NavItemDef[];
 };
@@ -152,16 +157,18 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     label: 'TRABAJO',
     items: [
       { id: 'home', label: 'Inicio', icon: LayoutDashboard },
-      { id: 'projects', label: 'Cotizaciones', icon: FileText },
-      { id: 'customers', label: 'Clientes', icon: Users },
-      /** Commercial catalog — not engineering ABM. */
-      { id: 'showcase', label: 'Vitrina', icon: Store },
       /**
        * F093 — factory progress board. Visible to EVERY role (sales
        * included): read-only "where is each project right now".
        * Filtered only when allowedNavIds excludes it (never, today).
        */
       { id: 'plantBoard', label: 'Estado de Planta', icon: KanbanSquare },
+      /**
+       * Fábrica — tabbed work queue per assigned sector (replaces Mi Estación).
+       * Only for sector-scoped operators (produccion / almacen);
+       * rbac.ts navIdsForRole decides via roleIsScopedBySector.
+       */
+      { id: 'fabric', label: 'Fábrica', icon: Factory },
       /**
        * Plant production queue. Filtered out unless allowedNavIds includes it
        * (rbac.ts navIdsForRole adds 'production' only for roles with
@@ -176,44 +183,50 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     ],
   },
   {
+    id: 'ventas',
+    label: 'VENTAS',
+    items: [
+      /**
+       * Dashboard Ventas — pipeline + summary for sales roles.
+       * vendedor sees own portfolio; gerente_ventas and admin see all.
+       */
+      { id: 'salesDashboard', label: 'Dashboard', icon: TrendingUp },
+      { id: 'projects', label: 'Cotizaciones', icon: FileText },
+      { id: 'customers', label: 'Clientes', icon: Users },
+      /** Commercial catalog — not engineering ABM. */
+      { id: 'showcase', label: 'Vitrina', icon: Store },
+    ],
+  },
+  {
     id: 'ingenieria',
     label: 'INGENIERÍA',
-    // design.md §4.1 order: composition first, then catalogs, Grupos last.
     items: [
-      { id: 'modules', label: 'Muebles', icon: Package, group: 'composition' },
-      {
-        id: 'structures',
-        label: 'Estructuras',
-        icon: LayoutGrid,
-        group: 'composition',
-      },
-      {
-        id: 'agregados',
-        label: 'Agregados',
-        icon: Boxes,
-        group: 'composition',
-      },
-      {
-        id: 'components',
-        label: 'Componentes',
-        icon: Puzzle,
-        group: 'composition',
-      },
-      { id: 'materials', label: 'Materiales', icon: Layers, group: 'catalogs' },
-      { id: 'edges', label: 'Cantos', icon: Minus, group: 'catalogs' },
-      { id: 'hardware', label: 'Herrajes', icon: Settings2, group: 'catalogs' },
-      {
-        id: 'ambientMaterials',
-        label: 'Acabados',
-        icon: Palette,
-        group: 'catalogs',
-      },
-      {
-        id: 'optionGroups',
-        label: 'Grupos',
-        icon: ToggleLeft,
-        group: 'catalogs',
-      },
+      /**
+       * Ingeniería — documentation workspace for engineers.
+       * Landing page with project list + engineering status.
+       */
+      { id: 'engineering', label: 'Ingeniería', icon: ClipboardList },
+    ],
+  },
+  {
+    id: 'libreria',
+    label: 'LIBRERÍA',
+    items: [
+      { id: 'modules', label: 'Muebles', icon: Package },
+      { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
+      { id: 'agregados', label: 'Agregados', icon: Boxes },
+      { id: 'components', label: 'Componentes', icon: Puzzle },
+      { id: 'optionGroups', label: 'Grupos', icon: ToggleLeft },
+    ],
+  },
+  {
+    id: 'catalogos',
+    label: 'CATÁLOGOS',
+    items: [
+      { id: 'materials', label: 'Materiales', icon: Layers },
+      { id: 'edges', label: 'Cantos', icon: Minus },
+      { id: 'hardware', label: 'Herrajes', icon: Settings2 },
+      { id: 'ambientMaterials', label: 'Acabados', icon: Palette },
     ],
   },
   {

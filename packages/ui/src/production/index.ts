@@ -7,6 +7,7 @@ export {
   ProjectFloorStageChip,
 } from './ProjectFloorProgressStrip';
 export { PlantBoardScreen } from './PlantBoardScreen';
+export { FabricScreen } from './FabricScreen';
 
 export {
   ProductionQueue,

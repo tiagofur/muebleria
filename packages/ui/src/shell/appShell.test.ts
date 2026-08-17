@@ -32,78 +32,70 @@ function read(rel: string): string {
 }
 
 describe('AppShell nav model (F017)', () => {
-  it('exposes TRABAJO, INGENIERIA and CONFIG sections with required destinations', () => {
-    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ingenieria', 'config']);
+  it('exposes TRABAJO, VENTAS, INGENIERIA, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
+    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ventas', 'ingenieria', 'libreria', 'catalogos', 'config']);
     expect(APP_NAV_SECTIONS.map((s) => s.label)).toEqual([
       'TRABAJO',
+      'VENTAS',
       'INGENIERÍA',
+      'LIBRERÍA',
+      'CATÁLOGOS',
       'CONFIG',
     ]);
 
     const trabajo = APP_NAV_SECTIONS.find((s) => s.id === 'trabajo')!;
+    const ventas = APP_NAV_SECTIONS.find((s) => s.id === 'ventas')!;
     const ingenieria = APP_NAV_SECTIONS.find((s) => s.id === 'ingenieria')!;
+    const libreria = APP_NAV_SECTIONS.find((s) => s.id === 'libreria')!;
+    const catalogos = APP_NAV_SECTIONS.find((s) => s.id === 'catalogos')!;
     const config = APP_NAV_SECTIONS.find((s) => s.id === 'config')!;
 
     expect(trabajo.items.map((i) => i.id)).toEqual([
       'home',
-      'projects',
-      'customers',
-      'showcase',
       'plantBoard',
+      'fabric',
       'production',
       'productionDashboard',
     ]);
-    expect(trabajo.items.map((i) => i.label)).toEqual([
-      'Inicio',
-      'Cotizaciones',
-      'Clientes',
-      'Vitrina',
-      'Estado de Planta',
-      'Producción',
-      'Dashboard Producción',
+
+    expect(ventas.items.map((i) => i.id)).toEqual([
+      'salesDashboard',
+      'projects',
+      'customers',
+      'showcase',
     ]);
 
-    // design.md §4.1: composition first, then catalogs, Grupos last (Fase 6).
-    // Ambient materials (catalogs) sit before Grupos.
     expect(ingenieria.items.map((i) => i.id)).toEqual([
+      'engineering',
+    ]);
+    expect(ingenieria.items.map((i) => i.label)).toEqual([
+      'Ingeniería',
+    ]);
+
+    expect(libreria.items.map((i) => i.id)).toEqual([
       'modules',
       'structures',
       'agregados',
       'components',
-      'materials',
-      'edges',
-      'hardware',
-      'ambientMaterials',
       'optionGroups',
     ]);
-    expect(ingenieria.items.map((i) => i.label)).toEqual([
+    expect(libreria.items.map((i) => i.label)).toEqual([
       'Muebles',
       'Estructuras',
       'Agregados',
       'Componentes',
-      'Materiales',
-      'Cantos',
-      'Herrajes',
-      'Acabados',
       'Grupos',
     ]);
-    expect(ingenieria.items.map((i) => i.group)).toEqual([
-      'composition',
-      'composition',
-      'composition',
-      'composition',
-      'catalogs',
-      'catalogs',
-      'catalogs',
-      'catalogs',
-      'catalogs',
+
+    expect(catalogos.items.map((i) => i.id)).toEqual([
+      'materials',
+      'edges',
+      'hardware',
+      'ambientMaterials',
     ]);
 
     expect(config.items.map((i) => i.id)).toEqual([
       'settings',
-    ]);
-    expect(config.items.map((i) => i.label)).toEqual([
-      'Ajustes',
     ]);
   });
 
@@ -137,16 +129,14 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('users')).toBe('Usuarios');
   });
 
-  it('INGENIERÍA groups composition vs catalogs (Fase 6 IA)', () => {
-    const css = read('appShell.css');
-    expect(css).toMatch(/app-sidebar__group-label/);
-    expect(css).toMatch(/app-sidebar__item--nested/);
-    const src = read('AppShell.tsx');
-    expect(src).toMatch(/nav-group-\$\{item\.group\}/);
-    expect(src).toMatch(/Composición/);
-    expect(src).toMatch(/Catálogos/);
-    expect(src).toMatch(/group: 'composition'/);
-    expect(src).toMatch(/group: 'catalogs'/);
+  it('CATÁLOGOS section contains catalog items', () => {
+    const catalogos = APP_NAV_SECTIONS.find((s) => s.id === 'catalogos')!;
+    expect(catalogos.items.map((i) => i.id)).toEqual([
+      'materials',
+      'edges',
+      'hardware',
+      'ambientMaterials',
+    ]);
   });
 
   it('resolveNavSections appends Usuarios only when showAdminUsers', () => {

@@ -203,8 +203,8 @@ export function ProductionOrderDespiecePanel({
               type="button"
               className={
                 groupBy === id
-                  ? 'prod-hub__tab prod-hub__tab--active'
-                  : 'prod-hub__tab'
+                  ? 'tab-btn tab-btn--active'
+                  : 'tab-btn'
               }
               onClick={() => setGroupBy(id)}
               data-testid={`prod-despiece-group-${id}`}

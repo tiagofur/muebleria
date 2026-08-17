@@ -393,14 +393,7 @@ export function ProductionOrderLabelsPanel({
     <div className="prod-labels" data-testid="prod-hub-etiquetas">
       {/* Top Type Selector: Piezas vs Muebles */}
       <div
-        className="prod-hub__tabs"
-        style={{
-          marginBottom: '1rem',
-          display: 'flex',
-          gap: '0.5rem',
-          borderBottom: '1px solid var(--color-border)',
-          paddingBottom: '0.5rem',
-        }}
+        className="tab-bar tab-bar--compact"
         role="tablist"
         aria-label="Tipo de etiqueta"
       >
@@ -408,8 +401,8 @@ export function ProductionOrderLabelsPanel({
           type="button"
           className={
             labelMode === 'pieces'
-              ? 'prod-hub__tab prod-hub__tab--active'
-              : 'prod-hub__tab'
+              ? 'tab-btn tab-btn--active'
+              : 'tab-btn'
           }
           onClick={() => {
             setLabelMode('pieces');
@@ -425,8 +418,8 @@ export function ProductionOrderLabelsPanel({
           type="button"
           className={
             labelMode === 'modules'
-              ? 'prod-hub__tab prod-hub__tab--active'
-              : 'prod-hub__tab'
+              ? 'tab-btn tab-btn--active'
+              : 'tab-btn'
           }
           onClick={() => {
             setLabelMode('modules');
@@ -503,7 +496,7 @@ export function ProductionOrderLabelsPanel({
               <button
                 type="button"
                 className={
-                  perUnit ? 'prod-hub__tab' : 'prod-hub__tab prod-hub__tab--active'
+                  perUnit ? 'tab-btn' : 'tab-btn tab-btn--active'
                 }
                 onClick={() => setPerUnit(false)}
                 data-testid="prod-labels-per-piece"
@@ -513,7 +506,7 @@ export function ProductionOrderLabelsPanel({
               <button
                 type="button"
                 className={
-                  perUnit ? 'prod-hub__tab prod-hub__tab--active' : 'prod-hub__tab'
+                  perUnit ? 'tab-btn tab-btn--active' : 'tab-btn'
                 }
                 onClick={() => setPerUnit(true)}
                 data-testid="prod-labels-per-unit"

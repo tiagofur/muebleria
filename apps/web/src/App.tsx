@@ -43,7 +43,10 @@ import {
   defaultMeasurePresetId,
   generateCutRows,
   generateHardwareList,
+  generatePieceLabels,
+  generateModuleLabels,
   generateProjectMaterialSummary,
+  createEngineeringLog,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
   projectToTemplate,
@@ -70,6 +73,7 @@ import {
   roleLabelEs,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
+  roleIsScopedBySector,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -88,6 +92,10 @@ import {
   ProjectsScreen,
   ProductionWorkspace,
   PlantBoardScreen,
+  FabricScreen,
+  EngineeringScreen,
+  EngineeringWorkspace,
+  SalesDashboard,
   ProductionManagerDashboard,
   ProjectFloorProgressStrip,
   filterProductionVisible,
@@ -129,6 +137,7 @@ import {
   type ComponentDraft,
   AgregadosScreen,
   PageLoading,
+  buildProductionOrderReadiness,
   type CommandPaletteItem,
 } from '@muebles/ui';
 import {
@@ -162,6 +171,8 @@ import {
   componentEditIdFromPath,
   entityIdFromPath,
   entityPath,
+  engineeringProjectFromPath,
+  engineeringProjectPath,
   isEntityEditPath,
   isEntitySection,
   moduleEditIdFromPath,
@@ -660,6 +671,34 @@ function AppContent({
     () => navIdsForRole(session === 'auth' ? authUser?.role : null),
     [session, authUser?.role],
   );
+  // F094 — own station assignments (Mi Estación). Loaded for scoped
+  // operator roles; null = unrestricted / local mode.
+  const isSectorScoped = roleIsScopedBySector(actorRole);
+  const [mySectors, setMySectors] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (session !== 'auth' || !isSectorScoped) {
+      setMySectors(null);
+      return;
+    }
+    const repo = getRepository();
+    if (!repo.getMySectors) {
+      setMySectors(null);
+      return;
+    }
+    let cancelled = false;
+    repo
+      .getMySectors()
+      .then((sectors) => {
+        if (cancelled) return;
+        setMySectors(sectors.map((s) => s.sector));
+      })
+      .catch(() => {
+        if (!cancelled) setMySectors(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, isSectorScoped]);
   const canMutateCatalog =
     session === 'guest' || roleCanMutateCatalog(actorRole);
   const canMutateModules =
@@ -750,6 +789,8 @@ function AppContent({
   const routeProductionOrderTab = parseProductionOrderTab(
     productionOrderRoute?.tab ?? 'resumen',
   );
+  const routeEngineeringProjectId =
+    navId === 'engineering' ? engineeringProjectFromPath(location.pathname) : null;
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
   const routeModuleEditId =
     navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;
@@ -1298,6 +1339,24 @@ function AppContent({
       projectActions.markProjectProduced(id, catalog);
     },
     [projectActions, catalog],
+  );
+  const startEngineering = useCallback(
+    (projectId: string) => {
+      const project = projects.find((p) => p.id === projectId);
+      if (!project || project.engineeringLog) return;
+      const log = createEngineeringLog(
+        authUser?.id ?? 'unknown',
+        new Date().toISOString(),
+      );
+      // Patch the project's engineeringLog directly via setProjects.
+      projectActions.setProjects(
+        projects.map((p) =>
+          p.id === projectId ? { ...p, engineeringLog: log, updatedAt: new Date().toISOString() } : p,
+        ),
+      );
+      navigate(engineeringProjectPath(projectId));
+    },
+    [projects, authUser?.id, projectActions, navigate],
   );
   const changeProjectStatus = useCallback(
     (id: string, status: ProjectStatus) => {
@@ -2232,6 +2291,184 @@ function AppContent({
               ? modulesWithoutPhotoCount
               : undefined
           }
+        />
+      ) : null}
+      {navId === 'fabric' && isSectorScoped ? (
+        <FabricScreen
+          projects={projectsForRole}
+          assignedSectors={mySectors}
+          canAdvance={
+            session === 'auth' &&
+            (canMarkProduced || roleCanExportProduction(actorRole))
+          }
+          onAdvance={(projectId, itemId, target) => {
+            const repo = getRepository();
+            if (repo.setProjectItemFloorStatus) {
+              // Server path enforces station scoping + writes the audit
+              // event (F094); mirror locally to keep the list in sync.
+              void repo
+                .setProjectItemFloorStatus(projectId, itemId, target)
+                .then((res) => {
+                  if (res.floorStatus === target) {
+                    setItemFloorStatus(projectId, itemId, target);
+                  }
+                })
+                .catch((err) => {
+                  toast({
+                    type: 'error',
+                    message:
+                      err instanceof Error && err.message
+                        ? err.message
+                        : 'No se pudo avanzar el mueble',
+                  });
+                });
+            } else {
+              setItemFloorStatus(projectId, itemId, target);
+            }
+          }}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
+          }
+        />
+      ) : null}
+      {navId === 'engineering' && !routeEngineeringProjectId ? (
+        <EngineeringScreen
+          projects={projectsForRole.map((p) => ({
+            ...p,
+            customerLabel: resolveCustomerName(p.customerId, customers),
+          }))}
+          onStartEngineering={startEngineering}
+          onOpenProject={(id) => {
+            const target = engineeringProjectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
+          currentUserId={authUser?.id}
+        />
+      ) : null}
+      {navId === 'engineering' && routeEngineeringProjectId ? (() => {
+        const engProject = projects.find((p) => p.id === routeEngineeringProjectId);
+        if (!engProject) {
+          return (
+            <div className="empty-state">
+              <p>Proyecto no encontrado.</p>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => navigate(pathForNav('engineering'))}
+              >
+                Volver a Ingeniería
+              </button>
+            </div>
+          );
+        }
+        const engModules = modules.filter((m) =>
+          engProject.items.some((item) => item.moduleId === m.id),
+        );
+        let engCutRows: ReturnType<typeof generateCutRows> | null = null;
+        let engCutError: string | null = null;
+        if (catalog) {
+          try {
+            engCutRows = generateCutRows(engProject, catalog);
+          } catch (err) {
+            engCutError = err instanceof Error ? err.message : 'Error al resolver despiece';
+          }
+        }
+        const engReadiness = buildProductionOrderReadiness({
+          project: engProject,
+          cutRows: engCutRows,
+          cutListError: engCutError,
+        });
+        let engLabels: ReturnType<typeof generatePieceLabels> | null = null;
+        let engLabelsError: string | null = null;
+        let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
+        let engModuleLabelsError: string | null = null;
+        if (catalog) {
+          try {
+            engLabels = generatePieceLabels(engProject, catalog);
+          } catch (err) {
+            engLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
+          }
+          try {
+            engModuleLabels = generateModuleLabels(engProject, catalog, {
+              customerName: resolveCustomerName(engProject.customerId, customers),
+              revision: engProject.production?.revision?.toString(),
+            });
+          } catch (err) {
+            engModuleLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas de módulo';
+          }
+        }
+        let engHardwareRows: ReturnType<typeof generateHardwareList> | null = null;
+        let engHardwareError: string | null = null;
+        if (catalog) {
+          try {
+            engHardwareRows = generateHardwareList(engProject, catalog);
+          } catch (err) {
+            engHardwareError = err instanceof Error ? err.message : 'Error al resolver herrajes';
+          }
+        }
+        return (
+          <EngineeringWorkspace
+            project={engProject}
+            modules={engModules}
+            catalog={catalog}
+            catalog3d={
+              catalog
+                ? {
+                    modules,
+                    structures,
+                    components,
+                    agregados,
+                    materials,
+                    edges,
+                    hardware,
+                    optionGroups,
+                    ambientMaterials,
+                    ambientCategories,
+                  }
+                : null
+            }
+            cutRows={engCutRows}
+            cutError={engCutError}
+            readiness={engReadiness}
+            labels={engLabels}
+            labelsError={engLabelsError}
+            moduleLabels={engModuleLabels}
+            moduleLabelsError={engModuleLabelsError}
+            hardwareRows={engHardwareRows}
+            hardwareError={engHardwareError}
+            customerLabel={resolveCustomerName(engProject.customerId, customers)}
+            onBack={() => navigate(pathForNav('engineering'))}
+            resolveMediaUrl={resolveMediaUrl}
+            onExportCsv={() => { void handleExportCutListCsv(engProject.id); }}
+            onExportPdf={(labels, perUnit) => { void handleExportPieceLabels(engProject.id, { labels, perUnit }); }}
+            onExportModulePdf={(labels) => { void handleExportModuleLabels(engProject.id, { labels }); }}
+            onExportHardware={() => { void handleExportHardwareList(engProject.id); }}
+            onExportElevations={() => { void handleExportElevations(engProject.id); }}
+            onExportOptimizer={() => { void handleExportOptimizer(engProject.id); }}
+            onExportProductionPack={() => { void handleExportProductionPack(engProject.id); }}
+            onExportCutListCsv={() => { void handleExportCutListCsv(engProject.id); }}
+            onExportPieceLabels={(lbls, opts) => { void handleExportPieceLabels(engProject.id, { labels: lbls, perUnit: opts.perUnit }); }}
+            onExportModuleLabels={(lbls) => { void handleExportModuleLabels(engProject.id, { labels: lbls }); }}
+            canImportNesting={canMarkProduced || roleCanExportProduction(actorRole)}
+            onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
+            exportBusy={exportBusy}
+          />
+        );
+      })() : null}
+      {navId === 'salesDashboard' ? (
+        <SalesDashboard
+          projects={projectsForRole.map((p) => ({
+            ...p,
+            customerLabel: resolveCustomerName(p.customerId, customers),
+          }))}
+          onOpenProject={(id) => {
+            const target = projectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
+          isVendedor={actorRole === 'vendedor'}
+          currentUserId={authUser?.id}
+          vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
+          ownerLabels={ownerLabels}
         />
       ) : null}
       {navId === 'plantBoard' ? (

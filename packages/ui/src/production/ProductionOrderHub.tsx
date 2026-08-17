@@ -527,9 +527,9 @@ export function ProductionOrderHub({
         </div>
       </header>
 
-      <div className="prod-hub__tabs-wrap">
+      <div className="tab-bar">
         <nav
-          className="prod-hub__tabs"
+          className="tab-bar__inner"
           role="tablist"
           aria-label="Secciones de la orden de producción"
         >
@@ -543,8 +543,8 @@ export function ProductionOrderHub({
                 aria-selected={selected}
                 className={
                   selected
-                    ? 'prod-hub__tab prod-hub__tab--active'
-                    : 'prod-hub__tab'
+                    ? 'tab-btn tab-btn--active'
+                    : 'tab-btn'
                 }
                 onClick={() => onTabChange(tab)}
                 data-testid={`prod-hub-tab-${tab}`}
