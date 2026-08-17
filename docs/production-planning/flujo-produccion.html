@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flujo de Producción — Análisis y Mejoras</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            border-radius: 12px;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Flow Diagram */
+        .flow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .flow-title {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--gray-900);
+        }
+
+        .flow-steps {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            padding: 1rem 0;
+        }
+
+        .flow-step {
+            min-width: 180px;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .flow-step.current {
+            background: var(--primary);
+            color: white;
+        }
+
+        .flow-step.improved {
+            background: var(--success);
+            color: white;
+        }
+
+        .flow-step.warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .flow-step.danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .flow-step h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .flow-step p {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .flow-arrow {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            color: var(--gray-300);
+            flex-shrink: 0;
+        }
+
+        /* Cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 4px solid var(--primary);
+        }
+
+        .card.pro { border-left-color: var(--success); }
+        .card.con { border-left-color: var(--danger); }
+        .card.idea { border-left-color: var(--warning); }
+        .card.system { border-left-color: #8b5cf6; }
+
+        .card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .card li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 0.95rem;
+        }
+
+        .card li:last-child {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.high { background: #dcfce7; color: #166534; }
+        .badge.medium { background: #fef3c7; color: #92400e; }
+        .badge.low { background: #e0e7ff; color: #3730a3; }
+
+        /* Comparison Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .comparison-table th {
+            background: var(--gray-100);
+            font-weight: 600;
+        }
+
+        .comparison-table tr:hover {
+            background: var(--gray-50);
+        }
+
+        /* Priority Matrix */
+        .priority-matrix {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .priority-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .priority-item .phase {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .priority-item .label {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+            margin-top: 0.25rem;
+        }
+
+        /* Interactive QR Demo */
+        .qr-demo {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .qr-scanner {
+            width: 200px;
+            height: 200px;
+            border: 3px dashed var(--primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 1rem auto;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .qr-scanner:hover {
+            background: #eff6ff;
+            border-style: solid;
+        }
+
+        .qr-scanner.scanning {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .qr-result {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--gray-100);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .qr-result.show {
+            display: block;
+        }
+
+        /* Research Links */
+        .research-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .research-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 3px solid #8b5cf6;
+        }
+
+        .research-item h4 {
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .research-item p {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+        }
+
+        .research-item a {
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+
+        .research-item a:hover {
+            text-decoration: underline;
+        }
+
+        /* Bonus Calculator */
+        .calculator {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .calculator-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .calculator input, .calculator select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .calculator .result {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--success);
+            text-align: center;
+            padding: 1rem;
+            background: #f0fdf4;
+            border-radius: 8px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--gray-500);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            header h1 { font-size: 1.5rem; }
+            .flow-steps { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+            .card-grid { grid-template-columns: 1fr; }
+            .priority-matrix { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏭 Flujo de Producción — Análisis y Mejoras</h1>
+            <p>Análisis de las 11 áreas de mejora identificadas + investigación de sistemas MES</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="flow">📊 Flujo Actual</button>
+            <button class="tab" data-tab="improvements">🚀 Mejoras Propuestas</button>
+            <button class="tab" data-tab="ideas">💡 Ideas por Punto</button>
+            <button class="tab" data-tab="research">🔬 Investigación</button>
+            <button class="tab" data-tab="priority">🎯 Priorización</button>
+            <button class="tab" data-tab="calculator">🧮 Calculadora Bono</button>
+            <button class="tab" data-tab="status">📋 Status por Proceso</button>
+            <button class="tab" data-tab="roles">👥 Roles y Permisos</button>
+        </div>
+
+        <!-- TAB: Flujo Actual -->
+        <div class="tab-content active" id="flow">
+            <div class="flow-container">
+                <h2 class="flow-title">Flujo Actual de Producción</h2>
+                <div class="flow-steps">
+                    <div class="flow-step current">
+                        <h3>📋 Cotización</h3>
+                        <p>Se aprueba el proyecto</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step current">
+                        <h3>📦 Almacén</h3>
+                        <p>Se surte material</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step warning">
+                        <h3>✂️ Corte</h3>
+                        <p>Se cortan piezas</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step warning">
+                        <h3>🔧 Cantoneado</h3>
+                        <p>Se aplican cantos</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step warning">
+                        <h3>🔩 CNC</h3>
+                        <p>Perforaciones</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step danger">
+                        <h3>🪑 Ensamble</h3>
+                        <p>Se arma el mueble</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step current">
+                        <h3>🚚 Embarque</h3>
+                        <p>Se envía a obra</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card con">
+                    <h3>❌ Problemas Identificados</h3>
+                    <ul>
+                        <li>Sin visibilidad del estado de cada proyecto</li>
+                        <li>No se sabe quién hizo cada proceso</li>
+                        <li>Las piezas dañadas se detectan en ensamble</li>
+                        <li>El cortador no sabe qué tiene que cortar</li>
+                        <li>No hay métricas de productividad</li>
+                        <li>El almacén no sabe qué material falta</li>
+                        <li>El admin no puede mover piezas entre colas</li>
+                        <li>No hay control de herrajes/accesorios</li>
+                        <li>Se pierde tiempo esperando material</li>
+                        <li>No se puede saber dónde se perdió una pieza</li>
+                        <li>No hay orden definida CNC vs Encintado</li>
+                    </ul>
+                </div>
+                <div class="card idea">
+                    <h3>🎯 Impacto Esperado</h3>
+                    <ul>
+                        <li><span class="badge high">Alto</span> Reducción de retrabajo por detección temprana</li>
+                        <li><span class="badge high">Alto</span> Visibilidad total del proceso</li>
+                        <li><span class="badge high">Alto</span> Métricas para bonificación</li>
+                        <li><span class="badge medium">Medio</span> Optimización de tiempos muertos</li>
+                        <li><span class="badge medium">Medio</span> Control de inventario en tiempo real</li>
+                        <li><span class="badge low">Bajo</span> Mejora gradual con datos históricos</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Mejoras Propuestas -->
+        <div class="tab-content" id="improvements">
+            <div class="flow-container">
+                <h2 class="flow-title">Flujo Mejorado Propuesto</h2>
+                <div class="flow-steps">
+                    <div class="flow-step improved">
+                        <h3>📋 Cotización</h3>
+                        <p>Aprueba + lista materiales</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>📦 Almacén</h3>
+                        <p>Surte anticipado + QR</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>✂️ Corte</h3>
+                        <p>Cola por cortador + métricas</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>🔧 Cantoneado</h3>
+                        <p>Escaneo de lote</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>🔩 CNC</h3>
+                        <p>Fin de ciclo automático</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>🪑 Ensamble</h3>
+                        <p>Daño detectado antes</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>🚚 Embarque</h3>
+                        <p>QR de entrega</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card pro">
+                    <h3>✅ Soluciones por Punto</h3>
+                    <ul>
+                        <li><strong>Gerente:</strong> Dashboard en tiempo real con KPIs por área</li>
+                        <li><strong>Pieza dañada:</strong> Escaneo QR → reporte → reemplazo automático</li>
+                        <li><strong>Cola de corte:</strong> Vista por cortador, ordenada por fecha de entrega</li>
+                        <li><strong>Métricas:</strong> Valor por pieza × coeficiente × cantidad</li>
+                        <li><strong>Status pieza:</strong> Escaneo por EVENTO, no por pieza</li>
+                        <li><strong>Orden:</strong> Configurable por tipo de mueble</li>
+                        <li><strong>Admin:</strong> Puede mover, reasignar, priorizar</li>
+                        <li><strong>Herrajes:</strong> Lista por proyecto + status</li>
+                        <li><strong>Tableros:</strong> Surte anticipado + alertas de stock</li>
+                    </ul>
+                </div>
+                <div class="card system">
+                    <h3>🔗 Sistemas Investigados</h3>
+                    <ul>
+                        <li><strong>OpenMES:</strong> Open source, tablet-first, ISA-95</li>
+                        <li><strong>IMCORE:</strong> Trazabilidad QR por pieza, bonos</li>
+                        <li><strong>integratePRO:</strong> Tracking por componente, barcode</li>
+                        <li><strong>INNOVERA:</strong> Kitting/wrapping, damaged parts</li>
+                        <li><strong>Fixner:</strong> QR por orden, trazabilidad absoluta</li>
+                        <li><strong>MKWork:</strong> Costo real por pieza, QR workshop</li>
+                        <li><strong>Stolcad:</strong> Piece Work Pay con puntos</li>
+                        <li><strong>HOMAG:</strong> Batch formation, rework tracking</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Ideas por Punto -->
+        <div class="tab-content" id="ideas">
+            <div class="card-grid">
+                <div class="card idea">
+                    <h3>👤 1. Gerente de Producción</h3>
+                    <ul>
+                        <li>Dashboard con vista por área (corte, cantoneado, CNC, ensamble)</li>
+                        <li>Gráfico de barras: piezas pendientes vs completadas por día</li>
+                        <li>Tabla de tiempos promedio por proceso</li>
+                        <li>Alerta de cuellos de botella (proceso con más de X piezas pendientes)</li>
+                        <li>Reporte semanal exportable a Excel</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>🔍 2. Pieza Dañada con QR</h3>
+                    <ul>
+                        <li>Escaneo QR → abre detalle del proyecto</li>
+                        <li>Selector de tipo de daño (raspón, golpe, medida, corte, material)</li>
+                        <li>Foto opcional del daño</li>
+                        <li>Generación automática de pieza de reemplazo</li>
+                        <li>Notificación al gerente + encargado de corte</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>✂️ 3. Cola de Cortes + Métricas</h3>
+                    <ul>
+                        <li>Vista filtrada por cortador (cada uno ve SU cola)</li>
+                        <li>Orden: fecha de entrega → fecha de envío a producción</li>
+                        <li>Al finalizar: selección de cortador + máquina</li>
+                        <li>Bono = piezas × valor × coeficiente de dificultad</li>
+                        <li>Reporte semanal/quincenal/mensual</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>📊 4. Status por Pieza (El Dilema)</h3>
+                    <ul>
+                        <li><strong>Solución:</strong> Escaneo por EVENTO, no por pieza</li>
+                        <li>Obligatorio: inicio/fin de lote en cada estación</li>
+                        <li>Automático: fin de ciclo de máquina</li>
+                        <li>Selectivo: piezas de alto valor o con historial</li>
+                        <li>Balance: control vs eficiencia</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>⚙️ 5. Orden CNC vs Encintado</h3>
+                    <ul>
+                        <li>Configuración por proyecto/tipo de mueble</li>
+                        <li>Default: Encintado → CNC (evita dañar máquina)</li>
+                        <li>Override cuando CNC solo hace perforaciones simples</li>
+                        <li>Validación automática según tipo de perforación</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>🔧 6. Admin — Visibilidad y Edición</h3>
+                    <ul>
+                        <li>Mover pieza de una cola a otra</li>
+                        <li>Reasignar pieza a otro operador</li>
+                        <li>Cambiar prioridad de proyecto</li>
+                        <li>Marcar pieza como completada manualmente</li>
+                        <li>Log de auditoría: quién movió qué y por qué</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>📦 7. Almacén de Herrajes</h3>
+                    <ul>
+                        <li>Lista de accesorios por proyecto</li>
+                        <li>Status: Pendiente → En almacén → Enviado → Disponible</li>
+                        <li>Escaneo de recepción de proveedor</li>
+                        <li>Alerta si faltan accesorios para proyectos en cola</li>
+                        <li>Control de desinstalación en obra</li>
+                    </ul>
+                </div>
+
+                <div class="card idea">
+                    <h3>🪵 8. Almacén de Tableros</h3>
+                    <ul>
+                        <li>Lista de tableros a surtir por proyecto</li>
+                        <li>Surte anticipado: material listo ANTES de llegar a corte</li>
+                        <li>Stock mínimo por tipo de tablero</li>
+                        <li>Alerta: "Proyecto X necesita 3 tableros — solo 1 listo"</li>
+                        <li>El cortador nunca espera</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Investigación -->
+        <div class="tab-content" id="research">
+            <div class="flow-container">
+                <h2 class="flow-title">Sistemas Investigados</h2>
+                <p style="color: var(--gray-500); margin-bottom: 1.5rem;">
+                    Referencias de sistemas MES, ERP y de control de producción para talleres de carpintería
+                </p>
+            </div>
+
+            <div class="research-grid">
+                <div class="research-item">
+                    <h4>🟢 OpenMES</h4>
+                    <p>MES open source para pequeños fabricantes. Tablet-first, ISA-95 aligned. Multi-line production, work order tracking, batch production, CSV import.</p>
+                    <a href="https://github.com/Mes-Open/OpenMes" target="_blank">Ver en GitHub →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟡 IMCORE</h4>
+                    <p>Control de producción en tiempo real para carpinterías. Trazabilidad QR por pieza, bonificaciones, app del operario, reportes XLSX/PDF.</p>
+                    <a href="https://imcore.net/" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🔵 integratePRO</h4>
+                    <p>Software de tracking para joinery. Frame & sash component tracking, barcode scanning, production time tracking, scheduling.</p>
+                    <a href="https://www.endtoendit.com/product/integratepro/" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟣 INNOVERA</h4>
+                    <p>MES para cabinet makers. Etapas: Office → CNC → Part Sorting → Kitting/Wrapping → Hardware → Assembly. Target screens, daily goals.</p>
+                    <a href="https://www.innovera-edge.com.au/" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🔴 Fixner</h4>
+                    <p>Software de fabricación para PYMEs. QR por orden, hojas de ruta, control de costes, trazabilidad de retales, app móvil operarios.</p>
+                    <a href="https://fixner.com/software-fabricacion" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟠 MKWork</h4>
+                    <p>ERP para CNC workshops. Parts tracking, work sessions, real cost per part, QR codes, offline mode, REST API.</p>
+                    <a href="https://mkwork.ro/" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>⚪ Stolcad</h4>
+                    <p>Piece Work Pay Module. Puntos por pieza × coeficiente de estación × tasa empleado. Login por PIN o barcode badge.</p>
+                    <a href="https://www.stolcad.com/en/products/modules/piece-work-pay" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟤 HOMAG</h4>
+                    <p>Production Manager. Batch formation, rework tracking, cutting optimization, real-time status for all employees.</p>
+                    <a href="https://digital.homag.com/en/production-manager/" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🔵 Cabinet Vision</h4>
+                    <p>Paperless Traveller. Digital workflow, nest instructions, defect tracking, recut reporting, mobile & browser access.</p>
+                    <a href="https://sopaninfotech.com/cabinet-vision-paperless-traveller/" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟢 TimberCloud</h4>
+                    <p>Production management. Cut sheets auto-generated, AI Order Assistant, barcode scanning, real-time dashboards.</p>
+                    <a href="https://timbercloud.com/product/production" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟡 Iwoscan</h4>
+                    <p>Manufacturing defect & scrap management. Record defects at workstation, automatic replacement quantity, root cause analysis.</p>
+                    <a href="https://iwoscan.com/manufacturing_defects" target="_blank">Ver sitio →</a>
+                </div>
+
+                <div class="research-item">
+                    <h4>🟣 Odoo Shop Floor</h4>
+                    <p>Shop floor management para furniture. Work center queues, material readiness, quality control points, drag-and-drop scheduling.</p>
+                    <a href="https://www.aktivsoftware.com/shop-floor-management-in-odoo/" target="_blank">Ver sitio →</a>
+                </div>
+            </div>
+
+            <div class="flow-container">
+                <h2 class="flow-title">Conceptos Clave de la Investigación</h2>
+                <div class="card-grid">
+                    <div class="card system">
+                        <h3>📱 Escaneo Eficiente</h3>
+                        <ul>
+                            <li>Escaneo por EVENTO (inicio/fin lote), no por pieza</li>
+                            <li>Automatización con sensores y fin de ciclo</li>
+                            <li>QR por pieza solo para alto valor o trazabilidad</li>
+                            <li>Badge/QR del operador para login rápido</li>
+                        </ul>
+                    </div>
+                    <div class="card system">
+                        <h3>🎯 Bonificación por Productividad</h3>
+                        <ul>
+                            <li>Puntos por pieza × coeficiente de dificultad</li>
+                            <li>Múltiplo por estación de trabajo</li>
+                            <li>Tasa por empleado (niveles de habilidad)</li>
+                            <li>Reporte automático de ganancias</li>
+                        </ul>
+                    </div>
+                    <div class="card system">
+                        <h3>🔍 Trazabilidad</h3>
+                        <ul>
+                            <li>Cada pieza sabe: quién, cuándo, dónde, qué proceso</li>
+                            <li>Historial completo de defectos y rework</li>
+                            <li>Auditoría con timestamps y fotos</li>
+                            <li>Exportable a Excel/PDF para auditorías</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Priorización -->
+        <div class="tab-content" id="priority">
+            <div class="flow-container">
+                <h2 class="flow-title">Matriz de Priorización</h2>
+                <p style="color: var(--gray-500); margin-bottom: 1.5rem;">
+                    Impacto vs Esfuerzo de implementación
+                </p>
+            </div>
+
+            <div class="priority-matrix">
+                <div class="priority-item" style="background: #dcfce7;">
+                    <div class="phase">1</div>
+                    <div class="label"><strong>Dashboard Gerente</strong><br>Alto impacto, Medio esfuerzo</div>
+                </div>
+                <div class="priority-item" style="background: #dcfce7;">
+                    <div class="phase">2</div>
+                    <div class="label"><strong>Cola de Corte</strong><br>Alto impacto, Bajo esfuerzo</div>
+                </div>
+                <div class="priority-item" style="background: #fef3c7;">
+                    <div class="phase">3</div>
+                    <div class="label"><strong>Pieza Dañada QR</strong><br>Alto impacto, Medio esfuerzo</div>
+                </div>
+                <div class="priority-item" style="background: #fef3c7;">
+                    <div class="phase">4</div>
+                    <div class="label"><strong>Métricas y Bonos</strong><br>Medio impacto, Bajo esfuerzo</div>
+                </div>
+            </div>
+
+            <div class="comparison-table">
+                <table style="width:100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="padding:1rem; border-bottom:2px solid var(--gray-200); text-align:left;">Fase</th>
+                            <th style="padding:1rem; border-bottom:2px solid var(--gray-200); text-align:left;">Componente</th>
+                            <th style="padding:1rem; border-bottom:2px solid var(--gray-200); text-align:left;">Impacto</th>
+                            <th style="padding:1rem; border-bottom:2px solid var(--gray-200); text-align:left;">Esfuerzo</th>
+                            <th style="padding:1rem; border-bottom:2px solid var(--gray-200); text-align:left;">Depende de</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">1</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Dashboard del Gerente</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge high">Alto</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Fases 2-4</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">2</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Cola de Corte por Cortador</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge high">Alto</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge low">Bajo</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Ninguna</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">3</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Reporte Pieza Dañada (QR)</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge high">Alto</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">QR Infrastructure</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">4</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Métricas y Bonos por Pieza</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge low">Bajo</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Fase 2</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">5</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Almacén Tableros (Surte)</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Inventario físico</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">6</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Almacén Herrajes</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge low">Bajo</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Ninguna</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">7</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Admin Editable</td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge medium">Medio</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);"><span class="badge low">Bajo</span></td>
+                            <td style="padding:1rem; border-bottom:1px solid var(--gray-100);">Ninguna</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:1rem;">8</td>
+                            <td style="padding:1rem;">Orden CNC/Encintado</td>
+                            <td style="padding:1rem;"><span class="badge low">Bajo</span></td>
+                            <td style="padding:1rem;"><span class="badge low">Bajo</span></td>
+                            <td style="padding:1rem;">Ninguna</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: Calculadora Bono -->
+        <div class="tab-content" id="calculator">
+            <div class="calculator">
+                <h2 class="flow-title">🧮 Calculadora de Bono por Pieza</h2>
+                <p style="color: var(--gray-500); margin-bottom: 1.5rem;">
+                    Calcula el bono estimado basado en piezas cortadas, valor por pieza y coeficiente de dificultad
+                </p>
+
+                <div class="calculator-grid">
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Piezas Cortadas</label>
+                        <input type="number" id="pieces" value="150" min="0">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Valor por Pieza ($)</label>
+                        <input type="number" id="valuePerPiece" value="2.50" min="0" step="0.10">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Coeficiente Dificultad</label>
+                        <select id="difficulty">
+                            <option value="1.0">Recto (1.0x)</option>
+                            <option value="1.5" selected>Curvo (1.5x)</option>
+                            <option value="2.0">Complejo (2.0x)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Período</label>
+                        <select id="period">
+                            <option value="1">Semanal</option>
+                            <option value="2">Quincenal</option>
+                            <option value="4" selected>Mensual</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="result" id="bonusResult">
+                    Bono Estimado: $562.50
+                </div>
+
+                <div style="margin-top:1.5rem; padding:1rem; background:var(--gray-100); border-radius:8px;">
+                    <h4 style="margin-bottom:0.5rem;">Fórmula:</h4>
+                    <code style="font-size:1.1rem;">
+                        Bono = Piezas × Valor × Coeficiente × Período
+                    </code>
+                    <p style="margin-top:0.5rem; font-size:0.9rem; color:var(--gray-500);">
+                        150 × $2.50 × 1.5 × 4 semanas = $562.50/mes
+                    </p>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card idea">
+                    <h3>📊 Ejemplos de Cálculo</h3>
+                    <ul>
+                        <li><strong>100 piezas rectas:</strong> 100 × $2.00 × 1.0 = $200/semana</li>
+                        <li><strong>150 piezas curvas:</strong> 150 × $2.50 × 1.5 = $562.50/semana</li>
+                        <li><strong>80 piezas complejas:</strong> 80 × $3.00 × 2.0 = $480/semana</li>
+                        <li><strong>200 piezas mixtas:</strong> Promedio ponderado</li>
+                    </ul>
+                </div>
+                <div class="card system">
+                    <h3>🎯 Coeficientes Sugeridos</h3>
+                    <ul>
+                        <li><strong>Por tipo de corte:</strong> Recto=1.0, Curvo=1.5, Complejo=2.0</li>
+                        <li><strong>Por material:</strong> MDF=1.0, Contra=1.2, Sólido=1.5</li>
+                        <li><strong>Por estación:</strong> Corte=1.0, Cantoneado=0.8, CNC=1.2</li>
+                        <li><strong>Por calidad:</strong> Sin defectos=1.1, Con rework=0.9</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Status por Proceso -->
+        <div class="tab-content" id="status">
+            <div class="flow-container">
+                <h2 class="flow-title">📋 Modelo de Status por Proceso</h2>
+                <p style="color: var(--gray-500); margin-bottom: 1.5rem;">
+                    Cada proceso tiene 3 estados: Cola → En Proceso → Finalizado
+                </p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card idea">
+                    <h3>📋 EN COLA (Pendiente)</h3>
+                    <ul>
+                        <li>Nadie lo ha tomado aún</li>
+                        <li>Visible para todos los operadores del área</li>
+                        <li>Ordenado por: prioridad → fecha de entrega</li>
+                        <li>Cualquier operador puede TOMARLO</li>
+                    </ul>
+                </div>
+                <div class="card" style="border-left-color: var(--warning);">
+                    <h3>⏳ EN PROCESO (Asignado)</h3>
+                    <ul>
+                        <li>Un operador lo TOMÓ (claim/lock)</li>
+                        <li>Muestra: QUIÉN + EN QUÉ MÁQUINA + HORA INICIO</li>
+                        <li>Los demás NO pueden tomarlo</li>
+                        <li>Timer visible para el gerente</li>
+                    </ul>
+                </div>
+                <div class="card pro">
+                    <h3>✅ FINALIZADO</h3>
+                    <ul>
+                        <li>Operador marca como completado</li>
+                        <li>Registra: piezas, tiempo, observaciones</li>
+                        <li>Pasa automáticamente al siguiente proceso</li>
+                        <li>Historial completo para métricas</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="flow-container">
+                <h2 class="flow-title">🔄 Flujo de Concurrencia — 2 Máquinas de Corte</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <div style="background: #eff6ff; padding: 1.5rem; border-radius: 8px;">
+                        <h4 style="margin-bottom: 1rem;">👷 Operador A (Máquina 1)</h4>
+                        <p style="margin-bottom: 0.5rem;">Ve cola: [Corte-001, 002, 003]</p>
+                        <p style="margin-bottom: 0.5rem;">Toma <strong>Corte-001</strong></p>
+                        <p style="margin-bottom: 0.5rem;">Status: ASIGNADO a A</p>
+                        <p style="margin-bottom: 0.5rem;">Máquina: Cortadora 1</p>
+                        <p style="color: var(--gray-500);">Hora: 08:15</p>
+                    </div>
+                    <div style="background: #fef3c7; padding: 1.5rem; border-radius: 8px;">
+                        <h4 style="margin-bottom: 1rem;">👷 Operador B (Máquina 2)</h4>
+                        <p style="margin-bottom: 0.5rem;">Ve cola: [Corte-001, 002, 003]</p>
+                        <p style="margin-bottom: 0.5rem;">Toma <strong>Corte-002</strong></p>
+                        <p style="margin-bottom: 0.5rem;">Status: ASIGNADO a B</p>
+                        <p style="margin-bottom: 0.5rem;">Máquina: Cortadora 2</p>
+                        <p style="color: var(--gray-500);">Hora: 08:16</p>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5rem; padding: 1rem; background: #f0fdf4; border-radius: 8px; text-align: center;">
+                    <p><strong>Cola restante:</strong> [Corte-003] — Nadie puede tomar 001 o 002 porque ya están ASIGNADOS</p>
+                </div>
+            </div>
+
+            <div class="flow-container">
+                <h2 class="flow-title">⚡ Pasos de la "Toma" (Claim)</h2>
+                <div class="flow-steps" style="justify-content: center;">
+                    <div class="flow-step current">
+                        <h3>1. Abrir</h3>
+                        <p>Operador ve la cola</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step warning">
+                        <h3>2. Seleccionar</h3>
+                        <p>Elige un corte</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step" style="background: #8b5cf6; color: white;">
+                        <h3>3. Confirmar</h3>
+                        <p>"Tomar Corte-001?"</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step improved">
+                        <h3>4. Trabajar</h3>
+                        <p>Timer corre</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step" style="background: #059669; color: white;">
+                        <h3>5. Finalizar</h3>
+                        <p>Pasa al siguiente</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Roles y Permisos -->
+        <div class="tab-content" id="roles">
+            <div class="flow-container">
+                <h2 class="flow-title">👥 Distinción de Roles — CRÍTICO</h2>
+                <p style="color: var(--gray-500); margin-bottom: 1.5rem;">
+                    El Gerente de Producción es DIFERENTE al Gerente de Ventas. 
+                    Tienen ubicaciones, funciones y permisos distintos.
+                </p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card system">
+                    <h3>👔 Gerente de Producción</h3>
+                    <ul>
+                        <li><strong>Ubicación:</strong> Planta / Office connected</li>
+                        <li><strong>Ve:</strong> Colas, operadores, máquinas, tiempos</li>
+                        <li><strong>Puede:</strong> Mover, reasignar, priorizar, editar</li>
+                        <li><strong>Necesita:</strong> Qué máquina, quién está, cuándo empezó, por qué paró</li>
+                    </ul>
+                </div>
+                <div class="card idea">
+                    <h3>💼 Gerente de Ventas</h3>
+                    <ul>
+                        <li><strong>Ubicación:</strong> Oficina (área diferente)</li>
+                        <li><strong>Ve:</strong> Estado de SUS proyectos, fechas estimadas</li>
+                        <li><strong>Puede:</strong> Solo ver, notificar cambios</li>
+                        <li><strong>Necesita:</strong> Cuándo llega, si hay retraso, qué decirle al cliente</li>
+                    </ul>
+                </div>
+                <div class="card pro">
+                    <h3>👷 Operador de Planta</h3>
+                    <ul>
+                        <li><strong>Ubicación:</strong> Planta (su estación)</li>
+                        <li><strong>Ve:</strong> SU cola de trabajo</li>
+                        <li><strong>Puede:</strong> Tomar, trabajar, finalizar, reportar daño</li>
+                        <li><strong>No ve:</strong> Colas de otros operadores completas</li>
+                    </ul>
+                </div>
+                <div class="card con">
+                    <h3>🔧 Admin / Soporte</h3>
+                    <ul>
+                        <li><strong>Ubicación:</strong> Donde sea</li>
+                        <li><strong>Ve:</strong> TODO el sistema</li>
+                        <li><strong>Puede:</strong> TODO (soporte a la app)</li>
+                        <li><strong>Función:</strong> Mover lo que no se puede mover solo</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="flow-container">
+                <h2 class="flow-title">📊 Qué Ve Cada Rol</h2>
+                
+                <div style="margin-bottom: 2rem;">
+                    <h4 style="margin-bottom: 1rem; color: var(--primary);">👷 Operador de Corte (Planta)</h4>
+                    <div style="background: white; border: 1px solid var(--gray-200); border-radius: 8px; padding: 1rem; font-family: monospace;">
+                        <p style="margin-bottom: 0.5rem;"><strong>MI COLA DE CORTE</strong></p>
+                        <p>┌──────────────┬──────────┬──────────┬──────────┐</p>
+                        <p>│ Proyecto     │ Piezas   │ Material │ Estado   │</p>
+                        <p>├──────────────┼──────────┼──────────┼──────────┤</p>
+                        <p>│ Cocina López │ 12       │ MDF 18mm │ ⏳ MI    │</p>
+                        <p>│ Placar García│ 8        │ Contra   │ 📋 Cola  │</p>
+                        <p>│ Repisa Martín│ 4        │ Sólido   │ 📋 Cola  │</p>
+                        <p>└──────────────┴──────────┴──────────┴──────────┘</p>
+                        <p style="margin-top: 0.5rem;">[TOMAR SIGUIENTE] [FINALIZAR ACTUAL]</p>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 2rem;">
+                    <h4 style="margin-bottom: 1rem; color: var(--success);">👔 Gerente de Producción (Planta/Oficina)</h4>
+                    <div style="background: white; border: 1px solid var(--gray-200); border-radius: 8px; padding: 1rem; font-family: monospace;">
+                        <p style="margin-bottom: 0.5rem;"><strong>VISTA DE PRODUCCIÓN — CORTE</strong></p>
+                        <p>Máquina 1: [Juan Pérez] Cocina López — 12 piezas — 08:15-?</p>
+                        <p>Máquina 2: [María García] Placar Ruiz — 8 piezas — 08:16-?</p>
+                        <p style="margin-top: 0.5rem;">Cola pendiente: 2 proyectos (16 piezas)</p>
+                        <p>Promedio hoy: 45 min/proyecto</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom: 1rem; color: var(--warning);">💼 Gerente de Ventas (Oficina)</h4>
+                    <div style="background: white; border: 1px solid var(--gray-200); border-radius: 8px; padding: 1rem; font-family: monospace;">
+                        <p style="margin-bottom: 0.5rem;"><strong>MIS PROYECTOS EN PRODUCCIÓN</strong></p>
+                        <p>Cocina López:   ████████░░ 80% (En corte)</p>
+                        <p>Placar García:  ███░░░░░░░ 30% (En cola)</p>
+                        <p>Repisa Martín:  ░░░░░░░░░░ 0% (Pendiente)</p>
+                        <p style="margin-top: 0.5rem;">[Ver detalles] [Contactar planta]</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-container">
+                <h2 class="flow-title">⚠️ Por Qué NO Mezclar Roles</h2>
+                <div class="card-grid">
+                    <div class="card con">
+                        <h3>❌ Si se mezclan</h3>
+                        <ul>
+                            <li>Gerente de ventas ve detalles técnicos que no necesita</li>
+                            <li>Gerente de producción ve cotizaciones que no le competen</li>
+                            <li>Confusión de responsabilidades</li>
+                            <li>Sobrecarga de información</li>
+                        </ul>
+                    </div>
+                    <div class="card pro">
+                        <h3>✅ Separados</h3>
+                        <ul>
+                            <li>Cada rol ve solo lo que necesita</li>
+                            <li>Decisiones más rápidas y claras</li>
+                            <li>Menos errores por confusión</li>
+                            <li>Mejor experiencia de usuario</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Análisis generado desde <code>docs/IDEAS/importante-verificar.md</code></p>
+            <p>Investigación: OpenMES, IMCORE, integratePRO, INNOVERA, Fixner, MKWork, Stolcad, HOMAG, Cabinet Vision, TimberCloud, Iwoscan, Odoo</p>
+        </footer>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Bonus calculator
+        function calculateBonus() {
+            const pieces = parseInt(document.getElementById('pieces').value) || 0;
+            const value = parseFloat(document.getElementById('valuePerPiece').value) || 0;
+            const difficulty = parseFloat(document.getElementById('difficulty').value) || 1;
+            const period = parseInt(document.getElementById('period').value) || 1;
+
+            const bonus = pieces * value * difficulty * period;
+            document.getElementById('bonusResult').textContent = 
+                `Bono Estimado: $${bonus.toFixed(2)}`;
+        }
+
+        document.getElementById('pieces').addEventListener('input', calculateBonus);
+        document.getElementById('valuePerPiece').addEventListener('input', calculateBonus);
+        document.getElementById('difficulty').addEventListener('change', calculateBonus);
+        document.getElementById('period').addEventListener('change', calculateBonus);
+
+        // QR Demo simulation
+        document.querySelector('.qr-scanner')?.addEventListener('click', function() {
+            this.classList.add('scanning');
+            setTimeout(() => {
+                this.classList.remove('scanning');
+                const result = document.querySelector('.qr-result');
+                if (result) {
+                    result.classList.add('show');
+                    result.innerHTML = `
+                        <h4>📱 Pieza Escaneada</h4>
+                        <p><strong>Proyecto:</strong> Cocina María López</p>
+                        <p><strong>Pieza:</strong> Lateral derecho - MDF 18mm</p>
+                        <p><strong>Proceso actual:</strong> Cantoneado</p>
+                        <p><strong>Estado:</strong> En proceso</p>
+                        <p><strong>Operador:</strong> Juan Pérez</p>
+                        <p style="margin-top:0.5rem;"><em>Click para reportar daño →</em></p>
+                    `;
+                }
+            }, 1500);
+        });
+    </script>
+</body>
+</html>
