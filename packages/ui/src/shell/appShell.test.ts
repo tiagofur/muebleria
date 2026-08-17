@@ -49,14 +49,18 @@ describe('AppShell nav model (F017)', () => {
       'projects',
       'customers',
       'showcase',
+      'plantBoard',
       'production',
+      'productionDashboard',
     ]);
     expect(trabajo.items.map((i) => i.label)).toEqual([
       'Inicio',
       'Cotizaciones',
       'Clientes',
       'Vitrina',
+      'Estado de Planta',
       'Producción',
+      'Dashboard Producción',
     ]);
 
     // design.md §4.1: composition first, then catalogs, Grupos last (Fase 6).

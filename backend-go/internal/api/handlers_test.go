@@ -78,6 +78,8 @@ type stubStore struct {
 	// Floor scan (F089-RN): per-id modules + floor status write log.
 	modulesByID             map[string]*domain.Module
 	floorStatusWrites       []floorStatusWrite
+	floorEventWrites        []domain.FloorStatusEvent
+	floorEventsList         []domain.FloorStatusEvent
 	floorStatusErr          error
 	updateModuleCalled     bool
 	updateModuleReceived   *domain.Module
@@ -345,6 +347,15 @@ func (s *stubStore) SetProjectItemFloorStatus(_ context.Context, projectID, item
 	s.floorStatusWrites = append(s.floorStatusWrites, floorStatusWrite{projectID, itemID, status})
 	return nil
 }
+
+func (s *stubStore) InsertFloorEvent(_ context.Context, ev domain.FloorStatusEvent) error {
+	s.floorEventWrites = append(s.floorEventWrites, ev)
+	return nil
+}
+
+func (s *stubStore) ListFloorEvents(_ context.Context, _ string) ([]domain.FloorStatusEvent, error) {
+	return s.floorEventsList, nil
+}
 func (s *stubStore) CreateModule(context.Context, *domain.Module) error {
 	s.stubNotUsed("CreateModule")
 	return nil
@@ -529,6 +540,50 @@ func (s *stubStore) DeleteWarrantyTicketPhoto(_ context.Context, _, _ string) er
 }
 func (s *stubStore) ListShowcasePhotos(_ context.Context, _ bool) ([]domain.ShowcasePhotoItem, error) {
 	return []domain.ShowcasePhotoItem{}, nil
+}
+
+// Production activity stubs
+func (s *stubStore) InsertProductionActivity(_ context.Context, _ domain.ProductionActivity) error {
+	return nil
+}
+func (s *stubStore) GetActiveActivitiesBySector(_ context.Context, _ domain.ProductionSector) ([]domain.ProductionActivity, error) {
+	return []domain.ProductionActivity{}, nil
+}
+func (s *stubStore) GetActiveActivitiesByOperator(_ context.Context, _ string) ([]domain.ProductionActivity, error) {
+	return []domain.ProductionActivity{}, nil
+}
+func (s *stubStore) GetActiveActivityByID(_ context.Context, _ string) (*domain.ProductionActivity, error) {
+	return nil, nil
+}
+func (s *stubStore) FinishProductionActivity(_ context.Context, _ string, _ int, _ string) error {
+	return nil
+}
+func (s *stubStore) ListProductionActivitiesByProject(_ context.Context, _ string, _ int) ([]domain.ProductionActivity, error) {
+	return []domain.ProductionActivity{}, nil
+}
+func (s *stubStore) GetSectorMetrics(_ context.Context, _ domain.ProductionSector, _ string) (*domain.SectorDashboard, error) {
+	return &domain.SectorDashboard{}, nil
+}
+func (s *stubStore) GetOperatorMetrics(_ context.Context, _, _ string) (*domain.OperatorMetrics, error) {
+	return &domain.OperatorMetrics{}, nil
+}
+func (s *stubStore) GetDashboardMetrics(_ context.Context) (*domain.DashboardMetrics, error) {
+	return &domain.DashboardMetrics{}, nil
+}
+func (s *stubStore) InsertDamageReport(_ context.Context, _ domain.DamageReport) error {
+	return nil
+}
+func (s *stubStore) GetDamageReportByID(_ context.Context, _ string) (*domain.DamageReport, error) {
+	return nil, nil
+}
+func (s *stubStore) ListDamageReportsByProject(_ context.Context, _ string) ([]domain.DamageReport, error) {
+	return []domain.DamageReport{}, nil
+}
+func (s *stubStore) ResolveDamageReport(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubStore) GetTodayDamageCount(_ context.Context) (int, error) {
+	return 0, nil
 }
 
 

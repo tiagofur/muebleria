@@ -117,6 +117,9 @@ type Store interface {
 	DeleteProject(ctx context.Context, id string) error
 	// Floor scan (PROD-3.1 / F089-RN): atomic single-item floor status write.
 	SetProjectItemFloorStatus(ctx context.Context, projectID, itemID, status string) error
+	// Floor event log (F092): immutable who/when/how audit trail.
+	InsertFloorEvent(ctx context.Context, ev domain.FloorStatusEvent) error
+	ListFloorEvents(ctx context.Context, projectID string) ([]domain.FloorStatusEvent, error)
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)
@@ -155,5 +158,23 @@ type Store interface {
 	// Workshop settings (F031 defaults + F044 COST-02 flag)
 	GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error)
 	UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error)
+
+	// Production activity tracking (gerente_produccion dashboard)
+	InsertProductionActivity(ctx context.Context, act domain.ProductionActivity) error
+	GetActiveActivitiesBySector(ctx context.Context, sector domain.ProductionSector) ([]domain.ProductionActivity, error)
+	GetActiveActivitiesByOperator(ctx context.Context, operatorID string) ([]domain.ProductionActivity, error)
+	GetActiveActivityByID(ctx context.Context, id string) (*domain.ProductionActivity, error)
+	FinishProductionActivity(ctx context.Context, id string, piecesCount int, notes string) error
+	ListProductionActivitiesByProject(ctx context.Context, projectID string, limit int) ([]domain.ProductionActivity, error)
+	GetSectorMetrics(ctx context.Context, sector domain.ProductionSector, since string) (*domain.SectorDashboard, error)
+	GetOperatorMetrics(ctx context.Context, operatorID, since string) (*domain.OperatorMetrics, error)
+	GetDashboardMetrics(ctx context.Context) (*domain.DashboardMetrics, error)
+
+	// Damage reporting
+	InsertDamageReport(ctx context.Context, dmg domain.DamageReport) error
+	GetDamageReportByID(ctx context.Context, id string) (*domain.DamageReport, error)
+	ListDamageReportsByProject(ctx context.Context, projectID string) ([]domain.DamageReport, error)
+	ResolveDamageReport(ctx context.Context, id string) error
+	GetTodayDamageCount(ctx context.Context) (int, error)
 }
 

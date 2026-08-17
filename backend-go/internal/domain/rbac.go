@@ -137,7 +137,17 @@ func RoleCanAccessCatalogNav(role UserRole) bool {
 // RoleCanAccessModulesNav — module templates in UI.
 func RoleCanAccessModulesNav(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleIngeniero, RoleGerenteVentas, RoleVendedor:
+	case RoleAdmin, RoleGerenteVentas, RoleIngeniero, RoleProduccion:
+		return true
+	default:
+		return false
+	}
+}
+
+// RoleCanAccessProductionDashboard — full production metrics, active jobs, damage reports.
+func RoleCanAccessProductionDashboard(role UserRole) bool {
+	switch role {
+	case RoleAdmin, RoleProduccion:
 		return true
 	default:
 		return false

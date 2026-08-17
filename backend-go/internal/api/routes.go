@@ -116,6 +116,15 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(http.HandlerFunc(server.HandleProjectFloorScan)))
 	mux.Handle("GET /api/projects/{id}/loading-status", authMW(http.HandlerFunc(server.HandleProjectLoadingStatus)))
 	mux.Handle("PATCH /api/projects/{id}/items/{itemId}/floor-status", authMW(http.HandlerFunc(server.HandleProjectItemFloorStatus)))
+	mux.Handle("GET /api/projects/{id}/floor-events", authMW(http.HandlerFunc(server.HandleProjectFloorEvents)))
+
+	// Production activity tracking (gerente_produccion dashboard)
+	mux.Handle("POST /api/production/activity/claim", authMW(http.HandlerFunc(server.HandleProductionClaim)))
+	mux.Handle("POST /api/production/activity/finish/{activityId}", authMW(http.HandlerFunc(server.HandleProductionFinish)))
+	mux.Handle("POST /api/production/activity/damage", authMW(http.HandlerFunc(server.HandleProductionDamage)))
+	mux.Handle("GET /api/production/dashboard", authMW(http.HandlerFunc(server.HandleProductionDashboard)))
+	mux.Handle("GET /api/production/active", authMW(http.HandlerFunc(server.HandleProductionActiveJobs)))
+	mux.Handle("PATCH /api/production/damage/{id}/resolve", authMW(http.HandlerFunc(server.HandleProductionDamageResolve)))
 
 	// Project gallery photos (CRM Phase 1) & Commercial Showcase (CRM Phase 4)
 	mux.Handle("GET /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
