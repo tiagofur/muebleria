@@ -77,6 +77,7 @@ type DashboardProps = {
   readonly customerLabelFor?: (customerId: string) => string;
   readonly onOpenProject?: (projectId: string) => void;
   readonly onOpenOrder?: (projectId: string) => void;
+  readonly repo?: { getProductionDashboard?: () => Promise<DashboardMetrics>; getProductionActiveJobs?: () => Promise<readonly ActiveJob[]> };
   readonly testId?: string;
 };
 
@@ -113,7 +114,7 @@ function getSectorIcon(sector: string): string {
 
 // ─── Custom Hook ─────────────────────────────────────────────────────────────
 
-function useProductionDashboard() {
+function useProductionDashboard(repo?: { getProductionDashboard?: () => Promise<DashboardMetrics>; getProductionActiveJobs?: () => Promise<readonly ActiveJob[]> }) {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [activeJobs, setActiveJobs] = useState<readonly ActiveJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,21 +125,16 @@ function useProductionDashboard() {
       setLoading(true);
       setError(null);
 
-      // Try to fetch from backend; if it fails, use mock data
-      const [dashboardRes, jobsRes] = await Promise.allSettled([
-        fetch('/api/production/dashboard', {
-          headers: { 'Content-Type': 'application/json' },
-        }),
-        fetch('/api/production/active', {
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ]);
-
-      if (dashboardRes.status === 'fulfilled' && dashboardRes.value.ok) {
-        const dashboard = await dashboardRes.value.json();
-        setMetrics(dashboard.metrics || dashboard);
+      if (repo?.getProductionDashboard && repo?.getProductionActiveJobs) {
+        // Fetch from real backend via repository
+        const [dashResult, jobsResult] = await Promise.all([
+          repo.getProductionDashboard(),
+          repo.getProductionActiveJobs(),
+        ]);
+        setMetrics(dashResult);
+        setActiveJobs(jobsResult);
       } else {
-        // Mock data for demo
+        // No repository — empty state (no backend connected)
         setMetrics({
           totalProjects: 0,
           totalItems: 0,
@@ -157,12 +153,6 @@ function useProductionDashboard() {
             activeJobs: [],
           })),
         });
-      }
-
-      if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {
-        const jobsData = await jobsRes.value.json();
-        setActiveJobs(jobsData.jobs || []);
-      } else {
         setActiveJobs([]);
       }
     } catch (err) {
@@ -170,7 +160,7 @@ function useProductionDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [repo]);
 
   useEffect(() => {
     fetchDashboard();
@@ -186,11 +176,12 @@ export function ProductionManagerDashboard({
   customerLabelFor,
   onOpenProject,
   onOpenOrder,
+  repo,
   testId,
 }: DashboardProps) {
   const [selectedSector, setSelectedSector] = useState<PipelineSector | 'all'>('all');
   const [showMetrics, setShowMetrics] = useState(false);
-  const { metrics, activeJobs, loading, error, refresh } = useProductionDashboard();
+  const { metrics, activeJobs, loading, error, refresh } = useProductionDashboard(repo);
 
   // Build summaries for all production projects
   const productionProjects = useMemo(() => {

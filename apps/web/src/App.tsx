@@ -2272,6 +2272,7 @@ function AppContent({
             const target = projectPath(id);
             if (location.pathname !== target) navigate(target);
           }}
+          repo={getRepository()}
         />
       ) : null}
       {navId === 'production' && useProductionWorkspace ? (
