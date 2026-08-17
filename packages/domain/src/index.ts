@@ -142,11 +142,13 @@ export {
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleCanAccessProductionDashboard,
+  roleCanAccessEngineeringNav,
+  roleCanAccessSalesDashboard,
   roleCanClaimProductionJob,
   roleIsScopedBySector,
+  sectorsAllowedForRole,
+  roleCanAdvanceStation,
   type CostVisibilityOptions,
-  type WarehouseSubSector,
-  WAREHOUSE_SUB_SECTORS,
   type UserSector,
 } from './rbac';
 
@@ -457,6 +459,16 @@ export {
   getProductionStaleInfo,
   type ProductionStaleInfo,
 } from './productionRevision';
+
+export {
+  engineeringStatus,
+  createEngineeringLog,
+  recordGeneration,
+  recordSentToProduction,
+  ENGINEERING_STATUS_LABELS_ES,
+  type EngineeringLog,
+  type EngineeringStatus,
+} from './engineering';
 
 export {
   buildCncPilotDocument,

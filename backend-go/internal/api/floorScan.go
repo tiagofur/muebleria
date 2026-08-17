@@ -63,13 +63,15 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 	}
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
-	// Same gate as the web paperless panel: mark-produced or export-production.
+	// Station work gate (F094): supervisors (mark/export roles) plus the
+	// scoped operators (claim roles) — the per-sector scope check below
+	// constrains operators to their assigned stations.
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role),
+		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role) ||
+			domain.RoleCanClaimProductionJob(role),
 		"no tenés permiso para avanzar el piso de fábrica") {
 		return
 	}
-
 	var body floorScanRequest
 	if !decodeJSONBody(w, r, &body) {
 		return
@@ -145,19 +147,21 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 	after := before
 
 	if body.TargetStatus != "" {
-		target := domain.NormalizeItemFloorStatus(strings.TrimSpace(body.TargetStatus))
-		if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, target); err != nil {
-			respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar el estado")
-			return
-		}
-		after = target
+		after = domain.NormalizeItemFloorStatus(strings.TrimSpace(body.TargetStatus))
 	} else if body.Advance {
 		if next := domain.NextItemFloorStatus(before); next != "" {
-			if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, next); err != nil {
-				respondWithError(w, http.StatusInternalServerError, "no se pudo avanzar el estado")
-				return
-			}
 			after = next
+		}
+	}
+
+	// F094 — station separation: scoped operators only advance their sectors.
+	if after != before {
+		if !s.actorCanAdvanceStation(w, r, role, actorID(claims), after) {
+			return
+		}
+		if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, after); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar el estado")
+			return
 		}
 	}
 
@@ -185,11 +189,36 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// actorCanAdvanceStation enforces the F094 station separation: sector-scoped
+// operators (produccion/almacen) may only move items into statuses produced
+// by THEIR assigned sectors. Responds 403 and returns false when denied;
+// sector-list read failures fall open to the role-only check (logged).
+func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, role domain.UserRole, userID, targetStatus string) bool {
+	if !domain.RoleIsScopedBySector(role) {
+		return true
+	}
+	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
+	if err != nil {
+		log.Printf("[floor-scan] cannot read sectors for user %s: %v (falling open)", userID, err)
+		return true
+	}
+	names := make([]string, 0, len(sectors))
+	for _, us := range sectors {
+		names = append(names, us.Sector)
+	}
+	if domain.RoleCanAdvanceStation(role, targetStatus, names) {
+		return true
+	}
+	sector := domain.SectorForFloorStatus(targetStatus)
+	respondWithError(w, http.StatusForbidden,
+		"ese avance es de "+domain.SectorLabelES(sector)+" y no lo tenés asignado")
+	return false
+}
+
 // recordFloorEvent appends the transition to the audit log with the
 // authenticated actor. Failures are logged but never block the scan —
 // the status write already succeeded.
-func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {
-	claims := claimsFromRequest(r)
+func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {	claims := claimsFromRequest(r)
 	ev := domain.FloorStatusEvent{
 		ID:        newFloorEventID(),
 		ProjectID: projectID,
@@ -310,8 +339,10 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 	}
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
+	// Station work gate (F094) — same as floor-scan; scope enforced below.
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role),
+		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role) ||
+			domain.RoleCanClaimProductionJob(role),
 		"no tenés permiso para modificar el piso de fábrica") {
 		return
 	}
@@ -350,6 +381,13 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 		}
 	} else {
 		targetStatus = domain.NormalizeItemFloorStatus(targetStatus)
+	}
+
+	// F094 — station separation (same rule as floor-scan).
+	if targetStatus != before {
+		if !s.actorCanAdvanceStation(w, r, role, actorID(claims), targetStatus) {
+			return
+		}
 	}
 
 	if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, itemID, targetStatus); err != nil {

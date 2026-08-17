@@ -188,13 +188,21 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 		return nil, err
 	}
 
-	// Queue length (claims not yet started by any operator)
-	err = s.Pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM production_activities
-		WHERE sector = $1 AND type = 'claim' AND started_at IS NULL
-	`, string(sector)).Scan(&dash.QueueLength)
-	if err != nil && err != pgx.ErrNoRows {
-		return nil, err
+	// Queue length — honest station queue (F094): items of accepted/produced
+	// projects sitting at the status that WAITs for this sector. The old
+	// query counted claims with started_at IS NULL, which never happens
+	// (claims always set started_at) — a permanently-zero metric.
+	if prev := domain.SectorQueuePrevStatus(string(sector)); prev != "" {
+		err = s.Pool.QueryRow(ctx, `
+			SELECT COUNT(*)
+			FROM project_items pi
+			JOIN projects p ON p.id = pi.project_id
+			WHERE p.status IN ('accepted', 'produced')
+			  AND COALESCE(NULLIF(pi.floor_status, ''), 'pending') = $1
+		`, prev).Scan(&dash.QueueLength)
+		if err != nil && err != pgx.ErrNoRows {
+			return nil, err
+		}
 	}
 
 	// Items in progress (active claims)
@@ -329,20 +337,64 @@ func (s *PostgresStore) GetDashboardMetrics(ctx context.Context) (*domain.Dashbo
 		return nil, err
 	}
 
-	// Sectors
-	sectors := []domain.ProductionSector{
-		domain.SectorCutting,
-		domain.SectorEdgeBanding,
-		domain.SectorCNC,
-		domain.SectorAssembly,
-		domain.SectorPackaging,
+	// F094 — real pipeline totals straight from the floor statuses (the
+	// old version left these at zero; the UI rendered dead metrics).
+	rows, err := s.Pool.Query(ctx, `
+		SELECT COALESCE(NULLIF(pi.floor_status, ''), 'pending') AS st, COUNT(*)
+		FROM project_items pi
+		JOIN projects p ON p.id = pi.project_id
+		WHERE p.status IN ('accepted', 'produced')
+		GROUP BY 1;
+	`)
+	if err != nil {
+		return nil, err
 	}
-	dash.Sectors = make([]domain.SectorDashboard, 0, len(sectors))
-	for _, sec := range sectors {
+	counts := map[string]int{}
+	for rows.Next() {
+		var st string
+		var n int
+		if err := rows.Scan(&st, &n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		counts[st] = n
+	}
+	rows.Close()
+
+	maxRank := len(domain.ItemFloorStatuses) - 1
+	for _, st := range domain.ItemFloorStatuses {
+		dash.TotalItems += counts[st]
+		if st == "installed" {
+			dash.TotalInstalled = counts[st]
+		}
+	}
+	// accepted + produced projects (projects with zero items still count:
+	// they are in the factory even before cutting starts).
+	err = s.Pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM projects WHERE status IN ('accepted', 'produced');
+	`).Scan(&dash.TotalProjects)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	if dash.TotalItems > 0 {
+		progressSum := 0.0
+		for _, st := range domain.ItemFloorStatuses {
+			rank := domain.FloorStatusRank(st)
+			progressSum += float64(counts[st]) * (float64(rank) / float64(maxRank))
+		}
+		dash.AvgProgress = progressSum / float64(dash.TotalItems) * 100.0
+	} else {
+		dash.AvgProgress = 0
+	}
+
+	// Sectors — the full single vocabulary (was a hardcoded 5-list).
+	dash.Sectors = make([]domain.SectorDashboard, 0, len(domain.ProductionSectorsOrdered))
+	for _, sec := range domain.ProductionSectorsOrdered {
 		secDash, err := s.GetSectorMetrics(ctx, sec, since)
 		if err != nil {
 			continue
 		}
+		secDash.Label = domain.SectorLabelES(string(sec))
 		dash.Sectors = append(dash.Sectors, *secDash)
 	}
 

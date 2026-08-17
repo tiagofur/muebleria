@@ -277,6 +277,13 @@ export interface WorkspaceRepository {
     email: string;
   }>>;
 
+  /** Own station assignments (Mi Estación, F094) — GET /api/me/sectors. */
+  getMySectors?(): Promise<Array<{
+    userId: string;
+    sector: string;
+    subSector?: string;
+  }>>;
+
   // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
 
   getWarrantyTickets?(filter?: {

@@ -1783,6 +1783,21 @@
     "ui",
     "visibilidad"
    ]
+  },
+  {
+   "id": "F094",
+   "phase": 21,
+   "name": "produccion_fase2_separacion_roles_estaciones",
+   "title": "Fase 2 sectores/roles: separación de funciones por rol, avance por estación asignada y pantalla Mi Estación",
+   "description": "Corrección y completado de la Fase 2 (arrancada por sesión paralela con roles gerente_produccion/almacen, user_sectors y production_activities, pero con funciones mezcladas). (1) Separación de funciones: almacen SIN exportProduction (fuera del hub), gates de claim/finish/damage via RoleCanClaimProductionJob (no MarkProduced||Export), paridad Go/TS de RoleCanAccessProductionDashboard (admin|gerente_produccion), RoleCanAccessProjects Go + gerente_produccion. (2) roleCanAdvanceStation: operadores con sectores asignados solo avanzan estados de SUS sectores en floor-scan y PATCH floor-status (sin asignaciones = sin restricción, compatibilidad); supervisores sin límite. (3) finish de production_activities avanza el pipeline floor_status + escribe FloorStatusEvent (source activity) — el claim deja de ser telemetría flotante. (4) Seguridad: /admin/users/:id/sectors con adminMW, /production/operators gated, payloads repo alineados. (5) Mi Estación: StationQueueScreen con colas por sector asignado (itemsWaitingForSector F092) y avance directo. (6) SectorAssignment con los 8 sectores desde el dominio; dashboard con métricas reales; .down de 000049/000050.",
+   "status": "in_progress",
+   "tags": [
+    "produccion",
+    "roles",
+    "sectores",
+    "rbac",
+    "fase2"
+   ]
   }
  ]
 }

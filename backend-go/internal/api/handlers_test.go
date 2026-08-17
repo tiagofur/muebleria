@@ -80,6 +80,8 @@ type stubStore struct {
 	floorStatusWrites       []floorStatusWrite
 	floorEventWrites        []domain.FloorStatusEvent
 	floorEventsList         []domain.FloorStatusEvent
+	userSectorsList         []domain.UserSector
+	activitiesByID          []domain.ProductionActivity
 	floorStatusErr          error
 	updateModuleCalled     bool
 	updateModuleReceived   *domain.Module
@@ -556,7 +558,13 @@ func (s *stubStore) GetActiveActivitiesBySector(_ context.Context, _ domain.Prod
 func (s *stubStore) GetActiveActivitiesByOperator(_ context.Context, _ string) ([]domain.ProductionActivity, error) {
 	return []domain.ProductionActivity{}, nil
 }
-func (s *stubStore) GetActiveActivityByID(_ context.Context, _ string) (*domain.ProductionActivity, error) {
+func (s *stubStore) GetActiveActivityByID(_ context.Context, id string) (*domain.ProductionActivity, error) {
+	for i := range s.activitiesByID {
+		if s.activitiesByID[i].ID == id {
+			act := s.activitiesByID[i]
+			return &act, nil
+		}
+	}
 	return nil, nil
 }
 func (s *stubStore) FinishProductionActivity(_ context.Context, _ string, _ int, _ string) error {
@@ -592,7 +600,7 @@ func (s *stubStore) GetTodayDamageCount(_ context.Context) (int, error) {
 
 // User sector stubs
 func (s *stubStore) ListUserSectors(_ context.Context, _ string) ([]domain.UserSector, error) {
-	return []domain.UserSector{}, nil
+	return s.userSectorsList, nil
 }
 func (s *stubStore) SetUserSectors(_ context.Context, _ string, _ []domain.UserSector) error {
 	return nil

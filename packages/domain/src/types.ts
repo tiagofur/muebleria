@@ -585,8 +585,8 @@ export type ItemFloorStatus =
   | 'loaded'
   | 'installed';
 
-/** How a floor transition was performed (F092). */
-export type FloorEventSource = 'scan' | 'manual' | 'dispatch' | 'api';
+/** How a floor transition was performed (F092; 'activity' = F094 claim finish). */
+export type FloorEventSource = 'scan' | 'manual' | 'dispatch' | 'api' | 'activity';
 
 /**
  * Immutable entry of the shop-floor log (F092): one per floor status
@@ -960,6 +960,11 @@ export interface Project {
    * the Go API serves it from `project_item_floor_events`.
    */
   readonly floorEvents?: readonly FloorStatusEvent[];
+  /**
+   * Engineering audit log. Records who started engineering, when docs
+   * were generated, and when the project was sent to production.
+   */
+  readonly engineeringLog?: import('./engineering').EngineeringLog;
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

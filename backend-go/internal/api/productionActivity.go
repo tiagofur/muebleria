@@ -17,6 +17,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -81,7 +82,7 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role),
+		domain.RoleCanClaimProductionJob(role),
 		"no tenés permiso para reclamar trabajos") {
 		return
 	}
@@ -105,7 +106,7 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	// For operadores, verify they have access to this sector
 	if domain.RoleIsScopedBySector(role) {
 		actorID := actorID(claims)
-		if !s.userHasSectorAccess(r.Context(), actorID, sector) {
+		if !s.userCanWorkSector(r.Context(), role, actorID, sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
 		}
@@ -198,7 +199,7 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role),
+		domain.RoleCanClaimProductionJob(role),
 		"no tenés permiso para finalizar trabajos") {
 		return
 	}
@@ -218,7 +219,7 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 
 	// For operadores, verify they have access to this sector
 	if domain.RoleIsScopedBySector(role) {
-		if !s.userHasSectorAccess(r.Context(), actorID, activity.Sector) {
+		if !s.userCanWorkSector(r.Context(), role, actorID, activity.Sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
 		}
@@ -234,6 +235,12 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// F094 — finishing a station job moves the floor pipeline (and leaves
+	// the F092 audit trail). Claims are no longer floating telemetry: when
+	// the sector produces a floor status and the item has not reached it,
+	// the finish advances it exactly like the station queue would.
+	s.advanceItemOnActivityFinish(r, *activity, actorID)
+
 	// Update the activity with finish info
 	now := time.Now().UTC()
 	activity.FinishedAt = &now
@@ -244,6 +251,53 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondWithJSON(w, http.StatusOK, finishResponse{Activity: *activity})
+}
+
+// advanceItemOnActivityFinish moves the item to its station's floor status
+// when the finished activity's sector owns one. Idempotent (no-op when the
+// item already reached it); failures are logged, never block the finish.
+func (s *Server) advanceItemOnActivityFinish(r *http.Request, activity domain.ProductionActivity, actorID string) {
+	target := domain.TargetStatusForSector(string(activity.Sector))
+	if target == "" {
+		// warehouse / cnc produce no floor status yet (Fase 3).
+		return
+	}
+	project, err := s.Store.GetProjectByID(r.Context(), activity.ProjectID)
+	if err != nil || project == nil {
+		return
+	}
+	for i := range project.Items {
+		if project.Items[i].ID != activity.ItemID {
+			continue
+		}
+		before := domain.NormalizeItemFloorStatus(project.Items[i].FloorStatus)
+		if before == target || domain.FloorStatusRank(before) >= domain.FloorStatusRank(target) {
+			return
+		}
+		if err := s.Store.SetProjectItemFloorStatus(r.Context(), activity.ProjectID, activity.ItemID, target); err != nil {
+			log.Printf("[activity-finish] floor status update failed for item %s: %v", activity.ItemID, err)
+			return
+		}
+		ev := domain.FloorStatusEvent{
+			ID:        newFloorEventID(),
+			ProjectID: activity.ProjectID,
+			ItemID:    activity.ItemID,
+			From:      before,
+			To:        target,
+			At:        time.Now().UTC(),
+			ByUserID:  actorID,
+			ByName:    activity.OperatorName,
+			Source:    domain.FloorEventSourceActivity,
+			Note:      "fin de actividad en " + string(activity.Sector),
+		}
+		if domain.FloorStatusRank(target)-domain.FloorStatusRank(before) != 1 {
+			ev.Note = domain.FloorEventJumpNote(ev.Note, before, target)
+		}
+		if err := s.Store.InsertFloorEvent(r.Context(), ev); err != nil {
+			log.Printf("[activity-finish] floor event insert failed for item %s: %v", activity.ItemID, err)
+		}
+		return
+	}
 }
 
 // HandleProductionDamage handles POST /api/production/activity/damage
@@ -257,7 +311,7 @@ func (s *Server) HandleProductionDamage(w http.ResponseWriter, r *http.Request) 
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role),
+		domain.RoleCanClaimProductionJob(role),
 		"no tenés permiso para reportar daños") {
 		return
 	}
@@ -276,7 +330,7 @@ func (s *Server) HandleProductionDamage(w http.ResponseWriter, r *http.Request) 
 	if domain.RoleIsScopedBySector(role) {
 		actorID := actorID(claims)
 		sector := domain.ProductionSector(body.Sector)
-		if !s.userHasSectorAccess(r.Context(), actorID, sector) {
+		if !s.userCanWorkSector(r.Context(), role, actorID, sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
 		}
@@ -376,14 +430,8 @@ func (s *Server) HandleProductionActiveJobs(w http.ResponseWriter, r *http.Reque
 			sectors = []domain.ProductionSector{}
 		}
 	} else {
-		// Gerente produccion and admin see all sectors
-		sectors = []domain.ProductionSector{
-			domain.SectorCutting,
-			domain.SectorEdgeBanding,
-			domain.SectorCNC,
-			domain.SectorAssembly,
-			domain.SectorPackaging,
-		}
+		// Managers/admin see every sector (single vocabulary, F094).
+		sectors = append(sectors, domain.ProductionSectorsOrdered...)
 	}
 
 	var allJobs []domain.ActiveJob
@@ -434,8 +482,10 @@ func (s *Server) HandleProductionDamageResolve(w http.ResponseWriter, r *http.Re
 
 	claims := claimsFromRequest(r)
 	role := actorRole(claims)
+	// F094 — resolving damage (refabrication decision) is a production
+	// supervisor call, not an operator one.
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role),
+		domain.RoleCanManageProductionStaff(role),
 		"no tenés permiso para resolver daños") {
 		return
 	}
@@ -476,6 +526,25 @@ func (s *Server) HandleUserSectors(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &req) {
 			return
 		}
+
+		// Validate sectors against user's role (F094 — role↔sector binding).
+		user, err := s.Store.GetUserByID(r.Context(), userID)
+		if err != nil || user == nil {
+			respondWithError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		for _, sec := range req.Sectors {
+			if !domain.IsValidSector(domain.ProductionSector(sec.Sector)) {
+				respondWithError(w, http.StatusBadRequest, "invalid sector: "+sec.Sector)
+				return
+			}
+			if !domain.SectorAllowedForRole(user.Role, domain.ProductionSector(sec.Sector)) {
+				respondWithError(w, http.StatusBadRequest,
+					"sector '"+sec.Sector+"' is not allowed for role '"+string(user.Role)+"'")
+				return
+			}
+		}
+
 		if err := s.Store.SetUserSectors(r.Context(), userID, req.Sectors); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "failed to set sectors")
 			return
@@ -488,7 +557,20 @@ func (s *Server) HandleUserSectors(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleOperatorsBySector handles GET /api/production/operators?sector=X
+// Staff directory data (who works each station) — production staff
+// management only (F094; was unauthenticated-by-role before).
 func (s *Server) HandleOperatorsBySector(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
+		return
+	}
+	role := actorRole(claimsFromRequest(r))
+	if !requirePermission(w,
+		domain.RoleCanManageProductionStaff(role),
+		"no tenés permiso para ver operadores por sector") {
+		return
+	}
+
 	sector := r.URL.Query().Get("sector")
 	if sector == "" {
 		respondWithError(w, http.StatusBadRequest, "sector query parameter required")
@@ -501,6 +583,31 @@ func (s *Server) HandleOperatorsBySector(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	respondWithJSON(w, http.StatusOK, users)
+}
+
+// HandleMySectors handles GET /api/me/sectors — the caller's own station
+// assignments. Any authenticated user: the web shell needs it to scope Mi
+// Estación (F094); it leaks nothing (it is your own profile).
+func (s *Server) HandleMySectors(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
+		return
+	}
+	claims := claimsFromRequest(r)
+	userID := actorID(claims)
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "sesión inválida")
+		return
+	}
+	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "no se pudieron leer tus sectores")
+		return
+	}
+	if sectors == nil {
+		sectors = []domain.UserSector{}
+	}
+	respondWithJSON(w, http.StatusOK, sectors)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -517,6 +624,25 @@ func isValidSector(s domain.ProductionSector) bool {
 }
 
 // userHasSectorAccess checks if a user has access to a specific sector.
+// userCanWorkSector — F094 semantics, mirroring RoleCanAdvanceStation:
+// produccion with NO assignments works every station (legacy operators);
+// with assignments, only members; almacen always needs explicit membership.
+func (s *Server) userCanWorkSector(ctx context.Context, role domain.UserRole, userID string, sector domain.ProductionSector) bool {
+	sectors, err := s.Store.ListUserSectors(ctx, userID)
+	if err != nil {
+		return false
+	}
+	if role == domain.RoleProduccion && len(sectors) == 0 {
+		return true
+	}
+	for _, us := range sectors {
+		if domain.ProductionSector(us.Sector) == sector {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) userHasSectorAccess(ctx context.Context, userID string, sector domain.ProductionSector) bool {
 	sectors, err := s.Store.ListUserSectors(ctx, userID)
 	if err != nil {

@@ -39,7 +39,119 @@ const (
 	SectorPackaging   ProductionSector = "packaging"
 	SectorShipping    ProductionSector = "shipping"
 	SectorInstall     ProductionSector = "installation"
+	SectorHerrajes    ProductionSector = "herrajes"
+	SectorTableros    ProductionSector = "tableros"
+	SectorCintillas   ProductionSector = "cintillas"
 )
+
+// ProductionSectorsOrdered is the single ordered vocabulary (F094 — was
+// hardcoded as 5-sector lists in the dashboard queries).
+var ProductionSectorsOrdered = []ProductionSector{
+	SectorWarehouse,
+	SectorCutting,
+	SectorCNC,
+	SectorEdgeBanding,
+	SectorAssembly,
+	SectorPackaging,
+	SectorShipping,
+	SectorInstall,
+	SectorHerrajes,
+	SectorTableros,
+	SectorCintillas,
+}
+
+// IsValidSector reports whether s is a known production sector.
+func IsValidSector(s ProductionSector) bool {
+	for _, known := range ProductionSectorsOrdered {
+		if known == s {
+			return true
+		}
+	}
+	return false
+}
+
+// sectorForStatus maps the floor pipeline status to the sector that
+// produces it (parity with TS sectorForFloorStatus; "" while queued).
+func sectorForStatus(status string) ProductionSector {
+	switch NormalizeItemFloorStatus(status) {
+	case "cut":
+		return SectorCutting
+	case "edged":
+		return SectorEdgeBanding
+	case "assembled":
+		return SectorAssembly
+	case "packaged":
+		return SectorPackaging
+	case "loaded":
+		return SectorShipping
+	case "installed":
+		return SectorInstall
+	default:
+		return ""
+	}
+}
+
+// SectorForFloorStatus exposes the status→sector mapping as a plain string
+// ("" when pending/unknown) for RBAC and handler use (F094).
+func SectorForFloorStatus(status string) string {
+	return string(sectorForStatus(status))
+}
+
+// TargetStatusForSector is the floor status a sector produces ("" for
+// warehouse/cnc — no status of their own yet, mirrors TS floorStatusForSector).
+func TargetStatusForSector(sector string) string {
+	for _, s := range ItemFloorStatuses {
+		if string(sectorForStatus(s)) == sector {
+			return s
+		}
+	}
+	return ""
+}
+
+// SectorQueuePrevStatus is the floor status an item sits at while WAITING
+// for `sector` ("" when the station has no queue of its own yet — cnc).
+// Warehouse stages queued (pending) items, like cutting.
+func SectorQueuePrevStatus(sector string) string {
+	switch sector {
+	case string(SectorWarehouse), string(SectorCutting):
+		return "pending"
+	}
+	target := TargetStatusForSector(sector)
+	if target == "" {
+		return ""
+	}
+	for i, s := range ItemFloorStatuses {
+		if s == target && i > 0 {
+			return ItemFloorStatuses[i-1]
+		}
+	}
+	return ""
+}
+
+// SectorLabelES is the workshop-facing label of a sector (parity with TS
+// PRODUCTION_SECTOR_LABELS_ES).
+func SectorLabelES(sector string) string {
+	switch ProductionSector(sector) {
+	case SectorWarehouse:
+		return "Almacén"
+	case SectorCutting:
+		return "Corte"
+	case SectorCNC:
+		return "CNC"
+	case SectorEdgeBanding:
+		return "Encintado"
+	case SectorAssembly:
+		return "Armado"
+	case SectorPackaging:
+		return "Embalaje"
+	case SectorShipping:
+		return "Despacho"
+	case SectorInstall:
+		return "Instalación"
+	default:
+		return sector
+	}
+}
 
 // DamageType classifies the kind of damage reported.
 type DamageType string

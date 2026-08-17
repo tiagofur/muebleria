@@ -15,13 +15,14 @@ const (
 	FloorEventSourceScan     FloorEventSource = "scan"
 	FloorEventSourceManual   FloorEventSource = "manual"
 	FloorEventSourceDispatch FloorEventSource = "dispatch"
+	FloorEventSourceActivity FloorEventSource = "activity"
 	FloorEventSourceAPI      FloorEventSource = "api"
 )
 
 // NormalizeFloorEventSource coerces unknown values to "api".
 func NormalizeFloorEventSource(s string) FloorEventSource {
 	switch FloorEventSource(s) {
-	case FloorEventSourceScan, FloorEventSourceManual, FloorEventSourceDispatch:
+	case FloorEventSourceScan, FloorEventSourceManual, FloorEventSourceDispatch, FloorEventSourceActivity:
 		return FloorEventSource(s)
 	default:
 		return FloorEventSourceAPI

@@ -129,9 +129,11 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PATCH /api/production/damage/{id}/resolve", authMW(http.HandlerFunc(server.HandleProductionDamageResolve)))
 	mux.Handle("GET /api/production/operators", authMW(http.HandlerFunc(server.HandleOperatorsBySector)))
 
-	// User sector management (admin assigns sectors to operators)
-	mux.Handle("GET /api/admin/users/{id}/sectors", authMW(http.HandlerFunc(server.HandleUserSectors)))
-	mux.Handle("PUT /api/admin/users/{id}/sectors", authMW(http.HandlerFunc(server.HandleUserSectors)))
+	// User sector management: admin panel uses the admin routes below
+	// (adminMW, defined with the other admin routes); staff managers use
+	// the /api/staff/{department} sector routes. F094 — operators read
+	// their OWN assignments for Mi Estación.
+	mux.Handle("GET /api/me/sectors", authMW(http.HandlerFunc(server.HandleMySectors)))
 
 	// Project gallery photos (CRM Phase 1) & Commercial Showcase (CRM Phase 4)
 	mux.Handle("GET /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
@@ -187,6 +189,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
+	// Sector assignments of any user — admin only (F094: was plain auth,
+	// letting any authenticated user rewrite anyone's station access).
+	mux.Handle("GET /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
+	mux.Handle("PUT /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
 
 	// Staff management — admin + gerente_produccion (production/warehouse) + gerente_ventas (sales)
 	// Uses {department} wildcard for production/warehouse; sales has its own routes.

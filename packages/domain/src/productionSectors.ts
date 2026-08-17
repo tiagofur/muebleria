@@ -17,9 +17,16 @@ import {
 import type { ItemFloorStatus } from './productionFloor';
 
 /**
- * Workshop sectors. `warehouse` stages materials (no floor status of its
- * own yet) and `cnc` joins the pipeline when the `machined` status lands
- * (Fase 3) — both map to null in `floorStatusForSector` until then.
+ * Workshop sectors.
+ *
+ * - Pipeline sectors (cutting → installation) own one step of the
+ *   manufacturing flow.
+ * - `warehouse` stages materials before cutting (no floor status of its
+ *   own yet).
+ * - `herrajes`, `tableros`, `cintillas` are first-class material sectors
+ *   for warehouse operators — each represents a material type the operator
+ *   manages (F094 refined: no sub-sector nesting).
+ * - `cnc` joins the pipeline when the `machined` status lands (Fase 3).
  */
 export const PRODUCTION_SECTORS = [
   'warehouse',
@@ -30,6 +37,9 @@ export const PRODUCTION_SECTORS = [
   'packaging',
   'shipping',
   'installation',
+  'herrajes',
+  'tableros',
+  'cintillas',
 ] as const;
 
 export type ProductionSector = (typeof PRODUCTION_SECTORS)[number];
@@ -49,6 +59,9 @@ export const PRODUCTION_SECTOR_LABELS_ES: Readonly<
   packaging: 'Embalaje',
   shipping: 'Despacho',
   installation: 'Instalación',
+  herrajes: 'Herrajes',
+  tableros: 'Tableros',
+  cintillas: 'Cintillas',
 };
 
 /**

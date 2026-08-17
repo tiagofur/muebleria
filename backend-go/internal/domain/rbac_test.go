@@ -119,3 +119,88 @@ func TestRBAC_ReopenAndMarkProduced(t *testing.T) {
 	}
 }
 
+func TestSectorsAllowedForRole(t *testing.T) {
+	t.Parallel()
+
+	// produccion: all 11 sectors
+	prodSectors := SectorsAllowedForRole(RoleProduccion)
+	if len(prodSectors) != 11 {
+		t.Fatalf("produccion should have 11 sectors, got %d", len(prodSectors))
+	}
+	prodMap := make(map[ProductionSector]bool)
+	for _, s := range prodSectors {
+		prodMap[s] = true
+	}
+	for _, expected := range []ProductionSector{
+		SectorWarehouse, SectorCutting, SectorCNC, SectorEdgeBanding,
+		SectorAssembly, SectorPackaging, SectorShipping, SectorInstall,
+		SectorHerrajes, SectorTableros, SectorCintillas,
+	} {
+		if !prodMap[expected] {
+			t.Fatalf("produccion missing sector: %s", expected)
+		}
+	}
+
+	// almacen: 3 material sectors (first-class, no sub-sector nesting)
+	almacenSectors := SectorsAllowedForRole(RoleAlmacen)
+	if len(almacenSectors) != 3 {
+		t.Fatalf("almacen should have 3 sectors, got %d", len(almacenSectors))
+	}
+	almacenMap := make(map[ProductionSector]bool)
+	for _, s := range almacenSectors {
+		almacenMap[s] = true
+	}
+	for _, expected := range []ProductionSector{SectorHerrajes, SectorTableros, SectorCintillas} {
+		if !almacenMap[expected] {
+			t.Fatalf("almacen missing sector: %s", expected)
+		}
+	}
+
+	// Supervisors: nil (no restriction)
+	for _, role := range []UserRole{RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleIngeniero} {
+		if s := SectorsAllowedForRole(role); s != nil {
+			t.Fatalf("supervisor %s should have nil allowed sectors, got %v", role, s)
+		}
+	}
+}
+
+func TestSectorAllowedForRole(t *testing.T) {
+	t.Parallel()
+
+	// produccion: all sectors allowed
+	if !SectorAllowedForRole(RoleProduccion, SectorCutting) {
+		t.Fatal("produccion should be allowed cutting")
+	}
+	if !SectorAllowedForRole(RoleProduccion, SectorHerrajes) {
+		t.Fatal("produccion should be allowed herrajes")
+	}
+
+	// almacen: only material sectors
+	if !SectorAllowedForRole(RoleAlmacen, SectorHerrajes) {
+		t.Fatal("almacen should be allowed herrajes")
+	}
+	if !SectorAllowedForRole(RoleAlmacen, SectorTableros) {
+		t.Fatal("almacen should be allowed tableros")
+	}
+	if !SectorAllowedForRole(RoleAlmacen, SectorCintillas) {
+		t.Fatal("almacen should be allowed cintillas")
+	}
+	if SectorAllowedForRole(RoleAlmacen, SectorCutting) {
+		t.Fatal("almacen must NOT be allowed cutting")
+	}
+	if SectorAllowedForRole(RoleAlmacen, SectorAssembly) {
+		t.Fatal("almacen must NOT be allowed assembly")
+	}
+	if SectorAllowedForRole(RoleAlmacen, SectorWarehouse) {
+		t.Fatal("almacen must NOT be allowed warehouse")
+	}
+
+	// Supervisors: always allowed
+	if !SectorAllowedForRole(RoleAdmin, SectorCutting) {
+		t.Fatal("admin should be allowed any sector")
+	}
+	if !SectorAllowedForRole(RoleGerenteProduccion, SectorHerrajes) {
+		t.Fatal("gerente_produccion should be allowed any sector")
+	}
+}
+

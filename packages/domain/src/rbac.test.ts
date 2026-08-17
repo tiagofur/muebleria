@@ -19,7 +19,10 @@ import {
   roleUsesProductionQueue,
   roleCanClaimProductionJob,
   roleCanAccessProductionDashboard,
+  roleCanAccessSalesDashboard,
   roleIsScopedBySector,
+  sectorsAllowedForRole,
+  roleCanAdvanceStation,
 } from './rbac';
 
 describe('rbac (F035)', () => {
@@ -188,23 +191,113 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('gerente_ventas').has('productionDashboard')).toBe(false);
   });
 
+  it('sales dashboard access for vendedor, gerente_ventas, and admin', () => {
+    expect(roleCanAccessSalesDashboard('vendedor')).toBe(true);
+    expect(roleCanAccessSalesDashboard('gerente_ventas')).toBe(true);
+    expect(roleCanAccessSalesDashboard('admin')).toBe(true);
+    expect(roleCanAccessSalesDashboard('ingeniero')).toBe(false);
+    expect(roleCanAccessSalesDashboard('produccion')).toBe(false);
+    expect(navIdsForRole('vendedor').has('salesDashboard')).toBe(true);
+    expect(navIdsForRole('gerente_ventas').has('salesDashboard')).toBe(true);
+    expect(navIdsForRole('admin').has('salesDashboard')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('salesDashboard')).toBe(false);
+  });
+
   it('almacen role is valid and can claim production jobs', () => {
     expect(isValidUserRole('almacen')).toBe(true);
     expect(roleCanClaimProductionJob('almacen')).toBe(true);
     expect(roleCanClaimProductionJob('produccion')).toBe(true);
     expect(roleCanClaimProductionJob('admin')).toBe(true);
     expect(roleCanClaimProductionJob('vendedor')).toBe(false);
-    expect(roleCanMarkProduced('almacen')).toBe(true);
-    expect(roleCanExportProduction('almacen')).toBe(true);
-    expect(roleCanAccessProductionDashboard('almacen')).toBe(false);
     expect(roleLabelEs('almacen')).toBe('Almacén');
     expect(roleIsScopedBySector('almacen')).toBe(true);
     expect(roleIsScopedBySector('produccion')).toBe(true);
     expect(roleIsScopedBySector('vendedor')).toBe(false);
   });
 
-  it('almacen does NOT have full dashboard access (only gerente_produccion does)', () => {
-    expect(navIdsForRole('almacen').has('productionDashboard')).toBe(false);
-    expect(navIdsForRole('almacen').has('production')).toBe(true);
+  it('F094 — function separation: almacen stays out of the factory hub', () => {
+    // Warehouse works from Fábrica (staging + assigned sectors), not
+    // from the production workspace: no exports, no mark-produced.
+    expect(roleCanMarkProduced('almacen')).toBe(false);
+    expect(roleCanExportProduction('almacen')).toBe(false);
+    expect(navIdsForRole('almacen').has('production')).toBe(false);
+    expect(navIdsForRole('almacen').has('fabric')).toBe(true);
+    // The plant operator keeps the hub and gains the fabric queue.
+    expect(navIdsForRole('produccion').has('production')).toBe(true);
+    expect(navIdsForRole('produccion').has('fabric')).toBe(true);
+    // Supervisors and commercial roles have no personal fabric queue.
+    expect(navIdsForRole('admin').has('fabric')).toBe(false);
+    expect(navIdsForRole('gerente_produccion').has('fabric')).toBe(false);
+    expect(navIdsForRole('vendedor').has('fabric')).toBe(false);
+  });
+
+  it('F094 — roleCanAdvanceStation scopes operators to their sectors', () => {
+    // Supervisors: full pipeline.
+    expect(roleCanAdvanceStation('admin', 'loaded')).toBe(true);
+    expect(roleCanAdvanceStation('gerente_produccion', 'installed')).toBe(true);
+    expect(roleCanAdvanceStation('gerente_ventas', 'packaged')).toBe(true);
+    expect(roleCanAdvanceStation('ingeniero', 'cut')).toBe(true);
+
+    // produccion without assignments: legacy full access.
+    expect(roleCanAdvanceStation('produccion', 'edged', [])).toBe(true);
+    expect(roleCanAdvanceStation('produccion', 'edged', null)).toBe(true);
+
+    // produccion assigned to cutting only.
+    const cutter = roleCanAdvanceStation('produccion', 'cut', ['cutting']);
+    expect(cutter).toBe(true);
+    expect(roleCanAdvanceStation('produccion', 'edged', ['cutting'])).toBe(false);
+    expect(roleCanAdvanceStation('produccion', 'loaded', ['cutting', 'shipping'])).toBe(true);
+
+    // almacen: NEVER unrestricted — only explicitly assigned sectors.
+    expect(roleCanAdvanceStation('almacen', 'cut', [])).toBe(false);
+    expect(roleCanAdvanceStation('almacen', 'loaded', ['shipping'])).toBe(true);
+    expect(roleCanAdvanceStation('almacen', 'cut', ['shipping'])).toBe(false);
+
+    // Nobody advances into 'pending' (it is the queue, not a station output).
+    expect(roleCanAdvanceStation('admin', 'pending')).toBe(false);
+    expect(roleCanAdvanceStation('produccion', 'pending', ['cutting'])).toBe(false);
+
+    // Commercial roles and users: no floor advancement at all.
+    expect(roleCanAdvanceStation('vendedor', 'cut', ['cutting'])).toBe(false);
+    expect(roleCanAdvanceStation('user', 'cut', ['cutting'])).toBe(false);
+    expect(roleCanAdvanceStation(null, 'cut', ['cutting'])).toBe(false);
+  });
+
+  it('engineering nav is for ingeniero and admin only', () => {
+    expect(navIdsForRole('ingeniero').has('engineering')).toBe(true);
+    expect(navIdsForRole('admin').has('engineering')).toBe(true);
+    expect(navIdsForRole('vendedor').has('engineering')).toBe(false);
+    expect(navIdsForRole('produccion').has('engineering')).toBe(false);
+    expect(navIdsForRole(null).has('engineering')).toBe(false);
+  });
+
+  it('F094 — sectorsAllowedForRole binds sectors to roles', () => {
+    // produccion: all 11 sectors (full floor + material types)
+    const prodSectors = sectorsAllowedForRole('produccion');
+    expect(prodSectors).toContain('warehouse');
+    expect(prodSectors).toContain('cutting');
+    expect(prodSectors).toContain('cnc');
+    expect(prodSectors).toContain('edge_banding');
+    expect(prodSectors).toContain('assembly');
+    expect(prodSectors).toContain('packaging');
+    expect(prodSectors).toContain('shipping');
+    expect(prodSectors).toContain('installation');
+    expect(prodSectors).toContain('herrajes');
+    expect(prodSectors).toContain('tableros');
+    expect(prodSectors).toContain('cintillas');
+    expect(prodSectors).toHaveLength(11);
+
+    // almacen: 3 material sectors (first-class, no sub-sector nesting)
+    const almacenSectors = sectorsAllowedForRole('almacen');
+    expect(almacenSectors).toEqual(['herrajes', 'tableros', 'cintillas']);
+
+    // Supervisors: empty (they manage via role, not sector membership)
+    expect(sectorsAllowedForRole('admin')).toEqual([]);
+    expect(sectorsAllowedForRole('gerente_produccion')).toEqual([]);
+    expect(sectorsAllowedForRole('gerente_ventas')).toEqual([]);
+    expect(sectorsAllowedForRole('ingeniero')).toEqual([]);
+    expect(sectorsAllowedForRole('vendedor')).toEqual([]);
+    expect(sectorsAllowedForRole('user')).toEqual([]);
+    expect(sectorsAllowedForRole(null)).toEqual([]);
   });
 });

@@ -3,6 +3,13 @@
  * Portfolio ownership (F034) layers on top for vendedor.
  */
 
+import type { ItemFloorStatus } from './types';
+import {
+  PRODUCTION_SECTORS,
+  sectorForFloorStatus,
+  type ProductionSector,
+} from './productionSectors';
+
 export type ProductRole =
   | 'admin'
   | 'user'
@@ -103,7 +110,8 @@ export function roleCanReopenProject(role: string | null | undefined): boolean {
 
 /**
  * Mark accepted → produced (click-only, no export gate).
- * Admin, gerente, ingeniero, produccion, almacen (F036).
+ * Admin, gerentes, ingeniero y produccion (F036). Almacén NO: closing a
+ * factory order is a plant-supervisor call, not a warehouse one (F094).
  */
 export function roleCanMarkProduced(role: string | null | undefined): boolean {
   return (
@@ -111,19 +119,22 @@ export function roleCanMarkProduced(role: string | null | undefined): boolean {
     role === 'gerente_ventas' ||
     role === 'gerente_produccion' ||
     role === 'ingeniero' ||
-    role === 'produccion' ||
-    role === 'almacen'
+    role === 'produccion'
   );
 }
 
+/**
+ * Factory exports / OP hub (F041 + F094). Almacén stays OUT of the hub:
+ * their surface is the station queue (staging + assigned sectors), not
+ * Optimizer/pack/documentos de fábrica.
+ */
 export function roleCanExportProduction(role: string | null | undefined): boolean {
   return (
     role === 'admin' ||
     role === 'ingeniero' ||
     role === 'produccion' ||
     role === 'gerente_produccion' ||
-    role === 'gerente_ventas' ||
-    role === 'almacen'
+    role === 'gerente_ventas'
   );
 }
 
@@ -178,6 +189,26 @@ export function roleCanAccessProductionDashboard(
 }
 
 /**
+ * Engineering workspace: documentation, optimization, and production prep.
+ * Engineers and admins can access it; guest/local cannot.
+ */
+export function roleCanAccessEngineeringNav(
+  role: string | null | undefined,
+): boolean {
+  return role === 'admin' || role === 'ingeniero';
+}
+
+/**
+ * Sales dashboard: pipeline, summary cards, project list, alerts.
+ * Vendedor sees own portfolio; gerente_ventas and admin see all.
+ */
+export function roleCanAccessSalesDashboard(
+  role: string | null | undefined,
+): boolean {
+  return role === 'admin' || role === 'gerente_ventas' || role === 'vendedor';
+}
+
+/**
  * Role whose *project list* is plant-filtered (accepted/produced only).
  * Historically F038: only `produccion` works the floor queue as portfolio.
  * Do not expand this without revisiting `projectsForRole` filtering.
@@ -214,17 +245,65 @@ export function roleIsScopedBySector(role: string | null | undefined): boolean {
   return role === 'produccion' || role === 'almacen';
 }
 
-/** Warehouse sub-sectors for material type separation. */
-export type WarehouseSubSector =
-  | 'herrajes'
-  | 'tableros'
-  | 'cintillas';
+/**
+ * Sectors a role may be assigned to (F094 — role↔sector binding).
+ *
+ * - `produccion`: all pipeline stations + warehouse + cnc (full floor).
+ * - `almacen`: material sectors — herrajes, tableros, cintillas (each a
+ *   first-class sector, no sub-sector nesting).
+ * - Supervisors / others: not scoped by sector (return empty — they see
+ *   everything via role, not sector membership).
+ */
+export function sectorsAllowedForRole(
+  role: string | null | undefined,
+): readonly ProductionSector[] {
+  if (role === 'produccion') {
+    return PRODUCTION_SECTORS; // all sectors
+  }
+  if (role === 'almacen') {
+    return ['herrajes', 'tableros', 'cintillas'];
+  }
+  return [];
+}
 
-export const WAREHOUSE_SUB_SECTORS: readonly WarehouseSubSector[] = [
-  'herrajes',
-  'tableros',
-  'cintillas',
-] as const;
+/**
+ * May `role` advance an item INTO `target`, given the user's assigned
+ * sectors (F094 — station separation)?
+ *
+ * - Supervisors (admin / gerente_ventas / gerente_produccion / ingeniero):
+ *   full pipeline.
+ * - `produccion`: only sectors assigned via user_sectors. NO assignments =
+ *   legacy full access (existing operators keep working every station).
+ * - `almacen`: ONLY explicitly assigned sectors — never unrestricted
+ *   (warehouse staging produces no floor status of its own).
+ * - Everyone else (vendedor / user / guest): no floor advancement.
+ */
+export function roleCanAdvanceStation(
+  role: string | null | undefined,
+  target: ItemFloorStatus,
+  assignedSectors?: readonly string[] | null,
+): boolean {
+  const sector = sectorForFloorStatus(target);
+  // 'pending' is nobody's station output — it is the queue, not a step.
+  if (sector === null) return false;
+
+  if (
+    role === 'admin' ||
+    role === 'gerente_produccion' ||
+    role === 'gerente_ventas' ||
+    role === 'ingeniero'
+  ) {
+    return true;
+  }
+  if (role === 'produccion') {
+    if (!assignedSectors || assignedSectors.length === 0) return true;
+    return assignedSectors.includes(sector);
+  }
+  if (role === 'almacen') {
+    return (assignedSectors ?? []).includes(sector);
+  }
+  return false;
+}
 
 /** User-sector assignment for operators. */
 export type UserSector = {
@@ -355,10 +434,17 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   }
   if (roleCanAccessSettings(role)) ids.add('settings');
   if (roleCanManageUsers(role)) ids.add('users');
+  // Fábrica: tabbed work queue for sector-scoped operators (replaces Mi Estación).
+  // produccion (any station) and almacen (staging + assigned sectors).
+  if (roleIsScopedBySector(role)) ids.add('fabric');
   // PROD-0.1: factory workspace nav for production-export roles.
   if (roleCanAccessProductionNav(role)) ids.add('production');
   // Production Manager Dashboard: full visibility for gerente_produccion
   if (roleCanAccessProductionDashboard(role)) ids.add('productionDashboard');
+  // Ingeniería: documentation workspace for engineers and admins.
+  if (roleCanAccessEngineeringNav(role)) ids.add('engineering');
+  // Dashboard Ventas: pipeline + summary for sales roles.
+  if (roleCanAccessSalesDashboard(role)) ids.add('salesDashboard');
   return ids;
 }
 
