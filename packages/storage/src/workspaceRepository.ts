@@ -13,6 +13,7 @@ import type {
   ShowcasePhotoItem,
   Workspace,
   ItemFloorStatus,
+  FloorStatusEvent,
   LoadingProgress,
 } from '@muebles/domain';
 
@@ -110,6 +111,8 @@ export interface WorkspaceRepository {
     statusAfter: ItemFloorStatus;
     nextStatus: string;
     loadingProgress: LoadingProgress;
+    /** Audit entry written for the transition (F092); null on no-op. */
+    event?: FloorStatusEvent | null;
   }>;
 
   getProjectLoadingStatus?(projectId: string): Promise<{
@@ -127,7 +130,129 @@ export interface WorkspaceRepository {
     itemId: string;
     floorStatus: ItemFloorStatus;
     nextStatus: string;
+    /** Audit entry written for the transition (F092); null on no-op. */
+    event?: FloorStatusEvent | null;
   }>;
+
+  /** Shop-floor transition log of a project, oldest first (F092). */
+  listFloorEvents?(projectId: string): Promise<readonly FloorStatusEvent[]>;
+
+  // --- Production Activity Tracking (gerente_produccion) ---
+
+  /** Full dashboard metrics: sectors, active jobs, damage counts. */
+  getProductionDashboard?(): Promise<{
+    totalProjects: number;
+    totalItems: number;
+    totalInstalled: number;
+    avgProgress: number;
+    todayCompleted: number;
+    todayDamages: number;
+    sectors: Array<{
+      sector: string;
+      label: string;
+      activeOperators: number;
+      queueLength: number;
+      itemsInProgress: number;
+      itemsCompletedToday: number;
+      avgTimeMinutes: number;
+      activeJobs: Array<{
+        activityId: string;
+        projectId: string;
+        projectName: string;
+        itemId: string;
+        moduleCode: string;
+        operatorId: string;
+        operatorName: string;
+        machineId?: string;
+        machineName?: string;
+        startedAt: string;
+        durationMin: number;
+      }>;
+    }>;
+  }>;
+
+  /** All active jobs right now across all sectors. */
+  getProductionActiveJobs?(): Promise<Array<{
+    activityId: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    moduleCode: string;
+    operatorId: string;
+    operatorName: string;
+    machineId?: string;
+    machineName?: string;
+    startedAt: string;
+    durationMin: number;
+  }>>;
+
+  /** Operator claims a job (starts working). */
+  claimProductionActivity?(payload: {
+    projectId: string;
+    itemId: string;
+    sector: string;
+    machineId?: string;
+    machineName?: string;
+  }): Promise<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    moduleCode: string;
+    sector: string;
+    type: string;
+    operatorId: string;
+    operatorName: string;
+    startedAt: string;
+    createdAt: string;
+  }>;
+
+  /** Operator finishes a job (records pieces count). */
+  finishProductionActivity?(
+    activityId: string,
+    payload: { piecesCount: number; notes?: string },
+  ): Promise<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    moduleCode: string;
+    sector: string;
+    type: string;
+    operatorId: string;
+    operatorName: string;
+    startedAt: string;
+    finishedAt: string;
+    durationMs: number;
+    piecesCount: number;
+    notes: string;
+  }>;
+
+  /** Report a damaged piece. */
+  reportProductionDamage?(payload: {
+    projectId: string;
+    itemId: string;
+    sector: string;
+    damageType: string;
+    description: string;
+    photoUrl?: string;
+    needsReplace: boolean;
+  }): Promise<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    sector: string;
+    damageType: string;
+    description: string;
+    reportedBy: string;
+    reportedByName: string;
+    reportedAt: string;
+    needsReplace: boolean;
+  }>;
+
+  /** Mark damage report as resolved. */
+  resolveProductionDamage?(damageId: string): Promise<void>;
 
   // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
 

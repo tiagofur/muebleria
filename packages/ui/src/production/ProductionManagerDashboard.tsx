@@ -8,7 +8,7 @@
  * Distinct from PlantBoardScreen (F093) which is read-only for all roles.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Factory,
   Users,
@@ -18,6 +18,10 @@ import {
   ArrowRight,
   BarChart3,
   Settings,
+  RefreshCw,
+  Pause,
+  Play,
+  XCircle,
 } from 'lucide-react';
 
 import type { Project } from '@muebles/domain';
@@ -33,36 +37,39 @@ import './productionManagerDashboard.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type OperatorStatus = 'active' | 'idle' | 'break';
-
-type OperatorInfo = {
-  readonly id: string;
-  readonly name: string;
-  readonly sector: PipelineSector;
+type ActiveJob = {
+  readonly activityId: string;
   readonly projectId: string;
   readonly projectName: string;
-  readonly status: OperatorStatus;
+  readonly itemId: string;
+  readonly moduleCode: string;
+  readonly operatorId: string;
+  readonly operatorName: string;
+  readonly machineId?: string;
+  readonly machineName?: string;
   readonly startedAt: string;
-  readonly itemsCount: number;
+  readonly durationMin: number;
 };
 
-type QueueItem = {
-  readonly projectId: string;
-  readonly projectName: string;
-  readonly customerId: string;
-  readonly itemsCount: number;
-  readonly priority: 'high' | 'medium' | 'low';
-  readonly deadline?: string;
-};
-
-type SectorStatus = {
-  readonly sector: PipelineSector;
+type SectorDashboard = {
+  readonly sector: string;
   readonly label: string;
   readonly activeOperators: number;
   readonly queueLength: number;
   readonly itemsInProgress: number;
   readonly itemsCompletedToday: number;
   readonly avgTimeMinutes: number;
+  readonly activeJobs: readonly ActiveJob[];
+};
+
+type DashboardMetrics = {
+  readonly totalProjects: number;
+  readonly totalItems: number;
+  readonly totalInstalled: number;
+  readonly avgProgress: number;
+  readonly todayCompleted: number;
+  readonly todayDamages: number;
+  readonly sectors: readonly SectorDashboard[];
 };
 
 type DashboardProps = {
@@ -85,8 +92,15 @@ function formatTimeAgo(isoDate: string): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-function getSectorIcon(sector: PipelineSector): string {
-  const icons: Record<PipelineSector, string> = {
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)}min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return `${h}h ${m}min`;
+}
+
+function getSectorIcon(sector: string): string {
+  const icons: Record<string, string> = {
     cutting: '✂️',
     edge_banding: '🔧',
     assembly: '🪑',
@@ -95,6 +109,74 @@ function getSectorIcon(sector: PipelineSector): string {
     installation: '🏠',
   };
   return icons[sector] ?? '⚙️';
+}
+
+// ─── Custom Hook ─────────────────────────────────────────────────────────────
+
+function useProductionDashboard() {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [activeJobs, setActiveJobs] = useState<readonly ActiveJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Try to fetch from backend; if it fails, use mock data
+      const [dashboardRes, jobsRes] = await Promise.allSettled([
+        fetch('/api/production/dashboard', {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        fetch('/api/production/active', {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ]);
+
+      if (dashboardRes.status === 'fulfilled' && dashboardRes.value.ok) {
+        const dashboard = await dashboardRes.value.json();
+        setMetrics(dashboard.metrics || dashboard);
+      } else {
+        // Mock data for demo
+        setMetrics({
+          totalProjects: 0,
+          totalItems: 0,
+          totalInstalled: 0,
+          avgProgress: 0,
+          todayCompleted: 0,
+          todayDamages: 0,
+          sectors: PIPELINE_SECTORS.map((sector) => ({
+            sector,
+            label: PRODUCTION_SECTOR_LABELS_ES[sector],
+            activeOperators: 0,
+            queueLength: 0,
+            itemsInProgress: 0,
+            itemsCompletedToday: 0,
+            avgTimeMinutes: 0,
+            activeJobs: [],
+          })),
+        });
+      }
+
+      if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {
+        const jobsData = await jobsRes.value.json();
+        setActiveJobs(jobsData.jobs || []);
+      } else {
+        setActiveJobs([]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  return { metrics, activeJobs, loading, error, refresh: fetchDashboard };
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -108,6 +190,7 @@ export function ProductionManagerDashboard({
 }: DashboardProps) {
   const [selectedSector, setSelectedSector] = useState<PipelineSector | 'all'>('all');
   const [showMetrics, setShowMetrics] = useState(false);
+  const { metrics, activeJobs, loading, error, refresh } = useProductionDashboard();
 
   // Build summaries for all production projects
   const productionProjects = useMemo(() => {
@@ -119,27 +202,19 @@ export function ProductionManagerDashboard({
       }));
   }, [projects]);
 
-  // Aggregate sector status (placeholder - real data would come from backend)
-  const sectorStatuses: SectorStatus[] = useMemo(() => {
-    return PIPELINE_SECTORS.map((sector) => {
-      const itemsInProgress = productionProjects.reduce((acc, { project }) => {
-        return acc + project.summary.stages.find((s) => s.sector === sector)?.waiting ?? 0;
-      }, 0);
-
-      return {
-        sector,
-        label: PRODUCTION_SECTOR_LABELS_ES[sector],
-        activeOperators: 0, // Would come from real-time data
-        queueLength: itemsInProgress,
-        itemsInProgress: 0,
-        itemsCompletedToday: 0,
-        avgTimeMinutes: 0,
-      };
-    });
-  }, [productionProjects]);
-
-  // Total metrics
+  // Use backend metrics if available, fallback to local calculation
   const totalMetrics = useMemo(() => {
+    if (metrics) {
+      return {
+        totalProjects: metrics.totalProjects,
+        totalItems: metrics.totalItems,
+        totalInstalled: metrics.totalInstalled,
+        avgProgress: metrics.avgProgress,
+        todayCompleted: metrics.todayCompleted,
+        todayDamages: metrics.todayDamages,
+      };
+    }
+
     const totalProjects = productionProjects.length;
     const totalItems = productionProjects.reduce((acc, { summary }) => acc + summary.totalItems, 0);
     const totalInstalled = productionProjects.reduce((acc, { summary }) => acc + summary.installedItems, 0);
@@ -152,8 +227,69 @@ export function ProductionManagerDashboard({
       totalItems,
       totalInstalled,
       avgProgress,
+      todayCompleted: 0,
+      todayDamages: 0,
     };
-  }, [productionProjects]);
+  }, [metrics, productionProjects]);
+
+  // Use backend sector data if available, fallback to local
+  const sectorStatuses = useMemo(() => {
+    if (metrics?.sectors && metrics.sectors.length > 0) {
+      return metrics.sectors;
+    }
+
+    return PIPELINE_SECTORS.map((sector) => {
+      const itemsInProgress = productionProjects.reduce((acc, { summary }) => {
+        const stage = summary.stages.find((s) => s.sector === sector);
+        return acc + (stage?.waiting ?? 0);
+      }, 0);
+
+      return {
+        sector,
+        label: PRODUCTION_SECTOR_LABELS_ES[sector],
+        activeOperators: 0,
+        queueLength: itemsInProgress,
+        itemsInProgress: 0,
+        itemsCompletedToday: 0,
+        avgTimeMinutes: 0,
+        activeJobs: [],
+      };
+    });
+  }, [metrics, productionProjects]);
+
+  // Filter active jobs by selected sector
+  const filteredJobs = useMemo(() => {
+    if (selectedSector === 'all') return activeJobs;
+    return activeJobs.filter((job) => {
+      const sector = sectorStatuses.find((s) => s.sector === selectedSector);
+      return sector?.activeJobs.some((j) => j.activityId === job.activityId);
+    });
+  }, [activeJobs, selectedSector, sectorStatuses]);
+
+  if (loading) {
+    return (
+      <section className="pm-dashboard" aria-label="Dashboard del Gerente de Producción" data-testid={testId}>
+        <div className="pm-dashboard__loading">
+          <RefreshCw size={32} className="pm-dashboard__spinner" />
+          <p>Cargando datos de producción...</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="pm-dashboard" aria-label="Dashboard del Gerente de Producción" data-testid={testId}>
+        <div className="pm-dashboard__error">
+          <AlertTriangle size={32} />
+          <p>Error al cargar el dashboard: {error}</p>
+          <button type="button" onClick={refresh} className="pm-dashboard__btn pm-dashboard__btn--primary">
+            Reintentar
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="pm-dashboard" aria-label="Dashboard del Gerente de Producción" data-testid={testId}>
@@ -171,6 +307,14 @@ export function ProductionManagerDashboard({
           </div>
         </div>
         <div className="pm-dashboard__header-actions">
+          <button
+            type="button"
+            className="pm-dashboard__btn pm-dashboard__btn--secondary"
+            onClick={refresh}
+          >
+            <RefreshCw size={16} />
+            Actualizar
+          </button>
           <button
             type="button"
             className="pm-dashboard__btn pm-dashboard__btn--secondary"
@@ -206,8 +350,8 @@ export function ProductionManagerDashboard({
             <Users size={20} />
           </div>
           <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{totalMetrics.totalItems}</span>
-            <span className="pm-dashboard__card-label">Muebles Totales</span>
+            <span className="pm-dashboard__card-value">{activeJobs.length}</span>
+            <span className="pm-dashboard__card-label">Operadores Activos</span>
           </div>
         </div>
 
@@ -216,8 +360,8 @@ export function ProductionManagerDashboard({
             <CheckCircle2 size={20} />
           </div>
           <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{totalMetrics.totalInstalled}</span>
-            <span className="pm-dashboard__card-label">Instalados</span>
+            <span className="pm-dashboard__card-value">{totalMetrics.todayCompleted}</span>
+            <span className="pm-dashboard__card-label">Completados Hoy</span>
           </div>
         </div>
 
@@ -248,6 +392,9 @@ export function ProductionManagerDashboard({
               <span className="pm-dashboard__sector-icon">{getSectorIcon(status.sector)}</span>
               <span className="pm-dashboard__sector-name">{status.label}</span>
               <span className="pm-dashboard__sector-count">
+                {status.activeOperators} activos
+              </span>
+              <span className="pm-dashboard__sector-count">
                 {status.queueLength} en cola
               </span>
             </button>
@@ -261,25 +408,34 @@ export function ProductionManagerDashboard({
           <h2 className="pm-dashboard__section-title">Métricas de Producción</h2>
           <div className="pm-dashboard__metrics-grid">
             <div className="pm-dashboard__metric">
-              <span className="pm-dashboard__metric-label">Tiempo Promedio por Proyecto</span>
-              <span className="pm-dashboard__metric-value">--</span>
-            </div>
-            <div className="pm-dashboard__metric">
-              <span className="pm-dashboard__metric-label">Piezas Cortadas Hoy</span>
-              <span className="pm-dashboard__metric-value">--</span>
-            </div>
-            <div className="pm-dashboard__metric">
-              <span className="pm-dashboard__metric-label">Eficiencia del Día</span>
-              <span className="pm-dashboard__metric-value">--</span>
+              <span className="pm-dashboard__metric-label">Piezas Completadas Hoy</span>
+              <span className="pm-dashboard__metric-value">{totalMetrics.todayCompleted}</span>
             </div>
             <div className="pm-dashboard__metric">
               <span className="pm-dashboard__metric-label">Piezas Dañadas Hoy</span>
-              <span className="pm-dashboard__metric-value">--</span>
+              <span className="pm-dashboard__metric-value">{totalMetrics.todayDamages}</span>
             </div>
+            {sectorStatuses.map((sector) => (
+              <div key={sector.sector} className="pm-dashboard__metric">
+                <span className="pm-dashboard__metric-label">{sector.label}</span>
+                <span className="pm-dashboard__metric-value">
+                  {sector.itemsCompletedToday} completados
+                </span>
+              </div>
+            ))}
           </div>
-          <p className="pm-dashboard__metric-note">
-            Las métricas se actualizarán con datos en tiempo real del backend
-          </p>
+        </div>
+      )}
+
+      {/* Active Jobs */}
+      {filteredJobs.length > 0 && (
+        <div className="pm-dashboard__jobs">
+          <h2 className="pm-dashboard__section-title">Trabajos Activos</h2>
+          <div className="pm-dashboard__job-list">
+            {filteredJobs.map((job) => (
+              <ActiveJobRow key={job.activityId} job={job} />
+            ))}
+          </div>
         </div>
       )}
 
@@ -307,30 +463,38 @@ export function ProductionManagerDashboard({
           </div>
         )}
       </div>
-
-      {/* Quick Actions */}
-      <div className="pm-dashboard__actions">
-        <h2 className="pm-dashboard__section-title">Acciones Rápidas</h2>
-        <div className="pm-dashboard__action-grid">
-          <button type="button" className="pm-dashboard__action-btn">
-            <ArrowRight size={16} />
-            Mover Between Colas
-          </button>
-          <button type="button" className="pm-dashboard__action-btn">
-            <Users size={16} />
-            Reasignar Operador
-          </button>
-          <button type="button" className="pm-dashboard__action-btn">
-            <AlertTriangle size={16} />
-            Reportar Problema
-          </button>
-          <button type="button" className="pm-dashboard__action-btn">
-            <Clock size={16} />
-            Cambiar Prioridad
-          </button>
-        </div>
-      </div>
     </section>
+  );
+}
+
+// ─── Active Job Row ──────────────────────────────────────────────────────────
+
+function ActiveJobRow({ job }: { readonly job: ActiveJob }) {
+  return (
+    <div className="pm-dashboard__job-row" data-testid={`pm-active-job-${job.activityId}`}>
+      <div className="pm-dashboard__job-info">
+        <span className="pm-dashboard__job-operator">
+          <Users size={14} />
+          {job.operatorName}
+        </span>
+        <span className="pm-dashboard__job-project">
+          {job.projectName}
+        </span>
+        <span className="pm-dashboard__job-module">
+          {job.moduleCode}
+        </span>
+        {job.machineName && (
+          <span className="pm-dashboard__job-machine">
+            <Settings size={12} />
+            {job.machineName}
+          </span>
+        )}
+      </div>
+      <div className="pm-dashboard__job-time">
+        <Clock size={14} />
+        <span>{formatDuration(job.durationMin)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -407,7 +571,7 @@ function ProjectDashboardRow({
               className={`pm-dashboard__stage ${
                 done ? 'pm-dashboard__stage--done' : active ? 'pm-dashboard__stage--active' : ''
               }`}
-              title={`${stage.label}: ${stage.done}/${stage.total}`}
+              title={`${PRODUCTION_SECTOR_LABELS_ES[stage.sector]}: ${stage.done}/${stage.total}`}
             >
               <span className="pm-dashboard__stage-icon">{getSectorIcon(stage.sector)}</span>
               <span className="pm-dashboard__stage-count">

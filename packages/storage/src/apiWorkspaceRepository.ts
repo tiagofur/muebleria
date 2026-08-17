@@ -14,6 +14,7 @@ import type {
   Workspace,
   WorkshopSettings,
   ItemFloorStatus,
+  FloorStatusEvent,
   LoadingProgress,
 } from '@muebles/domain';
 import {
@@ -51,10 +52,29 @@ import {
   workshopSettingsToApi,
 } from './apiMappers';
 
-
-
-
 import { SCHEMA_VERSION } from './seed';
+
+/** Snake_case floor event from the Go API → domain shape (F092). */
+function floorEventFromApi(
+  raw: unknown,
+): FloorStatusEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = String(r.id ?? '');
+  if (!id) return null;
+  return {
+    id,
+    projectId: String(r.project_id ?? ''),
+    itemId: String(r.item_id ?? ''),
+    from: (r.from_status as FloorStatusEvent['from']) ?? 'pending',
+    to: (r.to_status as FloorStatusEvent['to']) ?? 'pending',
+    at: String(r.at ?? ''),
+    byUserId: r.by_user_id ? String(r.by_user_id) : undefined,
+    byName: r.by_name ? String(r.by_name) : undefined,
+    source: (r.source as FloorStatusEvent['source']) ?? 'api',
+    note: r.note ? String(r.note) : undefined,
+  };
+}
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
@@ -681,6 +701,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     statusAfter: ItemFloorStatus;
     nextStatus: string;
     loadingProgress: LoadingProgress;
+    event?: FloorStatusEvent | null;
   }> {
     const res = await fetch(`${this.baseUrl}/projects/${projectId}/floor-scan`, {
       method: 'POST',
@@ -724,6 +745,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         allLoaded: Boolean(progressRaw.all_loaded),
         canReleaseToDelivery: Boolean(progressRaw.can_release_to_delivery),
       },
+      event: floorEventFromApi(raw.event),
     };
   }
 
@@ -774,6 +796,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     itemId: string;
     floorStatus: ItemFloorStatus;
     nextStatus: string;
+    event?: FloorStatusEvent | null;
   }> {
     const res = await fetch(
       `${this.baseUrl}/projects/${projectId}/items/${itemId}/floor-status`,
@@ -793,7 +816,27 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       itemId: String(raw.item_id ?? ''),
       floorStatus: (raw.floor_status as ItemFloorStatus) ?? 'pending',
       nextStatus: String(raw.next_status ?? ''),
+      event: floorEventFromApi(raw.event),
     };
+  }
+
+  async listFloorEvents(
+    projectId: string,
+  ): Promise<readonly FloorStatusEvent[]> {
+    const res = await fetch(
+      `${this.baseUrl}/projects/${projectId}/floor-events`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to list floor events: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((e) => floorEventFromApi(e as Record<string, unknown>))
+      .filter((e): e is FloorStatusEvent => e !== null);
   }
 
   // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
@@ -960,6 +1003,97 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (!res.ok && res.status !== 404) {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to delete warranty photo: ${res.status} ${text}`);
+    }
+  }
+
+  // ─── Production Activity Tracking (gerente_produccion) ──────────────────────
+
+  async getProductionDashboard() {
+    const res = await fetch(`${this.baseUrl}/production/dashboard`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to fetch production dashboard: ${res.status} ${text}`);
+    }
+    return res.json();
+  }
+
+  async getProductionActiveJobs() {
+    const res = await fetch(`${this.baseUrl}/production/active`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to fetch active jobs: ${res.status} ${text}`);
+    }
+    return res.json();
+  }
+
+  async claimProductionActivity(payload: {
+    projectId: string;
+    itemId: string;
+    sector: string;
+    machineId?: string;
+    machineName?: string;
+  }) {
+    const res = await fetch(`${this.baseUrl}/production/activity/claim`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to claim activity: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return raw.activity;
+  }
+
+  async finishProductionActivity(activityId: string, payload: { piecesCount: number; notes?: string }) {
+    const res = await fetch(`${this.baseUrl}/production/activity/finish/${activityId}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to finish activity: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return raw.activity;
+  }
+
+  async reportProductionDamage(payload: {
+    projectId: string;
+    itemId: string;
+    sector: string;
+    damageType: string;
+    description: string;
+    photoUrl?: string;
+    needsReplace: boolean;
+  }) {
+    const res = await fetch(`${this.baseUrl}/production/activity/damage`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to report damage: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return raw.report;
+  }
+
+  async resolveProductionDamage(damageId: string) {
+    const res = await fetch(`${this.baseUrl}/production/damage/${damageId}/resolve`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to resolve damage: ${res.status} ${text}`);
     }
   }
 }
