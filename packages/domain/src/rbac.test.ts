@@ -19,7 +19,7 @@ import {
   roleUsesProductionQueue,
   roleCanClaimProductionJob,
   roleCanAccessProductionDashboard,
-  roleIsOperador,
+  roleIsScopedBySector,
 } from './rbac';
 
 describe('rbac (F035)', () => {
@@ -188,22 +188,23 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('gerente_ventas').has('productionDashboard')).toBe(false);
   });
 
-  it('operador role is valid and can claim production jobs', () => {
-    expect(isValidUserRole('operador')).toBe(true);
-    expect(roleCanClaimProductionJob('operador')).toBe(true);
+  it('almacen role is valid and can claim production jobs', () => {
+    expect(isValidUserRole('almacen')).toBe(true);
+    expect(roleCanClaimProductionJob('almacen')).toBe(true);
     expect(roleCanClaimProductionJob('produccion')).toBe(true);
     expect(roleCanClaimProductionJob('admin')).toBe(true);
     expect(roleCanClaimProductionJob('vendedor')).toBe(false);
-    expect(roleCanMarkProduced('operador')).toBe(true);
-    expect(roleCanExportProduction('operador')).toBe(true);
-    expect(roleCanAccessProductionDashboard('operador')).toBe(false);
-    expect(roleLabelEs('operador')).toBe('Operador');
-    expect(roleIsOperador('operador')).toBe(true);
-    expect(roleIsOperador('produccion')).toBe(false);
+    expect(roleCanMarkProduced('almacen')).toBe(true);
+    expect(roleCanExportProduction('almacen')).toBe(true);
+    expect(roleCanAccessProductionDashboard('almacen')).toBe(false);
+    expect(roleLabelEs('almacen')).toBe('Almacén');
+    expect(roleIsScopedBySector('almacen')).toBe(true);
+    expect(roleIsScopedBySector('produccion')).toBe(true);
+    expect(roleIsScopedBySector('vendedor')).toBe(false);
   });
 
-  it('operador does NOT have full dashboard access (only gerente_produccion does)', () => {
-    expect(navIdsForRole('operador').has('productionDashboard')).toBe(false);
-    expect(navIdsForRole('operador').has('production')).toBe(true);
+  it('almacen does NOT have full dashboard access (only gerente_produccion does)', () => {
+    expect(navIdsForRole('almacen').has('productionDashboard')).toBe(false);
+    expect(navIdsForRole('almacen').has('production')).toBe(true);
   });
 });

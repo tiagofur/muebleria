@@ -11,7 +11,7 @@ export type ProductRole =
   | 'gerente_produccion'
   | 'ingeniero'
   | 'produccion'
-  | 'operador';
+  | 'almacen';
 
 export const PRODUCT_ROLES: readonly ProductRole[] = [
   'admin',
@@ -21,7 +21,7 @@ export const PRODUCT_ROLES: readonly ProductRole[] = [
   'gerente_produccion',
   'ingeniero',
   'produccion',
-  'operador',
+  'almacen',
 ] as const;
 
 /** Assignable job titles from admin panel (includes sin puesto). */
@@ -36,7 +36,7 @@ export function isValidUserRole(role: string | null | undefined): role is Produc
     role === 'gerente_produccion' ||
     role === 'ingeniero' ||
     role === 'produccion' ||
-    role === 'operador'
+    role === 'almacen'
   );
 }
 
@@ -103,7 +103,7 @@ export function roleCanReopenProject(role: string | null | undefined): boolean {
 
 /**
  * Mark accepted → produced (click-only, no export gate).
- * Admin, gerente, ingeniero, produccion, operador (F036).
+ * Admin, gerente, ingeniero, produccion, almacen (F036).
  */
 export function roleCanMarkProduced(role: string | null | undefined): boolean {
   return (
@@ -112,7 +112,7 @@ export function roleCanMarkProduced(role: string | null | undefined): boolean {
     role === 'gerente_produccion' ||
     role === 'ingeniero' ||
     role === 'produccion' ||
-    role === 'operador'
+    role === 'almacen'
   );
 }
 
@@ -123,7 +123,7 @@ export function roleCanExportProduction(role: string | null | undefined): boolea
     role === 'produccion' ||
     role === 'gerente_produccion' ||
     role === 'gerente_ventas' ||
-    role === 'operador'
+    role === 'almacen'
   );
 }
 
@@ -200,18 +200,18 @@ export function roleCanAccessProductionNav(
 }
 
 /**
- * Operator can claim/finish jobs in their assigned sectors.
+ * Production/warehouse workers can claim/finish jobs in their assigned sectors.
  * Distinct from gerente_produccion which sees everything.
  */
 export function roleCanClaimProductionJob(
   role: string | null | undefined,
 ): boolean {
-  return role === 'admin' || role === 'produccion' || role === 'operador';
+  return role === 'admin' || role === 'produccion' || role === 'almacen';
 }
 
-/** Check if role is an operator (for sector-scoped queries). */
-export function roleIsOperador(role: string | null | undefined): boolean {
-  return role === 'operador';
+/** Check if role is scoped by user_sectors (produccion or almacen). */
+export function roleIsScopedBySector(role: string | null | undefined): boolean {
+  return role === 'produccion' || role === 'almacen';
 }
 
 /** Warehouse sub-sectors for material type separation. */
@@ -303,7 +303,7 @@ export function roleLabelEs(role: string | null | undefined): string {
     gerente_produccion: 'Gerente de producción',
     ingeniero: 'Ingeniero',
     produccion: 'Producción',
-    operador: 'Operador',
+    almacen: 'Almacén',
   };
   if (!role) return '—';
   return map[role] ?? role;

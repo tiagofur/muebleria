@@ -42,7 +42,9 @@ func (s *Server) HandleStaffByRole(w http.ResponseWriter, r *http.Request) {
 	var roles []domain.UserRole
 	switch department {
 	case "production":
-		roles = []domain.UserRole{domain.RoleProduccion, domain.RoleOperador}
+		roles = []domain.UserRole{domain.RoleProduccion}
+	case "warehouse":
+		roles = []domain.UserRole{domain.RoleAlmacen}
 	case "sales":
 		roles = []domain.UserRole{domain.RoleVendedor}
 	default:
@@ -88,8 +90,13 @@ func (s *Server) HandleStaffCreate(w http.ResponseWriter, r *http.Request) {
 	role := domain.UserRole(req.Role)
 	switch department {
 	case "production":
-		if role != domain.RoleProduccion && role != domain.RoleOperador {
+		if role != domain.RoleProduccion {
 			respondWithError(w, http.StatusBadRequest, "invalid role for production department")
+			return
+		}
+	case "warehouse":
+		if role != domain.RoleAlmacen {
+			respondWithError(w, http.StatusBadRequest, "invalid role for warehouse department")
 			return
 		}
 	case "sales":
@@ -156,8 +163,13 @@ func (s *Server) HandleStaffUpdate(w http.ResponseWriter, r *http.Request) {
 	role := domain.UserRole(req.Role)
 	switch department {
 	case "production":
-		if role != domain.RoleProduccion && role != domain.RoleOperador {
+		if role != domain.RoleProduccion {
 			respondWithError(w, http.StatusBadRequest, "invalid role for production department")
+			return
+		}
+	case "warehouse":
+		if role != domain.RoleAlmacen {
+			respondWithError(w, http.StatusBadRequest, "invalid role for warehouse department")
 			return
 		}
 	case "sales":

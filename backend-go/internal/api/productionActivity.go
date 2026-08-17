@@ -103,7 +103,7 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// For operadores, verify they have access to this sector
-	if domain.RoleIsOperador(role) {
+	if domain.RoleIsScopedBySector(role) {
 		actorID := actorID(claims)
 		if !s.userHasSectorAccess(r.Context(), actorID, sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
@@ -217,7 +217,7 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// For operadores, verify they have access to this sector
-	if domain.RoleIsOperador(role) {
+	if domain.RoleIsScopedBySector(role) {
 		if !s.userHasSectorAccess(r.Context(), actorID, activity.Sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
@@ -273,7 +273,7 @@ func (s *Server) HandleProductionDamage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// For operadores, verify they have access to this sector
-	if domain.RoleIsOperador(role) {
+	if domain.RoleIsScopedBySector(role) {
 		actorID := actorID(claims)
 		sector := domain.ProductionSector(body.Sector)
 		if !s.userHasSectorAccess(r.Context(), actorID, sector) {
@@ -361,7 +361,7 @@ func (s *Server) HandleProductionActiveJobs(w http.ResponseWriter, r *http.Reque
 
 	// Determine which sectors to query
 	var sectors []domain.ProductionSector
-	if domain.RoleIsOperador(role) {
+	if domain.RoleIsScopedBySector(role) {
 		// Operadores only see their assigned sectors
 		actorID := actorID(claims)
 		userSectors, err := s.Store.ListUserSectors(r.Context(), actorID)

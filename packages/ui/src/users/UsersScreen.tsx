@@ -40,9 +40,10 @@ const ROLES = [
   'admin',
   'vendedor',
   'gerente_ventas',
+  'gerente_produccion',
   'ingeniero',
   'produccion',
-  'operador',
+  'almacen',
 ] as const;
 
 const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
@@ -50,9 +51,10 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   admin: 'Admin',
   vendedor: 'Vendedor',
   gerente_ventas: 'Gerente de ventas',
+  gerente_produccion: 'Gerente de producción',
   ingeniero: 'Ingeniero',
   produccion: 'Producción',
-  operador: 'Operador',
+  almacen: 'Almacén',
 };
 
 export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
@@ -265,7 +267,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         Aprobar
                       </button>
                     )}
-                    {u.active && (u.role === 'operador' || u.role === 'produccion') && (
+                    {u.active && (u.role === 'produccion' || u.role === 'almacen') && (
                       <button
                         type="button"
                         className="btn btn--ghost btn--small"

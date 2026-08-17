@@ -143,7 +143,7 @@ export {
   roleCanAccessProductionNav,
   roleCanAccessProductionDashboard,
   roleCanClaimProductionJob,
-  roleIsOperador,
+  roleIsScopedBySector,
   type CostVisibilityOptions,
   type WarehouseSubSector,
   WAREHOUSE_SUB_SECTORS,
