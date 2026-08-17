@@ -74,6 +74,7 @@ import { ProjectPhotosGallery } from './ProjectPhotosGallery';
 import { InternalCommsPanel } from './InternalCommsPanel';
 import { WarrantyTicketsPanel } from './WarrantyTicketsPanel';
 import { WhatsAppButton } from '../../crm/WhatsAppButton';
+import { ProjectFloorProgressStrip } from '../../production/ProjectFloorProgressStrip';
 import { StatusBadge } from './StatusBadge';
 import { ProjectItemsSection } from './ProjectItemsSection';
 import { ProjectOptionsSection } from './ProjectOptionsSection';
@@ -759,6 +760,10 @@ function ProjectDetailViewInner(): ReactNode {
           ) : null}
         </div>
       </header>
+
+      {project.status === 'accepted' || project.status === 'produced' ? (
+        <ProjectFloorProgressStrip project={project} />
+      ) : null}
 
       {project.ownerUserId ? (
         <p className="project-detail__notes" data-testid="project-owner-label">

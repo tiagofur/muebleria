@@ -135,3 +135,15 @@ describe('app routes', () => {
     expect(productionOrderFromPath(`/produccion/${id}/nope`)).toBeNull();
   });
 });
+
+describe('plant board route (F093)', () => {
+  it('maps /planta to the plantBoard nav and back', () => {
+    expect(NAV_PATHS.plantBoard).toBe('/planta');
+    expect(pathForNav('plantBoard')).toBe('/planta');
+    expect(navFromPath('/planta')).toBe('plantBoard');
+  });
+
+  it('keeps plantBoard out of entity deep-link sections', () => {
+    expect(isEntitySection('plantBoard')).toBe(false);
+  });
+});

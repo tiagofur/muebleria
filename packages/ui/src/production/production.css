@@ -1849,3 +1849,273 @@
   color: var(--text-muted);
   text-align: center;
 }
+
+/* ==========================================================================
+   F093 — Visibilidad de fábrica: franja de procesos, chip de sector y
+   tablero Estado de Planta. Solo tokens del design system (design.md §3).
+   ========================================================================== */
+
+/* --- Franja de procesos (detalle de obra / proyectos) --- */
+
+.floor-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 10px);
+}
+
+.floor-strip__pct {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-brand);
+  white-space: nowrap;
+}
+
+.floor-strip__stages {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.floor-strip__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs, 0.75rem);
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+}
+
+.floor-strip__stage--done {
+  color: var(--success-700);
+  background: var(--success-50);
+  border-color: var(--success-500);
+}
+
+.floor-strip__stage--active {
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border-color: var(--border-brand);
+  font-weight: var(--weight-semibold);
+}
+
+.floor-strip__stage-label {
+  white-space: nowrap;
+}
+
+.floor-strip__stage-count {
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+/* --- Chip de sector activo (tarjetas de cola) --- */
+
+.floor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.floor-chip__label {
+  font-weight: var(--weight-semibold);
+}
+
+.floor-chip__pct {
+  color: var(--text-secondary);
+}
+
+/* --- Tablero Estado de Planta --- */
+
+.plant-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.plant-board__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.plant-board__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.plant-board__title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--text-inverse);
+  background: var(--brand-500);
+  border-radius: var(--radius-md, 10px);
+}
+
+.plant-board__title {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
+.plant-board__subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-secondary);
+}
+
+.plant-board__scroll {
+  overflow-x: auto;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 10px);
+}
+
+.plant-board__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.plant-board__th {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-hover);
+}
+
+.plant-board__th--project {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 200px;
+  text-align: left;
+  background: var(--surface-card);
+}
+
+.plant-board__th--pct {
+  min-width: 110px;
+}
+
+.plant-board__row + .plant-board__row .plant-board__td {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.plant-board__td {
+  padding: var(--space-2) var(--space-3);
+  text-align: center;
+  vertical-align: top;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.plant-board__td--project {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  background: var(--surface-card);
+}
+
+.plant-board__td--done {
+  color: var(--success-700);
+  background: var(--success-50);
+  font-weight: var(--weight-semibold);
+}
+
+.plant-board__td--active {
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  font-weight: var(--weight-semibold);
+}
+
+.plant-board__open-order,
+.plant-board__open-project {
+  padding: 0;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  text-align: left;
+}
+
+.plant-board__open-order:hover,
+.plant-board__open-project:hover,
+.plant-board__open-order:focus-visible,
+.plant-board__open-project:focus-visible {
+  color: var(--text-brand);
+  text-decoration: underline;
+}
+
+.plant-board__name {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.plant-board__customer,
+.plant-board__counts {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-muted);
+}
+
+.plant-board__cell-count {
+  font-weight: var(--weight-semibold);
+}
+
+.plant-board__cell-waiting {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-muted);
+}
+
+.plant-board__td--pct {
+  text-align: right;
+}
+
+.plant-board__pct {
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
+.plant-board__bottleneck {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-secondary);
+}
+
+.plant-board__bottleneck--done {
+  color: var(--success-700);
+}

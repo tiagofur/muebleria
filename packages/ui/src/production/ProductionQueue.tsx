@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { EmptyState, InlineLoading } from '../common';
 import { ProductionBoardView } from './ProductionBoardView';
+import { ProjectFloorStageChip } from './ProjectFloorProgressStrip';
 import {
   formatIsoDate,
   projectStatusBadgeClass,
@@ -221,9 +222,9 @@ export function ProductionQueue({
                         </>
                       ) : null}
                     </p>
-                    {lastExport || nestingAt ? (
-                      <p className="prod-queue-card__signals">
-                        {lastExport ? (
+                    <p className="prod-queue-card__signals">
+                      <ProjectFloorStageChip project={project} />
+                      {lastExport ? (
                           <span
                             className="prod-queue-card__signal"
                             data-testid={`prod-signal-pack-${project.id}`}
@@ -240,7 +241,6 @@ export function ProductionQueue({
                           </span>
                         ) : null}
                       </p>
-                    ) : null}
                   </div>
                   <div className="prod-queue-card__actions">
                     {onOpenOrder ? (
