@@ -401,6 +401,61 @@ func (s *Server) HandleProductionDamageResolve(w http.ResponseWriter, r *http.Re
 	respondWithJSON(w, http.StatusOK, map[string]string{"status": "resolved"})
 }
 
+// ─── User Sector Management (Admin assigns sectors to operators) ──────────────
+
+type userSectorsRequest struct {
+	Sectors []domain.UserSector `json:"sectors"`
+}
+
+// HandleUserSectors handles GET/PUT /api/admin/users/{id}/sectors
+func (s *Server) HandleUserSectors(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if userID == "" {
+		respondWithError(w, http.StatusBadRequest, "user ID required")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		sectors, err := s.Store.ListUserSectors(r.Context(), userID)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to list sectors")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, sectors)
+
+	case http.MethodPut:
+		var req userSectorsRequest
+		if !decodeJSONBody(w, r, &req) {
+			return
+		}
+		if err := s.Store.SetUserSectors(r.Context(), userID, req.Sectors); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to set sectors")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleOperatorsBySector handles GET /api/production/operators?sector=X
+func (s *Server) HandleOperatorsBySector(w http.ResponseWriter, r *http.Request) {
+	sector := r.URL.Query().Get("sector")
+	if sector == "" {
+		respondWithError(w, http.StatusBadRequest, "sector query parameter required")
+		return
+	}
+
+	users, err := s.Store.GetUsersBySector(r.Context(), sector)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to get operators")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, users)
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 func isValidSector(s domain.ProductionSector) bool {

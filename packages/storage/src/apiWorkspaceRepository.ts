@@ -1178,6 +1178,67 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Failed to resolve damage: ${res.status} ${text}`);
     }
   }
+
+  // --- User Sector Management ---
+
+  async getUserSectors(userId: string): Promise<Array<{
+    userId: string;
+    sector: string;
+    subSector?: string;
+    assignedAt: string;
+  }>> {
+    const res = await fetch(`${this.baseUrl}/admin/users/${userId}/sectors`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get user sectors: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return (raw as Array<Record<string, unknown>>).map((s) => ({
+      userId: s.user_id as string,
+      sector: s.sector as string,
+      subSector: s.sub_sector as string | undefined,
+      assignedAt: s.assigned_at as string,
+    }));
+  }
+
+  async setUserSectors(userId: string, sectors: Array<{
+    sector: string;
+    subSector?: string;
+  }>): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/admin/users/${userId}/sectors`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ sectors }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to set user sectors: ${res.status} ${text}`);
+    }
+  }
+
+  async getOperatorsBySector(sector: string): Promise<Array<{
+    id: string;
+    name: string;
+    email: string;
+  }>> {
+    const res = await fetch(`${this.baseUrl}/production/operators?sector=${encodeURIComponent(sector)}`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get operators by sector: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return (raw as Array<Record<string, unknown>>).map((u) => ({
+      id: u.id as string,
+      name: u.name as string,
+      email: u.email as string,
+    }));
+  }
 }
 
 

@@ -125,6 +125,11 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/production/dashboard", authMW(http.HandlerFunc(server.HandleProductionDashboard)))
 	mux.Handle("GET /api/production/active", authMW(http.HandlerFunc(server.HandleProductionActiveJobs)))
 	mux.Handle("PATCH /api/production/damage/{id}/resolve", authMW(http.HandlerFunc(server.HandleProductionDamageResolve)))
+	mux.Handle("GET /api/production/operators", authMW(http.HandlerFunc(server.HandleOperatorsBySector)))
+
+	// User sector management (admin assigns sectors to operators)
+	mux.Handle("GET /api/admin/users/{id}/sectors", authMW(http.HandlerFunc(server.HandleUserSectors)))
+	mux.Handle("PUT /api/admin/users/{id}/sectors", authMW(http.HandlerFunc(server.HandleUserSectors)))
 
 	// Project gallery photos (CRM Phase 1) & Commercial Showcase (CRM Phase 4)
 	mux.Handle("GET /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
