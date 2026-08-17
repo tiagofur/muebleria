@@ -25,6 +25,7 @@ import {
   Settings,
   Settings2,
   ShieldCheck,
+  Search,
   Store,
   ToggleLeft,
   User,
@@ -477,50 +478,60 @@ export function AppShell({
           </button>
           <h1 className="app-topbar__title">{heading}</h1>
           {meta ? <p className="app-topbar__meta">{meta}</p> : null}
-          {hasActions ? (
-            <div className="app-topbar__actions">
-              {headerActions}
-              {sessionMode === 'guest' ? (
-                <div
-                  className="app-topbar__identity"
-                  data-testid="app-session-identity"
-                  title="Modo invitado: datos locales, sin API"
-                >
-                  <WifiOff size={16} strokeWidth={1.5} aria-hidden />
-                  <span className="app-topbar__identity-text">
-                    <span className="app-topbar__identity-name">Invitado</span>
-                    <span className="app-topbar__identity-role">Sin conexión</span>
+          <div className="app-topbar__actions">
+            <button
+              type="button"
+              className="app-topbar__search-trigger"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Buscar secciones o atajos (Cmd+K)"
+              title="Buscar secciones o atajos (Cmd+K)"
+              data-testid="app-topbar-command-trigger"
+            >
+              <Search size={14} strokeWidth={1.5} aria-hidden />
+              <span className="app-topbar__search-text">Buscar…</span>
+              <kbd className="app-topbar__search-kbd">⌘K</kbd>
+            </button>
+            {headerActions}
+            {sessionMode === 'guest' ? (
+              <div
+                className="app-topbar__identity app-topbar__identity--guest"
+                data-testid="app-session-identity"
+                title="Modo local: datos guardados en este navegador, sin conexión al servidor"
+              >
+                <WifiOff size={16} strokeWidth={1.5} aria-hidden />
+                <span className="app-topbar__identity-text">
+                  <span className="app-topbar__identity-name">Invitado</span>
+                  <span className="app-topbar__identity-role">Modo local</span>
+                </span>
+              </div>
+            ) : null}
+            {sessionMode === 'auth' && user ? (
+              <div
+                className="app-topbar__identity"
+                data-testid="app-session-identity"
+                title={user.email}
+              >
+                <User size={16} strokeWidth={1.5} aria-hidden />
+                <span className="app-topbar__identity-text">
+                  <span className="app-topbar__identity-name">{user.email}</span>
+                  <span className="app-topbar__identity-role">
+                    {roleLabel(user.role)}
                   </span>
-                </div>
-              ) : null}
-              {sessionMode === 'auth' && user ? (
-                <div
-                  className="app-topbar__identity"
-                  data-testid="app-session-identity"
-                  title={user.email}
-                >
-                  <User size={16} strokeWidth={1.5} aria-hidden />
-                  <span className="app-topbar__identity-text">
-                    <span className="app-topbar__identity-name">{user.email}</span>
-                    <span className="app-topbar__identity-role">
-                      {roleLabel(user.role)}
-                    </span>
-                  </span>
-                </div>
-              ) : null}
-              {onLogout ? (
-                <button
-                  type="button"
-                  className="app-topbar__logout"
-                  onClick={onLogout}
-                  data-testid="app-logout"
-                >
-                  <LogOut size={16} strokeWidth={1.5} aria-hidden />
-                  Salir
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+                </span>
+              </div>
+            ) : null}
+            {onLogout ? (
+              <button
+                type="button"
+                className="app-topbar__logout"
+                onClick={onLogout}
+                data-testid="app-logout"
+              >
+                <LogOut size={16} strokeWidth={1.5} aria-hidden />
+                Salir
+              </button>
+            ) : null}
+          </div>
         </header>
 
         <main className="app-content">{children}</main>

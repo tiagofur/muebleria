@@ -73,12 +73,15 @@ function BarRow({
   readonly valueLabel: string;
   readonly testId: string;
 }): ReactNode {
-  const width = max > 0 ? Math.round((value / max) * 100) : 0;
+  const width = max > 0 ? Math.min(Math.max(Math.round((value / max) * 100), 0), 100) : 0;
   return (
     <li className="analytics__bar-row" data-testid={testId}>
       <span className="analytics__bar-label">{label}</span>
       <span className="analytics__bar-track" aria-hidden>
-        <span className="analytics__bar-fill" style={{ width: `${width}%` }} />
+        <span
+          className="analytics__bar-fill"
+          style={{ transform: `scaleX(${width / 100})` }}
+        />
       </span>
       <span className="analytics__bar-value">{valueLabel}</span>
     </li>

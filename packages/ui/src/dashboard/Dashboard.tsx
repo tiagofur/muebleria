@@ -425,16 +425,28 @@ export function Dashboard({
                 ) : null}
               </div>
               {modulesWithoutPhotoCount > 0 ? (
-                <p
+                <div
                   className="dashboard-photo-reminder"
                   data-testid="dashboard-modules-without-photo"
                 >
                   <ImageOff size={16} strokeWidth={1.5} aria-hidden />
-                  {modulesWithoutPhotoCount === 1
-                    ? '1 plantilla sin foto en la vitrina.'
-                    : `${modulesWithoutPhotoCount} plantillas sin foto en la vitrina.`}{' '}
-                  Subí imagen desde el editor de muebles para que ventas las vea.
-                </p>
+                  <span className="dashboard-photo-reminder__text">
+                    {modulesWithoutPhotoCount === 1
+                      ? '1 plantilla sin foto en la vitrina.'
+                      : `${modulesWithoutPhotoCount} plantillas sin foto en la vitrina.`}{' '}
+                    Subí imagen desde el editor de muebles para que ventas las vea.
+                  </span>
+                  {onOpenModules ? (
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost dashboard-photo-reminder__btn"
+                      onClick={onOpenModules}
+                      data-testid="dashboard-modules-without-photo-action"
+                    >
+                      Ir a muebles
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </section>
           ) : null}

@@ -192,11 +192,12 @@ describe('AppShell source structure (F017)', () => {
     expect(tsx).toContain('size={16}');
   });
 
-  it('accepts headerActions and onLogout Salir control in topbar', () => {
+  it('accepts headerActions, command search trigger and onLogout Salir control in topbar', () => {
     const tsx = read('AppShell.tsx');
     expect(tsx).toContain('headerActions');
     expect(tsx).toContain('onLogout');
     expect(tsx).toContain('app-topbar__actions');
+    expect(tsx).toContain('app-topbar__search-trigger');
     expect(tsx).toContain('app-topbar__logout');
     expect(tsx).toContain('Salir');
     expect(tsx).toContain('LogOut');

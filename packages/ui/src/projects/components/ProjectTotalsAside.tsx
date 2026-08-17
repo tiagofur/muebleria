@@ -96,8 +96,20 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
                 <div><dt>Herrajes</dt><dd>{formatProjectMoney(breakdown.hardwareTotal, project.currency)}</dd></div>
                 <div><dt>Costo directo</dt><dd>{formatProjectMoney(breakdown.directCost, project.currency)}</dd></div>
                 <div><dt>MO modular</dt><dd>{formatProjectMoney(breakdown.laborModular, project.currency)}</dd></div>
-                <div><dt>MO fija</dt><dd>{formatProjectMoney(breakdown.laborFixedCost, project.currency)}</dd></div>
-                <div><dt>Factor margen</dt><dd>{breakdown.marginFactor.toFixed(2)}</dd></div>
+                <div>
+                  <dt>Factor margen</dt>
+                  <dd>
+                    {breakdown.marginFactor.toFixed(2)}
+                    {breakdown.marginFactor > 1 ? (
+                      <span
+                        className="project-totals__margin-pct"
+                        title="Margen bruto sobre precio de venta: (Venta - Costo) / Venta"
+                      >
+                        {' '}({(((breakdown.marginFactor - 1) / breakdown.marginFactor) * 100).toFixed(1)}% mg)
+                      </span>
+                    ) : null}
+                  </dd>
+                </div>
               </>
             ) : null}
             <div className="project-totals__sale-row">

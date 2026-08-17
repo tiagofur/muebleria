@@ -148,8 +148,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenQuoter}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#f3e8ff' }]}>
-              <Layers size={22} color="#7c3aed" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipPurpleBg }]}>
+              <Layers size={22} color={colors.chipPurpleIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Cotizador Express</Text>
             <Text style={styles.gridCardDesc}>Cálculo en vivo y WhatsApp</Text>
@@ -160,8 +160,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenCatalog}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#dcfce7' }]}>
-              <BookOpen size={22} color="#16a34a" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipGreenBg }]}>
+              <BookOpen size={22} color={colors.chipGreenIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Catálogo Móvil</Text>
             <Text style={styles.gridCardDesc}>Placas, cantos y herrajes</Text>
@@ -172,8 +172,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenSurvey}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#fef3c7' }]}>
-              <Camera size={22} color="#d97706" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipAmberBg }]}>
+              <Camera size={22} color={colors.chipAmberIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Relevamiento & Fotos</Text>
             <Text style={styles.gridCardDesc}>Captura por etapas y cotas</Text>
@@ -184,8 +184,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenChat}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#e0f2fe' }]}>
-              <MessageSquare size={22} color="#0284c7" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipBlueBg }]}>
+              <MessageSquare size={22} color={colors.chipBlueIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Chat Técnico</Text>
             <Text style={styles.gridCardDesc}>Consultas con ingeniería</Text>
@@ -196,8 +196,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenCustomers}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#fae8ff' }]}>
-              <Users size={22} color="#c026d3" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipFuchsiaBg }]}>
+              <Users size={22} color={colors.chipFuchsiaIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Clientes 360°</Text>
             <Text style={styles.gridCardDesc}>Directorio, llamadas y chat</Text>
@@ -208,8 +208,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenWarranties}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#fee2e2' }]}>
-              <Wrench size={22} color="#dc2626" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipRedBg }]}>
+              <Wrench size={22} color={colors.chipRedIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Garantías & Service</Text>
             <Text style={styles.gridCardDesc}>Reporte de reclamos</Text>
@@ -220,8 +220,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenLaser}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#e0f2fe' }]}>
-              <Ruler size={22} color="#0284c7" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipBlueBg }]}>
+              <Ruler size={22} color={colors.chipBlueIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Medición Láser BLE</Text>
             <Text style={styles.gridCardDesc}>Bosch & Leica Disto</Text>
@@ -232,8 +232,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenAnnotation}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#fef3c7' }]}>
-              <Maximize2 size={22} color="#d97706" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipAmberBg }]}>
+              <Maximize2 size={22} color={colors.chipAmberIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Acotar sobre Foto</Text>
             <Text style={styles.gridCardDesc}>Cotas visuales en obra</Text>
@@ -244,8 +244,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpen3D}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#dbeafe' }]}>
-              <Box size={22} color="#2563eb" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipIndigoBg }]}>
+              <Box size={22} color={colors.chipIndigoIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Presentación 3D</Text>
             <Text style={styles.gridCardDesc}>Despiece y acabados</Text>
@@ -256,8 +256,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenSignature}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#dcfce7' }]}>
-              <PenTool size={22} color="#16a34a" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipGreenBg }]}>
+              <PenTool size={22} color={colors.chipGreenIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Firma de Acta</Text>
             <Text style={styles.gridCardDesc}>Recepción de obra</Text>
@@ -268,8 +268,8 @@ export function HomeScreen({
             style={styles.gridCard}
             onPress={onOpenBench}
           >
-            <View style={[styles.gridIconBadge, { backgroundColor: '#ffedd5' }]}>
-              <CheckSquare size={22} color="#ea580c" />
+            <View style={[styles.gridIconBadge, { backgroundColor: colors.chipOrangeBg }]}>
+              <CheckSquare size={22} color={colors.chipOrangeIcon} />
             </View>
             <Text style={styles.gridCardTitle}>Banco Paperless</Text>
             <Text style={styles.gridCardDesc}>Checklist de armado</Text>

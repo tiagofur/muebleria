@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Vibration,
 } from 'react-native';
 import { ArrowLeft, History, RotateCcw } from 'lucide-react-native';
 import { ScannerView } from '../components/scanner/ScannerView';
@@ -93,7 +94,10 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
                   title={`Marcar: ${ITEM_FLOOR_STATUS_LABELS_ES[activeScan.resolution.nextStatus!]}`}
                   variant="primary"
                   size="sm"
-                  onPress={() => advanceScan(activeScan)}
+                  onPress={() => {
+                    Vibration.vibrate([0, 80]);
+                    advanceScan(activeScan);
+                  }}
                 />
               ) : (
                 <Text style={styles.resolutionDone}>Completo ✓</Text>
@@ -199,7 +203,7 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#090d16',
+    backgroundColor: colors.scannerBg,
   },
   header: {
     flexDirection: 'row',
@@ -208,11 +212,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl + spacing.md,
     paddingBottom: spacing.sm,
-    backgroundColor: '#0f172a',
+    backgroundColor: colors.scannerHeaderBg,
   },
   headerTitle: {
     ...typography.h3,
-    color: '#ffffff',
+    color: colors.scannerTextOnDark,
   },
   iconBtn: {
     padding: spacing.xs,
@@ -250,7 +254,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   autoAdvanceText: {
-    color: '#cbd5e1',
+    color: colors.scannerSubtextOnDark,
     fontSize: typography.body.fontSize,
   },
   resolutionBox: {
@@ -261,26 +265,26 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   resolutionProject: {
-    color: '#ffffff',
+    color: colors.scannerTextOnDark,
     fontSize: typography.h3.fontSize,
     fontWeight: '600',
   },
   resolutionStatus: {
-    color: '#34d399',
+    color: colors.scannerSuccessOnDark,
     fontSize: typography.body.fontSize,
   },
   resolutionDone: {
-    color: '#94a3b8',
+    color: colors.scannerMutedOnDark,
     fontSize: typography.body.fontSize,
   },
   scanError: {
-    color: '#f87171',
+    color: colors.scannerErrorOnDark,
     fontSize: typography.body.fontSize,
     marginBottom: spacing.sm,
   },
   idleText: {
     ...typography.body,
-    color: '#cbd5e1',
+    color: colors.scannerSubtextOnDark,
     textAlign: 'center',
   },
   emptyHistoryText: {

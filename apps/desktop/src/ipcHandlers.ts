@@ -12,7 +12,8 @@ export interface SaveDialogResult {
 export interface ExcelIpcDeps {
   readonly showSaveDialog: (options: {
     defaultPath: string;
-    filters: readonly { name: string; extensions: string[] }[];
+    title?: string;
+    filters: readonly { name: string; extensions: readonly string[] }[];
   }) => Promise<SaveDialogResult>;
   readonly writeFile: (filePath: string, data: Uint8Array) => Promise<void>;
 }
@@ -26,9 +27,14 @@ export function createExcelIpcHandlers(deps: ExcelIpcDeps): ElectronAPI {
     async showSaveDialog(
       options: ElectronSaveDialogOptions,
     ): Promise<string | undefined> {
+      const filters =
+        options.filters && options.filters.length > 0
+          ? options.filters
+          : [{ name: 'Excel', extensions: ['xlsx'] }];
       const result = await deps.showSaveDialog({
         defaultPath: options.defaultPath,
-        filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+        title: options.title,
+        filters,
       });
       if (result.canceled || !result.filePath) {
         return undefined;

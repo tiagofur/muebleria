@@ -3,8 +3,15 @@
  * Renderer talks only through this surface — never require('electron') in UI.
  */
 
+export interface ElectronFileFilter {
+  readonly name: string;
+  readonly extensions: readonly string[];
+}
+
 export interface ElectronSaveDialogOptions {
   readonly defaultPath: string;
+  readonly title?: string;
+  readonly filters?: readonly ElectronFileFilter[];
 }
 
 /**

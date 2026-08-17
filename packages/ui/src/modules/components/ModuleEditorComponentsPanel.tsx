@@ -4,7 +4,7 @@
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { Component, Hardware } from '@muebles/domain';
-import { Plus } from 'lucide-react';
+import { Copy, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import type { ModuleDraft } from '../moduleHelpers';
 import { InstanceOverridesEditor } from './InstanceOverridesEditor';
@@ -84,19 +84,38 @@ export function ModuleEditorComponentsPanel({
                       ? `${catComp.code} — ${catComp.name}`
                       : comp.componentId}
                   </h5>
-                  <button
-                    type="button"
-                    className="btn btn--small btn--danger"
-                    onClick={() => {
-                      setDraft((prev) => ({
-                        ...prev,
-                        components: prev.components.filter((_, i) => i !== idx),
-                      }));
-                    }}
-                    data-testid={`remove-component-${idx}`}
-                  >
-                    Quitar
-                  </button>
+                  <div className="module-part-card__actions">
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      onClick={() => {
+                        setDraft((prev) => {
+                          const itemToClone = prev.components[idx];
+                          if (!itemToClone) return prev;
+                          const nextList = [...prev.components];
+                          nextList.splice(idx + 1, 0, { ...itemToClone });
+                          return { ...prev, components: nextList };
+                        });
+                      }}
+                      title="Duplicar este componente"
+                      data-testid={`duplicate-component-${idx}`}
+                    >
+                      <Copy size={13} strokeWidth={1.5} aria-hidden /> Duplicar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--danger"
+                      onClick={() => {
+                        setDraft((prev) => ({
+                          ...prev,
+                          components: prev.components.filter((_, i) => i !== idx),
+                        }));
+                      }}
+                      data-testid={`remove-component-${idx}`}
+                    >
+                      Quitar
+                    </button>
+                  </div>
                 </div>
                 <div className="module-editor__grid">
                   <div className="catalog-form__field module-editor__field--narrow">

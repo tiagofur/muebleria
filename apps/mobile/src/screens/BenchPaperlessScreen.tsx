@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Vibration,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -90,9 +91,9 @@ export function BenchPaperlessScreen({
               style={[
                 styles.progressBarFill,
                 {
-                  width: `${progressPercent}%`,
-                  backgroundColor:
-                    progressPercent === 100 ? '#16a34a' : colors.primary,
+                width: `${progressPercent}%`,
+                    backgroundColor:
+                      progressPercent === 100 ? colors.success : colors.primary,
                 },
               ]}
             />
@@ -124,14 +125,17 @@ export function BenchPaperlessScreen({
             <Pressable
               key={piece.id}
               style={[styles.pieceCard, isDone && styles.pieceCardDone]}
-              onPress={() => toggleBenchPieceAssembled(piece.id)}
+              onPress={() => {
+                Vibration.vibrate([0, 40]);
+                toggleBenchPieceAssembled(piece.id);
+              }}
             >
               <View style={styles.pieceHeader}>
                 <View style={styles.checkboxContainer}>
                   {isDone ? (
-                    <CheckCircle2 size={24} color="#16a34a" />
+                    <CheckCircle2 size={24} color={colors.assembledText} />
                   ) : (
-                    <Circle size={24} color="#94a3b8" />
+                    <Circle size={24} color={colors.textMuted} />
                   )}
                 </View>
 
@@ -285,7 +289,7 @@ const styles = StyleSheet.create({
   progressBarTrack: {
     height: 10,
     borderRadius: radius.full,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: colors.border,
     overflow: 'hidden',
   },
   progressBarFill: {
@@ -311,8 +315,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   pieceCardDone: {
-    borderColor: '#86efac',
-    backgroundColor: '#f0fdf4',
+    borderColor: colors.assembledBorder,
+    backgroundColor: colors.assembledBg,
     opacity: 0.8,
   },
   pieceHeader: {
@@ -338,7 +342,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   pieceNameDone: {
-    color: '#166534',
+    color: colors.assembledText,
     textDecorationLine: 'line-through',
   },
   dimRow: {
@@ -369,21 +373,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: colors.surfaceHover,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
   },
   edgeBadgeActive: {
-    backgroundColor: '#dbeafe',
-    borderColor: '#93c5fd',
+    backgroundColor: colors.chipIndigoBg,
+    borderColor: colors.borderStrong,
   },
   edgeBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#64748b',
+    color: colors.textSecondary,
   },
   edgeBadgeTextActive: {
-    color: '#1d4ed8',
+    color: colors.assembledPrimaryDark,
     fontWeight: 'bold',
   },
 });

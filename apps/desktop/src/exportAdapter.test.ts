@@ -87,6 +87,26 @@ describe('createExcelIpcHandlers', () => {
     await expect(api.writeExcelFile('file\0.xlsx', bytes)).rejects.toThrow(/filePath required/);
     expect(writeFile).not.toHaveBeenCalled();
   });
+
+  it('supports custom title and filters in showSaveDialog', async () => {
+    const showSaveDialog = vi.fn(async (opts: { defaultPath: string; title?: string; filters: readonly { name: string; extensions: readonly string[] }[] }) => {
+      expect(opts.title).toBe('Exportar Cotización PDF');
+      expect(opts.filters[0]?.extensions).toContain('pdf');
+      return { canceled: false, filePath: '/out/quote.pdf' };
+    });
+    const api = createExcelIpcHandlers({
+      showSaveDialog,
+      writeFile: async () => undefined,
+    });
+
+    const res = await api.showSaveDialog({
+      defaultPath: 'quote.pdf',
+      title: 'Exportar Cotización PDF',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    expect(res).toBe('/out/quote.pdf');
+    expect(showSaveDialog).toHaveBeenCalledOnce();
+  });
 });
 
 describe('getElectronAPI', () => {

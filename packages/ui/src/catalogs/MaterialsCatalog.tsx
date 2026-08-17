@@ -521,7 +521,10 @@ export function MaterialsCatalog({
       {
         key: 'dimensions',
         header: 'Medidas (mm)',
-        render: (r) => `${r.lengthMm} × ${r.widthMm}`,
+        render: (r) => {
+          const areaM2 = (r.lengthMm * r.widthMm) / 1_000_000;
+          return `${r.lengthMm} × ${r.widthMm} (${areaM2.toFixed(2)} m²)`;
+        },
       },
       {
         key: 'boardPrice',

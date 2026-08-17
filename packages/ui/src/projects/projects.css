@@ -762,6 +762,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.project-totals__margin-pct {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
 .project-totals__sale-row {
   grid-column: 1 / -1;
   padding-top: var(--space-2);

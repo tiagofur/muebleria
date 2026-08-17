@@ -214,6 +214,53 @@
   gap: var(--space-2);
 }
 
+/* Command palette / quick search trigger in topbar */
+.app-topbar__search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  height: 2rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.app-topbar__search-trigger:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-brand);
+  color: var(--text-primary);
+}
+
+.app-topbar__search-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.app-topbar__search-text {
+  font-size: var(--text-xs);
+}
+
+.app-topbar__search-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-1);
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: var(--weight-medium);
+  line-height: 1.4;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-muted);
+}
+
 /* Ghost / small logout control — tokens only (design.md §5.1 spirit). */
 .app-topbar__logout {
   display: inline-flex;
@@ -340,7 +387,24 @@
   text-transform: capitalize;
 }
 
+.app-topbar__identity--guest {
+  border-style: dashed;
+  background: var(--surface-muted);
+}
+
 @media (max-width: 640px) {
+  .app-topbar__search-text,
+  .app-topbar__search-kbd {
+    display: none;
+  }
+
+  .app-topbar__search-trigger {
+    padding: var(--space-1) var(--space-2);
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    justify-content: center;
+  }
+
   .app-topbar__identity-text {
     display: none;
   }

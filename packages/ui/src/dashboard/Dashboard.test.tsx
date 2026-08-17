@@ -289,6 +289,10 @@ describe('Dashboard home by role (F043 / #88)', () => {
     expect(onOpenMaterials).toHaveBeenCalledTimes(1);
     await user.click(screen.getByTestId('dashboard-open-modules'));
     expect(onOpenModules).toHaveBeenCalledTimes(1);
+    await user.click(
+      screen.getByTestId('dashboard-modules-without-photo-action'),
+    );
+    expect(onOpenModules).toHaveBeenCalledTimes(2);
   });
 
   it('default/gerente keeps owner breakdown without sales-only chrome', () => {

@@ -502,7 +502,7 @@ export function KitchenPlanPanel({
                   <path
                     d={`M ${fx1} ${fy1} L ${fx2} ${fy2}`}
                     className="kitchen-plan__front-face"
-                    stroke="var(--bg-card, #ffffff)"
+                    stroke="var(--surface-card)"
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     opacity={0.95}
@@ -510,12 +510,12 @@ export function KitchenPlanPanel({
                   />
 
                   {/* Label inside cabinet */}
-                  {rw > 28 && rh > 12 ? (
+                  {rw > 18 && rh > 10 ? (
                     <text
                       x={rx + rw / 2}
-                      y={ry + rh / 2 + 3}
-                      fontSize={rw > 45 ? 9 : 7.5}
-                      fill="white"
+                      y={ry + rh / 2 + (rw > 28 ? 3 : 2)}
+                      fontSize={rw > 45 ? 9 : rw > 28 ? 7.5 : 6.5}
+                      fill="var(--text-inverse)"
                       textAnchor="middle"
                       fontWeight={600}
                       pointerEvents="none"

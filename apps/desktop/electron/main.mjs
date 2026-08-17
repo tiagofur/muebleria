@@ -3,7 +3,7 @@
  * Loads the shared web UI (Vite dev server or built dist). No domain formulas here.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { execFile as execFileCb } from 'node:child_process';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
@@ -79,10 +79,135 @@ function setupAutoUpdater() {
   }
 }
 
+function getWindowStatePath() {
+  return path.join(app.getPath('userData'), 'window-state.json');
+}
+
+function loadSavedWindowState() {
+  try {
+    const data = fsSync.readFileSync(getWindowStatePath(), 'utf8');
+    const state = JSON.parse(data);
+    if (
+      typeof state.width === 'number' &&
+      typeof state.height === 'number' &&
+      state.width >= 390 &&
+      state.height >= 640
+    ) {
+      return state;
+    }
+  } catch {}
+  return { width: 1280, height: 800, isMaximized: false };
+}
+
+function saveWindowState(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    const isMaximized = win.isMaximized();
+    const bounds = isMaximized ? win.getNormalBounds() : win.getBounds();
+    const state = {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      isMaximized,
+    };
+    fsSync.writeFileSync(getWindowStatePath(), JSON.stringify(state), 'utf8');
+  } catch {}
+}
+
+function createAppMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac
+      ? [
+          {
+            label: app.name || 'Muebles',
+            submenu: [
+              { role: 'about', label: 'Acerca de Muebles' },
+              { type: 'separator' },
+              { role: 'services', label: 'Servicios' },
+              { type: 'separator' },
+              { role: 'hide', label: 'Ocultar Muebles' },
+              { role: 'hideOthers', label: 'Ocultar otros' },
+              { role: 'unhide', label: 'Mostrar todo' },
+              { type: 'separator' },
+              { role: 'quit', label: 'Salir de Muebles' },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'Archivo',
+      submenu: [
+        isMac
+          ? { role: 'close', label: 'Cerrar ventana' }
+          : { role: 'quit', label: 'Salir' },
+      ],
+    },
+    {
+      label: 'Edición',
+      submenu: [
+        { role: 'undo', label: 'Deshacer' },
+        { role: 'redo', label: 'Rehacer' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Cortar' },
+        { role: 'copy', label: 'Copiar' },
+        { role: 'paste', label: 'Pegar' },
+        { role: 'selectAll', label: 'Seleccionar todo' },
+      ],
+    },
+    {
+      label: 'Ver',
+      submenu: [
+        { role: 'reload', label: 'Recargar' },
+        { role: 'forceReload', label: 'Forzar recarga' },
+        { role: 'toggleDevTools', label: 'Herramientas de desarrollo' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: 'Zoom real (100%)' },
+        { role: 'zoomIn', label: 'Acercar' },
+        { role: 'zoomOut', label: 'Alejar' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: 'Pantalla completa' },
+      ],
+    },
+    {
+      label: 'Ventana',
+      submenu: [
+        { role: 'minimize', label: 'Minimizar' },
+        { role: 'zoom', label: 'Maximizar / Restaurar' },
+        ...(isMac
+          ? [
+              { type: 'separator' },
+              { role: 'front', label: 'Traer todo al frente' },
+            ]
+          : []),
+      ],
+    },
+    {
+      role: 'help',
+      label: 'Ayuda',
+      submenu: [
+        {
+          label: 'Repositorio del Proyecto',
+          click: async () => {
+            await shell.openExternal('https://github.com/tiagofur/muebleria');
+          },
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 function createWindow() {
+  const savedState = loadSavedWindowState();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: savedState.width,
+    height: savedState.height,
+    x: savedState.x,
+    y: savedState.y,
     minWidth: 390,
     minHeight: 640,
     title: 'Muebles',
@@ -94,6 +219,14 @@ function createWindow() {
       webviewTag: false,
       navigateOnDragDrop: false,
     },
+  });
+
+  if (savedState.isMaximized) {
+    win.maximize();
+  }
+
+  win.on('close', () => {
+    saveWindowState(win);
   });
 
   const devUrl =
@@ -143,9 +276,9 @@ function createWindow() {
     void win.loadFile(indexHtml);
   }
 
+  createAppMenu();
   return win;
 }
-
 
 function registerIpc() {
   ipcMain.handle(CHANNELS.showSaveDialog, async (_event, options) => {
@@ -153,10 +286,26 @@ function registerIpc() {
       typeof options?.defaultPath === 'string' && options.defaultPath
         ? options.defaultPath
         : 'export.xlsx';
+    const ext = path.extname(defaultPath).replace('.', '').toLowerCase();
+    const defaultFilters = ext
+      ? [
+          { name: ext.toUpperCase(), extensions: [ext] },
+          { name: 'Todos los archivos', extensions: ['*'] },
+        ]
+      : [{ name: 'Excel', extensions: ['xlsx'] }];
+    const filters =
+      Array.isArray(options?.filters) && options.filters.length > 0
+        ? options.filters
+        : defaultFilters;
+    const title =
+      typeof options?.title === 'string' && options.title
+        ? options.title
+        : 'Guardar archivo';
+
     const result = await dialog.showSaveDialog({
-      title: 'Guardar Excel',
+      title,
       defaultPath,
-      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+      filters,
     });
     if (result.canceled || !result.filePath) {
       return undefined;
