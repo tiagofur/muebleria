@@ -387,7 +387,7 @@ export function ProductionManagerDashboard({
               className={`pm-dashboard__sector-btn ${
                 selectedSector === status.sector ? 'pm-dashboard__sector-btn--active' : ''
               }`}
-              onClick={() => setSelectedSector(status.sector)}
+              onClick={() => setSelectedSector(status.sector as PipelineSector)}
             >
               <span className="pm-dashboard__sector-icon">{getSectorIcon(status.sector)}</span>
               <span className="pm-dashboard__sector-name">{status.label}</span>

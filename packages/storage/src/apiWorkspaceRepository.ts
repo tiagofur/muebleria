@@ -1008,7 +1008,36 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   // ─── Production Activity Tracking (gerente_produccion) ──────────────────────
 
-  async getProductionDashboard() {
+  async getProductionDashboard(): Promise<{
+    totalProjects: number;
+    totalItems: number;
+    totalInstalled: number;
+    avgProgress: number;
+    todayCompleted: number;
+    todayDamages: number;
+    sectors: Array<{
+      sector: string;
+      label: string;
+      activeOperators: number;
+      queueLength: number;
+      itemsInProgress: number;
+      itemsCompletedToday: number;
+      avgTimeMinutes: number;
+      activeJobs: Array<{
+        activityId: string;
+        projectId: string;
+        projectName: string;
+        itemId: string;
+        moduleCode: string;
+        operatorId: string;
+        operatorName: string;
+        machineId?: string;
+        machineName?: string;
+        startedAt: string;
+        durationMin: number;
+      }>;
+    }>;
+  }> {
     const res = await fetch(`${this.baseUrl}/production/dashboard`, {
       headers: this.getHeaders(),
     });
@@ -1016,10 +1045,23 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to fetch production dashboard: ${res.status} ${text}`);
     }
-    return res.json();
+    const data = await res.json() as { metrics: unknown };
+    return data.metrics as ReturnType<typeof this.getProductionDashboard> extends Promise<infer R> ? R : never;
   }
 
-  async getProductionActiveJobs() {
+  async getProductionActiveJobs(): Promise<Array<{
+    activityId: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    moduleCode: string;
+    operatorId: string;
+    operatorName: string;
+    machineId?: string;
+    machineName?: string;
+    startedAt: string;
+    durationMin: number;
+  }>> {
     const res = await fetch(`${this.baseUrl}/production/active`, {
       headers: this.getHeaders(),
     });
@@ -1027,7 +1069,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to fetch active jobs: ${res.status} ${text}`);
     }
-    return res.json();
+    const data = await res.json() as { jobs: unknown };
+    return data.jobs as ReturnType<typeof this.getProductionActiveJobs> extends Promise<infer R> ? R : never;
   }
 
   async claimProductionActivity(payload: {
@@ -1036,7 +1079,19 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     sector: string;
     machineId?: string;
     machineName?: string;
-  }) {
+  }): Promise<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    moduleCode: string;
+    sector: string;
+    type: string;
+    operatorId: string;
+    operatorName: string;
+    startedAt: string;
+    createdAt: string;
+  }> {
     const res = await fetch(`${this.baseUrl}/production/activity/claim`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -1046,11 +1101,26 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to claim activity: ${res.status} ${text}`);
     }
-    const raw = await res.json();
-    return raw.activity;
+    const raw = await res.json() as { activity: Record<string, unknown> };
+    return raw.activity as ReturnType<typeof this.claimProductionActivity> extends Promise<infer R> ? R : never;
   }
 
-  async finishProductionActivity(activityId: string, payload: { piecesCount: number; notes?: string }) {
+  async finishProductionActivity(activityId: string, payload: { piecesCount: number; notes?: string }): Promise<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    moduleCode: string;
+    sector: string;
+    type: string;
+    operatorId: string;
+    operatorName: string;
+    startedAt: string;
+    finishedAt: string;
+    durationMs: number;
+    piecesCount: number;
+    notes: string;
+  }> {
     const res = await fetch(`${this.baseUrl}/production/activity/finish/${activityId}`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -1060,8 +1130,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to finish activity: ${res.status} ${text}`);
     }
-    const raw = await res.json();
-    return raw.activity;
+    const raw = await res.json() as { activity: Record<string, unknown> };
+    return raw.activity as ReturnType<typeof this.finishProductionActivity> extends Promise<infer R> ? R : never;
   }
 
   async reportProductionDamage(payload: {
@@ -1072,7 +1142,19 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     description: string;
     photoUrl?: string;
     needsReplace: boolean;
-  }) {
+  }): Promise<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    itemId: string;
+    sector: string;
+    damageType: string;
+    description: string;
+    reportedBy: string;
+    reportedByName: string;
+    reportedAt: string;
+    needsReplace: boolean;
+  }> {
     const res = await fetch(`${this.baseUrl}/production/activity/damage`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -1082,11 +1164,11 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to report damage: ${res.status} ${text}`);
     }
-    const raw = await res.json();
-    return raw.report;
+    const raw = await res.json() as { report: Record<string, unknown> };
+    return raw.report as ReturnType<typeof this.reportProductionDamage> extends Promise<infer R> ? R : never;
   }
 
-  async resolveProductionDamage(damageId: string) {
+  async resolveProductionDamage(damageId: string): Promise<void> {
     const res = await fetch(`${this.baseUrl}/production/damage/${damageId}/resolve`, {
       method: 'PATCH',
       headers: this.getHeaders(),
