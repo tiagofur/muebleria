@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS production_activities (
     id              TEXT PRIMARY KEY,
-    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     project_name    TEXT NOT NULL DEFAULT '',
     item_id         TEXT NOT NULL,
     module_code     TEXT NOT NULL DEFAULT '',
@@ -27,7 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_production_activities_created ON production_activ
 
 CREATE TABLE IF NOT EXISTS damage_reports (
     id              TEXT PRIMARY KEY,
-    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     project_name    TEXT NOT NULL DEFAULT '',
     item_id         TEXT NOT NULL,
     sector          TEXT NOT NULL,
