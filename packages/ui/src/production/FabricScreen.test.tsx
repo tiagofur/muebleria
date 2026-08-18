@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import type { Project, ProjectItem } from '@muebles/domain';
 
@@ -401,5 +401,56 @@ describe('FabricScreen — project board actions (F096)', () => {
     expect(onClaim).toHaveBeenCalledWith('p1', 'cutting');
     fireEvent.click(screen.getByTestId('fabric-batch-p1'));
     expect(onBatch).toHaveBeenCalledWith('p1', ['a', 'b'], 'cut');
+  });
+
+  it('confirms before finishing the last claim and only then advances its batch', async () => {
+    const onFinish = vi.fn(async () => undefined);
+    const onBatch = vi.fn();
+    const onConfirmBatch = vi.fn(() => false);
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a'), makeItem('b')])]}
+        assignedSectors={['cutting']}
+        canAdvance
+        onAdvance={() => undefined}
+        activeClaims={[{ activityId: 'claim-1', projectId: 'p1', sector: 'cutting', operatorName: 'Ana', startedAt: '2026-08-18T14:32:00.000Z' }]}
+        onFinish={onFinish}
+        onAdvanceBatch={onBatch}
+        onConfirmBatch={onConfirmBatch}
+      />,
+    );
+
+    expect(screen.getByText(/En curso · empezó/)).not.toBeNull();
+    fireEvent.click(screen.getByTestId('fabric-finish-claim-1'));
+    expect(onConfirmBatch).toHaveBeenCalledWith(2, 'cut');
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onBatch).not.toHaveBeenCalled();
+
+    onConfirmBatch.mockReturnValue(true);
+    fireEvent.click(screen.getByTestId('fabric-finish-claim-1'));
+    await waitFor(() => expect(onFinish).toHaveBeenCalledWith('claim-1', 2));
+    expect(onBatch).toHaveBeenCalledWith('p1', ['a', 'b'], 'cut');
+  });
+
+  it('does not batch-advance when another operator still has a claim', async () => {
+    const onFinish = vi.fn(async () => undefined);
+    const onBatch = vi.fn();
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a')])]}
+        assignedSectors={['cutting']}
+        canAdvance
+        onAdvance={() => undefined}
+        onFinish={onFinish}
+        onAdvanceBatch={onBatch}
+        activeClaims={[
+          { activityId: 'claim-1', projectId: 'p1', sector: 'cutting', operatorName: 'Ana', startedAt: '2026-08-18T14:32:00.000Z' },
+          { activityId: 'claim-2', projectId: 'p1', sector: 'cutting', operatorName: 'Beto', startedAt: '2026-08-18T14:35:00.000Z' },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('fabric-finish-claim-1'));
+    await waitFor(() => expect(onFinish).toHaveBeenCalledWith('claim-1', 1));
+    expect(onBatch).not.toHaveBeenCalled();
   });
 });

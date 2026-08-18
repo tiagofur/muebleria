@@ -1820,7 +1820,7 @@
       "name": "fabric_screen_v2_board_por_obra",
       "title": "FabricScreen v2 — board por obra",
       "description": "Implementa el board por obra de Producción v2 según docs/roadmap-screens/03-fabrica.md: cards por obra y estación, métricas derivadas desde dominio para Corte/Encintado, Armado/Embalaje agrupados, claims obra×estación, finish y avance batch explícito preservando las transiciones auditadas por ítem. Reutiliza picking persistido únicamente por claves projectId×material existentes.",
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "produccion",
         "ui",

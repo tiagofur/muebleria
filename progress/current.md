@@ -1189,3 +1189,9 @@ dashboard/surtido/instalaciones), una feature a la vez según AGENTS.md.
 - Estado actualizado a `done` en `feature_list.json`.
 - Commit y push se registran en `progress/implement_f095.md`.
 - Entregado en `4e0281e` y push a `origin/codex/f095-production-claims` confirmado.
+
+## F096 — cierre aprobado (2026-08-18)
+
+- Revisión: **APPROVED** — `progress/review_f096.md`.
+- `FabricScreen` v2 entregado como board por obra; F096 actualizado a `done`.
+- Evidencia, correcciones y verificaciones: `progress/implement_f096.md`.
