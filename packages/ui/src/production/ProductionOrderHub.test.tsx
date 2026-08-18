@@ -85,140 +85,11 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     await user.click(screen.getByTestId('prod-hub-export-pack'));
     expect(onPack).toHaveBeenCalled();
 
-    await user.click(screen.getByTestId('prod-hub-tab-modulos'));
-    expect(onTab).toHaveBeenCalledWith('modulos');
-  });
-
-  it('renders modules inventory on modulos tab (PROD-0.4)', () => {
-    const readiness = buildProductionOrderReadiness({
-      project: project(),
-      cutRows: [],
-    });
-    render(
-      <ProductionOrderHub
-        project={project()}
-        customerLabel="Ana"
-        salePrice={null}
-        readiness={readiness}
-        activeTab="modulos"
-        onTabChange={vi.fn()}
-        onBackToQueue={vi.fn()}
-        onOpenDesign={vi.fn()}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
-        modules={[
-          {
-            id: 'm1',
-            code: 'GAB-01',
-            name: 'Gabinete',
-            active: true,
-            externalDims: { width: 600, height: 720, depth: 560 },
-            boardParts: [],
-            hardwareLines: [],
-          } as import('@muebles/domain').Module,
-        ]}
-      />,
-    );
-    expect(screen.getByTestId('prod-hub-modulos')).toBeTruthy();
-    expect(screen.getByTestId('prod-modulos-table')).toBeTruthy();
-    expect(screen.getByTestId('prod-modulo-row-i1')).toBeTruthy();
-    expect(screen.getByText('Gabinete')).toBeTruthy();
-  });
-
-  it('shows despiece panel when tab is despiece (PROD-1.3)', () => {
-    const readiness = buildProductionOrderReadiness({
-      project: project(),
-      cutRows: [
-        {
-          quantity: 2,
-          lengthMm: 720,
-          widthMm: 560,
-          description: 'Lateral',
-          materialName: 'Blanco',
-          grain: 1,
-          L1: 1,
-          L2: 0,
-          W1: 0,
-          W2: 1,
-        },
-      ],
-    });
-    render(
-      <ProductionOrderHub
-        project={project()}
-        customerLabel="Ana"
-        salePrice={null}
-        readiness={readiness}
-        activeTab="despiece"
-        onTabChange={vi.fn()}
-        onBackToQueue={vi.fn()}
-        onOpenDesign={vi.fn()}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
-        cutRows={[
-          {
-            quantity: 2,
-            lengthMm: 720,
-            widthMm: 560,
-            description: 'Lateral',
-            materialName: 'Blanco',
-            grain: 1,
-            L1: 1,
-            L2: 0,
-            W1: 0,
-            W2: 1,
-          },
-        ]}
-      />,
-    );
-    expect(screen.getByTestId('prod-hub-despiece')).toBeTruthy();
-    expect(screen.queryByTestId('prod-hub-resumen')).toBeNull();
-    // D-lite: veta column, edge legend and per-group subtotals.
-    expect(screen.getByText('Veta')).toBeTruthy();
-    expect(screen.getByText('↗')).toBeTruthy();
-    expect(screen.getByText(/Cantos: lados L1\/L2/)).toBeTruthy();
-    const totals = screen.getByTestId(
-      'prod-despiece-totals-Blanco',
-    ).textContent;
-    expect(totals).toContain('2 piezas');
-    expect(totals).toContain('0.81 m²');
-  });
-
-  it('shows optimizacion panel with L0/L1/L2 layers (PROD-2.3)', () => {
-    const readiness = buildProductionOrderReadiness({
-      project: project(),
-      cutRows: [],
-    });
-    render(
-      <ProductionOrderHub
-        project={project()}
-        customerLabel="Ana"
-        salePrice={null}
-        readiness={readiness}
-        activeTab="optimizacion"
-        onTabChange={vi.fn()}
-        onBackToQueue={vi.fn()}
-        onOpenDesign={vi.fn()}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
-        cutRows={[]}
-      />,
-    );
-    expect(screen.getByTestId('prod-hub-optimizacion')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-l0')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-l1')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-l2')).toBeTruthy();
-    // Official exports moved to Documentos/Etiquetas — optimización only
-    // points at them.
-    expect(
-      screen.getByTestId('prod-opt-official-hint').textContent,
-    ).toContain('Documentos');
-    expect(
-      screen.queryByTestId('prod-opt-export-zpl'),
-    ).toBeNull();
-    expect(
-      screen.queryByTestId('prod-opt-export-optimizer'),
-    ).toBeNull();
+    // Hub tabs (HUB_TABS): resumen / piso / despacho / etiquetas / herrajes /
+    // documentos — technical tabs (modulos/despiece/optimizacion) live in
+    // Engineering now (2211e2c Hub trim).
+    await user.click(screen.getByTestId('prod-hub-tab-documentos'));
+    expect(onTab).toHaveBeenCalledWith('documentos');
   });
 
   it('shows etiquetas tab with the labels panel', () => {
@@ -262,7 +133,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(screen.getByTestId('prod-labels-download-zpl')).toBeTruthy();
   });
 
-  it('documentos buttons are honest: ZPL configures, despiece views the tab', async () => {
+  it('documentos button is honest: ZPL configures the etiquetas tab', async () => {
     const user = userEvent.setup();
     const onTab = vi.fn();
     const readiness = buildProductionOrderReadiness({
@@ -316,15 +187,9 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(
       screen.getByTestId('prod-doc-labels-zpl').textContent,
     ).toContain('Configurar');
-    expect(screen.getByTestId('prod-doc-despiece').textContent).toContain(
-      'Ver tab',
-    );
 
     await user.click(screen.getByTestId('prod-doc-labels-zpl'));
     expect(onTab).toHaveBeenCalledWith('etiquetas');
-
-    await user.click(screen.getByTestId('prod-doc-despiece'));
-    expect(onTab).toHaveBeenCalledWith('despiece');
   });
 
   it('shows not-ready banner on resumen when cut list empty', () => {
