@@ -174,7 +174,24 @@ type EngineeringLog = {
 
 ---
 
-## 8. Referencia cruzada
+## 8. Implementación del gating por etapa (2026-08-18)
+
+El paso secuencial entre áreas está implementado en `packages/domain/src/processStage.ts`
+(`projectProcessStage` deriva `ventas → ingeniería → almacén → producción`):
+
+| Etapa | Entrada (gate) | Pantallas |
+|-------|----------------|-----------|
+| ventas | status draft/quoted | Cotizaciones / Dashboard Ventas |
+| ingeniería | `accepted` sin `sentToProductionAt` | **solo** landing Ingeniería (los enviados pasan a sección "Enviadas") |
+| almacén | `sentToProductionAt` sin `materialsRelease` | **solo** Compras/Almacén (botón "Material completo") |
+| producción | `materialsRelease` estampado | Fábrica (estaciones) + Órdenes |
+
+`canSendToProduction` exige ingeniería **documentada** antes del handshake (§3);
+`canReleaseMaterials` exige que Ingeniería haya enviado antes de liberar material.
+El event log completo `ProjectEvent[]` de este doc sigue **pendiente** — los stamps
+`engineeringLog` y `materialsRelease` cubren el gating y la auditoría básica (quién/cuándo).
+
+## 9. Referencia cruzada
 
 - Pantallas de Ingeniería → `docs/roadmap-screens/02-ingenieria.md`
 - Pantallas de Ventas → `docs/roadmap-screens/01-ventas.md`

@@ -138,6 +138,7 @@ Inventario **ya implementado** (no reabrir issues cerrados como “nuevo trabajo
 | **Estado de Planta** (tablero proyectos × sectores, visible a todos los roles) | ✅ F093 | `PlantBoardScreen`, ruta `/planta` |
 | **Franja de procesos** en detalle de cotización (accepted/produced) + chip en cola | ✅ F093 | `ProjectFloorProgressStrip` / `ProjectFloorStageChip` |
 | **Reorg de menú** (PRODUCCIÓN = Dashboard · Órdenes* · Producción · Embarques · Instalaciones) | ✅ 2026-08-18 | `roadmap-screens/00-overview.md` §2b |
+| **Gating por etapa** (ventas → ingeniería → almacén → producción; Fábrica/Órdenes solo ven obras con material liberado) | ✅ 2026-08-18 | `domain/processStage.ts` + `materialsRelease` (migración 000059) · `docs/project-lifecycle.md` §8 |
 | **Embarques / Instalaciones** como pantallas propias (board por obra) | ✅ 2026-08-18 | `EmbarquesScreen` / `InstalacionesScreen` |
 | **Roles/estaciones + picking + stock + OC** (F094, Fase 3/3b/3c) | ✅ 2026-08-17 | `rbac.ts`, `purchasing.ts`, migraciones 54–57 |
 | **Actividad de operario** (`ProductionActivity`: claim/pausa/finish/daño, duraciones) | ⚠️ **backend listo, UI dormida** | `productionActivity.go` — nadie llama a claim desde pantalla alguna (JD 2026-08-18); ver D9 |
@@ -643,3 +644,4 @@ El módulo Producción se considera **sólido (Fase 0+1)** cuando:
 | 2026-08-17 | **F093 (Fase 1 del plan):** visibilidad para todos — franja de procesos en detalle de cotización, chip de sector en cola, tablero **Estado de Planta** (`/planta`, todos los roles). |
 | 2026-08-18 | Reorg de menú + pantallas Embarques e Instalaciones propias; Fábrica renombrada **Producción**; regla de orden del menú (dashboards → general → específico por proceso). |
 | 2026-08-18 | **Judgment Day flujo del operador** (critique 22/40, lente operario): estaciones aplanadas por ítem sin obra ni métricas; sistema claim dormido (backend listo, UI desconectada); dashboard contradictorio. Aprobado Fase 5 (D9 claim obra×estación + D10 board por obra). Limpieza de filas stale del baseline §3. |
+| 2026-08-18 | **Gating por etapa**: una obra aparece solo en el área de su etapa (`processStage.ts`). Ingeniería = accepted sin enviar; Almacén = enviada sin liberar (+ botón "Material completo" que estampa `materialsRelease`, migración 000059); Fábrica/Órdenes = material liberado. "Enviar a Producción" exige ingeniería documentada (`canSendToProduction`). |

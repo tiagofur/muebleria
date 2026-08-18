@@ -1,30 +1,32 @@
 # Sesión activa
 
-- **Cambio en curso (sin feature del backlog): taxonomía de URLs completa.**
-  - Regla: URL = nombre de la pantalla en inglés, kebab-case, plano (sin
-    nesting). URLs renombradas en `apps/web/src/routes.ts`:
-    - Órdenes `/orders` (antes `/production`); Producción (piso)
-      `/production` (antes `/factory`); dashboards planos
-      `/production-dashboard` y `/sales-dashboard`.
-    - Cotizaciones `/quotes` (antes `/projects`); Estado de Planta
-      `/plant-board`; Almacén `/warehouse` (antes `/purchasing`);
-      Acabados `/finishes` (antes `/ambient-materials`); Agregados
-      `/add-ons` (antes `/agregados`).
-    - Deep link de orden: `/orders/:projectId/:tab`.
-  - IDs internos (`AppNavId`) alineados con las URLs (misma pasada):
-    `projects→quotes`, `production→orders`, `fabric→production`,
-    `embarques→shipments`, `instalaciones→installations`,
-    `purchasing→warehouse`, `ambientMaterials→finishes`,
-    `agregados→addOns`. Renombrados en `packages/domain/rbac.ts`,
-    `packages/ui/shell/AppShell.tsx` y `apps/web` (routes + App + tests).
-    OJO: ids de dominio tipo `catalog.agregados`,
-    `project.production.revision`, tabs de editor ('agregados') y roles
-    ('produccion') NO se tocaron — son datos/roles, no navegación.
-    Funciones `roleCanAccess*Nav` conservan nombres históricos.
-  - Tests: `routes.test.ts` actualizado a la nueva taxonomía.
-  - Aparte: se actualizaron tests de nav (`appShell.test.ts`,
-    `index.test.ts`) al reorder VENTAS→PRODUCCIÓN ya presente sin commitear
-    en `AppShell.tsx`.
-  - `pnpm test` y `pnpm typecheck` verdes.
+- **Cambio en curso (sin feature del backlog): gating por etapa del proceso.**
+  - Secuencia implementada: ventas (accepted) → **solo Ingeniería** → enviada
+    a producción → **solo Almacén** (botón "Material completo") → material
+    liberado → **Fábrica/Órdenes**. Una obra ya no aparece en todos lados a
+    la vez.
+  - Dominio: `packages/domain/src/processStage.ts`
+    (`projectProcessStage`, `filterProjectsByProcessStage`,
+    `canReleaseMaterials`, `PROCESS_STAGE_LABELS_ES`) + `canSendToProduction`
+    en `engineering.ts` (exige ingeniería documentada) + campo
+    `Project.materialsRelease` (`{releasedBy, releasedAt}`).
+  - Persistencia: `materials_release` JSONB en `projects` (migración Go
+    aditiva 000059, verificada en Postgres local); mappers en
+    `packages/storage/apiMappers.ts` con round-trip testeado.
+  - UI: Ingeniería (cola = etapa ingeniería, sección "Enviadas" read-only),
+    Almacén (proyectos filtrados a etapa almacén + botón "Material completo"
+    por card, admin/almacen), Fábrica (`fabricProjectCards` exige
+    `materialsRelease`), Órdenes (`ProductionWorkspace` filtrado a etapa
+    producción). Embarques/Instalaciones/Estado de Planta sin cambio
+    (gatean por floorStatus / son overview).
+  - Store: `releaseProjectMaterials` nuevo; `sendProjectToProduction` ya no
+    permite bypass sin log documentado (test del bypass reemplazado por
+    gate).
+  - Tests: `pnpm test` (2114 tests) y `pnpm typecheck` verdes; `go test
+    ./internal/...` verde; server arranca y aplica 000059.
+  - Docs: `docs/project-lifecycle.md` §8 (implementación), tabla §3 +
+    historial en `docs/production-module.md`.
+  - Pendiente explícito: event log completo `ProjectEvent[]` con KPIs de
+    tiempos (§5) — no pedido aún.
 - **Último cierre:** F099 — Polish final del módulo Producción (APPROVED, 2026-08-18).
 - **Próximo pendiente por id:** F077 — prep_venta_pricing_landing.
