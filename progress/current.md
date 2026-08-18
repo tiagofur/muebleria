@@ -1092,3 +1092,60 @@ Hammer). VENTAS/TRABAJO ya cumplían (Dashboard/Inicio primero).
 Embarques O Instalaciones.
 
 **Verificación:** ver registro del commit (typecheck 0 + suites full).
+
+## Judgment Day + Critique — menú PRODUCCIÓN, flujo del operador (2026-08-18)
+
+Sesión de evaluación (impeccable critique, register product), sin cambios de
+código. Pedido del usuario: rever el menú PRODUCCIÓN completo (Dashboard →
+Instalaciones) con foco en que cada estación muestre lo que importa al
+operador (tableros por acabado en corte, metros/piezas/lados de cintilla en
+encintado), siempre dentro del contexto de la obra, y activar el "operador
+marca en progreso su proceso en el proyecto".
+
+**Método:** lectura completa de pantallas + dominio + backend (FabricScreen,
+Embarques/Instalaciones, PlantBoard, ManagerDashboard, Queue, productionTotals,
+productionActivity); detector (1 warning: transition:width en dashboard css);
+recorrido autenticado en vivo (admin de prueba creado con `cmd/admin create` y
+BORRADO al cerrar — DELETE de 1 fila verificada) sobre Vite 5173 + backend 8080
+con snapshots DOM de /fabrica, /embarques, /planta, /produccion/dashboard;
+investigación de competencia (Mozaik/Cabinet Vision cut lists por material +
+banding reports; MES: digital job packet + verificación de material en punto
+de uso — valida el board por obra).
+
+**Score 22/40 (Acceptable), tendencia 28 → 24 → 22 (lentes distintas).**
+Snapshot: `.impeccable/critique/2026-08-18T14-35-54Z__packages-ui-src-production.md`.
+
+**P1 findings (verificados en vivo):**
+1. Producción (estaciones) aplanada por ítem: 3 filas idénticas "Cocina
+   Nellly · 1 mueble · Pendiente" — sin agrupar por obra ni métricas de
+   proceso. La data existe: `computeProductionTotals` (materiales piezas/m² +
+   cintillas ML) + `estimateBoardSheets`; Compras ya renderiza esa agregación.
+2. Claim "en progreso" DORMIDO: backend + storage client tienen
+   claim/pause/resume/finish/damage (ProductionActivity), pero NINGUNA pantalla
+   del operador lo llama — el dashboard lee "operarios activos 0" para siempre.
+3. Dashboard Producción se contradice: stat "PROYECTOS EN PLANTA 0" con 4
+   obras listadas; obras 0 ítems = "En Completado"/"completo"; emojis como
+   iconos (viola design.md §3.7).
+
+**P2:** surtido de almacén no visible en estaciones (picking ya persiste por
+obra×material); /fabrica como guest = main vacío sin mensaje; Instalaciones
+sin dirección/contacto del cliente; avance duplicado en 4 superficies;
+ProductionEdgeTotal sin piezas/lados; EdgeBand sin color; design.md §6.7 stale
+(10 tabs vs 6).
+
+**Decisión del usuario (plan aprobado):**
+- Rediseño COMPLETO de FabricScreen como board por obra con bloque de
+  métricas por estación (Corte: tableros por acabado m²/piezas/planchas +
+  surtido; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje:
+  módulos) + avance batch por obra.
+- Claim por OBRA × ESTACIÓN (extensión aditiva del backend; hoy claim es por
+  ítem): botón "Empezar [estación]" en la card → alimenta dashboard con
+  operarios/tiempos reales.
+- Extras de la tanda: dashboard honesto (métrica + 0-ítems + labels + Lucide),
+  surtido de almacén visible en corte/encintado, dirección/contacto en
+  Instalaciones, dominio: pieces/sides en ProductionEdgeTotal + previewColor
+  en EdgeBand.
+
+**Siguiente:** kick-off de implementación por fases (1. dominio aditivo +
+claim obra×estación Go · 2. board FabricScreen con métricas · 3. extras
+dashboard/surtido/instalaciones), una feature a la vez según AGENTS.md.
