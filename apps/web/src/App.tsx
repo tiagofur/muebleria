@@ -2130,13 +2130,17 @@ function AppContent({
 
   const handleFabricBatchAdvance = useCallback(
     (projectId: string, itemIds: readonly string[], target: ItemFloorStatus) => {
-      if (
-        itemIds.length > 1 &&
-        !window.confirm(`¿Marcar ${itemIds.length} módulos como ${ITEM_FLOOR_STATUS_LABELS_ES[target]}? Cada avance queda registrado por separado.`)
-      ) return;
       for (const itemId of itemIds) handleFloorAdvance(projectId, itemId, target);
     },
     [handleFloorAdvance],
+  );
+
+  const confirmFabricBatch = useCallback(
+    (itemCount: number, target: ItemFloorStatus): boolean =>
+      window.confirm(
+        `¿Marcar ${itemCount} módulos como ${ITEM_FLOOR_STATUS_LABELS_ES[target]}? Cada avance queda registrado por separado.`,
+      ),
+    [],
   );
 
   // PROD-3.2: freeze OP revision when opening a plant-ready order.
@@ -3100,6 +3104,7 @@ function AppContent({
           onClaim={session === 'auth' ? handleFabricClaim : undefined}
           onFinish={session === 'auth' ? handleFabricFinish : undefined}
           onAdvanceBatch={handleFabricBatchAdvance}
+          onConfirmBatch={confirmFabricBatch}
         />
         </ScreenBoundary>
       ) : null}
