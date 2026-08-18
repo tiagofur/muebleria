@@ -237,6 +237,8 @@ export {
   PlantBoardScreen,
   FabricScreen,
   summarizeFabricMetrics,
+  EmbarquesScreen,
+  embarquesProjects,
   type DashboardMetrics,
   type SectorDashboard,
   ProductionManagerDashboard,

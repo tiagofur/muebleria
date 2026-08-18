@@ -18,6 +18,7 @@ import {
   Layers,
   LayoutGrid,
   Boxes,
+  ListChecks,
   LogOut,
   Menu,
   Minus,
@@ -29,6 +30,7 @@ import {
   Search,
   Store,
   ToggleLeft,
+  Truck,
   User,
   WifiOff,
   X,
@@ -56,6 +58,7 @@ export type AppNavId =
   | 'showcase'
   | 'plantBoard'
   | 'fabric'
+  | 'embarques'
   | 'production'
   | 'productionDashboard'
   | 'engineering'
@@ -140,6 +143,7 @@ type NavItemDef = {
 type NavSectionDef = {
   readonly id:
     | 'trabajo'
+    | 'produccion'
     | 'ventas'
     | 'ingenieria'
     | 'almacen'
@@ -161,7 +165,7 @@ const NAV_GROUP_LABELS: Readonly<Record<NavItemGroup, string>> = {
   catalogs: 'Catálogos',
 };
 
-/** Canonical sidebar sections — TRABAJO / INGENIERIA / CONFIG (design.md §4.1 + §3.7). */
+/** Canonical sidebar sections — TRABAJO / PRODUCCIÓN / VENTAS / … (design.md §4.1 + §3.7). */
 export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: 'trabajo',
@@ -171,24 +175,33 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       /**
        * F093 — factory progress board. Visible to EVERY role (sales
        * included): read-only "where is each project right now".
-       * Filtered only when allowedNavIds excludes it (never, today).
        */
       { id: 'plantBoard', label: 'Estado de Planta', icon: KanbanSquare },
+    ],
+  },
+  {
+    id: 'produccion',
+    label: 'PRODUCCIÓN',
+    items: [
       /**
-       * Fábrica — tabbed work queue per assigned sector (replaces Mi Estación).
-       * Only for sector-scoped operators (produccion / almacen);
-       * rbac.ts navIdsForRole decides via roleIsScopedBySector.
+       * Producción (ex-Fábrica) — station work queue, corte → embalaje.
+       * Sector-scoped operators see their assigned stations; admin /
+       * gerente_produccion see everything + the metrics toggle.
        */
-      { id: 'fabric', label: 'Fábrica', icon: Factory },
+      { id: 'fabric', label: 'Producción', icon: Factory },
       /**
-       * Plant production queue. Filtered out unless allowedNavIds includes it
-       * (rbac.ts navIdsForRole adds 'production' only for roles with
-       * roleUsesProductionQueue). design.md §6.7.
+       * Embarques — despacho + instalación board (packaged → loaded →
+       * installed), across every factory project. Floor + supervisors.
        */
-      { id: 'production', label: 'Producción', icon: Factory },
+      { id: 'embarques', label: 'Embarques', icon: Truck },
+      /**
+       * Órdenes — per-project production workspace queue (the old
+       * "Producción" hub). TEMPORARY: slated for removal once its remaining
+       * tabs migrate (see roadmap-screens/00-overview.md §M2).
+       */
+      { id: 'production', label: 'Órdenes', icon: ListChecks },
       /**
        * Production Manager Dashboard: full visibility for gerente_produccion.
-       * Shows all queues, operators, metrics, and quick actions.
        */
       { id: 'productionDashboard', label: 'Dashboard Producción', icon: BarChart3 },
     ],

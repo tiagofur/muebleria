@@ -38,7 +38,7 @@ function clickTab(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
 
-describe('FabricScreen — Fábrica (Phase 1)', () => {
+describe('FabricScreen — Producción (manufacturing stations)', () => {
   const projects = [
     makeProject('p1', [makeItem('a'), makeItem('b', 'cut')]),
     makeProject('p2', [makeItem('c', 'edged')]),
@@ -46,7 +46,7 @@ describe('FabricScreen — Fábrica (Phase 1)', () => {
     makeProject('p3', [makeItem('d')], 'draft'),
   ];
 
-  it('shows the first assigned sector tab as active by default', () => {
+  it('shows the first assigned station tab as active by default', () => {
     render(
       <FabricScreen
         projects={projects}
@@ -56,7 +56,7 @@ describe('FabricScreen — Fábrica (Phase 1)', () => {
       />,
     );
 
-    // Tab bar shows only assigned sectors.
+    // Tab bar shows only assigned stations (manufacturing only).
     expect(screen.getByTestId('fabric-tab-cutting')).not.toBeNull();
     expect(screen.getByTestId('fabric-tab-edge_banding')).not.toBeNull();
     expect(screen.queryByTestId('fabric-tab-assembly')).toBeNull();
@@ -95,7 +95,7 @@ describe('FabricScreen — Fábrica (Phase 1)', () => {
     expect(screen.queryByTestId('fabric-row-a')).toBeNull();
   });
 
-  it('shows every tab when unrestricted (no assignments)', () => {
+  it('shows the manufacturing stations only when unrestricted (no Despacho/Instalación)', () => {
     render(
       <FabricScreen
         projects={projects}
@@ -108,8 +108,9 @@ describe('FabricScreen — Fábrica (Phase 1)', () => {
     expect(screen.getByTestId('fabric-tab-edge_banding')).not.toBeNull();
     expect(screen.getByTestId('fabric-tab-assembly')).not.toBeNull();
     expect(screen.getByTestId('fabric-tab-packaging')).not.toBeNull();
-    expect(screen.getByTestId('fabric-tab-shipping')).not.toBeNull();
-    expect(screen.getByTestId('fabric-tab-installation')).not.toBeNull();
+    // Despacho/Instalación moved to Embarques (menu reorg).
+    expect(screen.queryByTestId('fabric-tab-shipping')).toBeNull();
+    expect(screen.queryByTestId('fabric-tab-installation')).toBeNull();
 
     // Default tab is cutting — item 'a' (pending) waits here.
     expect(screen.getByTestId('fabric-row-a')).not.toBeNull();
@@ -175,42 +176,17 @@ describe('FabricScreen — Fábrica (Phase 1)', () => {
     expect(screen.getByTestId('fabric-row-a')).not.toBeNull();
   });
 
-  it('Despacho tab shows packaged items', () => {
-    const packagedProjects = [
-      makeProject('p1', [makeItem('a', 'packaged'), makeItem('b', 'loaded')]),
-    ];
+  it('operator assigned only to logistics sectors gets the Embarques hint', () => {
     render(
       <FabricScreen
-        projects={packagedProjects}
-        assignedSectors={null}
+        projects={projects}
+        assignedSectors={['shipping', 'installation']}
         canAdvance
         onAdvance={() => undefined}
       />,
     );
-    clickTab('fabric-tab-shipping');
-    // 'a' is packaged → waiting for shipping.
-    expect(screen.getByTestId('fabric-row-a')).not.toBeNull();
-    // 'b' is loaded → already past shipping.
-    expect(screen.queryByTestId('fabric-row-b')).toBeNull();
-  });
-
-  it('Instalación tab shows loaded items', () => {
-    const loadedProjects = [
-      makeProject('p1', [makeItem('a', 'loaded'), makeItem('b', 'installed')]),
-    ];
-    render(
-      <FabricScreen
-        projects={loadedProjects}
-        assignedSectors={null}
-        canAdvance
-        onAdvance={() => undefined}
-      />,
-    );
-    clickTab('fabric-tab-installation');
-    // 'a' is loaded → waiting for installation.
-    expect(screen.getByTestId('fabric-row-a')).not.toBeNull();
-    // 'b' is installed → already past installation.
-    expect(screen.queryByTestId('fabric-row-b')).toBeNull();
+    expect(screen.getByText('Tus sectores viven en Embarques')).not.toBeNull();
+    expect(screen.queryByTestId('fabric-tab-cutting')).toBeNull();
   });
 
   it('total waiting badge sums across all visible tabs', () => {
@@ -388,9 +364,9 @@ describe('FabricScreen — tab keyboard navigation (Fase 5.2)', () => {
       key: 'ArrowLeft',
     });
     expect(
-      screen.getByTestId('fabric-tab-installation').getAttribute('aria-selected'),
+      screen.getByTestId('fabric-tab-packaging').getAttribute('aria-selected'),
     ).toBe('true');
-    fireEvent.keyDown(screen.getByTestId('fabric-tab-installation'), {
+    fireEvent.keyDown(screen.getByTestId('fabric-tab-packaging'), {
       key: 'Home',
     });
     expect(cutting.getAttribute('aria-selected')).toBe('true');

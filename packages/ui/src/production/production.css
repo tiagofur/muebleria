@@ -2334,3 +2334,208 @@
     min-width: 480px;
   }
 }
+
+/* ==========================================================================
+   Embarques — despacho + instalación board (menu reorg)
+   Solo tokens del design system.
+   ========================================================================== */
+
+.embarques {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.embarques__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.embarques__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.embarques__title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--text-inverse);
+  background: var(--brand-500);
+  border-radius: var(--radius-md, 10px);
+}
+
+.embarques__title {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+}
+
+.embarques__subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-secondary);
+}
+
+.embarques__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.embarques__stat {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-full, 9999px);
+  white-space: nowrap;
+}
+
+.embarques__stat--road {
+  color: var(--text-secondary);
+  background: var(--surface-card);
+  border-color: var(--border-default);
+}
+
+.embarques__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.embarques__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.embarques__card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.embarques__card-title {
+  margin: 0;
+  font-size: var(--text-md, 1rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.embarques__card-customer {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-secondary);
+}
+
+.embarques__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.embarques__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.embarques__section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-inverse);
+  background: var(--brand-500);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.embarques__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.embarques__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-hover);
+  border-radius: var(--radius-md, 10px);
+}
+
+.embarques__row-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.embarques__row-module {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.embarques__row-meta {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-secondary);
+}
+
+.embarques__row-waiting {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Fase 5.1 — mobile: header apila, filas envuelven. */
+@media (max-width: 720px) {
+  .embarques__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .embarques__card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .embarques__row {
+    flex-wrap: wrap;
+  }
+}

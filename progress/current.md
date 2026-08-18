@@ -1028,3 +1028,38 @@ Corregidos; typecheck 0 errores.
 **Verificación:** typecheck 0 errores · ui 938 ✓ (+3) · pnpm test full verde ·
 `pnpm build` verde (bundle íntegro; el split de three.js quedó como follow-up
 documentado arriba).
+
+## Reorg de menú + pantalla Embarques (2026-08-18)
+
+Pedido del usuario: falta pantalla de embarques; limpiar grupo TRABAJO
+moviendo cada item a su grupo; renombrar Fábrica→Producción (el hub viejo
+"Producción" se renombró Órdenes porque se eliminará). Plan aprobado con
+3 decisiones del usuario (Despacho/Instalación SOLO en Embarques; hub →
+"Órdenes"; Estado de Planta queda en TRABAJO).
+
+**Dominio:** `roleCanAccessShippingNav` (admin|gerente_produccion|produccion
+— almacen fuera, no avanza piso F094) + `'embarques'` en navIdsForRole.
+
+**AppShell:** sección nueva **PRODUCCIÓN** (fabric→"Producción",
+embarques→"Embarques" Truck, production→"Órdenes" ListChecks,
+productionDashboard). TRABAJO queda Inicio + Estado de Planta. 8 secciones.
+Rutas intactas (/fabrica, /produccion) + nueva `/embarques`.
+
+**FabricScreen (ahora "Producción"):** solo 4 estaciones (corte/encintado/
+armado/embalaje); special-casing de shipping/installation eliminado;
+operador con sectores solo-logísticos → EmptyState "Tus sectores viven en
+Embarques".
+
+**EmbarquesScreen (nueva):** board por obra — PARA CARGAR (packaged→
+"Marcar Cargado") y EN CAMINO (loaded→"Marcar Instalado"), stats en header,
+link "Ver control de carga" al tab despacho del hub (mientras vive, M2),
+avance por `handleFloorAdvance` compartido con Producción (extraído del
+inline de fabric; server aplica station scoping + evento F094). CSS
+`.embarques__*` solo tokens + responsive ≤720px.
+
+**Docs:** design.md §4.1 (tabla canónica actualizada — estaba pre-roadmap)
++ vocabulario (Producción=fabric, Embarques, Órdenes=production TEMPORAL);
+00-overview.md §2b menú canónico + §M2 plan de eliminación del hub.
+
+**Verificación:** typecheck monorepo 0 errores · domain 631 · storage 114 ·
+excel 70 · ui 943 · mobile 36 · desktop 17 · web 256 — todo verde.

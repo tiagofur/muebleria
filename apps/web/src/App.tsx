@@ -87,11 +87,13 @@ import {
   computeWorkshopAnalytics,
   type AnalyticsPeriodDays,
   type WarrantyTicket,
+  type ItemFloorStatus,
   roleLabelEs,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleIsScopedBySector,
   roleCanAccessFabricNav,
+  roleCanAccessShippingNav,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -111,6 +113,7 @@ import {
   ProductionWorkspace,
   PlantBoardScreen,
   FabricScreen,
+  EmbarquesScreen,
   type DashboardMetrics,
   EmptyState,
   ScreenBoundary,
@@ -2019,6 +2022,36 @@ function AppContent({
   const ensureProductionRevisionOnProject =
     projectActions.ensureProductionRevision;
 
+  // Menu reorg — shared floor advance for Producción (stations) and
+  // Embarques (cargar/instalar). Server path enforces station scoping +
+  // writes the audit event (F094); mirror locally to keep lists in sync.
+  const handleFloorAdvance = useCallback(
+    (projectId: string, itemId: string, target: ItemFloorStatus) => {
+      const repo = getRepository();
+      if (repo.setProjectItemFloorStatus) {
+        void repo
+          .setProjectItemFloorStatus(projectId, itemId, target)
+          .then((res) => {
+            if (res.floorStatus === target) {
+              setItemFloorStatus(projectId, itemId, target);
+            }
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'No se pudo avanzar el mueble',
+            });
+          });
+      } else {
+        setItemFloorStatus(projectId, itemId, target);
+      }
+    },
+    [getRepository, setItemFloorStatus, toast],
+  );
+
   // PROD-3.2: freeze OP revision when opening a plant-ready order.
   useEffect(() => {
     if (!routeProductionOrderId) return;
@@ -2960,7 +2993,7 @@ function AppContent({
         />
       ) : null}
       {navId === 'fabric' && canOpenFabric ? (
-        <ScreenBoundary screenLabel="Fábrica" onGoHome={goHomeFromScreen}>
+        <ScreenBoundary screenLabel="Producción" onGoHome={goHomeFromScreen}>
         <FabricScreen
           projects={projectsForRole}
           assignedSectors={isSectorScoped ? mySectors : null}
@@ -2969,33 +3002,32 @@ function AppContent({
             session === 'auth' &&
             (canMarkProduced || roleCanExportProduction(actorRole))
           }
-          onAdvance={(projectId, itemId, target) => {
-            const repo = getRepository();
-            if (repo.setProjectItemFloorStatus) {
-              // Server path enforces station scoping + writes the audit
-              // event (F094); mirror locally to keep the list in sync.
-              void repo
-                .setProjectItemFloorStatus(projectId, itemId, target)
-                .then((res) => {
-                  if (res.floorStatus === target) {
-                    setItemFloorStatus(projectId, itemId, target);
-                  }
-                })
-                .catch((err) => {
-                  toast({
-                    type: 'error',
-                    message:
-                      err instanceof Error && err.message
-                        ? err.message
-                        : 'No se pudo avanzar el mueble',
-                  });
-                });
-            } else {
-              setItemFloorStatus(projectId, itemId, target);
-            }
-          }}
+          onAdvance={handleFloorAdvance}
           customerLabelFor={(customerId) =>
             resolveCustomerName(customerId, customers)
+          }
+        />
+        </ScreenBoundary>
+      ) : null}
+      {navId === 'embarques' && roleCanAccessShippingNav(actorRole) ? (
+        <ScreenBoundary screenLabel="Embarques" onGoHome={goHomeFromScreen}>
+        <EmbarquesScreen
+          projects={projectsForRole}
+          canAdvance={
+            session === 'auth' &&
+            (canMarkProduced || roleCanExportProduction(actorRole))
+          }
+          onAdvance={handleFloorAdvance}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
+          }
+          onOpenDispatch={
+            useProductionWorkspace
+              ? (id) => {
+                  const target = productionOrderPath(id, 'despacho');
+                  if (location.pathname !== target) navigate(target);
+                }
+              : undefined
           }
         />
         </ScreenBoundary>

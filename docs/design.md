@@ -398,18 +398,27 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 
 | Sección | Ítems (label → nav id) |
 |---------|------------------------|
-| TRABAJO | Inicio (`home`), Cotizaciones (`projects`), Clientes (`customers`), Vitrina (`showcase`), Producción (`production`, roles con `roleCanAccessProductionNav`) |
-| INGENIERÍA | Muebles (`modules`), Estructuras (`structures`), Componentes (`components`), Materiales (`materials`), Cantos (`edges`), Herrajes (`hardware`), Grupos (`optionGroups`) |
+| TRABAJO | Inicio (`home`), Estado de Planta (`plantBoard`, todos los roles) |
+| PRODUCCIÓN | Producción (`fabric`, estaciones corte→embalaje), Embarques (`embarques`, despacho+instalación), Órdenes (`production`, cola + hub OP — temporal, M2 lo elimina), Dashboard Producción (`productionDashboard`) |
+| VENTAS | Dashboard (`salesDashboard`), Cotizaciones (`projects`), Clientes (`customers`), Vitrina (`showcase`) |
+| INGENIERÍA | Ingeniería (`engineering`); ABM en LIBRERÍA/CATÁLOGOS |
+| COMPRAS / ALMACÉN | Almacén (`purchasing`) |
+| LIBRERÍA | Muebles (`modules`), Estructuras (`structures`), Agregados (`agregados`), Componentes (`components`), Grupos (`optionGroups`) |
+| CATÁLOGOS | Materiales (`materials`), Cantos (`edges`), Herrajes (`hardware`), Acabados (`ambientMaterials`) |
 | CONFIG | Ajustes (`settings`), Usuarios (`users`, solo admin) |
+
+Secciones vacías por rol se auto-ocultan (AppShell filtra por `allowedNavIds`).
 
 #### Vocabulario de producto (UI copy — issue #52)
 
 Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en español de taller**.
 
 | Nav / UI | Código (no renombrar) | Notas |
-|----------|------------------------|--------|
+|----------|------------------------|-------|
 | **Inicio** | `home` | No «Home». Dashboard para todos los roles (variantes por `homeMode`) |
-| **Producción** | `production` | Roles con `roleCanAccessProductionNav` (export producción: produccion, ingeniero, admin, gerente). Cola + hub OP (`/produccion/:id`). Ver `docs/production-module.md` |
+| **Producción** | `fabric` | Estaciones de fabricación (corte→embalaje), ex «Fábrica». Ruta `/fabrica` (histórica). Roles: `roleCanAccessFabricNav` |
+| **Embarques** | `embarques` | Despacho + instalación (embalado→cargado→instalado), board por obra. Roles: `roleCanAccessShippingNav` (sin almacén) |
+| **Órdenes** | `production` | Cola + hub OP por obra (`/produccion/:id`) — TEMPORAL, se elimina en M2. Roles con `roleCanAccessProductionNav`. Ver `docs/production-module.md` |
 | **Cotizaciones** | `projects` / `Project` | No «Proyectos» en UI |
 | **Clientes** | `customers` | |
 | **Vitrina** | `showcase` | Catálogo comercial (sin BOM/costos). F040/F043 |

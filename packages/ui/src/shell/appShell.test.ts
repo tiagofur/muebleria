@@ -11,12 +11,14 @@ import {
   Factory,
   LayoutDashboard,
   Layers,
+  ListChecks,
   Minus,
   Package,
   Settings,
   Settings2,
   Store,
   ToggleLeft,
+  Truck,
   Users,
 } from 'lucide-react';
 import {
@@ -32,10 +34,11 @@ function read(rel: string): string {
 }
 
 describe('AppShell nav model (F017)', () => {
-  it('exposes TRABAJO, VENTAS, INGENIERIA, ALMACEN, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
-    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ventas', 'ingenieria', 'almacen', 'libreria', 'catalogos', 'config']);
+  it('exposes TRABAJO, PRODUCCIÓN, VENTAS, INGENIERIA, ALMACEN, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
+    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'produccion', 'ventas', 'ingenieria', 'almacen', 'libreria', 'catalogos', 'config']);
     expect(APP_NAV_SECTIONS.map((s) => s.label)).toEqual([
       'TRABAJO',
+      'PRODUCCIÓN',
       'VENTAS',
       'INGENIERÍA',
       'COMPRAS / ALMACÉN',
@@ -45,6 +48,7 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     const trabajo = APP_NAV_SECTIONS.find((s) => s.id === 'trabajo')!;
+    const produccion = APP_NAV_SECTIONS.find((s) => s.id === 'produccion')!;
     const ventas = APP_NAV_SECTIONS.find((s) => s.id === 'ventas')!;
     const ingenieria = APP_NAV_SECTIONS.find((s) => s.id === 'ingenieria')!;
     const libreria = APP_NAV_SECTIONS.find((s) => s.id === 'libreria')!;
@@ -54,9 +58,22 @@ describe('AppShell nav model (F017)', () => {
     expect(trabajo.items.map((i) => i.id)).toEqual([
       'home',
       'plantBoard',
+    ]);
+
+    // Fábrica renamed to Producción (manufacturing stations); the old
+    // per-project hub queue is Órdenes until it goes away (M2); Embarques
+    // owns despacho + instalación.
+    expect(produccion.items.map((i) => i.id)).toEqual([
       'fabric',
+      'embarques',
       'production',
       'productionDashboard',
+    ]);
+    expect(produccion.items.map((i) => i.label)).toEqual([
+      'Producción',
+      'Embarques',
+      'Órdenes',
+      'Dashboard Producción',
     ]);
 
     expect(ventas.items.map((i) => i.id)).toEqual([
@@ -113,7 +130,9 @@ describe('AppShell nav model (F017)', () => {
     expect(byId.projects).toBe(FileText);
     expect(byId.customers).toBe(Users);
     expect(byId.showcase).toBe(Store);
-    expect(byId.production).toBe(Factory);
+    expect(byId.fabric).toBe(Factory);
+    expect(byId.embarques).toBe(Truck);
+    expect(byId.production).toBe(ListChecks);
     expect(byId.modules).toBe(Package);
     expect(byId.materials).toBe(Layers);
     expect(byId.edges).toBe(Minus);
@@ -127,7 +146,9 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('projects')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
     expect(labelForNavId('showcase')).toBe('Vitrina');
-    expect(labelForNavId('production')).toBe('Producción');
+    expect(labelForNavId('fabric')).toBe('Producción');
+    expect(labelForNavId('embarques')).toBe('Embarques');
+    expect(labelForNavId('production')).toBe('Órdenes');
     expect(labelForNavId('modules')).toBe('Muebles');
     expect(labelForNavId('optionGroups')).toBe('Grupos');
     expect(labelForNavId('settings')).toBe('Ajustes');

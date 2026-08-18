@@ -43,9 +43,35 @@ Esto genera confusión: un operador de planta ve tabs de ingeniería que no le s
 |---|----------|-----------|------------|
 | 1 | **Dashboard de Ventas** | Nada (nueva) | admin, gerente_ventas, vendedor |
 | 2 | **Ingeniería** | Tabs de Producción que son de ingeniería | admin, ingeniero, gerente_produccion (ver) |
-| 3 | **Fábrica** | Mi Estación + tabs de piso/carga de Producción | admin, gerente_produccion, produccion |
+| 3 | **Producción** (ex-Fábrica) | Mi Estación + tabs de piso de Producción | admin, gerente_produccion, produccion |
 | 4 | **Compras/Almacén** | Tab Herrajes de Producción | admin, gerente_produccion (ver), almacen |
 | 5 | **Estado de Planta** | Se mantiene | Todos |
+| 6 | **Embarques** (post-plan) | Tabs Despacho/Instalación de Fábrica | admin, gerente_produccion, produccion |
+
+### 2b. Menú canónico (post reorg 2026-08-18)
+
+```
+TRABAJO           Inicio · Estado de Planta            (todos)
+PRODUCCIÓN        Producción (estaciones) · Embarques · Órdenes* · Dashboard Producción
+VENTAS            Dashboard · Cotizaciones · Clientes · Vitrina
+INGENIERÍA        Ingeniería
+COMPRAS/ALMACÉN   Almacén
+LIBRERÍA          Muebles · Estructuras · Agregados · Componentes · Grupos
+CATÁLOGOS         Materiales · Cantos · Herrajes · Acabados
+CONFIG            Ajustes
+```
+
+\* **Órdenes** = la cola + hub por obra (ex menú "Producción"). TEMPORAL.
+
+### M2 — eliminación del hub "Órdenes" (plan, no implementado)
+
+El hub conserva tabs que aún no migran: **Piso** (paperless), **despacho**
+(el checklist completo de carga vive ahí; Embarques linkea "Ver control de
+carga"), **etiquetas/herrajes** (la generación ya está en Ingeniería —
+Documentos; quedan como vista por obra). Pasos: migrar Piso al workspace de
+Producción/Embarques → migrar o retirar el checklist de despacho → borrar
+nav `production` + `ProductionWorkspace`. Rutas `/produccion/:id` se
+redirigen o deprecian.
 
 Más las pantallas que **no se tocan**:
 - **Ingeniería ABM** (Composición + Materiales) — ya existe y está bien armada

@@ -8,6 +8,10 @@ export {
 } from './ProjectFloorProgressStrip';
 export { PlantBoardScreen } from './PlantBoardScreen';
 export { FabricScreen, summarizeFabricMetrics } from './FabricScreen';
+export {
+  EmbarquesScreen,
+  embarquesProjects,
+} from './EmbarquesScreen';
 export type {
   DashboardMetrics,
   SectorDashboard,

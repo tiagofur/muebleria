@@ -1,27 +1,23 @@
 /**
- * Fábrica — Tabbed work queue per production sector (Phase 1 roadmap).
- * Replaces StationQueueScreen ("Mi Estación") with horizontal tabs.
+ * Producción (ex-Fábrica) — Tabbed work queue for the MANUFACTURING
+ * stations (corte → encintado → armado → embalaje).
  *
- * Each tab shows items WAITING for that sector across every factory project,
- * with a one-tap advance button. Despacho and Instalación tabs follow the
- * same pattern (packaged → loaded → installed).
+ * Each tab shows items WAITING for that station across every factory
+ * project, with a one-tap advance button. Despacho and Instalación moved
+ * to Embarques (menu reorg — see roadmap-screens/00-overview.md).
  *
  * Read-derive only (itemsWaitingForSector from domain); advancing goes
  * through the shell callback so the server enforces station scoping.
  */
 
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Factory } from 'lucide-react';
 
 import {
-  floorStatusForSector,
   itemsWaitingForSector,
   normalizeItemFloorStatus,
   ITEM_FLOOR_STATUS_LABELS_ES,
-  PIPELINE_SECTORS,
-  PRODUCTION_SECTOR_LABELS_ES,
   type ItemFloorStatus,
-  type PipelineSector,
   type Project,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
@@ -31,29 +27,30 @@ import type {
   SectorDashboard,
 } from './ProductionManagerDashboard';
 
-/** All sectors visible in Fábrica tabs (production pipeline). */
-const FABRIC_TAB_SECTORS: readonly PipelineSector[] = PIPELINE_SECTORS;
+/** Manufacturing stations shown as tabs (despacho/instalación → Embarques). */
+type FabricStation = 'cutting' | 'edge_banding' | 'assembly' | 'packaging';
 
-type FabricTabSector = PipelineSector | 'shipping' | 'installation';
+const FABRIC_STATIONS: readonly FabricStation[] = [
+  'cutting',
+  'edge_banding',
+  'assembly',
+  'packaging',
+];
 
-/** Sector → target floor status for the advance button. */
-const TARGET_STATUS: Readonly<Record<FabricTabSector, ItemFloorStatus | null>> = {
+/** Station → target floor status for the advance button. */
+const TARGET_STATUS: Readonly<Record<FabricStation, ItemFloorStatus>> = {
   cutting: 'cut',
   edge_banding: 'edged',
   assembly: 'assembled',
   packaging: 'packaged',
-  shipping: 'loaded',
-  installation: 'installed',
 };
 
 /** Tab labels in Spanish. */
-const TAB_LABELS: Readonly<Record<FabricTabSector, string>> = {
+const TAB_LABELS: Readonly<Record<FabricStation, string>> = {
   cutting: 'Corte',
   edge_banding: 'Encintado',
   assembly: 'Armado',
   packaging: 'Embalaje',
-  shipping: 'Despacho',
-  installation: 'Instalación',
 };
 
 function formatAvgMinutes(minutes: number): string {
@@ -127,18 +124,18 @@ export function FabricScreen({
   readonly testId?: string;
 }): ReactNode {
   // Determine which tabs are visible based on assigned sectors.
-  const visibleTabs = useMemo<FabricTabSector[]>(() => {
+  const visibleTabs = useMemo<FabricStation[]>(() => {
     const assigned = assignedSectors ?? [];
     if (assigned.length === 0) {
-      // Unrestricted: all pipeline tabs.
-      return [...FABRIC_TAB_SECTORS];
+      // Unrestricted: all manufacturing stations.
+      return [...FABRIC_STATIONS];
     }
     // Filter to only the assigned sectors, preserving pipeline order.
-    return FABRIC_TAB_SECTORS.filter((s) => assigned.includes(s));
+    return FABRIC_STATIONS.filter((s) => assigned.includes(s));
   }, [assignedSectors]);
 
   // Active tab state.
-  const [activeTab, setActiveTab] = useState<FabricTabSector>(
+  const [activeTab, setActiveTab] = useState<FabricStation>(
     () => visibleTabs[0] ?? 'cutting',
   );
 
@@ -161,52 +158,13 @@ export function FabricScreen({
     onSelect: setActiveTab,
   });
 
-  // Build rows for the active tab only (not all sectors).
+  // Build rows for the active tab only (not all stations).
   const rows = useMemo(() => {
     const factoryProjects = projects.filter(
       (p) => p.status === 'accepted' || p.status === 'produced',
     );
-
-    // Shipping and installation are not pipeline sectors with itemsWaitingForSector.
-    // They use a different filter: items whose current status matches the "waiting" state.
-    if (effectiveTab === 'shipping') {
-      // Items waiting for loading = status 'packaged'
-      return factoryProjects.flatMap((project) =>
-        project.items
-          .filter((item) => normalizeItemFloorStatus(item.floorStatus) === 'packaged')
-          .map((item) => ({
-            projectId: project.id,
-            projectName: project.name,
-            customerLabel: customerLabelFor?.(project.customerId) ?? '',
-            itemId: item.id,
-            moduleName: item.moduleId,
-            quantity: item.quantity,
-            currentStatus: normalizeItemFloorStatus(item.floorStatus),
-          })),
-      );
-    }
-
-    if (effectiveTab === 'installation') {
-      // Items waiting for installation = status 'loaded'
-      return factoryProjects.flatMap((project) =>
-        project.items
-          .filter((item) => normalizeItemFloorStatus(item.floorStatus) === 'loaded')
-          .map((item) => ({
-            projectId: project.id,
-            projectName: project.name,
-            customerLabel: customerLabelFor?.(project.customerId) ?? '',
-            itemId: item.id,
-            moduleName: item.moduleId,
-            quantity: item.quantity,
-            currentStatus: normalizeItemFloorStatus(item.floorStatus),
-          })),
-      );
-    }
-
-    // Pipeline sectors: use domain helper.
-    const sector = effectiveTab as PipelineSector;
     return factoryProjects.flatMap((project) =>
-      itemsWaitingForSector(project, sector).map((item) => ({
+      itemsWaitingForSector(project, effectiveTab).map((item) => ({
         projectId: project.id,
         projectName: project.name,
         customerLabel: customerLabelFor?.(project.customerId) ?? '',
@@ -225,30 +183,10 @@ export function FabricScreen({
     );
     let total = 0;
     for (const tab of visibleTabs) {
-      if (tab === 'shipping') {
-        total += factoryProjects.reduce(
-          (acc, p) =>
-            acc +
-            p.items.filter(
-              (i) => normalizeItemFloorStatus(i.floorStatus) === 'packaged',
-            ).length,
-          0,
-        );
-      } else if (tab === 'installation') {
-        total += factoryProjects.reduce(
-          (acc, p) =>
-            acc +
-            p.items.filter(
-              (i) => normalizeItemFloorStatus(i.floorStatus) === 'loaded',
-            ).length,
-          0,
-        );
-      } else {
-        total += factoryProjects.reduce(
-          (acc, p) => acc + itemsWaitingForSector(p, tab).length,
-          0,
-        );
-      }
+      total += factoryProjects.reduce(
+        (acc, p) => acc + itemsWaitingForSector(p, tab).length,
+        0,
+      );
     }
     return total;
   }, [projects, visibleTabs]);
@@ -256,7 +194,7 @@ export function FabricScreen({
   const target = TARGET_STATUS[effectiveTab] ?? null;
 
   return (
-    <section className="fabric" aria-label="Fábrica" data-testid={testId ?? 'fabric-screen'}>
+    <section className="fabric" aria-label="Producción" data-testid={testId ?? 'fabric-screen'}>
       {/* Header */}
       <header className="fabric__header">
         <div className="fabric__title-row">
@@ -264,10 +202,11 @@ export function FabricScreen({
             <Factory size={20} strokeWidth={1.5} />
           </span>
           <div>
-            <h2 className="fabric__title">Fábrica</h2>
+            <h2 className="fabric__title">Producción</h2>
             <p className="fabric__subtitle">
-              Cola de trabajo por sector. Avanzás solo lo tuyo — el resto del
-              taller ve el progreso en Estado de Planta.
+              Cola de las estaciones de fabricación (corte a embalaje).
+              Despacho e instalación viven en Embarques; el avance de todos se
+              ve en Estado de Planta.
             </p>
           </div>
         </div>
@@ -276,7 +215,7 @@ export function FabricScreen({
             <div
               className="fabric__view-toggle"
               role="group"
-              aria-label="Vista de fábrica"
+              aria-label="Vista de producción"
             >
               <button
                 type="button"
@@ -347,49 +286,29 @@ export function FabricScreen({
           </table>
           <p className="fabric__metrics-note">
             Promedio general ponderado por ítems completados hoy. El detalle
-            completo vive en Producción → Dashboard.
+            completo vive en Dashboard Producción.
           </p>
         </div>
+      ) : visibleTabs.length === 0 ? (
+        <EmptyState
+          title="Tus sectores viven en Embarques"
+          description="No tenés estaciones de fabricación asignadas. El despacho y la instalación se trabajan desde la pantalla Embarques."
+        />
       ) : (
         <>
           {/* Tab bar */}
           <nav
             className="fabric__tabs"
-            aria-label="Sectores de fábrica"
+            aria-label="Estaciones de producción"
             role="tablist"
             {...sectorTabs.tabListProps}
           >
         {visibleTabs.map((tab, index) => {
           const isActive = tab === effectiveTab;
           // Count items for this tab.
-          let count = 0;
-          const factoryProjects = projects.filter(
-            (p) => p.status === 'accepted' || p.status === 'produced',
-          );
-          if (tab === 'shipping') {
-            count = factoryProjects.reduce(
-              (acc, p) =>
-                acc +
-                p.items.filter(
-                  (i) => normalizeItemFloorStatus(i.floorStatus) === 'packaged',
-                ).length,
-              0,
-            );
-          } else if (tab === 'installation') {
-            count = factoryProjects.reduce(
-              (acc, p) =>
-                acc +
-                p.items.filter(
-                  (i) => normalizeItemFloorStatus(i.floorStatus) === 'loaded',
-                ).length,
-              0,
-            );
-          } else {
-            count = factoryProjects.reduce(
-              (acc, p) => acc + itemsWaitingForSector(p, tab).length,
-              0,
-            );
-          }
+          const count = projects
+            .filter((p) => p.status === 'accepted' || p.status === 'produced')
+            .reduce((acc, p) => acc + itemsWaitingForSector(p, tab).length, 0);
           return (
             <button
               key={tab}

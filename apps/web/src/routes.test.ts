@@ -146,4 +146,11 @@ describe('plant board route (F093)', () => {
   it('keeps plantBoard out of entity deep-link sections', () => {
     expect(isEntitySection('plantBoard')).toBe(false);
   });
+
+  it('maps /embarques to the embarques nav (despacho + instalación board)', () => {
+    expect(NAV_PATHS.embarques).toBe('/embarques');
+    expect(pathForNav('embarques')).toBe('/embarques');
+    expect(navFromPath('/embarques')).toBe('embarques');
+    expect(isEntitySection('embarques')).toBe(false);
+  });
 });

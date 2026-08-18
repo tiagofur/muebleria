@@ -303,6 +303,17 @@ export function roleCanAccessFabricNav(role: string | null | undefined): boolean
 }
 
 /**
+ * May open Embarques (despacho + instalación board).
+ *
+ * The shipping/logistics stations belong to the production floor and its
+ * supervisors; almacen does NOT advance floor status (F094) and its world
+ * is Compras/Almacén, so it stays out.
+ */
+export function roleCanAccessShippingNav(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_produccion' || role === 'produccion';
+}
+
+/**
  * Sectors a role may be assigned to (F094 — role↔sector binding).
  *
  * - `produccion`: all pipeline stations + warehouse + cnc (full floor).
@@ -491,9 +502,12 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   }
   if (roleCanAccessSettings(role)) ids.add('settings');
   if (roleCanManageUsers(role)) ids.add('users');
-  // Fábrica: tabbed work queue for sector-scoped operators (replaces Mi Estación)
-  // and supervisors (admin / gerente_produccion see all sectors + metrics toggle).
+  // Fábrica: work queue for sector-scoped operators and supervisors —
+  // manufacturing stations only (corte→embalaje); despacho/instalación live
+  // in Embarques.
   if (roleCanAccessFabricNav(role)) ids.add('fabric');
+  // Embarques: despacho + instalación board (production floor + supervisors).
+  if (roleCanAccessShippingNav(role)) ids.add('embarques');
   // PROD-0.1: factory workspace nav for production-export roles.
   if (roleCanAccessProductionNav(role)) ids.add('production');
   // Production Manager Dashboard: full visibility for gerente_produccion
