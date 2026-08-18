@@ -18,6 +18,7 @@ import {
   Layers,
   LayoutGrid,
   Boxes,
+  Hammer,
   ListChecks,
   LogOut,
   Menu,
@@ -59,6 +60,7 @@ export type AppNavId =
   | 'plantBoard'
   | 'fabric'
   | 'embarques'
+  | 'instalaciones'
   | 'production'
   | 'productionDashboard'
   | 'engineering'
@@ -182,18 +184,16 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: 'produccion',
     label: 'PRODUCCIÓN',
+    /**
+     * Ordering rule (menu reorg): dashboards FIRST, then general →
+     * specific following the workshop process (orden de obra → fabricar →
+     * cargar → instalar).
+     */
     items: [
       /**
-       * Producción (ex-Fábrica) — station work queue, corte → embalaje.
-       * Sector-scoped operators see their assigned stations; admin /
-       * gerente_produccion see everything + the metrics toggle.
+       * Production Manager Dashboard: full visibility for gerente_produccion.
        */
-      { id: 'fabric', label: 'Producción', icon: Factory },
-      /**
-       * Embarques — despacho + instalación board (packaged → loaded →
-       * installed), across every factory project. Floor + supervisors.
-       */
-      { id: 'embarques', label: 'Embarques', icon: Truck },
+      { id: 'productionDashboard', label: 'Dashboard Producción', icon: BarChart3 },
       /**
        * Órdenes — per-project production workspace queue (the old
        * "Producción" hub). TEMPORARY: slated for removal once its remaining
@@ -201,9 +201,21 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        */
       { id: 'production', label: 'Órdenes', icon: ListChecks },
       /**
-       * Production Manager Dashboard: full visibility for gerente_produccion.
+       * Producción (ex-Fábrica) — station work queue, corte → embalaje.
+       * Sector-scoped operators see their assigned stations; admin /
+       * gerente_produccion see everything + the metrics toggle.
        */
-      { id: 'productionDashboard', label: 'Dashboard Producción', icon: BarChart3 },
+      { id: 'fabric', label: 'Producción', icon: Factory },
+      /**
+       * Embarques — what's packaged waiting for transport, across every
+       * factory project (embalado → cargado). Floor + supervisors.
+       */
+      { id: 'embarques', label: 'Embarques', icon: Truck },
+      /**
+       * Instalaciones — what's loaded and on its way to the client's site
+       * (cargado → instalado). The last process step gets its own screen.
+       */
+      { id: 'instalaciones', label: 'Instalaciones', icon: Hammer },
     ],
   },
   {

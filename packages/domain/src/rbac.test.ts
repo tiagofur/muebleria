@@ -259,6 +259,9 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('produccion').has('embarques')).toBe(true);
     expect(navIdsForRole('admin').has('embarques')).toBe(true);
     expect(navIdsForRole('almacen').has('embarques')).toBe(false);
+    expect(navIdsForRole('gerente_produccion').has('instalaciones')).toBe(true);
+    expect(navIdsForRole('vendedor').has('instalaciones')).toBe(false);
+    expect(navIdsForRole('almacen').has('instalaciones')).toBe(false);
   });
 
   it('F094 — roleCanAdvanceStation scopes operators to their sectors', () => {

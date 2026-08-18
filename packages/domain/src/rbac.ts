@@ -303,11 +303,12 @@ export function roleCanAccessFabricNav(role: string | null | undefined): boolean
 }
 
 /**
- * May open Embarques (despacho + instalación board).
+ * May open the logistics screens: Embarques (despacho/carga) and
+ * Instalaciones (instalación en obra).
  *
- * The shipping/logistics stations belong to the production floor and its
- * supervisors; almacen does NOT advance floor status (F094) and its world
- * is Compras/Almacén, so it stays out.
+ * Those stations belong to the production floor and its supervisors;
+ * almacen does NOT advance floor status (F094) and its world is
+ * Compras/Almacén, so it stays out.
  */
 export function roleCanAccessShippingNav(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_produccion' || role === 'produccion';
@@ -506,8 +507,11 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   // manufacturing stations only (corte→embalaje); despacho/instalación live
   // in Embarques.
   if (roleCanAccessFabricNav(role)) ids.add('fabric');
-  // Embarques: despacho + instalación board (production floor + supervisors).
-  if (roleCanAccessShippingNav(role)) ids.add('embarques');
+  // Embarques + Instalaciones: logistics boards (floor + supervisors).
+  if (roleCanAccessShippingNav(role)) {
+    ids.add('embarques');
+    ids.add('instalaciones');
+  }
   // PROD-0.1: factory workspace nav for production-export roles.
   if (roleCanAccessProductionNav(role)) ids.add('production');
   // Production Manager Dashboard: full visibility for gerente_produccion

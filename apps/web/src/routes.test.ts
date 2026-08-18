@@ -153,4 +153,11 @@ describe('plant board route (F093)', () => {
     expect(navFromPath('/embarques')).toBe('embarques');
     expect(isEntitySection('embarques')).toBe(false);
   });
+
+  it('maps /instalaciones to the instalaciones nav (cargado → instalado)', () => {
+    expect(NAV_PATHS.instalaciones).toBe('/instalaciones');
+    expect(pathForNav('instalaciones')).toBe('/instalaciones');
+    expect(navFromPath('/instalaciones')).toBe('instalaciones');
+    expect(isEntitySection('instalaciones')).toBe(false);
+  });
 });

@@ -1,19 +1,16 @@
 /**
- * Embarques — despacho/carga board (menu reorg).
+ * Instalaciones — instalación en obra board (menu reorg).
  *
- * Cross-project view of what's EMBALADO waiting to be loaded onto
- * transport (packaged → loaded). What gets loaded moves on to the
- * Instalaciones screen (cargado → instalado). The full per-project loading
- * checklist (scan + "Liberar salida") stays in the Órdenes hub despacho
- * tab until it migrates (M2 — roadmap-screens/00-overview.md); this screen
- * links to it per project.
+ * The last process step gets its own screen: what's CARGADO and on its way
+ * to the client (loaded → installed), grouped per project. Shares the
+ * ship-board layout with Embarques.
  *
  * Read-derive only; advancing goes through the shell callback so the server
  * enforces station scoping and writes the floor-status event (F094).
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { Truck } from 'lucide-react';
+import { Hammer } from 'lucide-react';
 
 import {
   normalizeItemFloorStatus,
@@ -24,21 +21,22 @@ import {
 } from '@muebles/domain';
 import { EmptyState } from '../common';
 
-type EmbarquesRow = {
+type InstalacionesRow = {
   readonly itemId: string;
   readonly moduleName: string;
   readonly quantity: number;
   readonly currentStatus: ItemFloorStatus;
 };
 
-type EmbarquesProject = {
+type InstalacionesProject = {
   readonly projectId: string;
   readonly projectName: string;
   readonly customerLabel: string;
-  readonly toLoad: readonly EmbarquesRow[];
+  readonly toInstall: readonly InstalacionesRow[];
+  readonly installedCount: number;
 };
 
-function rowFromItem(item: ProjectItem): EmbarquesRow {
+function rowFromItem(item: ProjectItem): InstalacionesRow {
   return {
     itemId: item.id,
     moduleName: item.moduleId,
@@ -47,86 +45,97 @@ function rowFromItem(item: ProjectItem): EmbarquesRow {
   };
 }
 
-/** Factory projects with items packaged waiting to load (pure, testable). */
-export function embarquesProjects(
+/** Factory projects with loaded items to install (pure, testable). */
+export function instalacionesProjects(
   projects: readonly Project[],
   customerLabelFor?: (customerId: string) => string,
-): readonly EmbarquesProject[] {
-  const result: EmbarquesProject[] = [];
+): readonly InstalacionesProject[] {
+  const result: InstalacionesProject[] = [];
   for (const project of projects) {
     if (project.status !== 'accepted' && project.status !== 'produced') continue;
-    const toLoad = project.items
-      .filter((item) => normalizeItemFloorStatus(item.floorStatus) === 'packaged')
-      .map(rowFromItem);
-    if (toLoad.length === 0) continue;
+    const toInstall: InstalacionesRow[] = [];
+    let installedCount = 0;
+    for (const item of project.items) {
+      const status = normalizeItemFloorStatus(item.floorStatus);
+      if (status === 'loaded') toInstall.push(rowFromItem(item));
+      else if (status === 'installed') installedCount++;
+    }
+    if (toInstall.length === 0) continue;
     result.push({
       projectId: project.id,
       projectName: project.name,
       customerLabel: customerLabelFor?.(project.customerId) ?? '',
-      toLoad,
+      toInstall,
+      installedCount,
     });
   }
   return result;
 }
 
-export function EmbarquesScreen({
+export function InstalacionesScreen({
   projects,
   canAdvance,
   onAdvance,
   customerLabelFor,
-  onOpenDispatch,
   testId,
 }: {
   /** Projects in the factory (accepted/produced), already role-filtered. */
   readonly projects: readonly Project[];
   readonly canAdvance: boolean;
-  /** Advance one packaged item to loaded (Marcar Cargado). */
+  /** Advance one loaded item to installed (Marcar Instalado). */
   readonly onAdvance: (
     projectId: string,
     itemId: string,
     target: ItemFloorStatus,
   ) => void;
   readonly customerLabelFor?: (customerId: string) => string;
-  /** Opens the per-project loading checklist (Órdenes hub, tab despacho). */
-  readonly onOpenDispatch?: (projectId: string) => void;
   readonly testId?: string;
 }): ReactNode {
   const cards = useMemo(
-    () => embarquesProjects(projects, customerLabelFor),
+    () => instalacionesProjects(projects, customerLabelFor),
     [projects, customerLabelFor],
   );
-  const totalToLoad = cards.reduce((acc, c) => acc + c.toLoad.length, 0);
+  const totalToInstall = cards.reduce((acc, c) => acc + c.toInstall.length, 0);
+  const totalInstalled = cards.reduce((acc, c) => acc + c.installedCount, 0);
 
   return (
     <section
       className="ship-board"
-      aria-label="Embarques"
-      data-testid={testId ?? 'embarques-screen'}
+      aria-label="Instalaciones"
+      data-testid={testId ?? 'instalaciones-screen'}
     >
       <header className="ship-board__header">
         <div className="ship-board__title-row">
           <span className="ship-board__title-icon" aria-hidden>
-            <Truck size={20} strokeWidth={1.5} />
+            <Hammer size={20} strokeWidth={1.5} />
           </span>
           <div>
-            <h2 className="ship-board__title">Embarques</h2>
+            <h2 className="ship-board__title">Instalaciones</h2>
             <p className="ship-board__subtitle">
-              Qué está embalado esperando carga al transporte. Lo que cargás
-              acá pasa a Instalaciones; el avance se ve en Estado de Planta.
+              Qué va cargado y en camino a obra. Al marcar instalado, la obra
+              avanza en Estado de Planta.
             </p>
           </div>
         </div>
         <div className="ship-board__header-actions">
-          <span className="ship-board__stat" data-testid="embarques-to-load">
-            {totalToLoad} para cargar
+          <span className="ship-board__stat" data-testid="instalaciones-to-install">
+            {totalToInstall} para instalar
           </span>
+          {totalInstalled > 0 ? (
+            <span
+              className="ship-board__stat ship-board__stat--road"
+              data-testid="instalaciones-installed"
+            >
+              {totalInstalled} instalados
+            </span>
+          ) : null}
         </div>
       </header>
 
       {cards.length === 0 ? (
         <EmptyState
-          title="Nada para cargar"
-          description="Cuando haya muebles embalados esperando transporte, aparecen acá organizados por obra."
+          title="Nada para instalar"
+          description="Cuando cargues muebles desde Embarques, aparecen acá para instalar en obra."
         />
       ) : (
         <ul className="ship-board__cards">
@@ -134,7 +143,7 @@ export function EmbarquesScreen({
             <li
               key={card.projectId}
               className="ship-board__card"
-              data-testid={`embarques-card-${card.projectId}`}
+              data-testid={`instalaciones-card-${card.projectId}`}
             >
               <div className="ship-board__card-header">
                 <div>
@@ -145,30 +154,25 @@ export function EmbarquesScreen({
                     </p>
                   ) : null}
                 </div>
-                {onOpenDispatch ? (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => onOpenDispatch(card.projectId)}
-                    data-testid={`embarques-dispatch-${card.projectId}`}
-                  >
-                    Ver control de carga
-                  </button>
+                {card.installedCount > 0 ? (
+                  <span className="ship-board__card-done">
+                    {card.installedCount} instalados
+                  </span>
                 ) : null}
               </div>
               <div className="ship-board__section">
                 <h4 className="ship-board__section-title">
-                  Para cargar
+                  En camino
                   <span className="ship-board__section-count">
-                    {card.toLoad.length}
+                    {card.toInstall.length}
                   </span>
                 </h4>
                 <ul className="ship-board__list">
-                  {card.toLoad.map((row) => (
+                  {card.toInstall.map((row) => (
                     <li
                       key={row.itemId}
                       className="ship-board__row"
-                      data-testid={`embarques-load-${row.itemId}`}
+                      data-testid={`instalaciones-install-${row.itemId}`}
                     >
                       <div className="ship-board__row-main">
                         <span className="ship-board__row-module">
@@ -185,16 +189,16 @@ export function EmbarquesScreen({
                           type="button"
                           className="btn btn--primary"
                           onClick={() =>
-                            onAdvance(card.projectId, row.itemId, 'loaded')
+                            onAdvance(card.projectId, row.itemId, 'installed')
                           }
-                          data-testid={`embarques-advance-${row.itemId}`}
+                          data-testid={`instalaciones-advance-${row.itemId}`}
                         >
-                          <Truck size={16} strokeWidth={1.5} aria-hidden />
-                          Marcar {ITEM_FLOOR_STATUS_LABELS_ES.loaded}
+                          <Hammer size={16} strokeWidth={1.5} aria-hidden />
+                          Marcar {ITEM_FLOOR_STATUS_LABELS_ES.installed}
                         </button>
                       ) : (
                         <span className="ship-board__row-waiting">
-                          {ITEM_FLOOR_STATUS_LABELS_ES.loaded}
+                          {ITEM_FLOOR_STATUS_LABELS_ES.installed}
                         </span>
                       )}
                     </li>

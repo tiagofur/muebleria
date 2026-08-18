@@ -114,6 +114,7 @@ import {
   PlantBoardScreen,
   FabricScreen,
   EmbarquesScreen,
+  InstalacionesScreen,
   type DashboardMetrics,
   EmptyState,
   ScreenBoundary,
@@ -3028,6 +3029,21 @@ function AppContent({
                   if (location.pathname !== target) navigate(target);
                 }
               : undefined
+          }
+        />
+        </ScreenBoundary>
+      ) : null}
+      {navId === 'instalaciones' && roleCanAccessShippingNav(actorRole) ? (
+        <ScreenBoundary screenLabel="Instalaciones" onGoHome={goHomeFromScreen}>
+        <InstalacionesScreen
+          projects={projectsForRole}
+          canAdvance={
+            session === 'auth' &&
+            (canMarkProduced || roleCanExportProduction(actorRole))
+          }
+          onAdvance={handleFloorAdvance}
+          customerLabelFor={(customerId) =>
+            resolveCustomerName(customerId, customers)
           }
         />
         </ScreenBoundary>

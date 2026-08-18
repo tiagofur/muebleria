@@ -399,13 +399,17 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 | Sección | Ítems (label → nav id) |
 |---------|------------------------|
 | TRABAJO | Inicio (`home`), Estado de Planta (`plantBoard`, todos los roles) |
-| PRODUCCIÓN | Producción (`fabric`, estaciones corte→embalaje), Embarques (`embarques`, despacho+instalación), Órdenes (`production`, cola + hub OP — temporal, M2 lo elimina), Dashboard Producción (`productionDashboard`) |
+| PRODUCCIÓN | Dashboard Producción (`productionDashboard`), Órdenes (`production`, cola + hub OP — temporal, M2 lo elimina), Producción (`fabric`, estaciones corte→embalaje), Embarques (`embarques`, carga), Instalaciones (`instalaciones`, en obra) |
 | VENTAS | Dashboard (`salesDashboard`), Cotizaciones (`projects`), Clientes (`customers`), Vitrina (`showcase`) |
 | INGENIERÍA | Ingeniería (`engineering`); ABM en LIBRERÍA/CATÁLOGOS |
 | COMPRAS / ALMACÉN | Almacén (`purchasing`) |
 | LIBRERÍA | Muebles (`modules`), Estructuras (`structures`), Agregados (`agregados`), Componentes (`components`), Grupos (`optionGroups`) |
 | CATÁLOGOS | Materiales (`materials`), Cantos (`edges`), Herrajes (`hardware`), Acabados (`ambientMaterials`) |
 | CONFIG | Ajustes (`settings`), Usuarios (`users`, solo admin) |
+
+**Regla de orden** (menu reorg): dashboards PRIMERO, luego lo más general
+bajando a lo más específico siguiendo el orden de proceso del taller
+(orden de obra → fabricar → cargar → instalar).
 
 Secciones vacías por rol se auto-ocultan (AppShell filtra por `allowedNavIds`).
 
@@ -417,7 +421,8 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 |----------|------------------------|-------|
 | **Inicio** | `home` | No «Home». Dashboard para todos los roles (variantes por `homeMode`) |
 | **Producción** | `fabric` | Estaciones de fabricación (corte→embalaje), ex «Fábrica». Ruta `/fabrica` (histórica). Roles: `roleCanAccessFabricNav` |
-| **Embarques** | `embarques` | Despacho + instalación (embalado→cargado→instalado), board por obra. Roles: `roleCanAccessShippingNav` (sin almacén) |
+| **Embarques** | `embarques` | Carga al transporte (embalado→cargado), board por obra. Roles: `roleCanAccessShippingNav` (sin almacén) |
+| **Instalaciones** | `instalaciones` | Instalación en obra (cargado→instalado), board por obra + contador de instalados. Mismos roles que Embarques |
 | **Órdenes** | `production` | Cola + hub OP por obra (`/produccion/:id`) — TEMPORAL, se elimina en M2. Roles con `roleCanAccessProductionNav`. Ver `docs/production-module.md` |
 | **Cotizaciones** | `projects` / `Project` | No «Proyectos» en UI |
 | **Clientes** | `customers` | |

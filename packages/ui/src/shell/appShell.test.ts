@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FileText,
   Factory,
+  Hammer,
   LayoutDashboard,
   Layers,
   ListChecks,
@@ -60,20 +61,21 @@ describe('AppShell nav model (F017)', () => {
       'plantBoard',
     ]);
 
-    // Fábrica renamed to Producción (manufacturing stations); the old
-    // per-project hub queue is Órdenes until it goes away (M2); Embarques
-    // owns despacho + instalación.
+    // Ordering rule: dashboard first, then general → specific following the
+    // workshop process (Órdenes → Producción → Embarques → Instalaciones).
     expect(produccion.items.map((i) => i.id)).toEqual([
+      'productionDashboard',
+      'production',
       'fabric',
       'embarques',
-      'production',
-      'productionDashboard',
+      'instalaciones',
     ]);
     expect(produccion.items.map((i) => i.label)).toEqual([
+      'Dashboard Producción',
+      'Órdenes',
       'Producción',
       'Embarques',
-      'Órdenes',
-      'Dashboard Producción',
+      'Instalaciones',
     ]);
 
     expect(ventas.items.map((i) => i.id)).toEqual([
@@ -132,6 +134,7 @@ describe('AppShell nav model (F017)', () => {
     expect(byId.showcase).toBe(Store);
     expect(byId.fabric).toBe(Factory);
     expect(byId.embarques).toBe(Truck);
+    expect(byId.instalaciones).toBe(Hammer);
     expect(byId.production).toBe(ListChecks);
     expect(byId.modules).toBe(Package);
     expect(byId.materials).toBe(Layers);
@@ -148,6 +151,7 @@ describe('AppShell nav model (F017)', () => {
     expect(labelForNavId('showcase')).toBe('Vitrina');
     expect(labelForNavId('fabric')).toBe('Producción');
     expect(labelForNavId('embarques')).toBe('Embarques');
+    expect(labelForNavId('instalaciones')).toBe('Instalaciones');
     expect(labelForNavId('production')).toBe('Órdenes');
     expect(labelForNavId('modules')).toBe('Muebles');
     expect(labelForNavId('optionGroups')).toBe('Grupos');

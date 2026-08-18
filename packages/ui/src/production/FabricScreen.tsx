@@ -205,8 +205,8 @@ export function FabricScreen({
             <h2 className="fabric__title">Producción</h2>
             <p className="fabric__subtitle">
               Cola de las estaciones de fabricación (corte a embalaje).
-              Despacho e instalación viven en Embarques; el avance de todos se
-              ve en Estado de Planta.
+              Despacho e instalación viven en Embarques e Instalaciones; el
+              avance de todos se ve en Estado de Planta.
             </p>
           </div>
         </div>
@@ -291,8 +291,8 @@ export function FabricScreen({
         </div>
       ) : visibleTabs.length === 0 ? (
         <EmptyState
-          title="Tus sectores viven en Embarques"
-          description="No tenés estaciones de fabricación asignadas. El despacho y la instalación se trabajan desde la pantalla Embarques."
+          title="Tus sectores viven en Embarques o Instalaciones"
+          description="No tenés estaciones de fabricación asignadas. El despacho y la instalación se trabajan desde esas pantallas."
         />
       ) : (
         <>

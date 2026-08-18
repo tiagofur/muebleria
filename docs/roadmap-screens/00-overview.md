@@ -46,13 +46,14 @@ Esto genera confusión: un operador de planta ve tabs de ingeniería que no le s
 | 3 | **Producción** (ex-Fábrica) | Mi Estación + tabs de piso de Producción | admin, gerente_produccion, produccion |
 | 4 | **Compras/Almacén** | Tab Herrajes de Producción | admin, gerente_produccion (ver), almacen |
 | 5 | **Estado de Planta** | Se mantiene | Todos |
-| 6 | **Embarques** (post-plan) | Tabs Despacho/Instalación de Fábrica | admin, gerente_produccion, produccion |
+| 6 | **Embarques** | Tab Despacho de Fábrica | admin, gerente_produccion, produccion |
+| 7 | **Instalaciones** | Tab Instalación de Fábrica | admin, gerente_produccion, produccion |
 
 ### 2b. Menú canónico (post reorg 2026-08-18)
 
 ```
 TRABAJO           Inicio · Estado de Planta            (todos)
-PRODUCCIÓN        Producción (estaciones) · Embarques · Órdenes* · Dashboard Producción
+PRODUCCIÓN        Dashboard Producción · Órdenes* · Producción (estaciones) · Embarques · Instalaciones
 VENTAS            Dashboard · Cotizaciones · Clientes · Vitrina
 INGENIERÍA        Ingeniería
 COMPRAS/ALMACÉN   Almacén
@@ -60,6 +61,9 @@ LIBRERÍA          Muebles · Estructuras · Agregados · Componentes · Grupos
 CATÁLOGOS         Materiales · Cantos · Herrajes · Acabados
 CONFIG            Ajustes
 ```
+
+**Regla de orden:** dashboards primero; después de lo general a lo específico
+siguiendo el proceso (obra → fabricar → cargar → instalar).
 
 \* **Órdenes** = la cola + hub por obra (ex menú "Producción"). TEMPORAL.
 

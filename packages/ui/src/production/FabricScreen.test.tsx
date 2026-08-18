@@ -185,7 +185,7 @@ describe('FabricScreen — Producción (manufacturing stations)', () => {
         onAdvance={() => undefined}
       />,
     );
-    expect(screen.getByText('Tus sectores viven en Embarques')).not.toBeNull();
+    expect(screen.getByText('Tus sectores viven en Embarques o Instalaciones')).not.toBeNull();
     expect(screen.queryByTestId('fabric-tab-cutting')).toBeNull();
   });
 

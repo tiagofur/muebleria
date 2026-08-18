@@ -12,6 +12,10 @@ export {
   EmbarquesScreen,
   embarquesProjects,
 } from './EmbarquesScreen';
+export {
+  InstalacionesScreen,
+  instalacionesProjects,
+} from './InstalacionesScreen';
 export type {
   DashboardMetrics,
   SectorDashboard,

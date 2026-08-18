@@ -1063,3 +1063,32 @@ inline de fabric; server aplica station scoping + evento F094). CSS
 
 **Verificación:** typecheck monorepo 0 errores · domain 631 · storage 114 ·
 excel 70 · ui 943 · mobile 36 · desktop 17 · web 256 — todo verde.
+
+## Instalaciones como pantalla propia + orden de menú por proceso (2026-08-18)
+
+Pedido del usuario tras ver la reorg: ¿dónde quedaron las instalaciones?
+Debe ser OTRA pantalla después de Embarques; y ordenar los grupos con regla:
+dashboards primero → general → específico en orden lógico de proceso.
+
+**InstalacionesScreen (nueva, `/instalaciones`):** board por obra con
+"En camino" (cargado → "Marcar Instalado"), stats "n para instalar" +
+"m instalados" (header + chip por card), avance por handleFloorAdvance
+compartido. Mismo RBAC que Embarques (roleCanAccessShippingNav: admin/
+gerente_produccion/produccion).
+
+**Embarques adelgazada:** solo PARA CARGAR (embalado → cargado); lo cargado
+pasa a Instalaciones (subtítulo lo explica). Helper embarquesProjects
+solo empaqueta packaged.
+
+**CSS compartido:** bloque renombrado `.embarques__*` → `.ship-board__*`
+(layout de board logístico usado por ambas pantallas) + `.ship-board__card-done`.
+
+**Orden de menú (regla documentada en design.md §4.1):** dashboards
+primero, luego general→específico por proceso. PRODUCCIÓN queda: Dashboard
+Producción · Órdenes · Producción · Embarques · Instalaciones (icono
+Hammer). VENTAS/TRABAJO ya cumplían (Dashboard/Inicio primero).
+
+**FabricScreen:** EmptyState del operador solo-logístico ahora nombra
+Embarques O Instalaciones.
+
+**Verificación:** ver registro del commit (typecheck 0 + suites full).
