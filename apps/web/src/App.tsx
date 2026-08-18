@@ -3160,14 +3160,14 @@ function AppContent({
               }
               canSetFloorStatus={
                 session === 'auth' &&
-                (canMarkProduced || roleCanExportProduction(actorRole))
+                roleCanAccessEmbarquesNav(actorRole)
               }
               onReleaseToDelivery={() => {
                 void handleReleaseToDelivery(shipmentProject.id);
               }}
               canReleaseToDelivery={
                 session === 'auth' &&
-                (canMarkProduced || roleCanExportProduction(actorRole))
+                roleCanAccessEmbarquesNav(actorRole)
               }
               onBack={() => navigate(pathForNav('shipments'))}
             />
