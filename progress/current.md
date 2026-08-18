@@ -1,6 +1,22 @@
 # Sesión activa
 
-- **Cambio en curso (sin feature del backlog): estandarización UI integral (post-critique).**
+- **Cerrada (2026-08-18): estandarización UI integral — IMPLEMENTADA y pushed.**
+  - Commits: `bc9c526` (docs design v2) + `24f8923` (feat(ui) estandarización).
+  - Todo el plan ①–⑦ ejecutado: headers unificados (aliases de .page-header,
+    0 sistemas propios), 141 font-size → tokens, tokens muertos eliminados
+    (solo excepción logo WhatsApp), color de área en sidebar/topbar/chips
+    (--area-sales/eng/work), statusBadge.css + statCard.css comunes,
+    Ingeniería rehecha (cards neutras + badges semánticos), ConfirmDialog
+    común (0 window.confirm), destructivas btn--danger, copy sobrio.
+  - Verificación: 2106 tests verdes + typecheck monorepo OK; pantallas
+    verificadas en vivo (admin); evidencia en /tmp/muebles-critique/
+    (NEW-*.png, efímero).
+  - Pendiente sugerido: re-critique para medir score (meta 32+/40);
+    Phase 3 de design.md (migrar editores LG a rutas propias) sigue abierto.
+  - Nota: `packages/domain/src/processStage.{ts,test.ts}` modificados en el
+    working tree son trabajo del dueño en paralelo (App.tsx ya los consume);
+    NO fueron commiteados por esta sesión.
+- **Sesión previa (cerrada, integrada): gating por etapa del proceso.**
   - **Critique completado (2026-08-18):** score 24/40. Snapshot:
     `.impeccable/critique/2026-08-18T18-53-56Z__packages-ui-src-todas-las-pantallas-de-la-app-web.md`.
     Evidencia: 28 screenshots en `/tmp/muebles-critique/` (efímero) + auditoría
