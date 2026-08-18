@@ -25,7 +25,6 @@
 |-----|----------|
 | `docs/prd.md` §6.6–6.7 | RBAC, exports, política Optimizer/CNC |
 | `docs/app-excellence.md` §3.3–4 | Capas de excelencia producción; **este doc es el detalle del workspace** |
-| `docs/perfect-app-roadmap.md` | Visión UX general; Producción aquí se especializa |
 | Issues históricos cerrados | #134 pack ZIP · #135 pliegos · #141 QR · #142 import nesting |
 
 ---

@@ -34,7 +34,7 @@ Excelencia = que cada rol del taller complete su trabajo **más rápido, con men
 
 ### Issues (GitHub — canónico)
 
-**META:** [#132 App Excellence](https://github.com/tiagofur/muebleria/issues/132) · JD: `docs/judgment-day-wip-3d-2026-07-17.md` · PRD §6.7
+**META:** [#132 App Excellence](https://github.com/tiagofur/muebleria/issues/132) · JD: `docs/history/judgment-day-wip-3d-2026-07-17.md` · PRD §6.7
 
 #### Ola A — Bugs Judgment Day (estabilizar WIP 3D)
 
@@ -241,7 +241,7 @@ interface ProjectKitchenLayout {
 ### 5.6 Evolución: SUPER 3D Proyectar (post-semilla)
 
 Plan de producto y slices de UX (viewport hero, toolbar, snap, realismo de obra):  
-→ **`docs/projectar-super-3d-plan.md`**
+→ **`docs/history/projectar-super-3d-plan.md`**
 
 Diagnóstico clave: el canvas reutiliza `module-scene-3d` con **altura fija 380px**, por eso en Proyectar el centro se ve con banda negra vacía. Parte 0 del plan = viewport a pantalla completa del área central.
 

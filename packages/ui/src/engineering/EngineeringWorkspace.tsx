@@ -13,11 +13,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   Circle,
+  FileCheck,
   FileSpreadsheet,
   Layers,
   LayoutGrid,
   Printer,
   Ruler,
+  Send,
 } from 'lucide-react';
 
 import './engineering.css';
@@ -25,6 +27,7 @@ import '../production/production.css';
 
 import {
   summarizeProductionTotals,
+  engineeringStatus,
   type Project,
   type Module,
   type Catalog,
@@ -111,9 +114,11 @@ function CheckRow({
 function ResumenTab({
   readiness,
   cutRows,
+  hardwareRows,
 }: {
   readonly readiness: ProductionOrderReadiness;
   readonly cutRows: readonly ProductionCutRow[] | null;
+  readonly hardwareRows: readonly HardwarePurchaseRow[] | null;
 }) {
   const totals = useMemo(
     () => (cutRows && cutRows.length > 0 ? summarizeProductionTotals(cutRows) : null),
@@ -153,9 +158,9 @@ function ResumenTab({
           </span>
           <div className="eng-resumen__stat-body">
             <span className="eng-resumen__stat-value">
-              {totals ? totals.totalAreaM2.toLocaleString('es-MX') : '—'}
+              {totals ? totals.totalPieces : '—'}
             </span>
-            <span className="eng-resumen__stat-label">m² de tablero</span>
+            <span className="eng-resumen__stat-label">tableros</span>
           </div>
         </div>
         <div className="eng-resumen__stat">
@@ -182,7 +187,7 @@ function ResumenTab({
                   <li key={m.key}>
                     <span className="eng-resumen__breakdown-material">{m.name}</span>
                     <span className="eng-resumen__breakdown-num">
-                      {m.areaM2.toLocaleString('es-MX')} m²
+                      {m.pieces} tablero{m.pieces !== 1 ? 's' : ''}
                     </span>
                   </li>
                 ))}
@@ -198,6 +203,23 @@ function ResumenTab({
                     <span className="eng-resumen__breakdown-material">{e.name}</span>
                     <span className="eng-resumen__breakdown-num">
                       {e.ml.toLocaleString('es-MX')} ml
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {hardwareRows && hardwareRows.length > 0 ? (
+            <div className="eng-resumen__breakdown-col">
+              <h4 className="eng-resumen__breakdown-title">Herrajes</h4>
+              <ul className="eng-resumen__breakdown-list">
+                {hardwareRows.slice(0, 6).map((h) => (
+                  <li key={h.hardwareId}>
+                    <span className="eng-resumen__breakdown-material">
+                      {h.description || h.code}
+                    </span>
+                    <span className="eng-resumen__breakdown-num">
+                      {h.purchaseQuantity} {h.unit}
                     </span>
                   </li>
                 ))}
@@ -307,10 +329,15 @@ export function EngineeringWorkspace({
   onExportCutListCsv,
   onExportPieceLabels,
   onExportModuleLabels,
+  onExportAssemblySheets,
+  onExportCncPilot,
+  onExportDespiecePdf,
   onImportNesting,
   // Permissions
   canImportNesting,
   exportBusy,
+  onSendToProduction,
+  onMarkDocumented,
 }: {
   readonly project: Project;
   readonly modules: readonly Module[];
@@ -338,9 +365,19 @@ export function EngineeringWorkspace({
   readonly onExportCutListCsv?: () => void | Promise<void>;
   readonly onExportPieceLabels?: (labels: readonly PieceLabel[], options: { perUnit: boolean }) => void | Promise<void>;
   readonly onExportModuleLabels?: (labels: readonly ModuleLabel[]) => void | Promise<void>;
+  readonly onExportAssemblySheets?: () => void | Promise<void>;
+  readonly onExportCncPilot?: () => void | Promise<void>;
+  readonly onExportDespiecePdf?: () => void | Promise<void>;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
   readonly exportBusy?: boolean;
+  /**
+   * roadmap-screens 2a.15 — the engineering→factory handshake. Button is
+   * rendered for accepted projects; the shell stamps the engineering log
+   * (sentToProductionBy/At + revision) and transitions to produced.
+   */
+  readonly onSendToProduction?: () => void;
+  readonly onMarkDocumented?: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
 
@@ -386,6 +423,47 @@ export function EngineeringWorkspace({
       onDownload: onExportElevations,
     },
     {
+      id: 'labels',
+      label: 'Etiquetas de pieza (PDF A4)',
+      hint: 'Hojas A4 con QR v2 — generálalas en la pestaña Etiquetas',
+      available: Boolean(labels?.length) && Boolean(onExportPieceLabels),
+      reason: 'Sin piezas de tablero',
+      actionLabel: 'Ir a Etiquetas',
+      onDownload: () => setActiveTab('etiquetas'),
+    },
+    {
+      id: 'labels-zpl',
+      label: 'Etiquetas ZPL (impresora térmica)',
+      hint: 'Lote .zpl para Zebra — pestaña Etiquetas → Impresora térmica',
+      available: Boolean(labels?.length),
+      reason: 'Sin piezas de tablero',
+      actionLabel: 'Ir a Etiquetas',
+      onDownload: () => setActiveTab('etiquetas'),
+    },
+    {
+      id: 'module-labels',
+      label: 'Etiquetas de módulo / bulto (PDF)',
+      hint: 'Una por unidad física con QR — pestaña Etiquetas',
+      available: Boolean(moduleLabels?.length) && Boolean(onExportModulePdf),
+      reason: 'Sin ítems en la obra',
+      actionLabel: 'Ir a Etiquetas',
+      onDownload: () => setActiveTab('etiquetas'),
+    },
+    {
+      id: 'assembly',
+      label: 'Hojas de armado (PDF)',
+      hint: 'Una página por módulo: medidas + herrajes + estado de piso',
+      available: Boolean(onExportAssemblySheets),
+      onDownload: onExportAssemblySheets,
+    },
+    {
+      id: 'cnc-pilot',
+      label: 'CNC pilot (JSON)',
+      hint: 'Perfiles de pieza para piloto CNC — no reemplaza el Optimizer (#111)',
+      available: Boolean(onExportCncPilot),
+      onDownload: onExportCncPilot,
+    },
+    {
       id: 'despiece',
       label: 'Despiece (ver tab)',
       hint: 'Lista de piezas en la pestaña Despiece',
@@ -394,7 +472,7 @@ export function EngineeringWorkspace({
       actionLabel: 'Ver tab',
       onDownload: () => setActiveTab('despiece'),
     },
-  ], [readiness, onExportProductionPack, onExportOptimizer, onExportCutListCsv, onExportHardware, onExportElevations]);
+  ], [readiness, onExportProductionPack, onExportOptimizer, onExportCutListCsv, onExportHardware, onExportElevations, onExportAssemblySheets, onExportCncPilot, labels, moduleLabels, onExportPieceLabels, onExportModulePdf]);
 
   return (
     <section className="eng-workspace" aria-label={`Ingeniería — ${project.name}`}>
@@ -410,6 +488,30 @@ export function EngineeringWorkspace({
             <span className="eng-workspace__customer">{customerLabel}</span>
           ) : null}
         </div>
+        {project.status === 'accepted' && onSendToProduction ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={onSendToProduction}
+            data-testid="eng-send-to-production"
+            title="Registra el envío en el log de ingeniería (quién/cuándo/rev.) y marca la obra En producción"
+          >
+            <Send size={16} strokeWidth={1.5} aria-hidden />
+            Enviar a Producción
+          </button>
+        ) : null}
+        {engineeringStatus(project.engineeringLog) === 'in_progress' && onMarkDocumented ? (
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={onMarkDocumented}
+            data-testid="eng-mark-documented"
+            title="Marca la ingeniería como documentada (quién/cuándo)"
+          >
+            <FileCheck size={14} strokeWidth={1.5} aria-hidden />
+            Marcar documentado
+          </button>
+        ) : null}
       </header>
 
       {/* Tab bar */}
@@ -443,7 +545,7 @@ export function EngineeringWorkspace({
         aria-labelledby={`eng-tab-${activeTab}`}
       >
         {activeTab === 'resumen' && (
-          <ResumenTab readiness={readiness} cutRows={cutRows} />
+          <ResumenTab readiness={readiness} cutRows={cutRows} hardwareRows={hardwareRows} />
         )}
         {activeTab === 'modulos' && (
           <ProductionOrderModulesPanel
@@ -465,8 +567,8 @@ export function EngineeringWorkspace({
               <button
                 type="button"
                 className="btn btn--small"
-                onClick={onExportCsv}
-                disabled={exportBusy}
+                onClick={onExportDespiecePdf}
+                disabled={exportBusy || !onExportDespiecePdf}
               >
                 <Printer size={14} strokeWidth={1.5} />
                 Imprimir A4

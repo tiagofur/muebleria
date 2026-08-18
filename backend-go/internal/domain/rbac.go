@@ -152,17 +152,17 @@ func RoleCanAccessModulesNav(role UserRole) bool {
 	return role == RoleAdmin || role == RoleIngeniero
 }
 
-// RoleCanAccessProductionDashboard — full production metrics, active jobs,
-// damage reports. The manager dashboard belongs to gerente_produccion
-// (F094 parity with TS rbac.ts — produccion works the floor, not the books).
+// RoleCanAccessProductionDashboard — production workers and managers see the
+// factory dashboard; admin retains full access (RBAC P2 parity update).
 func RoleCanAccessProductionDashboard(role UserRole) bool {
-	return role == RoleAdmin || role == RoleGerenteProduccion
+	return role == RoleAdmin || role == RoleGerenteProduccion || role == RoleProduccion
 }
 
-// RoleCanClaimProductionJob — produccion/almacen can claim/finish jobs in their assigned sectors.
+// RoleCanClaimProductionJob — produccion can claim/finish jobs in their assigned sectors.
+// Almacén excluded pending Compras/Almacén module (RBAC P2 parity update).
 func RoleCanClaimProductionJob(role UserRole) bool {
 	switch role {
-	case RoleAdmin, RoleProduccion, RoleAlmacen:
+	case RoleAdmin, RoleProduccion:
 		return true
 	default:
 		return false

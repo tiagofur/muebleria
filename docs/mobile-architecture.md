@@ -33,6 +33,24 @@ muebles/ (pnpm monorepo)
 | `packages/domain` | TypeScript stdlib puro | Cualquier cosa externa (sin react, sin react-native, sin fs) |
 | `packages/storage` | `domain`, fetch/axios agnóstico | React, React Native, electron |
 
+### 1.2 Reutilización de Código (Web/Desktop ↔ React Native)
+
+| Capa / Módulo | % Reutilización | Estrategia |
+|---|---|---|
+| `@muebles/domain` (BOM, costeo, QR, RBAC) | 100% | Importación directa (TS puro) |
+| DTOs & Mappers API (`apiMappers.ts`) | 100% | Misma función de serialización |
+| Reglas RBAC (`rbac.ts`) | 100% | Misma función `hasPermission` |
+| Parsers QR (`pieceLabelQr.ts`) | 100% | `parsePieceLabelScan` idéntico |
+| Stores headless (Zustand) | ~85% | Misma lógica / adapters de entorno |
+| Design Tokens (colores) | ~90% | Mapeo CSS Variables → TS Obj |
+| Componentes UI visuales | 0% | React Native primitives nativos |
+
+**Módulos de dominio clave en mobile:** `resolveBom`, `calcProjectTotals`, `setProjectItemFloorStatus`, `nextItemFloorStatus`, `parsePieceLabelScan`, `hasPermission`.
+
+**Mappers API:** `mapApiProjectToDomain` / `mapDomainProjectToApi` (y equivalentses de Customer, Material, Module) se reutilizan 100% desde `@muebles/storage`.
+
+**Design tokens:** las CSS variables de `docs/design.md` se traducen a constantes TS en `apps/mobile/src/theme/colors.ts` (ej. `--color-primary: hsl(217, 91%, 60%)` → `'#2563eb'`). Iconografía: `lucide-react-native` (misma lista que `lucide-react`).
+
 ---
 
 ## 2. Configuración de Metro para pnpm Monorepo

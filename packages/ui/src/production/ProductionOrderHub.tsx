@@ -37,27 +37,21 @@ import {
   projectStatusLabel,
 } from '../projects/projectHelpers';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
-import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
-  PRODUCTION_ORDER_TABS,
+  HUB_TABS,
   PRODUCTION_ORDER_TAB_LABELS,
   type ProductionOrderReadiness,
   type ProductionOrderTab,
 } from './productionOrderModel';
-import { ProductionOrderModulesPanel } from './ProductionOrderModulesPanel';
-import { ProductionOrderViewsPanel } from './ProductionOrderViewsPanel';
-import { ProductionOrderDespiecePanel } from './ProductionOrderDespiecePanel';
 import { ProductionOrderHardwarePanel } from './ProductionOrderHardwarePanel';
 import {
   ProductionOrderDocumentsPanel,
   type ProductionDocumentItem,
 } from './ProductionOrderDocumentsPanel';
-import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
 import { ProductionOrderPaperlessPanel } from './ProductionOrderPaperlessPanel';
 import { ProductionOrderDispatchPanel } from './ProductionOrderDispatchPanel';
 import { ProductionOrderLabelsPanel } from './ProductionOrderLabelsPanel';
 import { CsvExportConfigModal } from './CsvExportConfigModal';
-import type { Catalog, NestingImportResult } from '@muebles/domain';
 import type { ProductionSpaceOption } from '@muebles/domain';
 import { PRODUCTION_SCOPE_ALL } from '@muebles/domain';
 import './production.css';
@@ -97,15 +91,9 @@ export type ProductionOrderHubProps = {
   ) => void | Promise<void>;
   readonly hardwareRows?: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
-  readonly catalog3d?: Module3DCatalogInput | null;
-  /** Full catalog for material summary / sheet estimate (optimización). */
-  readonly catalog?: Catalog | null;
-  readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   readonly hideHardwareCosts?: boolean;
   /** Has kitchen walls for elevations PDF. */
   readonly elevationsAvailable?: boolean;
-  readonly onImportNesting?: (nesting: NestingImportResult) => void;
-  readonly canImportNesting?: boolean;
   readonly onSetFloorStatus?: (
     itemId: string,
     status: ItemFloorStatus,
@@ -243,13 +231,8 @@ export function ProductionOrderHub({
   onExportModuleLabels,
   hardwareRows = null,
   hardwareError = null,
-  catalog3d = null,
-  catalog = null,
-  resolveMediaUrl,
   hideHardwareCosts = false,
   elevationsAvailable = false,
-  onImportNesting,
-  canImportNesting = false,
   onSetFloorStatus,
   canSetFloorStatus = false,
   onReleaseToDelivery,
@@ -348,15 +331,6 @@ export function ProductionOrderHub({
       available: elevationsAvailable && Boolean(onExportElevations),
       reason: 'Sin muros en el layout de cocina',
       onDownload: onExportElevations,
-    },
-    {
-      id: 'despiece',
-      label: 'Despiece (ver tab)',
-      hint: 'Lista de piezas en la pestaña Despiece',
-      available: readiness.materialsResolved,
-      reason: 'Sin piezas de tablero',
-      actionLabel: 'Ver tab',
-      onDownload: () => onTabChange('despiece'),
     },
     {
       id: 'drilling',
@@ -533,7 +507,7 @@ export function ProductionOrderHub({
           role="tablist"
           aria-label="Secciones de la orden de producción"
         >
-          {PRODUCTION_ORDER_TABS.map((tab) => {
+          {HUB_TABS.map((tab) => {
             const selected = activeTab === tab;
             return (
               <button
@@ -691,16 +665,6 @@ export function ProductionOrderHub({
           </div>
         ) : null}
 
-        {activeTab === 'modulos' ? (
-          <ProductionOrderModulesPanel
-            project={project}
-            modules={modules}
-            cutRows={cutRows}
-            onSetFloorStatus={onSetFloorStatus}
-            canSetFloorStatus={canSetFloorStatus}
-          />
-        ) : null}
-
         {activeTab === 'piso' ? (
           <ProductionOrderPaperlessPanel
             project={project}
@@ -721,15 +685,6 @@ export function ProductionOrderHub({
             onReleaseToDelivery={onReleaseToDelivery}
             canReleaseToDelivery={canReleaseToDelivery}
             isReleasing={isReleasing}
-          />
-        ) : null}
-
-        {activeTab === 'despiece' ? (
-          <ProductionOrderDespiecePanel
-            cutRows={cutRows}
-            cutError={cutListError}
-            onExportCsv={onExportCutListCsv}
-            exportBusy={exportBusy}
           />
         ) : null}
 
@@ -758,41 +713,6 @@ export function ProductionOrderHub({
             onExportHardware={onExportHardware}
             exportBusy={exportBusy}
             hideCosts={hideHardwareCosts}
-          />
-        ) : null}
-
-        {activeTab === 'vistas' ? (
-          catalog3d ? (
-            <ProductionOrderViewsPanel
-              project={project}
-              modules={modules}
-              catalog={catalog3d}
-              resolveMediaUrl={resolveMediaUrl}
-              onExportElevations={onExportElevations}
-              exportBusy={exportBusy}
-            />
-          ) : (
-            <div
-              className="prod-hub__placeholder"
-              data-testid="prod-hub-vistas-no-catalog"
-            >
-              <p className="prod-hub__placeholder-title">Vistas no disponibles</p>
-              <p className="prod-hub__placeholder-body">
-                Falta el catálogo para resolver planta y 3D. Recargá el workspace
-                o abrí la cotización.
-              </p>
-            </div>
-          )
-        ) : null}
-
-        {activeTab === 'optimizacion' ? (
-          <ProductionOrderOptimizationPanel
-            project={project}
-            catalog={catalog}
-            cutRows={cutRows}
-            onImportNesting={onImportNesting}
-            exportBusy={exportBusy}
-            canImportNesting={canImportNesting}
           />
         ) : null}
 

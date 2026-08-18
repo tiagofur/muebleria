@@ -831,3 +831,124 @@ describe('projectStore — Warranty Desk & Refabrication (CRM Phase 3)', () => {
   });
 });
 
+
+describe('projectStore — engineering lifecycle (roadmap-screens 2a)', () => {
+  it('startEngineering creates the log and persists the project', () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+
+    store.getState().startEngineering('proj-1', 'u9');
+
+    const updated = store.getState().projects[0]!;
+    expect(updated.engineeringLog).toMatchObject({
+      startedBy: 'u9',
+      revision: 1,
+    });
+    // The whole point (2a.4): the mutation must reach saveProject.
+    expect(savedProjects.some((p) => p.engineeringLog?.startedBy === 'u9')).toBe(true);
+  });
+
+  it('startEngineering is idempotent — an existing log is not overwritten', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const existing = {
+      startedBy: 'u1',
+      startedAt: '2026-08-17T10:00:00.000Z',
+      revision: 1,
+    };
+    store
+      .getState()
+      .setProjects([
+        makeProject({ status: 'accepted', engineeringLog: existing }),
+      ]);
+
+    store.getState().startEngineering('proj-1', 'u9');
+
+    expect(store.getState().projects[0]!.engineeringLog).toEqual(existing);
+  });
+
+  it('recordEngineeringGeneration stamps generatedBy/At (Documentado)', () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([
+      makeProject({
+        status: 'accepted',
+        engineeringLog: {
+          startedBy: 'u1',
+          startedAt: '2026-08-17T10:00:00.000Z',
+          revision: 1,
+        },
+      }),
+    ]);
+
+    store.getState().recordEngineeringGeneration('proj-1', 'u2');
+
+    const log = store.getState().projects[0]!.engineeringLog!;
+    expect(log.generatedBy).toBe('u2');
+    expect(log.generatedAt).toBeTruthy();
+    expect(savedProjects.some((p) => p.engineeringLog?.generatedBy === 'u2')).toBe(true);
+  });
+
+  it('recordEngineeringGeneration is a no-op without a log', () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+
+    store.getState().recordEngineeringGeneration('proj-1', 'u2');
+
+    expect(store.getState().projects[0]!.engineeringLog).toBeUndefined();
+    expect(savedProjects).toHaveLength(0);
+  });
+
+  it('sendProjectToProduction records the handshake, bumps revision and transitions', () => {
+    const { deps, savedProjects, toasts } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([
+      makeProject({
+        status: 'accepted',
+        engineeringLog: {
+          startedBy: 'u1',
+          startedAt: '2026-08-17T10:00:00.000Z',
+          generatedBy: 'u2',
+          generatedAt: '2026-08-17T11:00:00.000Z',
+          revision: 1,
+        },
+      }),
+    ]);
+
+    store.getState().sendProjectToProduction('proj-1', 'u2', seedCatalog());
+
+    const updated = store.getState().projects[0]!;
+    expect(updated.status).toBe('produced');
+    expect(updated.engineeringLog).toMatchObject({
+      sentToProductionBy: 'u2',
+      revision: 2,
+    });
+    expect(updated.engineeringLog?.sentToProductionAt).toBeTruthy();
+    expect(savedProjects.some((p) => p.engineeringLog?.revision === 2)).toBe(true);
+    expect(toasts[0]!.message).toContain('rev. 2');
+  });
+
+  it('sendProjectToProduction without log still transitions (plain mark-produced)', () => {
+    const { deps, toasts } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+
+    store.getState().sendProjectToProduction('proj-1', 'u2', seedCatalog());
+
+    expect(store.getState().projects[0]!.status).toBe('produced');
+    expect(toasts[0]!.message).toContain('en producción');
+  });
+
+  it('sendProjectToProduction rejects non-accepted projects', () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ status: 'draft' })]);
+
+    store.getState().sendProjectToProduction('proj-1', 'u2', seedCatalog());
+
+    expect(store.getState().projects[0]!.status).toBe('draft');
+    expect(savedProjects).toHaveLength(0);
+  });
+});

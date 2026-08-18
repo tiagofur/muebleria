@@ -319,17 +319,8 @@ export function ProductionWorkspace({
         cutListError={cut.error}
         hardwareRows={hardware.rows}
         hardwareError={hardware.error}
-        catalog3d={catalog3d}
-        catalog={catalog}
-        resolveMediaUrl={resolveMediaUrl}
         hideHardwareCosts={hideHardwareCosts}
         elevationsAvailable={elevations.walls.length > 0}
-        onImportNesting={
-          onImportNesting
-            ? (nesting) => onImportNesting(orderProject.id, nesting)
-            : undefined
-        }
-        canImportNesting={canImportNesting}
         onSetFloorStatus={
           onSetFloorStatus
             ? (itemId, status) =>

@@ -67,19 +67,17 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `docs/guia-de-uso.md` | **Guía de uso de la app para el usuario final** (roles, catálogo, cotizar, Proyectar, zócalos, producción) | Onboarding / capacitación / demo |
 | `docs/app-excellence.md` | Plan post-horizonte: ventas/ingeniería/producción, layout cocina, CNC policy, issues | Roadmap de excelencia / issues #125+ |
 | `docs/production-module.md` | **Módulo Producción:** separación diseño vs fábrica, pantallas, pack, optimización, roadmap e issues | Antes de tocar nav/UI Producción, elevaciones PDF, pack ampliado o nesting visual |
-| `docs/judgment-day-wip-3d-2026-07-17.md` | Findings JD Round 1 (WIP 3D/espacial) | Antes de tocar preview 3D o mappers espaciales |
+| `docs/history/judgment-day-wip-3d-2026-07-17.md` | Findings JD Round 1 (histórico) | Referencia histórica, no activo |
 | `docs/PRODUCT.md` | Contexto Impeccable (register, personality, anti-refs) | Setup del skill UI; no reemplaza el PRD |
 | `docs/architecture.md` | Paquetes, boundaries, flujo de datos | Antes de crear archivos |
 | `docs/conventions.md` | Estilo, nombres, tests, errores, tipos | Antes de escribir código |
 | `docs/design.md` | **Sistema de diseño UI/UX**: tokens CSS, tipografía, colores HSL, iconos (Lucide), patrones (modal, sidebar, toast, lista→detalle) | **OBLIGATORIO** antes de tocar UI (también es el DESIGN de Impeccable) |
 | `.agents/skills/impeccable/` | Skill de craft UI (audit, polish, critique, live, …) | Solo trabajo frontend / UX |
 | `.impeccable/live/config.json` | Live mode: shell Vite `apps/web/index.html` | Antes de `$impeccable live` |
-| `docs/technical_design.md` | Decisiones técnicas de implementación | Cuando el diseño de solución no está claro |
 | `docs/verification.md` | Cómo demostrar que funciona | Antes de declarar `done` |
 | `docs/git-workflow.md` | **Preservación de trabajo**: cómo guardar/cerrar sesión, por qué NO usar `git stash` como depósito, recuperación de commits perdidos | **OBLIGATORIO** antes de cerrar sesión o tocar `git stash` |
 | `docs/roadmap_RN.md` | **Roadmap React Native:** Estrategia, fases 0-5 y valor de la app móvil de taller/campo | Antes de trabajar en `apps/mobile` |
 | `docs/mobile-architecture.md` | **Arquitectura React Native:** Monorepo Expo, offline-first SQLite, hardware nativo y Go API | Antes de tocar código de `apps/mobile` |
-| `docs/mobile-code-sharing.md` | **Reutilización de Código:** Cómo consumir `@muebles/domain` y `@muebles/storage` sin duplicar | Antes de implementar features en mobile |
 | `docs/mobile-ui-ux.md` | **Diseño UI/UX Móvil:** Ergonomía táctil de taller, touch targets ≥48px, tokens | Antes de diseñar pantallas móviles |
 | `CHECKPOINTS.md` | Criterios del revisor | Para auto-evaluarte |
 | `.agents/skills/` | Cómo actuar según tu rol (leader / implementer / reviewer) | Lee tu rol |

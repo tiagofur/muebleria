@@ -19,6 +19,7 @@ export type ProductionDocumentId =
   | 'hardware'
   | 'labels'
   | 'labels-zpl'
+  | 'module-labels'
   | 'elevations'
   | 'despiece'
   | 'drilling'
@@ -49,6 +50,7 @@ const ICONS: Record<ProductionDocumentId, typeof FileText> = {
   hardware: Wrench,
   labels: Tags,
   'labels-zpl': Tags,
+  'module-labels': Tags,
   elevations: FileText,
   despiece: FileText,
   drilling: FileText,

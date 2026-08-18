@@ -184,6 +184,11 @@
   color: hsl(0 65% 55%);
 }
 
+.sales-monthly__value--installed {
+  color: hsl(142 55% 40%);
+  font-weight: 600;
+}
+
 .sales-monthly__money {
   font-size: 0.78rem;
   color: var(--text-secondary);
@@ -566,6 +571,43 @@
   font-size: 0.7rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.sales-badge--cancelled {
+  background: hsl(0 60% 92%);
+  color: hsl(0 70% 40%);
+}
+
+.sales-list__cancel-btn {
+  font-size: 0.68rem;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.sales-list__cancel-btn:hover {
+  opacity: 1;
+  color: hsl(0 60% 45%);
+}
+
+.sales-list__confirm-cancel {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.btn--danger {
+  background: hsl(0 60% 50%);
+  color: #fff;
+  border: none;
+}
+
+.btn--danger:hover {
+  background: hsl(0 60% 40%);
+}
+
+.btn--xs {
+  padding: 0.15em 0.5em;
+  font-size: 0.68rem;
 }
 
 /* ── Alerts ─────────────────────────────────────────────────────────────── */

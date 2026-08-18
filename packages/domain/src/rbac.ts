@@ -185,7 +185,7 @@ export function roleCanViewPortfolioDashboard(
 export function roleCanAccessProductionDashboard(
   role: string | null | undefined,
 ): boolean {
-  return role === 'admin' || role === 'gerente_produccion';
+  return role === 'admin' || role === 'gerente_produccion' || role === 'produccion';
 }
 
 /**
@@ -237,7 +237,7 @@ export function roleCanAccessProductionNav(
 export function roleCanClaimProductionJob(
   role: string | null | undefined,
 ): boolean {
-  return role === 'admin' || role === 'produccion' || role === 'almacen';
+  return role === 'admin' || role === 'produccion';
 }
 
 /** Check if role is scoped by user_sectors (produccion or almacen). */

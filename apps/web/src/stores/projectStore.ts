@@ -72,6 +72,9 @@ import {
   setProjectItemFloorStatus,
   transitionProjectStatus,
   snapshotOnStatusChange,
+  createEngineeringLog,
+  recordGeneration,
+  recordSentToProduction,
   restoreProjectVersion,
 } from '@muebles/domain';
 import { breakdownFromApi } from '@muebles/storage';
@@ -283,6 +286,21 @@ export interface ProjectState {
   ) => void;
   readonly duplicateProjectById: (id: string) => void;
   readonly markProjectProduced: (id: string, catalog: Catalog) => void;
+  /** roadmap-screens 2a.6 — create + persist the engineering log. */
+  readonly startEngineering: (id: string, byUserId: string) => void;
+  /** roadmap-screens 2a — stamp generatedBy/At when docs are exported. */
+  readonly recordEngineeringGeneration: (id: string, byUserId: string) => void;
+  /**
+   * roadmap-screens 2a.15 — the engineering→factory handshake: records
+   * sentToProductionBy/At, bumps the log revision, and transitions
+   * accepted → produced (same snapshot machinery as markProjectProduced).
+   */
+  readonly sendProjectToProduction: (
+    id: string,
+    byUserId: string,
+    catalog: Catalog,
+  ) => void;
+  readonly cancelProject: (id: string) => void;
   /** Generic status transition: draft→quoted, quoted→accepted (gap #3). */
   readonly changeProjectStatus: (
     id: string,
@@ -679,6 +697,76 @@ export function createProjectStore(options: InternalOptions) {
       const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({ type: 'success', message: '✓ Marcada en producción' });
+    },
+
+    // --- Engineering lifecycle (roadmap-screens 2a). All persist via
+    // patch() → saveProject PUT → engineering_log column (migration 000053).
+
+    startEngineering: (id, byUserId) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project || project.engineeringLog) return;
+      const now = new Date().toISOString();
+      const log = createEngineeringLog(byUserId, now);
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === id ? { ...p, engineeringLog: log, updatedAt: now } : p,
+        ),
+      );
+    },
+
+    recordEngineeringGeneration: (id, byUserId) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project?.engineeringLog) return;
+      const now = new Date().toISOString();
+      const log = recordGeneration(project.engineeringLog, byUserId, now);
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === id ? { ...p, engineeringLog: log, updatedAt: now } : p,
+        ),
+      );
+    },
+
+    sendProjectToProduction: (id, byUserId, catalog) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project || project.status !== 'accepted') return;
+      const now = new Date().toISOString();
+      const cat = catalog ?? getCatalogStoreState().catalog ?? {
+        materials: [],
+        edges: [],
+        hardware: [],
+        categories: [],
+        optionGroups: [],
+        modules: [],
+      };
+      const log = project.engineeringLog
+        ? recordSentToProduction(project.engineeringLog, byUserId, now)
+        : undefined;
+      const withTransition = transitionProjectStatus(project, 'produced', cat, now);
+      const updated = snapshotOnStatusChange(withTransition, 'produced');
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === id
+            ? { ...updated, ...(log ? { engineeringLog: log } : {}) }
+            : p,
+        ),
+      );
+      toast({
+        type: 'success',
+        message: log
+          ? `✓ Enviada a producción · rev. ${log.revision}`
+          : '✓ Marcada en producción',
+      });
+    },
+
+    /** Explicit cancel: stamps cancelledAt, excludes from pipeline. */
+    cancelProject: (id) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project || project.cancelledAt) return;
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) => (p.id === id ? { ...p, cancelledAt: now } : p)),
+      );
+      toast({ type: 'info', message: 'Cotización cancelada' });
     },
 
     /** Gap #3: draft→quoted, quoted→accepted. Reuses the same transition +

@@ -14,6 +14,7 @@ import type {
   Customer,
   EdgeBand,
   EdgeAssignment,
+  EngineeringLog,
   FloorStatusEvent,
   Hardware,
   HardwareLine,
@@ -1506,6 +1507,19 @@ export function projectToApi(p: Project): Record<string, unknown> {
       source: e.source,
       note: e.note ?? null,
     })),
+    // Engineering lifecycle log (roadmap-screens 2a.4 — was never persisted,
+    // the status died on reload).
+    engineering_log: p.engineeringLog
+      ? {
+          started_by: p.engineeringLog.startedBy,
+          started_at: p.engineeringLog.startedAt,
+          generated_by: p.engineeringLog.generatedBy ?? null,
+          generated_at: p.engineeringLog.generatedAt ?? null,
+          sent_to_production_by: p.engineeringLog.sentToProductionBy ?? null,
+          sent_to_production_at: p.engineeringLog.sentToProductionAt ?? null,
+          revision: p.engineeringLog.revision,
+        }
+      : null,
   };
 }
 
@@ -1678,11 +1692,31 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     }),
     // F092 — shop-floor transition log (server serves it embedded; optional)
     floorEvents: floorEventsFromApi(raw.floor_events ?? raw.floorEvents),
+    // Engineering lifecycle log (roadmap-screens 2a.4)
+    engineeringLog: engineeringLogFromApi(raw.engineering_log ?? raw.engineeringLog),
   };
 }
 
-function floorEventsFromApi(raw: unknown): FloorStatusEvent[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+function engineeringLogFromApi(raw: unknown): EngineeringLog | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const startedBy = str(r.started_by ?? r.startedBy);
+  const revision = num(r.revision, 0);
+  if (!startedBy || revision < 1) return undefined;
+  return {
+    startedBy,
+    startedAt: str(r.started_at ?? r.startedAt),
+    generatedBy: str(r.generated_by ?? r.generatedBy) || undefined,
+    generatedAt: str(r.generated_at ?? r.generatedAt) || undefined,
+    sentToProductionBy:
+      str(r.sent_to_production_by ?? r.sentToProductionBy) || undefined,
+    sentToProductionAt:
+      str(r.sent_to_production_at ?? r.sentToProductionAt) || undefined,
+    revision,
+  };
+}
+
+function floorEventsFromApi(raw: unknown): FloorStatusEvent[] | undefined {  if (!Array.isArray(raw)) return undefined;
   const events: FloorStatusEvent[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue;

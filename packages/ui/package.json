@@ -18,7 +18,8 @@
     "./common/dataTable.css": "./src/common/dataTable.css",
     "./common/pageHeader.css": "./src/common/pageHeader.css",
     "./common/entityCard.css": "./src/common/entityCard.css",
-    "./common/engineeringDetail.css": "./src/common/engineeringDetail.css"
+    "./common/engineeringDetail.css": "./src/common/engineeringDetail.css",
+    "./common/tabs.css": "./src/common/tabs.css"
   },
   "files": [
     "src"

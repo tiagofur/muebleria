@@ -1407,3 +1407,57 @@ describe('hardwareToApi / hardwareFromApi — part finishes (F080)', () => {
     expect(round.partFinishes).toEqual({ body: 'chrome' });
   });
 });
+
+describe('apiMappers — engineering log round-trip (roadmap-screens 2a.4)', () => {
+  const base = {
+    id: 'p1',
+    name: 'Cocina López',
+    customerId: 'c1',
+    currency: 'MXN',
+    marginFactor: 1.35,
+    laborFixedCost: 100,
+    status: 'accepted',
+    items: [],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  it('serializes the log to snake_case and back', () => {
+    const p = {
+      ...base,
+      engineeringLog: {
+        startedBy: 'u1',
+        startedAt: '2026-08-17T10:00:00.000Z',
+        generatedBy: 'u2',
+        generatedAt: '2026-08-17T11:00:00.000Z',
+        sentToProductionBy: 'u2',
+        sentToProductionAt: '2026-08-17T12:00:00.000Z',
+        revision: 2,
+      },
+    } as unknown as Project;
+    const api = projectToApi(p);
+    const log = api.engineering_log as Record<string, unknown>;
+    expect(log.started_by).toBe('u1');
+    expect(log.generated_at).toBe('2026-08-17T11:00:00.000Z');
+    expect(log.sent_to_production_by).toBe('u2');
+    expect(log.revision).toBe(2);
+
+    const back = projectFromApi(api as Record<string, unknown>);
+    expect(back.engineeringLog).toEqual(p.engineeringLog);
+  });
+
+  it('keeps undefined log absent (null on the wire, undefined back)', () => {
+    const p = { ...base } as unknown as Project;
+    const api = projectToApi(p);
+    expect(api.engineering_log).toBeNull();
+    expect(projectFromApi(api as Record<string, unknown>).engineeringLog).toBeUndefined();
+  });
+
+  it('drops malformed logs instead of crashing', () => {
+    const back = projectFromApi({
+      ...base,
+      engineering_log: { revision: 0 },
+    } as unknown as Record<string, unknown>);
+    expect(back.engineeringLog).toBeUndefined();
+  });
+});

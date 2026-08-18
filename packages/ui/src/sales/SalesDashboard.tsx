@@ -58,12 +58,14 @@ type MonthlyStats = {
     abiertas: StatusStats;
     cerradas: StatusStats;
     canceladas: StatusStats;
+    instaladas: StatusStats;
   };
   total: {
     cotizaciones: StatusStats;
     abiertas: StatusStats;
     cerradas: StatusStats;
     canceladas: StatusStats;
+    instaladas: StatusStats;
   };
 };
 
@@ -101,15 +103,17 @@ function isCurrentMonth(iso: string): boolean {
 }
 
 function isOpen(p: Project): boolean {
+  if (p.cancelledAt) return false;
   return p.status === 'draft' || p.status === 'quoted' || p.status === 'accepted';
 }
 
 function isClosed(p: Project): boolean {
+  if (p.cancelledAt) return false;
   return p.status === 'produced';
 }
 
 function isCancelled(p: Project): boolean {
-  return p.status === 'quoted' && daysSince(p.updatedAt) > 30;
+  return Boolean(p.cancelledAt);
 }
 
 /* ── Vendedor filter ────────────────────────────────────────────────────── */
@@ -202,6 +206,15 @@ function MonthlyStatsSection({
               {formatMoneyDisplay(stats.mesActual.canceladas.totalValue)}
             </span>
           </div>
+          <div className="sales-monthly__row">
+            <span className="sales-monthly__label">Instaladas</span>
+            <span className="sales-monthly__value sales-monthly__value--installed">
+              {stats.mesActual.instaladas.count}
+            </span>
+            <span className="sales-monthly__money">
+              {formatMoneyDisplay(stats.mesActual.instaladas.totalValue)}
+            </span>
+          </div>
         </div>
 
         {/* Totales */}
@@ -241,6 +254,15 @@ function MonthlyStatsSection({
             </span>
             <span className="sales-monthly__money">
               {formatMoneyDisplay(stats.total.canceladas.totalValue)}
+            </span>
+          </div>
+          <div className="sales-monthly__row">
+            <span className="sales-monthly__label">Instaladas</span>
+            <span className="sales-monthly__value sales-monthly__value--installed">
+              {stats.total.instaladas.count}
+            </span>
+            <span className="sales-monthly__money">
+              {formatMoneyDisplay(stats.total.instaladas.totalValue)}
             </span>
           </div>
         </div>
@@ -392,6 +414,7 @@ function AlertsSection({
 export function SalesDashboard({
   projects,
   onOpenProject,
+  onCancelProject,
   isVendedor = false,
   currentUserId,
   vendedores = [],
@@ -409,8 +432,11 @@ export function SalesDashboard({
   readonly vendedores?: readonly VendedorOption[];
   /** Map of userId -> display name. */
   readonly ownerLabels?: Record<string, string>;
+  /** Called when user explicitly cancels a project (sets cancelledAt). */
+  readonly onCancelProject?: (projectId: string) => void;
 }): ReactNode {
   const [selectedVendedor, setSelectedVendedor] = useState<string | null>(null);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   // For vendedor: always filter to their projects
   // For gerente_ventas/admin: use filter or show all
@@ -438,12 +464,14 @@ export function SalesDashboard({
         abiertas: { ...empty },
         cerradas: { ...empty },
         canceladas: { ...empty },
+        instaladas: { ...empty },
       },
       total: {
         cotizaciones: { ...empty },
         abiertas: { ...empty },
         cerradas: { ...empty },
         canceladas: { ...empty },
+        instaladas: { ...empty },
       },
     };
 
@@ -484,6 +512,18 @@ export function SalesDashboard({
         if (current) {
           result.mesActual.canceladas.count++;
           result.mesActual.canceladas.totalValue += price;
+        }
+      }
+
+      if (
+        p.technicalStatus === 'installed' ||
+        p.technicalStatus === 'completed'
+      ) {
+        result.total.instaladas.count++;
+        result.total.instaladas.totalValue += price;
+        if (current) {
+          result.mesActual.instaladas.count++;
+          result.mesActual.instaladas.totalValue += price;
         }
       }
     }
@@ -697,9 +737,51 @@ export function SalesDashboard({
                   <span className={`sales-badge ${projectStatusBadgeClass(row.project.status)}`}>
                     {projectStatusLabel(row.project.status)}
                   </span>
+                  {row.project.cancelledAt ? (
+                    <span className="sales-badge sales-badge--cancelled">Cancelada</span>
+                  ) : null}
                   <span className="sales-list__date">
                     {formatIsoDate(row.project.updatedAt)}
                   </span>
+                  {onCancelProject && !row.project.cancelledAt && isOpen(row.project) ? (
+                    confirmCancelId === row.project.id ? (
+                      <span className="sales-list__confirm-cancel">
+                        <button
+                          type="button"
+                          className="btn btn--danger btn--xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCancelProject(row.project.id);
+                            setConfirmCancelId(null);
+                          }}
+                        >
+                          Sí, cancelar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmCancelId(null);
+                          }}
+                        >
+                          No
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--xs sales-list__cancel-btn"
+                        title="Cancelar cotización"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmCancelId(row.project.id);
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    )
+                  ) : null}
                 </div>
               </button>
             </li>

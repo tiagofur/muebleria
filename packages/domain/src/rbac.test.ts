@@ -187,7 +187,7 @@ describe('rbac (F035)', () => {
   it('gerente_produccion has production dashboard access', () => {
     expect(navIdsForRole('gerente_produccion').has('productionDashboard')).toBe(true);
     expect(navIdsForRole('admin').has('productionDashboard')).toBe(true);
-    expect(navIdsForRole('produccion').has('productionDashboard')).toBe(false);
+    expect(navIdsForRole('produccion').has('productionDashboard')).toBe(true);
     expect(navIdsForRole('gerente_ventas').has('productionDashboard')).toBe(false);
   });
 
@@ -205,7 +205,7 @@ describe('rbac (F035)', () => {
 
   it('almacen role is valid and can claim production jobs', () => {
     expect(isValidUserRole('almacen')).toBe(true);
-    expect(roleCanClaimProductionJob('almacen')).toBe(true);
+    expect(roleCanClaimProductionJob('almacen')).toBe(false);
     expect(roleCanClaimProductionJob('produccion')).toBe(true);
     expect(roleCanClaimProductionJob('admin')).toBe(true);
     expect(roleCanClaimProductionJob('vendedor')).toBe(false);

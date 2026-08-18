@@ -493,12 +493,16 @@ type Project struct {
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
 	// Shape: { revision, revision_at, fingerprint, last_export_* }.
-	Production    json.RawMessage     `json:"production,omitempty"`
-	FloorEvents   []FloorStatusEvent  `json:"floor_events,omitempty"`
-	Notes         string              `json:"notes,omitempty"`
-	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt     time.Time           `json:"created_at"`
-	UpdatedAt     time.Time           `json:"updated_at"`
+	Production json.RawMessage `json:"production,omitempty"`
+	// EngineeringLog is the engineering lifecycle log (roadmap-screens 2a).
+	// Opaque JSON blob: { started_by, started_at, generated_by, generated_at,
+	// sent_to_production_by, sent_to_production_at, revision }.
+	EngineeringLog json.RawMessage    `json:"engineering_log,omitempty"`
+	FloorEvents    []FloorStatusEvent `json:"floor_events,omitempty"`
+	Notes          string             `json:"notes,omitempty"`
+	PriceSnapshot  *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
 // ProjectTemplate is a reusable project recipe (#110 / H15). Slimmed Project:

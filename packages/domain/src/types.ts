@@ -965,6 +965,7 @@ export interface Project {
    * were generated, and when the project was sent to production.
    */
   readonly engineeringLog?: import('./engineering').EngineeringLog;
+  readonly cancelledAt?: string;                          // ISO timestamp — explicit cancel
   readonly notes?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

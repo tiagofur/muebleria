@@ -42,6 +42,21 @@ export const PRODUCTION_ORDER_TAB_LABELS: Readonly<
 };
 
 /**
+ * Hub-only tabs — export roles (produccion, gerente_produccion, admin, etc.).
+ * Technical tabs (modulos, despiece, vistas, optimizacion) live in Engineering.
+ */
+export const HUB_TABS = [
+  'resumen',
+  'piso',
+  'despacho',
+  'etiquetas',
+  'herrajes',
+  'documentos',
+] as const;
+
+export type HubTab = (typeof HUB_TABS)[number];
+
+/**
  * Tabs fully implemented. (Kept for call sites that gate on readiness.)
  */
 export const PRODUCTION_ORDER_TABS_READY: ReadonlySet<ProductionOrderTab> =

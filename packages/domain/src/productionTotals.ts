@@ -31,6 +31,8 @@ export type ProductionTotals = {
   readonly edges: readonly ProductionEdgeTotal[];
   readonly totalAreaM2: number;
   readonly totalEdgeMl: number;
+  /** Total board pieces across all materials. */
+  readonly totalPieces: number;
 };
 
 function bandedLengthMm(row: ProductionCutRow): number {
@@ -121,6 +123,7 @@ export function computeProductionTotals(
     edges: edgeTotals,
     totalAreaM2: round2(materialTotals.reduce((s, m) => s + m.areaM2, 0)),
     totalEdgeMl: round2(edgeTotals.reduce((s, e) => s + e.ml, 0)),
+    totalPieces: materialTotals.reduce((s, m) => s + m.pieces, 0),
   };
 }
 

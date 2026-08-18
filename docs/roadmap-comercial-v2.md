@@ -1,9 +1,8 @@
 # Roadmap Comercial v2 — Única fuente de verdad
 
 > **Estado:** ACTIVO. Este documento reemplaza como backlog canónico a:
-> `docs/perfect-app-roadmap.md`, `docs/app-excellence.md` (§roadmap),
-> `docs/IDEAS/roadmap.md` y `docs/prd.md §17`. Esos quedan como registro
-> histórico; el trabajo vivo vive aquí + GitHub issues (`tiagofur/muebleria`).
+> `docs/app-excellence.md` (§roadmap) y `docs/prd.md §17`. Esos quedan como
+> registro histórico; el trabajo vivo vive aquí + GitHub issues (`tiagofur/muebleria`).
 >
 > **Fecha:** 2026-08-10 · **Horizonte:** 12 meses a "producto vendible en LatAm"
 

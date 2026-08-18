@@ -46,7 +46,6 @@ import {
   generatePieceLabels,
   generateModuleLabels,
   generateProjectMaterialSummary,
-  createEngineeringLog,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
   projectToTemplate,
@@ -163,6 +162,7 @@ import { buildCutListCsvExport } from './exportCutListCsv';
 import { buildCncPilotExport } from './exportCncPilot';
 import { buildAssemblySheetsExport } from './exportAssemblySheets';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
+import { downloadDespiecePdf } from './exportDespiecePdf';
 import {
   buildOptimizerExport,
   deliverExcelFile,
@@ -1342,21 +1342,11 @@ function AppContent({
   );
   const startEngineering = useCallback(
     (projectId: string) => {
-      const project = projects.find((p) => p.id === projectId);
-      if (!project || project.engineeringLog) return;
-      const log = createEngineeringLog(
-        authUser?.id ?? 'unknown',
-        new Date().toISOString(),
-      );
-      // Patch the project's engineeringLog directly via setProjects.
-      projectActions.setProjects(
-        projects.map((p) =>
-          p.id === projectId ? { ...p, engineeringLog: log, updatedAt: new Date().toISOString() } : p,
-        ),
-      );
+      // Store action persists via saveProject (engineering_log column).
+      projectActions.startEngineering(projectId, authUser?.id ?? 'unknown');
       navigate(engineeringProjectPath(projectId));
     },
-    [projects, authUser?.id, projectActions, navigate],
+    [authUser?.id, projectActions, navigate],
   );
   const changeProjectStatus = useCallback(
     (id: string, status: ProjectStatus) => {
@@ -1499,6 +1489,21 @@ function AppContent({
     [catalogActions, toast],
   );
 
+
+  /**
+   * roadmap-screens 2a — every successful engineering export stamps
+   * generatedBy/At on the project's engineering log (makes "Documentado"
+   * reachable and dated on the landing).
+   */
+  const stampEngineeringGeneration = useCallback(
+    (projectId?: string) => {
+      const id = projectId ?? selectedProject?.id;
+      if (!id) return;
+      projectActions.recordEngineeringGeneration(id, authUser?.id ?? 'unknown');
+    },
+    [projectActions, authUser?.id, selectedProject?.id],
+  );
+
   const handleExportOptimizer = useCallback(
     async (projectId?: string) => {
       const project =
@@ -1538,6 +1543,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1589,6 +1597,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1648,6 +1659,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1707,6 +1721,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1825,6 +1842,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1878,6 +1898,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1927,6 +1950,9 @@ function AppContent({
           toast({ type: 'info', message: 'Export cancelado' });
           return;
         }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
         toast({
           type: 'success',
           message:
@@ -1939,6 +1965,57 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
+  );
+
+  const handleExportDespiecePdf = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      setExportErrors([]);
+      try {
+        const result = await downloadDespiecePdf(
+          project,
+          catalog,
+          resolveCustomerName(project.customerId, customers),
+        );
+        if (!result.ok) {
+          setExportErrors(result.issues);
+          toast({
+            type: 'error',
+            message: 'No se pudo exportar despiece PDF',
+          });
+          return;
+        }
+        const stampProjectId =
+          projectId ?? project?.id ?? selectedProject?.id;
+        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
+        toast({
+          type: 'success',
+          message:
+            result.delivery === 'saved'
+              ? `✓ ${result.fileName} guardado`
+              : `✓ ${result.fileName} descargado`,
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole],
   );
 
   const handleReleaseToDelivery = useCallback(
@@ -2009,6 +2086,7 @@ function AppContent({
         }
         // PROD-3.2 — stamp OP export revision so stale detection works.
         recordProductionExport(project.id);
+        stampEngineeringGeneration(project.id);
         // Optional annexes that failed are listed — never silently missing.
         const omissionNote =
           result.omissions.length > 0
@@ -2449,9 +2527,26 @@ function AppContent({
             onExportCutListCsv={() => { void handleExportCutListCsv(engProject.id); }}
             onExportPieceLabels={(lbls, opts) => { void handleExportPieceLabels(engProject.id, { labels: lbls, perUnit: opts.perUnit }); }}
             onExportModuleLabels={(lbls) => { void handleExportModuleLabels(engProject.id, { labels: lbls }); }}
+            onExportAssemblySheets={() => { void handleExportAssemblySheets(engProject.id); }}
+            onExportCncPilot={() => { void handleExportCncPilot(engProject.id); }}
+            onExportDespiecePdf={() => { void handleExportDespiecePdf(engProject.id); }}
             canImportNesting={canMarkProduced || roleCanExportProduction(actorRole)}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}
+            onSendToProduction={() => {
+              if (!catalog) return;
+              projectActions.sendProjectToProduction(
+                engProject.id,
+                authUser?.id ?? 'unknown',
+                catalog,
+              );
+            }}
+            onMarkDocumented={() => {
+              projectActions.recordEngineeringGeneration(
+                engProject.id,
+                authUser?.id ?? 'unknown',
+              );
+            }}
           />
         );
       })() : null}
@@ -2465,6 +2560,7 @@ function AppContent({
             const target = projectPath(id);
             if (location.pathname !== target) navigate(target);
           }}
+          onCancelProject={(id) => projectActions.cancelProject(id)}
           isVendedor={actorRole === 'vendedor'}
           currentUserId={authUser?.id}
           vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}

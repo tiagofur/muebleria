@@ -4,7 +4,7 @@
 > **Fecha:** 2026-08-15  
 > **Área:** Aplicación Móvil Nativa (iOS / Android)  
 > **Monorepo Target:** `apps/mobile` en pnpm monorepo  
-> **Relación con otros docs:** Complementa `docs/prd.md`, `docs/architecture.md`, `docs/production-module.md` y `docs/crm-and-internal-comms-plan.md`.
+> **Relación con otros docs:** Complementa `docs/prd.md`, `docs/architecture.md` y `docs/production-module.md`.
 
 ---
 
@@ -243,8 +243,7 @@ Para garantizar velocidad, estabilidad y foco en la experiencia móvil:
 
 ## 10. Referencias y Documentación Relacionada
 
-- [docs/mobile-architecture.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/mobile-architecture.md) — Arquitectura técnica, integración de monorepo y capas de datos.
-- [docs/mobile-code-sharing.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/mobile-code-sharing.md) — Guía detallada de reutilización de lógica, domain y storage.
+- [docs/mobile-architecture.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/mobile-architecture.md) — Arquitectura técnica, integración de monorepo, capas de datos y reutilización de código.
 - [docs/mobile-ui-ux.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/mobile-ui-ux.md) — Sistema de diseño móvil, ergonomía táctil y modo taller.
 - [docs/production-module.md](file:///Users/tiagofur/dev/carpinteria/muebles/docs/production-module.md) — Contrato del módulo de producción y estados de piso.
 - [packages/domain/src/pieceLabelQr.ts](file:///Users/tiagofur/dev/carpinteria/muebles/packages/domain/src/pieceLabelQr.ts) — Parser oficial del payload QR v2.
