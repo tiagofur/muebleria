@@ -75,6 +75,8 @@ import {
   createEngineeringLog,
   recordGeneration,
   recordSentToProduction,
+  canReleaseMaterials,
+  canSendToProduction,
   restoreProjectVersion,
 } from '@muebles/domain';
 import { breakdownFromApi } from '@muebles/storage';
@@ -300,6 +302,12 @@ export interface ProjectState {
     byUserId: string,
     catalog: Catalog,
   ) => void;
+  /**
+   * Process stage gating — Almacén stamps "materials complete" to release
+   * the project to the production floor. Requires engineering sent first
+   * (`canReleaseMaterials`).
+   */
+  readonly releaseProjectMaterials: (id: string, byUserId: string) => void;
   readonly cancelProject: (id: string) => void;
   /** Generic status transition: draft→quoted, quoted→accepted (gap #3). */
   readonly changeProjectStatus: (
@@ -728,7 +736,9 @@ export function createProjectStore(options: InternalOptions) {
 
     sendProjectToProduction: (id, byUserId, catalog) => {
       const project = get().projects.find((p) => p.id === id);
-      if (!project || project.status !== 'accepted') return;
+      // project-lifecycle.md §3 — engineering must be documented before the
+      // handshake; no bypass without a log.
+      if (!project || !canSendToProduction(project)) return;
       const now = new Date().toISOString();
       const cat = catalog ?? getCatalogStoreState().catalog ?? {
         materials: [],
@@ -738,24 +748,40 @@ export function createProjectStore(options: InternalOptions) {
         optionGroups: [],
         modules: [],
       };
-      const log = project.engineeringLog
-        ? recordSentToProduction(project.engineeringLog, byUserId, now)
-        : undefined;
+      // Guard guarantees engineeringLog exists and is documented.
+      const log = recordSentToProduction(project.engineeringLog!, byUserId, now);
       const withTransition = transitionProjectStatus(project, 'produced', cat, now);
       const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) =>
         ps.map((p) =>
           p.id === id
-            ? { ...updated, ...(log ? { engineeringLog: log } : {}) }
+            ? { ...updated, engineeringLog: log }
             : p,
         ),
       );
       toast({
         type: 'success',
-        message: log
-          ? `✓ Enviada a producción · rev. ${log.revision}`
-          : '✓ Marcada en producción',
+        message: `✓ Enviada a producción · rev. ${log.revision}`,
       });
+    },
+
+    /** Process stage gating — Almacén releases materials to the floor. */
+    releaseProjectMaterials: (id, byUserId) => {
+      const project = get().projects.find((p) => p.id === id);
+      if (!project || !canReleaseMaterials(project)) return;
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                materialsRelease: { releasedBy: byUserId, releasedAt: now },
+                updatedAt: now,
+              }
+            : p,
+        ),
+      );
+      toast({ type: 'success', message: '✓ Material completo — liberada a producción' });
     },
 
     /** Explicit cancel: stamps cancelledAt, excludes from pipeline. */

@@ -31,6 +31,7 @@ function makeProject(
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-17T00:00:00.000Z',
     items,
+    materialsRelease: { releasedBy: 'alm1', releasedAt: '2026-08-17T08:00:00.000Z' },
   } as unknown as Project;
 }
 

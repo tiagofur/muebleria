@@ -103,6 +103,13 @@ export type PurchasingScreenProps = {
     material: PickingMaterial;
     status: PickingStatus;
   }) => void;
+  /**
+   * Process stage gating — releases a project's materials to the production
+   * floor ("Material completo"). Projects passed to this screen are already
+   * in the almacén stage (engineering sent, materials not released). Only
+   * called for roles that can mark picking (admin/almacen).
+   */
+  readonly onReleaseMaterials?: (projectId: string) => void;
 
   // --- Stock (Fase 3b): saldos + movimientos para chips y el tab Compras ---
 
@@ -219,6 +226,7 @@ export function PurchasingScreen({
   assignedSectors = null,
   initialPicking = null,
   onTogglePick,
+  onReleaseMaterials,
   stock = null,
   stockMovements = null,
   stockLabels = {},
@@ -400,6 +408,23 @@ export function PurchasingScreen({
   const projectsWithMaterials = projectViews.filter((p) => p.materials.length > 0);
   const projectsWithEdges = projectViews.filter((p) => p.edges.length > 0);
 
+  /** Release-to-production action shown on every project card. */
+  const renderReleaseAction = (projectId: string): ReactNode => {
+    if (!canMarkPicked || !onReleaseMaterials) return null;
+    return (
+      <button
+        type="button"
+        className="btn btn--secondary btn--small"
+        onClick={() => onReleaseMaterials(projectId)}
+        data-testid={`purch-release-${projectId}`}
+        title="Marca el material de la obra como completo y la libera al piso de producción"
+      >
+        <PackageCheck size={14} strokeWidth={1.5} aria-hidden />
+        Material completo
+      </button>
+    );
+  };
+
   const renderProjectActions = (
     projectId: string,
     material: MaterialTab,
@@ -483,6 +508,7 @@ export function PurchasingScreen({
                   {p.hardware.length} {p.hardware.length === 1 ? 'línea' : 'líneas'}
                 </span>
               </div>
+              {renderReleaseAction(p.projectId)}
               {renderProjectActions(p.projectId, 'herrajes')}
             </div>
             <ul className="purch-card__rows">
@@ -536,6 +562,7 @@ export function PurchasingScreen({
                 <span className="purch-card__name">{p.projectName}</span>
                 <span className="purch-card__sub">{formatAreaM2(p.totalAreaM2)}</span>
               </div>
+              {renderReleaseAction(p.projectId)}
               {renderProjectActions(p.projectId, 'tableros')}
             </div>
             <ul className="purch-card__rows">
@@ -609,6 +636,7 @@ export function PurchasingScreen({
                   ml
                 </span>
               </div>
+              {renderReleaseAction(p.projectId)}
               {renderProjectActions(p.projectId, 'cintillas')}
             </div>
             <ul className="purch-card__rows">

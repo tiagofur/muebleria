@@ -6,6 +6,7 @@ const project = {
   id: 'p1', name: 'Cocina', customerId: 'c1', status: 'accepted', currency: 'MXN',
   createdAt: '2026-08-18T00:00:00.000Z', updatedAt: '2026-08-18T00:00:00.000Z',
   items: [{ id: 'i1', moduleId: 'm1', quantity: 2, optionChoices: {} }],
+  materialsRelease: { releasedBy: 'alm1', releasedAt: '2026-08-18T08:00:00.000Z' },
 } as unknown as Project;
 
 describe('fabricProjectCards', () => {
@@ -57,5 +58,17 @@ describe('fabricProjectCards', () => {
 
     expect(cards[0]?.materials[0]?.pickingStatus).toBe('pendiente');
     expect(cards[0]?.edges).toEqual([]);
+  });
+
+  it('excludes works whose materials were not released by Almacén (stage gate)', () => {
+    const { materialsRelease: _released, ...unreleased } = project;
+    const cards = fabricProjectCards({
+      projects: [unreleased as unknown as Project],
+      station: 'cutting',
+      metricsByProject: {},
+      pickingStates: [],
+      activeClaims: [],
+    });
+    expect(cards).toHaveLength(0);
   });
 });

@@ -6,6 +6,8 @@
  * sent to production (with a revision counter).
  */
 
+import type { Project } from './types';
+
 /** Engineering lifecycle status derived from the log fields. */
 export type EngineeringStatus =
   /** No log yet — engineering hasn't started. */
@@ -77,6 +79,18 @@ export function recordSentToProduction(
     sentToProductionAt,
     revision: log.revision + 1,
   };
+}
+
+/**
+ * Whether engineering may send the project to production: the quote is
+ * accepted AND the documentation was generated (project-lifecycle.md §3 —
+ * "Enviar a producción" requires documented engineering, no bypass).
+ */
+export function canSendToProduction(project: Project): boolean {
+  return (
+    project.status === 'accepted' &&
+    engineeringStatus(project.engineeringLog) === 'documented'
+  );
 }
 
 /** Spanish labels for engineering statuses. */

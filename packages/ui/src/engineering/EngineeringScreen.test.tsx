@@ -21,6 +21,13 @@ const logDocumented: EngineeringLog = {
   revision: 2,
 };
 
+const logSent: EngineeringLog = {
+  ...logDocumented,
+  sentToProductionBy: 'u1',
+  sentToProductionAt: '2026-08-03T09:00:00Z',
+  revision: 3,
+};
+
 const mockProjects: ProjectWithCustomer[] = [
   {
     id: 'p1',
@@ -152,6 +159,46 @@ describe('EngineeringScreen', () => {
         onOpenProject={vi.fn()}
       />,
     );
-    expect(screen.getByText('No hay proyectos')).not.toBeNull();
+    expect(screen.getByText('No hay obras para ingeniería')).not.toBeNull();
+  });
+
+  it('excludes drafts from the queue and moves sent works to "Enviadas"', () => {
+    const projects: ProjectWithCustomer[] = [
+      ...mockProjects,
+      {
+        id: 'draft1',
+        name: 'Borrador',
+        status: 'draft',
+        items: [],
+        currency: 'MXN',
+        createdAt: '2026-08-01T00:00:00Z',
+        updatedAt: '2026-08-01T00:00:00Z',
+      } as unknown as ProjectWithCustomer,
+      {
+        id: 'sent1',
+        name: 'Obra Enviada',
+        customerLabel: 'Cliente C',
+        status: 'produced',
+        items: [],
+        currency: 'MXN',
+        createdAt: '2026-08-01T00:00:00Z',
+        updatedAt: '2026-08-01T00:00:00Z',
+        engineeringLog: logSent,
+      } as unknown as ProjectWithCustomer,
+    ];
+    render(
+      <EngineeringScreen
+        projects={projects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    // Draft never appears.
+    expect(screen.queryByText('Borrador')).toBeNull();
+    // Sent work is in the read-only section, not in the working queue stats
+    // (3 queue projects: p1 pending, p2 in_progress, p3 documented).
+    expect(screen.getByTestId('eng-sent-sent1')).not.toBeNull();
+    expect(screen.getByText('En almacén')).not.toBeNull();
+    expect(screen.getByTestId('eng-stat-pending').textContent).toContain('1');
   });
 });

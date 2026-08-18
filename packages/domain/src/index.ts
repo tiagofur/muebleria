@@ -512,6 +512,7 @@ export {
 
 export {
   engineeringStatus,
+  canSendToProduction,
   createEngineeringLog,
   recordGeneration,
   recordSentToProduction,
@@ -519,6 +520,15 @@ export {
   type EngineeringLog,
   type EngineeringStatus,
 } from './engineering';
+
+export {
+  projectProcessStage,
+  filterProjectsByProcessStage,
+  canReleaseMaterials,
+  PROCESS_STAGE_LABELS_ES,
+  type ProjectProcessStage,
+  type MaterialsRelease,
+} from './processStage';
 
 export {
   buildCncPilotDocument,

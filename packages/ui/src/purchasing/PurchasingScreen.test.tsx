@@ -130,6 +130,31 @@ describe('PurchasingScreen (Fase 3)', () => {
     expect(screen.getAllByText(/7,2 ml/).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('"Material completo" releases the work to production (stage gate)', () => {
+    const onRelease = vi.fn();
+    render(
+      <PurchasingScreen
+        projects={projects}
+        role="almacen"
+        onReleaseMaterials={onRelease}
+      />,
+    );
+    const btn = screen.getByTestId('purch-release-p1');
+    fireEvent.click(btn);
+    expect(onRelease).toHaveBeenCalledWith('p1');
+  });
+
+  it('hides the release button for read-only roles', () => {
+    render(
+      <PurchasingScreen
+        projects={projects}
+        role="gerente_produccion"
+        onReleaseMaterials={() => undefined}
+      />,
+    );
+    expect(screen.queryByTestId('purch-release-p1')).toBeNull();
+  });
+
   it('"Marcar despachado" toggles local state to despachado and back', () => {
     render(<PurchasingScreen projects={projects} role="almacen" />);
     fireEvent.click(screen.getByTestId('purch-mark-p1-herrajes'));

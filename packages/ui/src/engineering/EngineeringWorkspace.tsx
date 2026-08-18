@@ -27,6 +27,7 @@ import '../production/production.css';
 
 import {
   summarizeProductionTotals,
+  canSendToProduction,
   engineeringStatus,
   type Project,
   type Module,
@@ -501,8 +502,13 @@ export function EngineeringWorkspace({
             type="button"
             className="btn btn--primary"
             onClick={onSendToProduction}
+            disabled={!canSendToProduction(project)}
             data-testid="eng-send-to-production"
-            title="Registra el envío en el log de ingeniería (quién/cuándo/rev.) y marca la obra En producción"
+            title={
+              canSendToProduction(project)
+                ? 'Registra el envío en el log de ingeniería (quién/cuándo/rev.) y pasa la obra a Almacén'
+                : 'Primero marcá la ingeniería como documentada (generar documentos)'
+            }
           >
             <Send size={16} strokeWidth={1.5} aria-hidden />
             Enviar a Producción

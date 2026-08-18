@@ -76,6 +76,9 @@ export function fabricProjectCards({
 }: FabricProjectCardInput): readonly FabricProjectCard[] {
   return projects.flatMap((project) => {
     if (project.status !== 'accepted' && project.status !== 'produced') return [];
+    // Process stage gating — the floor only sees works whose materials were
+    // released by Almacén (ventas → ingeniería → almacén → producción).
+    if (!project.materialsRelease) return [];
     const items = itemsWaitingForSector(project, station).map((item) => ({
       itemId: item.id,
       moduleName: moduleLabelFor?.(item.moduleId) ?? item.moduleId,

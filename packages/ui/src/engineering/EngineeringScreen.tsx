@@ -21,6 +21,7 @@ import './engineering.css';
 import {
   engineeringStatus,
   ENGINEERING_STATUS_LABELS_ES,
+  projectProcessStage,
   type EngineeringStatus,
   type Project,
 } from '@muebles/domain';
@@ -60,8 +61,24 @@ export function EngineeringScreen({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<EngineeringStatus | null>(null);
 
+  // Process stage gating — the working queue is ONLY projects in the
+  // ingeniería stage (accepted, engineering not sent yet). Projects already
+  // sent to Almacén/Producción move to the read-only "Enviadas" section.
+  const queue = useMemo(
+    () => projects.filter((p) => projectProcessStage(p) === 'ingenieria'),
+    [projects],
+  );
+  const sent = useMemo(
+    () =>
+      projects.filter((p) => {
+        const stage = projectProcessStage(p);
+        return stage === 'almacen' || stage === 'produccion';
+      }),
+    [projects],
+  );
+
   const filtered = useMemo(() => {
-    let result = projects;
+    let result = queue;
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -74,15 +91,15 @@ export function EngineeringScreen({
       result = result.filter((p) => engineeringStatus(p.engineeringLog) === statusFilter);
     }
     return result;
-  }, [projects, search, statusFilter]);
+  }, [queue, search, statusFilter]);
 
   const counts = useMemo(() => {
     const c: Record<EngineeringStatus, number> = { pending: 0, in_progress: 0, documented: 0 };
-    for (const p of projects) {
+    for (const p of queue) {
       c[engineeringStatus(p.engineeringLog)]++;
     }
     return c;
-  }, [projects]);
+  }, [queue]);
 
   return (
     <section className="eng-landing" aria-label="Ingeniería">
@@ -129,7 +146,7 @@ export function EngineeringScreen({
       </div>
 
       {/* Project list */}
-      {filtered.length === 0 && projects.length > 0 ? (
+      {filtered.length === 0 && queue.length > 0 ? (
         <EmptyState
           icon={SearchX}
           title="Sin resultados"
@@ -140,8 +157,8 @@ export function EngineeringScreen({
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="No hay proyectos"
-          description="Los proyectos aceptados aparecen aquí para documentación técnica."
+          title="No hay obras para ingeniería"
+          description="Cuando Ventas acepte una cotización, la obra aparece aquí para documentación técnica."
         />
       ) : (
         <ul className="eng-project-list">
@@ -211,6 +228,54 @@ export function EngineeringScreen({
           })}
         </ul>
       )}
+
+      {/* Sent works — read-only traceability (almacén / producción stage) */}
+      {sent.length > 0 ? (
+        <div className="eng-landing__sent">
+          <h3 className="eng-landing__sent-title">
+            Enviadas a producción ({sent.length})
+          </h3>
+          <ul className="eng-project-list eng-project-list--sent">
+            {sent.map((project) => (
+              <li
+                key={project.id}
+                className="eng-project-card eng-project-card--sent"
+                data-testid={`eng-sent-${project.id}`}
+              >
+                <button
+                  type="button"
+                  className="eng-project-card__body"
+                  onClick={() => onOpenProject(project.id)}
+                >
+                  <div className="eng-project-card__main">
+                    <span className="eng-project-card__name">{project.name}</span>
+                    {project.customerLabel ? (
+                      <span className="eng-project-card__customer">
+                        {project.customerLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="eng-project-card__meta">
+                    {project.engineeringLog?.sentToProductionAt ? (
+                      <span className="eng-project-card__date-value">
+                        Enviada{' '}
+                        {new Date(
+                          project.engineeringLog.sentToProductionAt,
+                        ).toLocaleDateString('es-AR')}
+                      </span>
+                    ) : null}
+                    <span className="eng-badge eng-badge--documented">
+                      {project.materialsRelease
+                        ? 'En producción'
+                        : 'En almacén'}
+                    </span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -24,6 +24,13 @@ function makeProject(status: Project['status']): Project {
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-17T00:00:00.000Z',
     items: [],
+    engineeringLog: {
+      startedBy: 'ing1',
+      startedAt: '2026-08-02T08:00:00.000Z',
+      generatedBy: 'ing1',
+      generatedAt: '2026-08-03T08:00:00.000Z',
+      revision: 1,
+    },
   } as unknown as Project;
 }
 
@@ -61,6 +68,23 @@ describe('EngineeringWorkspace — Enviar a Producción (2a.15)', () => {
     const btn = screen.getByTestId('eng-send-to-production');
     btn.click();
     expect(onSendToProduction).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the button while engineering is not documented (stage gate)', () => {
+    const onSendToProduction = vi.fn();
+    const project = makeProject('accepted');
+    const { engineeringLog: _log, ...withoutLog } = project;
+    render(
+      <EngineeringWorkspace
+        {...baseProps}
+        project={withoutLog as unknown as Project}
+        onSendToProduction={onSendToProduction}
+      />,
+    );
+    const btn = screen.getByTestId('eng-send-to-production') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    btn.click();
+    expect(onSendToProduction).not.toHaveBeenCalled();
   });
 
   it('hides the button once the project is produced', () => {

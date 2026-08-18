@@ -1459,6 +1459,30 @@ describe('apiMappers — engineering log round-trip (roadmap-screens 2a.4)', () 
     expect(back.engineeringLog).toEqual(p.engineeringLog);
   });
 
+  it('serializes the materials release stamp to snake_case and back', () => {
+    const p = {
+      ...base,
+      materialsRelease: {
+        releasedBy: 'alm-1',
+        releasedAt: '2026-08-18T09:30:00.000Z',
+      },
+    } as unknown as Project;
+    const api = projectToApi(p);
+    const release = api.materials_release as Record<string, unknown>;
+    expect(release.released_by).toBe('alm-1');
+    expect(release.released_at).toBe('2026-08-18T09:30:00.000Z');
+
+    const back = projectFromApi(api as Record<string, unknown>);
+    expect(back.materialsRelease).toEqual(p.materialsRelease);
+  });
+
+  it('keeps an absent materials release undefined (null on the wire)', () => {
+    const p = { ...base } as unknown as Project;
+    const api = projectToApi(p);
+    expect(api.materials_release).toBeNull();
+    expect(projectFromApi(api as Record<string, unknown>).materialsRelease).toBeUndefined();
+  });
+
   it('keeps undefined log absent (null on the wire, undefined back)', () => {
     const p = { ...base } as unknown as Project;
     const api = projectToApi(p);

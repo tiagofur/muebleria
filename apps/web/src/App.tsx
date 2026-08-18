@@ -95,6 +95,7 @@ import {
   roleIsScopedBySector,
   roleCanAccessFabricNav,
   roleCanAccessShippingNav,
+  filterProjectsByProcessStage,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -1343,7 +1344,12 @@ function AppContent({
    */
   const purchasingProjects = useMemo((): ActiveProjectMaterial[] => {
     if (!catalog) return [];
-    return filterProductionVisible(projects).map((project) => {
+    // Process stage gating — Almacén only sees works whose engineering was
+    // sent but whose materials are not released yet (stage "almacen").
+    return filterProjectsByProcessStage(
+      filterProductionVisible(projects),
+      'almacen',
+    ).map((project) => {
       let hardware: readonly HardwarePurchaseRow[] = [];
       let cutRows: readonly ProductionCutRow[] = [];
       let sheetEstimates: readonly BoardSheetEstimate[] = [];
@@ -3298,6 +3304,12 @@ function AppContent({
           assignedSectors={mySectors}
           initialPicking={pickingStates}
           onTogglePick={handleTogglePick}
+          onReleaseMaterials={(projectId) =>
+            projectActions.releaseProjectMaterials(
+              projectId,
+              authUser?.id ?? 'unknown',
+            )
+          }
           stock={stockRows}
           stockMovements={stockMovements}
           stockLabels={stockCatalog.labels}
@@ -3384,9 +3396,10 @@ function AppContent({
       ) : null}
       {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
-          projects={
-            filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)
-          }
+          projects={filterProjectsByProcessStage(
+            filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects),
+            'produccion',
+          )}
           orderProjectId={routeProductionOrderId}
           orderTab={routeProductionOrderTab}
           onOrderTabChange={(tab) => {

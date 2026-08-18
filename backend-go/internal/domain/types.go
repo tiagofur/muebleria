@@ -513,12 +513,16 @@ type Project struct {
 	// EngineeringLog is the engineering lifecycle log (roadmap-screens 2a).
 	// Opaque JSON blob: { started_by, started_at, generated_by, generated_at,
 	// sent_to_production_by, sent_to_production_at, revision }.
-	EngineeringLog json.RawMessage     `json:"engineering_log,omitempty"`
-	FloorEvents    []FloorStatusEvent  `json:"floor_events,omitempty"`
-	Notes          string              `json:"notes,omitempty"`
-	PriceSnapshot  *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt      time.Time           `json:"created_at"`
-	UpdatedAt      time.Time           `json:"updated_at"`
+	EngineeringLog json.RawMessage `json:"engineering_log,omitempty"`
+	// MaterialsRelease is Almacén's "materials complete" stamp (process stage
+	// gating). Opaque JSON blob: { released_by, released_at }. NULL = the
+	// project is still in the warehouse queue.
+	MaterialsRelease json.RawMessage     `json:"materials_release,omitempty"`
+	FloorEvents      []FloorStatusEvent  `json:"floor_events,omitempty"`
+	Notes            string              `json:"notes,omitempty"`
+	PriceSnapshot    *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
+	CreatedAt        time.Time           `json:"created_at"`
+	UpdatedAt        time.Time           `json:"updated_at"`
 }
 
 // ProjectTemplate is a reusable project recipe (#110 / H15). Slimmed Project:

@@ -930,15 +930,51 @@ describe('projectStore — engineering lifecycle (roadmap-screens 2a)', () => {
     expect(toasts[0]!.message).toContain('rev. 2');
   });
 
-  it('sendProjectToProduction without log still transitions (plain mark-produced)', () => {
+  it('sendProjectToProduction is a no-op without documented engineering (stage gate)', () => {
     const { deps, toasts } = makeDeps();
     const store = createProjectStore({ deps });
     store.getState().setProjects([makeProject({ status: 'accepted' })]);
 
     store.getState().sendProjectToProduction('proj-1', 'u2', seedCatalog());
 
-    expect(store.getState().projects[0]!.status).toBe('produced');
-    expect(toasts[0]!.message).toContain('en producción');
+    expect(store.getState().projects[0]!.status).toBe('accepted');
+    expect(toasts).toHaveLength(0);
+  });
+
+  it('releaseProjectMaterials stamps the release after engineering sent', () => {
+    const { deps, toasts } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([
+      makeProject({
+        status: 'produced',
+        engineeringLog: {
+          startedBy: 'u1',
+          startedAt: '2026-08-01T10:00:00Z',
+          generatedBy: 'u1',
+          generatedAt: '2026-08-02T10:00:00Z',
+          sentToProductionBy: 'u1',
+          sentToProductionAt: '2026-08-03T10:00:00Z',
+          revision: 2,
+        },
+      }),
+    ]);
+
+    store.getState().releaseProjectMaterials('proj-1', 'alm-1');
+
+    const project = store.getState().projects[0]!;
+    expect(project.materialsRelease).toMatchObject({ releasedBy: 'alm-1' });
+    expect(toasts[0]!.message).toContain('producción');
+  });
+
+  it('releaseProjectMaterials ignores works whose engineering was not sent', () => {
+    const { deps, toasts } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ status: 'accepted' })]);
+
+    store.getState().releaseProjectMaterials('proj-1', 'alm-1');
+
+    expect(store.getState().projects[0]!.materialsRelease).toBeUndefined();
+    expect(toasts).toHaveLength(0);
   });
 
   it('sendProjectToProduction rejects non-accepted projects', () => {

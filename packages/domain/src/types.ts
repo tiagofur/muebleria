@@ -971,6 +971,11 @@ export interface Project {
    * were generated, and when the project was sent to production.
    */
   readonly engineeringLog?: import('./engineering').EngineeringLog;
+  /**
+   * Almacén's explicit "materials complete" release stamp — the gate that
+   * makes the project visible to the production floor (processStage).
+   */
+  readonly materialsRelease?: import('./processStage').MaterialsRelease;
   readonly cancelledAt?: string;                          // ISO timestamp — explicit cancel
   readonly notes?: string;
   readonly createdAt: string;

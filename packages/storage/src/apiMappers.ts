@@ -19,6 +19,7 @@ import type {
   Hardware,
   HardwareLine,
   MaterialBoard,
+  MaterialsRelease,
   Module,
   ModuleCategory,
   OptionGroup,
@@ -1531,6 +1532,13 @@ export function projectToApi(p: Project): Record<string, unknown> {
           revision: p.engineeringLog.revision,
         }
       : null,
+    // Process stage gating — Almacén's explicit "materials complete" stamp.
+    materials_release: p.materialsRelease
+      ? {
+          released_by: p.materialsRelease.releasedBy,
+          released_at: p.materialsRelease.releasedAt,
+        }
+      : null,
   };
 }
 
@@ -1705,7 +1713,20 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     floorEvents: floorEventsFromApi(raw.floor_events ?? raw.floorEvents),
     // Engineering lifecycle log (roadmap-screens 2a.4)
     engineeringLog: engineeringLogFromApi(raw.engineering_log ?? raw.engineeringLog),
+    // Process stage gating — Almacén's materials release stamp.
+    materialsRelease: materialsReleaseFromApi(
+      raw.materials_release ?? raw.materialsRelease,
+    ),
   };
+}
+
+function materialsReleaseFromApi(raw: unknown): MaterialsRelease | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const releasedBy = str(r.released_by ?? r.releasedBy);
+  const releasedAt = str(r.released_at ?? r.releasedAt);
+  if (!releasedBy || !releasedAt) return undefined;
+  return { releasedBy, releasedAt };
 }
 
 function engineeringLogFromApi(raw: unknown): EngineeringLog | undefined {
