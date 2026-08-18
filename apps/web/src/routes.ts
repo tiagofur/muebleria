@@ -5,29 +5,29 @@
 
 import type { AppNavId } from '@muebles/ui';
 
-/** Canonical path for each sidebar destination. */
+/** Canonical path for each sidebar destination. URLs name the screen. */
 export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   home: '/',
-  projects: '/projects',
+  quotes: '/quotes',
   customers: '/customers',
   showcase: '/showcase',
-  plantBoard: '/planta',
-  fabric: '/fabrica',
-  embarques: '/embarques',
-  instalaciones: '/instalaciones',
-  production: '/produccion',
-  productionDashboard: '/produccion/dashboard',
-  salesDashboard: '/ventas/dashboard',
-  engineering: '/ingenieria',
-  purchasing: '/compras',
+  plantBoard: '/plant-board',
+  production: '/production',
+  shipments: '/shipments',
+  installations: '/installations',
+  orders: '/orders',
+  productionDashboard: '/production-dashboard',
+  salesDashboard: '/sales-dashboard',
+  engineering: '/engineering',
+  warehouse: '/warehouse',
   modules: '/modules',
   structures: '/structures',
   components: '/components',
-  agregados: '/agregados',
+  addOns: '/add-ons',
   materials: '/materials',
   edges: '/edges',
   hardware: '/hardware',
-  ambientMaterials: '/materiales-ambiente',
+  finishes: '/finishes',
   optionGroups: '/option-groups',
   settings: '/settings',
   users: '/users',
@@ -36,12 +36,14 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
 /** Sections that support `/section/:id` deep links for entity rows. */
 export type EntitySection = Exclude<
   AppNavId,
-  'home' | 'users' | 'settings' | 'showcase' | 'plantBoard' | 'fabric' | 'embarques' | 'instalaciones' | 'production' | 'productionDashboard' | 'engineering' | 'purchasing'
+  'home' | 'users' | 'settings' | 'showcase' | 'plantBoard' | 'production' | 'shipments' | 'installations' | 'orders' | 'productionDashboard' | 'engineering' | 'warehouse'
 >;
 
 /**
  * Production order hub tabs (PROD-0.1). Kept local to routes so web shell
  * can deep-link without importing the full UI model at parse time.
+ * URL slugs are English (i18n-ready); tab keys stay in sync with
+ * PRODUCTION_ORDER_TABS in @muebles/ui.
  */
 export const PRODUCTION_PATH_TABS = [
   'resumen',
@@ -54,17 +56,37 @@ export const PRODUCTION_PATH_TABS = [
   'vistas',
   'optimizacion',
   'documentos',
-  'exports',
 ] as const;
 
 export type ProductionPathTab = (typeof PRODUCTION_PATH_TABS)[number];
 
-function isProductionPathTab(value: string): value is ProductionPathTab {
-  return (PRODUCTION_PATH_TABS as readonly string[]).includes(value);
+/** English URL slug for each hub tab. */
+const TAB_URL_SLUGS: Readonly<Record<ProductionPathTab, string>> = {
+  resumen: 'summary',
+  modulos: 'modules',
+  piso: 'floor',
+  despacho: 'dispatch',
+  despiece: 'cutlist',
+  etiquetas: 'labels',
+  herrajes: 'hardware',
+  vistas: 'views',
+  optimizacion: 'optimization',
+  documentos: 'documents',
+};
+
+const SLUG_TO_TAB = new Map<string, ProductionPathTab>(
+  (Object.entries(TAB_URL_SLUGS) as [ProductionPathTab, string][]).map(
+    ([tab, slug]) => [slug, tab],
+  ),
+);
+
+/** Resolve an English URL segment to a hub tab. */
+function productionTabFromSegment(segment: string): ProductionPathTab | null {
+  return SLUG_TO_TAB.get(segment) ?? null;
 }
 
 const ENTITY_SECTIONS: readonly EntitySection[] = [
-  'projects',
+  'quotes',
   'customers',
   'modules',
   'structures',
@@ -72,7 +94,7 @@ const ENTITY_SECTIONS: readonly EntitySection[] = [
   'materials',
   'edges',
   'hardware',
-  'ambientMaterials',
+  'finishes',
   'optionGroups',
 ] as const;
 
@@ -90,7 +112,7 @@ export function entityPath(section: EntitySection, id: string): string {
 }
 
 export function projectPath(projectId: string): string {
-  return entityPath('projects', projectId);
+  return entityPath('quotes', projectId);
 }
 
 export function modulePath(moduleId: string): string {
@@ -208,7 +230,7 @@ export function entityIdFromPath(
 }
 
 export function projectIdFromPath(pathname: string): string | null {
-  return entityIdFromPath(pathname, 'projects');
+  return entityIdFromPath(pathname, 'quotes');
 }
 
 export function moduleIdFromPath(pathname: string): string | null {
@@ -243,7 +265,7 @@ export function navFromPath(pathname: string): AppNavId | null {
 }
 
 /**
- * Engineering project deep link: `/ingenieria/:projectId`.
+ * Engineering project deep link: `/engineering/:projectId`.
  */
 export function engineeringProjectPath(projectId: string): string {
   return `${NAV_PATHS.engineering}/${encodeURIComponent(projectId)}`;
@@ -267,23 +289,24 @@ export function engineeringProjectFromPath(pathname: string): string | null {
 }
 
 /**
- * Production order deep link: `/produccion/:projectId` or
- * `/produccion/:projectId/:tab` (PROD-0.1).
+ * Production order deep link: `/orders/:projectId` or
+ * `/orders/:projectId/:tab` with English tab slugs (PROD-0.1).
+ * (`/production` is the factory floor screen — nav id `fabric`.)
  */
 export function productionOrderPath(
   projectId: string,
   tab?: ProductionPathTab | null,
 ): string {
-  const base = `${NAV_PATHS.production}/${encodeURIComponent(projectId)}`;
+  const base = `${NAV_PATHS.orders}/${encodeURIComponent(projectId)}`;
   if (!tab || tab === 'resumen') return base;
-  return `${base}/${tab}`;
+  return `${base}/${TAB_URL_SLUGS[tab]}`;
 }
 
 export function productionOrderFromPath(pathname: string): {
   readonly projectId: string;
   readonly tab: ProductionPathTab;
 } | null {
-  const base = NAV_PATHS.production;
+  const base = NAV_PATHS.orders;
   const normalized = normalizePathname(pathname);
   if (normalized === base) return null;
   if (!normalized.startsWith(`${base}/`)) return null;
@@ -299,9 +322,10 @@ export function productionOrderFromPath(pathname: string): {
   }
   if (!projectId || projectId.includes('/')) return null;
   const tabRaw = parts[1];
-  const tab: ProductionPathTab =
-    tabRaw && isProductionPathTab(tabRaw) ? tabRaw : 'resumen';
+  const tab: ProductionPathTab | null = tabRaw
+    ? productionTabFromSegment(tabRaw)
+    : 'resumen';
   // Unknown second segment → treat as invalid (not an order route).
-  if (tabRaw && !isProductionPathTab(tabRaw)) return null;
+  if (tab === null) return null;
   return { projectId, tab };
 }

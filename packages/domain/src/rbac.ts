@@ -460,21 +460,21 @@ export function roleLabelEs(role: string | null | undefined): string {
 /** Nav section ids that a role may open (guest = all). */
 export function navIdsForRole(role: string | null | undefined): ReadonlySet<string> {
   if (role == null) {
-    // guest / local mode — full tool (no `production` nav, no RBAC to plant queue)
+    // guest / local mode — full tool (no `orders` nav, no RBAC to plant queue)
     return new Set([
       'home',
-      'projects',
+      'quotes',
       'customers',
       'showcase',
       'plantBoard',
       'modules',
       'structures',
       'components',
-      'agregados',
+      'addOns',
       'materials',
       'edges',
       'hardware',
-      'ambientMaterials',
+      'finishes',
       'optionGroups',
       'settings',
       'users',
@@ -484,7 +484,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   // F093 — Estado de Planta: factory progress is visible to EVERY role
   // (sales answers "where is my project"); read-only board.
   ids.add('plantBoard');
-  if (roleCanAccessProjects(role)) ids.add('projects');
+  if (roleCanAccessProjects(role)) ids.add('quotes');
   if (roleCanAccessCustomers(role)) ids.add('customers');
   if (roleCanAccessShowcaseNav(role)) ids.add('showcase');
   // Ingeniería: Muebles + Estructuras + Componentes + Agregados + Acabados (admin / ingeniero)
@@ -492,8 +492,8 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanMutateModules(role)) {
     ids.add('structures');
     ids.add('components');
-    ids.add('agregados');
-    ids.add('ambientMaterials');
+    ids.add('addOns');
+    ids.add('finishes');
   }
   if (roleCanAccessCatalogNav(role)) {
     ids.add('materials');
@@ -506,14 +506,15 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   // Fábrica: work queue for sector-scoped operators and supervisors —
   // manufacturing stations only (corte→embalaje); despacho/instalación live
   // in Embarques.
-  if (roleCanAccessFabricNav(role)) ids.add('fabric');
+  // Nav id `production` = Producción (factory floor screen).
+  if (roleCanAccessFabricNav(role)) ids.add('production');
   // Embarques + Instalaciones: logistics boards (floor + supervisors).
   if (roleCanAccessShippingNav(role)) {
-    ids.add('embarques');
-    ids.add('instalaciones');
+    ids.add('shipments');
+    ids.add('installations');
   }
-  // PROD-0.1: factory workspace nav for production-export roles.
-  if (roleCanAccessProductionNav(role)) ids.add('production');
+  // PROD-0.1: Órdenes — per-project factory workspace for production-export roles.
+  if (roleCanAccessProductionNav(role)) ids.add('orders');
   // Production Manager Dashboard: full visibility for gerente_produccion
   if (roleCanAccessProductionDashboard(role)) ids.add('productionDashboard');
   // Ingeniería: documentation workspace for engineers and admins.
@@ -521,7 +522,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   // Dashboard Ventas: pipeline + summary for sales roles.
   if (roleCanAccessSalesDashboard(role)) ids.add('salesDashboard');
   // Compras/Almacén: picking lists for warehouse + supervisors (Fase 3).
-  if (roleCanAccessPurchasingNav(role)) ids.add('purchasing');
+  if (roleCanAccessPurchasingNav(role)) ids.add('warehouse');
   return ids;
 }
 

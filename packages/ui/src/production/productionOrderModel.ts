@@ -69,7 +69,7 @@ export function isProductionOrderTab(value: string): value is ProductionOrderTab
 export function parseProductionOrderTab(
   value: string | null | undefined,
 ): ProductionOrderTab {
-  // Legacy URL: /produccion/:id/exports → Documentos
+  // Legacy URL: /produccion/:id/exports (now /production/:id/documents) → Documentos
   if (value === 'exports') return 'documentos';
   if (value && isProductionOrderTab(value)) return value;
   return 'resumen';

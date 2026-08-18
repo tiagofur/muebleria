@@ -35,12 +35,12 @@ function read(rel: string): string {
 }
 
 describe('AppShell nav model (F017)', () => {
-  it('exposes TRABAJO, PRODUCCIÓN, VENTAS, INGENIERIA, ALMACEN, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
-    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'produccion', 'ventas', 'ingenieria', 'almacen', 'libreria', 'catalogos', 'config']);
+  it('exposes TRABAJO, VENTAS, PRODUCCIÓN, INGENIERIA, ALMACEN, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
+    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ventas', 'produccion', 'ingenieria', 'almacen', 'libreria', 'catalogos', 'config']);
     expect(APP_NAV_SECTIONS.map((s) => s.label)).toEqual([
       'TRABAJO',
-      'PRODUCCIÓN',
       'VENTAS',
+      'PRODUCCIÓN',
       'INGENIERÍA',
       'COMPRAS / ALMACÉN',
       'LIBRERÍA',
@@ -65,10 +65,10 @@ describe('AppShell nav model (F017)', () => {
     // workshop process (Órdenes → Producción → Embarques → Instalaciones).
     expect(produccion.items.map((i) => i.id)).toEqual([
       'productionDashboard',
+      'orders',
       'production',
-      'fabric',
-      'embarques',
-      'instalaciones',
+      'shipments',
+      'installations',
     ]);
     expect(produccion.items.map((i) => i.label)).toEqual([
       'Dashboard',
@@ -80,7 +80,7 @@ describe('AppShell nav model (F017)', () => {
 
     expect(ventas.items.map((i) => i.id)).toEqual([
       'salesDashboard',
-      'projects',
+      'quotes',
       'customers',
       'showcase',
     ]);
@@ -93,13 +93,13 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     const almacen = APP_NAV_SECTIONS.find((s) => s.id === 'almacen')!;
-    expect(almacen.items.map((i) => i.id)).toEqual(['purchasing']);
+    expect(almacen.items.map((i) => i.id)).toEqual(['warehouse']);
     expect(almacen.items.map((i) => i.label)).toEqual(['Almacén']);
 
     expect(libreria.items.map((i) => i.id)).toEqual([
       'modules',
       'structures',
-      'agregados',
+      'addOns',
       'components',
       'optionGroups',
     ]);
@@ -115,7 +115,7 @@ describe('AppShell nav model (F017)', () => {
       'materials',
       'edges',
       'hardware',
-      'ambientMaterials',
+      'finishes',
     ]);
 
     expect(config.items.map((i) => i.id)).toEqual([
@@ -129,13 +129,13 @@ describe('AppShell nav model (F017)', () => {
     );
 
     expect(byId.home).toBe(LayoutDashboard);
-    expect(byId.projects).toBe(FileText);
+    expect(byId.quotes).toBe(FileText);
     expect(byId.customers).toBe(Users);
     expect(byId.showcase).toBe(Store);
-    expect(byId.fabric).toBe(Factory);
-    expect(byId.embarques).toBe(Truck);
-    expect(byId.instalaciones).toBe(Hammer);
-    expect(byId.production).toBe(ListChecks);
+    expect(byId.production).toBe(Factory);
+    expect(byId.shipments).toBe(Truck);
+    expect(byId.installations).toBe(Hammer);
+    expect(byId.orders).toBe(ListChecks);
     expect(byId.modules).toBe(Package);
     expect(byId.materials).toBe(Layers);
     expect(byId.edges).toBe(Minus);
@@ -146,13 +146,13 @@ describe('AppShell nav model (F017)', () => {
 
   it('labelForNavId resolves known destinations', () => {
     expect(labelForNavId('home')).toBe('Inicio');
-    expect(labelForNavId('projects')).toBe('Cotizaciones');
+    expect(labelForNavId('quotes')).toBe('Cotizaciones');
     expect(labelForNavId('customers')).toBe('Clientes');
     expect(labelForNavId('showcase')).toBe('Vitrina');
-    expect(labelForNavId('fabric')).toBe('Producción');
-    expect(labelForNavId('embarques')).toBe('Embarques');
-    expect(labelForNavId('instalaciones')).toBe('Instalaciones');
-    expect(labelForNavId('production')).toBe('Órdenes');
+    expect(labelForNavId('production')).toBe('Producción');
+    expect(labelForNavId('shipments')).toBe('Embarques');
+    expect(labelForNavId('installations')).toBe('Instalaciones');
+    expect(labelForNavId('orders')).toBe('Órdenes');
     expect(labelForNavId('modules')).toBe('Muebles');
     expect(labelForNavId('optionGroups')).toBe('Grupos');
     expect(labelForNavId('settings')).toBe('Ajustes');
@@ -165,7 +165,7 @@ describe('AppShell nav model (F017)', () => {
       'materials',
       'edges',
       'hardware',
-      'ambientMaterials',
+      'finishes',
     ]);
   });
 
@@ -182,11 +182,11 @@ describe('AppShell nav model (F017)', () => {
 
   it('resolveNavSections filters by allowedNavIds (F035)', () => {
     const prod = resolveNavSections({
-      allowedNavIds: new Set(['home', 'projects']),
+      allowedNavIds: new Set(['home', 'quotes']),
     });
     expect(prod.flatMap((s) => s.items.map((i) => i.id))).toEqual([
       'home',
-      'projects',
+      'quotes',
     ]);
   });
 });

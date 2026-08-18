@@ -73,7 +73,7 @@ describe('rbac (F035)', () => {
   it('hides CRM from produccion', () => {
     expect(roleCanAccessCustomers('produccion')).toBe(false);
     expect(navIdsForRole('produccion').has('customers')).toBe(false);
-    expect(navIdsForRole('produccion').has('projects')).toBe(true);
+    expect(navIdsForRole('produccion').has('quotes')).toBe(true);
   });
 
   it('F093 — Estado de Planta visible to every role (incl. vendedor/user)', () => {
@@ -89,7 +89,7 @@ describe('rbac (F035)', () => {
     }
     expect(navIdsForRole(null).has('plantBoard')).toBe(true);
     // The production hub itself stays gated for export roles only.
-    expect(navIdsForRole('vendedor').has('production')).toBe(false);
+    expect(navIdsForRole('vendedor').has('orders')).toBe(false);
   });
 
   it('Ingeniería Muebles/Estructuras/Componentes vs Trabajo Vitrina', () => {
@@ -103,11 +103,11 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('vendedor').has('components')).toBe(false);
     expect(navIdsForRole('ingeniero').has('modules')).toBe(true);
     expect(navIdsForRole('vendedor').has('modules')).toBe(false);
-    expect(navIdsForRole('ingeniero').has('ambientMaterials')).toBe(true);
-    expect(navIdsForRole('admin').has('ambientMaterials')).toBe(true);
-    expect(navIdsForRole('vendedor').has('ambientMaterials')).toBe(false);
-    expect(navIdsForRole('gerente_ventas').has('ambientMaterials')).toBe(false);
-    expect(navIdsForRole('produccion').has('ambientMaterials')).toBe(false);
+    expect(navIdsForRole('ingeniero').has('finishes')).toBe(true);
+    expect(navIdsForRole('admin').has('finishes')).toBe(true);
+    expect(navIdsForRole('vendedor').has('finishes')).toBe(false);
+    expect(navIdsForRole('gerente_ventas').has('finishes')).toBe(false);
+    expect(navIdsForRole('produccion').has('finishes')).toBe(false);
     expect(navIdsForRole('vendedor').has('showcase')).toBe(true);
     expect(navIdsForRole('ingeniero').has('showcase')).toBe(true);
     expect(navIdsForRole('produccion').has('showcase')).toBe(false);
@@ -142,13 +142,13 @@ describe('rbac (F035)', () => {
 
   it('production nav is for production-export roles (PROD-0.1)', () => {
     // Factory workspace nav (queue + OP hub) — not the plant-only project filter.
-    expect(navIdsForRole('produccion').has('production')).toBe(true);
-    expect(navIdsForRole('admin').has('production')).toBe(true);
-    expect(navIdsForRole('ingeniero').has('production')).toBe(true);
-    expect(navIdsForRole('gerente_ventas').has('production')).toBe(true);
-    expect(navIdsForRole('vendedor').has('production')).toBe(false);
+    expect(navIdsForRole('produccion').has('orders')).toBe(true);
+    expect(navIdsForRole('admin').has('orders')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('orders')).toBe(true);
+    expect(navIdsForRole('gerente_ventas').has('orders')).toBe(true);
+    expect(navIdsForRole('vendedor').has('orders')).toBe(false);
     // Guest (local mode): does NOT get production nav.
-    expect(navIdsForRole(null).has('production')).toBe(false);
+    expect(navIdsForRole(null).has('orders')).toBe(false);
     expect(navIdsForRole('produccion').has('home')).toBe(true);
   });
 
@@ -225,16 +225,16 @@ describe('rbac (F035)', () => {
     // from the production workspace: no exports, no mark-produced.
     expect(roleCanMarkProduced('almacen')).toBe(false);
     expect(roleCanExportProduction('almacen')).toBe(false);
-    expect(navIdsForRole('almacen').has('production')).toBe(false);
-    expect(navIdsForRole('almacen').has('fabric')).toBe(true);
+    expect(navIdsForRole('almacen').has('orders')).toBe(false);
+    expect(navIdsForRole('almacen').has('production')).toBe(true);
     // The plant operator keeps the hub and gains the fabric queue.
+    expect(navIdsForRole('produccion').has('orders')).toBe(true);
     expect(navIdsForRole('produccion').has('production')).toBe(true);
-    expect(navIdsForRole('produccion').has('fabric')).toBe(true);
     // Fase 4.4 — supervisors work the full floor too (all tabs + metrics);
     // commercial roles have no personal fabric queue.
-    expect(navIdsForRole('admin').has('fabric')).toBe(true);
-    expect(navIdsForRole('gerente_produccion').has('fabric')).toBe(true);
-    expect(navIdsForRole('vendedor').has('fabric')).toBe(false);
+    expect(navIdsForRole('admin').has('production')).toBe(true);
+    expect(navIdsForRole('gerente_produccion').has('production')).toBe(true);
+    expect(navIdsForRole('vendedor').has('production')).toBe(false);
   });
 
   it('Fase 4.4 — roleCanAccessFabricNav: scoped operators + supervisors', () => {
@@ -256,12 +256,12 @@ describe('rbac (F035)', () => {
     expect(roleCanAccessShippingNav('almacen')).toBe(false);
     expect(roleCanAccessShippingNav('vendedor')).toBe(false);
     expect(roleCanAccessShippingNav(null)).toBe(false);
-    expect(navIdsForRole('produccion').has('embarques')).toBe(true);
-    expect(navIdsForRole('admin').has('embarques')).toBe(true);
-    expect(navIdsForRole('almacen').has('embarques')).toBe(false);
-    expect(navIdsForRole('gerente_produccion').has('instalaciones')).toBe(true);
-    expect(navIdsForRole('vendedor').has('instalaciones')).toBe(false);
-    expect(navIdsForRole('almacen').has('instalaciones')).toBe(false);
+    expect(navIdsForRole('produccion').has('shipments')).toBe(true);
+    expect(navIdsForRole('admin').has('shipments')).toBe(true);
+    expect(navIdsForRole('almacen').has('shipments')).toBe(false);
+    expect(navIdsForRole('gerente_produccion').has('installations')).toBe(true);
+    expect(navIdsForRole('vendedor').has('installations')).toBe(false);
+    expect(navIdsForRole('almacen').has('installations')).toBe(false);
   });
 
   it('F094 — roleCanAdvanceStation scopes operators to their sectors', () => {
@@ -317,14 +317,14 @@ describe('rbac (F035)', () => {
     // auth-only workspace navs (same as engineering / production).
     expect(roleCanAccessPurchasingNav(null)).toBe(false);
 
-    expect(navIdsForRole('admin').has('purchasing')).toBe(true);
-    expect(navIdsForRole('gerente_produccion').has('purchasing')).toBe(true);
-    expect(navIdsForRole('almacen').has('purchasing')).toBe(true);
-    expect(navIdsForRole('ingeniero').has('purchasing')).toBe(false);
-    expect(navIdsForRole('gerente_ventas').has('purchasing')).toBe(false);
-    expect(navIdsForRole('vendedor').has('purchasing')).toBe(false);
-    expect(navIdsForRole('produccion').has('purchasing')).toBe(false);
-    expect(navIdsForRole(null).has('purchasing')).toBe(false);
+    expect(navIdsForRole('admin').has('warehouse')).toBe(true);
+    expect(navIdsForRole('gerente_produccion').has('warehouse')).toBe(true);
+    expect(navIdsForRole('almacen').has('warehouse')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('warehouse')).toBe(false);
+    expect(navIdsForRole('gerente_ventas').has('warehouse')).toBe(false);
+    expect(navIdsForRole('vendedor').has('warehouse')).toBe(false);
+    expect(navIdsForRole('produccion').has('warehouse')).toBe(false);
+    expect(navIdsForRole(null).has('warehouse')).toBe(false);
   });
 
   it('Fase 3 — roleCanMarkPicking: admin/almacen write, gerente read-only', () => {

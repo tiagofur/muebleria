@@ -34,7 +34,7 @@ describe('app routes', () => {
     expect(navFromPath('/')).toBe('home');
     expect(navFromPath('/home')).toBe('home');
     expect(navFromPath('/materials')).toBe('materials');
-    expect(navFromPath('/projects')).toBe('projects');
+    expect(navFromPath('/quotes')).toBe('quotes');
     expect(navFromPath('/option-groups')).toBe('optionGroups');
     expect(navFromPath('/users')).toBe('users');
     expect(navFromPath('/settings')).toBe('settings');
@@ -43,7 +43,7 @@ describe('app routes', () => {
   it('resolves entity deep links for all id-bearing sections', () => {
     const id = '969f82ae-8da6-45d0-b49a-951dbfde309e';
     const sections = [
-      'projects',
+      'quotes',
       'modules',
       'materials',
       'edges',
@@ -60,10 +60,10 @@ describe('app routes', () => {
       expect(navFromPath(path)).toBe(section);
     }
 
-    expect(projectPath(id)).toBe(`/projects/${id}`);
-    expect(projectIdFromPath(`/projects/${id}`)).toBe(id);
+    expect(projectPath(id)).toBe(`/quotes/${id}`);
+    expect(projectIdFromPath(`/quotes/${id}`)).toBe(id);
     expect(moduleIdFromPath(`/modules/${id}`)).toBe(id);
-    expect(entityIdFromPath('/projects', 'projects')).toBeNull();
+    expect(entityIdFromPath('/quotes', 'quotes')).toBeNull();
   });
 
   it('home and users are not entity-detail sections', () => {
@@ -103,61 +103,85 @@ describe('app routes', () => {
 
   it('resolves production order deep links (PROD-0.1)', () => {
     const id = '969f82ae-8da6-45d0-b49a-951dbfde309e';
-    expect(navFromPath('/produccion')).toBe('production');
-    expect(navFromPath(`/produccion/${id}`)).toBe('production');
-    expect(navFromPath(`/produccion/${id}/despiece`)).toBe('production');
-    expect(productionOrderPath(id)).toBe(`/produccion/${id}`);
-    expect(productionOrderPath(id, 'resumen')).toBe(`/produccion/${id}`);
-    expect(productionOrderPath(id, 'exports')).toBe(`/produccion/${id}/exports`);
-    expect(productionOrderFromPath('/produccion')).toBeNull();
-    expect(productionOrderFromPath(`/produccion/${id}`)).toEqual({
+    expect(navFromPath('/orders')).toBe('orders');
+    expect(navFromPath(`/orders/${id}`)).toBe('orders');
+    expect(navFromPath(`/orders/${id}/cutlist`)).toBe('orders');
+    expect(productionOrderPath(id)).toBe(`/orders/${id}`);
+    expect(productionOrderPath(id, 'resumen')).toBe(`/orders/${id}`);
+    expect(productionOrderPath(id, 'documentos')).toBe(
+      `/orders/${id}/documents`,
+    );
+    expect(productionOrderFromPath('/orders')).toBeNull();
+    expect(productionOrderFromPath(`/orders/${id}`)).toEqual({
       projectId: id,
       tab: 'resumen',
     });
-    expect(productionOrderFromPath(`/produccion/${id}/vistas`)).toEqual({
+    expect(productionOrderFromPath(`/orders/${id}/views`)).toEqual({
       projectId: id,
       tab: 'vistas',
     });
-    expect(productionOrderFromPath(`/produccion/${id}/despacho`)).toEqual({
+    expect(productionOrderFromPath(`/orders/${id}/dispatch`)).toEqual({
       projectId: id,
       tab: 'despacho',
     });
-    expect(productionOrderFromPath(`/produccion/${id}/etiquetas`)).toEqual({
+    expect(productionOrderFromPath(`/orders/${id}/labels`)).toEqual({
       projectId: id,
       tab: 'etiquetas',
     });
     expect(productionOrderPath(id, 'despacho')).toBe(
-      `/produccion/${id}/despacho`,
+      `/orders/${id}/dispatch`,
     );
     expect(productionOrderPath(id, 'etiquetas')).toBe(
-      `/produccion/${id}/etiquetas`,
+      `/orders/${id}/labels`,
     );
-    expect(productionOrderFromPath(`/produccion/${id}/nope`)).toBeNull();
+    // Legacy Spanish slugs no longer parse.
+    expect(productionOrderFromPath(`/orders/${id}/despacho`)).toBeNull();
+    expect(productionOrderFromPath(`/orders/${id}/nope`)).toBeNull();
   });
 });
 
 describe('plant board route (F093)', () => {
-  it('maps /planta to the plantBoard nav and back', () => {
-    expect(NAV_PATHS.plantBoard).toBe('/planta');
-    expect(pathForNav('plantBoard')).toBe('/planta');
-    expect(navFromPath('/planta')).toBe('plantBoard');
+  it('maps /plant-board to the plantBoard nav and back', () => {
+    expect(NAV_PATHS.plantBoard).toBe('/plant-board');
+    expect(pathForNav('plantBoard')).toBe('/plant-board');
+    expect(navFromPath('/plant-board')).toBe('plantBoard');
   });
 
   it('keeps plantBoard out of entity deep-link sections', () => {
     expect(isEntitySection('plantBoard')).toBe(false);
   });
 
-  it('maps /embarques to the embarques nav (despacho + instalación board)', () => {
-    expect(NAV_PATHS.embarques).toBe('/embarques');
-    expect(pathForNav('embarques')).toBe('/embarques');
-    expect(navFromPath('/embarques')).toBe('embarques');
-    expect(isEntitySection('embarques')).toBe(false);
+  it('maps /shipments to the embarques nav (despacho + instalación board)', () => {
+    expect(NAV_PATHS.shipments).toBe('/shipments');
+    expect(pathForNav('shipments')).toBe('/shipments');
+    expect(navFromPath('/shipments')).toBe('shipments');
+    expect(isEntitySection('shipments')).toBe(false);
   });
 
-  it('maps /instalaciones to the instalaciones nav (cargado → instalado)', () => {
-    expect(NAV_PATHS.instalaciones).toBe('/instalaciones');
-    expect(pathForNav('instalaciones')).toBe('/instalaciones');
-    expect(navFromPath('/instalaciones')).toBe('instalaciones');
-    expect(isEntitySection('instalaciones')).toBe(false);
+  it('maps /installations to the instalaciones nav (cargado → instalado)', () => {
+    expect(NAV_PATHS.installations).toBe('/installations');
+    expect(pathForNav('installations')).toBe('/installations');
+    expect(navFromPath('/installations')).toBe('installations');
+    expect(isEntitySection('installations')).toBe(false);
+  });
+
+  it('maps remaining nav ids to English paths', () => {
+    expect(NAV_PATHS.production).toBe('/production');
+    expect(NAV_PATHS.productionDashboard).toBe('/production-dashboard');
+    expect(NAV_PATHS.salesDashboard).toBe('/sales-dashboard');
+    expect(NAV_PATHS.engineering).toBe('/engineering');
+    expect(NAV_PATHS.warehouse).toBe('/warehouse');
+    expect(NAV_PATHS.finishes).toBe('/finishes');
+    expect(NAV_PATHS.addOns).toBe('/add-ons');
+    expect(navFromPath('/production')).toBe('production');
+    expect(navFromPath('/production-dashboard')).toBe('productionDashboard');
+    expect(navFromPath('/sales-dashboard')).toBe('salesDashboard');
+    expect(navFromPath('/engineering')).toBe('engineering');
+    expect(navFromPath('/warehouse')).toBe('warehouse');
+    expect(navFromPath('/finishes')).toBe('finishes');
+    expect(navFromPath('/add-ons')).toBe('addOns');
+    expect(entityIdFromPath('/finishes/x', 'finishes')).toBe(
+      'x',
+    );
   });
 });

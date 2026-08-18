@@ -241,7 +241,7 @@ export interface ProjectsScreenProps {
   readonly onExportProductionPack?: () => void | Promise<void>;
   /**
    * Open factory workspace for the selected plant-ready project (PROD-0.1).
-   * Shell navigates to `/produccion/:id`.
+   * Shell navigates to `/production/:id`.
    */
   readonly onOpenInProduction?: (projectId: string) => void;
   /**

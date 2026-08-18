@@ -107,7 +107,7 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(app).toContain("navId === 'hardware'");
     expect(app).toContain("navId === 'optionGroups'");
     expect(app).toContain("navId === 'modules'");
-    expect(app).toContain("navId === 'projects'");
+    expect(app).toContain("navId === 'quotes'");
     expect(app).toContain("navId === 'home'");
   });
 

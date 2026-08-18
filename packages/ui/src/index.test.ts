@@ -63,8 +63,8 @@ describe('@muebles/ui package surface', () => {
     expect(typeof AppShell).toBe('function');
     expect(APP_NAV_SECTIONS).toHaveLength(8);
     expect(APP_NAV_SECTIONS[0]?.id).toBe('trabajo');
-    expect(APP_NAV_SECTIONS[1]?.id).toBe('produccion');
-    expect(APP_NAV_SECTIONS[2]?.id).toBe('ventas');
+    expect(APP_NAV_SECTIONS[1]?.id).toBe('ventas');
+    expect(APP_NAV_SECTIONS[2]?.id).toBe('produccion');
     expect(APP_NAV_SECTIONS[3]?.id).toBe('ingenieria');
     expect(APP_NAV_SECTIONS[4]?.id).toBe('almacen');
     expect(APP_NAV_SECTIONS[5]?.id).toBe('libreria');

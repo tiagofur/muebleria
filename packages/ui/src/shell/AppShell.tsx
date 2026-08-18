@@ -54,26 +54,26 @@ import './appShell.css';
 /** Stable nav destinations for AppShell (shell wires screens). */
 export type AppNavId =
   | 'home'
-  | 'projects'
+  | 'quotes'
   | 'customers'
   | 'showcase'
   | 'plantBoard'
-  | 'fabric'
-  | 'embarques'
-  | 'instalaciones'
   | 'production'
+  | 'shipments'
+  | 'installations'
+  | 'orders'
   | 'productionDashboard'
   | 'engineering'
-  | 'purchasing'
+  | 'warehouse'
   | 'salesDashboard'
   | 'modules'
   | 'structures'
   | 'components'
-  | 'agregados'
+  | 'addOns'
   | 'materials'
   | 'edges'
   | 'hardware'
-  | 'ambientMaterials'
+  | 'finishes'
   | 'optionGroups'
   | 'settings'
   | 'users';
@@ -145,8 +145,8 @@ type NavItemDef = {
 type NavSectionDef = {
   readonly id:
   | 'trabajo'
-  | 'produccion'
   | 'ventas'
+  | 'produccion'
   | 'ingenieria'
   | 'almacen'
   | 'libreria'
@@ -182,6 +182,21 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     ],
   },
   {
+    id: 'ventas',
+    label: 'VENTAS',
+    items: [
+      /**
+       * Dashboard Ventas — pipeline + summary for sales roles.
+       * vendedor sees own portfolio; gerente_ventas and admin see all.
+       */
+      { id: 'salesDashboard', label: 'Dashboard', icon: TrendingUp },
+      { id: 'quotes', label: 'Cotizaciones', icon: FileText },
+      { id: 'customers', label: 'Clientes', icon: Users },
+      /** Commercial catalog — not engineering ABM. */
+      { id: 'showcase', label: 'Vitrina', icon: Store },
+    ],
+  },
+  {
     id: 'produccion',
     label: 'PRODUCCIÓN',
     /**
@@ -199,38 +214,23 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        * "Producción" hub). TEMPORARY: slated for removal once its remaining
        * tabs migrate (see roadmap-screens/00-overview.md §M2).
        */
-      { id: 'production', label: 'Órdenes', icon: ListChecks },
+      { id: 'orders', label: 'Órdenes', icon: ListChecks },
       /**
        * Producción (ex-Fábrica) — station work queue, corte → embalaje.
        * Sector-scoped operators see their assigned stations; admin /
        * gerente_produccion see everything + the metrics toggle.
        */
-      { id: 'fabric', label: 'Producción', icon: Factory },
+      { id: 'production', label: 'Producción', icon: Factory },
       /**
        * Embarques — what's packaged waiting for transport, across every
        * factory project (embalado → cargado). Floor + supervisors.
        */
-      { id: 'embarques', label: 'Embarques', icon: Truck },
+      { id: 'shipments', label: 'Embarques', icon: Truck },
       /**
        * Instalaciones — what's loaded and on its way to the client's site
        * (cargado → instalado). The last process step gets its own screen.
        */
-      { id: 'instalaciones', label: 'Instalaciones', icon: Hammer },
-    ],
-  },
-  {
-    id: 'ventas',
-    label: 'VENTAS',
-    items: [
-      /**
-       * Dashboard Ventas — pipeline + summary for sales roles.
-       * vendedor sees own portfolio; gerente_ventas and admin see all.
-       */
-      { id: 'salesDashboard', label: 'Dashboard', icon: TrendingUp },
-      { id: 'projects', label: 'Cotizaciones', icon: FileText },
-      { id: 'customers', label: 'Clientes', icon: Users },
-      /** Commercial catalog — not engineering ABM. */
-      { id: 'showcase', label: 'Vitrina', icon: Store },
+      { id: 'installations', label: 'Instalaciones', icon: Hammer },
     ],
   },
   {
@@ -253,7 +253,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        * admin full, gerente_produccion read-only, almacen own sectors;
        * rbac.ts navIdsForRole decides via roleCanAccessPurchasingNav.
        */
-      { id: 'purchasing', label: 'Almacén', icon: Warehouse },
+      { id: 'warehouse', label: 'Almacén', icon: Warehouse },
     ],
   },
   {
@@ -262,7 +262,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     items: [
       { id: 'modules', label: 'Muebles', icon: Package },
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
-      { id: 'agregados', label: 'Agregados', icon: Boxes },
+      { id: 'addOns', label: 'Agregados', icon: Boxes },
       { id: 'components', label: 'Componentes', icon: Puzzle },
       { id: 'optionGroups', label: 'Grupos', icon: ToggleLeft },
     ],
@@ -274,7 +274,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'materials', label: 'Materiales', icon: Layers },
       { id: 'edges', label: 'Cantos', icon: Minus },
       { id: 'hardware', label: 'Herrajes', icon: Settings2 },
-      { id: 'ambientMaterials', label: 'Acabados', icon: Palette },
+      { id: 'finishes', label: 'Acabados', icon: Palette },
     ],
   },
   {

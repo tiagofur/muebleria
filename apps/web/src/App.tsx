@@ -1139,7 +1139,7 @@ function AppContent({
   const [fabricMetrics, setFabricMetrics] = useState<DashboardMetrics | null>(null);
   const [fabricActiveClaims, setFabricActiveClaims] = useState<readonly FabricActiveClaim[]>([]);
   useEffect(() => {
-    if (navId !== 'fabric' || isSectorScoped) return;
+    if (navId !== 'production' || isSectorScoped) return;
     const repo = getRepository();
     if (!repo.getProductionDashboard) return;
     let cancelled = false;
@@ -1158,7 +1158,7 @@ function AppContent({
   }, [navId, isSectorScoped, getRepository]);
 
   useEffect(() => {
-    if (navId !== 'fabric') return;
+    if (navId !== 'production') return;
     const repo = getRepository();
     if (!repo.getProductionActiveJobs) return;
     let cancelled = false;
@@ -1191,12 +1191,12 @@ function AppContent({
       ? entityIdFromPath(location.pathname, navId)
       : null;
   const routeProjectId =
-    navId === 'projects' ? routeEntityId : null;
+    navId === 'quotes' ? routeEntityId : null;
   const routeModuleId = navId === 'modules' ? routeEntityId : null;
   const routeStructureId = navId === 'structures' ? routeEntityId : null;
   const routeComponentId = navId === 'components' ? routeEntityId : null;
   const productionOrderRoute =
-    navId === 'production' ? productionOrderFromPath(location.pathname) : null;
+    navId === 'orders' ? productionOrderFromPath(location.pathname) : null;
   const routeProductionOrderId = productionOrderRoute?.projectId ?? null;
   const routeProductionOrderTab = parseProductionOrderTab(
     productionOrderRoute?.tab ?? 'resumen',
@@ -1232,7 +1232,7 @@ function AppContent({
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
 
   // Welcome tour auto-opens at Inicio only — never above factory routes
-  // (/produccion) or deep links. Any dismiss persists (see modal).
+  // (/production) or deep links. Any dismiss persists (see modal).
   useEffect(() => {
     if (navId === 'home' && !getHasSeenOnboardingTour()) {
       setShowOnboardingTour(true);
@@ -1726,7 +1726,7 @@ function AppContent({
 
   const onDashboardNewProject = useCallback(() => {
     bumpProjectsCreateKey();
-    navigate(pathForNav('projects'));
+    navigate(pathForNav('quotes'));
   }, [navigate]);
 
   const onDashboardNewModule = useCallback(() => {
@@ -1755,7 +1755,7 @@ function AppContent({
     (moduleId: string) => {
       const mod = modules.find((m) => m.id === moduleId);
       bumpProjectsCreateKey();
-      navigate(pathForNav('projects'));
+      navigate(pathForNav('quotes'));
       toast({
         type: 'info',
         message: mod
@@ -1770,7 +1770,7 @@ function AppContent({
     (projectId: string) => {
       const proj = projects.find((p) => p.id === projectId);
       bumpProjectsCreateKey();
-      navigate(pathForNav('projects'));
+      navigate(pathForNav('quotes'));
       toast({
         type: 'info',
         message: proj
@@ -1965,7 +1965,7 @@ function AppContent({
     (id: string) => {
       projectActions.deleteProject(id, (deletedId) => {
         if (selectedProjectId === deletedId) {
-          navigate(pathForNav('projects'));
+          navigate(pathForNav('quotes'));
         }
       });
     },
@@ -2155,7 +2155,7 @@ function AppContent({
         projectId,
         role,
         choiceId,
-        (newId) => navigate(entityPath('projects', newId)),
+        (newId) => navigate(entityPath('quotes', newId)),
       );
     },
     [projectActions, navigate],
@@ -2896,7 +2896,7 @@ function AppContent({
 
   const onEntitySelectionChange = useCallback(
     (section: EntitySection, id: string | null) => {
-      if (section === 'projects') {
+      if (section === 'quotes') {
         setExportErrors([]);
       }
       // Fase 3 UI: do not navigate away from /section/:id/edit. The editor
@@ -2945,7 +2945,7 @@ function AppContent({
 
   const onProjectSelectionChange = useCallback(
     (projectId: string | null) => {
-      onEntitySelectionChange('projects', projectId);
+      onEntitySelectionChange('quotes', projectId);
     },
     [onEntitySelectionChange],
   );
@@ -3083,7 +3083,7 @@ function AppContent({
           }
         />
       ) : null}
-      {navId === 'fabric' && canOpenFabric ? (
+      {navId === 'production' && canOpenFabric ? (
         <ScreenBoundary screenLabel="Producción" onGoHome={goHomeFromScreen}>
         <FabricScreen
           projects={projectsForRole}
@@ -3108,7 +3108,7 @@ function AppContent({
         />
         </ScreenBoundary>
       ) : null}
-      {navId === 'embarques' && roleCanAccessShippingNav(actorRole) ? (
+      {navId === 'shipments' && roleCanAccessShippingNav(actorRole) ? (
         <ScreenBoundary screenLabel="Embarques" onGoHome={goHomeFromScreen}>
         <EmbarquesScreen
           projects={projectsForRole}
@@ -3131,7 +3131,7 @@ function AppContent({
         />
         </ScreenBoundary>
       ) : null}
-      {navId === 'instalaciones' && roleCanAccessShippingNav(actorRole) ? (
+      {navId === 'installations' && roleCanAccessShippingNav(actorRole) ? (
         <ScreenBoundary screenLabel="Instalaciones" onGoHome={goHomeFromScreen}>
         <InstalacionesScreen
           projects={projectsForRole}
@@ -3290,7 +3290,7 @@ function AppContent({
         })()}
         </ScreenBoundary>
       ) : null}
-      {navId === 'purchasing' ? (
+      {navId === 'warehouse' ? (
         <ScreenBoundary screenLabel="Compras y Almacén" onGoHome={goHomeFromScreen}>
         <PurchasingScreen
           projects={purchasingProjects}
@@ -3382,7 +3382,7 @@ function AppContent({
           repo={getRepository()}
         />
       ) : null}
-      {navId === 'production' && useProductionWorkspace ? (
+      {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
           projects={
             filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)
@@ -3399,7 +3399,7 @@ function AppContent({
             if (location.pathname !== target) navigate(target);
           }}
           onBackToQueue={() => {
-            const target = pathForNav('production');
+            const target = pathForNav('orders');
             if (location.pathname !== target) navigate(target);
           }}
           onOpenDesign={(id) => {
@@ -3578,7 +3578,7 @@ function AppContent({
           }
         />
       ) : null}
-      {navId === 'ambientMaterials' ? (
+      {navId === 'finishes' ? (
         <AmbientMaterialsCatalog
           materials={ambientMaterials}
           categories={ambientCategories}
@@ -3756,7 +3756,7 @@ function AppContent({
           canMutate={canMutateModules}
         />
       ) : null}
-      {navId === 'agregados' ? (
+      {navId === 'addOns' ? (
         <AgregadosScreen
           agregados={agregados}
           catalogComponents={components}
@@ -3771,7 +3771,7 @@ function AppContent({
           resolveImageUrl={resolveMediaUrl}
         />
       ) : null}
-      {navId === 'projects' ? (
+      {navId === 'quotes' ? (
         <ProjectsScreen
           projects={projectsForRole}
           modules={modules}
