@@ -4,23 +4,25 @@
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  color: #128c7e;
-  border-color: rgba(18, 140, 126, 0.3);
+  color: var(--success-700);
+  border-color: color-mix(in srgb, var(--success-700) 30%, transparent);
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .whatsapp-btn:hover:not(:disabled) {
-  background-color: rgba(37, 211, 102, 0.1);
-  border-color: #25d366;
-  color: #075e54;
+  background-color: color-mix(in srgb, var(--success-500) 10%, transparent);
+  border-color: var(--success-500);
+  color: var(--success-700);
 }
 
 .whatsapp-btn--compact {
   padding: 0.25rem 0.5rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
 }
 
+/* Excepción documentada: verde de marca WhatsApp (#25d366) solo para el
+   logo/icono de WhatsApp; el resto del modal usa tokens del design system. */
 .whatsapp-btn__icon {
   color: #25d366;
 }
@@ -36,8 +38,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background-color: var(--color-surface-subtle, #f8fafc);
-  border: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md, 8px);
 }
 
@@ -46,16 +48,16 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: var(--color-text, #1e293b);
+  color: var(--text-primary);
 }
 
 .whatsapp-modal__project-tag {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted, #64748b);
-  background-color: var(--color-surface, #ffffff);
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  background-color: var(--surface-card);
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm, 4px);
-  border: 1px solid var(--color-border, #e2e8f0);
+  border: 1px solid var(--border-default);
 }
 
 .whatsapp-modal__field {
@@ -65,9 +67,9 @@
 }
 
 .whatsapp-modal__label {
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   font-weight: 500;
-  color: var(--color-text, #1e293b);
+  color: var(--text-primary);
 }
 
 .whatsapp-modal__input,
@@ -85,8 +87,8 @@
 }
 
 .whatsapp-modal__help-text {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #64748b);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   margin: 0.25rem 0 0 0;
 }
 
@@ -98,9 +100,9 @@
 }
 
 .whatsapp-modal__send-btn {
-  background-color: #25d366 !important;
-  border-color: #25d366 !important;
-  color: #ffffff !important;
+  background-color: var(--brand-500) !important;
+  border-color: var(--brand-500) !important;
+  color: var(--text-inverse) !important;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -108,6 +110,6 @@
 }
 
 .whatsapp-modal__send-btn:hover:not(:disabled) {
-  background-color: #128c7e !important;
-  border-color: #128c7e !important;
+  background-color: var(--brand-600) !important;
+  border-color: var(--brand-600) !important;
 }

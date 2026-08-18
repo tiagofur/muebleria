@@ -41,6 +41,25 @@
   --accent-500: hsl(170 60% 40%); /* ACCENT */
   --accent-600: hsl(170 55% 33%);
 
+  /* —— Áreas (design.md §3.2.1): color de ubicación, nunca de acción — */
+  --area-sales-100: hsl(170 60% 95%);
+  --area-sales-300: hsl(170 55% 72%);
+  --area-sales-400: var(--accent-400);
+  --area-sales-500: var(--accent-500); /* VENTAS — teal */
+  --area-sales-600: var(--accent-600);
+
+  --area-eng-100: var(--brand-100);
+  --area-eng-300: var(--brand-300);
+  --area-eng-400: var(--brand-400);
+  --area-eng-500: var(--brand-500); /* INGENIERÍA+LIBRERÍA+CATÁLOGOS — indigo marca */
+  --area-eng-600: var(--brand-600);
+
+  --area-work-100: hsl(25 100% 96%);
+  --area-work-300: hsl(25 90% 78%);
+  --area-work-400: hsl(25 82% 60%);
+  --area-work-500: hsl(25 72% 46%); /* PRODUCCIÓN+ALMACÉN — naranja taller */
+  --area-work-600: hsl(25 66% 38%);
+
   /* —— Surfaces —— */
   --surface-app: hsl(220 20% 97%);
   --surface-sidebar: hsl(230 18% 16%);

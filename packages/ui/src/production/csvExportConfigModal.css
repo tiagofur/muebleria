@@ -11,8 +11,8 @@
 }
 
 .csv-modal {
-  background-color: var(--surface-card, #ffffff);
-  border: 1px solid var(--border-strong, #cbd5e1);
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
   width: 100%;
@@ -21,7 +21,7 @@
   flex-direction: column;
   max-height: 90vh;
   overflow: hidden;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary);
 }
 
 .csv-modal__header {
@@ -29,21 +29,21 @@
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .csv-modal__title {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary);
 }
 
 .csv-modal__icon {
-  color: var(--brand-primary, #3b82f6);
+  color: var(--brand-500);
 }
 
 .csv-modal__close-btn {
@@ -51,15 +51,15 @@
   border: none;
   cursor: pointer;
   padding: 0.25rem;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
   border-radius: 4px;
   display: flex;
   align-items: center;
 }
 
 .csv-modal__close-btn:hover {
-  background-color: var(--surface-muted, #f1f5f9);
-  color: var(--text-primary, #0f172a);
+  background-color: var(--surface-muted);
+  color: var(--text-primary);
 }
 
 .csv-modal__body {
@@ -81,25 +81,25 @@
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  font-size: 0.84rem;
+  font-size: var(--text-base);
   font-weight: 500;
-  color: var(--text-secondary, #475569);
+  color: var(--text-secondary);
 }
 
 .csv-modal__field select {
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-strong, #cbd5e1);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background-color: var(--surface-card, #ffffff);
-  color: var(--text-primary, #0f172a);
-  font-size: 0.9rem;
+  background-color: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--text-md);
 }
 
 .csv-modal__checkbox {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   cursor: pointer;
   user-select: none;
   padding-bottom: 0.5rem;
@@ -112,9 +112,9 @@
 }
 
 .csv-modal__preview-label {
-  font-size: 0.8rem;
+  font-size: var(--text-base);
   font-weight: 600;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -122,12 +122,12 @@
 .csv-modal__preview-text {
   margin: 0;
   padding: 0.875rem 1rem;
-  background-color: var(--surface-muted, #f8fafc);
-  border: 1px solid var(--border-subtle, #e2e8f0);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
-  color: var(--text-primary, #0f172a);
+  font-size: var(--text-base);
+  color: var(--text-primary);
   max-height: 220px;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -139,13 +139,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 1.5rem;
-  border-top: 1px solid var(--border-subtle, #e2e8f0);
-  background-color: var(--surface-subtle, #f8fafc);
+  border-top: 1px solid var(--border-subtle);
+  background-color: var(--surface-muted);
 }
 
 .csv-modal__info {
-  font-size: 0.82rem;
-  color: var(--text-muted, #64748b);
+  font-size: var(--text-base);
+  color: var(--text-muted);
 }
 
 .csv-modal__actions {

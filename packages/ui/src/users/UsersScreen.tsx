@@ -13,7 +13,7 @@ import {
   Users,
   MapPin,
 } from 'lucide-react';
-import { EmptyState, PageLoading } from '../common';
+import { ConfirmDialog, EmptyState, PageLoading, StatusChips } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
@@ -67,7 +67,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUserName, setSelectedUserName] = useState<string>('');
   const [selectedUserRole, setSelectedUserRole] = useState<string>('');
-
+  const [rejectingUser, setRejectingUser] = useState<UserRow | null>(null);
   const headers = useMemo(
     () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
     [token],
@@ -127,7 +127,6 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   };
 
   const reject = async (id: string) => {
-    if (!confirm('¿Eliminar este usuario pendiente?')) return;
     setActionId(id);
     try {
       await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
@@ -146,40 +145,43 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
         </div>
       ) : null}
 
-      <div className="catalog-header">
-        <div className="catalog-header__title-row">
-          <Users size={20} strokeWidth={1.5} aria-hidden />
-          <h1 className="catalog-header__title">
+      <div className="catalog-page__header">
+        <div>
+          <h2 className="catalog-page__title">
             Usuarios
             {pendingCount > 0 ? (
               <span className="users-badge">{pendingCount} pendiente{pendingCount > 1 ? 's' : ''}</span>
             ) : null}
-          </h1>
+          </h2>
+          <p className="page-header__subtitle">
+            Aprobación de registros y puestos del taller
+          </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost btn--small"
-          onClick={load}
-          disabled={loading}
-          title="Recargar"
-        >
-          <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
-        </button>
+        <div className="catalog-page__toolbar">
+          <button
+            type="button"
+            className="btn btn--ghost btn--small"
+            onClick={load}
+            disabled={loading}
+            title="Recargar"
+          >
+            <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
-      <div className="catalog-filters">
-        {(['pending', 'active', 'all'] as UserFilter[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`filter-tab ${filter === f ? 'filter-tab--active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {f === 'pending' ? `Pendientes${pendingCount > 0 ? ` (${pendingCount})` : ''}` :
-             f === 'active' ? 'Aprobados' : 'Todos'}
-          </button>
-        ))}
+      <div className="catalog-page__filters">
+        <StatusChips
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'pending' as const, label: pendingCount > 0 ? `Pendientes (${pendingCount})` : 'Pendientes' },
+            { value: 'active' as const, label: 'Aprobados' },
+            { value: 'all' as const, label: 'Todos' },
+          ]}
+          aria-label="Filtrar usuarios"
+        />
       </div>
 
       {loading ? (
@@ -250,7 +252,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         Activo
                       </span>
                     ) : (
-                      <span className="status-badge status-badge--pending">
+                      <span className="status-badge status-badge--open">
                         <MinusCircle size={13} strokeWidth={1.5} />
                         Pendiente
                       </span>
@@ -298,7 +300,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         type="button"
                         className="btn btn--danger btn--small"
                         disabled={actionId === u.id}
-                        onClick={() => void reject(u.id)}
+                        onClick={() => setRejectingUser(u)}
                         title="Rechazar"
                       >
                         <Trash2 size={15} strokeWidth={1.5} />
@@ -327,6 +329,22 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={rejectingUser !== null}
+        onClose={() => setRejectingUser(null)}
+        title="Eliminar usuario pendiente"
+        message={
+          rejectingUser
+            ? `Se elimina el registro de ${rejectingUser.email}. Podrá solicitar acceso de nuevo.`
+            : ''
+        }
+        confirmLabel="Eliminar"
+        onConfirm={() => {
+          if (rejectingUser) void reject(rejectingUser.id);
+        }}
+        dataTestId="users-reject-confirm"
+      />
     </div>
   );
 }

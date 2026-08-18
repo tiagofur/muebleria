@@ -154,7 +154,17 @@ export function InternalCommsPanel({
             <HardHat size={20} color="var(--color-primary, #2563eb)" />
             <h3 className="internal-comms__handoff-title">Handoff Técnico: Ventas ↔ Ingeniería / Taller</h3>
           </div>
-          <span className={`internal-comms__status-badge internal-comms__status-badge--${statusMeta.color}`}>
+          <span
+            className={`status-badge status-badge--${
+              statusMeta.color === 'neutral'
+                ? 'cancelled'
+                : statusMeta.color === 'info'
+                  ? 'open'
+                  : statusMeta.color === 'success'
+                    ? 'done'
+                    : statusMeta.color
+            }`}
+          >
             <Clock size={12} />
             {statusMeta.label}
           </span>

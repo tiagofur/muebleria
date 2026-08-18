@@ -323,7 +323,7 @@ export function PurchaseOrdersPanel({
               <button
                 key="emit"
                 type="button"
-                className="btn btn--primary btn--small"
+                className="btn btn--small"
                 onClick={() => void run(() => onEmitPurchaseOrder(po.id))}
                 data-testid={`purch-po-emit-${po.id}`}
               >
@@ -347,7 +347,7 @@ export function PurchaseOrdersPanel({
               <button
                 key="receive"
                 type="button"
-                className="btn btn--primary btn--small"
+                className="btn btn--small"
                 onClick={() => openReceive(po)}
                 data-testid={`purch-po-receive-${po.id}`}
               >
@@ -386,12 +386,14 @@ export function PurchaseOrdersPanel({
                 </div>
                 <div className="purch-po-card__right">
                   <span
-                    className={`purch-badge purch-badge--${
+                    className={`status-badge status-badge--${
                       po.status === 'recibida' || po.status === 'cancelada'
-                        ? po.status
+                        ? po.status === 'recibida'
+                          ? 'done'
+                          : 'cancelled'
                         : po.status === 'emitida'
-                          ? 'despachado'
-                          : 'pendiente'
+                          ? 'done'
+                          : 'open'
                     }`}
                     data-testid={`purch-po-status-${po.id}`}
                   >
@@ -515,7 +517,7 @@ export function PurchaseOrdersPanel({
               </div>
               <div className="purch-card__actions">
                 {!sp.active ? (
-                  <span className="purch-badge purch-badge--cancelada">Inactivo</span>
+                  <span className="status-badge status-badge--cancelled">Inactivo</span>
                 ) : null}
                 {canEdit ? (
                   <>

@@ -136,7 +136,7 @@
 }
 
 .material-palette__badge {
-  font-size: 10px;
+  font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
@@ -150,18 +150,18 @@
 }
 
 .material-palette__badge--wall {
-  background: color-mix(in srgb, #3b82f6 15%, transparent);
-  color: #2563eb;
+  background: color-mix(in srgb, var(--info-500) 15%, transparent);
+  color: var(--info-700);
 }
 
 .material-palette__badge--ceiling {
-  background: color-mix(in srgb, #8b5cf6 15%, transparent);
-  color: #7c3aed;
+  background: color-mix(in srgb, var(--brand-400) 15%, transparent);
+  color: var(--brand-600);
 }
 
 .material-palette__badge--countertop {
-  background: color-mix(in srgb, #0d9488 15%, transparent);
-  color: #0f766e;
+  background: color-mix(in srgb, var(--accent-500) 15%, transparent);
+  color: var(--accent-600);
 }
 
 .material-palette__list {

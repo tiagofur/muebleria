@@ -267,16 +267,30 @@ export function WarrantyTicketsPanel({
                   </div>
 
                   <div className="warranty-card__badges">
-                    <span className="warranty-badge warranty-badge--category">
+                    <span className="status-badge status-badge--cancelled">
                       {catMeta?.label ?? ticket.category}
                     </span>
                     <span
-                      className={`warranty-badge warranty-badge--priority-${ticket.priority}`}
+                      className={`status-badge status-badge--${
+                        ticket.priority === 'urgent'
+                          ? 'danger'
+                          : ticket.priority === 'normal'
+                            ? 'open'
+                            : 'cancelled'
+                      }`}
                     >
                       {prioMeta?.label ?? ticket.priority}
                     </span>
                     <span
-                      className={`warranty-badge warranty-badge--status-${ticket.status === 'visit_scheduled' ? 'visit' : ticket.status === 'in_progress' ? 'progress' : ticket.status}`}
+                      className={`status-badge status-badge--${
+                        ticket.status === 'resolved'
+                          ? 'done'
+                          : ticket.status === 'cancelled'
+                            ? 'cancelled'
+                            : ticket.status === 'open'
+                              ? 'open'
+                              : 'progress'
+                      }`}
                     >
                       {statusMeta?.label ?? ticket.status}
                     </span>

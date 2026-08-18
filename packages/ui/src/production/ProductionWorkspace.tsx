@@ -30,6 +30,7 @@ import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
 import { ProductionQueue, type ProductionQueueProps } from './ProductionQueue';
 import { ProductionOrderHub } from './ProductionOrderHub';
+import type { FabricActiveClaim } from './fabricProjectCards';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   buildProductionOrderReadiness,
@@ -101,6 +102,8 @@ export type ProductionWorkspaceProps = {
   readonly onReleaseToDelivery?: (projectId: string) => void | Promise<void>;
   readonly canReleaseToDelivery?: boolean;
   readonly isReleasing?: boolean;
+  /** Active cutting/floor claims — used to filter the "Ya en producción" queue. */
+  readonly activeClaims?: readonly FabricActiveClaim[];
 };
 
 export function ProductionWorkspace({
@@ -140,6 +143,7 @@ export function ProductionWorkspace({
   onReleaseToDelivery,
   canReleaseToDelivery = true,
   isReleasing = false,
+  activeClaims = [],
 }: ProductionWorkspaceProps): ReactNode {
   const [productionScopeId, setProductionScopeId] =
     useState<string>(PRODUCTION_SCOPE_ALL);
@@ -365,6 +369,7 @@ export function ProductionWorkspace({
       exportBusy={exportBusy}
       loading={loading}
       cutRowsFor={cutRowsFor}
+      activeClaims={activeClaims}
     />
   );
 }

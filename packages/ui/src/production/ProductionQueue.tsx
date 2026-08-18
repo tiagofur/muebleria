@@ -21,10 +21,8 @@ import {
   projectStatusLabel,
 } from '../projects/projectHelpers';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
-import {
-  filterProductionQueue,
-  type ProductionQueueTab,
-} from './productionHelpers';
+import type { FabricActiveClaim } from './fabricProjectCards';
+import { isProductionQueueStatus } from './productionHelpers';
 import './production.css';
 
 export type ProductionQueueItem = {
@@ -56,6 +54,8 @@ export type ProductionQueueProps = {
   readonly cutRowsFor?: (
     projectId: string,
   ) => readonly import('@muebles/domain').ProductionCutRow[] | undefined;
+  /** Active claims — projects with at least one go to "Ya en producción". */
+  readonly activeClaims?: readonly FabricActiveClaim[];
 };
 
 function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
@@ -80,18 +80,33 @@ export function ProductionQueue({
   exportBusy = false,
   loading = false,
   cutRowsFor,
+  activeClaims = [],
 }: ProductionQueueProps): ReactNode {
-  const [tab, setTab] = useState<ProductionQueueTab>('accepted');
+  const [tab, setTab] = useState<'accepted' | 'produced'>('accepted');
   const [expandedBoard, setExpandedBoard] = useState<string | null>(null);
   /** Hub is the primary workspace: queue cards stay triage-only. */
   const hubWired = Boolean(onOpenOrder);
   /** Board preview on cards only when no hub (legacy) or explicit cutRows. */
   const showBoardToggle = Boolean(cutRowsFor) && !hubWired;
 
-  const rows = useMemo(
-    () => filterProductionQueue(projects, tab),
-    [projects, tab],
+  /** IDs of projects that have at least one active claim. */
+  const claimedIds = useMemo(
+    () => new Set(activeClaims.map((c) => c.projectId)),
+    [activeClaims],
   );
+
+  const rows = useMemo(() => {
+    return projects
+      .filter((p) => isProductionQueueStatus(p.status))
+      .filter((p) =>
+        tab === 'accepted' ? !claimedIds.has(p.id) : claimedIds.has(p.id),
+      )
+      .sort((a, b) => {
+        if (a.updatedAt < b.updatedAt) return 1;
+        if (a.updatedAt > b.updatedAt) return -1;
+        return 0;
+      });
+  }, [projects, tab, claimedIds]);
 
   if (loading) {
     return (
@@ -101,12 +116,11 @@ export function ProductionQueue({
     );
   }
 
-  const title =
-    tab === 'accepted' ? 'Para fabricar' : 'Ya en producción';
+  const title = 'Órdenes';
   const subtitle =
     tab === 'accepted'
-      ? 'Pedidos aceptados. Abrí la orden para pack, despiece y piso — acá solo elegís la obra.'
-      : 'Ya marcadas en producción. Reabrí la orden para reexportar o ver el avance.';
+      ? 'Liberados de Almacén, esperando que arranque el corte.'
+      : 'Con corte activo — ya se está fabricando.';
 
   return (
     <section className="prod-queue" aria-label="Cola de producción">
@@ -170,13 +184,13 @@ export function ProductionQueue({
           icon={Factory}
           title={
             tab === 'accepted'
-              ? 'No hay cotizaciones aceptadas'
-              : 'Todavía no hay nada en producción'
+              ? 'No hay proyectos para fabricar'
+              : 'Ninguno tiene corte activo'
           }
           description={
             tab === 'accepted'
-              ? 'Cuando ventas acepte un pedido, aparece acá para abrir la orden de fábrica.'
-              : 'Las obras que marques «En producción» se listan en esta pestaña.'
+              ? 'Cuando Almacén libere materiales, aparece acá.'
+              : 'Las obras con corte iniciado se listan en esta pestaña.'
           }
         />
       ) : (
@@ -294,7 +308,7 @@ export function ProductionQueue({
                         {exportBusy ? 'Exportando…' : 'Exportar corte'}
                       </button>
                     ) : null}
-                    {project.status === 'accepted' ? (
+                    {project.status === 'accepted' && !claimedIds.has(project.id) ? (
                       <button
                         type="button"
                         className="btn"

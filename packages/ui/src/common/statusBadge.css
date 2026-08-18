@@ -1,0 +1,108 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Status badge — vocabulario único de estados (design.md §5.2 v2).
+   Colores SIEMPRE semánticos (success/warning/danger/info/neutral),
+   nunca color de área. Extraído de projects/projects.css.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.15rem var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+
+.status-badge__dot {
+  font-size: 0.55em;
+  line-height: 1;
+}
+
+/* ── Flujo de cotización (projects) ─────────────────────────────────────── */
+
+.status-badge--draft {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-default);
+}
+
+.status-badge--quoted {
+  color: var(--info-700);
+  background: var(--info-50);
+  border: 1px solid var(--info-500);
+}
+
+.status-badge--accepted {
+  color: var(--success-700);
+  background: var(--success-50);
+  border: 1px solid var(--success-500);
+}
+
+.status-badge--rejected {
+  color: var(--danger-700);
+  background: var(--danger-50);
+  border: 1px solid var(--danger-500);
+}
+
+.status-badge--produced {
+  color: var(--brand-700);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-300);
+}
+
+/* ── Vocabulario semántico v2 (§5.2) ────────────────────────────────────── */
+
+/* abierto / pendiente — info */
+.status-badge--open {
+  color: var(--info-700);
+  background: var(--info-50);
+  border: 1px solid var(--info-500);
+}
+
+/* en proceso — brand (índigo) */
+.status-badge--progress {
+  color: var(--brand-700);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-300);
+}
+
+/* resuelto / documentado / completo — success */
+.status-badge--done {
+  color: var(--success-700);
+  background: var(--success-50);
+  border: 1px solid var(--success-500);
+}
+
+/* cancelado / enviado (read-only) — neutral */
+.status-badge--cancelled {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-default);
+}
+
+/* uso (activo/inactivo) */
+.status-badge--active {
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.status-badge--inactive {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+/* variantes semánticas auxiliares (stock, prioridades) */
+.status-badge--warning {
+  background: var(--warning-50);
+  color: var(--warning-700);
+  border: 1px solid var(--warning-100);
+}
+
+.status-badge--danger {
+  background: var(--danger-50);
+  color: var(--danger-700);
+  border: 1px solid var(--danger-500);
+}

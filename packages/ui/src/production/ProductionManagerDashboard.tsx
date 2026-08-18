@@ -39,6 +39,7 @@ import {
   PIPELINE_SECTORS,
   type ProjectFloorSummary,
   type PipelineSector,
+  type ProductionSector,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
 import './productionManagerDashboard.css';
@@ -302,10 +303,10 @@ export function ProductionManagerDashboard({
       <header className="pm-dashboard__header">
         <div className="pm-dashboard__title-row">
           <span className="pm-dashboard__title-icon" aria-hidden>
-            <Factory size={24} strokeWidth={1.5} aria-hidden />
+            <Factory size={18} strokeWidth={1.5} aria-hidden />
           </span>
           <div>
-            <h1 className="pm-dashboard__title">Dashboard de Producción</h1>
+            <h2 className="pm-dashboard__title">Dashboard de Producción</h2>
             <p className="pm-dashboard__subtitle">
               Visibilidad completa de todas las áreas, operadores y métricas
             </p>
@@ -334,52 +335,52 @@ export function ProductionManagerDashboard({
 
       {/* Summary Cards */}
       <div className="pm-dashboard__summary">
-        <div className="pm-dashboard__card pm-dashboard__card--highlight">
-          <div className="pm-dashboard__card-icon">
+        <div className="stat-card stat-card--work stat-card--emphasis">
+          <div className="stat-card__icon">
             <Factory size={20} strokeWidth={1.5} aria-hidden />
           </div>
-          <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value" data-testid="pm-total-projects">
+          <div className="stat-card__body">
+            <span className="stat-card__value" data-testid="pm-total-projects">
               {totalMetrics.totalProjects}
             </span>
-            <span className="pm-dashboard__card-label">Obras en Producción</span>
+            <span className="stat-card__label">Obras en Producción</span>
           </div>
         </div>
 
-        <div className="pm-dashboard__card">
-          <div className="pm-dashboard__card-icon">
+        <div className="stat-card stat-card--work">
+          <div className="stat-card__icon">
             <Users size={20} strokeWidth={1.5} aria-hidden />
           </div>
-          <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{activeJobs.length}</span>
-            <span className="pm-dashboard__card-label">Operadores Activos</span>
+          <div className="stat-card__body">
+            <span className="stat-card__value">{activeJobs.length}</span>
+            <span className="stat-card__label">Operadores Activos</span>
           </div>
         </div>
 
-        <div className="pm-dashboard__card">
-          <div className="pm-dashboard__card-icon">
+        <div className="stat-card stat-card--work">
+          <div className="stat-card__icon">
             <CheckCircle2 size={20} strokeWidth={1.5} aria-hidden />
           </div>
-          <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{totalMetrics.todayCompleted}</span>
-            <span className="pm-dashboard__card-label">Completados Hoy</span>
+          <div className="stat-card__body">
+            <span className="stat-card__value">{totalMetrics.todayCompleted}</span>
+            <span className="stat-card__label">Completados Hoy</span>
           </div>
         </div>
 
-        <div className="pm-dashboard__card">
-          <div className="pm-dashboard__card-icon">
+        <div className="stat-card stat-card--work">
+          <div className="stat-card__icon">
             <Clock size={20} strokeWidth={1.5} aria-hidden />
           </div>
-          <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{totalMetrics.avgProgress}%</span>
-            <span className="pm-dashboard__card-label">Avance Promedio</span>
+          <div className="stat-card__body">
+            <span className="stat-card__value">{totalMetrics.avgProgress}%</span>
+            <span className="stat-card__label">Avance Promedio</span>
           </div>
         </div>
       </div>
 
       {/* Sector Status Bar */}
       <div className="pm-dashboard__sectors">
-        <h2 className="pm-dashboard__section-title">Estado por Sector</h2>
+        <h3 className="pm-dashboard__section-title">Estado por Sector</h3>
         <div className="pm-dashboard__sector-grid">
           {sectorStatuses.map((status) => (
             <button
@@ -394,7 +395,9 @@ export function ProductionManagerDashboard({
               <span className="pm-dashboard__sector-icon">
                 <SectorIcon sector={status.sector} size={20} />
               </span>
-              <span className="pm-dashboard__sector-name">{status.label}</span>
+              <span className="pm-dashboard__sector-name">
+                {PRODUCTION_SECTOR_LABELS_ES[status.sector as ProductionSector] ?? status.label}
+              </span>
               <span className="pm-dashboard__sector-count">
                 {status.activeOperators} activos
               </span>
@@ -409,7 +412,7 @@ export function ProductionManagerDashboard({
       {/* Metrics Panel (collapsible) */}
       {showMetrics && (
         <div className="pm-dashboard__metrics">
-          <h2 className="pm-dashboard__section-title">Métricas de Producción</h2>
+          <h3 className="pm-dashboard__section-title">Métricas de Producción</h3>
           <div className="pm-dashboard__metrics-grid">
             <div className="pm-dashboard__metric">
               <span className="pm-dashboard__metric-label">Piezas Completadas Hoy</span>
@@ -434,7 +437,7 @@ export function ProductionManagerDashboard({
       {/* Active Jobs */}
       {filteredJobs.length > 0 && (
         <div className="pm-dashboard__jobs">
-          <h2 className="pm-dashboard__section-title">Trabajos Activos</h2>
+          <h3 className="pm-dashboard__section-title">Trabajos Activos</h3>
           <div className="pm-dashboard__job-list">
             {filteredJobs.map((job) => (
               <ActiveJobRow key={job.activityId} job={job} />
@@ -445,7 +448,7 @@ export function ProductionManagerDashboard({
 
       {/* Project List */}
       <div className="pm-dashboard__projects">
-        <h2 className="pm-dashboard__section-title">Proyectos en Producción</h2>
+        <h3 className="pm-dashboard__section-title">Proyectos en Producción</h3>
         
         {productionProjects.length === 0 ? (
           <EmptyState

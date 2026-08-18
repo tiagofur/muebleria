@@ -5,6 +5,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { History, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { ConfirmDialog } from '../../common/ConfirmDialog';
 import type {
   Project,
   ProjectVersion,
@@ -28,10 +29,10 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
 };
 
 const STATUS_CLASSES: Record<ProjectStatus, string> = {
-  draft: 'badge-draft',
-  quoted: 'badge-quoted',
-  accepted: 'badge-accepted',
-  produced: 'badge-produced',
+  draft: 'status-badge--draft',
+  quoted: 'status-badge--quoted',
+  accepted: 'status-badge--accepted',
+  produced: 'status-badge--produced',
 };
 
 function formatRelativeTime(iso: string): string {
@@ -149,6 +150,7 @@ export function VersionHistoryPanel({
   onRestore,
 }: VersionHistoryPanelProps): ReactNode {
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
   const version = currentVersion(project);
   const history = project.history ?? [];
 
@@ -225,16 +227,24 @@ export function VersionHistoryPanel({
                   : card.version.version,
               )
             }
-            onRestore={() => {
-              const confirmed = window.confirm(
-                `¿Restaurar versión ${card.version.version}? Se guardará el estado actual como snapshot antes de restaurar.`,
-              );
-              if (confirmed) onRestore(card.version.version);
-            }}
+            onRestore={() => setRestoringVersion(card.version.version)}
             diff={card.diff}
           />
         ))}
       </div>
+
+      <ConfirmDialog
+        open={restoringVersion !== null}
+        onClose={() => setRestoringVersion(null)}
+        title={restoringVersion !== null ? `Restaurar versión ${restoringVersion}` : ''}
+        message="Se guardará el estado actual como snapshot antes de restaurar."
+        confirmLabel="Restaurar"
+        tone="primary"
+        onConfirm={() => {
+          if (restoringVersion !== null) onRestore(restoringVersion);
+        }}
+        dataTestId="version-restore-confirm"
+      />
     </div>
   );
 }

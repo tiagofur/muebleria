@@ -2,6 +2,9 @@
  * Shared presentational primitives (modal, toast, search, empty state, etc.).
  */
 
+import './statusBadge.css';
+import './statCard.css';
+
 export { BrandMark, type BrandMarkProps } from './BrandMark';
 export { CatalogImage, type CatalogImageProps } from './CatalogImage';
 export {
@@ -22,6 +25,10 @@ export {
   type EmptyStateProps,
   type EmptyStateVariant,
 } from './EmptyState';
+export {
+  ConfirmDialog,
+  type ConfirmDialogProps,
+} from './ConfirmDialog';
 export {
   ErrorBoundary,
   type ErrorBoundaryProps,

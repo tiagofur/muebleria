@@ -880,7 +880,7 @@ export function SalesDashboard({
                       <span className="sales-list__confirm-cancel">
                         <button
                           type="button"
-                          className="btn btn--danger btn--xs"
+                          className="btn btn--danger btn--small"
                           onClick={(e) => {
                             e.stopPropagation();
                             onCancelProject(row.project.id);
@@ -891,7 +891,7 @@ export function SalesDashboard({
                         </button>
                         <button
                           type="button"
-                          className="btn btn--ghost btn--xs"
+                          className="btn btn--ghost btn--small"
                           onClick={(e) => {
                             e.stopPropagation();
                             setConfirmCancelId(null);
@@ -903,7 +903,7 @@ export function SalesDashboard({
                     ) : (
                       <button
                         type="button"
-                        className="btn btn--ghost btn--xs sales-list__cancel-btn"
+                        className="btn btn--ghost btn--small sales-list__cancel-btn"
                         title="Cancelar cotización"
                         onClick={(e) => {
                           e.stopPropagation();

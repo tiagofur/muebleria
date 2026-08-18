@@ -11,29 +11,8 @@
   gap: var(--space-5);
 }
 
-.purch-landing__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.purch-landing__title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.purch-landing__subtitle {
-  margin: 0.25rem 0 0;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
+/* .purch-landing__header / __title / __subtitle are aliases of .page-header
+   (common/pageHeader.css). */
 
 .purch-landing__badge {
   display: inline-flex;
@@ -41,7 +20,7 @@
   gap: var(--space-1);
   padding: 0.25em 0.7em;
   border-radius: var(--radius-sm);
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-brand);
   background: var(--surface-selected);
@@ -57,67 +36,8 @@
   gap: var(--space-3);
 }
 
-.purch-stat {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  box-shadow: var(--shadow-sm);
-}
-
-.purch-stat__icon {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.purch-stat__icon--projects {
-  background: hsl(245 96% 93%);
-  color: hsl(245 78% 55%);
-}
-
-.purch-stat__icon--hardware {
-  background: hsl(170 60% 90%);
-  color: hsl(170 55% 38%);
-}
-
-.purch-stat__icon--tableros {
-  background: hsl(142 60% 90%);
-  color: hsl(142 55% 32%);
-}
-
-.purch-stat__icon--cintillas {
-  background: hsl(38 100% 90%);
-  color: hsl(38 80% 40%);
-}
-
-.purch-stat__body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.purch-stat__value {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.purch-stat__label {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-top: 0.1rem;
-}
+/* Stat cards — migrado a .stat-card (common/statCard.css);
+   área Compras/Almacén → variante .stat-card--work (§3.2.1). */
 
 /* ── Tab panel ───────────────────────────────────────────────────────────── */
 
@@ -165,13 +85,13 @@
 }
 
 .purch-card__name {
-  font-size: 0.9rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .purch-card__sub {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -201,7 +121,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   padding: var(--space-1) 0;
 }
 
@@ -216,7 +136,7 @@
 
 .purch-row__code {
   margin-left: var(--space-1);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   font-family: var(--font-mono);
   color: var(--text-muted);
   background: var(--surface-hover);
@@ -253,7 +173,7 @@
 }
 
 .purch-card__sheets-title {
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -265,49 +185,21 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  font-size: 0.8rem;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
 .purch-card__sheets-note {
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
-/* ── Status badges ───────────────────────────────────────────────────────── */
-
-.purch-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  padding: 0.2em 0.6em;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.purch-badge--pendiente {
-  background: hsl(38 100% 93%);
-  color: hsl(35 90% 35%);
-}
-
-.purch-badge--despachado {
-  background: hsl(142 60% 90%);
-  color: hsl(142 55% 30%);
-}
-
-.purch-badge--bajo {
-  background: hsl(38 100% 90%);
-  color: hsl(35 90% 32%);
-}
-
-.purch-badge--agotado {
-  background: hsl(0 70% 93%);
-  color: hsl(0 70% 40%);
-}
+/* ── Status badges ─────────────────────────────────────────────────────────
+   Migrado al vocabulario único .status-badge--* (common/statusBadge.css):
+   pendiente→--open · despachado/recibida→--done · cancelada→--cancelled ·
+   bajo→--warning · agotado→--danger. */
 
 /* ── Stock chips (picking rows) ──────────────────────────────────────────── */
 
@@ -318,7 +210,7 @@
   margin-left: var(--space-2);
   padding: 0.15em 0.55em;
   border-radius: var(--radius-sm);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -369,7 +261,7 @@
   background: hsl(38 100% 93%);
   border: 1px solid hsl(35 90% 75%);
   color: hsl(35 90% 30%);
-  font-size: 0.8rem;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
@@ -404,7 +296,7 @@
   outline: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: var(--text-base);
   width: 100%;
 }
 
@@ -419,13 +311,13 @@
 .purch-stock__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--text-base);
 }
 
 .purch-stock__table th {
   text-align: left;
   padding: var(--space-2) var(--space-3);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -452,7 +344,7 @@
 
 .purch-stock__kind {
   display: block;
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -470,7 +362,7 @@
   border: 1px solid var(--border-default);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 0.78rem;
+  font-size: var(--text-base);
   font-variant-numeric: tabular-nums;
 }
 
@@ -494,7 +386,7 @@
   padding: var(--space-3);
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-base);
 }
 
 /* ── Stock movement modal ────────────────────────────────────────────────── */
@@ -512,7 +404,7 @@
 }
 
 .purch-stock-modal__label {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -524,17 +416,17 @@
   border: 1px solid var(--border-default);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 0.82rem;
+  font-size: var(--text-base);
 }
 
 .purch-stock-modal__hint {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .purch-stock-modal__units {
   margin: var(--space-3) 0 0;
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -545,7 +437,7 @@
 }
 
 .purch-stock-modal__error {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: hsl(0 70% 40%);
   font-weight: 600;
 }
@@ -589,7 +481,7 @@
   gap: var(--space-2);
   padding: 0.6rem 1rem;
   border-top: 1px solid var(--border-default);
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -606,7 +498,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -623,7 +515,7 @@
 .purch-supplier-notes {
   margin: 0;
   padding: 0 1rem 0.8rem;
-  font-size: 0.74rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -637,7 +529,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  font-size: 0.74rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -650,7 +542,7 @@
   border: 1px solid var(--border-default);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 400;
   font-family: inherit;
 }
@@ -662,7 +554,7 @@
 
 .purch-po-form__hint {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -673,7 +565,7 @@
 }
 
 .purch-po-form__lines-title {
-  font-size: 0.74rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -692,7 +584,7 @@
   border: 1px solid var(--border-default);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: var(--text-base);
   min-width: 0;
 }
 
@@ -718,12 +610,12 @@
   gap: var(--space-2);
   padding: 0.7rem 1rem;
   border-top: 2px solid var(--border-default);
-  font-size: 0.8rem;
+  font-size: var(--text-base);
   color: var(--text-secondary);
 }
 
 .purch-stock__total strong {
-  font-size: 0.95rem;
+  font-size: var(--text-md);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }

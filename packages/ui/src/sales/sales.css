@@ -14,7 +14,7 @@
 
 .sales-section-title {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
   display: flex;
@@ -35,7 +35,7 @@
 }
 
 .sales-filter__label {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -46,7 +46,7 @@
   border: 1px solid var(--border-default);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-family: inherit;
   cursor: pointer;
   min-width: 180px;
@@ -58,35 +58,13 @@
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
-
-.sales-dashboard__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.sales-dashboard__title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
+/* .sales-dashboard__header / __title / __subtitle are aliases of
+   .page-header (common/pageHeader.css). */
 
 .sales-dashboard__filter-badge {
-  font-size: 0.95rem;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
   color: var(--text-brand);
-}
-
-.sales-dashboard__subtitle {
-  margin: 0.25rem 0 0;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
 }
 
 .sales-dashboard__total {
@@ -97,7 +75,7 @@
 }
 
 .sales-dashboard__total-label {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -105,7 +83,7 @@
 }
 
 .sales-dashboard__total-value {
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--text-brand);
   font-variant-numeric: tabular-nums;
@@ -140,7 +118,7 @@
 
 .sales-monthly__card-title {
   margin: 0 0 var(--space-3);
-  font-size: 0.78rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -160,12 +138,12 @@
 }
 
 .sales-monthly__label {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   color: var(--text-primary);
 }
 
 .sales-monthly__value {
-  font-size: 0.88rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -190,7 +168,7 @@
 }
 
 .sales-monthly__money {
-  font-size: 0.78rem;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -242,7 +220,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -272,7 +250,7 @@
 }
 
 .sales-ranking__name {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -281,12 +259,12 @@
 }
 
 .sales-ranking__detail {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .sales-ranking__value {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-brand);
   font-variant-numeric: tabular-nums;
@@ -371,7 +349,7 @@
 }
 
 .sales-card__value {
-  font-size: 1.35rem;
+  font-size: var(--text-xl);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.1;
@@ -379,14 +357,14 @@
 }
 
 .sales-card__label {
-  font-size: 0.78rem;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-secondary);
   margin-top: 0.15rem;
 }
 
 .sales-card__money {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-muted);
   margin-top: 0.1rem;
@@ -410,7 +388,26 @@
 }
 
 .sales-pipeline__seg {
-  transition: width 0.3s ease;
+  position: relative;
+}
+
+/* Animar con transform (compositor) en vez de transition: width (layout) */
+.sales-pipeline__seg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  transform-origin: left center;
+  animation: sales-seg-grow 0.3s ease;
+}
+
+@keyframes sales-seg-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sales-pipeline__seg::before { animation: none; }
 }
 
 .sales-pipeline__seg--abiertas { background: hsl(245 78% 55%); }
@@ -431,7 +428,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
@@ -456,7 +453,7 @@
 
 .sales-list__title {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -518,7 +515,7 @@
 }
 
 .sales-list__name {
-  font-size: 0.88rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -527,12 +524,12 @@
 }
 
 .sales-list__customer {
-  font-size: 0.78rem;
+  font-size: var(--text-base);
   color: var(--text-secondary);
 }
 
 .sales-list__owner {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -550,14 +547,14 @@
 }
 
 .sales-list__price {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
 .sales-list__date {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -568,7 +565,7 @@
   align-items: center;
   padding: 0.2em 0.6em;
   border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -579,7 +576,7 @@
 }
 
 .sales-list__cancel-btn {
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   opacity: 0.6;
   transition: opacity 0.15s;
 }
@@ -595,20 +592,8 @@
   align-items: center;
 }
 
-.btn--danger {
-  background: hsl(0 60% 50%);
-  color: #fff;
-  border: none;
-}
-
-.btn--danger:hover {
-  background: hsl(0 60% 40%);
-}
-
-.btn--xs {
-  padding: 0.15em 0.5em;
-  font-size: 0.68rem;
-}
+/* Nota: .btn--danger/.btn--xs se eliminaron — los botones usan el sistema
+   común de common/buttons.css (regla: el CSS de features no redefine .btn). */
 
 /* ── Alerts ─────────────────────────────────────────────────────────────── */
 
@@ -624,7 +609,7 @@
 
 .sales-alerts__title {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: hsl(35 90% 35%);
   display: flex;
@@ -642,7 +627,7 @@
 }
 
 .sales-alerts__item {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
 }
 
 .sales-alerts__link {
@@ -706,7 +691,7 @@
 }
 
 .sales-monthly-chart__value {
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
   line-height: 1;
@@ -729,14 +714,14 @@
 
 .sales-monthly-chart__label {
   text-align: center;
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .sales-monthly-chart__legend {
   display: flex;
   gap: var(--space-4);
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 

@@ -397,7 +397,7 @@ export function OptionGroupsScreen({
                   </button>
                   <button
                     type="button"
-                    className="btn btn--small"
+                    className="btn btn--small btn--danger"
                     onClick={() => requestDelete(row.id)}
                   >
                     <Trash2 size={14} strokeWidth={1.5} aria-hidden />

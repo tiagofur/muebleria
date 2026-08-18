@@ -90,10 +90,10 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
 
 /** design.md §5.2 status badge class names (without leading `.`). */
 const STATUS_BADGE_CLASS: Record<ProjectStatus, string> = {
-  draft: 'badge-draft',
-  quoted: 'badge-quoted',
-  accepted: 'badge-accepted',
-  produced: 'badge-produced',
+  draft: 'status-badge--draft',
+  quoted: 'status-badge--quoted',
+  accepted: 'status-badge--accepted',
+  produced: 'status-badge--produced',
 };
 
 export const PROJECT_STATUSES: readonly ProjectStatus[] = [
@@ -152,7 +152,7 @@ export function projectStatusLabel(status: ProjectStatus): string {
 
 /** CSS class for colored project status badge (design.md §5.2). */
 export function projectStatusBadgeClass(status: ProjectStatus): string {
-  return STATUS_BADGE_CLASS[status] ?? 'badge-draft';
+  return STATUS_BADGE_CLASS[status] ?? 'status-badge--draft';
 }
 
 /**

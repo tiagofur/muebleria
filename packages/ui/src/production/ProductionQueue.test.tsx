@@ -102,7 +102,7 @@ describe('ProductionQueue (F038)', () => {
         projects={[
           project('p1', 'accepted', 'Cocina Ana'),
           project('p2', 'draft', 'Borrador'),
-          project('p3', 'produced', 'Living hecho'),
+          project('p3', 'accepted', 'Living hecho'),
         ]}
         customerLabelFor={() => 'Ana'}
         salePriceFor={() => 1000}
@@ -112,7 +112,7 @@ describe('ProductionQueue (F038)', () => {
     );
     expect(screen.getByText('Cocina Ana')).toBeTruthy();
     expect(screen.queryByText('Borrador')).toBeNull();
-    expect(screen.queryByText('Living hecho')).toBeNull();
+    expect(screen.queryByText('Living hecho')).toBeTruthy();
 
     await user.click(screen.getByTestId('prod-open-order-p1'));
     expect(onOpen).toHaveBeenCalledWith('p1');
@@ -123,28 +123,37 @@ describe('ProductionQueue (F038)', () => {
     expect(onMark).toHaveBeenCalledWith('p1');
   });
 
-  it('produced tab shows finished jobs without mark button', async () => {
+  it('produced tab shows jobs with active claims, no mark button', async () => {
     const user = userEvent.setup();
     render(
       <ProductionQueue
         projects={[
           project('p1', 'accepted', 'Cocina'),
-          project('p3', 'produced', 'Living hecho'),
+          project('p3', 'accepted', 'Living'),
         ]}
         customerLabelFor={() => 'Cliente'}
         salePriceFor={() => null}
         onOpenOrder={vi.fn()}
         onMarkProduced={vi.fn()}
+        activeClaims={[
+          {
+            activityId: 'a1',
+            projectId: 'p3',
+            sector: 'cutting',
+            operatorName: 'Ana',
+            startedAt: '2026-08-18T09:00:00.000Z',
+          },
+        ]}
       />,
     );
     expect(screen.getByTestId('prod-queue-title').textContent).toBe(
-      'Para fabricar',
+      'Órdenes',
     );
     await user.click(screen.getByTestId('prod-tab-produced'));
     expect(screen.getByTestId('prod-queue-title').textContent).toBe(
-      'Ya en producción',
+      'Órdenes',
     );
-    expect(screen.getByText('Living hecho')).toBeTruthy();
+    expect(screen.getByText('Living')).toBeTruthy();
     expect(screen.queryByTestId('prod-mark-p3')).toBeNull();
     expect(screen.getByTestId('prod-open-order-p3')).toBeTruthy();
   });

@@ -74,11 +74,11 @@ export function ProjectsPortfolioView({
     <div className="portfolio-view" data-testid="projects-portfolio-view">
       <header className="portfolio-header">
         <div className="portfolio-title-group">
-          <h2>
-            <Sparkles className="text-amber-500" size={24} aria-hidden />
+          <h2 className="portfolio-title">
+            <Sparkles className="portfolio-title__icon" size={20} strokeWidth={1.5} aria-hidden />
             Portafolio de Obras e Instalaciones
           </h2>
-          <p>
+          <p className="portfolio-subtitle">
             Galería comercial de proyectos reales terminados para presentación a clientes y ventas.
           </p>
         </div>
@@ -129,7 +129,7 @@ export function ProjectsPortfolioView({
             onClick={() => setOnlyShowcase(!onlyShowcase)}
             data-testid="filter-showcase"
           >
-            <Star size={14} className={onlyShowcase ? 'fill-amber-500 text-amber-500' : ''} />
+            <Star size={14} className={onlyShowcase ? 'portfolio-star portfolio-star--active' : 'portfolio-star'} />
             Destacadas ({photos.filter((p) => p.isShowcase).length})
           </button>
           <button
@@ -184,7 +184,7 @@ export function ProjectsPortfolioView({
           description={
             query || stageFilter !== 'all' || onlyShowcase
               ? 'No se encontraron fotos que coincidan con los filtros seleccionados.'
-              : 'Sube fotos en la pestaña "Fotos de Obra" de cualquier proyecto y márcalas con la estrella ⭐ para destacarlas aquí.'
+              : 'Sube fotos en la pestaña "Fotos de Obra" de cualquier proyecto y márcalas con la estrella para destacarlas aquí.'
           }
           icon={ImageIcon}
           data-testid="portfolio-empty-state"

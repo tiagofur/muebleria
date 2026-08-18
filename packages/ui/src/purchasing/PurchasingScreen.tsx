@@ -433,7 +433,7 @@ export function PurchasingScreen({
     if (!canMarkPicked) {
       return (
         <span
-          className={`purch-badge purch-badge--${status}`}
+          className={`status-badge status-badge--${status}`}
           data-testid={`purch-status-${projectId}-${material}`}
         >
           {PICKING_STATUS_LABELS_ES[status]}
@@ -444,10 +444,10 @@ export function PurchasingScreen({
       return (
         <div className="purch-card__actions">
           <span
-            className="purch-badge purch-badge--despachado"
+            className="status-badge status-badge--done"
             data-testid={`purch-status-${projectId}-${material}`}
           >
-            <CheckCircle2 size={12} strokeWidth={2} aria-hidden />
+            <CheckCircle2 size={12} strokeWidth={1.5} aria-hidden />
             {PICKING_STATUS_LABELS_ES.despachado}
           </span>
           <button
@@ -464,10 +464,10 @@ export function PurchasingScreen({
     return (
       <div className="purch-card__actions">
         <span
-          className="purch-badge purch-badge--pendiente"
+          className="status-badge status-badge--open"
           data-testid={`purch-status-${projectId}-${material}`}
         >
-          <CircleDashed size={12} strokeWidth={2} aria-hidden />
+          <CircleDashed size={12} strokeWidth={1.5} aria-hidden />
           {PICKING_STATUS_LABELS_ES.pendiente}
         </span>
         <button
@@ -746,7 +746,7 @@ export function PurchasingScreen({
     <section className="purch-landing" aria-label="Compras y almacén">
       <header className="purch-landing__header">
         <div>
-          <h2 className="purch-landing__title">Compras / Almacén</h2>
+          <h2 className="purch-landing__title">Almacén</h2>
           <p className="purch-landing__subtitle">
             Qué necesita cada proyecto activo, como lista de picking por
             material. Sin gestión de stock en esta fase.
@@ -760,43 +760,43 @@ export function PurchasingScreen({
 
       {/* Stat cards */}
       <div className="purch-stats">
-        <div className="purch-stat" data-testid="purch-stat-projects">
-          <span className="purch-stat__icon purch-stat__icon--projects">
+        <div className="stat-card stat-card--work" data-testid="purch-stat-projects">
+          <span className="stat-card__icon">
             <Warehouse size={18} strokeWidth={1.5} />
           </span>
-          <div className="purch-stat__body">
-            <span className="purch-stat__value">{stats.projects}</span>
-            <span className="purch-stat__label">Proyectos activos</span>
+          <div className="stat-card__body">
+            <span className="stat-card__value">{stats.projects}</span>
+            <span className="stat-card__label">Proyectos activos</span>
           </div>
         </div>
-        <div className="purch-stat" data-testid="purch-stat-hardware">
-          <span className="purch-stat__icon purch-stat__icon--hardware">
+        <div className="stat-card stat-card--work" data-testid="purch-stat-hardware">
+          <span className="stat-card__icon">
             <Wrench size={18} strokeWidth={1.5} />
           </span>
-          <div className="purch-stat__body">
-            <span className="purch-stat__value">{stats.hardwareLines}</span>
-            <span className="purch-stat__label">Líneas de herrajes</span>
+          <div className="stat-card__body">
+            <span className="stat-card__value">{stats.hardwareLines}</span>
+            <span className="stat-card__label">Líneas de herrajes</span>
           </div>
         </div>
-        <div className="purch-stat" data-testid="purch-stat-tableros">
-          <span className="purch-stat__icon purch-stat__icon--tableros">
+        <div className="stat-card stat-card--work" data-testid="purch-stat-tableros">
+          <span className="stat-card__icon">
             <Layers size={18} strokeWidth={1.5} />
           </span>
-          <div className="purch-stat__body">
-            <span className="purch-stat__value">{formatAreaM2(stats.areaM2)}</span>
-            <span className="purch-stat__label">Tableros (área neta)</span>
+          <div className="stat-card__body">
+            <span className="stat-card__value">{formatAreaM2(stats.areaM2)}</span>
+            <span className="stat-card__label">Tableros (área neta)</span>
           </div>
         </div>
-        <div className="purch-stat" data-testid="purch-stat-cintillas">
-          <span className="purch-stat__icon purch-stat__icon--cintillas">
+        <div className="stat-card stat-card--work" data-testid="purch-stat-cintillas">
+          <span className="stat-card__icon">
             <Ruler size={18} strokeWidth={1.5} />
           </span>
-          <div className="purch-stat__body">
-            <span className="purch-stat__value">
+          <div className="stat-card__body">
+            <span className="stat-card__value">
               {stats.edgeMl.toLocaleString('es-AR', { maximumFractionDigits: 1 })}{' '}
               ml
             </span>
-            <span className="purch-stat__label">Cintillas</span>
+            <span className="stat-card__label">Cintillas</span>
           </div>
         </div>
       </div>

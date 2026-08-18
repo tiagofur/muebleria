@@ -368,9 +368,9 @@ export function StructureEditorAgregadosPanel<
                     data-testid={`structure-agregado-toggle-${idx}`}
                   >
                     {isOpen ? (
-                      <ChevronDown size={16} strokeWidth={1.75} aria-hidden />
+                      <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
                     ) : (
-                      <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
+                      <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
                     )}
                     <span className="structure-editor__agregado-code">
                       {template?.code ?? 'AGR'}
@@ -455,7 +455,7 @@ export function StructureEditorAgregadosPanel<
                     }
                     data-testid={`structure-remove-agregado-${idx}`}
                   >
-                    <Trash2 size={15} strokeWidth={1.75} aria-hidden />
+                    <Trash2 size={15} strokeWidth={1.5} aria-hidden />
                   </button>
                 </div>
 

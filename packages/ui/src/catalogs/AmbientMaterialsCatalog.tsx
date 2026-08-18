@@ -242,7 +242,7 @@ function ManageCategoryRows({
               {canDelete ? (
                 <button
                   type="button"
-                  className="btn btn--ghost btn--small"
+                  className="btn btn--ghost btn--small btn--danger"
                   onClick={() => onDelete(node.id)}
                   aria-label={`Eliminar ${node.name}`}
                   data-testid={`manage-category-delete-${node.id}`}

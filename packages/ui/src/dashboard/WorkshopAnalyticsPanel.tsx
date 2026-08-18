@@ -52,10 +52,10 @@ function StatCard({
   readonly testId: string;
 }): ReactNode {
   return (
-    <li className="dashboard-stat analytics__card" data-testid={testId}>
-      <span className="dashboard-stat__label">{label}</span>
-      <span className="dashboard-stat__value">{value}</span>
-      {hint ? <span className="dashboard-stat__hint">{hint}</span> : null}
+    <li className="stat-card analytics__card" data-testid={testId}>
+      <span className="stat-card__label">{label}</span>
+      <span className="stat-card__value">{value}</span>
+      {hint ? <span className="analytics__hint">{hint}</span> : null}
     </li>
   );
 }

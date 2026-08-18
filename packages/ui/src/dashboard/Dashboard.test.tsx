@@ -117,7 +117,7 @@ describe('Dashboard (F023)', () => {
     );
     expect(
       screen.getByTestId('stat-monthly-quoted').className,
-    ).toContain('dashboard-stat--emphasis');
+    ).toContain('stat-card--emphasis');
     expect(screen.getByTestId('stat-modules').textContent).toContain('12');
     expect(screen.getByTestId('stat-materials').textContent).toContain('8');
     expect(screen.getByText('Cotizaciones activas')).toBeTruthy();

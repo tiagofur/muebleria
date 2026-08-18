@@ -343,43 +343,43 @@ export function Dashboard({
             aria-label="Indicadores"
             data-testid={isSales ? 'dashboard-stats-sales' : 'dashboard-stats'}
           >
-            <li className="dashboard-stat" data-testid="stat-active-projects">
-              <span className="dashboard-stat__icon" aria-hidden>
+            <li className={`stat-card stat-card--stack${isSales ? ' stat-card--sales' : ''}`} data-testid="stat-active-projects">
+              <span className="stat-card__icon" aria-hidden>
                 <FileText size={18} strokeWidth={1.5} />
               </span>
-              <p className="dashboard-stat__label">Cotizaciones activas</p>
-              <p className="dashboard-stat__value">{stats.activeProjects}</p>
+              <p className="stat-card__label">Cotizaciones activas</p>
+              <p className="stat-card__value">{stats.activeProjects}</p>
             </li>
             <li
-              className="dashboard-stat dashboard-stat--emphasis"
+              className={`stat-card stat-card--stack stat-card--emphasis${isSales ? ' stat-card--sales' : ''}`}
               data-testid="stat-monthly-quoted"
             >
-              <span className="dashboard-stat__icon" aria-hidden>
+              <span className="stat-card__icon" aria-hidden>
                 <DollarSign size={18} strokeWidth={1.5} />
               </span>
-              <p className="dashboard-stat__label">
+              <p className="stat-card__label">
                 {isSales ? 'Tu total del mes' : 'Total cotizado del mes'}
               </p>
-              <p className="dashboard-stat__value">
+              <p className="stat-card__value">
                 {formatDashboardMoney(stats.monthlyQuotedTotal)}
               </p>
             </li>
             {!isSales ? (
-              <li className="dashboard-stat" data-testid="stat-modules">
-                <span className="dashboard-stat__icon" aria-hidden>
+              <li className="stat-card stat-card--stack" data-testid="stat-modules">
+                <span className="stat-card__icon" aria-hidden>
                   <Package size={18} strokeWidth={1.5} />
                 </span>
-                <p className="dashboard-stat__label">Muebles en catálogo</p>
-                <p className="dashboard-stat__value">{stats.modulesCount}</p>
+                <p className="stat-card__label">Muebles en catálogo</p>
+                <p className="stat-card__value">{stats.modulesCount}</p>
               </li>
             ) : null}
             {!isSales ? (
-              <li className="dashboard-stat" data-testid="stat-materials">
-                <span className="dashboard-stat__icon" aria-hidden>
+              <li className="stat-card stat-card--stack" data-testid="stat-materials">
+                <span className="stat-card__icon" aria-hidden>
                   <Layers size={18} strokeWidth={1.5} />
                 </span>
-                <p className="dashboard-stat__label">Materiales activos</p>
-                <p className="dashboard-stat__value">{stats.activeMaterials}</p>
+                <p className="stat-card__label">Materiales activos</p>
+                <p className="stat-card__value">{stats.activeMaterials}</p>
               </li>
             ) : null}
           </ul>

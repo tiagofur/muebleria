@@ -201,7 +201,7 @@
   border-radius: var(--radius-full);
   background: var(--danger-600, #b91c1c);
   color: var(--text-inverse);
-  font-size: 0.65rem;
+  font-size: var(--text-sm);
   font-weight: var(--weight-bold);
   line-height: 1;
 }

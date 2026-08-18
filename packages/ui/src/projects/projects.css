@@ -54,54 +54,9 @@
   gap: var(--space-2);
 }
 
-/* —— Status badges (design.md §5.2) —— */
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 0.15rem var(--space-2);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight);
-  white-space: nowrap;
-}
-
-.status-badge__dot {
-  font-size: 0.55em;
-  line-height: 1;
-}
-
-.badge-draft {
-  color: var(--text-secondary);
-  background: var(--surface-hover);
-  border: 1px solid var(--border-default);
-}
-
-.badge-quoted {
-  color: var(--info-700);
-  background: var(--info-50);
-  border: 1px solid var(--info-500);
-}
-
-.badge-accepted {
-  color: var(--success-700);
-  background: var(--success-50);
-  border: 1px solid var(--success-500);
-}
-
-.badge-rejected {
-  color: var(--danger-700);
-  background: var(--danger-50);
-  border: 1px solid var(--danger-500);
-}
-
-.badge-produced {
-  color: var(--brand-700);
-  background: var(--brand-50);
-  border: 1px solid var(--brand-300);
-}
+/* —— Status badges (design.md §5.2) ——
+   El sistema completo (.status-badge + modificadores semánticos) vive en
+   common/statusBadge.css, cargado vía common/index.ts. */
 
 /* —— Card grid (list) —— 1 / 2 / 3 cols (issue #34) —— */
 

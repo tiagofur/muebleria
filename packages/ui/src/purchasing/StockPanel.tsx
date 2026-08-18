@@ -301,7 +301,7 @@ export function StockPanel({
                   </td>
                   <td>
                     <span
-                      className={`purch-badge purch-badge--${status === 'ok' ? 'despachado' : status}`}
+                      className={`status-badge status-badge--${status === 'ok' ? 'done' : status}`}
                       data-testid={`purch-stock-status-${row.kind}-${row.materialId}`}
                     >
                       {STOCK_STATUS_LABELS_ES[status]}

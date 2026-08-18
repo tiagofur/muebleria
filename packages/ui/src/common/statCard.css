@@ -1,0 +1,118 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Stat-card — indicador KPI único (design.md §5.4 v2).
+   Reemplaza dashboard__stat, eng-stat, purch-stat, pm-dashboard__card.
+   Icono: 18px, tinte de ÁREA (-100 fondo / -500 ícono) si el KPI es de área,
+   o semántico si es de estado. NUNCA tinte de fondo en estado rest.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  text-align: left;
+}
+
+/* Tinte del ícono — neutro por defecto; el área/semántico lo setea la
+   variante (--sales / --eng / --work) o una clase semántica puntual. */
+.stat-card__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--stat-card-icon-bg, var(--surface-selected));
+  color: var(--stat-card-icon-fg, var(--text-secondary));
+}
+
+.stat-card__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat-card__value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+/* ── Variantes de área (§3.2.1): solo tinte del ícono + estado activo ────── */
+
+.stat-card--sales {
+  --stat-card-icon-bg: var(--area-sales-100);
+  --stat-card-icon-fg: var(--area-sales-500);
+  --stat-card-active-border: var(--area-sales-400);
+  --stat-card-active-bg: var(--area-sales-100);
+}
+
+.stat-card--eng {
+  --stat-card-icon-bg: var(--area-eng-100);
+  --stat-card-icon-fg: var(--area-eng-500);
+  --stat-card-active-border: var(--area-eng-400);
+  --stat-card-active-bg: var(--area-eng-100);
+}
+
+.stat-card--work {
+  --stat-card-icon-bg: var(--area-work-100);
+  --stat-card-icon-fg: var(--area-work-500);
+  --stat-card-active-border: var(--area-work-400);
+  --stat-card-active-bg: var(--area-work-100);
+}
+
+/* ── Variante interactiva (filtro clickeable) ────────────────────────────── */
+
+.stat-card--button {
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.stat-card--button:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+.stat-card--button.stat-card--active {
+  border-color: var(--stat-card-active-border, var(--border-brand));
+  background: var(--stat-card-active-bg, var(--surface-card));
+  box-shadow: 0 0 0 1px var(--stat-card-active-border, var(--border-brand));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card--button { transition: none; }
+}
+
+/* ── Variante apilada (icono arriba, valor, label — dashboards) ─────────── */
+
+.stat-card--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.stat-card--stack .stat-card__value {
+  font-size: var(--text-xl);
+}
+
+/* ── Variante énfasis (KPI principal de dashboards) ──────────────────────── */
+
+.stat-card--emphasis {
+  border-color: var(--border-brand);
+  padding: var(--space-4);
+}

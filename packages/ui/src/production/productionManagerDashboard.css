@@ -12,7 +12,6 @@
 .pm-dashboard__header,
 .pm-dashboard__title-row,
 .pm-dashboard__header-actions,
-.pm-dashboard__card,
 .pm-dashboard__project-name,
 .pm-dashboard__project-progress,
 .pm-dashboard__project-stages,
@@ -25,45 +24,19 @@
   align-items: center;
 }
 
-.pm-dashboard__header {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
 .pm-dashboard__title-row { gap: var(--space-3); }
 
-.pm-dashboard__title-icon,
-.pm-dashboard__card-icon {
+/* Icon-chip de área — Producción usa --area-work-* (design.md §3.2.1) */
+.pm-dashboard__title-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  color: var(--text-brand);
-  background: var(--surface-selected);
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--area-work-500);
+  background: var(--area-work-100);
   border-radius: var(--radius-md);
-}
-
-.pm-dashboard__title-icon {
-  width: var(--space-10);
-  height: var(--space-10);
-  color: var(--text-inverse);
-  background: var(--brand-500);
-}
-
-.pm-dashboard__title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  line-height: var(--leading-tight);
-  text-wrap: balance;
-}
-
-.pm-dashboard__subtitle {
-  margin: var(--space-1) 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-base);
 }
 
 .pm-dashboard__header-actions { flex-wrap: wrap; gap: var(--space-2); }
@@ -75,7 +48,8 @@
   gap: var(--space-3);
 }
 
-.pm-dashboard__card,
+/* Summary cards → .stat-card--work / --emphasis (common/statCard.css) */
+
 .pm-dashboard__metrics,
 .pm-dashboard__project-row {
   border: 1px solid var(--border-default);
@@ -84,28 +58,13 @@
   box-shadow: var(--shadow-sm);
 }
 
-.pm-dashboard__card { gap: var(--space-3); padding: var(--space-4); }
 
-.pm-dashboard__card--highlight {
-  border-color: var(--border-brand);
-  background: var(--surface-selected);
-}
-
-.pm-dashboard__card-icon { width: var(--space-10); height: var(--space-10); }
-
-.pm-dashboard__card--highlight .pm-dashboard__card-icon {
-  color: var(--text-inverse);
-  background: var(--brand-500);
-}
-
-.pm-dashboard__card-content,
 .pm-dashboard__project-info,
 .pm-dashboard__metric {
   display: flex;
   flex-direction: column;
 }
 
-.pm-dashboard__card-value,
 .pm-dashboard__metric-value {
   color: var(--text-primary);
   font-size: var(--text-xl);
@@ -113,7 +72,6 @@
   line-height: var(--leading-tight);
 }
 
-.pm-dashboard__card-label,
 .pm-dashboard__metric-label,
 .pm-dashboard__sector-count,
 .pm-dashboard__project-customer,
@@ -125,7 +83,6 @@
   font-size: var(--text-sm);
 }
 
-.pm-dashboard__card-label { margin-top: var(--space-1); }
 
 .pm-dashboard__section-title {
   margin: 0 0 var(--space-3);

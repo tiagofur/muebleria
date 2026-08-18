@@ -26,8 +26,7 @@ describe('UsersScreen (F026 admin approval)', () => {
   it('uses design tokens in users.css (no hardcoded hex)', () => {
     const css = readFileSync(join(here, 'users.css'), 'utf8');
     expect(css).toContain('var(--surface-card)');
-    expect(css).toContain('var(--warning-');
-    expect(css).toContain('var(--success-');
+    // badge colors now live in common/statusBadge.css (semantic vocabulary)
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 

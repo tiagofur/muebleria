@@ -36,6 +36,13 @@ const STATUS_FILTERS: readonly EngineeringStatus[] = [
   'documented',
 ];
 
+/** Engineering status → semantic status-badge modifier (design.md §5.2). */
+const STATUS_BADGE_MODIFIER: Readonly<Record<EngineeringStatus, string>> = {
+  pending: 'open',
+  in_progress: 'progress',
+  documented: 'done',
+};
+
 /** Status → stat card icon. */
 const STATUS_ICON: Readonly<Record<EngineeringStatus, typeof ClipboardList>> = {
   pending: Clock,
@@ -113,6 +120,13 @@ export function EngineeringScreen({
         </div>
       </header>
 
+      {/* Toolbar (search) — inmediatamente bajo el header (design.md §4.1a) */}
+      <div className="eng-landing__toolbar">
+        <div className="eng-landing__search">
+          <SearchInput value={search} onChange={setSearch} placeholder="Buscar proyecto..." />
+        </div>
+      </div>
+
       {/* Stat cards */}
       <div className="eng-stats">
         {STATUS_FILTERS.map((s) => {
@@ -122,27 +136,22 @@ export function EngineeringScreen({
             <button
               key={s}
               type="button"
-              className={`eng-stat ${isActive ? 'eng-stat--active' : ''}`}
+              className={`stat-card stat-card--eng stat-card--button${
+                isActive ? ' stat-card--active' : ''
+              }`}
               onClick={() => setStatusFilter(isActive ? null : s)}
               data-testid={`eng-stat-${s}`}
             >
-              <span className={`eng-stat__icon eng-stat__icon--${s}`}>
+              <span className="stat-card__icon" aria-hidden>
                 <Icon size={18} strokeWidth={1.5} />
               </span>
-              <div className="eng-stat__body">
-                <span className="eng-stat__value">{counts[s]}</span>
-                <span className="eng-stat__label">{ENGINEERING_STATUS_LABELS_ES[s]}</span>
+              <div className="stat-card__body">
+                <span className="stat-card__value">{counts[s]}</span>
+                <span className="stat-card__label">{ENGINEERING_STATUS_LABELS_ES[s]}</span>
               </div>
             </button>
           );
         })}
-      </div>
-
-      {/* Search */}
-      <div className="eng-landing__toolbar">
-        <div className="eng-landing__search">
-          <SearchInput value={search} onChange={setSearch} placeholder="Buscar proyecto..." />
-        </div>
       </div>
 
       {/* Project list */}
@@ -168,7 +177,7 @@ export function EngineeringScreen({
             return (
               <li
                 key={project.id}
-                className={`eng-project-card eng-project-card--${status}`}
+                className={`eng-project-card${status === 'pending' ? ' eng-project-card--startable' : ''}`}
                 data-testid={`eng-project-${project.id}`}
               >
                 <button
@@ -206,22 +215,24 @@ export function EngineeringScreen({
                         Rev. {log.revision}
                       </span>
                     ) : null}
-                    <span className={`eng-badge eng-badge--${status}`}>
+                    <span className={`status-badge status-badge--${STATUS_BADGE_MODIFIER[status]}`}>
+                      <span className="status-badge__dot" aria-hidden>●</span>
                       {ENGINEERING_STATUS_LABELS_ES[status]}
                     </span>
+                    {status === 'pending' && (
+                      <span className="eng-project-card__start-slot" aria-hidden />
+                    )}
                   </div>
                 </button>
                 {status === 'pending' && (
-                  <div className="eng-project-card__action">
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--small"
-                      onClick={(e) => { e.stopPropagation(); onStartEngineering(project.id); }}
-                    >
-                      <FileText size={14} strokeWidth={1.5} />
-                      Iniciar
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--small eng-project-card__start"
+                    onClick={(e) => { e.stopPropagation(); onStartEngineering(project.id); }}
+                  >
+                    <FileText size={14} strokeWidth={1.5} />
+                    Iniciar
+                  </button>
                 )}
               </li>
             );
@@ -264,7 +275,10 @@ export function EngineeringScreen({
                         ).toLocaleDateString('es-AR')}
                       </span>
                     ) : null}
-                    <span className="eng-badge eng-badge--documented">
+                    <span
+                      className={`status-badge status-badge--${project.materialsRelease ? 'progress' : 'cancelled'}`}
+                    >
+                      <span className="status-badge__dot" aria-hidden>●</span>
                       {project.materialsRelease
                         ? 'En producción'
                         : 'En almacén'}

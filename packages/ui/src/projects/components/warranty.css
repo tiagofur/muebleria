@@ -15,8 +15,8 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg, 12px);
   padding: 1rem 1.25rem;
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
@@ -30,9 +30,9 @@
 }
 
 .warranty-panel__title {
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: var(--color-text, #1e293b);
+  color: var(--text-primary);
   margin: 0;
   display: flex;
   align-items: center;
@@ -51,22 +51,22 @@
   border: 1px solid transparent;
   padding: 0.35rem 0.75rem;
   border-radius: var(--radius-md, 8px);
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
   font-weight: 500;
-  color: var(--color-text-muted, #64748b);
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .warranty-panel__filter-btn:hover {
-  background: var(--color-surface-hover, #f8fafc);
-  color: var(--color-text, #1e293b);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .warranty-panel__filter-btn--active {
-  background: var(--color-primary-subtle, #eff6ff);
-  color: var(--color-primary, #2563eb);
-  border-color: var(--color-primary-border, #bfdbfe);
+  background: var(--surface-selected);
+  color: var(--brand-500);
+  border-color: var(--border-brand);
   font-weight: 600;
 }
 
@@ -74,19 +74,19 @@
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  background: var(--color-primary, #2563eb);
-  color: #ffffff;
+  background: var(--brand-500);
+  color: var(--text-inverse);
   border: none;
   border-radius: var(--radius-md, 8px);
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
 .warranty-panel__create-btn:hover {
-  background: var(--color-primary-hover, #1d4ed8);
+  background: var(--brand-600);
 }
 
 /* --- Tickets List --- */
@@ -94,10 +94,10 @@
 .warranty-panel__empty {
   text-align: center;
   padding: 3rem 1.5rem;
-  background: var(--color-surface-subtle, #f8fafc);
-  border: 1px dashed var(--color-border, #e2e8f0);
+  background: var(--surface-muted);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-lg, 12px);
-  color: var(--color-text-muted, #64748b);
+  color: var(--text-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -111,8 +111,8 @@
 }
 
 .warranty-card {
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg, 12px);
   padding: 1.25rem;
   display: flex;
@@ -123,7 +123,7 @@
 }
 
 .warranty-card:hover {
-  border-color: var(--color-border-hover, #cbd5e1);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.08));
 }
 
@@ -144,19 +144,19 @@
 
 .warranty-card__code {
   font-family: var(--font-mono, monospace);
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
   font-weight: 700;
-  background: var(--color-surface-subtle, #f1f5f9);
-  color: var(--color-text-muted, #475569);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #e2e8f0);
+  border: 1px solid var(--border-default);
 }
 
 .warranty-card__title {
-  font-size: 1rem;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: var(--color-text, #0f172a);
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -167,66 +167,15 @@
   flex-wrap: wrap;
 }
 
-.warranty-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.warranty-badge--category {
-  background: var(--color-surface-subtle, #f8fafc);
-  color: var(--color-text-muted, #475569);
-  border: 1px solid var(--color-border, #e2e8f0);
-}
-
-.warranty-badge--priority-low {
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.warranty-badge--priority-normal {
-  background: #e0f2fe;
-  color: #0369a1;
-}
-
-.warranty-badge--priority-urgent {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.warranty-badge--status-open {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.warranty-badge--status-visit {
-  background: #f3e8ff;
-  color: #7e22ce;
-}
-
-.warranty-badge--status-progress {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.warranty-badge--status-resolved {
-  background: #d1fae5;
-  color: #047857;
-}
-
-.warranty-badge--status-cancelled {
-  background: #f1f5f9;
-  color: #64748b;
-}
+/* Badges — migrado al vocabulario único .status-badge--*
+   (common/statusBadge.css): categoría→chip neutral --cancelled;
+   prioridad low/normal/urgent→--cancelled/--open/--danger;
+   estado open/visit_scheduled/in_progress/resolved/cancelled→
+   --open/--progress/--progress/--done/--cancelled. */
 
 .warranty-card__description {
-  font-size: 0.875rem;
-  color: var(--color-text-muted, #475569);
+  font-size: var(--text-md);
+  color: var(--text-secondary);
   line-height: 1.5;
   margin: 0;
   white-space: pre-wrap;
@@ -236,10 +185,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
-  background: var(--color-surface-subtle, #f8fafc);
+  background: var(--surface-muted);
   border-radius: var(--radius-md, 8px);
   padding: 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
 }
 
 .warranty-card__meta-item {
@@ -249,20 +198,20 @@
 }
 
 .warranty-card__meta-label {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #64748b);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .warranty-card__meta-val {
-  color: var(--color-text, #1e293b);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 /* --- Refabrication Pieces Section --- */
 
 .warranty-card__refab {
-  border-top: 1px solid var(--color-border-subtle, #f1f5f9);
+  border-top: 1px solid var(--border-subtle);
   padding-top: 0.75rem;
   display: flex;
   flex-direction: column;
@@ -273,37 +222,37 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: var(--color-text, #1e293b);
+  color: var(--text-primary);
 }
 
 .warranty-card__pieces-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
   text-align: left;
 }
 
 .warranty-card__pieces-table th {
-  background: var(--color-surface-subtle, #f1f5f9);
+  background: var(--surface-muted);
   padding: 0.35rem 0.5rem;
   font-weight: 600;
-  color: var(--color-text-muted, #475569);
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .warranty-card__pieces-table td {
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid var(--color-border-subtle, #f8fafc);
-  color: var(--color-text, #1e293b);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
 }
 
 /* --- Resolution Box --- */
 
 .warranty-card__resolution-box {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: var(--success-50);
+  border: 1px solid var(--success-200);
   border-radius: var(--radius-md, 8px);
   padding: 0.75rem 1rem;
   display: flex;
@@ -312,17 +261,17 @@
 }
 
 .warranty-card__resolution-title {
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
   font-weight: 700;
-  color: #166534;
+  color: var(--success-700);
   display: flex;
   align-items: center;
   gap: 0.375rem;
 }
 
 .warranty-card__resolution-notes {
-  font-size: 0.8125rem;
-  color: #14532d;
+  font-size: var(--text-base);
+  color: var(--success-700);
   margin: 0;
 }
 
@@ -334,7 +283,7 @@
   justify-content: flex-end;
   gap: 0.5rem;
   flex-wrap: wrap;
-  border-top: 1px solid var(--color-border-subtle, #f1f5f9);
+  border-top: 1px solid var(--border-subtle);
   padding-top: 0.75rem;
 }
 
@@ -344,7 +293,7 @@
   gap: 0.375rem;
   padding: 0.4rem 0.75rem;
   border-radius: var(--radius-md, 8px);
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -353,32 +302,32 @@
 
 .warranty-btn--outline {
   background: transparent;
-  border-color: var(--color-border, #cbd5e1);
-  color: var(--color-text, #334155);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 
 .warranty-btn--outline:hover {
-  background: var(--color-surface-hover, #f8fafc);
-  border-color: var(--color-border-hover, #94a3b8);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .warranty-btn--success {
-  background: #10b981;
-  color: #ffffff;
+  background: var(--success-500);
+  color: var(--text-inverse);
 }
 
 .warranty-btn--success:hover {
-  background: #059669;
+  background: var(--success-600);
 }
 
 .warranty-btn--optimizer {
-  background: #15803d;
-  color: #ffffff;
+  background: var(--success-600);
+  color: var(--text-inverse);
   box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
 }
 
 .warranty-btn--optimizer:hover {
-  background: #166534;
+  background: var(--success-700);
 }
 
 /* --- Modal Styles --- */
@@ -410,20 +359,20 @@
 }
 
 .warranty-modal__label {
-  font-size: 0.8125rem;
+  font-size: var(--text-base);
   font-weight: 600;
-  color: var(--color-text, #334155);
+  color: var(--text-primary);
 }
 
 .warranty-modal__input,
 .warranty-modal__select,
 .warranty-modal__textarea {
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border, #cbd5e1);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md, 8px);
-  font-size: 0.875rem;
-  color: var(--color-text, #0f172a);
-  background: var(--color-surface, #ffffff);
+  font-size: var(--text-md);
+  color: var(--text-primary);
+  background: var(--surface-card);
   outline: none;
   transition: border-color 0.15s ease;
 }
@@ -431,8 +380,8 @@
 .warranty-modal__input:focus,
 .warranty-modal__select:focus,
 .warranty-modal__textarea:focus {
-  border-color: var(--color-primary, #2563eb);
-  box-shadow: 0 0 0 2px var(--color-primary-subtle, #eff6ff);
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 2px var(--surface-selected);
 }
 
 .warranty-modal__textarea {
@@ -441,13 +390,13 @@
 }
 
 .warranty-modal__pieces-selector {
-  border: 1px solid var(--color-border, #e2e8f0);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md, 8px);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: var(--color-surface-subtle, #f8fafc);
+  background: var(--surface-muted);
 }
 
 .warranty-modal__piece-row {
@@ -455,11 +404,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  background: #ffffff;
+  background: var(--surface-card);
   padding: 0.5rem;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #e2e8f0);
-  font-size: 0.8125rem;
+  border: 1px solid var(--border-default);
+  font-size: var(--text-base);
 }
 
 .warranty-modal__photos-preview {
@@ -473,5 +422,5 @@
   height: 64px;
   object-fit: cover;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #cbd5e1);
+  border: 1px solid var(--border-default);
 }

@@ -68,18 +68,8 @@
   color: var(--text-muted);
 }
 
-/* Status badges — local to users (active/pending). The shared .status-badge
-   base + project-status variants live in projects.css (design.md §5.2).
-   These are role-status-specific modifiers, kept here for co-location. */
-.status-badge--active {
-  background: var(--success-50);
-  color: var(--success-700);
-}
-
-.status-badge--pending {
-  background: var(--warning-50);
-  color: var(--warning-700);
-}
+/* Status badges — users usa el vocabulario semántico único de
+   common/statusBadge.css (--active / --open); sin overrides locales. */
 
 /* .btn and its modifiers live in common/buttons.css (F0 UI Fase 0).
    Users screen uses .btn--small from the shared system; no overrides needed. */

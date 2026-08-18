@@ -63,6 +63,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import {
+  ConfirmDialog,
   DropdownMenu,
   type DropdownMenuItem,
   type DropdownMenuSection,
@@ -413,6 +414,12 @@ function ProjectDetailViewInner(): ReactNode {
 
   const chromeSale = breakdown?.salePrice ?? null;
   const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const kitchenUnplacedCount = useMemo(() => {
     const fps = allFootprints(project, modules);
@@ -462,8 +469,12 @@ function ProjectDetailViewInner(): ReactNode {
 
   const requestStatus = (next: ProjectStatus, message: string) => {
     if (!onChangeStatus) return;
-    if (typeof window !== 'undefined' && !window.confirm(message)) return;
-    onChangeStatus(project.id, next);
+    setPendingConfirm({
+      title: next === 'quoted' ? 'Enviar cotización' : 'Aceptar cotización',
+      message,
+      confirmLabel: next === 'quoted' ? 'Enviar' : 'Aceptar',
+      onConfirm: () => onChangeStatus(project.id, next),
+    });
   };
 
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
@@ -538,10 +549,12 @@ function ProjectDetailViewInner(): ReactNode {
         icon: <RotateCcw size={16} strokeWidth={1.5} aria-hidden />,
         onSelect: () => {
           const msg = reopenClosed ? CONFIRM_REOPEN_FORCE : CONFIRM_REOPEN;
-          if (typeof window !== 'undefined' && !window.confirm(msg)) {
-            return;
-          }
-          onRequestReopen();
+          setPendingConfirm({
+            title: 'Reabrir a borrador',
+            message: msg,
+            confirmLabel: 'Reabrir',
+            onConfirm: () => onRequestReopen(),
+          });
         },
       });
     }
@@ -603,7 +616,15 @@ function ProjectDetailViewInner(): ReactNode {
               <StatusBadge status={project.status} />
               {project.technicalStatus && project.technicalStatus !== 'pending_assignment' ? (
                 <span
-                  className={`internal-comms__status-badge internal-comms__status-badge--${TECHNICAL_STATUS_METADATA[project.technicalStatus].color}`}
+                  className={`status-badge status-badge--${
+                    TECHNICAL_STATUS_METADATA[project.technicalStatus].color === 'neutral'
+                      ? 'cancelled'
+                      : TECHNICAL_STATUS_METADATA[project.technicalStatus].color === 'info'
+                        ? 'open'
+                        : TECHNICAL_STATUS_METADATA[project.technicalStatus].color === 'success'
+                          ? 'done'
+                          : TECHNICAL_STATUS_METADATA[project.technicalStatus].color
+                  }`}
                   style={{ marginLeft: '0.25rem', fontSize: '0.75rem' }}
                   title={TECHNICAL_STATUS_METADATA[project.technicalStatus].description}
                 >
@@ -1075,6 +1096,17 @@ function ProjectDetailViewInner(): ReactNode {
 
         <ProjectTotalsAside />
       </div>
+
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        onClose={() => setPendingConfirm(null)}
+        title={pendingConfirm?.title ?? ''}
+        message={pendingConfirm?.message ?? ''}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        tone="primary"
+        onConfirm={() => pendingConfirm?.onConfirm()}
+        dataTestId="project-status-confirm"
+      />
     </>
   );
 }

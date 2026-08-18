@@ -16,6 +16,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { compressImage } from '../../common/imageCompression';
+import { ConfirmDialog } from '../../common/ConfirmDialog';
 import './projectPhotosGallery.css';
 
 export interface ProjectPhotosGalleryProps {
@@ -55,6 +56,7 @@ export function ProjectPhotosGallery({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [editingCaptionId, setEditingCaptionId] = useState<string | null>(null);
   const [tempCaption, setTempCaption] = useState('');
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadStageSelectId = useId();
 
@@ -351,11 +353,7 @@ export function ProjectPhotosGallery({
                         <button
                           type="button"
                           className="photo-card__delete-btn"
-                          onClick={() => {
-                            if (window.confirm('¿Seguro que deseas eliminar esta foto?')) {
-                              void onDeletePhoto(photo.id);
-                            }
-                          }}
+                          onClick={() => setDeletingPhotoId(photo.id)}
                           title="Eliminar foto"
                         >
                           <Trash2 size={15} />
@@ -470,6 +468,18 @@ export function ProjectPhotosGallery({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deletingPhotoId !== null}
+        onClose={() => setDeletingPhotoId(null)}
+        title="Eliminar foto"
+        message="La foto se elimina de la obra. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => {
+          if (deletingPhotoId) void onDeletePhoto(deletingPhotoId);
+        }}
+        dataTestId="photo-delete-confirm"
+      />
     </div>
   );
 }
