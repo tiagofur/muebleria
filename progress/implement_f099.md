@@ -63,4 +63,5 @@ Implementación corregida lista para nueva revisión independiente. F099 permane
 
 - Review independiente: `APPROVED` en `progress/review_f099.md`.
 - F099 marcada `done`; resumen trasladado a `progress/history.md`.
-- Commit y push: pendientes de registrar tras finalizar la entrega atómica.
+- Commit: `c0c4d50` — `feat(production): polish production dashboard`.
+- Push: `origin/codex/f095-production-claims` actualizado a `c0c4d50`.
