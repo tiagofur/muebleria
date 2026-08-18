@@ -47,3 +47,8 @@ un contrato de picking nuevo y queda fuera de F097.
 ## Estado
 
 Implementación lista para revisión. F097 permanece `in_progress`.
+
+## Entrega
+
+- Commit de cierre: `5cdba26` — `fix(production): align dashboard and picking status`.
+- Push confirmado a `origin/codex/f095-production-claims`.

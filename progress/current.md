@@ -1220,3 +1220,4 @@ dashboard/surtido/instalaciones), una feature a la vez según AGENTS.md.
 - Revisión: **APPROVED** — `progress/review_f097.md`.
 - F097 marcada `done`; commit y push se registran en
   `progress/implement_f097.md`.
+- Entrega: `5cdba26` pusheado a `origin/codex/f095-production-claims`.
