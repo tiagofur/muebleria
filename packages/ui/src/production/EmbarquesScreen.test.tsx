@@ -1,6 +1,6 @@
 /**
  * @vitest-environment jsdom
- * Embarques — carga board (packaged → loaded).
+ * Embarques — project list + project detail (loading checklist).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -36,23 +36,34 @@ function makeProject(
 }
 
 describe('embarquesProjects (pure derivation)', () => {
-  it('keeps only packaged items; loaded/installed/draft are out', () => {
+  it('keeps projects with packaged or loaded items', () => {
     const projects = [
       makeProject('p1', [
         makeItem('a', 'packaged'),
-        makeItem('b', 'loaded'),      // → Instalaciones, not here
-        makeItem('c', 'installed'),   // done
-        makeItem('d'),                // manufacturing
+        makeItem('b', 'loaded'),
+        makeItem('c', 'installed'), // done — still counts
+        makeItem('d'), // manufacturing — not relevant
       ]),
       makeProject('p2', [makeItem('e', 'packaged')]),
       makeProject('p3', [makeItem('f', 'assembled')]), // nothing to load
-      makeProject('p4', [makeItem('g', 'packaged')], 'draft'),
+      makeProject('p4', [makeItem('g', 'packaged')], 'draft'), // draft — out
     ];
     const cards = embarquesProjects(projects, () => 'Cliente X');
     expect(cards.map((c) => c.projectId)).toEqual(['p1', 'p2']);
-    expect(cards[0]!.toLoad.map((r) => r.itemId)).toEqual(['a']);
-    expect(cards[1]!.toLoad.map((r) => r.itemId)).toEqual(['e']);
     expect(cards[0]!.customerLabel).toBe('Cliente X');
+  });
+
+  it('computes loading progress per project', () => {
+    const projects = [
+      makeProject('p1', [
+        makeItem('a', 'packaged'),
+        makeItem('b', 'loaded'),
+      ]),
+    ];
+    const cards = embarquesProjects(projects);
+    expect(cards[0]!.totalBultos).toBe(2);
+    expect(cards[0]!.loadedBultos).toBe(1);
+    expect(cards[0]!.percentage).toBe(50);
   });
 });
 
@@ -60,78 +71,61 @@ describe('EmbarquesScreen', () => {
   const projects = [
     makeProject('p1', [
       makeItem('a', 'packaged'),
-      makeItem('b', 'loaded'), // lives in Instalaciones now
+      makeItem('b', 'loaded'),
     ]),
     makeProject('p2', [makeItem('c', 'packaged')]),
   ];
 
-  it('groups packaged items by project with the load total', () => {
+  it('shows project cards with progress summary', () => {
     render(
       <EmbarquesScreen
         projects={projects}
-        canAdvance
-        onAdvance={() => undefined}
+        customerLabelFor={() => 'Cliente'}
       />,
     );
     expect(screen.getByTestId('embarques-card-p1')).not.toBeNull();
     expect(screen.getByTestId('embarques-card-p2')).not.toBeNull();
-    expect(screen.getByTestId('embarques-load-a')).not.toBeNull();
-    expect(screen.queryByTestId('embarques-load-b')).toBeNull();
     expect(screen.getByTestId('embarques-to-load').textContent).toBe(
-      '2 para cargar',
+      '2 bultos por cargar',
     );
   });
 
-  it('advances packaged → loaded via the callback', () => {
-    const onAdvance = vi.fn();
+  it('navigates to detail when clicking Ver detalle', () => {
+    const onOpenProject = vi.fn();
     render(
       <EmbarquesScreen
         projects={projects}
-        canAdvance
-        onAdvance={onAdvance}
+        customerLabelFor={() => 'Cliente'}
+        onOpenProject={onOpenProject}
       />,
     );
-    fireEvent.click(screen.getByTestId('embarques-advance-a'));
-    expect(onAdvance).toHaveBeenCalledWith('p1', 'a', 'loaded');
+    fireEvent.click(screen.getByTestId('embarques-open-p1'));
+    expect(onOpenProject).toHaveBeenCalledWith('p1');
   });
 
-  it('hides advance buttons read-only and shows the target label', () => {
+  it('shows complete badge when 100% loaded', () => {
+    const completeProjects = [
+      makeProject('p1', [
+        makeItem('a', 'loaded'),
+        makeItem('b', 'loaded'),
+      ]),
+    ];
     render(
       <EmbarquesScreen
-        projects={projects}
-        canAdvance={false}
-        onAdvance={() => undefined}
+        projects={completeProjects}
+        customerLabelFor={() => 'Cliente'}
       />,
     );
-    expect(screen.queryByTestId('embarques-advance-a')).toBeNull();
-    expect(screen.getAllByText('Cargado').length).toBe(2);
-  });
-
-  it('links to the per-project control de carga when provided', () => {
-    const onOpenDispatch = vi.fn();
-    render(
-      <EmbarquesScreen
-        projects={projects}
-        canAdvance
-        onAdvance={() => undefined}
-        onOpenDispatch={onOpenDispatch}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('embarques-dispatch-p1'));
-    expect(onOpenDispatch).toHaveBeenCalledWith('p1');
+    expect(screen.getByText('✓ Lista para enviar')).not.toBeNull();
   });
 
   it('renders the empty state when nothing is packaged', () => {
     render(
       <EmbarquesScreen
         projects={[makeProject('p1', [makeItem('a', 'cut')])]}
-        canAdvance
-        onAdvance={() => undefined}
+        customerLabelFor={() => 'Cliente'}
       />,
     );
     expect(screen.getByText('Nada para cargar')).not.toBeNull();
-    expect(screen.getByTestId('embarques-to-load').textContent).toBe(
-      '0 para cargar',
-    );
   });
 });

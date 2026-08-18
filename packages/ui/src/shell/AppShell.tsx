@@ -89,7 +89,8 @@ export type AppShellProps = {
   readonly children: ReactNode;
   /** Optional meta line in the top bar (e.g. schema version). */
   readonly meta?: string;
-  /** Top bar title; defaults to active nav label. */
+  /** @deprecated The topbar no longer shows a screen title (design.md §4.1b);
+   * the page-header of each screen owns the title. */
   readonly title?: string;
   /** Optional top-bar trailing actions (custom controls). */
   readonly headerActions?: ReactNode;
@@ -222,11 +223,6 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        */
       { id: 'production', label: 'Producción', icon: Factory },
       /**
-       * Embarques — what's packaged waiting for transport, across every
-       * factory project (embalado → cargado). Floor + supervisors.
-       */
-      { id: 'shipments', label: 'Embarques', icon: Truck },
-      /**
        * Instalaciones — what's loaded and on its way to the client's site
        * (cargado → instalado). The last process step gets its own screen.
        */
@@ -254,6 +250,12 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        * rbac.ts navIdsForRole decides via roleCanAccessPurchasingNav.
        */
       { id: 'warehouse', label: 'Almacén', icon: Warehouse },
+      /**
+       * Embarques — staging, loading, and dispatch of finished goods.
+       * Moved from PRODUCCIÓN to ALMACÉN (2026-08-18): logistics
+       * responsibility, not production.
+       */
+      { id: 'shipments', label: 'Embarques', icon: Truck },
     ],
   },
   {
@@ -293,6 +295,42 @@ export function labelForNavId(id: AppNavId): string {
     if (item) return item.label;
   }
   return 'Muebles';
+}
+
+/**
+ * Section label (área) for the topbar "dónde estoy" indicator — design.md §4.1b.
+ * The topbar no longer repeats the screen title; the page-header owns it.
+ */
+export function sectionLabelForNavId(id: AppNavId): string {
+  for (const section of APP_NAV_SECTIONS) {
+    if (section.items.some((i) => i.id === id)) return section.label;
+  }
+  return id === 'users' ? 'CONFIG' : 'Muebles';
+}
+
+/**
+ * Área funcional (design.md §3.2.1) — color de ubicación, nunca de acción.
+ * ventas → teal · ingeniería/librería/catálogos → indigo marca ·
+ * producción/almacén → naranja taller · trabajo/config → neutro.
+ */
+export type AppAreaId = 'sales' | 'eng' | 'work';
+
+const SECTION_AREA: Readonly<Record<string, AppAreaId | null>> = {
+  trabajo: null,
+  ventas: 'sales',
+  produccion: 'work',
+  ingenieria: 'eng',
+  almacen: 'work',
+  libreria: 'eng',
+  catalogos: 'eng',
+  config: null,
+};
+
+export function areaIdForNavId(id: AppNavId): AppAreaId | null {
+  for (const section of APP_NAV_SECTIONS) {
+    if (section.items.some((i) => i.id === id)) return SECTION_AREA[section.id] ?? null;
+  }
+  return null;
 }
 
 export type ResolveNavOptions = {
@@ -350,7 +388,6 @@ export function AppShell({
   onNavigate,
   children,
   meta,
-  title,
   headerActions,
   onLogout,
   user = null,
@@ -433,7 +470,8 @@ export function AppShell({
     [],
   );
 
-  const heading = title ?? labelForNavId(activeId);
+  const areaLabel = sectionLabelForNavId(activeId);
+  const areaId = areaIdForNavId(activeId);
   const hasIdentity = Boolean(user) || sessionMode === 'guest' || sessionMode === 'auth';
   const hasActions = Boolean(headerActions) || Boolean(onLogout) || hasIdentity;
 
@@ -463,7 +501,10 @@ export function AppShell({
           {navSections.map((section) => {
             let lastGroup: NavItemGroup | undefined;
             return (
-              <div key={section.id} className="app-sidebar__section">
+              <div
+                key={section.id}
+                className={`app-sidebar__section${SECTION_AREA[section.id] ? ` app-sidebar__section--${SECTION_AREA[section.id]}` : ''}`}
+              >
                 <p className="app-sidebar__section-label">{section.label}</p>
                 <ul className="app-sidebar__list">
                   {section.items.flatMap((item) => {
@@ -552,7 +593,7 @@ export function AppShell({
               <Menu size={20} strokeWidth={1.5} aria-hidden />
             )}
           </button>
-          <h1 className="app-topbar__title">{heading}</h1>
+          <p className="app-topbar__area" data-area={areaId ?? undefined}>{areaLabel}</p>
           {meta ? <p className="app-topbar__meta">{meta}</p> : null}
           <div className="app-topbar__actions">
             <button

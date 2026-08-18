@@ -90,6 +90,98 @@ function floorEventFromApi(
   };
 }
 
+function activeJobFromApi(raw: Record<string, unknown>): {
+  activityId: string;
+  projectId: string;
+  projectName: string;
+  sector: string;
+  itemId?: string;
+  moduleCode?: string;
+  operatorId: string;
+  operatorName: string;
+  machineId?: string;
+  machineName?: string;
+  startedAt: string;
+  durationMin: number;
+} {
+  const optionalString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value !== '' ? value : undefined;
+
+  return {
+    activityId: String(raw.activity_id ?? ''),
+    projectId: String(raw.project_id ?? ''),
+    projectName: String(raw.project_name ?? ''),
+    sector: String(raw.sector ?? ''),
+    itemId: optionalString(raw.item_id),
+    moduleCode: optionalString(raw.module_code),
+    operatorId: String(raw.operator_id ?? ''),
+    operatorName: String(raw.operator_name ?? ''),
+    machineId: optionalString(raw.machine_id),
+    machineName: optionalString(raw.machine_name),
+    startedAt: String(raw.started_at ?? ''),
+    durationMin: typeof raw.duration_min === 'number' ? raw.duration_min : 0,
+  };
+}
+
+function dashboardMetricsFromApi(raw: Record<string, unknown>): {
+  totalProjects: number;
+  totalItems: number;
+  totalInstalled: number;
+  avgProgress: number;
+  todayCompleted: number;
+  todayDamages: number;
+  sectors: Array<{
+    sector: string;
+    label: string;
+    activeOperators: number;
+    queueLength: number;
+    itemsInProgress: number;
+    itemsCompletedToday: number;
+    avgTimeMinutes: number;
+    activeJobs: Array<{
+      activityId: string;
+      projectId: string;
+      projectName: string;
+      sector: string;
+      itemId?: string;
+      moduleCode?: string;
+      operatorId: string;
+      operatorName: string;
+      machineId?: string;
+      machineName?: string;
+      startedAt: string;
+      durationMin: number;
+    }>;
+  }>;
+} {
+  const num = (v: unknown): number =>
+    typeof v === 'number' ? v : 0;
+  const sectors = Array.isArray(raw.sectors)
+    ? (raw.sectors as Record<string, unknown>[]).map((s) => ({
+        sector: String(s.sector ?? ''),
+        label: String(s.label ?? ''),
+        activeOperators: num(s.active_operators),
+        queueLength: num(s.queue_length),
+        itemsInProgress: num(s.items_in_progress),
+        itemsCompletedToday: num(s.items_completed_today),
+        avgTimeMinutes: num(s.avg_time_minutes),
+        activeJobs: Array.isArray(s.active_jobs)
+          ? (s.active_jobs as Record<string, unknown>[]).map(activeJobFromApi)
+          : [],
+      }))
+    : [];
+
+  return {
+    totalProjects: num(raw.total_projects),
+    totalItems: num(raw.total_items),
+    totalInstalled: num(raw.total_installed),
+    avgProgress: num(raw.avg_progress),
+    todayCompleted: num(raw.today_completed),
+    todayDamages: num(raw.today_damages),
+    sectors,
+  };
+}
+
 function claimedProductionActivityFromApi(raw: Record<string, unknown>): {
   id: string;
   projectId: string;
@@ -1091,8 +1183,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to fetch production dashboard: ${res.status} ${text}`);
     }
-    const data = await res.json() as { metrics: unknown };
-    return data.metrics as ReturnType<typeof this.getProductionDashboard> extends Promise<infer R> ? R : never;
+    const data = await res.json() as { metrics: Record<string, unknown> };
+    return dashboardMetricsFromApi(data.metrics ?? {});
   }
 
   async getProductionActiveJobs(): Promise<Array<{
@@ -1116,8 +1208,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to fetch active jobs: ${res.status} ${text}`);
     }
-    const data = await res.json() as { jobs: unknown };
-    return data.jobs as ReturnType<typeof this.getProductionActiveJobs> extends Promise<infer R> ? R : never;
+    const data = await res.json() as { jobs: readonly Record<string, unknown>[] };
+    return (data.jobs ?? []).map(activeJobFromApi);
   }
 
   async claimProductionActivity(payload: {
@@ -1142,7 +1234,13 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const res = await fetch(`${this.baseUrl}/production/activity/claim`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        project_id: payload.projectId,
+        item_id: payload.itemId,
+        sector: payload.sector,
+        machine_id: payload.machineId,
+        machine_name: payload.machineName,
+      }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');

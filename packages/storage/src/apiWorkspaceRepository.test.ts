@@ -871,4 +871,165 @@ describe('APIWorkspaceRepository', () => {
       lines: [{ kind: 'herrajes', material_id: 'h1', quantity: 30 }],
     });
   });
+
+  it('maps production active jobs from snake_case API to camelCase', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobs: [
+          {
+            activity_id: 'act-1',
+            project_id: 'p1',
+            project_name: 'Cocina Nellly',
+            sector: 'cutting',
+            item_id: '',
+            module_code: '',
+            operator_id: 'u1',
+            operator_name: 'Ramón',
+            machine_id: 'm1',
+            machine_name: 'Sierra 1',
+            started_at: '2026-08-18T14:32:00Z',
+            duration_min: 15.5,
+          },
+        ],
+      }),
+    } as Response);
+
+    const repo = new APIWorkspaceRepository();
+    const jobs = await repo.getProductionActiveJobs();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      activityId: 'act-1',
+      projectId: 'p1',
+      projectName: 'Cocina Nellly',
+      sector: 'cutting',
+      operatorId: 'u1',
+      operatorName: 'Ramón',
+      machineId: 'm1',
+      machineName: 'Sierra 1',
+      startedAt: '2026-08-18T14:32:00Z',
+      durationMin: 15.5,
+    });
+    // Empty string item_id should be mapped to undefined
+    expect(jobs[0]!.itemId).toBeUndefined();
+  });
+
+  it('maps production active jobs with project-level claim (no item_id)', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobs: [
+          {
+            activity_id: 'act-2',
+            project_id: 'p2',
+            project_name: 'Placard Martínez',
+            sector: 'edge_banding',
+            item_id: '',
+            module_code: '',
+            operator_id: 'u2',
+            operator_name: 'Ana',
+            started_at: '2026-08-18T15:00:00Z',
+            duration_min: 5,
+          },
+        ],
+      }),
+    } as Response);
+
+    const repo = new APIWorkspaceRepository();
+    const jobs = await repo.getProductionActiveJobs();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.projectId).toBe('p2');
+    expect(jobs[0]!.sector).toBe('edge_banding');
+    expect(jobs[0]!.operatorName).toBe('Ana');
+  });
+
+  it('maps production dashboard metrics from snake_case API to camelCase', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        metrics: {
+          total_projects: 3,
+          total_items: 12,
+          total_installed: 2,
+          avg_progress: 65.5,
+          today_completed: 4,
+          today_damages: 1,
+          sectors: [
+            {
+              sector: 'cutting',
+              label: 'Corte',
+              active_operators: 2,
+              queue_length: 5,
+              items_in_progress: 3,
+              items_completed_today: 2,
+              avg_time_minutes: 15.5,
+              active_jobs: [
+                {
+                  activity_id: 'act-1',
+                  project_id: 'p1',
+                  project_name: 'Cocina López',
+                  sector: 'cutting',
+                  item_id: '',
+                  module_code: '',
+                  operator_id: 'u1',
+                  operator_name: 'Ramón',
+                  started_at: '2026-08-18T14:32:00Z',
+                  duration_min: 15.5,
+                },
+              ],
+            },
+            {
+              sector: 'edge_banding',
+              label: 'Encintado',
+              active_operators: 1,
+              queue_length: 3,
+              items_in_progress: 1,
+              items_completed_today: 1,
+              avg_time_minutes: 8.0,
+              active_jobs: [],
+            },
+          ],
+        },
+      }),
+    } as Response);
+
+    const repo = new APIWorkspaceRepository();
+    const metrics = await repo.getProductionDashboard();
+
+    // Top-level fields mapped
+    expect(metrics.totalProjects).toBe(3);
+    expect(metrics.totalItems).toBe(12);
+    expect(metrics.totalInstalled).toBe(2);
+    expect(metrics.avgProgress).toBe(65.5);
+    expect(metrics.todayCompleted).toBe(4);
+    expect(metrics.todayDamages).toBe(1);
+
+    // Sectors mapped
+    expect(metrics.sectors).toHaveLength(2);
+    expect(metrics.sectors[0]).toMatchObject({
+      sector: 'cutting',
+      label: 'Corte',
+      activeOperators: 2,
+      queueLength: 5,
+      itemsInProgress: 3,
+      itemsCompletedToday: 2,
+      avgTimeMinutes: 15.5,
+    });
+
+    // Nested activeJobs mapped
+    expect(metrics.sectors[0]!.activeJobs).toHaveLength(1);
+    expect(metrics.sectors[0]!.activeJobs[0]).toMatchObject({
+      activityId: 'act-1',
+      projectId: 'p1',
+      projectName: 'Cocina López',
+      sector: 'cutting',
+      operatorName: 'Ramón',
+    });
+    expect(metrics.sectors[0]!.activeJobs[0]!.itemId).toBeUndefined();
+
+    // Empty activeJobs sector
+    expect(metrics.sectors[1]!.activeJobs).toHaveLength(0);
+  });
 });

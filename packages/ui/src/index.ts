@@ -239,6 +239,8 @@ export {
   summarizeFabricMetrics,
   EmbarquesScreen,
   embarquesProjects,
+  EmbarquesProjectDetail,
+  type EmbarquesProjectDetailProps,
   InstalacionesScreen,
   instalacionesProjects,
   type DashboardMetrics,

@@ -1,69 +1,62 @@
 /**
- * Embarques — despacho/carga board (menu reorg).
+ * Embarques — Project list (loading staging).
  *
- * Cross-project view of what's EMBALADO waiting to be loaded onto
- * transport (packaged → loaded). What gets loaded moves on to the
- * Instalaciones screen (cargado → instalado). The full per-project loading
- * checklist (scan + "Liberar salida") stays in the Órdenes hub despacho
- * tab until it migrates (M2 — roadmap-screens/00-overview.md); this screen
- * links to it per project.
+ * Cross-project view of what's EMBALADO waiting to be loaded onto transport.
+ * Shows a card per project with a loading progress summary. Clicking a card
+ * navigates to the detail view (EmbarquesProjectDetail) where the operator
+ * can scan QR codes and mark bultos as loaded.
  *
  * Read-derive only; advancing goes through the shell callback so the server
  * enforces station scoping and writes the floor-status event (F094).
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { Truck } from 'lucide-react';
+import { ArrowRight, Truck } from 'lucide-react';
 
 import {
+  calculateLoadingProgress,
   normalizeItemFloorStatus,
-  ITEM_FLOOR_STATUS_LABELS_ES,
-  type ItemFloorStatus,
   type Project,
-  type ProjectItem,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
 
-type EmbarquesRow = {
-  readonly itemId: string;
-  readonly moduleName: string;
-  readonly quantity: number;
-  readonly currentStatus: ItemFloorStatus;
-};
-
-type EmbarquesProject = {
+type EmbarquesProjectCard = {
   readonly projectId: string;
   readonly projectName: string;
   readonly customerLabel: string;
-  readonly toLoad: readonly EmbarquesRow[];
+  readonly totalBultos: number;
+  readonly loadedBultos: number;
+  readonly percentage: number;
 };
 
-function rowFromItem(item: ProjectItem): EmbarquesRow {
-  return {
-    itemId: item.id,
-    moduleName: item.moduleId,
-    quantity: item.quantity,
-    currentStatus: normalizeItemFloorStatus(item.floorStatus),
-  };
-}
-
-/** Factory projects with items packaged waiting to load (pure, testable). */
+/** Derive project summary cards for the Embarques list (pure, testable). */
 export function embarquesProjects(
   projects: readonly Project[],
   customerLabelFor?: (customerId: string) => string,
-): readonly EmbarquesProject[] {
-  const result: EmbarquesProject[] = [];
+): readonly EmbarquesProjectCard[] {
+  const result: EmbarquesProjectCard[] = [];
   for (const project of projects) {
     if (project.status !== 'accepted' && project.status !== 'produced') continue;
-    const toLoad = project.items
-      .filter((item) => normalizeItemFloorStatus(item.floorStatus) === 'packaged')
-      .map(rowFromItem);
-    if (toLoad.length === 0) continue;
+    // A project qualifies if it has at least one item in 'packaged' or later
+    // manufacturing status (packaged, loaded) — i.e. it has been through
+    // embalaje and is relevant to dispatch.
+    const hasRelevantItems = project.items.some((item) => {
+      const status = normalizeItemFloorStatus(item.floorStatus);
+      return status === 'packaged' || status === 'loaded';
+    });
+    if (!hasRelevantItems) continue;
+
+    const progress = calculateLoadingProgress(project);
+    const totalBultos = progress.totalPackages ?? progress.totalUnits ?? 0;
+    const loadedBultos = progress.loadedPackages ?? progress.loadedUnits ?? 0;
+
     result.push({
       projectId: project.id,
       projectName: project.name,
       customerLabel: customerLabelFor?.(project.customerId) ?? '',
-      toLoad,
+      totalBultos,
+      loadedBultos,
+      percentage: progress.percentage ?? 0,
     });
   }
   return result;
@@ -71,31 +64,25 @@ export function embarquesProjects(
 
 export function EmbarquesScreen({
   projects,
-  canAdvance,
-  onAdvance,
   customerLabelFor,
-  onOpenDispatch,
+  onOpenProject,
   testId,
 }: {
   /** Projects in the factory (accepted/produced), already role-filtered. */
   readonly projects: readonly Project[];
-  readonly canAdvance: boolean;
-  /** Advance one packaged item to loaded (Marcar Cargado). */
-  readonly onAdvance: (
-    projectId: string,
-    itemId: string,
-    target: ItemFloorStatus,
-  ) => void;
   readonly customerLabelFor?: (customerId: string) => string;
-  /** Opens the per-project loading checklist (Órdenes hub, tab despacho). */
-  readonly onOpenDispatch?: (projectId: string) => void;
+  /** Navigate to the project's loading detail view. */
+  readonly onOpenProject?: (projectId: string) => void;
   readonly testId?: string;
 }): ReactNode {
   const cards = useMemo(
     () => embarquesProjects(projects, customerLabelFor),
     [projects, customerLabelFor],
   );
-  const totalToLoad = cards.reduce((acc, c) => acc + c.toLoad.length, 0);
+  const totalPending = cards.reduce(
+    (acc, c) => acc + (c.totalBultos - c.loadedBultos),
+    0,
+  );
 
   return (
     <section
@@ -111,14 +98,14 @@ export function EmbarquesScreen({
           <div>
             <h2 className="ship-board__title">Embarques</h2>
             <p className="ship-board__subtitle">
-              Qué está embalado esperando carga al transporte. Lo que cargás
-              acá pasa a Instalaciones; el avance se ve en Estado de Planta.
+              Obras con muebles embalados esperando carga al transporte. Seleccioná
+              una obra para ver el checklist de carga.
             </p>
           </div>
         </div>
         <div className="ship-board__header-actions">
           <span className="ship-board__stat" data-testid="embarques-to-load">
-            {totalToLoad} para cargar
+            {totalPending} bultos por cargar
           </span>
         </div>
       </header>
@@ -137,7 +124,7 @@ export function EmbarquesScreen({
               data-testid={`embarques-card-${card.projectId}`}
             >
               <div className="ship-board__card-header">
-                <div>
+                <div className="ship-board__card-info">
                   <h3 className="ship-board__card-title">{card.projectName}</h3>
                   {card.customerLabel ? (
                     <p className="ship-board__card-customer">
@@ -145,61 +132,43 @@ export function EmbarquesScreen({
                     </p>
                   ) : null}
                 </div>
-                {onOpenDispatch ? (
+                {onOpenProject ? (
                   <button
                     type="button"
                     className="btn"
-                    onClick={() => onOpenDispatch(card.projectId)}
-                    data-testid={`embarques-dispatch-${card.projectId}`}
+                    onClick={() => onOpenProject(card.projectId)}
+                    data-testid={`embarques-open-${card.projectId}`}
                   >
-                    Ver control de carga
+                    Ver detalle <ArrowRight size={14} />
                   </button>
                 ) : null}
               </div>
+
+              {/* Loading progress summary */}
               <div className="ship-board__section">
-                <h4 className="ship-board__section-title">
-                  Para cargar
-                  <span className="ship-board__section-count">
-                    {card.toLoad.length}
+                <div className="ship-board__progress-row">
+                  <span className="ship-board__progress-label">
+                    {card.loadedBultos} de {card.totalBultos} bultos cargados
                   </span>
-                </h4>
-                <ul className="ship-board__list">
-                  {card.toLoad.map((row) => (
-                    <li
-                      key={row.itemId}
-                      className="ship-board__row"
-                      data-testid={`embarques-load-${row.itemId}`}
-                    >
-                      <div className="ship-board__row-main">
-                        <span className="ship-board__row-module">
-                          {row.moduleName}
-                        </span>
-                        <span className="ship-board__row-meta">
-                          {row.quantity}{' '}
-                          {row.quantity === 1 ? 'mueble' : 'muebles'} · está en{' '}
-                          {ITEM_FLOOR_STATUS_LABELS_ES[row.currentStatus]}
-                        </span>
-                      </div>
-                      {canAdvance ? (
-                        <button
-                          type="button"
-                          className="btn btn--primary"
-                          onClick={() =>
-                            onAdvance(card.projectId, row.itemId, 'loaded')
-                          }
-                          data-testid={`embarques-advance-${row.itemId}`}
-                        >
-                          <Truck size={16} strokeWidth={1.5} aria-hidden />
-                          Marcar {ITEM_FLOOR_STATUS_LABELS_ES.loaded}
-                        </button>
-                      ) : (
-                        <span className="ship-board__row-waiting">
-                          {ITEM_FLOOR_STATUS_LABELS_ES.loaded}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                  <span className="ship-board__progress-pct">
+                    {card.percentage}%
+                  </span>
+                </div>
+                <div className="ship-board__progress-bar-bg">
+                  <div
+                    className={`ship-board__progress-bar-fill ${
+                      card.percentage === 100
+                        ? 'ship-board__progress-bar-fill--complete'
+                        : ''
+                    }`}
+                    style={{ width: `${card.percentage}%` }}
+                  />
+                </div>
+                {card.percentage === 100 ? (
+                  <span className="ship-board__complete-badge">
+                    ✓ Lista para enviar
+                  </span>
+                ) : null}
               </div>
             </li>
           ))}

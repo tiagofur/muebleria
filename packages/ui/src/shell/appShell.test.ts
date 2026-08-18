@@ -62,19 +62,18 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     // Ordering rule: dashboard first, then general → specific following the
-    // workshop process (Órdenes → Producción → Embarques → Instalaciones).
+    // workshop process (Órdenes → Producción → Instalaciones).
+    // Embarques moved to ALMACÉN (2026-08-18): logistics responsibility.
     expect(produccion.items.map((i) => i.id)).toEqual([
       'productionDashboard',
       'orders',
       'production',
-      'shipments',
       'installations',
     ]);
     expect(produccion.items.map((i) => i.label)).toEqual([
       'Dashboard',
       'Órdenes',
       'Producción',
-      'Embarques',
       'Instalaciones',
     ]);
 
@@ -93,8 +92,8 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     const almacen = APP_NAV_SECTIONS.find((s) => s.id === 'almacen')!;
-    expect(almacen.items.map((i) => i.id)).toEqual(['warehouse']);
-    expect(almacen.items.map((i) => i.label)).toEqual(['Almacén']);
+    expect(almacen.items.map((i) => i.id)).toEqual(['warehouse', 'shipments']);
+    expect(almacen.items.map((i) => i.label)).toEqual(['Almacén', 'Embarques']);
 
     expect(libreria.items.map((i) => i.id)).toEqual([
       'modules',

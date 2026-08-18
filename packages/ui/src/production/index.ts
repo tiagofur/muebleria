@@ -17,6 +17,8 @@ export {
   EmbarquesScreen,
   embarquesProjects,
 } from './EmbarquesScreen';
+export { EmbarquesProjectDetail } from './EmbarquesProjectDetail';
+export type { EmbarquesProjectDetailProps } from './EmbarquesProjectDetail';
 export {
   InstalacionesScreen,
   instalacionesProjects,

@@ -307,11 +307,17 @@ export function roleCanAccessFabricNav(role: string | null | undefined): boolean
  * Instalaciones (instalación en obra).
  *
  * Those stations belong to the production floor and its supervisors;
- * almacen does NOT advance floor status (F094) and its world is
- * Compras/Almacén, so it stays out.
  */
 export function roleCanAccessShippingNav(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_produccion' || role === 'produccion';
+}
+
+/**
+ * Embarques — staging + loading of finished goods (moved to Almacén scope
+ * 2026-08-18). Warehouse handles dispatch logistics.
+ */
+export function roleCanAccessEmbarquesNav(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_produccion' || role === 'almacen';
 }
 
 /**
@@ -508,11 +514,10 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   // in Embarques.
   // Nav id `production` = Producción (factory floor screen).
   if (roleCanAccessFabricNav(role)) ids.add('production');
-  // Embarques + Instalaciones: logistics boards (floor + supervisors).
-  if (roleCanAccessShippingNav(role)) {
-    ids.add('shipments');
-    ids.add('installations');
-  }
+  // Embarques: staging + loading of finished goods (Almacén scope).
+  if (roleCanAccessEmbarquesNav(role)) ids.add('shipments');
+  // Instalaciones: last-mile delivery + installation (Producción scope).
+  if (roleCanAccessShippingNav(role)) ids.add('installations');
   // PROD-0.1: Órdenes — per-project factory workspace for production-export roles.
   if (roleCanAccessProductionNav(role)) ids.add('orders');
   // Production Manager Dashboard: full visibility for gerente_produccion

@@ -23,6 +23,7 @@ import {
   roleIsScopedBySector,
   roleCanAccessFabricNav,
   roleCanAccessShippingNav,
+  roleCanAccessEmbarquesNav,
   sectorsAllowedForRole,
   roleCanAdvanceStation,
   roleCanAccessPurchasingNav,
@@ -248,17 +249,24 @@ describe('rbac (F035)', () => {
     expect(roleCanAccessFabricNav(null)).toBe(false);
   });
 
-  it('Embarques — roleCanAccessShippingNav: floor + supervisors, not almacen', () => {
+  it('Embarques — roleCanAccessEmbarquesNav: admin + gerente + almacen', () => {
+    expect(roleCanAccessEmbarquesNav('admin')).toBe(true);
+    expect(roleCanAccessEmbarquesNav('gerente_produccion')).toBe(true);
+    expect(roleCanAccessEmbarquesNav('almacen')).toBe(true);
+    expect(roleCanAccessEmbarquesNav('produccion')).toBe(false);
+    expect(roleCanAccessEmbarquesNav('vendedor')).toBe(false);
+    expect(roleCanAccessEmbarquesNav(null)).toBe(false);
+    expect(navIdsForRole('almacen').has('shipments')).toBe(true);
+    expect(navIdsForRole('produccion').has('shipments')).toBe(false);
+  });
+
+  it('Instalaciones — roleCanAccessShippingNav: floor + supervisors (not almacen)', () => {
     expect(roleCanAccessShippingNav('admin')).toBe(true);
     expect(roleCanAccessShippingNav('gerente_produccion')).toBe(true);
     expect(roleCanAccessShippingNav('produccion')).toBe(true);
-    // Almacén does not advance floor status (F094) — its world is Compras.
     expect(roleCanAccessShippingNav('almacen')).toBe(false);
     expect(roleCanAccessShippingNav('vendedor')).toBe(false);
     expect(roleCanAccessShippingNav(null)).toBe(false);
-    expect(navIdsForRole('produccion').has('shipments')).toBe(true);
-    expect(navIdsForRole('admin').has('shipments')).toBe(true);
-    expect(navIdsForRole('almacen').has('shipments')).toBe(false);
     expect(navIdsForRole('gerente_produccion').has('installations')).toBe(true);
     expect(navIdsForRole('vendedor').has('installations')).toBe(false);
     expect(navIdsForRole('almacen').has('installations')).toBe(false);

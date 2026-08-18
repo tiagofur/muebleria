@@ -93,9 +93,10 @@ import {
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleIsScopedBySector,
-  roleCanAccessFabricNav,
-  roleCanAccessShippingNav,
+  roleCanAccessFabricNav,   roleCanAccessShippingNav,
+   roleCanAccessEmbarquesNav,
   filterProjectsByProcessStage,
+  isProductionReady,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -116,6 +117,7 @@ import {
   PlantBoardScreen,
   FabricScreen,
   EmbarquesScreen,
+  EmbarquesProjectDetail,
   InstalacionesScreen,
   type DashboardMetrics,
   type FabricActiveClaim,
@@ -215,6 +217,8 @@ import {
   pathForNav,
   productionOrderFromPath,
   productionOrderPath,
+  shipmentDetailFromPath,
+  shipmentDetailPath,
   projectPath,
   structureEditIdFromPath,
   type EntitySection,
@@ -1159,7 +1163,7 @@ function AppContent({
   }, [navId, isSectorScoped, getRepository]);
 
   useEffect(() => {
-    if (navId !== 'production') return;
+    if (navId !== 'production' && navId !== 'orders') return;
     const repo = getRepository();
     if (!repo.getProductionActiveJobs) return;
     let cancelled = false;
@@ -1202,6 +1206,8 @@ function AppContent({
   const routeProductionOrderTab = parseProductionOrderTab(
     productionOrderRoute?.tab ?? 'resumen',
   );
+  const routeShipmentProjectId =
+    navId === 'shipments' ? shipmentDetailFromPath(location.pathname) : null;
   const routeEngineeringProjectId =
     navId === 'engineering' ? engineeringProjectFromPath(location.pathname) : null;
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
@@ -2080,6 +2086,14 @@ function AppContent({
   // writes the audit event (F094); mirror locally to keep lists in sync.
   const handleFloorAdvance = useCallback(
     (projectId: string, itemId: string, target: ItemFloorStatus) => {
+      // packaged → loaded is a warehouse (Almacén) transition, not production.
+      // Only almacen and admins can advance past packaged.
+      if (target === 'loaded') {
+        if (actorRole !== 'admin' && actorRole !== 'gerente_produccion' && actorRole !== 'almacen') {
+          toast({ type: 'error', message: 'La carga de muebles es responsabilidad de Almacén.' });
+          return;
+        }
+      }
       const repo = getRepository();
       if (repo.setProjectItemFloorStatus) {
         void repo
@@ -2102,7 +2116,7 @@ function AppContent({
         setItemFloorStatus(projectId, itemId, target);
       }
     },
-    [getRepository, setItemFloorStatus, toast],
+    [getRepository, setItemFloorStatus, toast, actorRole],
   );
 
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
@@ -3114,27 +3128,62 @@ function AppContent({
         />
         </ScreenBoundary>
       ) : null}
-      {navId === 'shipments' && roleCanAccessShippingNav(actorRole) ? (
+      {navId === 'shipments' && roleCanAccessEmbarquesNav(actorRole) ? (
         <ScreenBoundary screenLabel="Embarques" onGoHome={goHomeFromScreen}>
-        <EmbarquesScreen
-          projects={projectsForRole}
-          canAdvance={
-            session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
+        {routeShipmentProjectId ? (() => {
+          const shipmentProject = projectsForRole.find(
+            (p) => p.id === routeShipmentProjectId,
+          );
+          if (!shipmentProject) {
+            return (
+              <EmptyState
+                title="Obra no encontrada"
+                description="Esa obra no está en embarques o no tenés acceso."
+                actionLabel="Volver a Embarques"
+                onAction={() => navigate(pathForNav('shipments'))}
+              />
+            );
           }
-          onAdvance={handleFloorAdvance}
-          customerLabelFor={(customerId) =>
-            resolveCustomerName(customerId, customers)
-          }
-          onOpenDispatch={
-            useProductionWorkspace
-              ? (id) => {
-                  const target = productionOrderPath(id, 'despacho');
-                  if (location.pathname !== target) navigate(target);
-                }
-              : undefined
-          }
-        />
+          return (
+            <EmbarquesProjectDetail
+              project={shipmentProject}
+              modules={modules}
+              customerName={resolveCustomerName(
+                shipmentProject.customerId,
+                customers,
+              )}
+              onSetFloorStatus={
+                session === 'auth'
+                  ? (itemId, status) =>
+                      handleFloorAdvance(shipmentProject.id, itemId, status)
+                  : undefined
+              }
+              canSetFloorStatus={
+                session === 'auth' &&
+                (canMarkProduced || roleCanExportProduction(actorRole))
+              }
+              onReleaseToDelivery={() => {
+                void handleReleaseToDelivery(shipmentProject.id);
+              }}
+              canReleaseToDelivery={
+                session === 'auth' &&
+                (canMarkProduced || roleCanExportProduction(actorRole))
+              }
+              onBack={() => navigate(pathForNav('shipments'))}
+            />
+          );
+        })() : (
+          <EmbarquesScreen
+            projects={projectsForRole}
+            customerLabelFor={(customerId) =>
+              resolveCustomerName(customerId, customers)
+            }
+            onOpenProject={(id) => {
+              const target = shipmentDetailPath(id);
+              if (location.pathname !== target) navigate(target);
+            }}
+          />
+        )}
         </ScreenBoundary>
       ) : null}
       {navId === 'installations' && roleCanAccessShippingNav(actorRole) ? (
@@ -3396,10 +3445,7 @@ function AppContent({
       ) : null}
       {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
-          projects={filterProjectsByProcessStage(
-            filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects),
-            'produccion',
-          )}
+          projects={(filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).filter(isProductionReady)}
           orderProjectId={routeProductionOrderId}
           orderTab={routeProductionOrderTab}
           onOrderTabChange={(tab) => {
@@ -3534,6 +3580,7 @@ function AppContent({
           onReleaseToDelivery={(id) => {
             void handleReleaseToDelivery(id);
           }}
+          activeClaims={fabricActiveClaims}
         />
       ) : null}
       {navId === 'materials' ? (
