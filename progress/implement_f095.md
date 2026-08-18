@@ -55,3 +55,9 @@
 
 - Rama: `codex/f095-production-claims`.
 - Commit convencional y push a `origin` realizados al cerrar la feature.
+
+## Resultado de cierre
+
+- Implementación: `4e0281e feat(production): add project station claims`.
+- Push: `origin/codex/f095-production-claims` actualizado correctamente.
+- Fuera del commit: `.codegraph/` y `progress/explore_roadmap_screens.md` / `progress/explore_production_mapping.md`, por ser índice/artefactos de exploración no pertenecientes a F095.
