@@ -1,6 +1,34 @@
 # Sesión activa
 
-- **Cambio en curso (sin feature del backlog): gating por etapa del proceso.**
+- **Cambio en curso (sin feature del backlog): estandarización UI integral (post-critique).**
+  - **Critique completado (2026-08-18):** score 24/40. Snapshot:
+    `.impeccable/critique/2026-08-18T18-53-56Z__packages-ui-src-todas-las-pantallas-de-la-app-web.md`.
+    Evidencia: 28 screenshots en `/tmp/muebles-critique/` (efímero) + auditoría
+    de consistencia (sub-agente) integrada al snapshot.
+  - **Diagnóstico central:** no es slop AI (detector: 1 hallazgo —
+    `transition: width` sales.css:413); es fragmentación por fases: 7 sistemas
+    de header (page-header 22px vs eng/sales/purch 1.35rem vs producción 18px
+    ×3 copias vs PM h1), 141 font-size literales, 15+ familias de badge,
+    6 stat-cards, tokens muertos que renderizan paleta Tailwind (warranty 78
+    hex, projectPhotosGallery 61, sectorAssignment, csvExport, whatsApp),
+    UsersScreen con clases sin CSS, doble título topbar+header.
+  - **Decisiones del dueño (2026-08-18):** (1) atacar **unificación primero**;
+    (2) design.md = **evolución v2** (conserva núcleo bueno, agrega esqueleto
+    único, color por área, stat-card/status-badge únicos); (3) color de área =
+    **3 familias + neutro** mapeadas al proceso: VENTAS teal hsl(170) /
+    INGENIERÍA+LIBRERÍA+CATÁLOGOS indigo marca hsl(245) / ALMACÉN+PRODUCCIÓN
+    naranja hsl(25) ramp `--work-*`; TRABAJO+CONFIG neutro. Color solo señala
+    ubicación (nav activo, sección, icon-chip), nunca reemplaza brand en
+    acciones; (4) **sin zonas intocables** (no tocar dominio/export/backend
+    en esta pasada).
+  - **Plan acordado (orden):** ① document v2 (design.md: esqueleto de página
+    + áreas) → ② unificación headers/tipografía (todas a page-header +
+    `--text-*`) → ③ tokens muertos → ④ colorize por área → ⑤ extract
+    stat-card/status-badge → ⑥ polish final + re-critique.
+  - **Nota entorno:** password de `admin2@test.com` (cuenta test, DB local)
+    reseteado a `Critique2026!` para capturar pantallas admin — cambiar si
+    molesta (`backend-go/dev.sh admin reset-password`).
+- **Sesión previa (cerrada, integrada): gating por etapa del proceso.**
   - Secuencia implementada: ventas (accepted) → **solo Ingeniería** → enviada
     a producción → **solo Almacén** (botón "Material completo") → material
     liberado → **Fábrica/Órdenes**. Una obra ya no aparece en todos lados a

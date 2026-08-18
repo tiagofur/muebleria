@@ -1,9 +1,9 @@
 # Design Guide — Muebles App
 
-> **Estado:** v1.1 — post phase-4 + F024 growth  
+> **Estado:** v2.0 — post-critique de estandarización (2026-08-18)  
 > **Autores:** Producto + agente de diseño  
-> **Fecha:** 2026-07-15  
-> **Referencia de implementación:** `feature_list.json` fases 4 (F016–F023) + F024 (clientes/auth) y residual UI slices A–F
+> **Fecha:** 2026-08-18  
+> **Referencia de implementación:** critique `.impeccable/critique/2026-08-18T18-53-56Z__*.md` + plan de unificación acordado (esqueleto único · título único · color de área · stat-card/badge únicos)
 
 ---
 
@@ -176,6 +176,37 @@ La paleta usa HSL para permitir variaciones programáticas y preparar dark mode.
 --border-strong:  hsl(220 12% 74%);
 --border-brand:   var(--brand-400);
 ```
+
+#### 3.2.1 Color de área (identidad por proceso) — v2
+
+El color **señala en qué parte del proceso del taller estás**, no decora.
+Se mapea al pipeline real (ventas → ingeniería → almacén → producción):
+
+| Área | Secciones del sidebar | Rampa | Uso |
+|------|----------------------|-------|-----|
+| **Ventas** | VENTAS (Dashboard, Cotizaciones, Clientes, Vitrina) | `--area-sales-*` teal (hue 170; hoy `--accent-*`) | label de sección + ítem activo del nav + icon-chip del page-header |
+| **Ingeniería** | INGENIERÍA + LIBRERÍA + CATÁLOGOS | `--area-eng-*` = rampa `--brand-*` (hue 245; el core del producto YA es indigo) | ídem |
+| **Producción** | COMPRAS/ALMACÉN + PRODUCCIÓN (Órdenes, Producción, Embarques, Instalaciones) | `--area-work-*` naranja taller (hue 25) — rampa nueva | ídem |
+| **Overview / Config** | TRABAJO + CONFIG | sin tinte (neutro) — son cross-area | — |
+
+```css
+/* Producción / Almacén — naranja taller (nuevo en v2) */
+--area-work-100: hsl(25 100% 96%);
+--area-work-300: hsl(25  90% 78%);
+--area-work-400: hsl(25  82% 60%);
+--area-work-500: hsl(25  72% 46%);
+--area-work-600: hsl(25  66% 38%);
+/* Alias semánticos */
+--area-sales-*: mapear a --accent-* (teal, hue 170)
+--area-eng-*:   mapear a --brand-*  (indigo, hue 245)
+```
+
+**Reglas duras (registro product, "restrained"):**
+- El color de área **solo señala ubicación**: label de sección del sidebar, ítem activo del nav, icon-chip del page-header. Nada más.
+- **Nunca** reemplaza al brand en botones primarios, links ni focus (eso sigue siendo `--brand-*`).
+- **Nunca** pinta superficies completas (fondos de página, cards, toolbars) ni texto de contenido.
+- No confundir con semánticos: success (verde 145) / warning (ámbar 38) / danger (rojo 0) / info (azul 210) siguen siendo de ESTADO, no de ubicación. Por eso Producción es naranja 25 (distinto del warning 38) y Ventas teal 170 (distinto del info 210).
+- Badges de estado usan SIEMPRE semánticos, nunca el color de área.
 
 ---
 
@@ -436,12 +467,43 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 
 CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», …
 
-- **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo `--brand-400`
+- **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo e ícono en el **color de área** (§3.2.1); label de sección en color de área al 70%
 - **Brand chrome (issue #53):** `BrandMark` monochrome (tile + paneles) + wordmark «Muebles» — **sin emoji**; mismo mark en Login/Register y favicon web
 - **Command palette (issue #54):** `Cmd/Ctrl+K` en el shell — secciones de nav + cotizaciones/muebles recientes; teclado ↑↓ Enter Esc; denso, sin búsqueda de marketing
-- **TopBar**: `--surface-card` con `--shadow-sm`; acciones opcionales (`headerActions`, p. ej. **Salir**)
+- **TopBar**: `--surface-card` con `--shadow-sm`; **NO repite el título de la pantalla** (ver §4.1b); acciones opcionales (`headerActions`, p. ej. **Salir**)
 - **Content**: `--surface-app`, padding `--space-6`
 - **Entrada por defecto:** `home` (Dashboard) para todos los roles. El redirect al gate de sesión / falta de permiso usa `home`. Para produccion, `home` sigue siendo Dashboard (la cola es su propia ruta `/produccion`).
+
+#### 4.1a Esqueleto único de página (v2 — OBLIGATORIO)
+
+TODA pantalla del producto usa el mismo esqueleto, en este orden:
+
+```
+┌────────────────────────────────────────────────────────┐
+│ PAGE-HEADER                                            │
+│ [icon-chip área 24px] Título (--text-xl, h2)  [Acciones]│  ← único título de la vista
+│ Subtítulo (--text-base, secondary)         [1 primary] │
+├────────────────────────────────────────────────────────┤
+│ TOOLBAR (opcional): [Buscar…] [chips filtro] [tabs]    │
+├────────────────────────────────────────────────────────┤
+│ CUERPO: lista / tabla / cards / board / form           │
+├────────────────────────────────────────────────────────┤
+│ ESTADOS: loading (skeleton) · empty (enseña) · error   │
+└────────────────────────────────────────────────────────┘
+```
+
+- **Page-header**: SIEMPRE `.page-header` de `common/pageHeader.css` (o alias `.catalog-page__header` / `.dashboard__header` / `.prod-queue__header`). **Prohibido** crear headers propios por pantalla. El título SIEMPRE `--text-xl` (22px) semibold en `h2`.
+- **Icon-chip de área**: cuadrado 24–28px, radio `--radius-md`, fondo `--area-*-100` e ícono `--area-*-500` (16–18px, strokeWidth 1.5). Opcional (las pantallas de catálogo hoy no lo llevan — unificar al migrar).
+- **Toolbar**: búsqueda y filtros viven INMEDIATAMENTE bajo el header, nunca desplazados a otra sección de la página.
+- **Gap raíz**: `--density-page-gap` (12px) para TODAS las pantallas — no `--space-5/6/8` por screen.
+- **Estados**: `EmptyState` / `ListSkeleton` / `PageLoading` comunes — prohibidos empty states propios.
+
+#### 4.1b Regla de título único (v2)
+
+- El **page-header es el único dueño del título** de la vista (h2 `--text-xl`).
+- El **topbar NO repite el título**. Su rol es contexto global: búsqueda Cmd+K + identidad/rol de usuario + Salir. Puede mostrar el **área** (label de sección, color de área, peso medio) a modo de "dónde estoy".
+- El título del header debe **coincidir con el label del nav** que lleva a la pantalla (p. ej. nav «Órdenes» → título «Órdenes», no «Para fabricar»). El matiz de proceso va en el subtítulo.
+- Jerarquía de headings: `h2` = título de pantalla; `h3` = sección; `h4` = subsección. Prohibido `h1` dentro del content (el `h1` semántico, si se necesita, es del documento).
 
 ### 4.2 Patrón Lista → Detalle → Editar
 
@@ -575,24 +637,51 @@ Definidos en `packages/ui/src/catalogs/catalogs.css` con **BEM** (base + modific
 
 **Regla:** en cualquier grupo de acciones, max **1** `.btn--primary`. La secundaria es el `.btn` base (sin modificador de variante).
 
-### 5.2 Badges de Status
+### 5.2 Badges de Status (v2 — vocabulario único)
+
+Un SOLO sistema de badge de estado con modificadores **semánticos** (no por entidad):
 
 ```
-.badge-active / ActiveBadge — verde    — "● Activo"
-.badge-inactive             — gris     — "● Inactivo"
-.status-badge--draft        — gris azulado — "● Borrador"
-.status-badge--quoted       — azul     — "● Cotizado"
-.status-badge--accepted     — verde    — "● Aceptado"
-.status-badge--rejected     — rojo     — "● Rechazado"
-.status-badge--produced     — morado   — "● En producción"
+.status-badge--draft      — gris azulado — "● Borrador"
+.status-badge--quoted     — azul     — "● Cotizado"
+.status-badge--accepted   — verde    — "● Aceptado"
+.status-badge--rejected   — rojo     — "● Rechazado"
+.status-badge--produced   — morado   — "● En producción"
+.status-badge--open       — azul     — abierto / pendiente
+.status-badge--progress   — índigo   — en proceso
+.status-badge--done       — verde    — resuelto / documentado / completo
+.status-badge--cancelled  — gris     — cancelado / enviado (read-only)
+.status-badge--active     — verde    — "● Activo"
+.status-badge--inactive   — gris     — "● Inactivo"
 ```
 
-(Implementación de status de proyecto: clases `status-badge` + modificadores en `projects.css`.)
+- Vive en `common/statusBadge.css` (a extraer de `projects.css` en v2). Las familias propias (`purch-badge`, `warranty-badge`, `internal-comms__status-badge`, `eng-badge`, `users-role-badge`, …) migran a este vocabulario y se eliminan.
+- Estados de USO (activo/inactivo) y de FLUJO (draft/quoted/…) usan semánticos (§3.2), **nunca** color de área.
+- Badges de categoría/meta (no estado) que no mappeen acá: texto `--text-secondary` sin cápsula de color, o chip neutral.
 
 ### 5.3 Cards vs Tabla
 
 - **Cards**: Cotizaciones (Proyectos), Muebles — información rica y heterogénea
 - **Tabla**: Materiales, Cantos, Herrajes, Grupos, Clientes — datos tabulares densos y comparables
+
+### 5.4 Stat-card único (v2)
+
+Un SOLO componente de indicador KPI, `.stat-card` en `common/statCard.css`
+(reemplaza `dashboard__stat`, `eng-stat`, `purch-stat`, `pm-dashboard__card`,
+`sales-monthly__card`, `ship-board__stat`):
+
+```
+┌──────────────────────────┐
+│ [icon 18px área/semántico]│  ← opcional, tint -100 fondo / -500 ícono
+│ 42              --text-2xl│  ← valor, tabular-nums, bold
+│ Documentados    --text-sm │  ← label, secondary
+└──────────────────────────┘
+```
+
+- Variante interactiva `.stat-card--button` (clickeable como filtro): borde `--area-*-400` + fondo `--area-*-100` cuando activo; NUNCA tinte de fondo en estado rest.
+- Variante énfasis `.stat-card--emphasis` (KPI principal de dashboards).
+- Iconos usan el color de ÁREA si el KPI es de área, o semántico si es de estado.
+- Prohibido crear stat-cards por pantalla.
 
 ---
 
