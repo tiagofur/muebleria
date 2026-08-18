@@ -49,6 +49,15 @@ function formatAvgMinutes(minutes: number): string {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
+function formatClaimStart(startedAt: string): string {
+  const date = new Date(startedAt);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 export function summarizeFabricMetrics(sectors: readonly SectorDashboard[]): {
   queue: number;
   completedToday: number;
@@ -142,6 +151,7 @@ function ProjectCard({
   canAdvance,
   onAdvance,
   onAdvanceBatch,
+  onConfirmBatch,
   onClaim,
   onFinish,
 }: {
@@ -150,6 +160,7 @@ function ProjectCard({
   readonly canAdvance: boolean;
   readonly onAdvance: (projectId: string, itemId: string, target: ItemFloorStatus) => void;
   readonly onAdvanceBatch?: (projectId: string, itemIds: readonly string[], target: ItemFloorStatus) => void;
+  readonly onConfirmBatch?: (itemCount: number, target: ItemFloorStatus) => boolean;
   readonly onClaim?: (projectId: string, sector: FabricStation) => Promise<void>;
   readonly onFinish?: (activityId: string, piecesCount: number) => Promise<void>;
 }): ReactNode {
@@ -157,9 +168,17 @@ function ProjectCard({
   const stationLabel = TAB_LABELS[station].toLowerCase();
   const hasClaims = card.activeClaims.length > 0;
   const itemIds = card.items.map((item) => item.itemId);
+  const confirmBatch = (): boolean =>
+    onConfirmBatch ? onConfirmBatch(itemIds.length, target) : true;
   const finishAndAdvance = async (activityId: string): Promise<void> => {
     if (!onFinish) return;
+    const isLastActiveClaim = card.activeClaims.length === 1;
+    if (isLastActiveClaim && !confirmBatch()) return;
     await onFinish(activityId, itemIds.length);
+    if (isLastActiveClaim) onAdvanceBatch?.(card.projectId, itemIds, target);
+  };
+  const advanceBatch = (): void => {
+    if (!confirmBatch()) return;
     onAdvanceBatch?.(card.projectId, itemIds, target);
   };
 
@@ -187,7 +206,7 @@ function ProjectCard({
 
       {hasClaims ? (
         <p className="fabric-card__active-copy">
-          En curso · {card.activeClaims.map((claim) => claim.operatorName).join(', ')}
+          En curso · empezó {formatClaimStart(card.activeClaims[0]?.startedAt ?? '')} · {card.activeClaims.map((claim) => claim.operatorName).join(', ')}
         </p>
       ) : null}
 
@@ -214,7 +233,7 @@ function ProjectCard({
           ))}
         </ul>
         {canAdvance && onAdvanceBatch ? (
-          <button type="button" className="btn btn--primary fabric-card__batch" onClick={() => onAdvanceBatch(card.projectId, itemIds, target)} data-testid={`fabric-batch-${card.projectId}`}>
+          <button type="button" className="btn btn--primary fabric-card__batch" onClick={advanceBatch} data-testid={`fabric-batch-${card.projectId}`}>
             <Check size={16} strokeWidth={1.5} aria-hidden /> Marcar los {card.items.length}
           </button>
         ) : null}
@@ -236,6 +255,7 @@ export function FabricScreen({
   onClaim,
   onFinish,
   onAdvanceBatch,
+  onConfirmBatch,
   metrics = null,
   testId,
 }: {
@@ -251,6 +271,7 @@ export function FabricScreen({
   readonly onClaim?: (projectId: string, sector: FabricStation) => Promise<void>;
   readonly onFinish?: (activityId: string, piecesCount: number) => Promise<void>;
   readonly onAdvanceBatch?: (projectId: string, itemIds: readonly string[], target: ItemFloorStatus) => void;
+  readonly onConfirmBatch?: (itemCount: number, target: ItemFloorStatus) => boolean;
   readonly metrics?: DashboardMetrics | null;
   readonly testId?: string;
 }): ReactNode {
