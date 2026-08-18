@@ -288,6 +288,21 @@ export function roleIsScopedBySector(role: string | null | undefined): boolean {
 }
 
 /**
+ * May open Fábrica (roadmap-screens Fase 4.4 — cross-dashboard view).
+ *
+ * - Sector-scoped operators (produccion/almacen): their assigned tabs.
+ * - admin / gerente_produccion: all tabs + the [Cola]/[Métricas] toggle
+ *   (03-fabrica.md §1 — supervisors work the full floor).
+ */
+export function roleCanAccessFabricNav(role: string | null | undefined): boolean {
+  return (
+    roleIsScopedBySector(role) ||
+    role === 'admin' ||
+    role === 'gerente_produccion'
+  );
+}
+
+/**
  * Sectors a role may be assigned to (F094 — role↔sector binding).
  *
  * - `produccion`: all pipeline stations + warehouse + cnc (full floor).
@@ -476,9 +491,9 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   }
   if (roleCanAccessSettings(role)) ids.add('settings');
   if (roleCanManageUsers(role)) ids.add('users');
-  // Fábrica: tabbed work queue for sector-scoped operators (replaces Mi Estación).
-  // produccion (any station) and almacen (staging + assigned sectors).
-  if (roleIsScopedBySector(role)) ids.add('fabric');
+  // Fábrica: tabbed work queue for sector-scoped operators (replaces Mi Estación)
+  // and supervisors (admin / gerente_produccion see all sectors + metrics toggle).
+  if (roleCanAccessFabricNav(role)) ids.add('fabric');
   // PROD-0.1: factory workspace nav for production-export roles.
   if (roleCanAccessProductionNav(role)) ids.add('production');
   // Production Manager Dashboard: full visibility for gerente_produccion

@@ -25,6 +25,7 @@ import {
   type Project,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
+import type { DashboardMetrics } from './ProductionManagerDashboard';
 
 /** All sectors visible in Fábrica tabs (production pipeline). */
 const FABRIC_TAB_SECTORS: readonly PipelineSector[] = PIPELINE_SECTORS;
@@ -51,12 +52,51 @@ const TAB_LABELS: Readonly<Record<FabricTabSector, string>> = {
   installation: 'Instalación',
 };
 
+function formatAvgMinutes(minutes: number): string {
+  if (minutes <= 0) return '—';
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+/**
+ * Totals for the metrics table footer: queue is a plain sum; the overall
+ * average time is weighted by items completed today (sectors without
+ * completions don't pull the average down).
+ */
+export function summarizeFabricMetrics(sectors: readonly DashboardMetrics['sectors']): {
+  queue: number;
+  completedToday: number;
+  activeOperators: number;
+  avgTimeMinutes: number | null;
+} {
+  let queue = 0;
+  let completedToday = 0;
+  let activeOperators = 0;
+  let weighted = 0;
+  for (const s of sectors) {
+    queue += s.queueLength;
+    completedToday += s.itemsCompletedToday;
+    activeOperators += s.activeOperators;
+    weighted += s.avgTimeMinutes * s.itemsCompletedToday;
+  }
+  return {
+    queue,
+    completedToday,
+    activeOperators,
+    avgTimeMinutes:
+      completedToday > 0 ? weighted / completedToday : null,
+  };
+}
+
 export function FabricScreen({
   projects,
   assignedSectors,
   canAdvance,
   onAdvance,
   customerLabelFor,
+  metrics = null,
   testId,
 }: {
   /** Projects in the factory (accepted/produced), already role-filtered. */
@@ -73,6 +113,13 @@ export function FabricScreen({
    */
   readonly onAdvance: (projectId: string, itemId: string, target: ItemFloorStatus) => void;
   readonly customerLabelFor?: (customerId: string) => string;
+  /**
+   * Per-sector metrics for supervisors (admin/gerente_produccion). When
+   * present, the header gains the [Cola]/[Métricas] toggle (Fase 4.1).
+   * Null/omitted (still loading, fetch failed, or sector-scoped operator)
+   * keeps the pure queue view.
+   */
+  readonly metrics?: DashboardMetrics | null;
   readonly testId?: string;
 }): ReactNode {
   // Determine which tabs are visible based on assigned sectors.
@@ -95,6 +142,13 @@ export function FabricScreen({
   const effectiveTab = visibleTabs.includes(activeTab)
     ? activeTab
     : visibleTabs[0] ?? 'cutting';
+
+  // [Cola]/[Métricas] view toggle — only for supervisors with metrics data.
+  const [showMetrics, setShowMetrics] = useState(false);
+  const metricsTotals = useMemo(
+    () => (metrics ? summarizeFabricMetrics(metrics.sectors) : null),
+    [metrics],
+  );
 
   // Build rows for the active tab only (not all sectors).
   const rows = useMemo(() => {
@@ -206,13 +260,89 @@ export function FabricScreen({
             </p>
           </div>
         </div>
-        <span className="fabric__total" data-testid="fabric-total-waiting">
-          {totalWaiting} por hacer
-        </span>
+        <div className="fabric__header-actions">
+          {metrics ? (
+            <div
+              className="fabric__view-toggle"
+              role="group"
+              aria-label="Vista de fábrica"
+            >
+              <button
+                type="button"
+                className={`fabric__view-btn ${!showMetrics ? 'fabric__view-btn--active' : ''}`}
+                aria-pressed={!showMetrics}
+                onClick={() => setShowMetrics(false)}
+                data-testid="fabric-view-queue"
+              >
+                Cola
+              </button>
+              <button
+                type="button"
+                className={`fabric__view-btn ${showMetrics ? 'fabric__view-btn--active' : ''}`}
+                aria-pressed={showMetrics}
+                onClick={() => setShowMetrics(true)}
+                data-testid="fabric-view-metrics"
+              >
+                Métricas
+              </button>
+            </div>
+          ) : null}
+          <span className="fabric__total" data-testid="fabric-total-waiting">
+            {totalWaiting} por hacer
+          </span>
+        </div>
       </header>
 
-      {/* Tab bar */}
-      <nav className="fabric__tabs" aria-label="Sectores de fábrica" role="tablist">
+      {showMetrics && metrics && metricsTotals ? (
+        <div
+          className="fabric__metrics"
+          data-testid="fabric-metrics"
+          aria-label="Métricas por sector"
+        >
+          <table className="fabric__metrics-table">
+            <thead>
+              <tr>
+                <th scope="col">Sector</th>
+                <th scope="col">Cola</th>
+                <th scope="col">Operarios</th>
+                <th scope="col">Hechos hoy</th>
+                <th scope="col">Tiempo prom.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.sectors.map((s) => (
+                <tr key={s.sector}>
+                  <th scope="row">{s.label || s.sector}</th>
+                  <td>{s.queueLength}</td>
+                  <td>{s.activeOperators}</td>
+                  <td>{s.itemsCompletedToday}</td>
+                  <td>{formatAvgMinutes(s.avgTimeMinutes)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td>{metricsTotals.queue}</td>
+                <td>{metricsTotals.activeOperators}</td>
+                <td>{metricsTotals.completedToday}</td>
+                <td>
+                  {metricsTotals.avgTimeMinutes == null
+                    ? '—'
+                    : formatAvgMinutes(metricsTotals.avgTimeMinutes)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+          <p className="fabric__metrics-note">
+            Promedio general ponderado por ítems completados hoy. El detalle
+            completo vive en Producción → Dashboard.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Tab bar */}
+          <nav className="fabric__tabs" aria-label="Sectores de fábrica" role="tablist">
         {visibleTabs.map((tab) => {
           const isActive = tab === effectiveTab;
           // Count items for this tab.
@@ -323,6 +453,8 @@ export function FabricScreen({
           </ul>
         )}
       </div>
+        </>
+      )}
     </section>
   );
 }

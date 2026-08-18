@@ -946,3 +946,40 @@ todas las fases del roadmap-screens estén OK hasta 3b.
 3. chore: `.gitignore` + `backend-go/server`.
 
 **Siguiente:** Fase 4 (dashboards refinados) del `05-implementation-phases.md`.
+
+## Fase 4 — Dashboards refinados (2026-08-17, noche)
+
+Implementada y verificada (estado por fase en `05-implementation-phases.md`).
+
+**4.1 — Toggle [Cola]/[Métricas] en Fábrica:**
+- `FabricScreen` gana prop opcional `metrics?: DashboardMetrics | null` y un
+  toggle segmentado en el header (solo cuando hay métricas). Vista Métricas =
+  tabla por sector (cola, operarios, hechos hoy, tiempo prom.) + fila Total
+  (promedio ponderado por completados de hoy, `summarizeFabricMetrics`
+  exportado y testeado; sin completados → '—').
+- Tipos `DashboardMetrics`/`SectorDashboard` exportados de
+  `ProductionManagerDashboard` (vía barrel production + index de UI).
+- `App.tsx`: fetch de `getProductionDashboard` SOLO al abrir /fabric sin
+  sector-scoping (admin/gerente); null mientras carga o si falla → vista cola.
+
+**4.4 — roleCanAccessFabricNav (domain/rbac.ts):** admin y gerente_produccion
+ganan el nav Fábrica (tabs completas: assignedSectors null). Operadores
+sector-scoped sin cambios. Tests rbac actualizados (la expectativa vieja
+afirmaba que admin NO tenía fabric — ahora la quiere 03-fabrica.md §1).
+
+**4.2 — Actividad por mes en SalesDashboard:** helper puro `monthlyActivity`
+(últimos 6 meses; creadas por `createdAt`, ganadas por
+`priceSnapshot.capturedAt` — misma honestidad que F090). `MonthlyActivityChart`:
+barras CSS agrupadas por mes con contador, leyenda, `role="img"` con
+descripción accesible; sigue el filtro de vendedor; se oculta sin actividad.
+CSS `.sales-monthly-chart__*` (tokens, colores de pipeline: violeta/verde).
+
+**4.3 — Ingeniería:** fallback de proyecto desconocido usa `EmptyState`
+compartido (icono FileQuestion) en vez del div pelado.
+
+**4.5 — Hub NO se elimina** (documentado en 05): conserva
+piso/despacho/etiquetas/herrajes/documentos y es el workspace por obra de 5
+roles. No está "fully replaced".
+
+**Verificación:** domain 630 ✓ · ui FabricScreen 15 / SalesDashboard 15 ✓ ·
+typecheck monorepo 0 errores · pnpm test full verde (ver registro).

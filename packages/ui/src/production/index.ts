@@ -7,7 +7,11 @@ export {
   ProjectFloorStageChip,
 } from './ProjectFloorProgressStrip';
 export { PlantBoardScreen } from './PlantBoardScreen';
-export { FabricScreen } from './FabricScreen';
+export { FabricScreen, summarizeFabricMetrics } from './FabricScreen';
+export type {
+  DashboardMetrics,
+  SectorDashboard,
+} from './ProductionManagerDashboard';
 
 export {
   ProductionQueue,

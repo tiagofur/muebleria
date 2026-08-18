@@ -146,6 +146,7 @@ export {
   roleCanAccessSalesDashboard,
   roleCanClaimProductionJob,
   roleIsScopedBySector,
+  roleCanAccessFabricNav,
   sectorsAllowedForRole,
   roleCanAdvanceStation,
   roleCanAccessPurchasingNav,

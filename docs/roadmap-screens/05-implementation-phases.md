@@ -5,6 +5,35 @@
 
 ---
 
+## Estado de implementación (2026-08-17)
+
+| Fase | Estado | Notas |
+|------|--------|-------|
+| 1 — Fábrica | ✅ Done | `FabricScreen` con tabs por sector (`7f11e7a`) |
+| 2a — Ingeniería | ✅ Done | Landing + workspace 8 tabs; Hub recortado a 6 tabs (`7f11e7a`, `2211e2c`) |
+| 2b — Dashboard Ventas | ✅ Done | `SalesDashboard` (`7f11e7a`) |
+| 3 — Compras/Almacén | ✅ Done | Picking + persistencia (migración 000054) |
+| 3b — Stock real | ✅ Done | Ledger inmutable + panel de stock (000055/000056, doc `06-stock-almacen.md`) |
+| 3c — Órdenes de compra | ✅ Done | POs + proveedores + costo/valor (000057) |
+| 4 — Dashboards refinados | ✅ Done | Ver abajo |
+| 5 — Polish y optimización | ⬜ Pendiente | Responsive, teclado, skeletons, perf |
+
+**Fase 4 — qué se hizo:**
+- 4.1 Toggle **[Cola]/[Métricas]** en `FabricScreen` para admin/gerente_produccion
+  (tabla por sector: cola, operarios, hechos hoy, tiempo promedio ponderado;
+  datos de `getProductionDashboard`, fetch al abrir la pantalla).
+- 4.2 `SalesDashboard`: gráfico **Actividad por mes** (últimos 6 meses, creadas
+  vs ganadas por `priceSnapshot.capturedAt`; barras CSS, sigue el filtro de
+  vendedor; se oculta si no hay actividad en la ventana).
+- 4.3 Ingeniería: fallback de proyecto desconocido usa el `EmptyState` compartido.
+- 4.4 `roleCanAccessFabricNav`: admin y gerente_produccion ganan el nav Fábrica
+  (tabs completas + toggle; los operadores sector-scoped no cambian).
+- 4.5 **ProductionOrderHub NO se elimina**: conserva piso/despacho/etiquetas/
+  herrajes/documentos y es el workspace por obra para 5 roles. Solo se quitaría
+  si esas tabs migran (no planificado); los tabs técnicos ya viven en Ingeniería.
+
+---
+
 ## Overview
 
 5 phases, ordered by priority and dependency. Each phase produces a working screen.

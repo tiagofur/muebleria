@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { SalesDashboard } from './SalesDashboard';
+import { SalesDashboard, monthlyActivity } from './SalesDashboard';
 import type { Project, ProjectStatus } from '@muebles/domain';
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
@@ -201,5 +201,82 @@ describe('SalesDashboard', () => {
     // Client c1 should appear in rankings with 3 projects
     const rankings = screen.getAllByText(/3 proyectos/);
     expect(rankings.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('SalesDashboard — monthly activity chart (Fase 4.2)', () => {
+  afterEach(cleanup);
+
+  /** ISO date `monthsBack` months before `now` (same day, mid-month safe). */
+  function monthsAgo(now: Date, monthsBack: number): string {
+    const d = new Date(now.getFullYear(), now.getMonth() - monthsBack, 15, 12, 0, 0);
+    return d.toISOString();
+  }
+
+  it('monthlyActivity buckets created and won per month', () => {
+    const now = new Date(2026, 7, 17); // 17 ago 2026
+    const projects = [
+      makeProject({ id: 'a', name: 'A', createdAt: monthsAgo(now, 0) }),
+      makeProject({ id: 'b', name: 'B', createdAt: monthsAgo(now, 0) }),
+      makeProject({
+        id: 'c',
+        name: 'C',
+        createdAt: monthsAgo(now, 2),
+        priceSnapshot: {
+          capturedAt: monthsAgo(now, 0),
+          breakdown: { salePrice: 100 },
+        } as unknown as Project['priceSnapshot'],
+      }),
+      // Created outside the 6-month window — ignored.
+      makeProject({ id: 'd', name: 'D', createdAt: monthsAgo(now, 8) }),
+    ];
+
+    const data = monthlyActivity(projects, now);
+    expect(data).toHaveLength(6);
+    const current = data[5];
+    expect(current.label).toBe('ago');
+    expect(current.created).toBe(2);
+    expect(current.won).toBe(1);
+    const twoAgo = data[3];
+    expect(twoAgo.created).toBe(1);
+    expect(twoAgo.won).toBe(0);
+    // Oldest bucket only holds nothing from the out-of-window project.
+    expect(data[0].created).toBe(0);
+  });
+
+  it('renders the chart with per-month counts and an accessible description', () => {
+    const now = new Date();
+    const projects = [
+      makeProject({ id: 'a', name: 'A', createdAt: monthsAgo(now, 0) }),
+      makeProject({
+        id: 'b',
+        name: 'B',
+        createdAt: monthsAgo(now, 0),
+        priceSnapshot: {
+          capturedAt: monthsAgo(now, 0),
+          breakdown: { salePrice: 100 },
+        } as unknown as Project['priceSnapshot'],
+      }),
+    ];
+    render(<SalesDashboard projects={projects} onOpenProject={vi.fn()} />);
+
+    const chart = screen.getByTestId('sales-monthly-chart');
+    expect(chart).toBeDefined();
+    const img = chart.querySelector('[role="img"]');
+    expect(img?.getAttribute('aria-label')).toContain('creadas');
+    expect(img?.getAttribute('aria-label')).toContain('ganadas');
+    // Current-month column shows both counters.
+    const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthCol = screen.getByTestId(`sales-month-${key}`);
+    expect(monthCol.textContent).toContain('1');
+  });
+
+  it('hides the chart when the window has no activity', () => {
+    const now = new Date();
+    const projects = [
+      makeProject({ id: 'old', name: 'Viejo', createdAt: monthsAgo(now, 9) }),
+    ];
+    render(<SalesDashboard projects={projects} onOpenProject={vi.fn()} />);
+    expect(screen.queryByTestId('sales-monthly-chart')).toBeNull();
   });
 });

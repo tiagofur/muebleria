@@ -51,7 +51,7 @@ type ActiveJob = {
   readonly durationMin: number;
 };
 
-type SectorDashboard = {
+export type SectorDashboard = {
   readonly sector: string;
   readonly label: string;
   readonly activeOperators: number;
@@ -62,7 +62,7 @@ type SectorDashboard = {
   readonly activeJobs: readonly ActiveJob[];
 };
 
-type DashboardMetrics = {
+export type DashboardMetrics = {
   readonly totalProjects: number;
   readonly totalItems: number;
   readonly totalInstalled: number;

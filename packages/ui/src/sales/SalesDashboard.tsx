@@ -116,6 +116,123 @@ function isCancelled(p: Project): boolean {
   return Boolean(p.cancelledAt);
 }
 
+/* ── Monthly activity (Fase 4.2 — actividad por mes) ────────────────────── */
+
+const MONTH_LABELS_ES = [
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+  'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+] as const;
+
+type MonthlyActivity = {
+  readonly key: string;
+  readonly label: string;
+  readonly created: number;
+  readonly won: number;
+};
+
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Created vs won per month over the last `months` (inclusive of the current
+ * one). "Won" = priceSnapshot.capturedAt (≈ acceptance date, same honesty
+ * note as workshopMetrics); drafts count as created, not as won.
+ */
+export function monthlyActivity(
+  projects: readonly Project[],
+  now: Date = new Date(),
+  months = 6,
+): MonthlyActivity[] {
+  const buckets: MonthlyActivity[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    buckets.push({
+      key: monthKey(d),
+      label: MONTH_LABELS_ES[d.getMonth()],
+      created: 0,
+      won: 0,
+    });
+  }
+  const index = new Map(buckets.map((b, i) => [b.key, i] as const));
+  for (const p of projects) {
+    const createdIdx = index.get(monthKey(new Date(p.createdAt)));
+    if (createdIdx != null) buckets[createdIdx].created++;
+    const capturedAt = p.priceSnapshot?.capturedAt;
+    if (capturedAt) {
+      const wonIdx = index.get(monthKey(new Date(capturedAt)));
+      if (wonIdx != null) buckets[wonIdx].won++;
+    }
+  }
+  return buckets;
+}
+
+function MonthlyActivityChart({
+  data,
+}: {
+  readonly data: readonly MonthlyActivity[];
+}): ReactNode {
+  const total = data.reduce((acc, d) => acc + d.created + d.won, 0);
+  if (total === 0) return null;
+  const max = Math.max(1, ...data.map((d) => Math.max(d.created, d.won)));
+  const description = data
+    .map((d) => `${d.label}: ${d.created} creadas, ${d.won} ganadas`)
+    .join('; ');
+  return (
+    <div className="sales-monthly-chart" data-testid="sales-monthly-chart">
+      <h3 className="sales-section-title">
+        <BarChart3 size={16} strokeWidth={1.5} />
+        Actividad por mes
+      </h3>
+      <div
+        className="sales-monthly-chart__chart"
+        role="img"
+        aria-label={`Proyectos creados y ganados por mes. ${description}.`}
+      >
+        {data.map((d) => (
+          <div
+            key={d.key}
+            className="sales-monthly-chart__month"
+            data-testid={`sales-month-${d.key}`}
+          >
+            <div className="sales-monthly-chart__bars">
+              <span className="sales-monthly-chart__bar-col">
+                <span className="sales-monthly-chart__value">
+                  {d.created > 0 ? d.created : ''}
+                </span>
+                <span
+                  className="sales-monthly-chart__bar sales-monthly-chart__bar--created"
+                  style={{ height: `${Math.round((d.created / max) * 100)}%` }}
+                />
+              </span>
+              <span className="sales-monthly-chart__bar-col">
+                <span className="sales-monthly-chart__value">
+                  {d.won > 0 ? d.won : ''}
+                </span>
+                <span
+                  className="sales-monthly-chart__bar sales-monthly-chart__bar--won"
+                  style={{ height: `${Math.round((d.won / max) * 100)}%` }}
+                />
+              </span>
+            </div>
+            <span className="sales-monthly-chart__label">{d.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="sales-monthly-chart__legend" aria-hidden>
+        <span className="sales-monthly-chart__legend-item">
+          <span className="sales-monthly-chart__dot sales-monthly-chart__dot--created" />
+          Creadas
+        </span>
+        <span className="sales-monthly-chart__legend-item">
+          <span className="sales-monthly-chart__dot sales-monthly-chart__dot--won" />
+          Ganadas
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── Vendedor filter ────────────────────────────────────────────────────── */
 
 function VendedorFilter({
@@ -612,6 +729,12 @@ export function SalesDashboard({
   /* Total pipeline value */
   const totalValue = stats.total.abiertas.totalValue + stats.total.cerradas.totalValue;
 
+  /* Monthly activity follows the active vendedor filter. */
+  const monthlyChartData = useMemo(
+    () => monthlyActivity(filteredProjects),
+    [filteredProjects],
+  );
+
   if (projects.length === 0) {
     return (
       <section className="sales-dashboard" aria-label="Dashboard de Ventas">
@@ -674,6 +797,9 @@ export function SalesDashboard({
         cerradas={stats.total.cerradas}
         canceladas={stats.total.canceladas}
       />
+
+      {/* Monthly activity chart (Fase 4.2) */}
+      <MonthlyActivityChart data={monthlyChartData} />
 
       {/* Client rankings */}
       <div className="sales-rankings">

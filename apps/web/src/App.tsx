@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { FileQuestion } from 'lucide-react';
 import type {
   Catalog,
   Component,
@@ -90,6 +91,7 @@ import {
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleIsScopedBySector,
+  roleCanAccessFabricNav,
   suggestDuplicateCode,
   transitionProjectStatus,
 } from '@muebles/domain';
@@ -109,6 +111,8 @@ import {
   ProductionWorkspace,
   PlantBoardScreen,
   FabricScreen,
+  type DashboardMetrics,
+  EmptyState,
   EngineeringScreen,
   EngineeringWorkspace,
   SalesDashboard,
@@ -1118,6 +1122,31 @@ function AppContent({
     return params.get('present') ?? null;
   }, [location.search]);
   const navId: AppNavId = navFromPath(location.pathname) ?? 'home';
+
+  // Fase 4.1 — Fábrica metrics for supervisors (admin / gerente_produccion):
+  // fetched only when they open the screen; sector-scoped operators never do
+  // (no toggle for them). Null until loaded or on failure → queue view only.
+  const canOpenFabric = roleCanAccessFabricNav(actorRole);
+  const [fabricMetrics, setFabricMetrics] = useState<DashboardMetrics | null>(null);
+  useEffect(() => {
+    if (navId !== 'fabric' || isSectorScoped) return;
+    const repo = getRepository();
+    if (!repo.getProductionDashboard) return;
+    let cancelled = false;
+    setFabricMetrics(null);
+    repo
+      .getProductionDashboard()
+      .then((metrics) => {
+        if (!cancelled) setFabricMetrics(metrics);
+      })
+      .catch(() => {
+        if (!cancelled) setFabricMetrics(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navId, isSectorScoped, getRepository]);
+
   const routeEntityId =
     isEntitySection(navId)
       ? entityIdFromPath(location.pathname, navId)
@@ -2923,10 +2952,11 @@ function AppContent({
           }
         />
       ) : null}
-      {navId === 'fabric' && isSectorScoped ? (
+      {navId === 'fabric' && canOpenFabric ? (
         <FabricScreen
           projects={projectsForRole}
-          assignedSectors={mySectors}
+          assignedSectors={isSectorScoped ? mySectors : null}
+          metrics={isSectorScoped ? undefined : fabricMetrics}
           canAdvance={
             session === 'auth' &&
             (canMarkProduced || roleCanExportProduction(actorRole))
@@ -2979,16 +3009,13 @@ function AppContent({
         const engProject = projects.find((p) => p.id === routeEngineeringProjectId);
         if (!engProject) {
           return (
-            <div className="empty-state">
-              <p>Proyecto no encontrado.</p>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={() => navigate(pathForNav('engineering'))}
-              >
-                Volver a Ingeniería
-              </button>
-            </div>
+            <EmptyState
+              icon={FileQuestion}
+              title="Proyecto no encontrado"
+              description="Puede haberse eliminado o el enlace es de otra obra."
+              actionLabel="Volver a Ingeniería"
+              onAction={() => navigate(pathForNav('engineering'))}
+            />
           );
         }
         const engModules = modules.filter((m) =>

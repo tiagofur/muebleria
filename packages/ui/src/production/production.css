@@ -2109,6 +2109,95 @@
   white-space: nowrap;
 }
 
+/* --- Header actions (total + supervisor view toggle) --- */
+.fabric__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fabric__view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.fabric__view-btn {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-full, 9999px);
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.fabric__view-btn:hover {
+  color: var(--text-primary);
+}
+
+.fabric__view-btn--active {
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  font-weight: var(--weight-semibold);
+}
+
+/* --- Supervisor metrics view (Fase 4.1) --- */
+.fabric__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fabric__metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.fabric__metrics-table th,
+.fabric__metrics-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: right;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.fabric__metrics-table thead th {
+  color: var(--text-secondary);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fabric__metrics-table tbody th,
+.fabric__metrics-table th[scope='row'] {
+  text-align: left;
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.fabric__metrics-table tfoot th,
+.fabric__metrics-table tfoot td {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  border-bottom: none;
+  border-top: 2px solid var(--border-subtle);
+}
+
+.fabric__metrics-note {
+  margin: 0;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-secondary);
+}
+
 /* --- Tab bar --- */
 .fabric__tabs {
   display: flex;

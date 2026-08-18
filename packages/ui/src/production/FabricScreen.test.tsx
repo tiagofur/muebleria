@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import type { Project, ProjectItem } from '@muebles/domain';
 
-import { FabricScreen } from './FabricScreen';
+import { FabricScreen, summarizeFabricMetrics } from './FabricScreen';
 
 afterEach(cleanup);
 
@@ -232,5 +232,128 @@ describe('FabricScreen — Fábrica (Phase 1)', () => {
     expect(screen.getByTestId('fabric-total-waiting').textContent).toBe(
       '2 por hacer',
     );
+  });
+});
+
+describe('FabricScreen — metrics toggle (Fase 4.1)', () => {
+  const metrics = {
+    totalProjects: 2,
+    totalItems: 3,
+    totalInstalled: 0,
+    avgProgress: 10,
+    todayCompleted: 5,
+    todayDamages: 0,
+    sectors: [
+      {
+        sector: 'cutting',
+        label: 'Corte',
+        activeOperators: 2,
+        queueLength: 8,
+        itemsInProgress: 1,
+        itemsCompletedToday: 4,
+        avgTimeMinutes: 45,
+        activeJobs: [],
+      },
+      {
+        sector: 'edge_banding',
+        label: 'Encintado',
+        activeOperators: 1,
+        queueLength: 5,
+        itemsInProgress: 0,
+        itemsCompletedToday: 1,
+        avgTimeMinutes: 30,
+        activeJobs: [],
+      },
+    ],
+  };
+
+  it('hides the toggle when no metrics are provided (operators)', () => {
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a')])]}
+        assignedSectors={['cutting']}
+        canAdvance
+        onAdvance={() => undefined}
+      />,
+    );
+    expect(screen.queryByTestId('fabric-view-metrics')).toBeNull();
+    expect(screen.queryByTestId('fabric-metrics')).toBeNull();
+  });
+
+  it('toggles between queue and metrics views', () => {
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a')])]}
+        assignedSectors={null}
+        canAdvance
+        onAdvance={() => undefined}
+        metrics={metrics}
+      />,
+    );
+    // Queue view is the default; the toggle is visible.
+    expect(screen.getByTestId('fabric-panel-cutting')).not.toBeNull();
+    expect(screen.queryByTestId('fabric-metrics')).toBeNull();
+    expect(screen.getByTestId('fabric-view-queue').getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('fabric-view-metrics'));
+    expect(screen.getByTestId('fabric-view-metrics').getAttribute('aria-pressed')).toBe('true');
+    // Tabs and queue panel are replaced by the metrics table.
+    expect(screen.queryByTestId('fabric-tab-cutting')).toBeNull();
+    expect(screen.queryByTestId('fabric-panel-cutting')).toBeNull();
+
+    const table = screen.getByTestId('fabric-metrics');
+    expect(table.textContent).toContain('Corte');
+    expect(table.textContent).toContain('Encintado');
+    // Totals row: queue 8 + 5, operators 2 + 1, completed 4 + 1.
+    expect(table.textContent).toContain('Total');
+    expect(table.textContent).toContain('13');
+    expect(table.textContent).toContain('3');
+    expect(table.textContent).toContain('5');
+    // Weighted average: (45×4 + 30×1) / 5 = 42 min.
+    expect(table.textContent).toContain('42 min');
+
+    // Back to the queue.
+    fireEvent.click(screen.getByTestId('fabric-view-queue'));
+    expect(screen.getByTestId('fabric-panel-cutting')).not.toBeNull();
+    expect(screen.queryByTestId('fabric-metrics')).toBeNull();
+  });
+
+  it('metrics fetch failed (null) keeps the pure queue view', () => {
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a')])]}
+        assignedSectors={null}
+        canAdvance
+        onAdvance={() => undefined}
+        metrics={null}
+      />,
+    );
+    expect(screen.queryByTestId('fabric-view-metrics')).toBeNull();
+    expect(screen.getByTestId('fabric-panel-cutting')).not.toBeNull();
+  });
+
+  it('summarizeFabricMetrics weights the average by completions', () => {
+    const totals = summarizeFabricMetrics(metrics.sectors);
+    expect(totals.queue).toBe(13);
+    expect(totals.activeOperators).toBe(3);
+    expect(totals.completedToday).toBe(5);
+    expect(totals.avgTimeMinutes).toBeCloseTo(42, 5);
+  });
+
+  it('summarizeFabricMetrics returns null average without completions', () => {
+    expect(
+      summarizeFabricMetrics([
+        {
+          sector: 'cnc',
+          label: 'CNC',
+          activeOperators: 0,
+          queueLength: 2,
+          itemsInProgress: 0,
+          itemsCompletedToday: 0,
+          avgTimeMinutes: 0,
+          activeJobs: [],
+        },
+      ]).avgTimeMinutes,
+    ).toBeNull();
   });
 });

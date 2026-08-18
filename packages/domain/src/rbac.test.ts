@@ -21,6 +21,7 @@ import {
   roleCanAccessProductionDashboard,
   roleCanAccessSalesDashboard,
   roleIsScopedBySector,
+  roleCanAccessFabricNav,
   sectorsAllowedForRole,
   roleCanAdvanceStation,
   roleCanAccessPurchasingNav,
@@ -228,10 +229,22 @@ describe('rbac (F035)', () => {
     // The plant operator keeps the hub and gains the fabric queue.
     expect(navIdsForRole('produccion').has('production')).toBe(true);
     expect(navIdsForRole('produccion').has('fabric')).toBe(true);
-    // Supervisors and commercial roles have no personal fabric queue.
-    expect(navIdsForRole('admin').has('fabric')).toBe(false);
-    expect(navIdsForRole('gerente_produccion').has('fabric')).toBe(false);
+    // Fase 4.4 — supervisors work the full floor too (all tabs + metrics);
+    // commercial roles have no personal fabric queue.
+    expect(navIdsForRole('admin').has('fabric')).toBe(true);
+    expect(navIdsForRole('gerente_produccion').has('fabric')).toBe(true);
     expect(navIdsForRole('vendedor').has('fabric')).toBe(false);
+  });
+
+  it('Fase 4.4 — roleCanAccessFabricNav: scoped operators + supervisors', () => {
+    expect(roleCanAccessFabricNav('produccion')).toBe(true);
+    expect(roleCanAccessFabricNav('almacen')).toBe(true);
+    expect(roleCanAccessFabricNav('admin')).toBe(true);
+    expect(roleCanAccessFabricNav('gerente_produccion')).toBe(true);
+    expect(roleCanAccessFabricNav('gerente_ventas')).toBe(false);
+    expect(roleCanAccessFabricNav('vendedor')).toBe(false);
+    expect(roleCanAccessFabricNav('ingeniero')).toBe(false);
+    expect(roleCanAccessFabricNav(null)).toBe(false);
   });
 
   it('F094 — roleCanAdvanceStation scopes operators to their sectors', () => {
