@@ -707,9 +707,9 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **RBAC**: `roleCanAccessShowcaseNav` (admin, ingeniero, gerente_ventas, vendedor). No `produccion`, no `user`.
 - **Icono:** `Store`
 
-### 6.7 Producción (cola + orden de fábrica)
+### 6.7 Órdenes (cola + hub de obra — TEMPORAL)
 
-- **Ruta nav:** `production` (sección TRABAJO, label **Producción**)
+- **Ruta nav:** `production` (sección PRODUCCIÓN, label **Órdenes** — ex "Producción"; se elimina en M2, ver `roadmap-screens/00-overview.md`)
 - **Paths:**
   - `/produccion` — cola de trabajo
   - `/produccion/:projectId` — hub de orden (OP)
@@ -719,25 +719,26 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Patrón:** workspace de fábrica (no editor de cotización)
 - **Contenido:**
   - Cola: tabs accepted / produced; CTA primario **Abrir orden**; Pack y Marcar en planta secundarios. **Sin** muro Optimizer/herrajes/etiquetas en la card (viven en el hub). Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
-  - Hub tabs: Resumen · Módulos · **Piso** · **Control de Carga** · **Despiece** · **Etiquetas** · **Herrajes** · **Vistas** · **Optimización** · **Documentos** (única pestaña de descargas; URL legacy `…/exports` redirige acá)
-  - Optimización: capas L0/L1/L2; Optimizer Excel = plan de corte oficial
-  - Módulos: estado de **piso** (pendiente→cortado→encintado→armado→instalado) — solo fábrica (PROD-3.1)
+  - Hub tabs (trim 2026-08-17): **Resumen · Piso · Control de Carga (despacho) · Etiquetas · Herrajes · Documentos** (única pestaña de descargas; URL legacy `…/exports` redirige acá)
+  - Las tabs técnicas (Módulos, Despiece, Vistas, Optimización) **migraron a Ingeniería** (`EngineeringWorkspace`); generación de documentos = Ingeniería, uso = Fábrica (regla en `roadmap-screens/00-overview.md` §4)
+  - Tab **Piso**: paperless cards + escaneo QR + avance de estado (PROD-4.2)
   - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint)
-  - Export piloto CNC JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
-  - Tab **Piso**: paperless cards + avance de estado (PROD-4.2)
-  - Hojas de armado PDF por módulo (PROD-4.1); what-if merma en Optimización (PROD-4.3)
-  - Selector **Ambiente** cuando hay 2+ KitchenSpace (filtra vistas; Optimizer = obra completa) (PROD-4.4)
-  - Hub Resumen: checklist listo-para-cortar, totales de fábrica, pack; **solo lectura del diseño**
-  - Hub Módulos: inventario con código de fábrica, medidas, ubicación, piezas
-  - Hub Despiece: cut-list agrupable (material/módulo); misma población que Optimizer
-  - Hub Herrajes: picking list + export
-  - Hub Vistas: planta + elevaciones SVG + PDF elevaciones + 3D (sin gizmos de diseño)
-  - Hub Documentos: pack / Optimizer / herrajes / etiquetas / elevaciones / armado / CNC pilot
-  - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas + resumen + despiece + elevaciones (si hay muros)
+  - Hub Resumen: checklist listo-para-cortar, totales de fábrica (m² tablero, ML canto), pack; **solo lectura del diseño**
+  - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas + resumen + despiece + elevaciones (si hay muros); export piloto CNC JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
   - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome ni Más)
-  - Detalle de cotización accepted|produced: **franja de procesos** bajo el header (`ProjectFloorProgressStrip`, F093) — visible a cualquier rol con acceso a la obra (vendedor incluido)
+  - Detalle de cotización accepted|produced: **franja de procesos** bajo el header (`ProjectFloorProgressStrip`, F093) — visible a cualquier rol con acceso a la obra (vendedor incl.)
 - **RBAC nav:** `roleCanAccessProductionNav` (= roles de export producción F041).  
   Filtro de lista de cotizaciones a solo plant-ready sigue siendo `roleUsesProductionQueue` (**solo** `produccion`).
+- **Icono:** `Factory`
+
+### 6.7a Producción (estaciones de fabricación)
+
+- **Ruta nav:** `fabric` (sección PRODUCCIÓN, label **Producción**, ruta histórica `/fabrica`) — ex "Fábrica"
+- **Path:** `packages/ui/src/production/FabricScreen.tsx`
+- **Patrón:** tabs de estación (corte → encintado → armado → embalaje) con roving tabindex + cola por estación + toggle Cola/Métricas (gerente)
+- **Contenido v1 (actual):** lista de ítems en cola por estación con avance one-tap (`onAdvance` → server con scoping + evento F092); Operador sector-scoped ve solo sus tabs
+- **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
+- **RBAC nav:** `roleCanAccessFabricNav` (admin, gerente_produccion, produccion)
 - **Icono:** `Factory`
 
 ### 6.7b Estado de Planta (tablero de avance para todos — F093)
@@ -754,6 +755,25 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Dominio:** `buildProjectFloorSummary` / `PIPELINE_SECTORS` / `PRODUCTION_SECTOR_LABELS_ES` (`@muebles/domain`, `productionSectors.ts`) — UI no calcula
 - **Bitácora (F092):** cada transición de piso (web/escaneo/despacho) escribe un `FloorStatusEvent` inmutable (quién/cuándo/cómo, saltos anotados); `GET /api/projects/:id/floor-events`
 - **Icono:** `KanbanSquare`
+
+### 6.7c Embarques (carga al transporte)
+
+- **Ruta nav:** `embarques` (sección PRODUCCIÓN) · **Path:** `/embarques`
+- **Path código:** `packages/ui/src/production/EmbarquesScreen.tsx` (CSS compartido `.ship-board__*` con Instalaciones)
+- **Patrón:** board por obra — cards de obra con la sección "Para cargar" (ítems `packaged` → "Marcar Cargado" → `loaded`)
+- **Contenido:** stats en header ("N para cargar"); por obra: nombre + cliente + ítems con qty y estado + botón "Ver control de carga" (linkea al tab despacho del hub Órdenes mientras M2 migra el checklist)
+- **Lo cargado pasa a Instalaciones** (subtítulo lo explica); avance por `handleFloorAdvance` compartido (server aplica scoping + evento F094)
+- **RBAC nav:** `roleCanAccessShippingNav` (admin, gerente_produccion, produccion — sin almacén)
+- **Icono:** `Truck`
+
+### 6.7d Instalaciones (instalación en obra)
+
+- **Ruta nav:** `instalaciones` (sección PRODUCCIÓN) · **Path:** `/instalaciones`
+- **Path código:** `packages/ui/src/production/InstalacionesScreen.tsx` (mismo `.ship-board__*`)
+- **Patrón:** board por obra — sección "En camino" (ítems `loaded` → "Marcar Instalado") + chip "N instalados" por obra
+- **Pendiente aprobado (JD 2026-08-18, Fase 5.5):** mostrar **dirección + contacto del cliente** en la card (dato ya existe en `Customer`; hoy solo llega el nombre) — JTBD del instalador
+- **RBAC nav:** mismo que Embarques
+- **Icono:** `Hammer`
 
 ### 6.8 Estructuras
 

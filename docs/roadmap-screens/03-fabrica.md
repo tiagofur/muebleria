@@ -1,14 +1,40 @@
-# Fábrica — Cola de trabajo por estación
+# Producción (estaciones) — Board de órdenes de trabajo por obra
 
-**Fase:** 1 | **Prioridad:** URGENTE | **Esfuerzo:** 1-2 semanas
+**Fase:** 1 (v1 implementada) → **v2 aprobada JD 2026-08-18, pendiente**
+**Nav:** `fabric` · **Ruta:** `/fabrica` · **Label UI:** Producción
+**Decisiones:** `docs/production-module.md` §8 D9 (claim) + D10 (board por obra)
 
 ---
 
 ## 0. Purpose
 
-The operator's primary work screen. Shows items waiting at each production station, organized by sector. Operators advance items through the pipeline; supervisors see all sectors and can reassign.
+La pantalla daily-driver del piso: qué fabricar **por obra**, con la información
+que importa a **cada estación** dentro de la card de la obra. El operador abre
+su estación y responde, sin salir de la pantalla:
 
-Replaces "Mi Estación" (`StationQueueScreen`) and incorporates the floor-level tabs from ProductionOrderHub (Piso, Control de Carga, Etiquetas).
+- *"¿Qué tableros me tienen que llegar para cortar esta obra — y me los surtieron?"*
+- *"¿Cuánta cintilla de cada color necesito y cuántas piezas/lados van?"*
+- *"¿Qué muebles armo de esta obra?"*
+
+Modelo mental validado contra el mercado (MES industrial: *digital job packet*
++ verificación de material en el punto de uso; Mozaik/Cabinet Vision: cut lists
+agrupadas por material por trabajo): **la unidad de trabajo es la obra**, no el
+ítem suelto.
+
+### v1 → v2 (qué cambió y por qué)
+
+| | v1 (implementada) | v2 (aprobada) |
+|---|---|---|
+| Estructura | Lista plana de ítems de todas las obras mezcladas | Cards **por obra** (patrón ship-board de Embarques/Instalaciones) |
+| Contenido | `obra · cliente · N muebles · está en X` | Bloque de **métricas del proceso** por estación (tableros/cintillas/muebles) |
+| En progreso | No existe (solo avance one-tap) | **"Empezar [estación]"** = claim obra×estación (D9) |
+| Surtido | Invisible | "✓ surtido por almacén" por material (picking ya persiste) |
+| Batch | No | "Marcar los N" por obra |
+
+v1 verificada en vivo el 2026-08-18: tab Corte con 3 filas idénticas
+"Cocina Nellly · 1 mueble · Pendiente" — la misma obra repetida por ítem, sin
+tableros ni agrupación. Score del critique: 22/40 (snapshot
+`.impeccable/critique/2026-08-18T14-35-54Z__packages-ui-src-production.md`).
 
 ---
 
@@ -16,283 +42,141 @@ Replaces "Mi Estación" (`StationQueueScreen`) and incorporates the floor-level 
 
 | Role | Access | Scope |
 |------|--------|-------|
-| admin | ✅ full | All sectors, all items |
-| gerente_produccion | ✅ full | All sectors, all items |
-| produccion | ✅ own sectors | Only assigned sectors |
-| almacen | ❌ | Uses Compras/Almacén instead |
-| ingeniero | 👁 read-only | All sectors |
-| gerente_ventas | 👁 read-only | All sectors |
-| vendedor | ❌ | — |
+| admin | ✅ full | Todas las estaciones + toggle Métricas |
+| gerente_produccion | ✅ full | Todas las estaciones + toggle Métricas |
+| produccion | ✅ sus sectores | Solo estaciones asignadas (unrestricted legacy = todas) |
+| almacen | ❌ | Vive en Compras/Almacén (sus sectores logísticos → Embarques/Instalaciones) |
+| vendedor / user / guest | ❌ | Estado de Planta es su vista (read-only) |
+
+**Estaciones de esta pantalla:** `cutting` · `edge_banding` · `assembly` ·
+`packaging`. Despacho e Instalación viven en sus pantallas propias
+(`Embarques` / `Instalaciones`). `cnc` se suma cuando exista `machined`.
 
 ---
 
-## 2. Screen structure
+## 2. Screen structure (v2)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  FÁBRICA                                  32 items en cola  │
-├─────────────────────────────────────────────────────────────┤
-│  [Corte] [Encintado] [CNC] [Armado] [Embalaje]             │
-│  [Despacho] [Instalación]                                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  TAB ACTIVO: Corte (8 items)                                │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │ Cocina López · Juan P. · 12 muebles · Pendiente    │    │
-│  │ [▶ Marcar Cortado]                                  │    │
-│  ├─────────────────────────────────────────────────────┤    │
-│  │ Placard Martínez · María G. · 6 muebles · Pendiente│    │
-│  │ [▶ Marcar Cortado]                                  │    │
-│  ├─────────────────────────────────────────────────────┤    │
-│  │ Cocina Ana · Ana R. · 8 muebles · Pendiente        │    │
-│  │ [▶ Marcar Cortado]                                  │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                             │
-│  Toggle (gerente/admin): [Cola] [Métricas]                  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  PRODUCCIÓN                                       3 por hacer    │
+│  (subtítulo actual)                                              │
+├──────────────────────────────────────────────────────────────────┤
+│  [Corte 3] [Encintado 0] [Armado 0] [Embalaje 0]   [Cola|Métricas]│
+├──────────────────────────────────────────────────────────────────┤
+│  TAB CORTE                                                       │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ Cocina Nellly · Pin Test Customer        [▶ Empezar corte] │  │
+│  │                                                            │  │
+│  │ TABLEROS PARA ESTA OBRA                                    │  │
+│  │  ● Melamina Blanca 18mm   4,2 m² · 23 piezas · ~2 planchas │  │
+│  │    ✓ surtido por almacén                                   │  │
+│  │  ● Roble Córdoba 18mm     2,1 m² · 11 piezas · ~1 plancha  │  │
+│  │    ⚠ sin marcar en almacén                                 │  │
+│  │                                                            │  │
+│  │ MÓDULOS EN COLA (3)                                        │  │
+│  │  MOD-GAB-01 ×1 · Pendiente              [Marcar cortado]   │  │
+│  │  MOD-ALZ-02 ×2 · Pendiente              [Marcar cortado]   │  │
+│  │                                          [✓ Marcar los 3]  │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ Placard Martínez · María G.             [▶ Empezar corte]  │  │
+│  │  … (misma estructura)                                      │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+**Card "En curso"** (tras claim): borde/tinte brand + "En curso · empezó
+14:32 · [operario]" + botón pasa a "Terminar corte" (finish + avance de los
+ítems que falten, con confirmación).
 
 ---
 
-## 3. Tabs — Production sectors
+## 3. Bloque de métricas por estación (el corazón de v2)
 
-| Tab | Sector | Items shown | Action button | Target status |
-|-----|--------|-------------|---------------|---------------|
-| **Corte** | `cutting` | `pending` items | Marcar Cortado | `cut` |
-| **Encintado** | `edge_banding` | `cut` items | Marcar Encintado | `edged` |
-| **CNC** | `cnc` | `edged` items (Fase 3) | Marcar Mecanizado | `machined` (future) |
-| **Armado** | `assembly` | `edged` items | Marcar Armado | `assembled` |
-| **Embalaje** | `packaging` | `assembled` items | Marcar Embalado | `packaged` |
-| **Despacho** | `shipping` | `packaged` items | Marcar Cargado | `loaded` |
-| **Instalación** | `installation` | `loaded` items | Marcar Instalado | `installed` |
+Todo derivado del dominio (`computeProductionTotals(cutRows)` del proyecto,
+`estimateBoardSheets`, picking states) — **la UI no calcula** (R7).
 
----
+| Estación | Bloque por obra | Fuente de datos | Estado |
+|-----------|----------------|-----------------|--------|
+| **Corte** | Tableros por acabado: nombre/código, espesor, m² netos, piezas, planchas estimadas + estado surtido del picking (✓ despachado / ⚠ sin marcar) | `ProductionTotals.materials` + `estimateBoardSheets` + `listPickingStates` | ✅ existe |
+| **Encintado** | Cintillas por código: **ML**, espesor mm, **piezas**, **lados a encintar** (Σ L1+L2+W1+W2 × qty), swatch de color | `ProductionTotals.edges` (+ `pieces`/`sides` y `EdgeBand.previewColor` — **pendiente Fase 5.1**) | 🔧 falta dominio |
+| **Armado** | Lista de muebles de la obra (código, nombre, qty, medidas si hay) — como hoy, agrupado por obra | `itemsWaitingForSector` + catálogo | ✅ existe |
+| **Embalaje** | Módulos/cantidades a embalar de la obra | `itemsWaitingForSector` | ✅ existe |
 
-## 4. Tabs detail
-
-### Tab: Corte (and all production tabs)
-
-**Each production tab shows:**
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Corte (8 items esperando)                              │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Proyecto: Cocina López                          │    │
-│  │ Cliente: Juan Pérez                             │    │
-│  │ Módulo: MDF-15-BASE · 4 unidades               │    │
-│  │ Estado actual: Pendiente                        │    │
-│  │ [▶ Marcar Cortado]                              │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Proyecto: Placard Martínez                      │    │
-│  │ Cliente: María González                         │    │
-│  │ Módulo: MDF-18-ALTO · 2 unidades               │    │
-│  │ Estado actual: Pendiente                        │    │
-│  │ [▶ Marcar Cortado]                              │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  ... (6 more items)                                     │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Each row shows:**
-- Project name
-- Customer name
-- Module ID + quantity
-- Current floor status
-- Action button (advance to next status)
-
-**Action:**
-- Click "Marcar Cortado" → `onAdvance(projectId, itemId, 'cut')`
-- Server enforces station scoping (operator can only advance items in their assigned sectors)
+**Surtido:** el picking de Compras/Almacén ya persiste por
+`projectId × material` (`project_picking`). La fila del material en Corte (y la
+cintilla en Encintado) muestra el estado — cierre del loop almacén→estación
+**sin backend nuevo**.
 
 ---
 
-### Tab: Despacho (shipping + dispatch control)
+## 4. En progreso — claim obra × estación (D9)
 
-**Purpose:** Control de Carga — what's ready to ship, what's loaded, what's dispatched.
+El sistema `ProductionActivity` (claim/pausa/reanudar/finish/daño) ya existe en
+backend y storage client pero **ninguna pantalla lo llama** (dormido — por eso
+Dashboard Producción lee "operarios activos 0" siempre).
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Despacho (5 items)                                     │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  Pendientes de carga:                                   │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Cocina López · 12 módulos · Embalado            │    │
-│  │ [▶ Marcar Cargado]                              │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  Cargados (listos para enviar):                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Placard Martínez · 6 módulos · Cargado          │    │
-│  │ [▶ Ver detalle]                                 │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  ─────────────────────────────────────────────────────  │
-│  Control de carga:                                      │
-│  Total: 18 módulos · 42 piezas · Peso est: 850 kg      │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Additional content (from ProductionOrderDispatchPanel):**
-- Summary: total modules, pieces, estimated weight
-- Loaded items grouped by project
-- Dispatch history
+- **"Empezar [estación]"** en la card → `POST /api/production/activity/claim`
+  con `project_id + sector` (requiere **extensión aditiva**: `item_id` nullable
+  o claim de obra — hoy el claim es por ítem).
+- Card muestra "En curso · HH:MM · operario"; múltiples operarios = lista.
+- **"Terminar"** = finish (+ avance pendientes con confirmación).
+- Las duraciones reales (claim→finish) alimentan Dashboard Producción.
 
 ---
 
-### Tab: Instalación
+## 5. Acciones de avance
 
-**Purpose:** Items ready for on-site installation.
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Instalación (3 items)                                  │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Cocina López · 12 módulos · Cargado             │    │
-│  │ Dirección: Av. Siempre Viva 123                 │    │
-│  │ [▶ Marcar Instalado]                            │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Placard Martínez · 6 módulos · Cargado          │    │
-│  │ Dirección: Calle Falsa 456                      │    │
-│  │ [▶ Marcar Instalado]                            │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-```
+- Per-ítem: "Marcar [estado]" como hoy (`onAdvance(projectId, itemId, target)`
+  → shell → server con scoping de estación + `FloorStatusEvent` F092).
+- **Batch por obra:** "Marcar los N" avanza todos los ítems en cola de esa obra
+  en esa estación (transacciones individuales auditadas, no un salto).
+- Undo/rollback de avance: **pendiente de decisión** (hoy un tap erróneo no se
+  revierte desde la UI — issue abierto del critique).
 
 ---
 
-## 5. Visibility logic
+## 6. Métricas (toggle gerente/admin)
 
-### 5.1 Which tabs does each user see?
-
-**produccion (with assigned sectors):**
-- Only tabs for assigned sectors
-- Example: assigned to `['cutting', 'edge_banding']` → sees Corte + Encintado tabs
-
-**produccion (without assignments — legacy):**
-- All production tabs (full access)
-
-**gerente_produccion / admin:**
-- All tabs
-- Additionally sees: [Cola] [Métricas] toggle
-
-**ingeniero / gerente_ventas (read-only):**
-- All tabs
-- No action buttons (read-only view)
-
-### 5.2 Items per tab
-
-Items are derived from `itemsWaitingForSector(project, sector)` for each project in the factory queue (`status === 'accepted' || status === 'produced'`).
-
----
-
-## 6. Metrics toggle (gerente/admin only)
-
-When toggled to "Métricas", the screen shows:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  MÉTRICAS POR SECTOR                                    │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  Sector      │ Cola │ Activos │ Completados hoy │ Tiempo │
-│  ────────────┼──────┼─────────┼─────────────────┼────────│
-│  Corte       │  8   │    2    │       5         │ 45 min │
-│  Encintado   │  5   │    1    │       3         │ 30 min │
-│  Armado      │  3   │    3    │       2         │ 60 min │
-│  Embalaje    │  2   │    1    │       4         │ 20 min │
-│  Despacho    │  1   │    0    │       1         │  —     │
-│  Instalación │  0   │    0    │       2         │  —     │
-│                                                         │
-│  Total: 19 items en cola · 7 operadores activos         │
-│  Completados hoy: 17 · Tiempo promedio: 39 min          │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Data source:** Reuses `ProductionManagerDashboard` data structure (`SectorDashboard`).
+Sin cambios respecto a v1: tabla por sector (cola, operarios, hechos hoy,
+tiempo prom. ponderado) + fila total (`summarizeFabricMetrics`). Con D9 activo,
+"Operarios" y "Tiempo prom." pasan a ser datos reales (hoy siempre 0/—).
 
 ---
 
 ## 7. Data requirements
 
 ```ts
-type FabricScreenData = {
-  sectors: PipelineSector[];
-  rowsBySector: Map<PipelineSector, StationRow[]>;
-  totalWaiting: number;
-  // Metrics (gerente/admin only)
-  metrics?: {
-    sectors: SectorDashboard[];
-    totalActiveOperators: number;
-    todayCompleted: number;
-    avgTimeMinutes: number;
-  };
-};
-
-type StationRow = {
+type FabricProjectCard = {
   projectId: string;
   projectName: string;
   customerLabel: string;
-  itemId: string;
-  moduleName: string;
-  quantity: number;
-  currentStatus: ItemFloorStatus;
+  items: readonly StationRow[];          // ítems en cola de ESTA estación
+  totals?: ProductionTotals;             // por proyecto (corte/encintado)
+  sheetEstimates?: SheetEstimate[];      // planchas estimadas por material
+  picking?: ReadonlyMap<string, PickingStatus>; // surtido por material
+  edgeBandColors?: ReadonlyMap<string, string>; // edgeId → previewColor
+  activeClaim?: { startedAt: string; operatorName: string }; // D9
 };
 ```
 
-**Existing data sources to reuse:**
-- `itemsWaitingForSector()` — per-sector queue
-- `PIPELINE_SECTORS` — sector list
-- `PRODUCTION_SECTOR_LABELS_ES` — sector labels
-- `ITEM_FLOOR_STATUS_LABELS_ES` — status labels
-- `roleCanAdvanceStation()` — RBAC check
+Reusar: `itemsWaitingForSector`, `PIPELINE_SECTORS`, labels ES,
+`roleCanAdvanceStation`, `computeProductionTotals`, `estimateBoardSheets`,
+`pickingKey`, claim/finish del storage client.
 
 ---
 
-## 8. Navigation
+## 8. Pendientes de dominio/backend (Fase 5, `production-module.md` §10.5)
 
-- **Nav item:** "Fábrica" in the PRODUCCIÓN section
-- **Icon:** `Factory` (lucide)
-- **Visible when:** `roleCanAccessFabricNav(role)` returns true (admin, gerente_produccion, produccion, ingeniero read-only)
-- **Replaces:** "Mi Estación" (remove from nav)
+1. `ProductionEdgeTotal` += `pieces`, `sides` (lados a encintar) — aditivo.
+2. `EdgeBand.previewColor` — aditivo (como `Hardware`), habilita swatches.
+3. Claim obra×estación en Go (`item_id` nullable) + storage client.
+4. (issue abierto) rollback/undo de avance.
 
 ---
 
-## 9. Implementation notes
+## 9. Out of scope
 
-### 9.1 Start from StationQueueScreen
-
-`StationQueueScreen.tsx` already implements the core logic:
-- Filter sectors by `assignedSectors`
-- Compute `rowsBySector` from `itemsWaitingForSector`
-- Render per-sector sections with advance buttons
-
-**Changes needed:**
-1. Rename to `FabricScreen`
-2. Add tab navigation (currently all sectors are shown as sections, not tabs)
-3. Add Despacho tab (move from `ProductionOrderDispatchPanel`)
-4. Add Instalación tab
-5. Add metrics toggle (move from `ProductionManagerDashboard`)
-6. Update CSS from `station` to `fabric` class prefix
-
-### 9.2 Remove from ProductionOrderHub
-
-The following tabs move OUT of ProductionOrderHub to other screens:
-
-| Tab | Moves to |
-|-----|----------|
-| piso | Fábrica (integrated into sector tabs) |
-| despacho | Fábrica → Despacho tab |
-| etiquetas | Ingeniería → Documentos (generation) + Fábrica (print reference) |
-| herrajes | Compras/Almacén → Herrajes tab |
+- Edición de diseño desde esta pantalla (R2 — siempre solo lectura).
+- Nesting nativo (D5). CNC hasta que exista `machined`.
+- Gestión de stock (vive en Compras/Almacén; acá solo se MUESTRA el surtido).

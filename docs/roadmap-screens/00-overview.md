@@ -77,6 +77,25 @@ Producción/Embarques → migrar o retirar el checklist de despacho → borrar
 nav `production` + `ProductionWorkspace`. Rutas `/produccion/:id` se
 redirigen o deprecian.
 
+### M3 — Producción v2: board por obra + claim (aprobado JD 2026-08-18)
+
+Critique del menú PRODUCCIÓN (score 22/40, lente operario; snapshot
+`.impeccable/critique/2026-08-18T14-35-54Z__packages-ui-src-production.md`).
+La pantalla Producción (estaciones) está aplanada por ítem — sin obra ni
+métricas de proceso — y el sistema de claim está dormido (backend listo,
+ninguna UI lo llama). **Plan aprobado por el usuario:**
+
+1. Dominio aditivo: `pieces`/`sides` en `ProductionEdgeTotal` +
+   `EdgeBand.previewColor`.
+2. Claim **obra × estación** en Go (extensión de `ProductionActivity`).
+3. **FabricScreen v2**: board por obra con métricas por estación
+   (Corte: tableros por acabado + surtido; Encintado: cintillas ML/piezas/
+   lados; Armado: muebles; Embalaje: módulos) + batch advance + "Empezar".
+4. Dashboard Producción honesto (métrica real, 0-ítems ≠ "completo", Lucide).
+5. Dirección/contacto del cliente en Instalaciones.
+
+Spec: `03-fabrica.md` §v2 · Decisiones: `docs/production-module.md` §8 D9/D10.
+
 Más las pantallas que **no se tocan**:
 - **Ingeniería ABM** (Composición + Materiales) — ya existe y está bien armada
 - **Cotizaciones/Proyectos** — flujo comercial, no se toca
