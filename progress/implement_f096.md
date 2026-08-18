@@ -60,3 +60,8 @@ Estado: sigue `in_progress`, listo para re-review.
 
 - Review final: **APPROVED** (`progress/review_f096.md`).
 - F096 marcada `done`; commit y push se registrarán a continuación.
+
+## Entrega
+
+- Commit de cierre: `a6c2dce` — `fix(production): finalize fabric board workflow`.
+- Push confirmado a `origin/codex/f095-production-claims`.
