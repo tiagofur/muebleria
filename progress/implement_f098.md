@@ -59,3 +59,9 @@ múltiples instancias de Three.js; no producen fallos.
 - `pnpm test` — verde.
 - `./init.sh` — verde.
 - `git diff --check` — verde.
+
+## Entrega
+
+- Commit funcional: `06df328 feat(production): show customer contacts for installations`.
+- Estado de F098: `done` tras aprobación en `progress/review_f098.md`.
+- Push: pendiente de ejecutar como último paso de cierre.
