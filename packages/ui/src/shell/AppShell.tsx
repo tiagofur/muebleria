@@ -37,6 +37,7 @@ import {
   BarChart3,
   ClipboardList,
   TrendingUp,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
@@ -58,6 +59,7 @@ export type AppNavId =
   | 'production'
   | 'productionDashboard'
   | 'engineering'
+  | 'purchasing'
   | 'salesDashboard'
   | 'modules'
   | 'structures'
@@ -116,8 +118,10 @@ function roleLabel(role: string): string {
     user: 'Sin puesto',
     vendedor: 'Vendedor',
     gerente_ventas: 'Gerente de ventas',
+    gerente_produccion: 'Gerente de producción',
     ingeniero: 'Ingeniero',
     produccion: 'Producción',
+    almacen: 'Almacén',
   };
   return map[role] ?? role;
 }
@@ -134,7 +138,14 @@ type NavItemDef = {
 };
 
 type NavSectionDef = {
-  readonly id: 'trabajo' | 'ventas' | 'ingenieria' | 'libreria' | 'catalogos' | 'config';
+  readonly id:
+    | 'trabajo'
+    | 'ventas'
+    | 'ingenieria'
+    | 'almacen'
+    | 'libreria'
+    | 'catalogos'
+    | 'config';
   readonly label: string;
   readonly items: readonly NavItemDef[];
 };
@@ -206,6 +217,18 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        * Landing page with project list + engineering status.
        */
       { id: 'engineering', label: 'Ingeniería', icon: ClipboardList },
+    ],
+  },
+  {
+    id: 'almacen',
+    label: 'COMPRAS / ALMACÉN',
+    items: [
+      /**
+       * Compras / Almacén (Fase 3) — picking lists per active project.
+       * admin full, gerente_produccion read-only, almacen own sectors;
+       * rbac.ts navIdsForRole decides via roleCanAccessPurchasingNav.
+       */
+      { id: 'purchasing', label: 'Almacén', icon: Warehouse },
     ],
   },
   {

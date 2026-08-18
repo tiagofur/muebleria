@@ -145,9 +145,12 @@ Los 3 tipos de material (herrajes, tableros, cintillas) son valores `ProductionS
 
 ## 6. Future enhancements
 
-- Real inventory tracking (stock in/out)
+> **La fase de inventario real (stock, mínimos y recepción) ya está diseñada en
+> [`06-stock-almacen.md`](06-stock-almacen.md).**
+
+- ~~Real inventory tracking (stock in/out)~~ → diseño en `06-stock-almacen.md`
+- ~~Low stock alerts~~ → diseño en `06-stock-almacen.md`
 - Purchase order workflow
 - Supplier management
 - Barcode/QR scanning for receiving
-- Low stock alerts
 - Integration with accounting

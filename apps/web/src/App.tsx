@@ -19,6 +19,8 @@ import type {
   EdgeBand,
   ExportIssue,
   Hardware,
+  HardwarePurchaseRow,
+  ProductionCutRow,
   MaterialBoard,
   Module,
   ModuleCategory,
@@ -33,14 +35,26 @@ import type {
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
+  BoardSheetEstimate,
   Workspace,
+  ProjectPickingState,
+  PickingMaterial,
+  PickingStatus,
+  MaterialStock,
+  StockMaterialKind,
+  StockMovement,
+  StockMovementType,
+  PurchaseOrder,
+  Supplier,
 } from '@muebles/domain';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
   calcMaterialCostPerM2,
   calcProjectBreakdown,
+  computeProductionTotals,
   defaultMeasurePresetId,
+  estimateBoardSheets,
   generateCutRows,
   generateHardwareList,
   generatePieceLabels,
@@ -59,8 +73,11 @@ import {
   roleCanDeleteProject,
   canExportProductionForProject,
   roleCanExportProduction,
+  roleCanMarkPicking,
   roleCanMarkProduced,
   roleCanMutateCatalog,
+  roleCanAccessPurchasingNav,
+  roleCanManagePurchasing,
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanReopenProject,
@@ -128,6 +145,9 @@ import {
   type CategoryDraft,
   type OptionGroupDraft,
   type ProjectDraft,
+  type ActiveProjectMaterial,
+  PurchasingScreen,
+  type PoLineInput,
   CustomersScreen,
   type CustomerDraft,
   StructuresScreen,
@@ -699,6 +719,330 @@ function AppContent({
       cancelled = true;
     };
   }, [session, isSectorScoped]);
+
+  // Fase 3 + 3b — Compras/Almacén: picking + stock persistence. Loads the
+  // persisted despachos and the stock balances/ledger once per workspace
+  // session; toggles and movements are reported back through the callbacks
+  // below (handleTogglePick lives after `purchasingProjects`, which it needs).
+  const canAccessPurchasing =
+    session === 'guest' || roleCanAccessPurchasingNav(actorRole);
+  const [pickingStates, setPickingStates] = useState<ProjectPickingState[] | null>(null);
+  const [stockRows, setStockRows] = useState<MaterialStock[] | null>(null);
+  const [stockMovements, setStockMovements] = useState<StockMovement[] | null>(null);
+  const [suppliers, setSuppliers] = useState<Supplier[] | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
+
+  const reloadPicking = useCallback(async (): Promise<void> => {
+    const repo = getRepository();
+    if (!repo.listPickingStates) return;
+    try {
+      setPickingStates([...await repo.listPickingStates()]);
+    } catch {
+      // keep previous state
+    }
+  }, [getRepository]);
+
+  const refreshStock = useCallback(async (): Promise<void> => {
+    const repo = getRepository();
+    if (!repo.getStock) return;
+    try {
+      const [rows, moves] = await Promise.all([
+        repo.getStock(),
+        repo.listStockMovements
+          ? repo.listStockMovements({ limit: 50 })
+          : Promise.resolve([]),
+      ]);
+      setStockRows([...rows]);
+      setStockMovements([...moves]);
+    } catch {
+      // keep previous state
+    }
+  }, [getRepository]);
+
+  /** Reloads suppliers + purchase orders (Fase 3c). */
+  const refreshPurchasing = useCallback(async (): Promise<void> => {
+    const repo = getRepository();
+    try {
+      const [sps, pos] = await Promise.all([
+        repo.listSuppliers
+          ? repo.listSuppliers()
+          : Promise.resolve([] as readonly Supplier[]),
+        repo.listPurchaseOrders
+          ? repo.listPurchaseOrders()
+          : Promise.resolve([] as readonly PurchaseOrder[]),
+      ]);
+      setSuppliers([...sps]);
+      setPurchaseOrders([...pos]);
+    } catch {
+      // keep previous state
+    }
+  }, [getRepository]);
+
+  useEffect(() => {
+    if (!canAccessPurchasing) {
+      setPickingStates(null);
+      setStockRows(null);
+      setStockMovements(null);
+      setSuppliers(null);
+      setPurchaseOrders(null);
+      return;
+    }
+    const repo = getRepository();
+    if (!repo.listPickingStates && !repo.getStock && !repo.listSuppliers) {
+      setPickingStates(null);
+      setStockRows(null);
+      setSuppliers(null);
+      return;
+    }
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      const [states, rows, moves, sps, pos] = await Promise.all([
+        repo.listPickingStates
+          ? repo.listPickingStates()
+          : Promise.resolve([] as readonly ProjectPickingState[]),
+        repo.getStock ? repo.getStock() : Promise.resolve([] as readonly MaterialStock[]),
+        repo.listStockMovements
+          ? repo.listStockMovements({ limit: 50 })
+          : Promise.resolve([] as readonly StockMovement[]),
+        repo.listSuppliers
+          ? repo.listSuppliers()
+          : Promise.resolve([] as readonly Supplier[]),
+        repo.listPurchaseOrders
+          ? repo.listPurchaseOrders()
+          : Promise.resolve([] as readonly PurchaseOrder[]),
+      ]);
+      if (cancelled) return;
+      setPickingStates([...states]);
+      setStockRows([...rows]);
+      setStockMovements([...moves]);
+      setSuppliers([...sps]);
+      setPurchaseOrders([...pos]);
+    };
+    load().catch(() => {
+      // Read failure → treat as empty so the screens still work.
+      if (!cancelled) {
+        setPickingStates((prev) => prev ?? []);
+        setStockRows((prev) => prev ?? []);
+        setStockMovements((prev) => prev ?? []);
+        setSuppliers((prev) => prev ?? []);
+        setPurchaseOrders((prev) => prev ?? []);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccessPurchasing, getRepository]);
+
+  const handleRecordStockMovement = useCallback(
+    async (payload: {
+      kind: StockMaterialKind;
+      materialId: string;
+      type: StockMovementType;
+      quantity: number;
+      note?: string;
+    }): Promise<void> => {
+      const repo = getRepository();
+      if (!repo.recordStockMovement) return;
+      try {
+        await repo.recordStockMovement(payload);
+        await refreshStock();
+      } catch (err) {
+        // Rethrow so the modal keeps the form open and shows the message.
+        throw err instanceof Error ? err : new Error('No se pudo registrar el movimiento');
+      }
+    },
+    [getRepository, refreshStock],
+  );
+
+  const handleUpsertStockMin = useCallback(
+    async (payload: {
+      kind: StockMaterialKind;
+      materialId: string;
+      minStock: number;
+    }): Promise<void> => {
+      const repo = getRepository();
+      if (!repo.upsertStockMin) return;
+      try {
+        await repo.upsertStockMin(payload);
+        await refreshStock();
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo guardar el mínimo');
+      }
+    },
+    [getRepository, refreshStock],
+  );
+
+  const canManagePurchasing = session === 'guest' || roleCanManagePurchasing(actorRole);
+
+  /** Client-minted id for suppliers/POs (matches the storage port contract). */
+  const newEntityId = (prefix: string): string =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? `${prefix}-${crypto.randomUUID().slice(0, 8)}`
+      : `${prefix}-${Date.now().toString(36)}`;
+
+  // ─── Fase 3c — proveedores + órdenes de compra ───────────────────────────
+
+  const handleSaveSupplier = useCallback(
+    async (data: {
+      id?: string;
+      name: string;
+      contactName?: string;
+      email?: string;
+      phone?: string;
+      notes?: string;
+      active?: boolean;
+    }): Promise<void> => {
+      if (!canManagePurchasing) return;
+      const repo = getRepository();
+      try {
+        if (data.id && repo.updateSupplier) {
+          await repo.updateSupplier({ id: data.id, ...data });
+        } else if (repo.createSupplier) {
+          await repo.createSupplier({ id: data.id ?? newEntityId('sp'), ...data });
+        }
+        await refreshPurchasing();
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo guardar el proveedor');
+      }
+    },
+    [canManagePurchasing, getRepository, refreshPurchasing],
+  );
+
+  const handleDeactivateSupplier = useCallback(
+    async (id: string): Promise<void> => {
+      if (!canManagePurchasing) return;
+      const repo = getRepository();
+      if (!repo.deactivateSupplier) return;
+      try {
+        await repo.deactivateSupplier(id);
+        await refreshPurchasing();
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo desactivar el proveedor');
+      }
+    },
+    [canManagePurchasing, getRepository, refreshPurchasing],
+  );
+
+  const handleSavePurchaseOrder = useCallback(
+    async (data: {
+      id?: string;
+      supplierId: string;
+      notes?: string;
+      items: readonly PoLineInput[];
+    }): Promise<void> => {
+      if (!canManagePurchasing) return;
+      const repo = getRepository();
+      try {
+        if (data.id && repo.updatePurchaseOrder) {
+          await repo.updatePurchaseOrder({ id: data.id, ...data });
+        } else if (repo.createPurchaseOrder) {
+          await repo.createPurchaseOrder({ id: data.id ?? newEntityId('po'), ...data });
+        }
+        await refreshPurchasing();
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo guardar la orden de compra');
+      }
+    },
+    [canManagePurchasing, getRepository, refreshPurchasing],
+  );
+
+  const handleEmitPurchaseOrder = useCallback(
+    async (id: string): Promise<void> => {
+      if (!canManagePurchasing) return;
+      const repo = getRepository();
+      if (!repo.emitPurchaseOrder) return;
+      try {
+        await repo.emitPurchaseOrder(id);
+        await refreshPurchasing();
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo emitir la orden');
+      }
+    },
+    [canManagePurchasing, getRepository, refreshPurchasing],
+  );
+
+  const handleCancelPurchaseOrder = useCallback(
+    async (id: string): Promise<void> => {
+      if (!canManagePurchasing) return;
+      const repo = getRepository();
+      if (!repo.cancelPurchaseOrder) return;
+      try {
+        await repo.cancelPurchaseOrder(id);
+        await refreshPurchasing();
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo cancelar la orden');
+      }
+    },
+    [canManagePurchasing, getRepository, refreshPurchasing],
+  );
+
+  const handleReceivePurchaseOrder = useCallback(
+    async (id: string, lines: readonly PoLineInput[]): Promise<void> => {
+      if (!canManagePurchasing) return;
+      const repo = getRepository();
+      if (!repo.receivePurchaseOrder) return;
+      try {
+        await repo.receivePurchaseOrder(id, lines);
+        // La recepción registra entradas de stock → refrescar ambos.
+        await Promise.all([refreshPurchasing(), refreshStock()]);
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('No se pudo registrar la recepción');
+      }
+    },
+    [canManagePurchasing, getRepository, refreshPurchasing, refreshStock],
+  );
+
+  /** Catálogo para el panel de stock: labels, opciones del modal y códigos→ids. */
+  const stockCatalog = useMemo(() => {
+    if (!catalog) {
+      return {
+        labels: {},
+        options: [],
+        materialIdByCode: {},
+        edgeIdByCode: {},
+        prices: {},
+      };
+    }
+    const labels: Record<string, string> = {};
+    const materialIdByCode: Record<string, string> = {};
+    const edgeIdByCode: Record<string, string> = {};
+    const prices: Record<string, number> = {};
+    const options: Array<{
+      kind: StockMaterialKind;
+      items: Array<{ id: string; label: string }>;
+    }> = [
+      {
+        kind: 'herrajes',
+        items: catalog.hardware.map((h) => {
+          labels[`herrajes:${h.id}`] = h.name;
+          // Valor de inventario: precio unitario del herraje (pieza/juego/metro).
+          prices[`herrajes:${h.id}`] = h.costPerUnit;
+          return { id: h.id, label: h.code ? `${h.name} (${h.code})` : h.name };
+        }),
+      },
+      {
+        kind: 'tableros',
+        items: catalog.materials.map((m) => {
+          labels[`tableros:${m.id}`] = m.name;
+          materialIdByCode[m.code] = m.id;
+          // Valor de inventario: precio por plancha (boardPrice).
+          prices[`tableros:${m.id}`] = m.boardPrice;
+          return { id: m.id, label: m.code ? `${m.name} (${m.code})` : m.name };
+        }),
+      },
+      {
+        kind: 'cintillas',
+        items: catalog.edges.map((e) => {
+          labels[`cintillas:${e.id}`] = e.name;
+          edgeIdByCode[e.code] = e.id;
+          // Valor de inventario: costo por metro lineal (costPerMl).
+          prices[`cintillas:${e.id}`] = e.costPerMl;
+          return { id: e.id, label: e.code ? `${e.name} (${e.code})` : e.name };
+        }),
+      },
+    ];
+    return { labels, options, materialIdByCode, edgeIdByCode, prices };
+  }, [catalog]);
   const canMutateCatalog =
     session === 'guest' || roleCanMutateCatalog(actorRole);
   const canMutateModules =
@@ -922,6 +1266,214 @@ function AppContent({
     () =>
       filterProjectsToPlant ? filterProductionVisible(projects) : projects,
     [filterProjectsToPlant, projects],
+  );
+
+  /**
+   * Fase 3 — Compras/Almacén: picking lists per plant-active project.
+   * Derives hardware rows + cut rows (and sheet estimates for Tableros)
+   * from the domain; unresolved projects contribute empty lists.
+   */
+  const purchasingProjects = useMemo((): ActiveProjectMaterial[] => {
+    if (!catalog) return [];
+    return filterProductionVisible(projects).map((project) => {
+      let hardware: readonly HardwarePurchaseRow[] = [];
+      let cutRows: readonly ProductionCutRow[] = [];
+      let sheetEstimates: readonly BoardSheetEstimate[] = [];
+      try {
+        hardware = generateHardwareList(project, catalog);
+      } catch {
+        // Unresolved BOM → project shows without a hardware list.
+      }
+      try {
+        cutRows = generateCutRows(project, catalog);
+      } catch {
+        // Unresolved despiece → project shows without boards/edges.
+      }
+      try {
+        const summary = generateProjectMaterialSummary(project, catalog);
+        sheetEstimates = estimateBoardSheets(summary.materials, materials).filter(
+          (s) => s.estimatedSheets > 0,
+        );
+      } catch {
+        // No sheet estimate → Tableros falls back to pieces/m².
+      }
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        hardware,
+        cutRows,
+        sheetEstimates,
+      };
+    });
+  }, [catalog, projects, materials]);
+
+  /**
+   * Líneas de stock que un despacho de picking descuenta (06 §3): solo
+   * materiales con fila de stock (backward compatible). Herrajes por
+   * hardwareId; tableros por materialId de la estimación de planchas;
+   * cintillas resolviendo el código de canto → id de catálogo.
+   */
+  const stockDebitLinesFor = useCallback(
+    (
+      projectId: string,
+      material: PickingMaterial,
+    ): Array<{ kind: StockMaterialKind; materialId: string; quantity: number }> => {
+      if (!stockRows) return [];
+      const project = purchasingProjects.find((p) => p.projectId === projectId);
+      if (!project) return [];
+      const tracked = (kind: StockMaterialKind, id: string | undefined): id is string =>
+        Boolean(id) && stockRows.some((r) => r.kind === kind && r.materialId === id);
+
+      if (material === 'herrajes') {
+        return project.hardware
+          .filter((h) => tracked('herrajes', h.hardwareId))
+          .map((h) => ({
+            kind: 'herrajes' as const,
+            materialId: h.hardwareId!,
+            quantity: h.purchaseQuantity,
+          }));
+      }
+      if (material === 'tableros') {
+        return (project.sheetEstimates ?? [])
+          .filter((s) => tracked('tableros', s.materialId))
+          .map((s) => ({
+            kind: 'tableros' as const,
+            materialId: s.materialId,
+            quantity: s.estimatedSheets,
+          }));
+      }
+      const totals = computeProductionTotals(project.cutRows);
+      const lines: Array<{ kind: StockMaterialKind; materialId: string; quantity: number }> =
+        [];
+      for (const e of totals.edges) {
+        const id = stockCatalog.edgeIdByCode[e.edgeBandCode ?? e.key];
+        if (tracked('cintillas', id)) {
+          lines.push({ kind: 'cintillas', materialId: id, quantity: e.ml });
+        }
+      }
+      return lines;
+    },
+    [purchasingProjects, stockRows, stockCatalog],
+  );
+
+  /**
+   * Toggle de picking (Fase 3 + 3b): persiste el estado y, cuando el material
+   * tiene stock, el despacho descuenta por línea (despacho) y el desmarcado
+   * revierte (reverts_id). Si el stock no alcanza, el despacho se revierte y
+   * se muestra el faltante — el picking queda pendiente (server truth).
+   */
+  const handleTogglePick = useCallback(
+    ({
+      projectId,
+      material,
+      status,
+    }: {
+      projectId: string;
+      material: PickingMaterial;
+      status: PickingStatus;
+    }) => {
+      const repo = getRepository();
+
+      const persistPicking = async (nextStatus: PickingStatus): Promise<void> => {
+        if (repo.setProjectPickingState) {
+          await repo.setProjectPickingState({ projectId, material, status: nextStatus });
+        }
+        setPickingStates((prev) => {
+          const next = (prev ?? []).filter(
+            (p) => !(p.projectId === projectId && p.material === material),
+          );
+          next.push({ projectId, material, status: nextStatus });
+          return next;
+        });
+      };
+
+      const fail = (err: unknown): void => {
+        // Revierte el estado optimista y refresca stock: la pantalla re-hidrata
+        // desde pickingStates (pendiente) y los chips muestran el saldo real.
+        void reloadPicking();
+        void refreshStock();
+        const msg =
+          err instanceof Error ? err.message : 'No se pudo completar el despacho';
+        toast({ type: 'error', message: msg });
+      };
+
+      void (async () => {
+        try {
+          if (status === 'despachado') {
+            const lines = stockDebitLinesFor(projectId, material);
+            if (lines.length > 0 && repo.recordStockMovement) {
+              // 1) Descuenta stock (todos los materiales con fila). Si uno
+              // falla, acredita los ya debitados y aborta antes de persistir.
+              const created: StockMovement[] = [];
+              try {
+                for (const line of lines) {
+                  created.push(
+                    await repo.recordStockMovement!({
+                      ...line,
+                      type: 'despacho',
+                      projectId,
+                    }),
+                  );
+                }
+              } catch (err) {
+                for (const c of created) {
+                  try {
+                    await repo.recordStockMovement!({
+                      kind: c.kind,
+                      materialId: c.materialId,
+                      type: 'despacho',
+                      quantity: Math.abs(c.delta),
+                      projectId,
+                      revertsId: c.id,
+                    });
+                  } catch {
+                    // best effort
+                  }
+                }
+                fail(err);
+                return;
+              }
+            }
+            // 2) Recién ahora persiste el picking despachado.
+            await persistPicking('despachado');
+            await refreshStock();
+          } else {
+            // Desmarcar: revierte los despachos activos de esta obra/tipo
+            // (ledger, sobrevive a recargas) y persiste pendiente.
+            if (repo.listStockMovements && repo.recordStockMovement) {
+              const moves = await repo.listStockMovements({ kind: material, limit: 200 });
+              const actives = moves.filter(
+                (m) =>
+                  m.type === 'despacho' &&
+                  m.projectId === projectId &&
+                  !m.revertsId,
+              );
+              for (const m of actives) {
+                await repo.recordStockMovement({
+                  kind: m.kind,
+                  materialId: m.materialId,
+                  type: 'despacho',
+                  quantity: Math.abs(m.delta),
+                  projectId,
+                  revertsId: m.id,
+                });
+              }
+            }
+            await persistPicking('pendiente');
+            await refreshStock();
+          }
+        } catch (err) {
+          fail(err);
+        }
+      })();
+    },
+    [
+      getRepository,
+      reloadPicking,
+      refreshStock,
+      stockDebitLinesFor,
+      toast,
+    ],
   );
   const workshopSettings = resolveWorkshopSettings(workspace?.settings);
   /** Guest/local: full costs; auth uses COST-01 + COST-02 flag (F039/F044). */
@@ -2550,6 +3102,34 @@ function AppContent({
           />
         );
       })() : null}
+      {navId === 'purchasing' ? (
+        <PurchasingScreen
+          projects={purchasingProjects}
+          role={actorRole ?? null}
+          assignedSectors={mySectors}
+          initialPicking={pickingStates}
+          onTogglePick={handleTogglePick}
+          stock={stockRows}
+          stockMovements={stockMovements}
+          stockLabels={stockCatalog.labels}
+          stockCatalogOptions={stockCatalog.options}
+          materialIdByCode={stockCatalog.materialIdByCode}
+          edgeIdByCode={stockCatalog.edgeIdByCode}
+          stockPrices={stockCatalog.prices}
+          showStockCosts={showCosts}
+          currency={workshopSettings.defaultCurrency ?? undefined}
+          onRecordStockMovement={handleRecordStockMovement}
+          onUpsertStockMin={handleUpsertStockMin}
+          suppliers={suppliers}
+          purchaseOrders={purchaseOrders}
+          onSaveSupplier={handleSaveSupplier}
+          onDeactivateSupplier={handleDeactivateSupplier}
+          onSavePurchaseOrder={handleSavePurchaseOrder}
+          onEmitPurchaseOrder={handleEmitPurchaseOrder}
+          onCancelPurchaseOrder={handleCancelPurchaseOrder}
+          onReceivePurchaseOrder={handleReceivePurchaseOrder}
+        />
+      ) : null}
       {navId === 'salesDashboard' ? (
         <SalesDashboard
           projects={projectsForRole.map((p) => ({

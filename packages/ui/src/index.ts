@@ -259,6 +259,14 @@ export {
 } from './engineering';
 
 export {
+  PurchasingScreen,
+  PurchaseOrdersPanel,
+  type ActiveProjectMaterial,
+  type PurchasingScreenProps,
+  type PoLineInput,
+} from './purchasing';
+
+export {
   SalesDashboard,
 } from './sales';
 

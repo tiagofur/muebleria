@@ -127,3 +127,4 @@ Cada pantalla tiene su propio doc con detalle completo:
 | `03-fabrica.md` | Fábrica — tabs por sector, cola de trabajo, avance |
 | `04-compras-almacen.md` | Compras/Almacén — tabs por material, stock, despacho |
 | `05-implementation-phases.md` | Fases de implementación — orden, esfuerzo, archivos |
+| `06-stock-almacen.md` | Stock real por material — entradas/salidas, mínimos, recepción (fase 3b) |

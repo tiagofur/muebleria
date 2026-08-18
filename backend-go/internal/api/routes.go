@@ -135,6 +135,32 @@ func RegisterRoutes(server *Server) http.Handler {
 	// their OWN assignments for Mi Estación.
 	mux.Handle("GET /api/me/sectors", authMW(http.HandlerFunc(server.HandleMySectors)))
 
+	// Compras/Almacén picking (Fase 3): project × material despacho state.
+	// Read: admin/gerente_produccion/almacen; write: admin/almacen.
+	mux.Handle("GET /api/picking", authMW(http.HandlerFunc(server.HandlePickingList)))
+	mux.Handle("PUT /api/picking", authMW(http.HandlerFunc(server.HandlePickingUpsert)))
+
+	// Compras/Almacén stock (Fase 3b): balances + mínimos + movement ledger.
+	// Read: admin/gerente_produccion/almacen; write (movements/mínimos): admin/almacen.
+	mux.Handle("GET /api/stock", authMW(http.HandlerFunc(server.HandleStockList)))
+	mux.Handle("PUT /api/stock", authMW(http.HandlerFunc(server.HandleStockUpsertMin)))
+	mux.Handle("POST /api/stock/movements", authMW(http.HandlerFunc(server.HandleStockMovementCreate)))
+	mux.Handle("GET /api/stock/movements", authMW(http.HandlerFunc(server.HandleStockMovementsList)))
+
+	// Compras/Almacén proveedores + órdenes de compra (Fase 3c). Reads: workspace
+	// roles; writes (create/edit/emit/cancel/receive): admin/almacen.
+	mux.Handle("GET /api/suppliers", authMW(http.HandlerFunc(server.HandleSuppliers)))
+	mux.Handle("POST /api/suppliers", authMW(http.HandlerFunc(server.HandleSuppliers)))
+	mux.Handle("PUT /api/suppliers/{id}", authMW(http.HandlerFunc(server.HandleSupplierByID)))
+	mux.Handle("DELETE /api/suppliers/{id}", authMW(http.HandlerFunc(server.HandleSupplierByID)))
+	mux.Handle("GET /api/purchase-orders", authMW(http.HandlerFunc(server.HandlePurchaseOrders)))
+	mux.Handle("POST /api/purchase-orders", authMW(http.HandlerFunc(server.HandlePurchaseOrders)))
+	mux.Handle("GET /api/purchase-orders/{id}", authMW(http.HandlerFunc(server.HandlePurchaseOrderByID)))
+	mux.Handle("PUT /api/purchase-orders/{id}", authMW(http.HandlerFunc(server.HandlePurchaseOrderByID)))
+	mux.Handle("POST /api/purchase-orders/{id}/emit", authMW(http.HandlerFunc(server.HandlePurchaseOrderEmit)))
+	mux.Handle("POST /api/purchase-orders/{id}/cancel", authMW(http.HandlerFunc(server.HandlePurchaseOrderCancel)))
+	mux.Handle("POST /api/purchase-orders/{id}/receive", authMW(http.HandlerFunc(server.HandlePurchaseOrderReceive)))
+
 	// Project gallery photos (CRM Phase 1) & Commercial Showcase (CRM Phase 4)
 	mux.Handle("GET /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))
 	mux.Handle("POST /api/projects/{id}/photos", authMW(http.HandlerFunc(server.HandleProjectPhotos)))

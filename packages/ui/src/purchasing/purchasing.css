@@ -1,0 +1,729 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Compras / Almacén — landing + project picking lists
+   docs/design.md §6 — tokens, spacing, color palette.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Landing ─────────────────────────────────────────────────────────────── */
+
+.purch-landing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.purch-landing__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.purch-landing__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.purch-landing__subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.purch-landing__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.25em 0.7em;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border: 1px solid var(--border-brand);
+  white-space: nowrap;
+}
+
+/* ── Stat cards ──────────────────────────────────────────────────────────── */
+
+.purch-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3);
+}
+
+.purch-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.purch-stat__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.purch-stat__icon--projects {
+  background: hsl(245 96% 93%);
+  color: hsl(245 78% 55%);
+}
+
+.purch-stat__icon--hardware {
+  background: hsl(170 60% 90%);
+  color: hsl(170 55% 38%);
+}
+
+.purch-stat__icon--tableros {
+  background: hsl(142 60% 90%);
+  color: hsl(142 55% 32%);
+}
+
+.purch-stat__icon--cintillas {
+  background: hsl(38 100% 90%);
+  color: hsl(38 80% 40%);
+}
+
+.purch-stat__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.purch-stat__value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.purch-stat__label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+/* ── Tab panel ───────────────────────────────────────────────────────────── */
+
+.purch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Project picking cards ───────────────────────────────────────────────── */
+
+.purch-project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.purch-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.purch-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.purch-card__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.purch-card__name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.purch-card__sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.purch-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Picking rows ────────────────────────────────────────────────────────── */
+
+.purch-card__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-2);
+}
+
+.purch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.82rem;
+  padding: var(--space-1) 0;
+}
+
+.purch-row__name {
+  color: var(--text-primary);
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.purch-row__code {
+  margin-left: var(--space-1);
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  padding: 0.05em 0.4em;
+  border-radius: var(--radius-sm);
+}
+
+.purch-row__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  margin-left: var(--space-3);
+}
+
+.purch-row__qty {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── Sheet estimate block (Tableros) ─────────────────────────────────────── */
+
+.purch-card__sheets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-selected);
+  border: 1px solid var(--border-default);
+}
+
+.purch-card__sheets-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.purch-card__sheets-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.purch-card__sheets-note {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ── Status badges ───────────────────────────────────────────────────────── */
+
+.purch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.2em 0.6em;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.purch-badge--pendiente {
+  background: hsl(38 100% 93%);
+  color: hsl(35 90% 35%);
+}
+
+.purch-badge--despachado {
+  background: hsl(142 60% 90%);
+  color: hsl(142 55% 30%);
+}
+
+.purch-badge--bajo {
+  background: hsl(38 100% 90%);
+  color: hsl(35 90% 32%);
+}
+
+.purch-badge--agotado {
+  background: hsl(0 70% 93%);
+  color: hsl(0 70% 40%);
+}
+
+/* ── Stock chips (picking rows) ──────────────────────────────────────────── */
+
+.purch-stock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: var(--space-2);
+  padding: 0.15em 0.55em;
+  border-radius: var(--radius-sm);
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.purch-stock-chip--ok {
+  background: hsl(142 60% 92%);
+  color: hsl(142 50% 30%);
+}
+
+.purch-stock-chip--bajo {
+  background: hsl(38 100% 91%);
+  color: hsl(35 90% 32%);
+}
+
+.purch-stock-chip--agotado {
+  background: hsl(0 70% 94%);
+  color: hsl(0 70% 40%);
+}
+
+.purch-stock-chip--none {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ── Stock panel (tab Compras) ───────────────────────────────────────────── */
+
+.purch-stock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.purch-panel__stock-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.purch-stock__alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: hsl(38 100% 93%);
+  border: 1px solid hsl(35 90% 75%);
+  color: hsl(35 90% 30%);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.purch-stock__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.purch-stock__filters {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.purch-stock__search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.3em 0.7em;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 10rem;
+  max-width: 18rem;
+}
+
+.purch-stock__search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.purch-stock__table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.purch-stock__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.purch-stock__table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.purch-stock__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.purch-stock__table tr:last-child td {
+  border-bottom: none;
+}
+
+.purch-stock__name {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.purch-stock__kind {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.purch-stock__qty {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.purch-stock__min-input {
+  width: 5.5rem;
+  padding: 0.25em 0.5em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.purch-stock__last {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.purch-stock__actions-col {
+  text-align: right;
+}
+
+.purch-stock__actions {
+  display: flex;
+  gap: var(--space-1);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.purch-stock__no-results {
+  padding: var(--space-3);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* ── Stock movement modal ────────────────────────────────────────────────── */
+
+.purch-stock-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.purch-stock-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.purch-stock-modal__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.purch-stock-modal__field select,
+.purch-stock-modal__field input {
+  padding: 0.45em 0.7em;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.purch-stock-modal__hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.purch-stock-modal__units {
+  margin: var(--space-3) 0 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.purch-stock-modal__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.purch-stock-modal__error {
+  font-size: 0.75rem;
+  color: hsl(0 70% 40%);
+  font-weight: 600;
+}
+
+.purch-stock-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ── Compras sub-tabs + Órdenes de compra / Proveedores (Fase 3c) ─────────── */
+
+.purch-compras {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.purch-compras__tabs {
+  flex-wrap: wrap;
+}
+
+.purch-po-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.purch-po-card__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.purch-card__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border-default);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.purch-card__foot-note {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.purch-card--inactive {
+  opacity: 0.62;
+}
+
+.purch-po-line-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.purch-po-line-state--done {
+  color: var(--success, hsl(150 45% 35%));
+  font-weight: 600;
+}
+
+.purch-po-line-state svg {
+  flex: none;
+}
+
+.purch-supplier-notes {
+  margin: 0;
+  padding: 0 1rem 0.8rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.purch-po-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.purch-po-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.purch-po-form__field select,
+.purch-po-form__field input,
+.purch-po-form__field textarea {
+  padding: 0.45em 0.7em;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 400;
+  font-family: inherit;
+}
+
+.purch-po-form__field textarea {
+  min-height: 3.5rem;
+  resize: vertical;
+}
+
+.purch-po-form__hint {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.purch-po-form__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.purch-po-form__lines-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.purch-po-form__line {
+  display: grid;
+  grid-template-columns: 8rem minmax(10rem, 1fr) 5rem auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.purch-po-form__line select,
+.purch-po-form__line input {
+  padding: 0.45em 0.6em;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.purch-po-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* ── Costo / valor de inventario (Fase 3c) ───────────────────────────────── */
+
+.purch-stock__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.purch-stock__total {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 0.7rem 1rem;
+  border-top: 2px solid var(--border-default);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.purch-stock__total strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}

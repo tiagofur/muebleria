@@ -739,3 +739,210 @@ activan al reiniciar (la migración ya está aplicada).
 **Pendiente (Fases 2-4 del plan):** roles de estación + RBAC por sector +
 "Mi estación" (Fase 2), split IA Ingeniería vs Planta + almacén staging +
 estado `machined` CNC (Fase 3), métricas de sector desde eventos (Fase 4).
+
+---
+
+## Fase 3 — Compras / Almacén (workspace de picking, 2026-08-17)
+
+Implementación del workspace dedicado para `almacen` (lectura para
+`gerente_produccion` y `admin`) — listas de picking por proyecto activo,
+sin gestión de stock (MVP, roadmap-screens/04 + 05 §Phase 3).
+
+**Dominio (`packages/domain`):**
+- `purchasing.ts` nuevo: `PickingMaterial` (herrajes/tableros/cintillas),
+  `PickingStatus` (pendiente/despachado), `ProjectPickingState` (contrato de
+  persistencia futura: markedAt/markedBy), `pickingKey(projectId, material)`,
+  labels ES. Exportado desde index.ts (+ `computeProductionTotals` ahora
+  también exportado, no solo el alias `summarizeProductionTotals`).
+- `rbac.ts`: `roleCanAccessPurchasingNav` (admin | gerente_produccion |
+  almacen) + `'purchasing'` en `navIdsForRole`. Tests en rbac.test.ts y
+  purchasing.test.ts.
+
+**UI (`packages/ui/src/purchasing/`):**
+- `PurchasingScreen.tsx`: 4 tabs (Herrajes/Tableros/Cintillas/Compras
+  placeholder "Próximamente"). Datos derivados del dominio
+  (`generateHardwareList`, `computeProductionTotals(cutRows)`); Tableros
+  muestra piezas/m² + "planchas estimadas" (`estimateBoardSheets`, prop
+  opcional `sheetEstimates`). Picking local `useState<Record<string,
+  PickingStatus>>` (key `projectId:tab`), botón "Marcar despachado" toggle +
+  "Desmarcar". RBAC display: `gerente_produccion` read-only (sin botones);
+  `admin`/`almacen`/guest marcan. `assignedSectors` filtra tabs de material
+  (almacen sector-scoped, coherente con FabricScreen); tab Compras siempre
+  visible. Stat cards + badges de pendientes por tab. `purchasing.css`
+  (prefijo `.purch-`, solo tokens).
+- `AppShell.tsx`: `AppNavId += 'purchasing'`, sección `almacen`
+  "COMPRAS / ALMACÉN" (icono Warehouse) entre INGENIERÍA y LIBRERÍA,
+  `NavSectionDef.id += 'almacen'`, roleLabel con almacen/gerente_produccion.
+  appShell.test.ts + index.test.ts actualizados (7 secciones).
+
+**Web shell (`apps/web`):**
+- `routes.ts`: `purchasing: '/compras'` (NAV_PATHS) + exclusión de
+  EntitySection.
+- `App.tsx`: memo `purchasingProjects` (proyectos accepted|produced →
+  hardware + cutRows + sheetEstimates, con try/catch por proyecto) y caso
+  `navId === 'purchasing'` → `<PurchasingScreen role assignedSectors />`.
+
+**Verificación:** domain 613 (rbac + purchasing), ui PurchasingScreen 8 +
+appShell 15 + index 15 ✓, web 255 ✓, `pnpm typecheck` monorepo 0 errores.
+Solo quedan 5 tests rojos PRE-EXISTENTES en ProductionOrderHub.test.tsx
+(commit 2211e2c recortó HUB_TABS a 6 tabs moviendo modulos/despiece/
+optimizacion a Ingeniería pero no actualizó su test) — ajenos a esta tanda.
+
+## Addendum — ProductionOrderHub.test.tsx actualizado al Hub trim
+
+Los 5 tests rojos pre-existentes de `ProductionOrderHub.test.tsx` (commit
+2211e2c recortó HUB_TABS a 6 tabs moviendo modulos/despiece/optimizacion a
+Ingeniería sin tocar su test) quedaron verdes:
+
+- Hub: click de tab en el test de resumen pasa a `documentos` (tab real);
+  test "documentos buttons" reducido a labels-zpl "Configurar" →
+  onTab('etiquetas') (el doc despiece ya no vive en el hub).
+- Tests de paneles movidos se portaron a su dueño actual (la cobertura no se
+  pierde): `ProductionOrderModulesPanel.test.tsx` (inventario PROD-0.4) y
+  `ProductionOrderOptimizationPanel.test.tsx` (capas L0/L1/L2 PROD-2.3)
+  nuevos; despiece ya tenía `ProductionOrderDespiecePanel.test.tsx`.
+- `EngineeringWorkspace.documents.test.tsx` nuevo: doc despiece "Ver tab"
+  navega a la tab Despiece, ZPL "Ir a Etiquetas" navega, gate por
+  materialsResolved (disabled + razón visible) e imprimir A4.
+
+Suites: @muebles/ui 906 ✓ (98 files, 0 failures), typecheck monorepo 0 errores.
+
+## Addendum — Persistencia del picking (Fase 3)
+
+Se implementó la persistencia del estado de despacho de Compras/Almacén (antes solo local en `PurchasingScreen`).
+
+**Backend Go (`backend-go`)**
+- Migración `000054_project_picking` (tabla `project_picking`: project_id × material PK, status, marked_at, marked_by).
+- `domain/types.go`: struct `ProjectPicking`; `domain/rbac.go`: `RoleCanAccessPurchasingNav` (admin/gerente_produccion/almacen) y `RoleCanMarkPicking` (admin/almacen — gerente_produccion es read-only).
+- `storage/projectPicking.go`: `ListAllPicking` (join users para marked_by_name) + `UpsertProjectPicking` (ON CONFLICT upsert). En `Store` interface.
+- `api/projectPicking.go`: `GET /api/picking` (lista) y `PUT /api/picking` (upsert; el server estampa who/when desde el JWT solo en despachado; pendiente limpia la estampa). Validación de material/status + 404 si la obra no existe. Rutas registradas.
+- Tests: `projectPicking_test.go` (lista por rol, deny a no-purchasing, stamps, pendiente limpia, gerente read-only, almacen permite, inputs inválidos 400, obra 404, paridad RBAC). Se actualizaron 2 tests obsoletos de `productionScope_test.go` (almacen fuera de gates de piso F094: el finish warehouse-sector lo ejerce produccion; almacen 403 en floor-status y finish) — estaban rojos en HEAD (verificado con worktree).
+
+**Storage TS (`packages/storage`)**
+- Puerto: `listPickingStates?()` y `setProjectPickingState?(state)` en `WorkspaceRepository`.
+- API: GET/PUT `/picking` con `pickingStateFromApi` (snake_case → dominio, marked_by_name → markedBy). LocalStorage: key `muebles_guest_picking`, upsert por `pickingKey`, estampa markedAt en guest.
+- Tests: `localStoragePicking.test.ts` (nuevo) + 2 tests API.
+
+**UI (`packages/ui`)**
+- `PurchasingScreen`: props `initialPicking` (hidrata despachos persistidos; efecto re-hidrata al cambiar identidad) y `onTogglePick` (reporta el nuevo estado tras el update optimista).
+- Tests: hidratación, callback, rehidratación tardía.
+
+**Web shell (`apps/web`)**
+- `App.tsx`: estado `pickingStates` cargado una vez por sesión de workspace (guest o rol purchasing), `handleTogglePick` persiste vía repo con reconciliación (reload de server truth si falla). `domain/index.ts`: exporta `roleCanAccessPurchasingNav` + `roleCanMarkPicking` (faltaban).
+
+**Verificación**: Go api/domain/storage ✓ · UI 909 ✓ · Storage 98 ✓ · Domain 614 ✓ · Web 255 ✓ · `pnpm typecheck` monorepo 0 errores.
+
+## Diseño — Fase 3b: Stock real por material
+
+Diseño documentado en `docs/roadmap-screens/06-stock-almacen.md` (nuevo; referenciado desde `00-overview.md` y `04-compras-almacen.md`). Sin implementación.
+
+Decisiones clave: ledger inmutable + saldo vivo (patrón floor events, migraciones 000055/000056); despacho auto-descuenta solo materiales con fila de stock (backward compatible); salida negativa bloqueada con `ajuste` como corrección; mínimos por material con estado derivado ok/bajo/agotado; unidades del dominio (pieza/juego/metro, planchas, ml); tab Compras = panel de stock (recepción/salida/ajuste/mínimos); `roleCanManageStock` = admin|almacen, gerente read-only. Fuera de MVP: PO/proveedores, QR, rollos, multi-depósito, costos.
+
+## Backend stock (Fase 3b) — implementado
+
+Backend completo de inventario según `06-stock-almacen.md` (sin UI).
+
+- Migraciones `000055_material_stock` (saldo + min_stock por kind×material_id, CHECK kind) y `000056_stock_movements` (ledger inmutable: type CHECK, delta, balance_after, project_id, reverts_id, by_user_id/name, at).
+- `domain/stock.go`: `MaterialStock`, `StockMovement`, sentinels `ErrStockNotTracked` / `ErrStockInsufficient`, `ValidStockMaterialKind/Type`, `StockDeltaForType` (entrada/salida/despacho positivas con signo del tipo; ajuste firmado), `StockStatusOf` (ok/bajo/agotado). `rbac.go`: `RoleCanManageStock` = admin | almacen.
+- `storage/stock.go`: `ListStock`, `UpsertStockMin` (upsert, crea fila), `RecordStockMovement` en **transacción** (lock FOR UPDATE → balance_after → insert ledger; solo entrada crea fila; saldo negativo → ErrStockInsufficient con faltante), `GetStockMovementByID`, `ListStockMovements` (filtros kind/material_id, limit).
+- `api/stock.go`: `GET /api/stock` (+ status derivado), `PUT /api/stock` (min_stock), `POST /api/stock/movements` (201; valida kind/type/quantity/proyecto/reverts; estampa who/when del JWT; 404 sin fila de stock, 400 con faltante), `GET /api/stock/movements`. Rutas registradas; interface Store ampliada; stubs en handlers_test.go.
+- Tests: `stock_test.go` (api, 14 tests: RBAC, entradas, débitos, insuficiente con faltante, ajuste firmado, gerente deny, inputs 400, proyecto/reversión 404, filtros) + `stock_test.go` (domain helpers).
+- Verificación: `go build` + `go vet` ✓; api/domain/storage ✓. Único fallo de `go test ./...`: `internal/config` con `PORT=0` en el env del shell — pre-existente y ambiental (falla igual en HEAD).
+
+## Stock Fase 3b — implementación completa
+
+Backend (turno anterior) + puerto TS + StockPanel + despacho que descuenta stock. Todo verde.
+
+**Backend extra**: reversión de despacho — `POST /api/stock/movements` con `type:"despacho"` + `reverts_id` ahora **acredita** de vuelta (delta +qty, enlazado al movimiento original; valida que el original sea un despacho del mismo material). Tests: crédito → saldo original, rechazos (no-despacho, material distinto).
+
+**Domain TS** (`packages/domain/src/stock.ts`): `MaterialStock`, `StockMovement`, kinds/types/status, `stockStatus` (ok/bajo/agotado), `stockUnitLabel/Plural`, `stockMovementDelta`, `applyStockMovement` + `roleCanManageStock`. Exportado desde `index.ts`.
+
+**Storage TS**: puerto `getStock`/`upsertStockMin`/`recordStockMovement`/`listStockMovements`; adapter API (4 endpoints snake_case, mappers `stockFromApi`/`stockMovementFromApi`); adapter localStorage (claves `muebles_guest_stock` + `_movements`, misma lógica transaccional: entrada crea fila, saldo negativo → error con faltante, reversión acredita). Tests API + localStorage.
+
+**UI**: `StockPanel` (tab Compras: banner de alertas, filtros/búsqueda, tabla con estados y último movimiento, edición inline del mínimo, acciones Recibir/Salida/Ajustar, empty state con "Recibir stock") + `StockMovementModal` (un formulario guiado por tipo; ajuste exige nota; muestra errores del server). `PurchasingScreen`: chips de stock por fila en los 3 tabs (herrajes por hardwareId, tableros por materialId de planchas, cintillas por edgeId resuelto) + tab Compras → panel. CSS `.purch-stock-*`.
+
+**Web shell**: carga stock + ledger con el picking; `stockCatalog` (labels, opciones del modal, códigos→ids); `handleRecordStockMovement`/`handleUpsertStockMin` (persisten + refresh); `handleTogglePick` extendido — despacho **descuenta por línea** solo materiales con fila de stock (si falla, acredita los ya debitados, recarga picking+stock y tostea el faltante); desmarcar **revierte** los despachos activos del ledger (sobrevive a recargas).
+
+**Verificación**: typecheck monorepo 0 errores · Domain 620 · Storage 109 · UI 918 · Web 255 · Go api/domain/storage ✓ (config sigue rojo solo por PORT=0 ambiental en HEAD).
+
+## Órdenes de compra + proveedores (Fase 3c)
+
+Implementado el modelo PO con estados (borrador → emitida → recibida, cancelada) y
+el directorio de proveedores, conectando la recepción a stock.
+
+**Backend Go**
+- Migración `000057_purchase_orders` (agrupada): `suppliers`, `purchase_orders`
+  (estado CHECK, created_by, received_at) + `purchase_order_items`
+  (received_quantity avanza por recepción).
+- Dominio `purchaseOrder.go`: `Supplier`, `PurchaseOrder`, sentinels y helpers
+  `PurchaseOrderCanEmit/Cancel/Receive`, `PurchaseOrderFullyReceived`; rbac →
+  `RoleCanManagePurchasing` (admin | almacen).
+- Storage: CRUD de suppliers (soft delete por active=false) + POs; recepción en
+  **una transacción** (lock FOR UPDATE de la PO → received_quantity += qty →
+  entradas de stock con nota = número de OC → recibida si completo). Refactor:
+  helper `recordStockMovementTx` extraído de stock.go.
+- API: `GET/POST /api/suppliers`, `PUT/DELETE /api/suppliers/{id}`,
+  `GET/POST /api/purchase-orders`, `GET/PUT /api/purchase-orders/{id}`,
+  `POST .../{id}/emit|cancel|receive`. 17 tests nuevos (RBAC, validaciones 400,
+  404, estampa de quién recibe, ciclo de vida completo).
+
+**TS**
+- Domain `purchasingOrders.ts`: tipos + helpers puros (`poRemaining`,
+  `poFullyReceived`, gates de estado) + `roleCanManagePurchasing`. Tests.
+- Storage: puerto (11 métodos), mappers `supplierFromApi/ToApi`,
+  `purchaseOrderFromApi`, `poItemToApi`; adapters API (7 endpoints) y
+  localStorage (`muebles_guest_suppliers`, `muebles_guest_purchase_orders` —
+  recepción replica las entradas de stock y el avance). Tests.
+
+**UI**
+- `PurchaseOrdersPanel`: sub-tabs Órdenes/Proveedores con búsqueda; cards de PO
+  con badge de estado, progreso por línea ("30/50 recibido · quedan 20") y
+  acciones por estado (Emitir/Editar, Recibir, Cancelar); modal de PO
+  (proveedor + líneas dinámicas), modal de recepción (cantidades por línea,
+  default = restante) y modal de proveedor. Read-only para gerente_produccion.
+- `PurchasingScreen`: el tab Compras gana sub-tabs Stock / Órdenes y proveedores.
+- CSS `.purch-po-*`, `.purch-compras*`.
+
+**Web shell**: carga suppliers + POs junto a picking/stock; handlers
+(create/update/emit/cancel/receive) con refresh; la recepción refresca stock +
+POs (las entradas se ven en el panel).
+
+**Verificación**: Go api/domain/storage ✓ · Domain 627 ✓ · Storage 114 ✓ ·
+UI 925 ✓ · Web 255 ✓ · `pnpm typecheck` 0 errores. (El único test rojo de
+`go test ./...` sigue siendo `internal/config` por `PORT=0` ambiental.)
+
+## Costo / valor de inventario en el panel de stock (Fase 3c)
+
+- Domain `stock.ts`: helper puro `stockValue(quantity, pricePerUnit)` (null sin
+  precio) + tests.
+- `StockPanel`: columnas **Costo** (precio unitario del catálogo) y **Valor**
+  (cantidad × precio) por fila, más la línea **"Valor total del inventario"**
+  con la suma, formateada con `formatMoneyDisplay` (moneda configurable).
+  Visible solo con `showCosts` (COST-01/02 — default false).
+- Fuente del precio: `Hardware.costPerUnit` (herrajes) · `MaterialBoard.boardPrice`
+  (planchas) · `EdgeBand.costPerMl` (ml) — `stockCatalog.prices` resuelto en
+  App.tsx desde el catálogo; `showStockCosts` reusa el `showCosts` del shell.
+- Materiales sin precio en catálogo → '—' (no cuentan en el total).
+
+**Verificación**: pnpm typecheck 0 errores · UI 927 ✓ · Web 255 ✓ · Domain 629 ✓.
+
+## Revisión de fases 1→3b + preservación (2026-08-17, noche)
+
+Revisión pedida por el usuario tras "fase 3": verificación por encima de que
+todas las fases del roadmap-screens estén OK hasta 3b.
+
+**Estado verificado (todo verde):**
+- Fase 1 (Fábrica), 2a (Ingeniería), 2b (Dashboard Ventas) — ya commiteadas
+  (`7f11e7a` + fixes `2211e2c`). Artefactos y nav presentes.
+- Fase 3 (picking + persistencia), 3b (stock real), 3c (POs/proveedores/
+  costo) — en working tree, sin commitear.
+- Evidencia fresca: `pnpm test` exit 0 (web 255, desktop 17, resto ✓) ·
+  `pnpm typecheck` 0 errores · `go build` + `go test ./internal/...` ok.
+
+**Preservación (3 commits atómicos + push):**
+1. Tests portados al Hub trim (ProductionOrderHub.test + paneles movidos +
+   EngineeringWorkspace.documents).
+2. Épico Fase 3/3b/3c completo (backend migraciones 54-57 + TS + UI + docs).
+3. chore: `.gitignore` + `backend-go/server`.
+
+**Siguiente:** Fase 4 (dashboards refinados) del `05-implementation-phases.md`.

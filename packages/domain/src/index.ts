@@ -148,6 +148,10 @@ export {
   roleIsScopedBySector,
   sectorsAllowedForRole,
   roleCanAdvanceStation,
+  roleCanAccessPurchasingNav,
+  roleCanMarkPicking,
+  roleCanManageStock,
+  roleCanManagePurchasing,
   type CostVisibilityOptions,
   type UserSector,
 } from './rbac';
@@ -446,11 +450,55 @@ export {
 } from './moduleLabels';
 
 export {
+  computeProductionTotals,
   summarizeProductionTotals,
   type ProductionTotals,
   type ProductionMaterialTotal,
   type ProductionEdgeTotal,
 } from './productionTotals';
+
+export {
+  PICKING_MATERIALS,
+  PICKING_STATUS_LABELS_ES,
+  pickingKey,
+  type PickingMaterial,
+  type PickingStatus,
+  type ProjectPickingState,
+} from './purchasing';
+
+export {
+  STOCK_KIND_LABELS_ES,
+  STOCK_MATERIAL_KINDS,
+  STOCK_MOVEMENT_LABELS_ES,
+  STOCK_MOVEMENT_TYPES,
+  STOCK_STATUS_LABELS_ES,
+  applyStockMovement,
+  stockMovementDelta,
+  stockStatus,
+  stockUnitLabel,
+  stockUnitPlural,
+  stockValue,
+  type MaterialStock,
+  type StockMaterialKind,
+  type StockMovement,
+  type StockMovementType,
+  type StockStatus,
+} from './stock';
+
+export {
+  PO_STATUSES,
+  PO_STATUS_LABELS_ES,
+  isValidPoStatus,
+  poCanCancel,
+  poCanEmit,
+  poCanReceive,
+  poFullyReceived,
+  poRemaining,
+  type PurchaseOrder,
+  type PurchaseOrderItem,
+  type PurchaseOrderStatus,
+  type Supplier,
+} from './purchasingOrders';
 
 export {
   computeProductionDesignFingerprint,

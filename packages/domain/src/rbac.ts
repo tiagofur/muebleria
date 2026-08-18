@@ -231,6 +231,23 @@ export function roleCanAccessProductionNav(
 }
 
 /**
+ * Compras / Almacén workspace (Fase 3): picking lists per active project.
+ * - admin: full access (can mark despachado).
+ * - gerente_produccion: read-only (no dispatch button).
+ * - almacen: own assigned material sectors (herrajes/tableros/cintillas).
+ * Everyone else stays out — engineering/sales work upstream of picking.
+ */
+export function roleCanAccessPurchasingNav(
+  role: string | null | undefined,
+): boolean {
+  return (
+    role === 'admin' ||
+    role === 'gerente_produccion' ||
+    role === 'almacen'
+  );
+}
+
+/**
  * Production/warehouse workers can claim/finish jobs in their assigned sectors.
  * Distinct from gerente_produccion which sees everything.
  */
@@ -238,6 +255,31 @@ export function roleCanClaimProductionJob(
   role: string | null | undefined,
 ): boolean {
   return role === 'admin' || role === 'produccion';
+}
+
+/**
+ * May write a project × material picking state (Fase 3 persistence).
+ * Gerente_produccion reads the workspace but does not dispatch — the screen
+ * shows it read-only; admin and almacen mark despachado.
+ */
+export function roleCanMarkPicking(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'almacen';
+}
+
+/**
+ * May write stock (movements, mínimos) in Compras/Almacén (Fase 3b).
+ * Gerente_produccion reads the stock dashboard; admin and almacen manage it.
+ */
+export function roleCanManageStock(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'almacen';
+}
+
+/**
+ * May write suppliers + purchase orders (Fase 3c): the same roles that
+ * manage stock. Gerente_produccion reads the directory and the orders.
+ */
+export function roleCanManagePurchasing(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'almacen';
 }
 
 /** Check if role is scoped by user_sectors (produccion or almacen). */
@@ -445,6 +487,8 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanAccessEngineeringNav(role)) ids.add('engineering');
   // Dashboard Ventas: pipeline + summary for sales roles.
   if (roleCanAccessSalesDashboard(role)) ids.add('salesDashboard');
+  // Compras/Almacén: picking lists for warehouse + supervisors (Fase 3).
+  if (roleCanAccessPurchasingNav(role)) ids.add('purchasing');
   return ids;
 }
 

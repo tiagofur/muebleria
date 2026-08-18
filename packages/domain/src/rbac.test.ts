@@ -23,6 +23,9 @@ import {
   roleIsScopedBySector,
   sectorsAllowedForRole,
   roleCanAdvanceStation,
+  roleCanAccessPurchasingNav,
+  roleCanMarkPicking,
+  roleCanManagePurchasing,
 } from './rbac';
 
 describe('rbac (F035)', () => {
@@ -269,6 +272,52 @@ describe('rbac (F035)', () => {
     expect(navIdsForRole('vendedor').has('engineering')).toBe(false);
     expect(navIdsForRole('produccion').has('engineering')).toBe(false);
     expect(navIdsForRole(null).has('engineering')).toBe(false);
+  });
+
+  it('Fase 3 — purchasing nav is for admin, gerente_produccion and almacen', () => {
+    expect(roleCanAccessPurchasingNav('admin')).toBe(true);
+    expect(roleCanAccessPurchasingNav('gerente_produccion')).toBe(true);
+    expect(roleCanAccessPurchasingNav('almacen')).toBe(true);
+    expect(roleCanAccessPurchasingNav('ingeniero')).toBe(false);
+    expect(roleCanAccessPurchasingNav('gerente_ventas')).toBe(false);
+    expect(roleCanAccessPurchasingNav('vendedor')).toBe(false);
+    expect(roleCanAccessPurchasingNav('produccion')).toBe(false);
+    expect(roleCanAccessPurchasingNav('user')).toBe(false);
+    // Guest (local mode) keeps the hardcoded full-tool list without the
+    // auth-only workspace navs (same as engineering / production).
+    expect(roleCanAccessPurchasingNav(null)).toBe(false);
+
+    expect(navIdsForRole('admin').has('purchasing')).toBe(true);
+    expect(navIdsForRole('gerente_produccion').has('purchasing')).toBe(true);
+    expect(navIdsForRole('almacen').has('purchasing')).toBe(true);
+    expect(navIdsForRole('ingeniero').has('purchasing')).toBe(false);
+    expect(navIdsForRole('gerente_ventas').has('purchasing')).toBe(false);
+    expect(navIdsForRole('vendedor').has('purchasing')).toBe(false);
+    expect(navIdsForRole('produccion').has('purchasing')).toBe(false);
+    expect(navIdsForRole(null).has('purchasing')).toBe(false);
+  });
+
+  it('Fase 3 — roleCanMarkPicking: admin/almacen write, gerente read-only', () => {
+    expect(roleCanMarkPicking('admin')).toBe(true);
+    expect(roleCanMarkPicking('almacen')).toBe(true);
+    expect(roleCanMarkPicking('gerente_produccion')).toBe(false);
+    expect(roleCanMarkPicking('ingeniero')).toBe(false);
+    expect(roleCanMarkPicking('produccion')).toBe(false);
+    expect(roleCanMarkPicking('vendedor')).toBe(false);
+    expect(roleCanMarkPicking('user')).toBe(false);
+    // Guest / local mode persists locally.
+    expect(roleCanMarkPicking(null)).toBe(false);
+  });
+
+  it('Fase 3c — roleCanManagePurchasing: admin/almacen write, gerente read-only', () => {
+    expect(roleCanManagePurchasing('admin')).toBe(true);
+    expect(roleCanManagePurchasing('almacen')).toBe(true);
+    expect(roleCanManagePurchasing('gerente_produccion')).toBe(false);
+    expect(roleCanManagePurchasing('ingeniero')).toBe(false);
+    expect(roleCanManagePurchasing('produccion')).toBe(false);
+    expect(roleCanManagePurchasing('vendedor')).toBe(false);
+    expect(roleCanManagePurchasing('user')).toBe(false);
+    expect(roleCanManagePurchasing(null)).toBe(false);
   });
 
   it('F094 — sectorsAllowedForRole binds sectors to roles', () => {

@@ -534,5 +534,307 @@ describe('APIWorkspaceRepository', () => {
     expect(result.loadingProgress.allLoaded).toBe(true);
     expect(result.loadingProgress.canReleaseToDelivery).toBe(true);
   });
+
+  it('listPickingStates maps snake_case rows from /api/picking', async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/picking')) {
+        return {
+          ok: true,
+          json: async () => [
+            {
+              project_id: 'p1',
+              material: 'herrajes',
+              status: 'despachado',
+              marked_at: '2026-08-17T10:00:00Z',
+              marked_by: 'a1',
+              marked_by_name: 'Admin',
+            },
+            {
+              project_id: 'p1',
+              material: 'tableros',
+              status: 'pendiente',
+            },
+          ],
+        } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const states = await repo.listPickingStates();
+
+    expect(states).toHaveLength(2);
+    expect(states[0]).toEqual({
+      projectId: 'p1',
+      material: 'herrajes',
+      status: 'despachado',
+      markedAt: '2026-08-17T10:00:00Z',
+      markedBy: 'Admin',
+    });
+    expect(states[1]?.status).toBe('pendiente');
+    expect(states[1]?.markedAt).toBeUndefined();
+  });
+
+  it('setProjectPickingState PUTs snake_case body to /api/picking', async () => {
+    const putRequests: { url: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (init?.method === 'PUT' && String(input).includes('/picking')) {
+        putRequests.push({
+          url: String(input),
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return { ok: true, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository('http://localhost:8080/api');
+    await repo.setProjectPickingState({
+      projectId: 'p1',
+      material: 'cintillas',
+      status: 'despachado',
+    });
+
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0]?.url).toBe('http://localhost:8080/api/picking');
+    expect(putRequests[0]?.body).toEqual({
+      project_id: 'p1',
+      material: 'cintillas',
+      status: 'despachado',
+    });
+  });
+
+  it('getStock maps snake_case rows with derived shape', async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/stock')) {
+        return {
+          ok: true,
+          json: async () => [
+            {
+              kind: 'herrajes',
+              material_id: 'h1',
+              quantity: 38,
+              min_stock: 50,
+              updated_at: '2026-08-17T10:00:00Z',
+              status: 'bajo',
+            },
+          ],
+        } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const stock = await repo.getStock();
+
+    expect(stock).toHaveLength(1);
+    expect(stock[0]).toEqual({
+      kind: 'herrajes',
+      materialId: 'h1',
+      quantity: 38,
+      minStock: 50,
+      updatedAt: '2026-08-17T10:00:00Z',
+    });
+  });
+
+  it('upsertStockMin PUTs snake_case body to /api/stock', async () => {
+    const putRequests: { url: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (init?.method === 'PUT' && String(input).includes('/stock')) {
+        putRequests.push({
+          url: String(input),
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return {
+          ok: true,
+          json: async () => ({
+            kind: 'tableros',
+            material_id: 'm1',
+            quantity: 14,
+            min_stock: 10,
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository('http://localhost:8080/api');
+    const result = await repo.upsertStockMin({
+      kind: 'tableros',
+      materialId: 'm1',
+      minStock: 10,
+    });
+
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0]?.url).toBe('http://localhost:8080/api/stock');
+    expect(putRequests[0]?.body).toEqual({
+      kind: 'tableros',
+      material_id: 'm1',
+      min_stock: 10,
+    });
+    expect(result.quantity).toBe(14);
+  });
+
+  it('recordStockMovement POSTs despacho and maps balance_after', async () => {
+    const postRequests: { url: string; body: Record<string, unknown> }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (init?.method === 'POST' && String(input).includes('/stock/movements')) {
+        postRequests.push({
+          url: String(input),
+          body: JSON.parse(String(init.body)) as Record<string, unknown>,
+        });
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            id: 'sm-1',
+            kind: 'herrajes',
+            material_id: 'h1',
+            type: 'despacho',
+            delta: -12,
+            balance_after: 26,
+            project_id: 'p1',
+            by_user_id: 'a1',
+            by_name: 'Admin',
+            at: '2026-08-17T10:00:00Z',
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository('http://localhost:8080/api');
+    const mov = await repo.recordStockMovement({
+      kind: 'herrajes',
+      materialId: 'h1',
+      type: 'despacho',
+      quantity: 12,
+      projectId: 'p1',
+    });
+
+    expect(postRequests).toHaveLength(1);
+    expect(postRequests[0]?.url).toBe('http://localhost:8080/api/stock/movements');
+    expect(postRequests[0]?.body).toEqual({
+      kind: 'herrajes',
+      material_id: 'h1',
+      type: 'despacho',
+      quantity: 12,
+      project_id: 'p1',
+      note: '',
+      reverts_id: '',
+    });
+    expect(mov.balanceAfter).toBe(26);
+    expect(mov.byName).toBe('Admin');
+  });
+
+  it('listStockMovements builds the query string', async () => {
+    const urls: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      urls.push(String(input));
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository('http://localhost:8080/api');
+    await repo.listStockMovements({ kind: 'herrajes', limit: 50 });
+
+    expect(urls[0]).toBe('http://localhost:8080/api/stock/movements?kind=herrajes&limit=50');
+  });
+
+  it('suppliers map snake_case and hit the right endpoints', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const supplierRow = {
+      id: 's1',
+      name: 'Maderera Norte',
+      contact_name: 'Juan',
+      active: true,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return {
+        ok: true,
+        json: async () => (init?.method === 'GET' ? [supplierRow] : supplierRow),
+      } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository('http://localhost:8080/api');
+    const created = await repo.createSupplier({
+      id: 's1',
+      name: 'Maderera Norte',
+      contactName: 'Juan',
+    });
+    expect(created.contactName).toBe('Juan');
+    expect(created.active).toBe(true);
+    expect(calls[0]!.url).toBe('http://localhost:8080/api/suppliers');
+    expect(calls[0]!.init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]!.init?.body))).toMatchObject({
+      id: 's1',
+      name: 'Maderera Norte',
+      contact_name: 'Juan',
+      active: true,
+    });
+
+    const list = await repo.listSuppliers();
+    expect(list).toHaveLength(1);
+    expect(list[0]?.name).toBe('Maderera Norte');
+  });
+
+  it('purchase orders map status/items and lifecycle endpoints', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'po1',
+          number: 'OC-PO1',
+          supplier_id: 's1',
+          status: 'borrador',
+          items: [
+            {
+              kind: 'herrajes',
+              material_id: 'h1',
+              quantity: 50,
+              received_quantity: 0,
+            },
+          ],
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        }),
+      } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository('http://localhost:8080/api');
+    const po = await repo.createPurchaseOrder({
+      id: 'po1',
+      supplierId: 's1',
+      items: [{ kind: 'herrajes', materialId: 'h1', quantity: 50 }],
+    });
+    expect(po.status).toBe('borrador');
+    expect(po.items[0]?.materialId).toBe('h1');
+    expect(po.items[0]?.receivedQuantity).toBe(0);
+    expect(calls[0]!.url).toBe('http://localhost:8080/api/purchase-orders');
+    expect(calls[0]!.init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]!.init?.body))).toMatchObject({
+      id: 'po1',
+      supplier_id: 's1',
+      items: [{ kind: 'herrajes', material_id: 'h1', quantity: 50 }],
+    });
+
+    await repo.emitPurchaseOrder('po1');
+    expect(calls[1]!.url).toBe('http://localhost:8080/api/purchase-orders/po1/emit');
+    expect(calls[1]!.init?.method).toBe('POST');
+
+    await repo.receivePurchaseOrder('po1', [
+      { kind: 'herrajes', materialId: 'h1', quantity: 30 },
+    ]);
+    expect(calls[2]!.url).toBe('http://localhost:8080/api/purchase-orders/po1/receive');
+    expect(JSON.parse(String(calls[2]!.init?.body))).toMatchObject({
+      lines: [{ kind: 'herrajes', material_id: 'h1', quantity: 30 }],
+    });
+  });
 });
 

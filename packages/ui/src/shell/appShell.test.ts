@@ -32,12 +32,13 @@ function read(rel: string): string {
 }
 
 describe('AppShell nav model (F017)', () => {
-  it('exposes TRABAJO, VENTAS, INGENIERIA, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
-    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ventas', 'ingenieria', 'libreria', 'catalogos', 'config']);
+  it('exposes TRABAJO, VENTAS, INGENIERIA, ALMACEN, LIBRERIA, CATÁLOGOS and CONFIG sections', () => {
+    expect(APP_NAV_SECTIONS.map((s) => s.id)).toEqual(['trabajo', 'ventas', 'ingenieria', 'almacen', 'libreria', 'catalogos', 'config']);
     expect(APP_NAV_SECTIONS.map((s) => s.label)).toEqual([
       'TRABAJO',
       'VENTAS',
       'INGENIERÍA',
+      'COMPRAS / ALMACÉN',
       'LIBRERÍA',
       'CATÁLOGOS',
       'CONFIG',
@@ -71,6 +72,10 @@ describe('AppShell nav model (F017)', () => {
     expect(ingenieria.items.map((i) => i.label)).toEqual([
       'Ingeniería',
     ]);
+
+    const almacen = APP_NAV_SECTIONS.find((s) => s.id === 'almacen')!;
+    expect(almacen.items.map((i) => i.id)).toEqual(['purchasing']);
+    expect(almacen.items.map((i) => i.label)).toEqual(['Almacén']);
 
     expect(libreria.items.map((i) => i.id)).toEqual([
       'modules',

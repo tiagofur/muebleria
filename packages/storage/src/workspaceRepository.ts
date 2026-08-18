@@ -15,6 +15,13 @@ import type {
   ItemFloorStatus,
   FloorStatusEvent,
   LoadingProgress,
+  ProjectPickingState,
+  MaterialStock,
+  StockMaterialKind,
+  StockMovement,
+  StockMovementType,
+  PurchaseOrder,
+  Supplier,
 } from '@muebles/domain';
 
 export interface WorkspaceRepository {
@@ -283,6 +290,111 @@ export interface WorkspaceRepository {
     sector: string;
     subSector?: string;
   }>>;
+
+  // --- Compras / Almacén picking (Fase 3) ---
+
+  /**
+   * Every project × material picking state (persisted despacho). Returns
+   * rows for all projects — the screen derives pendiente from absence.
+   */
+  listPickingStates?(): Promise<readonly ProjectPickingState[]>;
+  /**
+   * Upsert one project × material picking state. Server/local adapter stamp
+   * markedAt/markedBy (who/when) on despacho; status pendiente clears them.
+   */
+  setProjectPickingState?(state: ProjectPickingState): Promise<void>;
+
+  // --- Compras / Almacén stock (Fase 3b) ---
+
+  /** All tracked materials with live balance + minimum. */
+  getStock?(): Promise<readonly MaterialStock[]>;
+  /**
+   * Set the minimum-stock threshold of a material (creates the row when the
+   * material was never tracked — it shows as agotado until an entrada).
+   */
+  upsertStockMin?(stock: {
+    kind: StockMaterialKind;
+    materialId: string;
+    minStock: number;
+  }): Promise<MaterialStock>;
+  /**
+   * Append a ledger movement and update the balance atomically. `quantity` is
+   * positive for entrada/salida/despacho (sign decided by type); `ajuste` is
+   * signed by the caller. A despacho with `revertsId` credits back (reversión).
+   * Rejects when the balance would go negative or the material is untracked.
+   */
+  recordStockMovement?(payload: {
+    kind: StockMaterialKind;
+    materialId: string;
+    type: StockMovementType;
+    quantity: number;
+    projectId?: string;
+    note?: string;
+    revertsId?: string;
+  }): Promise<StockMovement>;
+  /** Ledger, newest first, optionally filtered by kind/material_id. */
+  listStockMovements?(filter?: {
+    kind?: StockMaterialKind;
+    materialId?: string;
+    limit?: number;
+  }): Promise<readonly StockMovement[]>;
+
+  // --- Compras / Almacén proveedores + órdenes de compra (Fase 3c) ---
+
+  /** All suppliers (active + inactive). */
+  listSuppliers?(): Promise<readonly Supplier[]>;
+  /** Create a supplier (POST /api/suppliers). */
+  createSupplier?(supplier: {
+    id: string;
+    name: string;
+    contactName?: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    active?: boolean;
+  }): Promise<Supplier>;
+  /** Update an existing supplier. */
+  updateSupplier?(supplier: {
+    id: string;
+    name: string;
+    contactName?: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    active?: boolean;
+  }): Promise<Supplier>;
+  /** Deactivate a supplier (soft delete). */
+  deactivateSupplier?(id: string): Promise<void>;
+  /** All purchase orders, newest first. */
+  listPurchaseOrders?(): Promise<readonly PurchaseOrder[]>;
+  /** One purchase order with its items. */
+  getPurchaseOrder?(id: string): Promise<PurchaseOrder | null>;
+  /** Create a PO (borrador; number/status created server-side). */
+  createPurchaseOrder?(po: {
+    id: string;
+    supplierId: string;
+    notes?: string;
+    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+  }): Promise<PurchaseOrder>;
+  /** Edit a borrador PO (supplier + items replaced). */
+  updatePurchaseOrder?(po: {
+    id: string;
+    supplierId: string;
+    notes?: string;
+    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+  }): Promise<PurchaseOrder>;
+  /** borrador → emitida. */
+  emitPurchaseOrder?(id: string): Promise<PurchaseOrder>;
+  /** borrador/emitida → cancelada. */
+  cancelPurchaseOrder?(id: string): Promise<PurchaseOrder>;
+  /**
+   * Receive lines of an emitted PO: records stock entradas (note references
+   * the OC number) and advances received_quantity; fully received → recibida.
+   */
+  receivePurchaseOrder?(
+    id: string,
+    lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<PurchaseOrder>;
 
   // --- Warranty Desk & Post-Sale (CRM Phase 3) ---
 

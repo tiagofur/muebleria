@@ -82,7 +82,10 @@ func TestPatchItemFloorStatus_AlmacenNeverUnrestricted(t *testing.T) {
 	}
 }
 
-func TestPatchItemFloorStatus_AlmacenWithShippingSectorCanLoad(t *testing.T) {
+func TestPatchItemFloorStatus_AlmacenWithShippingSectorCannotLoad(t *testing.T) {
+	// F094 parity — almacen's surface is the Compras/Almacén picking
+	// workspace, not the floor pipeline: even with sectors assigned it must
+	// not PATCH item floor status (403 at the gate, before sector scope).
 	shipping := []domain.UserSector{{UserID: "u1", Sector: "shipping"}}
 	_, srv := scopedFixtures(shipping)
 	req := withClaims(httptest.NewRequest(http.MethodPatch, "/api/projects/p1/items/i1/floor-status",
@@ -92,8 +95,8 @@ func TestPatchItemFloorStatus_AlmacenWithShippingSectorCanLoad(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	srv.HandleProjectItemFloorStatus(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("almacen assigned to shipping should load, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("almacen must not move the floor pipeline, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -157,7 +160,32 @@ func TestProductionFinish_AdvancesFloorPipeline(t *testing.T) {
 
 func TestProductionFinish_NoPipelineMoveForWarehouse(t *testing.T) {
 	// Warehouse staging produces no floor status: finishing the claim must
-	// NOT move the pipeline (cut stays pending).
+	// NOT move the pipeline (cut stays pending). F094 — almacen cannot
+	// claim/finish at all (its surface is the picking workspace), so the
+	// warehouse-sector case is exercised by a produccion operator.
+	store, srv := scopedFixtures([]domain.UserSector{{UserID: "u1", Sector: "warehouse"}})
+	store.activitiesByID = []domain.ProductionActivity{{
+		ID: "a2", ProjectID: "p1", ItemID: "i1", Sector: domain.SectorWarehouse,
+		Type: domain.ActivityClaim, OperatorID: "u1", OperatorName: "Depa",
+	}}
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/finish/a2",
+		strings.NewReader(`{}`)), "u1", string(domain.RoleProduccion))
+	req.SetPathValue("activityId", "a2")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProductionFinish(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("finish failed: %d %s", rr.Code, rr.Body.String())
+	}
+	if len(store.floorStatusWrites) != 0 {
+		t.Fatalf("warehouse finish must NOT move the pipeline, got %+v", store.floorStatusWrites)
+	}
+}
+
+func TestProductionFinish_AlmacenCannotFinish(t *testing.T) {
+	// F094 — almacen is excluded from claim/finish gates entirely; the
+	// Compras/Almacén workspace (picking) is its only factory surface.
 	store, srv := scopedFixtures([]domain.UserSector{{UserID: "u1", Sector: "warehouse"}})
 	store.activitiesByID = []domain.ProductionActivity{{
 		ID: "a2", ProjectID: "p1", ItemID: "i1", Sector: domain.SectorWarehouse,
@@ -170,11 +198,8 @@ func TestProductionFinish_NoPipelineMoveForWarehouse(t *testing.T) {
 	rr := httptest.NewRecorder()
 	srv.HandleProductionFinish(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("finish failed: %d %s", rr.Code, rr.Body.String())
-	}
-	if len(store.floorStatusWrites) != 0 {
-		t.Fatalf("warehouse finish must NOT move the pipeline, got %+v", store.floorStatusWrites)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("almacen must not finish activities, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

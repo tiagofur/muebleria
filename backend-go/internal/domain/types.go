@@ -68,6 +68,19 @@ type UserSector struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ProjectPicking is one project × material picking state (Fase 3 — Compras/Almacén).
+// Status is "pendiente" or "despachado"; MarkedAt/MarkedBy are stamped by the
+// server on despacho (who/when traceability). MarkedByName is the joined user
+// display name for the list response.
+type ProjectPicking struct {
+	ProjectID    string     `json:"project_id"`
+	Material     string     `json:"material"`
+	Status       string     `json:"status"`
+	MarkedAt     *time.Time `json:"marked_at,omitempty"`
+	MarkedBy     *string    `json:"marked_by,omitempty"`
+	MarkedByName *string    `json:"marked_by_name,omitempty"`
+}
+
 type Customer struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`

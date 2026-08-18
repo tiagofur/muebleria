@@ -28,6 +28,15 @@ import type {
   ProjectItem,
   ProjectPhoto,
   ProjectPhotoStage,
+  ProjectPickingState,
+  MaterialStock,
+  StockMaterialKind,
+  StockMovement,
+  StockMovementType,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  PurchaseOrderStatus,
+  Supplier,
   ProjectStatus,
   ProjectTechnicalStatus,
   ProjectTemplate,
@@ -2259,6 +2268,71 @@ export function warrantyTicketFromApi(
   };
 }
 
+// --- Compras / Almacén picking (Fase 3) ---
+
+/**
+ * Snake_case project picking row from the Go API → domain shape. The server
+ * stamps marked_at/marked_by on despacho; the display name (marked_by_name,
+ * joined from users) is the best available human label for `markedBy`.
+ */
+export function pickingStateFromApi(
+  raw: Record<string, unknown>,
+): ProjectPickingState {
+  const material = str(raw.material);
+  const status = str(raw.status, 'pendiente');
+  return {
+    projectId: str(raw.project_id ?? raw.projectId),
+    material:
+      material === 'tableros' || material === 'cintillas'
+        ? material
+        : 'herrajes',
+    status: status === 'despachado' ? 'despachado' : 'pendiente',
+    markedAt: str(raw.marked_at ?? raw.markedAt) || undefined,
+    markedBy:
+      str(raw.marked_by_name ?? raw.markedBy) ||
+      str(raw.marked_by) ||
+      undefined,
+  };
+}
+
+// --- Compras / Almacén stock (Fase 3b) ---
+
+/** Snake_case stock row from the Go API → domain shape. */
+export function stockFromApi(raw: Record<string, unknown>): MaterialStock {
+  const kind = str(raw.kind);
+  return {
+    kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as StockMaterialKind,
+    materialId: str(raw.material_id ?? raw.materialId),
+    quantity: num(raw.quantity),
+    minStock: num(raw.min_stock ?? raw.minStock),
+    updatedAt: str(raw.updated_at ?? raw.updatedAt) || undefined,
+  };
+}
+
+/** Snake_case ledger row from the Go API → domain shape. */
+export function stockMovementFromApi(
+  raw: Record<string, unknown>,
+): StockMovement {
+  const kind = str(raw.kind);
+  const type = str(raw.type);
+  return {
+    id: str(raw.id),
+    kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as StockMaterialKind,
+    materialId: str(raw.material_id ?? raw.materialId),
+    type: (type === 'entrada' || type === 'salida' || type === 'ajuste'
+      ? type
+      : 'despacho') as StockMovementType,
+    delta: num(raw.delta),
+    balanceAfter: num(raw.balance_after ?? raw.balanceAfter),
+    projectId: str(raw.project_id ?? raw.projectId) || undefined,
+    note: str(raw.note) || undefined,
+    revertsId: str(raw.reverts_id ?? raw.revertsId) || undefined,
+    byUserId: str(raw.by_user_id ?? raw.byUserId),
+    byName: str(raw.by_name ?? raw.byName) || undefined,
+    at: str(raw.at, new Date().toISOString()),
+  };
+}
+
 export function showcasePhotoItemFromApi(
   raw: Record<string, unknown>,
 ): ShowcasePhotoItem {
@@ -2280,3 +2354,87 @@ export function showcasePhotoItemFromApi(
 
 
 
+
+/** Snake_case supplier from the Go API → domain shape. */
+export function supplierFromApi(raw: Record<string, unknown>): Supplier {
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    contactName: str(raw.contact_name ?? raw.contactName) || undefined,
+    email: str(raw.email) || undefined,
+    phone: str(raw.phone) || undefined,
+    notes: str(raw.notes) || undefined,
+    active: bool(raw.active),
+    createdAt: str(raw.created_at ?? raw.createdAt) || undefined,
+    updatedAt: str(raw.updated_at ?? raw.updatedAt) || undefined,
+  };
+}
+
+/** Camel-case domain supplier → snake_case API body. */
+export function supplierToApi(sp: {
+  id: string;
+  name: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+  active?: boolean;
+}): Record<string, unknown> {
+  return {
+    id: sp.id,
+    name: sp.name,
+    contact_name: sp.contactName ?? '',
+    email: sp.email ?? '',
+    phone: sp.phone ?? '',
+    notes: sp.notes ?? '',
+    active: sp.active ?? true,
+  };
+}
+
+/** Snake_case PO item from the Go API → domain shape. */
+function poItemFromApi(raw: Record<string, unknown>): PurchaseOrderItem {
+  const kind = str(raw.kind);
+  return {
+    kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as StockMaterialKind,
+    materialId: str(raw.material_id ?? raw.materialId),
+    quantity: num(raw.quantity),
+    receivedQuantity: num(raw.received_quantity ?? raw.receivedQuantity),
+  };
+}
+
+/** Snake_case purchase order from the Go API → domain shape. */
+export function purchaseOrderFromApi(raw: Record<string, unknown>): PurchaseOrder {
+  const status = str(raw.status);
+  const items = Array.isArray(raw.items)
+    ? raw.items
+        .map((it) => poItemFromApi(it as Record<string, unknown>))
+        .filter((it) => it.materialId !== '')
+    : [];
+  return {
+    id: str(raw.id),
+    number: str(raw.number),
+    supplierId: str(raw.supplier_id ?? raw.supplierId),
+    status: (status === 'borrador' || status === 'emitida' || status === 'recibida' || status === 'cancelada'
+      ? status
+      : 'borrador') as PurchaseOrderStatus,
+    items,
+    notes: str(raw.notes) || undefined,
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+    updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
+    receivedAt: str(raw.received_at ?? raw.receivedAt) || undefined,
+    createdBy: str(raw.created_by ?? raw.createdBy) || undefined,
+  };
+}
+
+/** Domain PO line → snake_case API body. */
+export function poItemToApi(it: {
+  kind: StockMaterialKind;
+  materialId: string;
+  quantity: number;
+}): Record<string, unknown> {
+  return {
+    kind: it.kind,
+    material_id: it.materialId,
+    quantity: it.quantity,
+  };
+}

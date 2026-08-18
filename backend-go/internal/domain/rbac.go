@@ -158,6 +158,32 @@ func RoleCanAccessProductionDashboard(role UserRole) bool {
 	return role == RoleAdmin || role == RoleGerenteProduccion || role == RoleProduccion
 }
 
+// RoleCanAccessPurchasingNav — Compras/Almacén workspace (Fase 3): admin
+// (full), gerente_produccion (read-only) and almacen (own sectors).
+func RoleCanAccessPurchasingNav(role UserRole) bool {
+	return role == RoleAdmin || role == RoleGerenteProduccion || role == RoleAlmacen
+}
+
+// RoleCanMarkPicking — may write a project × material picking state.
+// Gerente_produccion reads the workspace but does not dispatch (read-only in
+// the UI — Fase 3 parity); admin and almacen mark despachado.
+func RoleCanMarkPicking(role UserRole) bool {
+	return role == RoleAdmin || role == RoleAlmacen
+}
+
+// RoleCanManageStock — may write stock (movements, mínimos) in Compras/Almacén
+// (Fase 3b). Gerente_produccion reads the stock dashboard; almacen manages the
+// materials it handles.
+func RoleCanManageStock(role UserRole) bool {
+	return role == RoleAdmin || role == RoleAlmacen
+}
+
+// RoleCanManagePurchasing — suppliers + purchase orders (Fase 3c): the same
+// roles that manage stock. Gerente_produccion reads them.
+func RoleCanManagePurchasing(role UserRole) bool {
+	return role == RoleAdmin || role == RoleAlmacen
+}
+
 // RoleCanClaimProductionJob — produccion can claim/finish jobs in their assigned sectors.
 // Almacén excluded pending Compras/Almacén module (RBAC P2 parity update).
 func RoleCanClaimProductionJob(role UserRole) bool {

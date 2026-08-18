@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -81,6 +82,35 @@ type stubStore struct {
 	floorEventWrites        []domain.FloorStatusEvent
 	floorEventsList         []domain.FloorStatusEvent
 	userSectorsList         []domain.UserSector
+	// Compras/Almacén picking (Fase 3)
+	pickingList             []domain.ProjectPicking
+	pickingUpsertWrites     []domain.ProjectPicking
+	pickingListErr          error
+	pickingUpsertErr        error
+	// Compras/Almacén stock (Fase 3b)
+	stockList               []domain.MaterialStock
+	stockListErr            error
+	stockMovementsList      []domain.StockMovement
+	stockMovements          []domain.StockMovement // recorded by RecordStockMovement
+	stockBalances           map[string]float64     // key kind:material_id
+	stockUpsertMinCalled    bool
+	stockUpsertMinReceived  domain.MaterialStock
+	// Compras/Almacén suppliers + purchase orders (Fase 3c)
+	suppliersList         []domain.Supplier
+	createSupplierErr     error
+	updateSupplierErr     error
+	deactivateSupplierErr error
+	posList               []domain.PurchaseOrder
+	poReturnedByID        *domain.PurchaseOrder
+	poGetByIDErr          error
+	createPOErr           error
+	updatePOErr           error
+	emitPOCalled          bool
+	cancelPOCalled        bool
+	receivePOCalled       bool
+	lastReceiveLines      []domain.PurchaseOrderItem
+	lastReceiveByUserID   string
+	lastReceiveByName     string
 	activitiesByID          []domain.ProductionActivity
 	floorStatusErr          error
 	updateModuleCalled     bool
@@ -607,6 +637,182 @@ func (s *stubStore) SetUserSectors(_ context.Context, _ string, _ []domain.UserS
 }
 func (s *stubStore) GetUsersBySector(_ context.Context, _ string) ([]domain.User, error) {
 	return []domain.User{}, nil
+}
+
+// Compras/Almacén picking stubs (Fase 3)
+func (s *stubStore) ListAllPicking(_ context.Context) ([]domain.ProjectPicking, error) {
+	if s.pickingListErr != nil {
+		return nil, s.pickingListErr
+	}
+	if s.pickingList != nil {
+		return s.pickingList, nil
+	}
+	return []domain.ProjectPicking{}, nil
+}
+func (s *stubStore) UpsertProjectPicking(_ context.Context, pick domain.ProjectPicking) error {
+	if s.pickingUpsertErr != nil {
+		return s.pickingUpsertErr
+	}
+	s.pickingUpsertWrites = append(s.pickingUpsertWrites, pick)
+	return nil
+}
+
+// Compras/Almacén stock stubs (Fase 3b) — RecordStockMovement emulates the
+// transactional balance logic (lock → balance_after → insert) so handler tests
+// can assert balances without a database.
+func (s *stubStore) ListStock(_ context.Context) ([]domain.MaterialStock, error) {
+	if s.stockListErr != nil {
+		return nil, s.stockListErr
+	}
+	if s.stockList != nil {
+		return s.stockList, nil
+	}
+	return []domain.MaterialStock{}, nil
+}
+func (s *stubStore) UpsertStockMin(_ context.Context, kind domain.StockMaterialKind, materialID string, minStock float64) (domain.MaterialStock, error) {
+	s.stockUpsertMinCalled = true
+	s.stockUpsertMinReceived = domain.MaterialStock{
+		Kind: kind, MaterialID: materialID, MinStock: minStock,
+	}
+	return s.stockUpsertMinReceived, nil
+}
+func (s *stubStore) GetStockMovementByID(_ context.Context, id string) (*domain.StockMovement, error) {
+	for i := range s.stockMovements {
+		if s.stockMovements[i].ID == id {
+			m := s.stockMovements[i]
+			return &m, nil
+		}
+	}
+	return nil, nil
+}
+func (s *stubStore) RecordStockMovement(_ context.Context, mov domain.StockMovement) (domain.StockMovement, error) {
+	if s.stockBalances == nil {
+		s.stockBalances = map[string]float64{}
+	}
+	key := string(mov.Kind) + ":" + mov.MaterialID
+	current, exists := s.stockBalances[key]
+	if !exists && mov.Type != domain.StockMovementEntrada {
+		return mov, domain.ErrStockNotTracked
+	}
+	balance := current + mov.Delta
+	if balance < 0 {
+		return mov, fmt.Errorf("%w: faltan %.2f", domain.ErrStockInsufficient, -balance)
+	}
+	s.stockBalances[key] = balance
+	saved := mov
+	saved.BalanceAfter = balance
+	saved.ID = fmt.Sprintf("sm-%d", len(s.stockMovements)+1)
+	s.stockMovements = append(s.stockMovements, saved)
+	return saved, nil
+}
+func (s *stubStore) ListStockMovements(_ context.Context, _ domain.StockMaterialKind, _ string, _ int) ([]domain.StockMovement, error) {
+	if s.stockMovementsList != nil {
+		return s.stockMovementsList, nil
+	}
+	if s.stockMovements != nil {
+		return s.stockMovements, nil
+	}
+	return []domain.StockMovement{}, nil
+}
+
+// Compras/Almacén suppliers + purchase orders stubs (Fase 3c).
+func (s *stubStore) ListSuppliers(_ context.Context) ([]domain.Supplier, error) {
+	if s.suppliersList != nil {
+		return s.suppliersList, nil
+	}
+	return []domain.Supplier{}, nil
+}
+func (s *stubStore) CreateSupplier(_ context.Context, sp domain.Supplier) error {
+	if s.createSupplierErr != nil {
+		return s.createSupplierErr
+	}
+	s.suppliersList = append(s.suppliersList, sp)
+	return nil
+}
+func (s *stubStore) UpdateSupplier(_ context.Context, sp domain.Supplier) error {
+	if s.updateSupplierErr != nil {
+		return s.updateSupplierErr
+	}
+	for i := range s.suppliersList {
+		if s.suppliersList[i].ID == sp.ID {
+			s.suppliersList[i] = sp
+		}
+	}
+	return nil
+}
+func (s *stubStore) DeactivateSupplier(_ context.Context, id string) error {
+	if s.deactivateSupplierErr != nil {
+		return s.deactivateSupplierErr
+	}
+	for i := range s.suppliersList {
+		if s.suppliersList[i].ID == id {
+			s.suppliersList[i].Active = false
+		}
+	}
+	return nil
+}
+func (s *stubStore) ListPurchaseOrders(_ context.Context) ([]domain.PurchaseOrder, error) {
+	if s.posList != nil {
+		return s.posList, nil
+	}
+	return []domain.PurchaseOrder{}, nil
+}
+func (s *stubStore) GetPurchaseOrderByID(_ context.Context, id string) (*domain.PurchaseOrder, error) {
+	if s.poGetByIDErr != nil {
+		return nil, s.poGetByIDErr
+	}
+	if s.poReturnedByID != nil && s.poReturnedByID.ID == id {
+		po := *s.poReturnedByID
+		return &po, nil
+	}
+	return nil, nil
+}
+func (s *stubStore) CreatePurchaseOrder(_ context.Context, po domain.PurchaseOrder) error {
+	if s.createPOErr != nil {
+		return s.createPOErr
+	}
+	s.posList = append(s.posList, po)
+	return nil
+}
+func (s *stubStore) UpdatePurchaseOrder(_ context.Context, po domain.PurchaseOrder) error {
+	if s.updatePOErr != nil {
+		return s.updatePOErr
+	}
+	if s.poReturnedByID != nil && s.poReturnedByID.ID == po.ID {
+		poCopy := po
+		s.poReturnedByID = &poCopy
+	}
+	return nil
+}
+func (s *stubStore) EmitPurchaseOrder(_ context.Context, id string) (domain.PurchaseOrder, error) {
+	s.emitPOCalled = true
+	if s.poReturnedByID == nil || s.poReturnedByID.ID != id {
+		return domain.PurchaseOrder{}, nil
+	}
+	po := *s.poReturnedByID
+	po.Status = domain.POEmitida
+	return po, nil
+}
+func (s *stubStore) CancelPurchaseOrder(_ context.Context, id string) (domain.PurchaseOrder, error) {
+	s.cancelPOCalled = true
+	if s.poReturnedByID == nil || s.poReturnedByID.ID != id {
+		return domain.PurchaseOrder{}, nil
+	}
+	po := *s.poReturnedByID
+	po.Status = domain.POCancelada
+	return po, nil
+}
+func (s *stubStore) ReceivePurchaseOrder(_ context.Context, id string, lines []domain.PurchaseOrderItem, byUserID, byName string) (domain.PurchaseOrder, error) {
+	s.receivePOCalled = true
+	s.lastReceiveLines = lines
+	s.lastReceiveByUserID = byUserID
+	s.lastReceiveByName = byName
+	if s.poReturnedByID == nil || s.poReturnedByID.ID != id {
+		return domain.PurchaseOrder{}, nil
+	}
+	po := *s.poReturnedByID
+	po.Status = domain.PORecibida
+	return po, nil
 }
 
 

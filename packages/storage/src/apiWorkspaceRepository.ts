@@ -16,6 +16,13 @@ import type {
   ItemFloorStatus,
   FloorStatusEvent,
   LoadingProgress,
+  ProjectPickingState,
+  MaterialStock,
+  StockMaterialKind,
+  StockMovement,
+  StockMovementType,
+  PurchaseOrder,
+  Supplier,
 } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -40,6 +47,13 @@ import {
   projectInternalMessageFromApi,
   projectPhotoFromApi,
   showcasePhotoItemFromApi,
+  pickingStateFromApi,
+  stockFromApi,
+  stockMovementFromApi,
+  supplierFromApi,
+  supplierToApi,
+  purchaseOrderFromApi,
+  poItemToApi,
   projectTemplateFromApi,
   projectTemplateToApi,
   projectToApi,
@@ -1269,6 +1283,333 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       name: u.name as string,
       email: u.email as string,
     }));
+  }
+
+  // --- Compras / Almacén picking (Fase 3) ---
+
+  async listPickingStates(): Promise<readonly ProjectPickingState[]> {
+    const res = await fetch(`${this.baseUrl}/picking`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to list picking states: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((r) => pickingStateFromApi(r as Record<string, unknown>))
+      .filter((p): p is ProjectPickingState => Boolean(p.projectId));
+  }
+
+  async setProjectPickingState(state: ProjectPickingState): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/picking`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        project_id: state.projectId,
+        material: state.material,
+        status: state.status,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to set picking state: ${res.status} ${text}`);
+    }
+  }
+
+  // --- Compras / Almacén stock (Fase 3b) ---
+
+  async getStock(): Promise<readonly MaterialStock[]> {
+    const res = await fetch(`${this.baseUrl}/stock`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get stock: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((r) => stockFromApi(r as Record<string, unknown>))
+      .filter((s): s is MaterialStock => Boolean(s.materialId));
+  }
+
+  async upsertStockMin(stock: {
+    kind: StockMaterialKind;
+    materialId: string;
+    minStock: number;
+  }): Promise<MaterialStock> {
+    const res = await fetch(`${this.baseUrl}/stock`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        kind: stock.kind,
+        material_id: stock.materialId,
+        min_stock: stock.minStock,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to set stock minimum: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return stockFromApi(raw as Record<string, unknown>);
+  }
+
+  async recordStockMovement(payload: {
+    kind: StockMaterialKind;
+    materialId: string;
+    type: StockMovementType;
+    quantity: number;
+    projectId?: string;
+    note?: string;
+    revertsId?: string;
+  }): Promise<StockMovement> {
+    const res = await fetch(`${this.baseUrl}/stock/movements`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        kind: payload.kind,
+        material_id: payload.materialId,
+        type: payload.type,
+        quantity: payload.quantity,
+        project_id: payload.projectId ?? '',
+        note: payload.note ?? '',
+        reverts_id: payload.revertsId ?? '',
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to record stock movement: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return stockMovementFromApi(raw as Record<string, unknown>);
+  }
+
+  async listStockMovements(filter?: {
+    kind?: StockMaterialKind;
+    materialId?: string;
+    limit?: number;
+  }): Promise<readonly StockMovement[]> {
+    const params = new URLSearchParams();
+    if (filter?.kind) params.set('kind', filter.kind);
+    if (filter?.materialId) params.set('material_id', filter.materialId);
+    if (filter?.limit) params.set('limit', String(filter.limit));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${this.baseUrl}/stock/movements${query}`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to list stock movements: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((m) => stockMovementFromApi(m as Record<string, unknown>))
+      .filter((m): m is StockMovement => Boolean(m.id));
+  }
+
+  // --- Compras / Almacén proveedores + órdenes de compra (Fase 3c) ---
+
+  async listSuppliers(): Promise<readonly Supplier[]> {
+    const res = await fetch(`${this.baseUrl}/suppliers`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to list suppliers: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((r) => supplierFromApi(r as Record<string, unknown>))
+      .filter((s): s is Supplier => Boolean(s.id));
+  }
+
+  async createSupplier(supplier: {
+    id: string;
+    name: string;
+    contactName?: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    active?: boolean;
+  }): Promise<Supplier> {
+    const res = await fetch(`${this.baseUrl}/suppliers`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(supplierToApi(supplier)),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to create supplier: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return supplierFromApi(raw as Record<string, unknown>);
+  }
+
+  async updateSupplier(supplier: {
+    id: string;
+    name: string;
+    contactName?: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    active?: boolean;
+  }): Promise<Supplier> {
+    const res = await fetch(`${this.baseUrl}/suppliers/${supplier.id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(supplierToApi(supplier)),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to update supplier: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return supplierFromApi(raw as Record<string, unknown>);
+  }
+
+  async deactivateSupplier(id: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/suppliers/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to deactivate supplier: ${res.status} ${text}`);
+    }
+  }
+
+  async listPurchaseOrders(): Promise<readonly PurchaseOrder[]> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to list purchase orders: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((r) => purchaseOrderFromApi(r as Record<string, unknown>))
+      .filter((p): p is PurchaseOrder => Boolean(p.id));
+  }
+
+  async getPurchaseOrder(id: string): Promise<PurchaseOrder | null> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get purchase order: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return purchaseOrderFromApi(raw as Record<string, unknown>);
+  }
+
+  async createPurchaseOrder(po: {
+    id: string;
+    supplierId: string;
+    notes?: string;
+    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+  }): Promise<PurchaseOrder> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        id: po.id,
+        supplier_id: po.supplierId,
+        notes: po.notes ?? '',
+        items: po.items.map(poItemToApi),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to create purchase order: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return purchaseOrderFromApi(raw as Record<string, unknown>);
+  }
+
+  async updatePurchaseOrder(po: {
+    id: string;
+    supplierId: string;
+    notes?: string;
+    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+  }): Promise<PurchaseOrder> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders/${po.id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        supplier_id: po.supplierId,
+        notes: po.notes ?? '',
+        items: po.items.map(poItemToApi),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to update purchase order: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return purchaseOrderFromApi(raw as Record<string, unknown>);
+  }
+
+  async emitPurchaseOrder(id: string): Promise<PurchaseOrder> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}/emit`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to emit purchase order: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return purchaseOrderFromApi(raw as Record<string, unknown>);
+  }
+
+  async cancelPurchaseOrder(id: string): Promise<PurchaseOrder> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}/cancel`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to cancel purchase order: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return purchaseOrderFromApi(raw as Record<string, unknown>);
+  }
+
+  async receivePurchaseOrder(
+    id: string,
+    lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<PurchaseOrder> {
+    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}/receive`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ lines: lines.map(poItemToApi) }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to receive purchase order: ${res.status} ${text}`);
+    }
+    const raw = await res.json();
+    return purchaseOrderFromApi(raw as Record<string, unknown>);
   }
 }
 
