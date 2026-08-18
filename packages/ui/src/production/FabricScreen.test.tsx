@@ -396,11 +396,32 @@ describe('FabricScreen — project board actions (F096)', () => {
     );
     expect(screen.getByTestId('fabric-card-p1')).not.toBeNull();
     expect(screen.getByText(/2.4 m² netos/)).not.toBeNull();
-    expect(screen.getByText('✓ surtido por almacén')).not.toBeNull();
+    expect(screen.getByText('Surtido por almacén')).not.toBeNull();
     fireEvent.click(screen.getByTestId('fabric-claim-p1'));
     expect(onClaim).toHaveBeenCalledWith('p1', 'cutting');
     fireEvent.click(screen.getByTestId('fabric-batch-p1'));
     expect(onBatch).toHaveBeenCalledWith('p1', ['a', 'b'], 'cut');
+  });
+
+  it('shows the persisted pending picking state without claiming stock or an unrecorded dispatch', () => {
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a')])]}
+        assignedSectors={['cutting']}
+        canAdvance={false}
+        onAdvance={() => undefined}
+        metricsByProject={{
+          p1: {
+            materials: [{ key: 'M1', name: 'Melamina', pieces: 1, lines: 1, areaM2: 1 }],
+            edges: [], sheetEstimates: [], edgeBandColors: {},
+          },
+        }}
+        pickingStates={[{ projectId: 'p1', material: 'tableros', status: 'pendiente' }]}
+      />,
+    );
+
+    expect(screen.getByText('Almacén: Pendiente')).not.toBeNull();
+    expect(screen.queryByText('Surtido por almacén')).toBeNull();
   });
 
   it('confirms before finishing the last claim and only then advances its batch', async () => {

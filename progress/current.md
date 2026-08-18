@@ -1195,3 +1195,28 @@ dashboard/surtido/instalaciones), una feature a la vez según AGENTS.md.
 - Revisión: **APPROVED** — `progress/review_f096.md`.
 - `FabricScreen` v2 entregado como board por obra; F096 actualizado a `done`.
 - Evidencia, correcciones y verificaciones: `progress/implement_f096.md`.
+
+## F097 — Dashboard honesto y surtido visible (2026-08-18)
+
+- **Feature en curso:** F097 — `produccion_dashboard_honesto_surtido_visible`.
+- **Plan:** alinear el KPI con la lista visible, mostrar un estado específico en
+  obras sin módulos, reemplazar iconos emoji por Lucide y exponer sólo los
+  estados de picking persistidos que tengan la relación obra×categoría válida.
+- **Estado:** implementación y verificaciones en curso; permanece `in_progress`
+  hasta revisión.
+
+## F097 — implementación lista para revisión
+
+- Dashboard alineado con el conjunto listado; cero módulos con estado propio;
+  iconografía de sectores migrada a Lucide.
+- Picking visible sólo para relaciones persistidas obra×categoría y documentado
+  su límite de granularidad en `progress/implement_f097.md`.
+- Verificación: focal 25 tests, `pnpm test`, `pnpm typecheck`, `./init.sh` y
+  `git diff --check` verdes.
+- F097 sigue `in_progress` hasta recibir revisión.
+
+## F097 — cierre aprobado (2026-08-18)
+
+- Revisión: **APPROVED** — `progress/review_f097.md`.
+- F097 marcada `done`; commit y push se registran en
+  `progress/implement_f097.md`.

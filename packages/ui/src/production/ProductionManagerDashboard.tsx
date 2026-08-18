@@ -22,6 +22,14 @@ import {
   Pause,
   Play,
   XCircle,
+  Scissors,
+  Wand2,
+  Armchair,
+  Package,
+  Truck,
+  House,
+  Settings2,
+  CircleAlert,
 } from 'lucide-react';
 
 import type { Project } from '@muebles/domain';
@@ -100,16 +108,22 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}min`;
 }
 
-function getSectorIcon(sector: string): string {
-  const icons: Record<string, string> = {
-    cutting: '✂️',
-    edge_banding: '🔧',
-    assembly: '🪑',
-    packaging: '📦',
-    shipping: '🚚',
-    installation: '🏠',
-  };
-  return icons[sector] ?? '⚙️';
+function SectorIcon({
+  sector,
+  size = 16,
+}: {
+  readonly sector: string;
+  readonly size?: number;
+}) {
+  const Icon = {
+    cutting: Scissors,
+    edge_banding: Wand2,
+    assembly: Armchair,
+    packaging: Package,
+    shipping: Truck,
+    installation: House,
+  }[sector] ?? Settings2;
+  return <Icon size={size} strokeWidth={1.5} aria-hidden />;
 }
 
 // ─── Custom Hook ─────────────────────────────────────────────────────────────
@@ -197,7 +211,7 @@ export function ProductionManagerDashboard({
   const totalMetrics = useMemo(() => {
     if (metrics) {
       return {
-        totalProjects: metrics.totalProjects,
+        totalProjects: productionProjects.length,
         totalItems: metrics.totalItems,
         totalInstalled: metrics.totalInstalled,
         avgProgress: metrics.avgProgress,
@@ -331,8 +345,10 @@ export function ProductionManagerDashboard({
             <Factory size={20} />
           </div>
           <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{totalMetrics.totalProjects}</span>
-            <span className="pm-dashboard__card-label">Proyectos en Planta</span>
+            <span className="pm-dashboard__card-value" data-testid="pm-total-projects">
+              {totalMetrics.totalProjects}
+            </span>
+            <span className="pm-dashboard__card-label">Obras en Producción</span>
           </div>
         </div>
 
@@ -380,7 +396,9 @@ export function ProductionManagerDashboard({
               }`}
               onClick={() => setSelectedSector(status.sector as PipelineSector)}
             >
-              <span className="pm-dashboard__sector-icon">{getSectorIcon(status.sector)}</span>
+              <span className="pm-dashboard__sector-icon">
+                <SectorIcon sector={status.sector} size={20} />
+              </span>
               <span className="pm-dashboard__sector-name">{status.label}</span>
               <span className="pm-dashboard__sector-count">
                 {status.activeOperators} activos
@@ -504,9 +522,12 @@ function ProjectDashboardRow({
   readonly onOpenProject?: (projectId: string) => void;
   readonly onOpenOrder?: (projectId: string) => void;
 }) {
-  const activeSectorLabel = summary.activeSector
-    ? PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]
-    : 'Completado';
+  const hasItems = summary.totalItems > 0;
+  const activeSectorLabel = !hasItems
+    ? 'Sin módulos cargados'
+    : summary.activeSector
+      ? PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]
+      : 'Completado';
 
   return (
     <div className="pm-dashboard__project-row" data-testid={`pm-project-row-${project.id}`}>
@@ -538,7 +559,7 @@ function ProjectDashboardRow({
         <div className="pm-dashboard__project-meta">
           <span>{summary.totalItems} muebles</span>
           <span>•</span>
-          <span>En {activeSectorLabel}</span>
+          <span>{hasItems ? `En ${activeSectorLabel}` : activeSectorLabel}</span>
         </div>
       </div>
 
@@ -549,29 +570,47 @@ function ProjectDashboardRow({
             style={{ width: `${summary.percentage}%` }}
           />
         </div>
-        <span className="pm-dashboard__progress-text">{summary.percentage}%</span>
+        <span className="pm-dashboard__progress-text">
+          {hasItems ? `${summary.percentage}%` : '—'}
+        </span>
       </div>
 
-      <div className="pm-dashboard__project-stages">
-        {summary.stages.map((stage) => {
-          const done = stage.done >= stage.total;
-          const active = summary.activeSector === stage.sector;
-          return (
-            <div
-              key={stage.sector}
-              className={`pm-dashboard__stage ${
-                done ? 'pm-dashboard__stage--done' : active ? 'pm-dashboard__stage--active' : ''
-              }`}
-              title={`${PRODUCTION_SECTOR_LABELS_ES[stage.sector]}: ${stage.done}/${stage.total}`}
-            >
-              <span className="pm-dashboard__stage-icon">{getSectorIcon(stage.sector)}</span>
-              <span className="pm-dashboard__stage-count">
-                {stage.done}/{stage.total}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {hasItems ? (
+        <div className="pm-dashboard__project-stages">
+          {summary.stages.map((stage) => {
+            const done = stage.done >= stage.total;
+            const active = summary.activeSector === stage.sector;
+            return (
+              <div
+                key={stage.sector}
+                className={`pm-dashboard__stage ${
+                  done
+                    ? 'pm-dashboard__stage--done'
+                    : active
+                      ? 'pm-dashboard__stage--active'
+                      : ''
+                }`}
+                title={`${PRODUCTION_SECTOR_LABELS_ES[stage.sector]}: ${stage.done}/${stage.total}`}
+              >
+                <span className="pm-dashboard__stage-icon">
+                  <SectorIcon sector={stage.sector} size={14} />
+                </span>
+                <span className="pm-dashboard__stage-count">
+                  {stage.done}/{stage.total}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <span
+          className="pm-dashboard__project-meta"
+          data-testid={`pm-project-empty-${project.id}`}
+        >
+          <CircleAlert size={14} strokeWidth={1.5} aria-hidden />
+          Sin módulos cargados
+        </span>
+      )}
     </div>
   );
 }

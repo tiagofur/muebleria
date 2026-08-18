@@ -1833,6 +1833,35 @@
         "progress/explore_roadmap_screens.md",
         "progress/explore_production_mapping.md"
       ]
+    },
+    {
+      "id": "F097",
+      "phase": 21,
+      "name": "produccion_dashboard_honesto_surtido_visible",
+      "title": "Producción — dashboard honesto y estado de surtido visible",
+      "description": "Alinea el Dashboard de Producción con el mismo conjunto de obras que lista, representa explícitamente las obras sin ítems y hace visible el estado persistido de surtido de almacén en Corte y Encintado cuando la asociación projectId×material/canto existe.",
+      "acceptance": [
+        "La métrica de proyectos en planta cuenta exactamente las obras visibles en el dashboard.",
+        "Las obras sin ítems tienen un estado propio y legible, sin presentarlas como completadas.",
+        "La interfaz usa el label Completado y reemplaza emojis decorativos por iconos Lucide.",
+        "Corte y Encintado muestran estado de surtido solo desde relaciones persistidas projectId×material/canto verificables, sin inventar stock ni claves.",
+        "Tests de UI cubren el conteo, el estado de cero ítems y el wiring seguro del surtido.",
+        "pnpm test, pnpm typecheck e init.sh verdes."
+      ],
+      "references": [
+        "docs/roadmap-screens/03-fabrica.md",
+        "progress/explore_roadmap_screens.md",
+        "progress/implement_f095.md",
+        "progress/implement_f096.md"
+      ],
+      "status": "done",
+      "tags": [
+        "produccion",
+        "ui",
+        "dashboard",
+        "picking",
+        "fase5"
+      ]
     }
   ]
 }

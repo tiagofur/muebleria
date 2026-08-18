@@ -30,8 +30,8 @@ describe('fabricProjectCards', () => {
     });
 
     expect(cards).toHaveLength(1);
-    expect(cards[0]?.materials[0]).toMatchObject({ estimatedSheets: 2, picked: true, pieces: 4, areaM2: 3.2 });
-    expect(cards[0]?.edges[0]).toMatchObject({ previewColor: '#ffffff', picked: false, sides: 7 });
+    expect(cards[0]?.materials[0]).toMatchObject({ estimatedSheets: 2, pickingStatus: 'despachado', pieces: 4, areaM2: 3.2 });
+    expect(cards[0]?.edges[0]).toMatchObject({ previewColor: '#ffffff', sides: 7 });
     expect(cards[0]?.activeClaims[0]?.operatorName).toBe('Ana');
     expect(cards[0]?.items[0]?.moduleName).toBe('MOD-1 · Bajo mesada');
   });
@@ -42,5 +42,20 @@ describe('fabricProjectCards', () => {
       pickingStates: [{ projectId: 'other', material: 'cintillas', status: 'despachado' }], activeClaims: [],
     });
     expect(cards).toHaveLength(0);
+  });
+
+  it('keeps the persisted category status separate from a missing association', () => {
+    const cards = fabricProjectCards({
+      projects: [project], station: 'cutting', metricsByProject: {
+        p1: {
+          materials: [{ key: 'MEL-18', name: 'Melamina blanca', pieces: 4, lines: 2, areaM2: 3.2 }],
+          edges: [], sheetEstimates: [], edgeBandColors: {},
+        },
+      },
+      pickingStates: [{ projectId: 'p1', material: 'tableros', status: 'pendiente' }], activeClaims: [],
+    });
+
+    expect(cards[0]?.materials[0]?.pickingStatus).toBe('pendiente');
+    expect(cards[0]?.edges).toEqual([]);
   });
 });

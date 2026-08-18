@@ -5,6 +5,7 @@ import { Check, Factory, Play } from 'lucide-react';
 
 import {
   ITEM_FLOOR_STATUS_LABELS_ES,
+  PICKING_STATUS_LABELS_ES,
   type ItemFloorStatus,
   type Project,
   type ProjectPickingState,
@@ -92,6 +93,15 @@ function StationMetrics({
   readonly card: FabricProjectCard;
   readonly station: FabricStation;
 }): ReactNode {
+  const pickingLabel = (
+    status: 'pendiente' | 'despachado' | undefined,
+  ): string | null => {
+    if (!status) return null;
+    return status === 'despachado'
+      ? 'Surtido por almacén'
+      : `Almacén: ${PICKING_STATUS_LABELS_ES[status]}`;
+  };
+
   if (station === 'cutting') {
     return (
       <section
@@ -118,17 +128,17 @@ function StationMetrics({
                       : ''}
                   </span>
                 </div>
-                <span
-                  className={
-                    material.picked
-                      ? 'fabric-card__pick fabric-card__pick--ready'
-                      : 'fabric-card__pick'
-                  }
-                >
-                  {material.picked
-                    ? '✓ surtido por almacén'
-                    : 'Sin marcar en almacén'}
-                </span>
+                {pickingLabel(material.pickingStatus) ? (
+                  <span
+                    className={
+                      material.pickingStatus === 'despachado'
+                        ? 'fabric-card__pick fabric-card__pick--ready'
+                        : 'fabric-card__pick'
+                    }
+                  >
+                    {pickingLabel(material.pickingStatus)}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -169,17 +179,17 @@ function StationMetrics({
                     </span>
                   </div>
                 </div>
-                <span
-                  className={
-                    edge.picked
-                      ? 'fabric-card__pick fabric-card__pick--ready'
-                      : 'fabric-card__pick'
-                  }
-                >
-                  {edge.picked
-                    ? '✓ surtido por almacén'
-                    : 'Sin marcar en almacén'}
-                </span>
+                {pickingLabel(edge.pickingStatus) ? (
+                  <span
+                    className={
+                      edge.pickingStatus === 'despachado'
+                        ? 'fabric-card__pick fabric-card__pick--ready'
+                        : 'fabric-card__pick'
+                    }
+                  >
+                    {pickingLabel(edge.pickingStatus)}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>
