@@ -233,15 +233,15 @@ describe('SalesDashboard — monthly activity chart (Fase 4.2)', () => {
 
     const data = monthlyActivity(projects, now);
     expect(data).toHaveLength(6);
-    const current = data[5];
+    const current = data[5]!;
     expect(current.label).toBe('ago');
     expect(current.created).toBe(2);
     expect(current.won).toBe(1);
-    const twoAgo = data[3];
+    const twoAgo = data[3]!;
     expect(twoAgo.created).toBe(1);
     expect(twoAgo.won).toBe(0);
     // Oldest bucket only holds nothing from the out-of-window project.
-    expect(data[0].created).toBe(0);
+    expect(data[0]!.created).toBe(0);
   });
 
   it('renders the chart with per-month counts and an accessible description', () => {

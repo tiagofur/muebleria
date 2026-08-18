@@ -357,3 +357,42 @@ describe('FabricScreen — metrics toggle (Fase 4.1)', () => {
     ).toBeNull();
   });
 });
+
+describe('FabricScreen — tab keyboard navigation (Fase 5.2)', () => {
+  it('ArrowRight/End/Home move selection with focus (roving tabindex)', () => {
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a')])]}
+        assignedSectors={null}
+        canAdvance
+        onAdvance={() => undefined}
+      />,
+    );
+    const cutting = screen.getByTestId('fabric-tab-cutting');
+    const edge = screen.getByTestId('fabric-tab-edge_banding');
+    // Roving tabindex: only the active tab is tabbable.
+    expect(cutting.tabIndex).toBe(0);
+    expect(edge.tabIndex).toBe(-1);
+
+    // ArrowRight selects + focuses the next sector.
+    fireEvent.keyDown(cutting, { key: 'ArrowRight' });
+    expect(edge.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(edge);
+
+    // ArrowLeft wraps back to the last tab; Home returns to the first.
+    fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    expect(
+      screen.getByTestId('fabric-tab-cutting').getAttribute('aria-selected'),
+    ).toBe('true');
+    fireEvent.keyDown(screen.getByTestId('fabric-tab-cutting'), {
+      key: 'ArrowLeft',
+    });
+    expect(
+      screen.getByTestId('fabric-tab-installation').getAttribute('aria-selected'),
+    ).toBe('true');
+    fireEvent.keyDown(screen.getByTestId('fabric-tab-installation'), {
+      key: 'Home',
+    });
+    expect(cutting.getAttribute('aria-selected')).toBe('true');
+  });
+});

@@ -144,12 +144,18 @@ export function monthlyActivity(
   now: Date = new Date(),
   months = 6,
 ): MonthlyActivity[] {
-  const buckets: MonthlyActivity[] = [];
+  // Mutable while building; the readonly-facing MonthlyActivity is the return.
+  const buckets: Array<{
+    key: string;
+    label: string;
+    created: number;
+    won: number;
+  }> = [];
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     buckets.push({
       key: monthKey(d),
-      label: MONTH_LABELS_ES[d.getMonth()],
+      label: MONTH_LABELS_ES[d.getMonth()] ?? String(d.getMonth() + 1),
       created: 0,
       won: 0,
     });
@@ -157,11 +163,11 @@ export function monthlyActivity(
   const index = new Map(buckets.map((b, i) => [b.key, i] as const));
   for (const p of projects) {
     const createdIdx = index.get(monthKey(new Date(p.createdAt)));
-    if (createdIdx != null) buckets[createdIdx].created++;
+    if (createdIdx != null) buckets[createdIdx]!.created++;
     const capturedAt = p.priceSnapshot?.capturedAt;
     if (capturedAt) {
       const wonIdx = index.get(monthKey(new Date(capturedAt)));
-      if (wonIdx != null) buckets[wonIdx].won++;
+      if (wonIdx != null) buckets[wonIdx]!.won++;
     }
   }
   return buckets;

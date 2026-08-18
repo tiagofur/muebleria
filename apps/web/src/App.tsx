@@ -113,6 +113,7 @@ import {
   FabricScreen,
   type DashboardMetrics,
   EmptyState,
+  ScreenBoundary,
   EngineeringScreen,
   EngineeringWorkspace,
   SalesDashboard,
@@ -1146,6 +1147,12 @@ function AppContent({
       cancelled = true;
     };
   }, [navId, isSectorScoped, getRepository]);
+
+  // Fase 5.4 — screen error boundaries' escape hatch (keeps the shell alive).
+  const goHomeFromScreen = useCallback(() => {
+    const target = pathForNav('home');
+    if (location.pathname !== target) navigate(target);
+  }, [location.pathname, navigate]);
 
   const routeEntityId =
     isEntitySection(navId)
@@ -2953,6 +2960,7 @@ function AppContent({
         />
       ) : null}
       {navId === 'fabric' && canOpenFabric ? (
+        <ScreenBoundary screenLabel="Fábrica" onGoHome={goHomeFromScreen}>
         <FabricScreen
           projects={projectsForRole}
           assignedSectors={isSectorScoped ? mySectors : null}
@@ -2990,8 +2998,10 @@ function AppContent({
             resolveCustomerName(customerId, customers)
           }
         />
+        </ScreenBoundary>
       ) : null}
       {navId === 'engineering' && !routeEngineeringProjectId ? (
+        <ScreenBoundary screenLabel="Ingeniería" onGoHome={goHomeFromScreen}>
         <EngineeringScreen
           projects={projectsForRole.map((p) => ({
             ...p,
@@ -3004,8 +3014,11 @@ function AppContent({
           }}
           currentUserId={authUser?.id}
         />
+        </ScreenBoundary>
       ) : null}
-      {navId === 'engineering' && routeEngineeringProjectId ? (() => {
+      {navId === 'engineering' && routeEngineeringProjectId ? (
+        <ScreenBoundary screenLabel="Ingeniería" onGoHome={goHomeFromScreen}>
+        {(() => {
         const engProject = projects.find((p) => p.id === routeEngineeringProjectId);
         if (!engProject) {
           return (
@@ -3128,8 +3141,11 @@ function AppContent({
             }}
           />
         );
-      })() : null}
+        })()}
+        </ScreenBoundary>
+      ) : null}
       {navId === 'purchasing' ? (
+        <ScreenBoundary screenLabel="Compras y Almacén" onGoHome={goHomeFromScreen}>
         <PurchasingScreen
           projects={purchasingProjects}
           role={actorRole ?? null}
@@ -3156,8 +3172,10 @@ function AppContent({
           onCancelPurchaseOrder={handleCancelPurchaseOrder}
           onReceivePurchaseOrder={handleReceivePurchaseOrder}
         />
+        </ScreenBoundary>
       ) : null}
       {navId === 'salesDashboard' ? (
+        <ScreenBoundary screenLabel="Dashboard de Ventas" onGoHome={goHomeFromScreen}>
         <SalesDashboard
           projects={projectsForRole.map((p) => ({
             ...p,
@@ -3173,8 +3191,10 @@ function AppContent({
           vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
           ownerLabels={ownerLabels}
         />
+        </ScreenBoundary>
       ) : null}
       {navId === 'plantBoard' ? (
+        <ScreenBoundary screenLabel="Estado de Planta" onGoHome={goHomeFromScreen}>
         <PlantBoardScreen
           projects={projectsForRole}
           customerLabelFor={(customerId) =>
@@ -3193,6 +3213,7 @@ function AppContent({
             if (location.pathname !== target) navigate(target);
           }}
         />
+        </ScreenBoundary>
       ) : null}
       {navId === 'productionDashboard' ? (
         <ProductionManagerDashboard

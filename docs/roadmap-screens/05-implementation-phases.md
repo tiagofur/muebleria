@@ -16,7 +16,7 @@
 | 3b — Stock real | ✅ Done | Ledger inmutable + panel de stock (000055/000056, doc `06-stock-almacen.md`) |
 | 3c — Órdenes de compra | ✅ Done | POs + proveedores + costo/valor (000057) |
 | 4 — Dashboards refinados | ✅ Done | Ver abajo |
-| 5 — Polish y optimización | ⬜ Pendiente | Responsive, teclado, skeletons, perf |
+| 5 — Polish y optimización | ✅ Done | Ver abajo |
 
 **Fase 4 — qué se hizo:**
 - 4.1 Toggle **[Cola]/[Métricas]** en `FabricScreen` para admin/gerente_produccion
@@ -31,6 +31,32 @@
 - 4.5 **ProductionOrderHub NO se elimina**: conserva piso/despacho/etiquetas/
   herrajes/documentos y es el workspace por obra para 5 roles. Solo se quitaría
   si esas tabs migran (no planificado); los tabs técnicos ya viven en Ingeniería.
+
+**Fase 5 — qué se hizo (time-boxed):**
+- 5.1 Responsive: header de Fábrica apila y su tabla de métricas scrollea
+  (≤720px); gráfico mensual de Ventas scrollea en vez de comprimirse (≤600px);
+  cards de Ingeniería envuelven meta/fecha (≤640px). Purchasing ya estaba
+  cubierto (stats auto-fit + tabla de stock con wrapper).
+- 5.2 Teclado: hook compartido `useRovingTabList` (flechas/Home/End + roving
+  tabindex, el patrón de los editores) aplicado a los tablists de Fábrica,
+  Ingeniería y Compras (principal + sub-tabs Stock/Órdenes).
+- 5.3 Loading: cubierto por el gate full-page del workspace + primitivas
+  existentes (`PageLoading`, `ListSkeleton`); las pantallas no muestran datos
+  faltantes post-mount que justifiquen skeletons decorativos — no se agregaron.
+- 5.4 Error boundaries: `ScreenBoundary` (preset del `ErrorBoundary` común)
+  envuelve las 5 pantallas en el shell — un crash de pantalla muestra fallback
+  con Reintentar/Ir al inicio y la nav sigue viva, en vez de tumbar toda la app.
+- 5.5 Performance: se intentó `lazy()` de `FurnitureScene3D` en
+  `ProductionOrderViewsPanel`, pero el build mostró que NO separa el chunk:
+  el barrel de `@muebles/ui` re-exporta preview3d y ~8 modals/pantallas lo
+  importan estático → three.js queda eager igual. Revertido; quedó la
+  extracción de `canUseWebGL` a `preview3d/webglSupport.ts` (chequeo de WebGL
+  sin arrastrar three) y el import directo del panel a FurnitureScene3D
+  (evita el barrel). **Split real de three.js = follow-up**: sacar los
+  componentes 3D del barrel raíz + lazy en cada modal (Structure3DModal,
+  Project3DModal, Module3DModal, Agregado3DModal, Furniture3DViewer...).
+  Sin `React.memo` en pantallas: reciben callbacks inline del shell y no
+  ganaría nada sin estabilizarlos (time-box honesto).
 
 ---
 

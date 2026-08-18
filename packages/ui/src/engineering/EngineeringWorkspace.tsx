@@ -38,6 +38,7 @@ import {
   type NestingImportResult,
 } from '@muebles/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
+import { useRovingTabList } from '../common/rovingTabList';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 import { ProductionOrderModulesPanel } from '../production/ProductionOrderModulesPanel';
 import { ProductionOrderDespiecePanel } from '../production/ProductionOrderDespiecePanel';
@@ -381,6 +382,13 @@ export function EngineeringWorkspace({
 }) {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
 
+  // Fase 5.2 — ARIA tabs keyboard pattern (arrows/Home/End + roving tabindex).
+  const engineeringTabs = useRovingTabList({
+    tabIds: ENGINEERING_TABS,
+    selectedId: activeTab,
+    onSelect: setActiveTab,
+  });
+
   // Build documents list for the Documentos tab.
   const documents: readonly ProductionDocumentItem[] = useMemo(() => [
     {
@@ -515,15 +523,21 @@ export function EngineeringWorkspace({
       </header>
 
       {/* Tab bar */}
-      <nav className="tab-bar" role="tablist" aria-label="Tabs de ingeniería">
+      <nav
+        className="tab-bar"
+        role="tablist"
+        aria-label="Tabs de ingeniería"
+        {...engineeringTabs.tabListProps}
+      >
         <div className="tab-bar__inner">
-          {ENGINEERING_TABS.map((tab) => {
+          {ENGINEERING_TABS.map((tab, index) => {
             const isActive = tab === activeTab;
             return (
               <button
                 key={tab}
                 type="button"
                 role="tab"
+                {...engineeringTabs.tabPropsAt(index)}
                 aria-selected={isActive}
                 aria-controls={`eng-panel-${tab}`}
                 id={`eng-tab-${tab}`}

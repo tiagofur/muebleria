@@ -44,6 +44,7 @@ import {
   type Supplier,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
+import { useRovingTabList } from '../common/rovingTabList';
 import { StockPanel, type StockCatalogOption } from './StockPanel';
 import {
   PurchaseOrdersPanel,
@@ -242,6 +243,9 @@ export function PurchasingScreen({
   const [activeTab, setActiveTab] = useState<ScreenTab>('herrajes');
   const [comprasTab, setComprasTab] = useState<'stock' | 'purchase'>('stock');
 
+  // Fase 5.2 — ARIA tabs keyboard pattern (arrows/Home/End + roving tabindex).
+  // Wired below once visibleMaterialTabs resolves to the effective tabs.
+
   // Hydrate from persisted states (mount + shell reloads). Rebuilds the map
   // from the prop so server truth wins over any stale optimistic update.
   useEffect(() => {
@@ -270,6 +274,17 @@ export function PurchasingScreen({
   const effectiveTab = visibleTabs.includes(activeTab)
     ? activeTab
     : (visibleTabs[0] ?? 'compras');
+
+  const materialTabsKeyboard = useRovingTabList({
+    tabIds: visibleTabs,
+    selectedId: effectiveTab,
+    onSelect: setActiveTab,
+  });
+  const comprasTabsKeyboard = useRovingTabList({
+    tabIds: ['stock', 'purchase'] as const,
+    selectedId: comprasTab,
+    onSelect: setComprasTab,
+  });
 
   // Per-project derived totals (materials + edges) — computed once. Las filas
   // llevan el id de catálogo resuelto (materialId/edgeId) para el stock.
@@ -635,12 +650,14 @@ export function PurchasingScreen({
           className="purch-stock__filters purch-compras__tabs"
           role="tablist"
           aria-label="Compras"
+          {...comprasTabsKeyboard.tabListProps}
         >
-          {(['stock', 'purchase'] as const).map((t) => (
+          {(['stock', 'purchase'] as const).map((t, index) => (
             <button
               key={t}
               type="button"
               role="tab"
+              {...comprasTabsKeyboard.tabPropsAt(index)}
               aria-selected={comprasTab === t}
               className={`tab-btn ${comprasTab === t ? 'tab-btn--active' : ''}`}
               onClick={() => setComprasTab(t)}
@@ -757,15 +774,21 @@ export function PurchasingScreen({
       </div>
 
       {/* Tabs */}
-      <nav className="tab-bar" role="tablist" aria-label="Tabs de compras y almacén">
+      <nav
+        className="tab-bar"
+        role="tablist"
+        aria-label="Tabs de compras y almacén"
+        {...materialTabsKeyboard.tabListProps}
+      >
         <div className="tab-bar__inner">
-          {visibleTabs.map((tab) => {
+          {visibleTabs.map((tab, index) => {
             const isActive = effectiveTab === tab;
             return (
               <button
                 key={tab}
                 type="button"
                 role="tab"
+                {...materialTabsKeyboard.tabPropsAt(index)}
                 aria-selected={isActive}
                 className={`tab-btn ${isActive ? 'tab-btn--active' : ''}`}
                 onClick={() => setActiveTab(tab)}

@@ -6,21 +6,23 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module, Project } from '@muebles/domain';
 import { buildProductionElevations } from '@muebles/domain';
+import { canUseWebGL } from '../preview3d/webglSupport';
 import {
-  FurnitureScene3D,
-  canUseWebGL,
+  DEFAULT_MATERIAL_SURFACE_MODE,
   materialColorMap,
   materialTextureMap,
-  DEFAULT_MATERIAL_SURFACE_MODE,
   type BoardColorMode,
   type MaterialSurfaceMode,
-} from '../preview3d';
+} from '../preview3d/boardPartVisual';
 import { resolveProject3DPreview } from '../preview3d/project3dPreview';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { PresentationKitchenPlanSlide } from '../projects/components/PresentationKitchenPlanSlide';
 import { PaintModeField } from '../preview3d/PaintModeField';
 import { MaterialSurfaceModeField } from '../preview3d/MaterialSurfaceModeField';
 import { ProductionElevationPreview } from './ProductionElevationPreview';
+import {
+  FurnitureScene3D,
+} from '../preview3d/FurnitureScene3D';
 import '../common/furniture3dViewer.css';
 
 export type ProductionOrderViewsPanelProps = {

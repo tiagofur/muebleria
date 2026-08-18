@@ -765,3 +765,14 @@
     transition: none;
   }
 }
+
+/* ── Fase 5.1 — mobile: el gráfico mensual scrollea en vez de comprimirse ── */
+@media (max-width: 600px) {
+  .sales-monthly-chart__chart {
+    overflow-x: auto;
+  }
+
+  .sales-monthly-chart__month {
+    flex: 0 0 3.5rem;
+  }
+}

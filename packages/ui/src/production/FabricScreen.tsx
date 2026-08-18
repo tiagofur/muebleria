@@ -25,7 +25,11 @@ import {
   type Project,
 } from '@muebles/domain';
 import { EmptyState } from '../common';
-import type { DashboardMetrics } from './ProductionManagerDashboard';
+import { useRovingTabList } from '../common/rovingTabList';
+import type {
+  DashboardMetrics,
+  SectorDashboard,
+} from './ProductionManagerDashboard';
 
 /** All sectors visible in Fábrica tabs (production pipeline). */
 const FABRIC_TAB_SECTORS: readonly PipelineSector[] = PIPELINE_SECTORS;
@@ -65,7 +69,7 @@ function formatAvgMinutes(minutes: number): string {
  * average time is weighted by items completed today (sectors without
  * completions don't pull the average down).
  */
-export function summarizeFabricMetrics(sectors: readonly DashboardMetrics['sectors']): {
+export function summarizeFabricMetrics(sectors: readonly SectorDashboard[]): {
   queue: number;
   completedToday: number;
   activeOperators: number;
@@ -149,6 +153,13 @@ export function FabricScreen({
     () => (metrics ? summarizeFabricMetrics(metrics.sectors) : null),
     [metrics],
   );
+
+  // Fase 5.2 — ARIA tabs keyboard pattern (arrows/Home/End + roving tabindex).
+  const sectorTabs = useRovingTabList({
+    tabIds: visibleTabs,
+    selectedId: effectiveTab,
+    onSelect: setActiveTab,
+  });
 
   // Build rows for the active tab only (not all sectors).
   const rows = useMemo(() => {
@@ -342,8 +353,13 @@ export function FabricScreen({
       ) : (
         <>
           {/* Tab bar */}
-          <nav className="fabric__tabs" aria-label="Sectores de fábrica" role="tablist">
-        {visibleTabs.map((tab) => {
+          <nav
+            className="fabric__tabs"
+            aria-label="Sectores de fábrica"
+            role="tablist"
+            {...sectorTabs.tabListProps}
+          >
+        {visibleTabs.map((tab, index) => {
           const isActive = tab === effectiveTab;
           // Count items for this tab.
           let count = 0;
@@ -379,6 +395,7 @@ export function FabricScreen({
               key={tab}
               type="button"
               role="tab"
+              {...sectorTabs.tabPropsAt(index)}
               aria-selected={isActive}
               aria-controls={`fabric-tab-panel-${tab}`}
               id={`fabric-tab-${tab}`}

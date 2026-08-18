@@ -983,3 +983,48 @@ roles. No está "fully replaced".
 
 **Verificación:** domain 630 ✓ · ui FabricScreen 15 / SalesDashboard 15 ✓ ·
 typecheck monorepo 0 errores · pnpm test full verde (ver registro).
+
+## Fase 5 — Polish y optimización (2026-08-17, noche)
+
+Implementada y verificada; roadmap-screens COMPLETO (fases 1-5 done,
+estado por fase en `05-implementation-phases.md`).
+
+**5.2 Teclado:** `packages/ui/src/common/rovingTabList.ts` — hook compartido
+`useRovingTabList` (flechas/Home/End con wrap-around + roving tabindex, el
+patrón que los 5 editores duplican). Aplicado a FabricScreen (tabs de sector),
+EngineeringWorkspace (8 tabs) y PurchasingScreen (tabs principales + sub-tabs
+Stock/Órdenes). Test de teclado en FabricScreen (ArrowRight selecciona+enfoca,
+wrap con ArrowLeft, Home).
+
+**5.4 Error boundaries:** `ScreenBoundary` (packages/ui/common) — preset del
+`ErrorBoundary` existente: fallback compacto "No pudimos mostrar {pantalla}"
+con Reintentar + Ir al inicio, DENTRO del shell. App.tsx envuelve Fábrica,
+Ingeniería (landing y workspace), Compras, Ventas y Estado de Planta. 2 tests.
+
+**5.1 Responsive:** fabric ≤720px (header apila; tabla métricas scrollea,
+min-width 480), sales chart ≤600px (scrollea, columna fija 3.5rem), eng cards
+≤640px (wrap de meta/fecha). Purchasing ya cubierto (auto-fit + wrappers).
+
+**5.5 Perf (hallazgo honesto):** se intentó lazy de `FurnitureScene3D` en
+`ProductionOrderViewsPanel` — el build de Vite avisó que NO separa el chunk:
+`@muebles/ui` re-exporta el barrel preview3d y ~8 modals/pantallas importan
+estático (Structure3DModal, Project3DModal, Module3DModal, Agregado3DModal,
+Furniture3DViewer, ComponentsScreen/editor...). Revertido el lazy (cero
+beneficio = complejidad muerta). QUEDÓ: `canUseWebGL` extraída a
+`preview3d/webglSupport.ts` (re-exportada desde ModuleScene3D, sin romper
+importadores) + el panel importa FurnitureScene3D directo (sin barrel).
+**Follow-up documentado:** split real de three.js exige sacar los componentes
+3D del barrel raíz + lazy por modal. Sin React.memo (callbacks inline).
+
+**5.3 Loading:** sin cambios — gate full-page del workspace + primitivas
+(PageLoading/ListSkeleton) ya cubren; nada muestra datos faltantes post-mount.
+
+**Fix latent Fase 4:** el typecheck de esta tanda reveló 2 errores de tipos
+que el commit 08ae62f arrastró enmascarados (caché incremental de tsc):
+`readonly DashboardMetrics['sectors']` inválido (→ `readonly SectorDashboard[]`)
+y mutación de buckets readonly en `monthlyActivity` (→ array mutable interno).
+Corregidos; typecheck 0 errores.
+
+**Verificación:** typecheck 0 errores · ui 938 ✓ (+3) · pnpm test full verde ·
+`pnpm build` verde (bundle íntegro; el split de three.js quedó como follow-up
+documentado arriba).

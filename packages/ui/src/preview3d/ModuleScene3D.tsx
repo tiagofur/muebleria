@@ -63,18 +63,7 @@ export type ModuleScene3DProps = {
   readonly hardwareCatalog?: readonly Hardware[];
 };
 
-/** Detect WebGL so tests/jsdom can skip Canvas. */
-export function canUseWebGL(): boolean {
-  if (typeof document === 'undefined') return false;
-  try {
-    const canvas = document.createElement('canvas');
-    return Boolean(
-      canvas.getContext('webgl') || canvas.getContext('experimental-webgl'),
-    );
-  } catch {
-    return false;
-  }
-}
+export { canUseWebGL } from './webglSupport';
 
 export function ModuleScene3D({
   parts,

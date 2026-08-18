@@ -576,3 +576,15 @@
   flex-direction: column;
   gap: var(--space-4);
 }
+
+/* ── Fase 5.1 — mobile: la card envuelve en vez de apretar meta/fecha ── */
+@media (max-width: 640px) {
+  .eng-project-card__body {
+    flex-wrap: wrap;
+  }
+
+  .eng-project-card__meta {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+}
