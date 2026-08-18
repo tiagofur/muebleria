@@ -77,42 +77,43 @@ type stubStore struct {
 	updateHardwareReceived *domain.Hardware
 	moduleReturnedByID     *domain.Module
 	// Floor scan (F089-RN): per-id modules + floor status write log.
-	modulesByID             map[string]*domain.Module
-	floorStatusWrites       []floorStatusWrite
-	floorEventWrites        []domain.FloorStatusEvent
-	floorEventsList         []domain.FloorStatusEvent
-	userSectorsList         []domain.UserSector
+	modulesByID       map[string]*domain.Module
+	floorStatusWrites []floorStatusWrite
+	floorEventWrites  []domain.FloorStatusEvent
+	floorEventsList   []domain.FloorStatusEvent
+	userSectorsList   []domain.UserSector
 	// Compras/Almacén picking (Fase 3)
-	pickingList             []domain.ProjectPicking
-	pickingUpsertWrites     []domain.ProjectPicking
-	pickingListErr          error
-	pickingUpsertErr        error
+	pickingList         []domain.ProjectPicking
+	pickingUpsertWrites []domain.ProjectPicking
+	pickingListErr      error
+	pickingUpsertErr    error
 	// Compras/Almacén stock (Fase 3b)
-	stockList               []domain.MaterialStock
-	stockListErr            error
-	stockMovementsList      []domain.StockMovement
-	stockMovements          []domain.StockMovement // recorded by RecordStockMovement
-	stockBalances           map[string]float64     // key kind:material_id
-	stockUpsertMinCalled    bool
-	stockUpsertMinReceived  domain.MaterialStock
+	stockList              []domain.MaterialStock
+	stockListErr           error
+	stockMovementsList     []domain.StockMovement
+	stockMovements         []domain.StockMovement // recorded by RecordStockMovement
+	stockBalances          map[string]float64     // key kind:material_id
+	stockUpsertMinCalled   bool
+	stockUpsertMinReceived domain.MaterialStock
 	// Compras/Almacén suppliers + purchase orders (Fase 3c)
-	suppliersList         []domain.Supplier
-	createSupplierErr     error
-	updateSupplierErr     error
-	deactivateSupplierErr error
-	posList               []domain.PurchaseOrder
-	poReturnedByID        *domain.PurchaseOrder
-	poGetByIDErr          error
-	createPOErr           error
-	updatePOErr           error
-	emitPOCalled          bool
-	cancelPOCalled        bool
-	receivePOCalled       bool
-	lastReceiveLines      []domain.PurchaseOrderItem
-	lastReceiveByUserID   string
-	lastReceiveByName     string
-	activitiesByID          []domain.ProductionActivity
-	floorStatusErr          error
+	suppliersList          []domain.Supplier
+	createSupplierErr      error
+	updateSupplierErr      error
+	deactivateSupplierErr  error
+	posList                []domain.PurchaseOrder
+	poReturnedByID         *domain.PurchaseOrder
+	poGetByIDErr           error
+	createPOErr            error
+	updatePOErr            error
+	emitPOCalled           bool
+	cancelPOCalled         bool
+	receivePOCalled        bool
+	lastReceiveLines       []domain.PurchaseOrderItem
+	lastReceiveByUserID    string
+	lastReceiveByName      string
+	activitiesByID         []domain.ProductionActivity
+	insertedActivities     []domain.ProductionActivity
+	floorStatusErr         error
 	updateModuleCalled     bool
 	updateModuleReceived   *domain.Module
 	deleteModuleCalled     bool
@@ -579,11 +580,18 @@ func (s *stubStore) ListShowcasePhotos(_ context.Context, _ bool) ([]domain.Show
 }
 
 // Production activity stubs
-func (s *stubStore) InsertProductionActivity(_ context.Context, _ domain.ProductionActivity) error {
+func (s *stubStore) InsertProductionActivity(_ context.Context, activity domain.ProductionActivity) error {
+	s.insertedActivities = append(s.insertedActivities, activity)
 	return nil
 }
-func (s *stubStore) GetActiveActivitiesBySector(_ context.Context, _ domain.ProductionSector) ([]domain.ProductionActivity, error) {
-	return []domain.ProductionActivity{}, nil
+func (s *stubStore) GetActiveActivitiesBySector(_ context.Context, sector domain.ProductionSector) ([]domain.ProductionActivity, error) {
+	activities := []domain.ProductionActivity{}
+	for _, activity := range s.insertedActivities {
+		if activity.Sector == sector && activity.FinishedAt == nil {
+			activities = append(activities, activity)
+		}
+	}
+	return activities, nil
 }
 func (s *stubStore) GetActiveActivitiesByOperator(_ context.Context, _ string) ([]domain.ProductionActivity, error) {
 	return []domain.ProductionActivity{}, nil
@@ -814,10 +822,6 @@ func (s *stubStore) ReceivePurchaseOrder(_ context.Context, id string, lines []d
 	po.Status = domain.PORecibida
 	return po, nil
 }
-
-
-
-
 
 // dupErr mimics the wrapped error the storage layer returns on a unique
 // violation: fmt.Errorf("error creating X: %w", pgErr).

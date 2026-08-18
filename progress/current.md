@@ -1,3 +1,16 @@
+# Sesión activa
+
+- **Feature en curso:** F096 — FabricScreen v2 — board por obra
+- **Inicio:** 2026-08-18 10:03 America/Bahia_Banderas
+- **Plan:**
+  1. Diseñar y documentar el board por obra conforme a la spec v2 y los tokens existentes.
+  2. Extraer DTO/selector fuera de React para métricas de Corte y Encintado, picking y claims.
+  3. Cablear datos/callbacks de claim, finish y batch desde el shell; conservar avances individuales.
+  4. Implementar las cards y estados accesibles/responsive, con pruebas de selector y pantalla.
+  5. Ejecutar pruebas focalizadas, typecheck y gate antes de revisión.
+
+---
+
 # Sesión — F089 Escaneo QR en Piso de Fábrica
 
 - **Fecha:** 2026-08-15 (tarde-noche)
@@ -1149,3 +1162,30 @@ ProductionEdgeTotal sin piezas/lados; EdgeBand sin color; design.md §6.7 stale
 **Siguiente:** kick-off de implementación por fases (1. dominio aditivo +
 claim obra×estación Go · 2. board FabricScreen con métricas · 3. extras
 dashboard/surtido/instalaciones), una feature a la vez según AGENTS.md.
+
+## F095 — Fase 1 del plan M3: dominio encintado + claim obra×estación (2026-08-18, mañana)
+
+- **Feature:** F095 — `produccion_fase5_board_por_obra_fase1_dominio_claim`
+- **Inicio:** ~09:10. init.sh verde (web 257, suites full OK).
+- **Plan:**
+  1. Dominio TS: `ProductionEdgeTotal` += `pieces`/`sides`; `EdgeBand.previewColor`.
+  2. Persistencia previewColor: migración Go 000058 + storage + apiMappers.
+  3. Claim obra×estación: `item_id` nullable (NULL = claim de obra), handler
+     sin item_id (dedupe por operador, no por obra — varios operarios pueden
+     trabajar la misma obra), finish de claim de obra NO avanza ítems (el
+     avance sigue por estación/batch), client TS itemId opcional.
+  4. Tests en cada capa + `./init.sh` + `go test ./internal/...`.
+
+## F095 — implementación lista para revisión (2026-08-18 ~09:55)
+
+- Implementado dominio piezas/lados de encintado, `previewColor` de cantos y claim obra×estación sin exclusividad global.
+- Evidencia y alcance detallado: `progress/implement_f095.md`.
+- Verificación: `pnpm test`, `pnpm typecheck`, Go API/domain/storage, build y vet verdes.
+- Estado: `done`, revisión APPROVED en `progress/review_f095.md`.
+
+## F095 — cierre aprobado (2026-08-18)
+
+- Revisión: **APPROVED** — `progress/review_f095.md`.
+- Estado actualizado a `done` en `feature_list.json`.
+- Commit y push se registran en `progress/implement_f095.md`.
+- Entregado en `4e0281e` y push a `origin/codex/f095-production-claims` confirmado.

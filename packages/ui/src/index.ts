@@ -243,6 +243,9 @@ export {
   instalacionesProjects,
   type DashboardMetrics,
   type SectorDashboard,
+  type FabricActiveClaim,
+  type FabricProjectMetrics,
+  type FabricStation,
   ProductionManagerDashboard,
   filterProductionQueue,
   filterProductionVisible,
@@ -371,6 +374,4 @@ export {
   setHasSeenOnboardingTour,
   type OnboardingTourModalProps,
 } from './onboarding/OnboardingTourModal';
-
-
 

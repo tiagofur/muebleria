@@ -6,6 +6,41 @@ describe('APIWorkspaceRepository', () => {
     vi.stubGlobal('fetch', vi.fn());
   });
 
+  it('maps a project-scoped production claim without item or module data', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activity: {
+          id: 'activity-1',
+          project_id: 'p1',
+          project_name: 'Cocina López',
+          sector: 'cutting',
+          type: 'claim',
+          operator_id: 'u1',
+          operator_name: 'Ramón',
+          started_at: '2026-08-18T10:00:00Z',
+          created_at: '2026-08-18T10:00:00Z',
+        },
+      }),
+    } as Response);
+
+    const repo = new APIWorkspaceRepository();
+    const activity = await repo.claimProductionActivity({
+      projectId: 'p1',
+      sector: 'cutting',
+    });
+
+    expect(activity).toMatchObject({
+      id: 'activity-1',
+      projectId: 'p1',
+      projectName: 'Cocina López',
+      sector: 'cutting',
+      operatorId: 'u1',
+    });
+    expect(activity.itemId).toBeUndefined();
+    expect(activity.moduleCode).toBeUndefined();
+  });
+
   it('loads catalog and projects mapping snake_case from API', async () => {
     const mockMaterials = [
       {
@@ -837,4 +872,3 @@ describe('APIWorkspaceRepository', () => {
     });
   });
 });
-

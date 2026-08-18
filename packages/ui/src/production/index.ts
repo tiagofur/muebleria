@@ -8,6 +8,11 @@ export {
 } from './ProjectFloorProgressStrip';
 export { PlantBoardScreen } from './PlantBoardScreen';
 export { FabricScreen, summarizeFabricMetrics } from './FabricScreen';
+export type {
+  FabricActiveClaim,
+  FabricProjectMetrics,
+  FabricStation,
+} from './fabricProjectCards';
 export {
   EmbarquesScreen,
   embarquesProjects,
@@ -130,4 +135,3 @@ export {
 } from './CsvExportConfigModal';
 
 export { ProductionManagerDashboard } from './ProductionManagerDashboard';
-

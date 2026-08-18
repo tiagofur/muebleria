@@ -278,6 +278,7 @@ describe('catalogStore — edges', () => {
       name: 'Canto 1',
       thicknessMm: 1,
       costPerMl: 5,
+      previewColor: '',
       notes: '',
     });
     expect(id).toBe('edge-1');

@@ -11,6 +11,13 @@ import (
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
 
+func nullableActivityItemID(itemID string) *string {
+	if itemID == "" {
+		return nil
+	}
+	return &itemID
+}
+
 func (s *PostgresStore) InsertProductionActivity(ctx context.Context, act domain.ProductionActivity) error {
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO production_activities (
@@ -19,7 +26,7 @@ func (s *PostgresStore) InsertProductionActivity(ctx context.Context, act domain
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 	`,
-		act.ID, act.ProjectID, act.ProjectName, act.ItemID, act.ModuleCode, act.ModuleName,
+		act.ID, act.ProjectID, act.ProjectName, nullableActivityItemID(act.ItemID), act.ModuleCode, act.ModuleName,
 		string(act.Sector), string(act.Type), act.OperatorID, act.OperatorName,
 		act.MachineID, act.MachineName, act.StartedAt, act.FinishedAt,
 		act.DurationMillis, act.PiecesCount, act.Notes, act.StatusBefore, act.CreatedAt,
@@ -47,7 +54,7 @@ func (s *PostgresStore) InsertDamageReport(ctx context.Context, dmg domain.Damag
 
 func (s *PostgresStore) GetActiveActivitiesBySector(ctx context.Context, sector domain.ProductionSector) ([]domain.ProductionActivity, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, project_id, project_name, item_id, module_code, module_name,
+		SELECT id, project_id, project_name, COALESCE(item_id, ''), module_code, module_name,
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
@@ -63,7 +70,7 @@ func (s *PostgresStore) GetActiveActivitiesBySector(ctx context.Context, sector 
 
 func (s *PostgresStore) GetActiveActivitiesByOperator(ctx context.Context, operatorID string) ([]domain.ProductionActivity, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, project_id, project_name, item_id, module_code, module_name,
+		SELECT id, project_id, project_name, COALESCE(item_id, ''), module_code, module_name,
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
@@ -79,7 +86,7 @@ func (s *PostgresStore) GetActiveActivitiesByOperator(ctx context.Context, opera
 
 func (s *PostgresStore) GetActiveActivityByID(ctx context.Context, id string) (*domain.ProductionActivity, error) {
 	row := s.Pool.QueryRow(ctx, `
-		SELECT id, project_id, project_name, item_id, module_code, module_name,
+		SELECT id, project_id, project_name, COALESCE(item_id, ''), module_code, module_name,
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
@@ -107,7 +114,7 @@ func (s *PostgresStore) ListProductionActivitiesByProject(ctx context.Context, p
 		limit = 50
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, project_id, project_name, item_id, module_code, module_name,
+		SELECT id, project_id, project_name, COALESCE(item_id, ''), module_code, module_name,
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
@@ -235,7 +242,7 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 
 	// Active jobs for this sector
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, project_id, project_name, item_id, module_code, operator_id, operator_name,
+		SELECT id, project_id, project_name, COALESCE(item_id, ''), module_code, operator_id, operator_name,
 			machine_id, machine_name, started_at
 		FROM production_activities
 		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND started_at IS NOT NULL
@@ -250,6 +257,7 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 				&job.ModuleCode, &job.OperatorID, &job.OperatorName,
 				&job.MachineID, &job.MachineName, &job.StartedAt,
 			); err == nil {
+				job.Sector = sector
 				job.DurationMin = time.Since(job.StartedAt).Minutes()
 				dash.ActiveJobs = append(dash.ActiveJobs, job)
 			}

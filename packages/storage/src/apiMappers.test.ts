@@ -4,6 +4,8 @@ import {
   ambientCategoryToApi,
   ambientMaterialFromApi,
   ambientMaterialToApi,
+  edgeFromApi,
+  edgeToApi,
   catalogFromApi,
   hardwareToApi,
   hardwareFromApi,
@@ -26,6 +28,7 @@ import {
 import type {
   AmbientCategory,
   AmbientMaterial,
+  EdgeBand,
   Component,
   Hardware,
   MaterialBoard,
@@ -37,6 +40,16 @@ import type {
 } from '@muebles/domain';
 
 describe('apiMappers', () => {
+  it('round-trips edge preview color', () => {
+    const edge: EdgeBand = {
+      id: 'e1', code: 'CAN-BLA', name: 'Blanco', thicknessMm: 1,
+      costPerMl: 2, previewColor: '#F5F5F0', active: true,
+    };
+    const api = edgeToApi(edge);
+    expect(api.preview_color).toBe('#F5F5F0');
+    expect(edgeFromApi(api)).toMatchObject({ previewColor: '#F5F5F0' });
+  });
+
   it('maps material camelCase ↔ snake_case', () => {
     const m: MaterialBoard = {
       id: 'm1',

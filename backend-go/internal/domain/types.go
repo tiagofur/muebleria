@@ -17,14 +17,14 @@ const (
 type UserRole string
 
 const (
-	RoleAdmin              UserRole = "admin"
-	RoleUser               UserRole = "user" // approved account without job title
-	RoleVendedor           UserRole = "vendedor"
-	RoleGerenteVentas      UserRole = "gerente_ventas"
-	RoleGerenteProduccion  UserRole = "gerente_produccion"
-	RoleIngeniero          UserRole = "ingeniero"
-	RoleProduccion         UserRole = "produccion" // production worker, scoped by user_sectors
-	RoleAlmacen            UserRole = "almacen"    // warehouse worker, scoped by user_sectors
+	RoleAdmin             UserRole = "admin"
+	RoleUser              UserRole = "user" // approved account without job title
+	RoleVendedor          UserRole = "vendedor"
+	RoleGerenteVentas     UserRole = "gerente_ventas"
+	RoleGerenteProduccion UserRole = "gerente_produccion"
+	RoleIngeniero         UserRole = "ingeniero"
+	RoleProduccion        UserRole = "produccion" // production worker, scoped by user_sectors
+	RoleAlmacen           UserRole = "almacen"    // warehouse worker, scoped by user_sectors
 )
 
 // IsValidUserRole reports whether role is an allowed account role (F035 product roles).
@@ -62,9 +62,9 @@ type User struct {
 
 // UserSector maps an operator to one or more production sectors.
 type UserSector struct {
-	UserID    string `json:"user_id"`
-	Sector    string `json:"sector"`
-	SubSector string `json:"sub_sector,omitempty"`
+	UserID    string    `json:"user_id"`
+	Sector    string    `json:"sector"`
+	SubSector string    `json:"sub_sector,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -130,15 +130,18 @@ type MaterialBoard struct {
 }
 
 type EdgeBand struct {
-	ID          string    `json:"id"`
-	Code        string    `json:"code"`
-	Name        string    `json:"name"`
-	ThicknessMm int       `json:"thickness_mm"`
-	CostPerMl   float64   `json:"cost_per_ml"`
-	Notes       string    `json:"notes,omitempty"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string  `json:"id"`
+	Code        string  `json:"code"`
+	Name        string  `json:"name"`
+	ThicknessMm int     `json:"thickness_mm"`
+	CostPerMl   float64 `json:"cost_per_ml"`
+	Notes       string  `json:"notes,omitempty"`
+	Active      bool    `json:"active"`
+	// PreviewColor is #RRGGBB for swatches ("metros por color" summaries —
+	// F095/D10), same hex path as MaterialBoard.PreviewColor.
+	PreviewColor *string   `json:"preview_color,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type Hardware struct {
@@ -156,20 +159,20 @@ type Hardware struct {
 	// Preview geometry for the 3D renderer (Fase 2: visible handles). All
 	// optional; nil = cost-only hardware (no mesh rendered). Pointer types so
 	// metalness/clearcoat 0.0 round-trips (never nullIfZeroFloat).
-	PreviewShape        *string   `json:"preview_shape,omitempty"`
-	PreviewSizeMm       *float64  `json:"preview_size_mm,omitempty"`
-	PreviewProjectionMm *float64  `json:"preview_projection_mm,omitempty"`
-	PreviewDiameterMm   *float64  `json:"preview_diameter_mm,omitempty"`
-	PreviewColor        *string   `json:"preview_color,omitempty"`
-	PreviewRoughness    *float64  `json:"preview_roughness,omitempty"`
-	PreviewMetalness    *float64  `json:"preview_metalness,omitempty"`
-	PreviewClearcoat    *float64  `json:"preview_clearcoat,omitempty"`
+	PreviewShape        *string  `json:"preview_shape,omitempty"`
+	PreviewSizeMm       *float64 `json:"preview_size_mm,omitempty"`
+	PreviewProjectionMm *float64 `json:"preview_projection_mm,omitempty"`
+	PreviewDiameterMm   *float64 `json:"preview_diameter_mm,omitempty"`
+	PreviewColor        *string  `json:"preview_color,omitempty"`
+	PreviewRoughness    *float64 `json:"preview_roughness,omitempty"`
+	PreviewMetalness    *float64 `json:"preview_metalness,omitempty"`
+	PreviewClearcoat    *float64 `json:"preview_clearcoat,omitempty"`
 	// PartFinishes maps a structural part role (body/base/grip) to a finish
 	// preset id (F080). Nil/empty = every part uses the global preview finish.
 	PartFinishes map[string]string `json:"part_finishes,omitempty"`
-	Active       bool      `json:"active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	Active       bool              `json:"active"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
 }
 
 type OptionGroup struct {
@@ -510,12 +513,12 @@ type Project struct {
 	// EngineeringLog is the engineering lifecycle log (roadmap-screens 2a).
 	// Opaque JSON blob: { started_by, started_at, generated_by, generated_at,
 	// sent_to_production_by, sent_to_production_at, revision }.
-	EngineeringLog json.RawMessage    `json:"engineering_log,omitempty"`
-	FloorEvents    []FloorStatusEvent `json:"floor_events,omitempty"`
-	Notes          string             `json:"notes,omitempty"`
+	EngineeringLog json.RawMessage     `json:"engineering_log,omitempty"`
+	FloorEvents    []FloorStatusEvent  `json:"floor_events,omitempty"`
+	Notes          string              `json:"notes,omitempty"`
 	PriceSnapshot  *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
+	CreatedAt      time.Time           `json:"created_at"`
+	UpdatedAt      time.Time           `json:"updated_at"`
 }
 
 // ProjectTemplate is a reusable project recipe (#110 / H15). Slimmed Project:
@@ -695,7 +698,6 @@ type ShowcasePhotoItem struct {
 	CreatedAt    time.Time         `json:"created_at"`
 }
 
-
 // TechnicalStatus represents the engineering and production stage of a project.
 type TechnicalStatus string
 
@@ -770,8 +772,8 @@ const (
 type WarrantyPhotoKind string
 
 const (
-	WarrantyPhotoIssueReport      WarrantyPhotoKind = "issue_report"
-	WarrantyPhotoResolutionProof  WarrantyPhotoKind = "resolution_proof"
+	WarrantyPhotoIssueReport     WarrantyPhotoKind = "issue_report"
+	WarrantyPhotoResolutionProof WarrantyPhotoKind = "resolution_proof"
 )
 
 // WarrantyRefabricationPiece is a single piece from a project cut list marked for re-cutting.
@@ -820,6 +822,3 @@ type WarrantyTicket struct {
 	CreatedAt            time.Time                    `json:"created_at"`
 	UpdatedAt            time.Time                    `json:"updated_at"`
 }
-
-
-

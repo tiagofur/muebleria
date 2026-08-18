@@ -24,6 +24,10 @@ export type ProductionEdgeTotal = {
   readonly edgeBandCode?: string;
   readonly thicknessMm?: number;
   readonly ml: number;
+  /** Board pieces that carry this band (row quantity summed). */
+  readonly pieces: number;
+  /** Total banded SIDES to run (L1+L2+W1+W2 flags × row quantity). */
+  readonly sides: number;
 };
 
 export type ProductionTotals = {
@@ -42,6 +46,13 @@ function bandedLengthMm(row: ProductionCutRow): number {
   if (row.W1) mm += row.widthMm;
   if (row.W2) mm += row.widthMm;
   return mm * row.quantity;
+}
+
+/** Banded side count of a row (L1+L2+W1+W2 flags × quantity). */
+function bandedSides(row: ProductionCutRow): number {
+  const sides =
+    (row.L1 ? 1 : 0) + (row.L2 ? 1 : 0) + (row.W1 ? 1 : 0) + (row.W2 ? 1 : 0);
+  return sides * row.quantity;
 }
 
 function round2(value: number): number {
@@ -64,6 +75,8 @@ type MutableEdgeAcc = {
   edgeBandCode?: string;
   thicknessMm?: number;
   mlmm: number;
+  pieces: number;
+  sides: number;
 };
 
 export function computeProductionTotals(
@@ -98,8 +111,12 @@ export function computeProductionTotals(
         edgeBandCode: row.edgeBandCode,
         thicknessMm: row.edgeBandThicknessMm,
         mlmm: 0,
+        pieces: 0,
+        sides: 0,
       };
       edge.mlmm += bandedMm;
+      edge.pieces += row.quantity;
+      edge.sides += bandedSides(row);
       edges.set(eKey, edge);
     }
   }

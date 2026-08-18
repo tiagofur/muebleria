@@ -65,6 +65,31 @@ describe('summarizeProductionTotals', () => {
     expect(totals.totalEdgeMl).toBe(5);
   });
 
+  it('edge totals carry pieces and banded side counts (F095)', () => {
+    const totals = summarizeProductionTotals([
+      // 2 pieces × 2 banded sides = 4 sides
+      row({ quantity: 2, L1: 1, W2: 1, edgeBandCode: 'CANT-ABS' }),
+      // 1 piece × 2 banded sides = 2 sides
+      row({ quantity: 1, L1: 1, L2: 1, edgeBandCode: 'CANT-ABS' }),
+      // banded with another band: separate accumulator
+      row({ quantity: 3, L1: 1, edgeBandCode: 'CANT-ROB' }),
+    ]);
+    const abs = totals.edges.find(
+      (e: { edgeBandCode?: string }) => e.edgeBandCode === 'CANT-ABS',
+    )!;
+    expect(abs.pieces).toBe(3); // 2 + 1 rows' quantities
+    expect(abs.sides).toBe(6); // 4 + 2
+
+    const rob = totals.edges.find(
+      (e: { edgeBandCode?: string }) => e.edgeBandCode === 'CANT-ROB',
+    )!;
+    expect(rob.pieces).toBe(3);
+    expect(rob.sides).toBe(3);
+
+    // Unbanded rows never reach an edge accumulator.
+    expect(totals.edges.every((e) => e.pieces > 0 && e.sides > 0)).toBe(true);
+  });
+
   it('banded rows without an assigned band land in "Sin canto asignado"', () => {
     const totals = summarizeProductionTotals([row({ L1: 1 })]);
     expect(totals.edges).toHaveLength(1);

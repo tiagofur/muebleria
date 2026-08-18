@@ -114,6 +114,12 @@ export interface EdgeBand {
   readonly costPerMl: number;
   readonly notes?: string;
   readonly active: boolean;
+  /**
+   * Solid color for swatches / labels (#RGB or #RRGGBB) — same hex path as
+   * `MaterialBoard.previewColor` (F095: enables "metros por color" summaries
+   * in edge banding).
+   */
+  readonly previewColor?: string;
 }
 
 export interface Hardware {

@@ -234,7 +234,7 @@ func (s *PostgresStore) ReactivateMaterialBoard(ctx context.Context, id string) 
 
 func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, error) {
 	query := `
-		SELECT id, code, name, thickness_mm, cost_per_ml, notes, active, created_at, updated_at
+		SELECT id, code, name, thickness_mm, cost_per_ml, notes, preview_color, active, created_at, updated_at
 		FROM edge_bands
 		ORDER BY name ASC;
 	`
@@ -248,7 +248,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 	for rows.Next() {
 		var e domain.EdgeBand
 		var notes *string
-		err := rows.Scan(&e.ID, &e.Code, &e.Name, &e.ThicknessMm, &e.CostPerMl, &notes, &e.Active, &e.CreatedAt, &e.UpdatedAt)
+		err := rows.Scan(&e.ID, &e.Code, &e.Name, &e.ThicknessMm, &e.CostPerMl, &notes, &e.PreviewColor, &e.Active, &e.CreatedAt, &e.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -358,14 +358,14 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 
 func (s *PostgresStore) GetEdgeBandByID(ctx context.Context, id string) (*domain.EdgeBand, error) {
 	query := `
-		SELECT id, code, name, thickness_mm, cost_per_ml, notes, active, created_at, updated_at
+		SELECT id, code, name, thickness_mm, cost_per_ml, notes, preview_color, active, created_at, updated_at
 		FROM edge_bands
 		WHERE id = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var e domain.EdgeBand
 	var notes *string
-	err := row.Scan(&e.ID, &e.Code, &e.Name, &e.ThicknessMm, &e.CostPerMl, &notes, &e.Active, &e.CreatedAt, &e.UpdatedAt)
+	err := row.Scan(&e.ID, &e.Code, &e.Name, &e.ThicknessMm, &e.CostPerMl, &notes, &e.PreviewColor, &e.Active, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -375,14 +375,23 @@ func (s *PostgresStore) GetEdgeBandByID(ctx context.Context, id string) (*domain
 	return &e, nil
 }
 
+// edgeColorArg returns the preview color as a string arg (NULLIF handles the
+// empty case — same pattern as material preview fields).
+func edgeColorArg(e *domain.EdgeBand) string {
+	if e.PreviewColor == nil {
+		return ""
+	}
+	return *e.PreviewColor
+}
+
 func (s *PostgresStore) CreateEdgeBand(ctx context.Context, e *domain.EdgeBand) error {
 	if e.ID != "" {
 		query := `
-			INSERT INTO edge_bands (id, code, name, thickness_mm, cost_per_ml, notes, active)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO edge_bands (id, code, name, thickness_mm, cost_per_ml, notes, preview_color, active)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, e.ID, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, e.Active).
+		err := s.Pool.QueryRow(ctx, query, e.ID, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active).
 			Scan(&e.CreatedAt, &e.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating edge band: %w", err)
@@ -390,11 +399,11 @@ func (s *PostgresStore) CreateEdgeBand(ctx context.Context, e *domain.EdgeBand) 
 		return nil
 	}
 	query := `
-		INSERT INTO edge_bands (code, name, thickness_mm, cost_per_ml, notes, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO edge_bands (code, name, thickness_mm, cost_per_ml, notes, preview_color, active)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, e.Active).
+	err := s.Pool.QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active).
 		Scan(&e.ID, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating edge band: %w", err)
@@ -405,11 +414,11 @@ func (s *PostgresStore) CreateEdgeBand(ctx context.Context, e *domain.EdgeBand) 
 func (s *PostgresStore) UpdateEdgeBand(ctx context.Context, id string, e *domain.EdgeBand) error {
 	query := `
 		UPDATE edge_bands
-		SET code = $1, name = $2, thickness_mm = $3, cost_per_ml = $4, notes = $5, active = $6, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $7
+		SET code = $1, name = $2, thickness_mm = $3, cost_per_ml = $4, notes = $5, preview_color = NULLIF($6, ''), active = $7, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $8
 		RETURNING updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, e.Active, id).
+	err := s.Pool.QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, id).
 		Scan(&e.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

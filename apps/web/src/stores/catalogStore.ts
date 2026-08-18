@@ -35,6 +35,7 @@ import {
   bumpStructureRevision,
   calcMaterialCostPerM2,
   duplicateModule as deepCopyModule,
+  normalizePreviewColor,
   normalizeHardwarePartFinishes,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
@@ -374,6 +375,7 @@ export function createCatalogStore(options: InternalOptions) {
             ? draft.previewTextureTileLengthMm
             : undefined,
         notes: optionalNotes(draft.notes),
+        ...(normalizePreviewColor(draft.previewColor) ? { previewColor: normalizePreviewColor(draft.previewColor) } : {}),
         active: true,
       };
       if (!get().catalog) return;
@@ -436,6 +438,7 @@ export function createCatalogStore(options: InternalOptions) {
                 previewTextureTileWidthMm: tileW,
                 previewTextureTileLengthMm: tileL,
                 notes: optionalNotes(draft.notes),
+                ...(normalizePreviewColor(draft.previewColor) ? { previewColor: normalizePreviewColor(draft.previewColor) } : {}),
               }
             : m,
         ),
@@ -479,6 +482,7 @@ export function createCatalogStore(options: InternalOptions) {
     // --- Edges ---
     createEdge: (draft) => {
       const code = draft.code.trim();
+      const previewColor = normalizePreviewColor(draft.previewColor);
       const id = newId();
       const item: EdgeBand = {
         id,
@@ -487,6 +491,7 @@ export function createCatalogStore(options: InternalOptions) {
         thicknessMm: draft.thicknessMm,
         costPerMl: draft.costPerMl,
         notes: optionalNotes(draft.notes),
+        ...(previewColor ? { previewColor } : {}),
         active: true,
       };
       patch(set, get, (c) => ({ ...c, edges: [...c.edges, item] }));
@@ -495,6 +500,7 @@ export function createCatalogStore(options: InternalOptions) {
     },
 
     updateEdge: (id, draft) => {
+      const previewColor = normalizePreviewColor(draft.previewColor);
       patch(set, get, (c) => ({
         ...c,
         edges: c.edges.map((e) =>
@@ -506,6 +512,7 @@ export function createCatalogStore(options: InternalOptions) {
                 thicknessMm: draft.thicknessMm,
                 costPerMl: draft.costPerMl,
                 notes: optionalNotes(draft.notes),
+                previewColor,
               }
             : e,
         ),
