@@ -10,12 +10,13 @@
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { Hammer } from 'lucide-react';
+import { Hammer, Mail, MapPin, Phone } from 'lucide-react';
 
 import {
   normalizeItemFloorStatus,
   ITEM_FLOOR_STATUS_LABELS_ES,
   type ItemFloorStatus,
+  type Customer,
   type Project,
   type ProjectItem,
 } from '@muebles/domain';
@@ -32,6 +33,9 @@ type InstalacionesProject = {
   readonly projectId: string;
   readonly projectName: string;
   readonly customerLabel: string;
+  readonly customerAddress?: string;
+  readonly customerPhone?: string;
+  readonly customerEmail?: string;
   readonly toInstall: readonly InstalacionesRow[];
   readonly installedCount: number;
 };
@@ -48,7 +52,7 @@ function rowFromItem(item: ProjectItem): InstalacionesRow {
 /** Factory projects with loaded items to install (pure, testable). */
 export function instalacionesProjects(
   projects: readonly Project[],
-  customerLabelFor?: (customerId: string) => string,
+  customerFor?: (customerId: string) => Customer | undefined,
 ): readonly InstalacionesProject[] {
   const result: InstalacionesProject[] = [];
   for (const project of projects) {
@@ -61,10 +65,14 @@ export function instalacionesProjects(
       else if (status === 'installed') installedCount++;
     }
     if (toInstall.length === 0) continue;
+    const customer = customerFor?.(project.customerId);
     result.push({
       projectId: project.id,
       projectName: project.name,
-      customerLabel: customerLabelFor?.(project.customerId) ?? '',
+      customerLabel: customer?.name ?? '',
+      customerAddress: customer?.address,
+      customerPhone: customer?.phone,
+      customerEmail: customer?.email,
       toInstall,
       installedCount,
     });
@@ -76,7 +84,7 @@ export function InstalacionesScreen({
   projects,
   canAdvance,
   onAdvance,
-  customerLabelFor,
+  customerFor,
   testId,
 }: {
   /** Projects in the factory (accepted/produced), already role-filtered. */
@@ -88,12 +96,13 @@ export function InstalacionesScreen({
     itemId: string,
     target: ItemFloorStatus,
   ) => void;
-  readonly customerLabelFor?: (customerId: string) => string;
+  /** Existing customer data for the installation destination and contact. */
+  readonly customerFor?: (customerId: string) => Customer | undefined;
   readonly testId?: string;
 }): ReactNode {
   const cards = useMemo(
-    () => instalacionesProjects(projects, customerLabelFor),
-    [projects, customerLabelFor],
+    () => instalacionesProjects(projects, customerFor),
+    [projects, customerFor],
   );
   const totalToInstall = cards.reduce((acc, c) => acc + c.toInstall.length, 0);
   const totalInstalled = cards.reduce((acc, c) => acc + c.installedCount, 0);
@@ -152,6 +161,39 @@ export function InstalacionesScreen({
                     <p className="ship-board__card-customer">
                       {card.customerLabel}
                     </p>
+                  ) : null}
+                  {card.customerAddress || card.customerPhone || card.customerEmail ? (
+                    <address
+                      className="ship-board__customer-details"
+                      aria-label={`Datos de contacto${
+                        card.customerLabel ? ` de ${card.customerLabel}` : ''
+                      }`}
+                    >
+                      {card.customerAddress ? (
+                        <span className="ship-board__customer-detail">
+                          <MapPin size={16} strokeWidth={1.5} aria-hidden />
+                          <span>{card.customerAddress}</span>
+                        </span>
+                      ) : null}
+                      {card.customerPhone ? (
+                        <a
+                          className="ship-board__customer-detail ship-board__customer-detail-link"
+                          href={`tel:${card.customerPhone}`}
+                        >
+                          <Phone size={16} strokeWidth={1.5} aria-hidden />
+                          <span>{card.customerPhone}</span>
+                        </a>
+                      ) : null}
+                      {card.customerEmail ? (
+                        <a
+                          className="ship-board__customer-detail ship-board__customer-detail-link"
+                          href={`mailto:${card.customerEmail}`}
+                        >
+                          <Mail size={16} strokeWidth={1.5} aria-hidden />
+                          <span>{card.customerEmail}</span>
+                        </a>
+                      ) : null}
+                    </address>
                   ) : null}
                 </div>
                 {card.installedCount > 0 ? (

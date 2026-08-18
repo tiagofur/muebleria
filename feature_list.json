@@ -1862,6 +1862,34 @@
         "picking",
         "fase5"
       ]
+    },
+    {
+      "id": "F098",
+      "phase": 21,
+      "name": "instalaciones_direccion_contacto_cliente",
+      "title": "Instalaciones — dirección y contacto del cliente en cards",
+      "description": "Expone la dirección y los datos de contacto ya registrados del cliente en cada card de Instalaciones para que el instalador llegue a obra y pueda comunicarse sin cambiar de pantalla.",
+      "acceptance": [
+        "Cada card de Instalaciones muestra la dirección y los medios de contacto disponibles del cliente.",
+        "Los datos se derivan del Customer existente sin inventar valores ni mostrar placeholders como datos reales.",
+        "La información usa marcado semántico, etiquetas accesibles e iconos Lucide; teléfono y email son enlaces accionables cuando existen.",
+        "El layout de las cards se mantiene usable en phone y consistente con los tokens del design system.",
+        "Tests de UI cubren datos completos, datos parciales y cliente no encontrado.",
+        "pnpm test, pnpm typecheck e init.sh verdes."
+      ],
+      "references": [
+        "docs/roadmap-screens/03-fabrica.md §6.7d",
+        "docs/design.md",
+        "packages/domain/src/types.ts — Customer"
+      ],
+      "status": "done",
+      "tags": [
+        "produccion",
+        "ui",
+        "instalaciones",
+        "cliente",
+        "fase5"
+      ]
     }
   ]
 }

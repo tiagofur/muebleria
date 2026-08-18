@@ -273,3 +273,9 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   obra×categoría; no infieren stock ni asignación por material/canto.
 - Revisión APPROVED (`progress/review_f097.md`); evidencia en
   `progress/implement_f097.md`.
+
+## F098 — Instalaciones: dirección y contacto del cliente (2026-08-18)
+
+- Aprobada en `progress/review_f098.md`.
+- Las cards de Instalaciones exponen dirección, teléfono y email existentes del cliente, con wrapping seguro en phone y enlaces accionables.
+- Evidencia de implementación y verificación: `progress/implement_f098.md`.

@@ -1221,3 +1221,31 @@ dashboard/surtido/instalaciones), una feature a la vez según AGENTS.md.
 - F097 marcada `done`; commit y push se registran en
   `progress/implement_f097.md`.
 - Entrega: `5cdba26` pusheado a `origin/codex/f095-production-claims`.
+
+## F098 — Instalaciones: dirección y contacto del cliente (2026-08-18)
+
+- **Feature en curso:** F098 — `instalaciones_direccion_contacto_cliente`.
+- **Inicio:** 10:34.
+- **Plan:**
+  1. Extender el modelo de card con datos existentes de `Customer`, sin fabricar valores.
+  2. Mostrar dirección, teléfono y email de forma semántica, accionable y responsive con tokens compartidos.
+  3. Cubrir datos completos, parciales y cliente ausente en tests de UI.
+  4. Ejecutar verificaciones focales, `pnpm test`, `pnpm typecheck` e `./init.sh`; dejar listo para revisión.
+
+## F098 — implementación lista para revisión
+
+- Cards de Instalaciones muestran sólo dirección, teléfono y email existentes del cliente; teléfono/email son accionables y el bloque es responsive con tokens.
+- Evidencia y alcance: `progress/implement_f098.md`.
+- Verificación: UI focal (8 tests), `pnpm typecheck`, `pnpm test`, `./init.sh` y `git diff --check` verdes.
+- F098 permanece `in_progress` hasta revisión.
+
+## F098 — corrección de revisión aplicada
+
+- Email/dirección largos ahora quiebran dentro de la card de Instalaciones en phone, sin truncarse ni desbordar.
+- El test de UI cubre el markup final para contacto parcial con email largo.
+- F098 sigue `in_progress` y queda listo para re-revisión; evidencia actualizada en `progress/implement_f098.md`.
+
+## F098 — cierre aprobado
+
+- Revisión: **APPROVED** — `progress/review_f098.md`.
+- F098 marcada `done`; commit y push se registran en `progress/implement_f098.md`.

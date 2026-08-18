@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import type { Project, ProjectItem } from '@muebles/domain';
+import type { Customer, Project, ProjectItem } from '@muebles/domain';
 
 import { InstalacionesScreen, instalacionesProjects } from './InstalacionesScreen';
 
@@ -35,6 +35,15 @@ function makeProject(
   } as unknown as Project;
 }
 
+function makeCustomer(overrides: Partial<Customer> = {}): Customer {
+  return {
+    id: 'c1',
+    name: 'Cliente X',
+    active: true,
+    ...overrides,
+  };
+}
+
 describe('instalacionesProjects (pure derivation)', () => {
   it('keeps loaded items and counts installed; other statuses are out', () => {
     const projects = [
@@ -48,11 +57,24 @@ describe('instalacionesProjects (pure derivation)', () => {
       makeProject('p3', [makeItem('f', 'installed')]), // nothing pending → out
       makeProject('p4', [makeItem('g', 'loaded')], 'draft'),
     ];
-    const cards = instalacionesProjects(projects, () => 'Cliente X');
+    const cards = instalacionesProjects(projects, () => makeCustomer());
     expect(cards.map((c) => c.projectId)).toEqual(['p1', 'p2']);
     expect(cards[0]!.toInstall.map((r) => r.itemId)).toEqual(['a']);
     expect(cards[0]!.installedCount).toBe(1);
     expect(cards[0]!.customerLabel).toBe('Cliente X');
+  });
+
+  it('only derives contact fields present in the existing customer', () => {
+    const [card] = instalacionesProjects(
+      [makeProject('p1', [makeItem('a', 'loaded')])],
+      () => makeCustomer({ address: 'Av. Reforma 120', phone: '+52 55 1234 5678' }),
+    );
+    expect(card).toMatchObject({
+      customerLabel: 'Cliente X',
+      customerAddress: 'Av. Reforma 120',
+      customerPhone: '+52 55 1234 5678',
+    });
+    expect(card?.customerEmail).toBeUndefined();
   });
 });
 
@@ -95,6 +117,63 @@ describe('InstalacionesScreen', () => {
     );
     fireEvent.click(screen.getByTestId('instalaciones-advance-a'));
     expect(onAdvance).toHaveBeenCalledWith('p1', 'a', 'installed');
+  });
+
+  it('shows the available destination and contact details as actionable links', () => {
+    render(
+      <InstalacionesScreen
+        projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
+        canAdvance
+        onAdvance={() => undefined}
+        customerFor={() =>
+          makeCustomer({
+            address: 'Av. Reforma 120, CDMX',
+            phone: '+52 55 1234 5678',
+            email: 'obra@example.com',
+          })
+        }
+      />,
+    );
+    expect(screen.getByText('Av. Reforma 120, CDMX')).not.toBeNull();
+    expect(screen.getByLabelText('Datos de contacto de Cliente X')).not.toBeNull();
+    expect(
+      screen.getByRole('link', { name: '+52 55 1234 5678' }).getAttribute('href'),
+    ).toBe('tel:+52 55 1234 5678');
+    expect(
+      screen.getByRole('link', { name: 'obra@example.com' }).getAttribute('href'),
+    ).toBe('mailto:obra@example.com');
+  });
+
+  it('does not render contact details when the customer is unavailable', () => {
+    render(
+      <InstalacionesScreen
+        projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
+        canAdvance
+        onAdvance={() => undefined}
+        customerFor={() => undefined}
+      />,
+    );
+    expect(screen.queryByLabelText('Datos de contacto')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('keeps partial contact details semantic for a long email address', () => {
+    const email = 'instalaciones-con-un-contacto-muy-largo@cliente-ejemplo.com';
+    render(
+      <InstalacionesScreen
+        projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
+        canAdvance
+        onAdvance={() => undefined}
+        customerFor={() => makeCustomer({ email })}
+      />,
+    );
+    const emailLink = screen.getByRole('link', { name: email });
+    expect(emailLink.getAttribute('href')).toBe(`mailto:${email}`);
+    expect(emailLink.className).toContain('ship-board__customer-detail');
+    expect(emailLink.closest('address')?.getAttribute('aria-label')).toBe(
+      'Datos de contacto de Cliente X',
+    );
+    expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
   it('hides advance buttons read-only and shows the target label', () => {
