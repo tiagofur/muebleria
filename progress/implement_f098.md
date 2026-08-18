@@ -64,4 +64,4 @@ múltiples instancias de Three.js; no producen fallos.
 
 - Commit funcional: `06df328 feat(production): show customer contacts for installations`.
 - Estado de F098: `done` tras aprobación en `progress/review_f098.md`.
-- Push: pendiente de ejecutar como último paso de cierre.
+- Push: confirmado a `origin/codex/f095-production-claims` (HEAD `56b721a`).
