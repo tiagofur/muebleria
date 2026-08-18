@@ -3148,6 +3148,7 @@ function AppContent({
             <EmbarquesProjectDetail
               project={shipmentProject}
               modules={modules}
+              catalog={catalog}
               customerName={resolveCustomerName(
                 shipmentProject.customerId,
                 customers,

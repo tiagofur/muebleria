@@ -10,6 +10,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeft, AlertTriangle, X } from 'lucide-react';
 import type {
+  Catalog,
   ItemFloorStatus,
   Module,
   ModuleLabel,
@@ -31,6 +32,7 @@ type CrossProjectAlert = {
 export type EmbarquesProjectDetailProps = {
   readonly project: Project;
   readonly modules: readonly Module[];
+  readonly catalog?: Catalog | null;
   readonly moduleLabels?: readonly ModuleLabel[] | null;
   readonly customerName?: string;
   readonly onSetFloorStatus?: (
@@ -48,6 +50,7 @@ export type EmbarquesProjectDetailProps = {
 export function EmbarquesProjectDetail({
   project,
   modules,
+  catalog,
   moduleLabels,
   customerName = '',
   onSetFloorStatus,
@@ -60,18 +63,19 @@ export function EmbarquesProjectDetail({
 }: EmbarquesProjectDetailProps): ReactNode {
   const [crossAlert, setCrossAlert] = useState<CrossProjectAlert | null>(null);
 
-  // Resolve module labels for cross-project validation
+  // Resolve module labels for cross-project validation and checklist
   const labels = useMemo(() => {
     if (moduleLabels && moduleLabels.length > 0) return moduleLabels;
+    if (!catalog) return [];
     try {
-      return generateModuleLabels(project, { modules } as never, {
+      return generateModuleLabels(project, catalog, {
         customerName,
         revision: project.production?.revision?.toString(),
       });
     } catch {
       return [];
     }
-  }, [moduleLabels, project, modules, customerName]);
+  }, [moduleLabels, project, catalog, customerName]);
 
   // Wrapped onSetFloorStatus with cross-project validation
   const handleSetFloorStatus = useCallback(
