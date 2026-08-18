@@ -78,6 +78,20 @@ describe('EdgesCatalog (gap #6)', () => {
     expect(draft.name).toBe('Canto nuevo');
   });
 
+
+  it('normalizes the optional preview color when saving', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(<EdgesCatalog edges={[]} onCreate={onCreate} onUpdate={vi.fn()} onDeactivate={vi.fn()} onReactivate={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /agregar|nueva|crear/i }));
+    await user.type(screen.getByLabelText(/código/i), 'CAN-COLOR');
+    await user.type(screen.getByLabelText(/^nombre/i), 'Canto color');
+    await user.clear(screen.getByPlaceholderText('#F5F5F0'));
+    await user.type(screen.getByPlaceholderText('#F5F5F0'), '#aabbcc');
+    await user.click(screen.getByRole('button', { name: /guardar/i }));
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ previewColor: '#AABBCC' }));
+  });
+
   it('shows inactive edges with a reactivate action when canMutate', async () => {
     const user = userEvent.setup();
     const onReactivate = vi.fn();

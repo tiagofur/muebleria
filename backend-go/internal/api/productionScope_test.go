@@ -126,6 +126,55 @@ func TestProductionClaim_GateIsClaimRole(t *testing.T) {
 	}
 }
 
+func TestProductionClaim_ProjectStationClaimIsNonExclusiveAndDedupedPerOperator(t *testing.T) {
+	store, srv := scopedFixtures([]domain.UserSector{{UserID: "u1", Sector: "cutting"}})
+	body := `{"project_id":"p1","sector":"cutting"}`
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/claim", strings.NewReader(body)), "u1", string(domain.RoleProduccion))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProductionClaim(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("project claim should pass, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if got := store.insertedActivities[0].ItemID; got != "" {
+		t.Fatalf("project claim must persist empty item ID for SQL NULL, got %q", got)
+	}
+
+	// A second operator may claim the same project × station.
+	req2 := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/claim", strings.NewReader(body)), "u2", string(domain.RoleProduccion))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	srv.HandleProductionClaim(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("another operator must be allowed, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+
+	// The original operator cannot open a duplicate active claim.
+	req3 := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/claim", strings.NewReader(body)), "u1", string(domain.RoleProduccion))
+	req3.Header.Set("Content-Type", "application/json")
+	rr3 := httptest.NewRecorder()
+	srv.HandleProductionClaim(rr3, req3)
+	if rr3.Code != http.StatusConflict {
+		t.Fatalf("same operator duplicate should conflict, got %d: %s", rr3.Code, rr3.Body.String())
+	}
+}
+
+func TestProductionFinish_ProjectStationClaimDoesNotAdvanceItems(t *testing.T) {
+	store, srv := scopedFixtures(nil)
+	store.activitiesByID = []domain.ProductionActivity{{ID: "project-claim", ProjectID: "p1", Sector: domain.SectorCutting, Type: domain.ActivityClaim, OperatorID: "u1", OperatorName: "Ramón"}}
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/finish/project-claim", strings.NewReader(`{}`)), "u1", string(domain.RoleProduccion))
+	req.SetPathValue("activityId", "project-claim")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProductionFinish(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("project claim finish failed: %d %s", rr.Code, rr.Body.String())
+	}
+	if len(store.floorStatusWrites) != 0 || len(store.floorEventWrites) != 0 {
+		t.Fatalf("project claim finish must not advance items, got statuses=%+v events=%+v", store.floorStatusWrites, store.floorEventWrites)
+	}
+}
+
 func TestProductionFinish_AdvancesFloorPipeline(t *testing.T) {
 	store, srv := scopedFixtures(nil)
 	// i1 pending; a cutting claim by this operator, then finished.

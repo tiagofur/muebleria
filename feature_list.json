@@ -1798,6 +1798,21 @@
         "rbac",
         "fase2"
       ]
+    },
+    {
+      "id": "F095",
+      "phase": 21,
+      "name": "produccion_fase5_board_por_obra_fase1_dominio_claim",
+      "title": "Fase 5.1+5.2 (M3): métricas de encintado en dominio + color de cintilla + claim obra×estación",
+      "description": "Fase 1 del plan aprobado en JD 2026-08-18 (docs/production-module.md §8 D9/D10, §10.5; spec roadmap-screens/03-fabrica.md §v2). (1) Dominio: ProductionEdgeTotal += pieces y sides (lados a encintar = Σ L1+L2+W1+W2 × qty) y EdgeBand.previewColor (aditivo, como Hardware) con persistencia completa (migración Go 000058, storage SELECT/INSERT/UPDATE, apiMappers round-trip). (2) Claim obra×estación: production_activities.item_id nullable (item_id NULL = claim de obra); handler acepta claim sin item_id (dedupe por operador, no por obra — varios operarios pueden trabajar la misma obra), finish de claim de obra NO avanza ítems (el avance sigue por estación/batch); active jobs expone claims de obra; storage client TS itemId opcional. Sin UI (Fase 2: FabricScreen v2).",
+      "status": "done",
+      "tags": [
+        "produccion",
+        "dominio",
+        "claim",
+        "encintado",
+        "fase5"
+      ]
     }
   ]
 }

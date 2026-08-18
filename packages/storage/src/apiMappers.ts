@@ -246,6 +246,7 @@ export function edgeToApi(e: EdgeBand): Record<string, unknown> {
     thickness_mm: e.thicknessMm,
     cost_per_ml: e.costPerMl,
     notes: e.notes ?? '',
+    preview_color: e.previewColor ?? '',
     active: e.active,
   };
 }
@@ -258,6 +259,7 @@ export function edgeFromApi(raw: Record<string, unknown>): EdgeBand {
     thicknessMm: num(raw.thickness_mm ?? raw.thicknessMm),
     costPerMl: num(raw.cost_per_ml ?? raw.costPerMl),
     notes: str(raw.notes) || undefined,
+    previewColor: str(raw.preview_color ?? raw.previewColor) || undefined,
     active: bool(raw.active, true),
   };
 }

@@ -153,6 +153,7 @@ const emptyEdgeDraft = (): EdgeDraft => ({
   thicknessMm: 0.5,
   costPerMl: 0,
   notes: '',
+  previewColor: '',
 });
 
 /** True when the draft already has 3D preview overrides (open advanced on edit). */
@@ -365,6 +366,7 @@ export function MaterialsCatalog({
       thicknessMm: 0.5,
       costPerMl: 0,
       notes: '',
+      previewColor: '',
     });
     setEdgeError(null);
     setEdgeCreateOpen(true);

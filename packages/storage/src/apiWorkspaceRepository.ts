@@ -90,6 +90,37 @@ function floorEventFromApi(
   };
 }
 
+function claimedProductionActivityFromApi(raw: Record<string, unknown>): {
+  id: string;
+  projectId: string;
+  projectName: string;
+  itemId?: string;
+  moduleCode?: string;
+  sector: string;
+  type: string;
+  operatorId: string;
+  operatorName: string;
+  startedAt: string;
+  createdAt: string;
+} {
+  const optionalString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value !== '' ? value : undefined;
+
+  return {
+    id: String(raw.id ?? ''),
+    projectId: String(raw.project_id ?? ''),
+    projectName: String(raw.project_name ?? ''),
+    itemId: optionalString(raw.item_id),
+    moduleCode: optionalString(raw.module_code),
+    sector: String(raw.sector ?? ''),
+    type: String(raw.type ?? ''),
+    operatorId: String(raw.operator_id ?? ''),
+    operatorName: String(raw.operator_name ?? ''),
+    startedAt: String(raw.started_at ?? ''),
+    createdAt: String(raw.created_at ?? ''),
+  };
+}
+
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
 
@@ -1041,8 +1072,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         activityId: string;
         projectId: string;
         projectName: string;
-        itemId: string;
-        moduleCode: string;
+        itemId?: string;
+        moduleCode?: string;
         operatorId: string;
         operatorName: string;
         machineId?: string;
@@ -1067,8 +1098,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     activityId: string;
     projectId: string;
     projectName: string;
-    itemId: string;
-    moduleCode: string;
+    itemId?: string;
+    moduleCode?: string;
     operatorId: string;
     operatorName: string;
     machineId?: string;
@@ -1089,7 +1120,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   async claimProductionActivity(payload: {
     projectId: string;
-    itemId: string;
+    itemId?: string;
     sector: string;
     machineId?: string;
     machineName?: string;
@@ -1097,8 +1128,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     id: string;
     projectId: string;
     projectName: string;
-    itemId: string;
-    moduleCode: string;
+    itemId?: string;
+    moduleCode?: string;
     sector: string;
     type: string;
     operatorId: string;
@@ -1116,7 +1147,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Failed to claim activity: ${res.status} ${text}`);
     }
     const raw = await res.json() as { activity: Record<string, unknown> };
-    return raw.activity as ReturnType<typeof this.claimProductionActivity> extends Promise<infer R> ? R : never;
+    return claimedProductionActivityFromApi(raw.activity);
   }
 
   async finishProductionActivity(activityId: string, payload: { piecesCount: number; notes?: string }): Promise<{
@@ -1629,4 +1660,3 @@ function isConflict(status: number, body: string): boolean {
   }
   return false;
 }
-

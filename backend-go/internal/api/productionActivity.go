@@ -27,10 +27,10 @@ import (
 // ─── Request/Response Types ──────────────────────────────────────────────────
 
 type claimRequest struct {
-	ProjectID  string `json:"project_id"`
-	ItemID     string `json:"item_id"`
-	Sector     string `json:"sector"`
-	MachineID  string `json:"machine_id,omitempty"`
+	ProjectID   string `json:"project_id"`
+	ItemID      string `json:"item_id,omitempty"`
+	Sector      string `json:"sector"`
+	MachineID   string `json:"machine_id,omitempty"`
 	MachineName string `json:"machine_name,omitempty"`
 }
 
@@ -48,13 +48,13 @@ type finishResponse struct {
 }
 
 type damageRequest struct {
-	ProjectID  string `json:"project_id"`
-	ItemID     string `json:"item_id"`
-	Sector     string `json:"sector"`
-	DamageType string `json:"damage_type"`
-	Description string `json:"description"`
-	PhotoURL   string `json:"photo_url,omitempty"`
-	NeedsReplace bool `json:"needs_replace"`
+	ProjectID    string `json:"project_id"`
+	ItemID       string `json:"item_id"`
+	Sector       string `json:"sector"`
+	DamageType   string `json:"damage_type"`
+	Description  string `json:"description"`
+	PhotoURL     string `json:"photo_url,omitempty"`
+	NeedsReplace bool   `json:"needs_replace"`
 }
 
 type damageResponse struct {
@@ -92,8 +92,8 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if body.ProjectID == "" || body.ItemID == "" || body.Sector == "" {
-		respondWithError(w, http.StatusBadRequest, "faltan project_id, item_id o sector")
+	if body.ProjectID == "" || body.Sector == "" {
+		respondWithError(w, http.StatusBadRequest, "faltan project_id o sector")
 		return
 	}
 
@@ -112,18 +112,21 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if item is already claimed by someone else
+	actorID := actorID(claims)
+	// Claims are deliberately NOT exclusive across operators: one station can
+	// need several people on the same obra. We only prevent the same operator
+	// from opening the same project × station claim twice.
 	existing, err := s.Store.GetActiveActivitiesBySector(r.Context(), sector)
 	if err == nil {
 		for _, act := range existing {
-			if act.ProjectID == body.ProjectID && act.ItemID == body.ItemID && act.Type == domain.ActivityClaim {
-				respondWithError(w, http.StatusConflict, "esta pieza ya está siendo trabajada por otro operador")
+			if act.ProjectID == body.ProjectID && act.ItemID == body.ItemID && act.OperatorID == actorID {
+				respondWithError(w, http.StatusConflict, "ya tenés una actividad activa en esta obra y estación")
 				return
 			}
 		}
 	}
 
-	// Get project and item info
+	// Get project and optional item info. Empty item_id is a project × station claim.
 	project, err := s.Store.GetProjectByID(r.Context(), body.ProjectID)
 	if err != nil || project == nil {
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
@@ -131,26 +134,26 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var item *domain.ProjectItem
-	var moduleCode, moduleName string
-	for i := range project.Items {
-		if project.Items[i].ID == body.ItemID {
-			item = &project.Items[i]
-			break
+	var moduleCode, moduleName, statusBefore string
+	if body.ItemID != "" {
+		for i := range project.Items {
+			if project.Items[i].ID == body.ItemID {
+				item = &project.Items[i]
+				break
+			}
 		}
-	}
-	if item == nil {
-		respondWithError(w, http.StatusNotFound, "item no encontrado")
-		return
-	}
-
-	// Get module info
-	if mod, mErr := s.Store.GetModuleByID(r.Context(), item.ModuleID); mErr == nil && mod != nil {
-		moduleCode = mod.Code
-		moduleName = mod.Name
+		if item == nil {
+			respondWithError(w, http.StatusNotFound, "item no encontrado")
+			return
+		}
+		statusBefore = string(domain.NormalizeItemFloorStatus(item.FloorStatus))
+		if mod, mErr := s.Store.GetModuleByID(r.Context(), item.ModuleID); mErr == nil && mod != nil {
+			moduleCode = mod.Code
+			moduleName = mod.Name
+		}
 	}
 
 	now := time.Now().UTC()
-	actorID := actorID(claims)
 	actorName := claims.Email
 	if user, uErr := s.Store.GetUserByID(r.Context(), actorID); uErr == nil && user != nil && user.Name != "" {
 		actorName = user.Name
@@ -170,7 +173,7 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 		MachineID:    body.MachineID,
 		MachineName:  body.MachineName,
 		StartedAt:    &now,
-		StatusBefore: string(domain.NormalizeItemFloorStatus(item.FloorStatus)),
+		StatusBefore: statusBefore,
 		CreatedAt:    now,
 	}
 
@@ -257,6 +260,10 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 // when the finished activity's sector owns one. Idempotent (no-op when the
 // item already reached it); failures are logged, never block the finish.
 func (s *Server) advanceItemOnActivityFinish(r *http.Request, activity domain.ProductionActivity, actorID string) {
+	if activity.ItemID == "" {
+		// F095 project × station claims measure work but do not advance items.
+		return
+	}
 	target := domain.TargetStatusForSector(string(activity.Sector))
 	if target == "" {
 		// warehouse / cnc produce no floor status yet (Fase 3).

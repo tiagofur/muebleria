@@ -3,7 +3,7 @@
  */
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import type { EdgeBand } from '@muebles/domain';
+import { isValidPreviewColor, normalizePreviewColor, type EdgeBand } from '@muebles/domain';
 import { Eye, EyeOff, Minus, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   EmptyState,
@@ -30,6 +30,7 @@ export type EdgeDraft = {
   thicknessMm: number;
   costPerMl: number;
   notes: string;
+  previewColor: string;
 };
 
 const emptyDraft = (): EdgeDraft => ({
@@ -38,6 +39,7 @@ const emptyDraft = (): EdgeDraft => ({
   thicknessMm: 0.5,
   costPerMl: 0,
   notes: '',
+  previewColor: '',
 });
 
 function toDraft(item: EdgeBand): EdgeDraft {
@@ -47,6 +49,7 @@ function toDraft(item: EdgeBand): EdgeDraft {
     thicknessMm: item.thicknessMm,
     costPerMl: item.costPerMl,
     notes: item.notes ?? '',
+    previewColor: item.previewColor ?? '',
   };
 }
 
@@ -129,6 +132,9 @@ export function EdgesCatalog({
     if (codeErr) return codeErr;
     const nameErr = validateRequiredName(draft.name);
     if (nameErr) return nameErr;
+    if (draft.previewColor.trim() && !isValidPreviewColor(draft.previewColor)) {
+      return 'Color de vista previa inválido. Usá #RGB o #RRGGBB, o dejalo vacío.';
+    }
     return (
       validateNonNegativeNumber(draft.thicknessMm, 'Espesor') ??
       validateNonNegativeNumber(draft.costPerMl, 'Costo/ML')
@@ -143,10 +149,11 @@ export function EdgesCatalog({
       return;
     }
     setError(null);
+    const finalDraft = { ...draft, previewColor: normalizePreviewColor(draft.previewColor) ?? '' };
     if (editingId) {
-      onUpdate(editingId, draft);
+      onUpdate(editingId, finalDraft);
     } else {
-      onCreate(draft);
+      onCreate(finalDraft);
     }
     closeModal();
   };
@@ -394,6 +401,27 @@ export function EdgesCatalog({
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 required
               />
+            </div>
+            <div className="catalog-form__field">
+              <label htmlFor="edge-preview-color">Color de vista previa</label>
+              <div className="material-preview-color-row">
+                <input
+                  id="edge-preview-color-picker"
+                  type="color"
+                  className="material-preview-color-picker"
+                  value={/^#([0-9a-fA-F]{6})$/.test(draft.previewColor) ? draft.previewColor : '#D4C4A8'}
+                  onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
+                  aria-label="Selector de color de vista previa"
+                />
+                <input
+                  id="edge-preview-color"
+                  className="material-preview-color-hex"
+                  value={draft.previewColor}
+                  onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
+                  placeholder="#F5F5F0"
+                  autoComplete="off"
+                />
+              </div>
             </div>
           </fieldset>
 

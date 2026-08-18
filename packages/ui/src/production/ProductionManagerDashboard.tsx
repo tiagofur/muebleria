@@ -41,8 +41,8 @@ type ActiveJob = {
   readonly activityId: string;
   readonly projectId: string;
   readonly projectName: string;
-  readonly itemId: string;
-  readonly moduleCode: string;
+  readonly itemId?: string;
+  readonly moduleCode?: string;
   readonly operatorId: string;
   readonly operatorName: string;
   readonly machineId?: string;

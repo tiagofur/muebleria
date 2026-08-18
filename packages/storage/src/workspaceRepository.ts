@@ -166,8 +166,8 @@ export interface WorkspaceRepository {
         activityId: string;
         projectId: string;
         projectName: string;
-        itemId: string;
-        moduleCode: string;
+        itemId?: string;
+        moduleCode?: string;
         operatorId: string;
         operatorName: string;
         machineId?: string;
@@ -183,8 +183,8 @@ export interface WorkspaceRepository {
     activityId: string;
     projectId: string;
     projectName: string;
-    itemId: string;
-    moduleCode: string;
+    itemId?: string;
+    moduleCode?: string;
     operatorId: string;
     operatorName: string;
     machineId?: string;
@@ -196,7 +196,7 @@ export interface WorkspaceRepository {
   /** Operator claims a job (starts working). */
   claimProductionActivity?(payload: {
     projectId: string;
-    itemId: string;
+    itemId?: string;
     sector: string;
     machineId?: string;
     machineName?: string;
@@ -204,8 +204,8 @@ export interface WorkspaceRepository {
     id: string;
     projectId: string;
     projectName: string;
-    itemId: string;
-    moduleCode: string;
+    itemId?: string;
+    moduleCode?: string;
     sector: string;
     type: string;
     operatorId: string;
@@ -425,6 +425,5 @@ export interface WorkspaceRepository {
   }): Promise<WarrantyTicketPhoto>;
   deleteWarrantyTicketPhoto?(ticketId: string, photoId: string): Promise<void>;
 }
-
 
 
