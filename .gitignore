@@ -50,3 +50,4 @@ tmp/
 .freebuff/
 # Local AI runtime state
 .atl/
+backend-go/server
