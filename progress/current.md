@@ -1,3 +1,16 @@
+# Sesión activa
+
+- **Feature en curso:** F096 — FabricScreen v2 — board por obra
+- **Inicio:** 2026-08-18 10:03 America/Bahia_Banderas
+- **Plan:**
+  1. Diseñar y documentar el board por obra conforme a la spec v2 y los tokens existentes.
+  2. Extraer DTO/selector fuera de React para métricas de Corte y Encintado, picking y claims.
+  3. Cablear datos/callbacks de claim, finish y batch desde el shell; conservar avances individuales.
+  4. Implementar las cards y estados accesibles/responsive, con pruebas de selector y pantalla.
+  5. Ejecutar pruebas focalizadas, typecheck y gate antes de revisión.
+
+---
+
 # Sesión — F089 Escaneo QR en Piso de Fábrica
 
 - **Fecha:** 2026-08-15 (tarde-noche)

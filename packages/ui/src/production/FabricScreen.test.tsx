@@ -372,3 +372,34 @@ describe('FabricScreen — tab keyboard navigation (Fase 5.2)', () => {
     expect(cutting.getAttribute('aria-selected')).toBe('true');
   });
 });
+
+describe('FabricScreen — project board actions (F096)', () => {
+  it('renders a project card, its cutting metrics, claim and explicit batch action', () => {
+    const onClaim = vi.fn(async () => undefined);
+    const onBatch = vi.fn();
+    render(
+      <FabricScreen
+        projects={[makeProject('p1', [makeItem('a'), makeItem('b')])]}
+        assignedSectors={['cutting']}
+        canAdvance
+        onAdvance={() => undefined}
+        onClaim={onClaim}
+        onAdvanceBatch={onBatch}
+        metricsByProject={{
+          p1: {
+            materials: [{ key: 'M1', name: 'Melamina', pieces: 2, lines: 1, areaM2: 2.4 }],
+            edges: [], sheetEstimates: [{ materialId: 'm1', code: 'M1', name: 'Melamina', areaM2: 2.4, sheetWidthMm: 1220, sheetLengthMm: 2440, sheetAreaM2: 2.97, wastePercent: 10, estimatedSheets: 1 }], edgeBandColors: {},
+          },
+        }}
+        pickingStates={[{ projectId: 'p1', material: 'tableros', status: 'despachado' }]}
+      />,
+    );
+    expect(screen.getByTestId('fabric-card-p1')).not.toBeNull();
+    expect(screen.getByText(/2.4 m² netos/)).not.toBeNull();
+    expect(screen.getByText('✓ surtido por almacén')).not.toBeNull();
+    fireEvent.click(screen.getByTestId('fabric-claim-p1'));
+    expect(onClaim).toHaveBeenCalledWith('p1', 'cutting');
+    fireEvent.click(screen.getByTestId('fabric-batch-p1'));
+    expect(onBatch).toHaveBeenCalledWith('p1', ['a', 'b'], 'cut');
+  });
+});

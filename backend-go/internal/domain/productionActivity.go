@@ -230,6 +230,7 @@ type ActiveJob struct {
 	ActivityID   string `json:"activity_id"`
 	ProjectID    string `json:"project_id"`
 	ProjectName  string `json:"project_name"`
+	Sector       ProductionSector `json:"sector"`
 	ItemID       string `json:"item_id"`
 	ModuleCode   string `json:"module_code"`
 	OperatorID   string `json:"operator_id"`

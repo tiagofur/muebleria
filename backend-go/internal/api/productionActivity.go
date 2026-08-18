@@ -454,6 +454,7 @@ func (s *Server) HandleProductionActiveJobs(w http.ResponseWriter, r *http.Reque
 					ActivityID:   act.ID,
 					ProjectID:    act.ProjectID,
 					ProjectName:  act.ProjectName,
+					Sector:       act.Sector,
 					ItemID:       act.ItemID,
 					ModuleCode:   act.ModuleCode,
 					OperatorID:   act.OperatorID,

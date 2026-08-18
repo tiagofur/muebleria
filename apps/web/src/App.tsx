@@ -88,6 +88,7 @@ import {
   type AnalyticsPeriodDays,
   type WarrantyTicket,
   type ItemFloorStatus,
+  ITEM_FLOOR_STATUS_LABELS_ES,
   roleLabelEs,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
@@ -116,6 +117,9 @@ import {
   EmbarquesScreen,
   InstalacionesScreen,
   type DashboardMetrics,
+  type FabricActiveClaim,
+  type FabricProjectMetrics,
+  type FabricStation,
   EmptyState,
   ScreenBoundary,
   EngineeringScreen,
@@ -1133,6 +1137,7 @@ function AppContent({
   // (no toggle for them). Null until loaded or on failure → queue view only.
   const canOpenFabric = roleCanAccessFabricNav(actorRole);
   const [fabricMetrics, setFabricMetrics] = useState<DashboardMetrics | null>(null);
+  const [fabricActiveClaims, setFabricActiveClaims] = useState<readonly FabricActiveClaim[]>([]);
   useEffect(() => {
     if (navId !== 'fabric' || isSectorScoped) return;
     const repo = getRepository();
@@ -1151,6 +1156,29 @@ function AppContent({
       cancelled = true;
     };
   }, [navId, isSectorScoped, getRepository]);
+
+  useEffect(() => {
+    if (navId !== 'fabric') return;
+    const repo = getRepository();
+    if (!repo.getProductionActiveJobs) return;
+    let cancelled = false;
+    repo.getProductionActiveJobs().then((jobs) => {
+      if (cancelled) return;
+      setFabricActiveClaims(jobs.flatMap((job) => {
+        if (!['cutting', 'edge_banding', 'assembly', 'packaging'].includes(job.sector) || job.itemId) return [];
+        return [{
+          activityId: job.activityId,
+          projectId: job.projectId,
+          sector: job.sector as FabricStation,
+          operatorName: job.operatorName,
+          startedAt: job.startedAt,
+        }];
+      }));
+    }).catch(() => {
+      if (!cancelled) setFabricActiveClaims([]);
+    });
+    return () => { cancelled = true; };
+  }, [navId, getRepository]);
 
   // Fase 5.4 — screen error boundaries' escape hatch (keeps the shell alive).
   const goHomeFromScreen = useCallback(() => {
@@ -1346,6 +1374,24 @@ function AppContent({
       };
     });
   }, [catalog, projects, materials]);
+
+  // F096 — presentation DTO for the FabricScreen board. The shell owns the
+  // domain calls; the React screen only renders this already-resolved data.
+  const fabricMetricsByProject = useMemo<Readonly<Record<string, FabricProjectMetrics>>>(() => {
+    const edgeBandColors = Object.fromEntries(
+      edges.map((edge) => [edge.code, edge.previewColor]),
+    );
+    return Object.fromEntries(purchasingProjects.map((project) => [project.projectId, {
+      ...computeProductionTotals(project.cutRows),
+      sheetEstimates: project.sheetEstimates ?? [],
+      edgeBandColors,
+    }]));
+  }, [purchasingProjects, edges]);
+
+  const moduleLabelForFabric = useCallback((moduleId: string) => {
+    const module = modules.find((candidate) => candidate.id === moduleId);
+    return module ? `${module.code} · ${module.name}` : moduleId;
+  }, [modules]);
 
   /**
    * Líneas de stock que un despacho de picking descuenta (06 §3): solo
@@ -2051,6 +2097,46 @@ function AppContent({
       }
     },
     [getRepository, setItemFloorStatus, toast],
+  );
+
+  const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
+    const repo = getRepository();
+    if (!repo.claimProductionActivity) return;
+    try {
+      const activity = await repo.claimProductionActivity({ projectId, sector });
+      setFabricActiveClaims((previous) => [...previous, {
+        activityId: activity.id,
+        projectId: activity.projectId,
+        sector,
+        operatorName: activity.operatorName,
+        startedAt: activity.startedAt,
+      }]);
+    } catch (err) {
+      toast({ type: 'error', message: err instanceof Error ? err.message : 'No se pudo iniciar la estación' });
+    }
+  }, [getRepository, toast]);
+
+  const handleFabricFinish = useCallback(async (activityId: string, piecesCount: number): Promise<void> => {
+    const repo = getRepository();
+    if (!repo.finishProductionActivity) return;
+    try {
+      await repo.finishProductionActivity(activityId, { piecesCount });
+      setFabricActiveClaims((previous) => previous.filter((claim) => claim.activityId !== activityId));
+    } catch (err) {
+      toast({ type: 'error', message: err instanceof Error ? err.message : 'No se pudo terminar la estación' });
+      throw err;
+    }
+  }, [getRepository, toast]);
+
+  const handleFabricBatchAdvance = useCallback(
+    (projectId: string, itemIds: readonly string[], target: ItemFloorStatus) => {
+      if (
+        itemIds.length > 1 &&
+        !window.confirm(`¿Marcar ${itemIds.length} módulos como ${ITEM_FLOOR_STATUS_LABELS_ES[target]}? Cada avance queda registrado por separado.`)
+      ) return;
+      for (const itemId of itemIds) handleFloorAdvance(projectId, itemId, target);
+    },
+    [handleFloorAdvance],
   );
 
   // PROD-3.2: freeze OP revision when opening a plant-ready order.
@@ -3007,6 +3093,13 @@ function AppContent({
           customerLabelFor={(customerId) =>
             resolveCustomerName(customerId, customers)
           }
+          moduleLabelFor={moduleLabelForFabric}
+          metricsByProject={fabricMetricsByProject}
+          pickingStates={pickingStates ?? []}
+          activeClaims={fabricActiveClaims}
+          onClaim={session === 'auth' ? handleFabricClaim : undefined}
+          onFinish={session === 'auth' ? handleFabricFinish : undefined}
+          onAdvanceBatch={handleFabricBatchAdvance}
         />
         </ScreenBoundary>
       ) : null}

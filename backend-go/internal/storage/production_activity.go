@@ -257,6 +257,7 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 				&job.ModuleCode, &job.OperatorID, &job.OperatorName,
 				&job.MachineID, &job.MachineName, &job.StartedAt,
 			); err == nil {
+				job.Sector = sector
 				job.DurationMin = time.Since(job.StartedAt).Minutes()
 				dash.ActiveJobs = append(dash.ActiveJobs, job)
 			}

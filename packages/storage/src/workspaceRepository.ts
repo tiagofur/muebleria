@@ -166,6 +166,7 @@ export interface WorkspaceRepository {
         activityId: string;
         projectId: string;
         projectName: string;
+        sector: string;
         itemId?: string;
         moduleCode?: string;
         operatorId: string;
@@ -183,6 +184,7 @@ export interface WorkspaceRepository {
     activityId: string;
     projectId: string;
     projectName: string;
+    sector: string;
     itemId?: string;
     moduleCode?: string;
     operatorId: string;
@@ -425,5 +427,4 @@ export interface WorkspaceRepository {
   }): Promise<WarrantyTicketPhoto>;
   deleteWarrantyTicketPhoto?(ticketId: string, photoId: string): Promise<void>;
 }
-
 

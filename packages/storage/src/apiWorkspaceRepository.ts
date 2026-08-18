@@ -1072,6 +1072,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         activityId: string;
         projectId: string;
         projectName: string;
+        sector: string;
         itemId?: string;
         moduleCode?: string;
         operatorId: string;
@@ -1098,6 +1099,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     activityId: string;
     projectId: string;
     projectName: string;
+    sector: string;
     itemId?: string;
     moduleCode?: string;
     operatorId: string;
