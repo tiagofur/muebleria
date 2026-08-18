@@ -260,3 +260,29 @@
 
 ### Tests
 - Suites components/modules/common relacionadas verdes
+
+## F096 — FabricScreen v2: board por obra (2026-08-18)
+
+Aprobada la migración de Producción de cola plana a cards por obra/estación, con DTO puro para métricas de Corte/Encintado, picking persistido por claves válidas, claims obra×estación, finish y batch auditado por ítem. La corrección final confirma antes de mutar el último claim/batch, evita batch duplicado con varios operarios y muestra la hora de inicio. Verificaciones: typecheck, suite focal UI, `pnpm test` y Go focal verdes.
+
+## F097 — Dashboard de Producción y surtido visible (2026-08-18)
+
+- Dashboard alineado al conjunto de obras que lista, estado explícito para
+  obras sin módulos y sectores con iconografía Lucide.
+- Corte/Encintado muestran únicamente el picking persistido por
+  obra×categoría; no infieren stock ni asignación por material/canto.
+- Revisión APPROVED (`progress/review_f097.md`); evidencia en
+  `progress/implement_f097.md`.
+
+## F098 — Instalaciones: dirección y contacto del cliente (2026-08-18)
+
+- Aprobada en `progress/review_f098.md`.
+- Las cards de Instalaciones exponen dirección, teléfono y email existentes del cliente, con wrapping seguro en phone y enlaces accionables.
+- Evidencia de implementación y verificación: `progress/implement_f098.md`.
+
+## F099 — Polish final del módulo Producción (2026-08-18)
+
+- Aprobada en `progress/review_f099.md`.
+- El dashboard de Producción se alineó al sistema compartido: tokens y `.btn`, estados de carga/error recuperables, semántica ARIA de filtros y progreso, reflujo seguro en phone y focos visibles.
+- Todos los iconos Lucide del dashboard declaran `strokeWidth={1.5}` y `aria-hidden` cuando son decorativos; la regresión focal protege ambos contratos.
+- Verificación: dashboard focal 6 tests, `pnpm typecheck`, `./init.sh` (domain 632, UI 966, web 257, desktop 17, mobile 36) y `git diff --check` verdes.

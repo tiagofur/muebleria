@@ -144,14 +144,14 @@ type NavItemDef = {
 
 type NavSectionDef = {
   readonly id:
-    | 'trabajo'
-    | 'produccion'
-    | 'ventas'
-    | 'ingenieria'
-    | 'almacen'
-    | 'libreria'
-    | 'catalogos'
-    | 'config';
+  | 'trabajo'
+  | 'produccion'
+  | 'ventas'
+  | 'ingenieria'
+  | 'almacen'
+  | 'libreria'
+  | 'catalogos'
+  | 'config';
   readonly label: string;
   readonly items: readonly NavItemDef[];
 };
@@ -193,7 +193,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       /**
        * Production Manager Dashboard: full visibility for gerente_produccion.
        */
-      { id: 'productionDashboard', label: 'Dashboard Producción', icon: BarChart3 },
+      { id: 'productionDashboard', label: 'Dashboard', icon: BarChart3 },
       /**
        * Órdenes — per-project production workspace queue (the old
        * "Producción" hub). TEMPORARY: slated for removal once its remaining
@@ -313,10 +313,10 @@ export function resolveNavSections(
 
   const allowed = options.allowedNavIds
     ? new Set(
-        options.allowedNavIds instanceof Set
-          ? options.allowedNavIds
-          : options.allowedNavIds,
-      )
+      options.allowedNavIds instanceof Set
+        ? options.allowedNavIds
+        : options.allowedNavIds,
+    )
     : null;
 
   const includeUsers =

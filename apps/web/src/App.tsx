@@ -3140,8 +3140,8 @@ function AppContent({
             (canMarkProduced || roleCanExportProduction(actorRole))
           }
           onAdvance={handleFloorAdvance}
-          customerLabelFor={(customerId) =>
-            resolveCustomerName(customerId, customers)
+          customerFor={(customerId) =>
+            customers.find((customer) => customer.id === customerId)
           }
         />
         </ScreenBoundary>

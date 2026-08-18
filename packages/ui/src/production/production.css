@@ -2447,6 +2447,50 @@
   color: var(--text-secondary);
 }
 
+.ship-board__customer-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-style: normal;
+}
+
+.ship-board__customer-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+.ship-board__customer-detail > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ship-board__customer-detail-link {
+  color: var(--text-brand);
+  text-decoration: none;
+  text-underline-offset: var(--space-1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ship-board__customer-detail-link {
+    transition: var(--transition-colors);
+  }
+}
+
+.ship-board__customer-detail-link:hover {
+  text-decoration: underline;
+}
+
+.ship-board__customer-detail-link:focus-visible {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus);
+  outline: none;
+}
+
 .ship-board__card-done {
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs, 0.75rem);
@@ -2541,6 +2585,11 @@
   }
 
   .ship-board__card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ship-board__customer-details {
     flex-direction: column;
     align-items: flex-start;
   }

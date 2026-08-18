@@ -22,6 +22,14 @@ import {
   Pause,
   Play,
   XCircle,
+  Scissors,
+  Wand2,
+  Armchair,
+  Package,
+  Truck,
+  House,
+  Settings2,
+  CircleAlert,
 } from 'lucide-react';
 
 import type { Project } from '@muebles/domain';
@@ -100,16 +108,22 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}min`;
 }
 
-function getSectorIcon(sector: string): string {
-  const icons: Record<string, string> = {
-    cutting: '✂️',
-    edge_banding: '🔧',
-    assembly: '🪑',
-    packaging: '📦',
-    shipping: '🚚',
-    installation: '🏠',
-  };
-  return icons[sector] ?? '⚙️';
+function SectorIcon({
+  sector,
+  size = 16,
+}: {
+  readonly sector: string;
+  readonly size?: number;
+}) {
+  const Icon = {
+    cutting: Scissors,
+    edge_banding: Wand2,
+    assembly: Armchair,
+    packaging: Package,
+    shipping: Truck,
+    installation: House,
+  }[sector] ?? Settings2;
+  return <Icon size={size} strokeWidth={1.5} aria-hidden />;
 }
 
 // ─── Custom Hook ─────────────────────────────────────────────────────────────
@@ -197,7 +211,7 @@ export function ProductionManagerDashboard({
   const totalMetrics = useMemo(() => {
     if (metrics) {
       return {
-        totalProjects: metrics.totalProjects,
+        totalProjects: productionProjects.length,
         totalItems: metrics.totalItems,
         totalInstalled: metrics.totalInstalled,
         avgProgress: metrics.avgProgress,
@@ -260,8 +274,8 @@ export function ProductionManagerDashboard({
   if (loading) {
     return (
       <section className="pm-dashboard" aria-label="Dashboard del Gerente de Producción" data-testid={testId}>
-        <div className="pm-dashboard__loading">
-          <RefreshCw size={32} className="pm-dashboard__spinner" />
+        <div className="pm-dashboard__loading" role="status">
+          <RefreshCw size={32} strokeWidth={1.5} className="pm-dashboard__spinner" aria-hidden />
           <p>Cargando datos de producción...</p>
         </div>
       </section>
@@ -271,10 +285,10 @@ export function ProductionManagerDashboard({
   if (error) {
     return (
       <section className="pm-dashboard" aria-label="Dashboard del Gerente de Producción" data-testid={testId}>
-        <div className="pm-dashboard__error">
-          <AlertTriangle size={32} />
+        <div className="pm-dashboard__error" role="alert">
+          <AlertTriangle size={32} strokeWidth={1.5} aria-hidden />
           <p>Error al cargar el dashboard: {error}</p>
-          <button type="button" onClick={refresh} className="pm-dashboard__btn pm-dashboard__btn--primary">
+          <button type="button" onClick={refresh} className="btn btn--primary">
             Reintentar
           </button>
         </div>
@@ -288,7 +302,7 @@ export function ProductionManagerDashboard({
       <header className="pm-dashboard__header">
         <div className="pm-dashboard__title-row">
           <span className="pm-dashboard__title-icon" aria-hidden>
-            <Factory size={24} strokeWidth={1.5} />
+            <Factory size={24} strokeWidth={1.5} aria-hidden />
           </span>
           <div>
             <h1 className="pm-dashboard__title">Dashboard de Producción</h1>
@@ -300,26 +314,20 @@ export function ProductionManagerDashboard({
         <div className="pm-dashboard__header-actions">
           <button
             type="button"
-            className="pm-dashboard__btn pm-dashboard__btn--secondary"
+            className="btn"
             onClick={refresh}
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
             Actualizar
           </button>
           <button
             type="button"
-            className="pm-dashboard__btn pm-dashboard__btn--secondary"
+            className="btn"
             onClick={() => setShowMetrics(!showMetrics)}
+            aria-pressed={showMetrics}
           >
-            <BarChart3 size={16} />
+            <BarChart3 size={16} strokeWidth={1.5} aria-hidden />
             {showMetrics ? 'Ocultar Métricas' : 'Ver Métricas'}
-          </button>
-          <button
-            type="button"
-            className="pm-dashboard__btn pm-dashboard__btn--primary"
-          >
-            <Settings size={16} />
-            Configurar
           </button>
         </div>
       </header>
@@ -328,17 +336,19 @@ export function ProductionManagerDashboard({
       <div className="pm-dashboard__summary">
         <div className="pm-dashboard__card pm-dashboard__card--highlight">
           <div className="pm-dashboard__card-icon">
-            <Factory size={20} />
+            <Factory size={20} strokeWidth={1.5} aria-hidden />
           </div>
           <div className="pm-dashboard__card-content">
-            <span className="pm-dashboard__card-value">{totalMetrics.totalProjects}</span>
-            <span className="pm-dashboard__card-label">Proyectos en Planta</span>
+            <span className="pm-dashboard__card-value" data-testid="pm-total-projects">
+              {totalMetrics.totalProjects}
+            </span>
+            <span className="pm-dashboard__card-label">Obras en Producción</span>
           </div>
         </div>
 
         <div className="pm-dashboard__card">
           <div className="pm-dashboard__card-icon">
-            <Users size={20} />
+            <Users size={20} strokeWidth={1.5} aria-hidden />
           </div>
           <div className="pm-dashboard__card-content">
             <span className="pm-dashboard__card-value">{activeJobs.length}</span>
@@ -348,7 +358,7 @@ export function ProductionManagerDashboard({
 
         <div className="pm-dashboard__card">
           <div className="pm-dashboard__card-icon">
-            <CheckCircle2 size={20} />
+            <CheckCircle2 size={20} strokeWidth={1.5} aria-hidden />
           </div>
           <div className="pm-dashboard__card-content">
             <span className="pm-dashboard__card-value">{totalMetrics.todayCompleted}</span>
@@ -358,7 +368,7 @@ export function ProductionManagerDashboard({
 
         <div className="pm-dashboard__card">
           <div className="pm-dashboard__card-icon">
-            <Clock size={20} />
+            <Clock size={20} strokeWidth={1.5} aria-hidden />
           </div>
           <div className="pm-dashboard__card-content">
             <span className="pm-dashboard__card-value">{totalMetrics.avgProgress}%</span>
@@ -379,8 +389,11 @@ export function ProductionManagerDashboard({
                 selectedSector === status.sector ? 'pm-dashboard__sector-btn--active' : ''
               }`}
               onClick={() => setSelectedSector(status.sector as PipelineSector)}
+              aria-pressed={selectedSector === status.sector}
             >
-              <span className="pm-dashboard__sector-icon">{getSectorIcon(status.sector)}</span>
+              <span className="pm-dashboard__sector-icon">
+                <SectorIcon sector={status.sector} size={20} />
+              </span>
               <span className="pm-dashboard__sector-name">{status.label}</span>
               <span className="pm-dashboard__sector-count">
                 {status.activeOperators} activos
@@ -465,7 +478,7 @@ function ActiveJobRow({ job }: { readonly job: ActiveJob }) {
     <div className="pm-dashboard__job-row" data-testid={`pm-active-job-${job.activityId}`}>
       <div className="pm-dashboard__job-info">
         <span className="pm-dashboard__job-operator">
-          <Users size={14} />
+          <Users size={14} strokeWidth={1.5} aria-hidden />
           {job.operatorName}
         </span>
         <span className="pm-dashboard__job-project">
@@ -476,13 +489,13 @@ function ActiveJobRow({ job }: { readonly job: ActiveJob }) {
         </span>
         {job.machineName && (
           <span className="pm-dashboard__job-machine">
-            <Settings size={12} />
+            <Settings size={12} strokeWidth={1.5} aria-hidden />
             {job.machineName}
           </span>
         )}
       </div>
       <div className="pm-dashboard__job-time">
-        <Clock size={14} />
+        <Clock size={14} strokeWidth={1.5} aria-hidden />
         <span>{formatDuration(job.durationMin)}</span>
       </div>
     </div>
@@ -504,9 +517,12 @@ function ProjectDashboardRow({
   readonly onOpenProject?: (projectId: string) => void;
   readonly onOpenOrder?: (projectId: string) => void;
 }) {
-  const activeSectorLabel = summary.activeSector
-    ? PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]
-    : 'Completado';
+  const hasItems = summary.totalItems > 0;
+  const activeSectorLabel = !hasItems
+    ? 'Sin módulos cargados'
+    : summary.activeSector
+      ? PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]
+      : 'Completado';
 
   return (
     <div className="pm-dashboard__project-row" data-testid={`pm-project-row-${project.id}`}>
@@ -538,7 +554,7 @@ function ProjectDashboardRow({
         <div className="pm-dashboard__project-meta">
           <span>{summary.totalItems} muebles</span>
           <span>•</span>
-          <span>En {activeSectorLabel}</span>
+          <span>{hasItems ? `En ${activeSectorLabel}` : activeSectorLabel}</span>
         </div>
       </div>
 
@@ -547,31 +563,54 @@ function ProjectDashboardRow({
           <div
             className="pm-dashboard__progress-fill"
             style={{ width: `${summary.percentage}%` }}
+            role="progressbar"
+            aria-label={`Avance de ${project.name}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={summary.percentage}
           />
         </div>
-        <span className="pm-dashboard__progress-text">{summary.percentage}%</span>
+        <span className="pm-dashboard__progress-text">
+          {hasItems ? `${summary.percentage}%` : '—'}
+        </span>
       </div>
 
-      <div className="pm-dashboard__project-stages">
-        {summary.stages.map((stage) => {
-          const done = stage.done >= stage.total;
-          const active = summary.activeSector === stage.sector;
-          return (
-            <div
-              key={stage.sector}
-              className={`pm-dashboard__stage ${
-                done ? 'pm-dashboard__stage--done' : active ? 'pm-dashboard__stage--active' : ''
-              }`}
-              title={`${PRODUCTION_SECTOR_LABELS_ES[stage.sector]}: ${stage.done}/${stage.total}`}
-            >
-              <span className="pm-dashboard__stage-icon">{getSectorIcon(stage.sector)}</span>
-              <span className="pm-dashboard__stage-count">
-                {stage.done}/{stage.total}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {hasItems ? (
+        <div className="pm-dashboard__project-stages">
+          {summary.stages.map((stage) => {
+            const done = stage.done >= stage.total;
+            const active = summary.activeSector === stage.sector;
+            return (
+              <div
+                key={stage.sector}
+                className={`pm-dashboard__stage ${
+                  done
+                    ? 'pm-dashboard__stage--done'
+                    : active
+                      ? 'pm-dashboard__stage--active'
+                      : ''
+                }`}
+                aria-label={`${PRODUCTION_SECTOR_LABELS_ES[stage.sector]}: ${stage.done}/${stage.total}`}
+              >
+                <span className="pm-dashboard__stage-icon">
+                  <SectorIcon sector={stage.sector} size={14} />
+                </span>
+                <span className="pm-dashboard__stage-count">
+                  {stage.done}/{stage.total}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <span
+          className="pm-dashboard__project-meta"
+          data-testid={`pm-project-empty-${project.id}`}
+        >
+          <CircleAlert size={14} strokeWidth={1.5} aria-hidden />
+          Sin módulos cargados
+        </span>
+      )}
     </div>
   );
 }

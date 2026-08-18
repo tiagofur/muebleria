@@ -3,6 +3,7 @@ import {
   normalizeItemFloorStatus,
   type BoardSheetEstimate,
   type ItemFloorStatus,
+  type PickingStatus,
   type ProductionEdgeTotal,
   type ProductionMaterialTotal,
   type Project,
@@ -40,11 +41,11 @@ export type FabricProjectCard = {
   readonly items: readonly FabricStationRow[];
   readonly materials: readonly (ProductionMaterialTotal & {
     readonly estimatedSheets?: number;
-    readonly picked: boolean;
+    readonly pickingStatus?: PickingStatus;
   })[];
   readonly edges: readonly (ProductionEdgeTotal & {
     readonly previewColor?: string;
-    readonly picked: boolean;
+    readonly pickingStatus?: PickingStatus;
   })[];
   readonly activeClaims: readonly FabricActiveClaim[];
 };
@@ -87,17 +88,15 @@ export function fabricProjectCards({
     const sheetByCode = new Map(
       metrics?.sheetEstimates.map((estimate) => [estimate.code, estimate.estimatedSheets]) ?? [],
     );
-    const boardsPicked = pickingStates.some(
+    const boardsPickingState = pickingStates.find(
       (state) =>
         state.projectId === project.id &&
-        state.material === 'tableros' &&
-        state.status === 'despachado',
+        state.material === 'tableros',
     );
-    const edgesPicked = pickingStates.some(
+    const edgesPickingState = pickingStates.find(
       (state) =>
         state.projectId === project.id &&
-        state.material === 'cintillas' &&
-        state.status === 'despachado',
+        state.material === 'cintillas',
     );
 
     return [{
@@ -108,12 +107,12 @@ export function fabricProjectCards({
       materials: (metrics?.materials ?? []).map((material) => ({
         ...material,
         estimatedSheets: sheetByCode.get(material.materialCode ?? material.key),
-        picked: boardsPicked,
+        pickingStatus: boardsPickingState?.status,
       })),
       edges: (metrics?.edges ?? []).map((edge) => ({
         ...edge,
         previewColor: metrics?.edgeBandColors[edge.edgeBandCode ?? edge.key],
-        picked: edgesPicked,
+        pickingStatus: edgesPickingState?.status,
       })),
       activeClaims: activeClaims.filter(
         (claim) => claim.projectId === project.id && claim.sector === station,

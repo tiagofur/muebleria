@@ -71,7 +71,7 @@ describe('AppShell nav model (F017)', () => {
       'instalaciones',
     ]);
     expect(produccion.items.map((i) => i.label)).toEqual([
-      'Dashboard Producción',
+      'Dashboard',
       'Órdenes',
       'Producción',
       'Embarques',
