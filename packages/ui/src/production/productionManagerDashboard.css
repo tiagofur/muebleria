@@ -1,521 +1,325 @@
-/* ─── Production Manager Dashboard ────────────────────────────────────────── */
+/* Production manager dashboard — same tokens and interaction patterns as the
+   rest of the factory module. */
 
 .pm-dashboard {
-  padding: 1.5rem;
-  max-width: 1400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-width: 87.5rem;
   margin: 0 auto;
 }
 
-/* Header */
-.pm-dashboard__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.pm-dashboard__title-row {
+.pm-dashboard__header,
+.pm-dashboard__title-row,
+.pm-dashboard__header-actions,
+.pm-dashboard__card,
+.pm-dashboard__project-name,
+.pm-dashboard__project-progress,
+.pm-dashboard__project-stages,
+.pm-dashboard__job-row,
+.pm-dashboard__job-info,
+.pm-dashboard__job-operator,
+.pm-dashboard__job-machine,
+.pm-dashboard__job-time {
   display: flex;
   align-items: center;
-  gap: 1rem;
+}
+
+.pm-dashboard__header {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.pm-dashboard__title-row { gap: var(--space-3); }
+
+.pm-dashboard__title-icon,
+.pm-dashboard__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border-radius: var(--radius-md);
 }
 
 .pm-dashboard__title-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  border-radius: 12px;
-  color: white;
+  width: var(--space-10);
+  height: var(--space-10);
+  color: var(--text-inverse);
+  background: var(--brand-500);
 }
 
 .pm-dashboard__title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--gray-900, #111827);
   margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  text-wrap: balance;
 }
 
 .pm-dashboard__subtitle {
-  font-size: 0.95rem;
-  color: var(--gray-500, #6b7280);
-  margin: 0.25rem 0 0 0;
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
 }
 
-.pm-dashboard__header-actions {
-  display: flex;
-  gap: 0.75rem;
-}
+.pm-dashboard__header-actions { flex-wrap: wrap; gap: var(--space-2); }
 
-.pm-dashboard__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  border: none;
-}
-
-.pm-dashboard__btn--primary {
-  background: #2563eb;
-  color: white;
-}
-
-.pm-dashboard__btn--primary:hover {
-  background: #1d4ed8;
-}
-
-.pm-dashboard__btn--secondary {
-  background: white;
-  color: var(--gray-700, #374151);
-  border: 1px solid var(--gray-200, #e5e7eb);
-}
-
-.pm-dashboard__btn--secondary:hover {
-  background: var(--gray-50, #f9fafb);
-  border-color: var(--gray-300, #d1d5db);
-}
-
-/* Summary Cards */
-.pm-dashboard__summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.pm-dashboard__card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.25rem;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--gray-100, #f3f4f6);
-}
-
-.pm-dashboard__card--highlight {
-  background: linear-gradient(135deg, #eff6ff, #dbeafe);
-  border-color: #bfdbfe;
-}
-
-.pm-dashboard__card-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: var(--gray-100, #f3f4f6);
-  border-radius: 10px;
-  color: var(--gray-600, #4b5563);
-}
-
-.pm-dashboard__card--highlight .pm-dashboard__card-icon {
-  background: #2563eb;
-  color: white;
-}
-
-.pm-dashboard__card-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.pm-dashboard__card-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--gray-900, #111827);
-  line-height: 1.2;
-}
-
-.pm-dashboard__card-label {
-  font-size: 0.8rem;
-  color: var(--gray-500, #6b7280);
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-/* Sector Status */
-.pm-dashboard__sectors {
-  margin-bottom: 2rem;
-}
-
-.pm-dashboard__section-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--gray-900, #111827);
-  margin: 0 0 1rem 0;
-}
-
-.pm-dashboard__sector-grid {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.pm-dashboard__sector-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 1rem 1.25rem;
-  background: white;
-  border: 2px solid var(--gray-200, #e5e7eb);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-width: 100px;
-}
-
-.pm-dashboard__sector-btn:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
-}
-
-.pm-dashboard__sector-btn--active {
-  border-color: #2563eb;
-  background: #eff6ff;
-}
-
-.pm-dashboard__sector-icon {
-  font-size: 1.5rem;
-}
-
-.pm-dashboard__sector-name {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--gray-700, #374151);
-  text-align: center;
-}
-
-.pm-dashboard__sector-count {
-  font-size: 0.7rem;
-  color: var(--gray-500, #6b7280);
-}
-
-/* Metrics Panel */
-.pm-dashboard__metrics {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
+.pm-dashboard__summary,
 .pm-dashboard__metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
+  gap: var(--space-3);
 }
 
+.pm-dashboard__card,
+.pm-dashboard__metrics,
+.pm-dashboard__project-row {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.pm-dashboard__card { gap: var(--space-3); padding: var(--space-4); }
+
+.pm-dashboard__card--highlight {
+  border-color: var(--border-brand);
+  background: var(--surface-selected);
+}
+
+.pm-dashboard__card-icon { width: var(--space-10); height: var(--space-10); }
+
+.pm-dashboard__card--highlight .pm-dashboard__card-icon {
+  color: var(--text-inverse);
+  background: var(--brand-500);
+}
+
+.pm-dashboard__card-content,
+.pm-dashboard__project-info,
 .pm-dashboard__metric {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 1rem;
-  background: var(--gray-50, #f9fafb);
-  border-radius: 8px;
 }
 
-.pm-dashboard__metric-label {
-  font-size: 0.8rem;
-  color: var(--gray-500, #6b7280);
-}
-
+.pm-dashboard__card-value,
 .pm-dashboard__metric-value {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--gray-900, #111827);
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
 }
 
-.pm-dashboard__metric-note {
-  margin-top: 1rem;
-  font-size: 0.8rem;
-  color: var(--gray-400, #9ca3af);
-  font-style: italic;
+.pm-dashboard__card-label,
+.pm-dashboard__metric-label,
+.pm-dashboard__sector-count,
+.pm-dashboard__project-customer,
+.pm-dashboard__project-meta,
+.pm-dashboard__job-project,
+.pm-dashboard__job-module,
+.pm-dashboard__job-machine {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
-/* Project List */
-.pm-dashboard__projects {
-  margin-bottom: 2rem;
+.pm-dashboard__card-label { margin-top: var(--space-1); }
+
+.pm-dashboard__section-title {
+  margin: 0 0 var(--space-3);
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  text-wrap: balance;
 }
 
-.pm-dashboard__project-list {
+.pm-dashboard__sector-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.pm-dashboard__sector-btn {
+  display: flex;
+  flex: 1 1 8rem;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-min);
+  padding: var(--space-3);
+  color: var(--text-secondary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.pm-dashboard__sector-btn:hover,
+.pm-dashboard__sector-btn--active {
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border-color: var(--border-brand);
+}
+
+.pm-dashboard__sector-btn:focus-visible,
+.pm-dashboard__project-link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.pm-dashboard__sector-name {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+
+.pm-dashboard__metrics { padding: var(--space-4); }
+
+.pm-dashboard__metric {
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--surface-hover);
+  border-radius: var(--radius-md);
+}
+
+.pm-dashboard__project-list,
+.pm-dashboard__job-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-2);
 }
 
 .pm-dashboard__project-row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, 14rem) minmax(0, 1fr);
+  gap: var(--space-4);
   align-items: center;
-  gap: 1.5rem;
-  padding: 1rem 1.25rem;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--gray-100, #f3f4f6);
+  padding: var(--space-4);
 }
 
-.pm-dashboard__project-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.pm-dashboard__project-name {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
+.pm-dashboard__project-info { gap: var(--space-1); min-width: 0; }
+.pm-dashboard__project-name { gap: var(--space-2); min-width: 0; }
 
 .pm-dashboard__project-link {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #2563eb;
-  background: none;
-  border: none;
+  min-width: 0;
   padding: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-brand);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  text-align: left;
+  background: transparent;
+  border: none;
   cursor: pointer;
-  text-decoration: none;
 }
 
-.pm-dashboard__project-link:hover {
-  text-decoration: underline;
-}
-
-.pm-dashboard__project-customer {
-  font-size: 0.85rem;
-  color: var(--gray-500, #6b7280);
-}
-
-.pm-dashboard__project-meta {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--gray-500, #6b7280);
-}
-
-.pm-dashboard__project-progress {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 150px;
-}
+.pm-dashboard__project-link:hover { text-decoration: underline; }
+.pm-dashboard__project-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pm-dashboard__project-progress { gap: var(--space-2); min-width: 0; }
 
 .pm-dashboard__progress-bar {
   flex: 1;
-  height: 8px;
-  background: var(--gray-200, #e5e7eb);
-  border-radius: 4px;
+  height: var(--space-2);
   overflow: hidden;
+  background: var(--surface-hover);
+  border-radius: var(--radius-full);
 }
 
 .pm-dashboard__progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #3b82f6);
-  border-radius: 4px;
-  transition: width 0.3s ease;
+  background: var(--brand-500);
+  border-radius: inherit;
 }
 
 .pm-dashboard__progress-text {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--gray-700, #374151);
-  min-width: 40px;
+  min-width: var(--space-10);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   text-align: right;
 }
 
-.pm-dashboard__project-stages {
-  display: flex;
-  gap: 0.5rem;
-}
+.pm-dashboard__project-stages { flex-wrap: wrap; gap: var(--space-1); }
 
 .pm-dashboard__stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.125rem;
-  padding: 0.375rem 0.5rem;
-  background: var(--gray-100, #f3f4f6);
-  border-radius: 6px;
-  font-size: 0.7rem;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
 }
 
-.pm-dashboard__stage--done {
-  background: #dcfce7;
-  color: #166534;
-}
+.pm-dashboard__stage--done { color: var(--success-700); background: var(--success-50); }
+.pm-dashboard__stage--active { color: var(--warning-800); background: var(--warning-50); }
+.pm-dashboard__stage-count { font-weight: var(--weight-semibold); }
 
-.pm-dashboard__stage--active {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.pm-dashboard__stage-icon {
-  font-size: 0.875rem;
-}
-
-.pm-dashboard__stage-count {
-  font-weight: 600;
-}
-
-/* Quick Actions */
-.pm-dashboard__actions {
-  margin-bottom: 2rem;
-}
-
-.pm-dashboard__action-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-}
-
-.pm-dashboard__action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.875rem 1rem;
-  background: white;
-  border: 2px dashed var(--gray-200, #e5e7eb);
-  border-radius: 10px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--gray-600, #4b5563);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.pm-dashboard__action-btn:hover {
-  border-color: #2563eb;
-  color: #2563eb;
-  background: #eff6ff;
-}
-
-/* Loading & Error States */
 .pm-dashboard__loading,
 .pm-dashboard__error {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  padding: 4rem 2rem;
+  gap: var(--space-3);
+  padding: var(--space-16) var(--space-6);
+  color: var(--text-secondary);
   text-align: center;
-  color: var(--gray-500, #6b7280);
 }
 
-.pm-dashboard__spinner {
-  animation: spin 1s linear infinite;
-  color: #2563eb;
+.pm-dashboard__error { color: var(--danger-700); }
+.pm-dashboard__spinner { color: var(--text-brand); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pm-dashboard__spinner {
+    animation: pm-dashboard-spin var(--duration-slow) linear infinite;
+  }
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.pm-dashboard__error {
-  color: #dc2626;
-}
-
-/* Active Jobs */
-.pm-dashboard__jobs {
-  margin-bottom: 2rem;
-}
-
-.pm-dashboard__job-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
+@keyframes pm-dashboard-spin { to { transform: rotate(1turn); } }
 
 .pm-dashboard__job-row {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 0.875rem 1rem;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 8px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--success-700);
+  background: var(--success-50);
+  border: 1px solid var(--success-300);
+  border-radius: var(--radius-md);
 }
 
-.pm-dashboard__job-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
+.pm-dashboard__job-info { flex-wrap: wrap; gap: var(--space-3); min-width: 0; }
 
 .pm-dashboard__job-operator {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-weight: 600;
-  color: var(--gray-900, #111827);
-}
-
-.pm-dashboard__job-project {
-  font-size: 0.875rem;
-  color: var(--gray-600, #4b5563);
+  gap: var(--space-1);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
 }
 
 .pm-dashboard__job-module {
-  font-size: 0.8rem;
-  color: var(--gray-500, #6b7280);
-  background: white;
-  padding: 0.125rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid var(--gray-200, #e5e7eb);
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
 }
 
-.pm-dashboard__job-machine {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--gray-500, #6b7280);
-}
+.pm-dashboard__job-machine,
+.pm-dashboard__job-time { gap: var(--space-1); }
 
 .pm-dashboard__job-time {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #166534;
+  flex: 0 0 auto;
+  color: var(--success-700);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .pm-dashboard {
-    padding: 1rem;
-  }
-
-  .pm-dashboard__header {
-    flex-direction: column;
-  }
-
-  .pm-dashboard__summary {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .pm-dashboard__project-row {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-
-  .pm-dashboard__project-stages {
-    flex-wrap: wrap;
-  }
+@media (max-width: 720px) {
+  .pm-dashboard__header { flex-direction: column; }
+  .pm-dashboard__header-actions { width: 100%; }
+  .pm-dashboard__header-actions .btn { flex: 1; }
+  .pm-dashboard__project-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .pm-dashboard__project-progress { max-width: 18rem; }
+  .pm-dashboard__job-row { align-items: flex-start; flex-direction: column; }
 }

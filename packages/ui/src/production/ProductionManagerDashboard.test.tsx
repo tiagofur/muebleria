@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Project } from '@muebles/domain';
 import {
@@ -85,5 +85,55 @@ describe('ProductionManagerDashboard', () => {
       expect(screen.getByRole('button', { name: /Corte/ })).not.toBeNull(),
     );
     expect(screen.getByRole('button', { name: /Corte/ }).querySelector('svg')).not.toBeNull();
+  });
+
+  it('keeps dashboard icons decorative and aligned to the Lucide stroke contract', async () => {
+    renderDashboard();
+
+    await screen.findByRole('button', { name: 'Actualizar' });
+
+    const icons = document.querySelectorAll('.pm-dashboard svg');
+    expect(icons.length).toBeGreaterThan(0);
+    icons.forEach((icon) => {
+      expect(icon.getAttribute('stroke-width')).toBe('1.5');
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  it('exposes toggle and sector selection states to keyboard and assistive tech', async () => {
+    renderDashboard();
+
+    const metricsToggle = await screen.findByRole('button', {
+      name: 'Ver Métricas',
+    });
+    expect(metricsToggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(metricsToggle);
+    expect(
+      screen.getByRole('button', { name: 'Ocultar Métricas' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+
+    const cutting = screen.getByRole('button', { name: /Corte/ });
+    expect(cutting.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(cutting);
+    expect(cutting.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('announces a recoverable dashboard loading error', async () => {
+    render(
+      <ProductionManagerDashboard
+        projects={projects}
+        repo={{
+          getProductionDashboard: async () => {
+            throw new Error('Sin conexión');
+          },
+          getProductionActiveJobs: async () => [],
+        }}
+      />,
+    );
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Error al cargar el dashboard: Sin conexión',
+    );
+    expect(screen.getByRole('button', { name: 'Reintentar' })).not.toBeNull();
   });
 });

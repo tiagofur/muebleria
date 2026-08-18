@@ -1890,6 +1890,38 @@
         "cliente",
         "fase5"
       ]
+    },
+    {
+      "id": "F099",
+      "phase": 21,
+      "name": "produccion_polish_final",
+      "title": "Polish final del módulo Producción",
+      "description": "Cierre de calidad UI/UX del módulo Producción posterior a F095–F098: consistencia visual, diseño responsive, accesibilidad, estados vacíos y de error, foco visible y uso exclusivo de tokens; sin alterar el dominio ni el backend.",
+      "acceptance": [
+        "Producción, Dashboard de Producción, Embarques e Instalaciones mantienen jerarquía, copy y controles consistentes.",
+        "Los estados vacíos, carga degradada y fallo de acciones son comprensibles y recuperables.",
+        "La navegación por teclado y los focos visibles se conservan o corrigen en las superficies afectadas.",
+        "Las cards y acciones principales siguen siendo utilizables en viewport móvil sin desbordes.",
+        "No se introducen valores visuales hardcodeados ni iconografía ajena a Lucide.",
+        "Tests focales, pnpm test, pnpm typecheck e init.sh verdes.",
+        "Existe informe de polish y critique posterior en progress/implement_f099.md."
+      ],
+      "references": [
+        "docs/roadmap-screens/03-fabrica.md",
+        "docs/design.md",
+        "progress/implement_f095.md",
+        "progress/implement_f096.md",
+        "progress/implement_f097.md",
+        "progress/implement_f098.md"
+      ],
+      "status": "done",
+      "tags": [
+        "produccion",
+        "ui",
+        "polish",
+        "accessibility",
+        "fase5"
+      ]
     }
   ]
 }

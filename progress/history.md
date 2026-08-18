@@ -279,3 +279,10 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Aprobada en `progress/review_f098.md`.
 - Las cards de Instalaciones exponen dirección, teléfono y email existentes del cliente, con wrapping seguro en phone y enlaces accionables.
 - Evidencia de implementación y verificación: `progress/implement_f098.md`.
+
+## F099 — Polish final del módulo Producción (2026-08-18)
+
+- Aprobada en `progress/review_f099.md`.
+- El dashboard de Producción se alineó al sistema compartido: tokens y `.btn`, estados de carga/error recuperables, semántica ARIA de filtros y progreso, reflujo seguro en phone y focos visibles.
+- Todos los iconos Lucide del dashboard declaran `strokeWidth={1.5}` y `aria-hidden` cuando son decorativos; la regresión focal protege ambos contratos.
+- Verificación: dashboard focal 6 tests, `pnpm typecheck`, `./init.sh` (domain 632, UI 966, web 257, desktop 17, mobile 36) y `git diff --check` verdes.
