@@ -2115,7 +2115,7 @@
         "packages/ui/src/dashboard/",
         "packages/ui/src/production/PlantBoardScreen.tsx"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "ui",
         "design-system",

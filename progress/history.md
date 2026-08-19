@@ -394,3 +394,16 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   rutas actualizada; docs/design.md §3.2.1 con la taxonomía de 5 contextos.
 - Verificación: UI 1008/1008, typecheck, ./init.sh, detector 0 y smoke visual
   con canvas oliva rgb(247,250,245) en /materials y /modules.
+
+## F105 — Page Chrome Rollout II: Ventas y Trabajo (2026-08-19)
+
+- Aprobada en `progress/review_F105.md`.
+- Inicio, Dashboard de Ventas, Clientes, Vitrina y Estado de Planta migran al
+  esqueleto único `PageHeader`/`PageToolbar` con icon-chips del mapa §3.7.
+- Vitrina reestructurada: el header lo posee `ShowcaseScreen`, los tabs viven
+  en la toolbar y los cuerpos (Portafolio/Módulos) ya no duplican título.
+- Título «Vitrina» alineado al label de nav; CSS huérfano podado
+  (dashboard/plant-board title-icon, showcase/portfolio headers, alias de
+  pageHeader.css sin uso).
+- Verificación: 5 tests nuevos de composición, UI 1013/1013, typecheck,
+  ./init.sh, detector 0, smoke 1280/390 sin overflow con una primaria en Inicio.
