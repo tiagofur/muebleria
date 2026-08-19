@@ -17,7 +17,7 @@
   position: absolute;
   top: calc(100% + var(--space-1));
   right: 0;
-  z-index: 50;
+  z-index: var(--z-dropdown);
   min-width: 16rem;
   max-width: min(24rem, calc(100vw - var(--space-4) * 2));
   margin: 0;

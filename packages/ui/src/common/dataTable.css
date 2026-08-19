@@ -93,7 +93,7 @@
 .dashboard-owners-table th {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: var(--z-raised);
   background: var(--surface-hover);
   font-weight: var(--weight-semibold);
   white-space: nowrap;

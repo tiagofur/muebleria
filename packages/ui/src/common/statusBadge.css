@@ -90,6 +90,21 @@
   color: var(--text-secondary);
 }
 
+/* ── Chip neutral para metadatos SIN connotación de estado (§5.2:
+   "texto --text-secondary sin cápsula, o chip neutral"). Categoría,
+   tipo, rol de usuario, unidad, etc. Nunca color semántico, sin dot. ── */
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  white-space: nowrap;
+}
+
 /* variantes semánticas auxiliares (stock, prioridades) */
 .status-badge--warning {
   background: var(--warning-50);

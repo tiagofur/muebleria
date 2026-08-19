@@ -291,8 +291,19 @@
   --bp-tablet-min: 640px;
   --bp-desktop-min: 900px;
   --bp-cards-3-min: 1024px;
-  /* Min interactive size on coarse pointers / phone (≈40px). */
-  --touch-min: 2.5rem;
+  /* Min interactive size on coarse pointers / phone (§4.0 v3: 44px). */
+  --touch-min: 2.75rem;
+
+  /* —— Escala z-index (§5.4 / F111) — nada de literales en features —— */
+  --z-base: 1;          /* contenido sobre su propio stacking context */
+  --z-raised: 2;        /* decors/chips sobre el contenido */
+  --z-sticky: 10;       /* chrome sticky, tabs, headers de tabla */
+  --z-dropdown: 40;     /* dropdowns, popovers */
+  --z-overlay: 50;      /* drawers y overlays internos */
+  --z-toast: 90;        /* toasts */
+  --z-modal: 1000;      /* superficies fullscreen (Proyectar) */
+  --z-modal-dialog: 1100; /* modales sobre fullscreen (Modal/FullscreenDialog) */
+  --z-tooltip: 1200;    /* tooltips, siempre encima */
 
   /* —— Border radius (§3.5) —— */
   --radius-sm: 4px;

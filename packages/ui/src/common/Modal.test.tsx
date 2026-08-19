@@ -262,7 +262,7 @@ describe('Modal CSS contract (F018)', () => {
     expect(css).toContain('.ui-modal-root.is-closing');
     expect(css).toContain('position: sticky');
     // Must stack above fullscreen Proyectar (--z-modal ≈ 1000).
-    expect(css).toMatch(/z-index:\s*var\(--z-modal-dialog,\s*1100\)/);
+    expect(css).toMatch(/z-index:\s*var\(--z-modal-dialog(?:,\s*1100)?\)/);
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 

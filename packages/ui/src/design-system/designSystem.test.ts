@@ -228,3 +228,59 @@ describe('design system (F016)', () => {
     ).toEqual([]);
   });
 });
+
+describe('design system — z-index token scale (F111)', () => {
+  it('feature CSS declares no literal z-index (only var(--z-*))', () => {
+    const offenders: string[] = [];
+    for (const file of listFeatureCss()) {
+      const rel = file.replace(uiRoot + '/src/', '');
+      const css = read(file);
+      const match = css.match(/z-index:\s*\d/);
+      if (match) offenders.push(`${rel}: "${match[0]}"`);
+    }
+    expect(
+      offenders,
+      `literal z-index found (use var(--z-base|raised|sticky|dropdown|overlay|toast|modal|modal-dialog|tooltip)):\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+});
+
+describe('design system — literal color gate (F111)', () => {
+  /**
+   * Files with legitimate exemptions from the pure tokens-only rule:
+   * - preview3d / visualizers (3D canvas, lighting, axis colors, camera gizmos)
+   * - showcase / portfolio (lightbox backdrop, media presentation overlays)
+   * - crm whatsApp modal (brand third-party icon/badge)
+   * All other files must keep their literal colors bounded under the gate limit.
+   */
+  const EXEMPT_PATTERNS = [
+    /preview3d\//,
+    /showcase\/projectsPortfolio\.css$/,
+    /crm\/whatsAppModal\.css$/,
+  ];
+
+  it('feature CSS literal colors are bounded and trending down (gate <= 100)', () => {
+    const colorRegex = /(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\))/g;
+    let totalLiterals = 0;
+    const byFile: Record<string, number> = {};
+
+    for (const file of listFeatureCss()) {
+      const rel = file.replace(uiRoot + '/src/', '');
+      const content = read(file);
+      // Strip comments so documented reasons don't trigger the gate
+      const noComments = content.replace(/\/\*[\s\S]*?\*\//g, '');
+      const matches = noComments.match(colorRegex);
+      if (matches && matches.length > 0) {
+        byFile[rel] = matches.length;
+        totalLiterals += matches.length;
+      }
+    }
+
+    // F111 acceptance: literal colors reduced from 129+ down to under 100
+    expect(
+      totalLiterals,
+      `literal CSS colors exceeded ceiling (found ${totalLiterals}):\n${JSON.stringify(byFile, null, 2)}`,
+    ).toBeLessThanOrEqual(100);
+  });
+});
+

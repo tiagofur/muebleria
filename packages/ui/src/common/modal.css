@@ -7,7 +7,7 @@
   position: fixed;
   inset: 0;
   /* Above fullscreen studio surfaces (Proyectar uses --z-modal ≈ 1000). */
-  z-index: var(--z-modal-dialog, 1100);
+  z-index: var(--z-modal-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -28,7 +28,7 @@
 
 .ui-modal {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -117,7 +117,7 @@
   flex: 0 0 auto;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--z-base);
   padding: var(--density-modal-header-y) var(--density-modal-header-x);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-card);
@@ -173,7 +173,7 @@
   flex: 0 0 auto;
   position: sticky;
   bottom: 0;
-  z-index: 1;
+  z-index: var(--z-base);
   padding: var(--density-modal-footer-y) var(--density-modal-footer-x);
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-card);

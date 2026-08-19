@@ -8,7 +8,7 @@
 .fullscreen-dialog {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal-dialog, 1100);
+  z-index: var(--z-modal-dialog);
   display: flex;
   flex-direction: column;
   background: var(--surface-sidebar);
