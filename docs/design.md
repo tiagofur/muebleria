@@ -583,6 +583,7 @@ TODA pantalla del producto usa el mismo esqueleto, en este orden:
 - **Toolbar**: búsqueda y filtros viven INMEDIATAMENTE bajo el header, nunca desplazados a otra sección de la página.
 - **Gap raíz**: `--density-page-gap` (12px) para TODAS las pantallas — no `--space-5/6/8` por screen.
 - **Estados**: `EmptyState` / `ListSkeleton` / `PageLoading` comunes — prohibidos empty states propios.
+- **Workspaces tipo hub** (detalle de cotización, orden de producción `/orders/:id`): usan chrome propio (`.workspace-chrome` / `.prod-hub__header`) con back + título + meta densa + acciones — no `.page-header` de lista. El título único, la jerarquía de headings y los estados comunes aplican igual.
 
 #### 4.1b Regla de título único (v2)
 
@@ -931,28 +932,26 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **RBAC**: `roleCanAccessShowcaseNav` (admin, ingeniero, gerente_ventas, vendedor). No `produccion`, no `user`.
 - **Icono:** `Store`
 
-### 6.7 Órdenes (cola + hub de obra — TEMPORAL)
+### 6.7 Órdenes (cola + hub de obra)
 
-- **Ruta nav:** `production` (sección PRODUCCIÓN, label **Órdenes** — ex "Producción"; se elimina en M2, ver `roadmap-screens/00-overview.md`)
+- **Ruta nav:** `orders` (sección PRODUCCIÓN, label **Órdenes**). M2 puede consolidar dashboards — ver `roadmap-screens/00-overview.md`
 - **Paths:**
-  - `/produccion` — cola de trabajo
-  - `/produccion/:projectId` — hub de orden (OP)
-  - `/produccion/:projectId/:tab` — sub-vista (`resumen`, `documentos`, …; legacy `exports` → documentos)
+  - `/orders` — cola de trabajo
+  - `/orders/:projectId` — hub de orden (OP)
+  - `/orders/:projectId/:tab` — sub-vista, slugs en inglés (`summary`, `floor`, `labels`, `hardware`, `documents`; legacy `exports` → documentos)
 - **Código:** `ProductionWorkspace` → `ProductionQueue` | `ProductionOrderHub` (`packages/ui/src/production/`)
 - **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
-- **Patrón:** workspace de fábrica (no editor de cotización)
+- **Patrón:** workspace de fábrica con chrome propio (`.prod-hub__header` — ver §4.1a workspaces)
 - **Contenido:**
-  - Cola: tabs accepted / produced; CTA primario **Abrir orden**; Pack y Marcar en planta secundarios. **Sin** muro Optimizer/herrajes/etiquetas en la card (viven en el hub). Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
-  - Hub tabs (trim 2026-08-17): **Resumen · Piso · Control de Carga (despacho) · Etiquetas · Herrajes · Documentos** (única pestaña de descargas; URL legacy `…/exports` redirige acá)
-  - Las tabs técnicas (Módulos, Despiece, Vistas, Optimización) **migraron a Ingeniería** (`EngineeringWorkspace`); generación de documentos = Ingeniería, uso = Fábrica (regla en `roadmap-screens/00-overview.md` §4)
-  - Tab **Piso**: paperless cards + escaneo QR + avance de estado (PROD-4.2)
-  - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint)
-  - Hub Resumen: checklist listo-para-cortar, totales de fábrica (m² tablero, ML canto), pack; **solo lectura del diseño**
-  - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas + resumen + despiece + elevaciones (si hay muros); export piloto CNC JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
+  - Cola: tabs «Para fabricar» (sin claim de corte) / «Ya en producción» (con claim); CTA primario **Abrir orden**; Pack y Marcar en producción secundarios. Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
+  - Hub tabs: **Resumen · Piso · Etiquetas · Herrajes · Documentos** (única pestaña de descargas). **Control de Carga (despacho) migró a Embarques** (`/shipments/:projectId`, `EmbarquesProjectDetail`); las tabs técnicas (Módulos, Despiece, Vistas, Optimización) viven en **Ingeniería** (`EngineeringWorkspace`); generación de documentos = Ingeniería, uso = Fábrica
+  - Tab **Piso**: paperless cards + escaneo QR (lector USB, cámara o manual) + avance one-tap (PROD-4.2); filtro por estado de piso con conteos
+  - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint); filtro por ambiente en obras multi-ambiente (PROD-4.4)
+  - Hub Resumen: checklist listo-para-cortar, totales de fábrica (módulos, piezas, m² tablero, ML canto) y desglose comprar/cargar por material; **solo lectura del diseño**
+  - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas PDF/ZPL + resumen + despiece + elevaciones + hojas de armado + cut-list CSV configurable + CNC pilot JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
   - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome ni Más)
   - Detalle de cotización accepted|produced: **franja de procesos** bajo el header (`ProjectFloorProgressStrip`, F093) — visible a cualquier rol con acceso a la obra (vendedor incl.)
-- **RBAC nav:** `roleCanAccessProductionNav` (= roles de export producción F041).  
-  Filtro de lista de cotizaciones a solo plant-ready sigue siendo `roleUsesProductionQueue` (**solo** `produccion`).
+- **RBAC nav:** `roleCanAccessProductionNav`. La ruta `/orders` sin permiso **debe redirigir a `home`** (§4.1) — deuda conocida: hoy renderiza main vacío.
 - **Icono:** `Factory`
 
 ### 6.7a Producción (estaciones de fabricación)
@@ -1125,7 +1124,7 @@ aprobar (ver `reviewer` skill, bloque Diseño UI/UX).
 
 - [ ] **Estados de pantalla**: loading (skeleton), empty, sin resultados, error — los 4 presentes o justificación escrita en el PR
 - [ ] **Estados de control**: hover, focus-visible, active, disabled en TODO control interactivo nuevo (§3.6.1)
-- [ ] **Una acción primaria** por vista; jerarquía primary → secundarias → menú
+- [ ] **Una acción primaria por nivel de contexto**: en listas/boards, UNA primaria por card (la acción de esa card) y ninguna primaria suelta compitiendo; en workspaces con chrome + tabs, la primaria vive en UN solo nivel — chrome **o** tab activa, nunca en ambos a la vez (p. ej. «Pack» primario en chrome ⇒ en Documentos es secundario)
 - [ ] **Solo tokens**: 0 hex, 0 px sueltos, 0 `font-size` literales; detector impeccable (`detect.mjs`) en 0 hallazgos
 - [ ] **A11y**: contraste AA, teclado completo (§4.8), icon-only con `aria-label`, significado nunca solo por color
 - [ ] **Copy**: taller + sentence case + datos formateados (§7.2) + errores que enseñan (§7.3)

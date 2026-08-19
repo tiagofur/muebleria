@@ -1,5 +1,32 @@
 # Sesión activa
 
+- **Review UI de `/orders` como test del estándar v3 (2026-08-18): COMPLETADO.**
+  - Alcance: cola + hub `/orders/:id` (tabs Resumen · Piso · Etiquetas · Herrajes ·
+    Documentos) contra `docs/design.md` v3.0 (gate §8 + §7 + §4.8). Sin tocar código.
+  - Método: lectura de código (production/*.tsx + css) · detector 0 hallazgos ·
+    verificación en vivo (dev server + admin en navegador: cola, hub, tabs).
+  - **Gate §8: 5/10 en verde** (tokens ✅, detector ✅, motion ✅, estructura básica ✅,
+    estados de pantalla parciales). Fracasos: copy/higiene §7 (❌), primarias por
+    contexto (❌ en Documentos/Herrajes), vocabulario §5.4 (stat-card y tabla propios).
+  - Hallazgos P1: (1) `/orders` sin permiso (guest) renderiza main VACÍO — debe
+    redirigir a home (§4.1); (2) higiene de datos en vivo: teléfono crudo
+    "195130.707627" en customerLabel, "schema v3" en topbar (App.tsx:3056),
+    "#111" en hint de Documentos, "payload QR" en placeholder de Piso.
+  - P2: doble primaria simultánea (chrome Pack + Pack/Exportar herrajes en tab) ·
+    `prod-hub__total-card` y `prod-modulos__table` en vez de `.stat-card`/`.data-table`
+    · fecha "18/08/2026" en vez de "18 ago 2026" · separadores "·" pegados (lectura
+    de screen reader). P3: "ml"→"ML", dimensiones sin espacios, "CNC pilot"/"Cut-list"
+    en inglés, tabpanel sin aria-labelledby, lineCost.toFixed(2) sin formato moneda.
+  - **El test validó el estándar**: cazó exactamente los problemas reales. Dos
+    ambigüedades detectadas y corregidas en el doc: (a) regla de primaria ahora es
+    "una por nivel de contexto" (listas: por card; workspaces: chrome O tab, nunca
+    ambos); (b) §4.1a ahora cubre workspaces tipo hub (`.prod-hub__header`).
+  - **docs/design.md §6.7 actualizado a la realidad del código**: rutas `/orders`
+    (nav `orders`), 5 tabs (despacho → Embarques `/shipments/:id`), slugs en inglés,
+    deuda de redirect documentada.
+  - Pendiente código (no tocado): redirect permiso /orders, quitar "schema v3" del
+    topbar, formatear teléfono customerLabel, limpiar "#111"/"payload" de copy,
+    migrar stat-card/tabla a componentes comunes, unificar fechas.
 - **Sesión activa (2026-08-18): docs design v3.0 — estándar de excelencia UI/UX.**
   - Pedido del dueño: elevar la documentación de diseño a estándar Apple/Google
     (app "digna de premio", usable 8hs/día); evaluar si hace falta un skill
