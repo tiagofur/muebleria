@@ -2086,7 +2086,7 @@
         "packages/ui/src/agregados/",
         "packages/ui/src/optionGroups/"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "ui",
         "design-system",
