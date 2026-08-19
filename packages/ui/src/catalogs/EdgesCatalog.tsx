@@ -9,6 +9,8 @@ import {
   EmptyState,
   formatMoneyDisplay,
   Modal,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
   useDebouncedValue,
@@ -196,15 +198,12 @@ export function EdgesCatalog({
 
   return (
     <section className="catalog-page" aria-label="Catálogo de cantos">
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Cantos</h2>
-          <p className="page-header__subtitle">
-            Cintillas y melaminas de canto del taller
-          </p>
-        </div>
-        <div className="catalog-page__toolbar">
-          {canMutate ? (
+      <PageHeader
+        title="Cantos"
+        subtitle="Cintillas y melaminas de canto del taller"
+        icon={<Minus size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -213,20 +212,23 @@ export function EdgesCatalog({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nuevo canto
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {!isTrulyEmpty ? (
-        <div className="catalog-page__filters">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Buscar cantos…"
-            aria-label="Buscar cantos"
-          />
-          <StatusChips value={status} onChange={setStatus} />
-        </div>
+        <PageToolbar
+          ariaLabel="Buscar y filtrar cantos"
+          search={
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Buscar cantos…"
+              aria-label="Buscar cantos"
+            />
+          }
+          filters={<StatusChips value={status} onChange={setStatus} />}
+        />
       ) : null}
 
       <div className="catalog-layout">

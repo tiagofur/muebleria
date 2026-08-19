@@ -45,6 +45,8 @@ import {
 import {
   EmptyState,
   Modal,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
   useDebouncedValue,
@@ -611,15 +613,12 @@ export function AmbientMaterialsCatalog({
 
   return (
     <section className="catalog-page" aria-label="Catálogo de acabados">
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Catálogo de Acabados</h2>
-          <p className="page-header__subtitle">
-            Acabados y texturas visuales para superficies, herrajes y objetos 3D (solo presentación, sin costo)
-          </p>
-        </div>
-        <div className="catalog-page__toolbar">
-          {canMutate && onCreateCategory ? (
+      <PageHeader
+        title="Acabados"
+        subtitle="Acabados y texturas visuales para superficies, herrajes y objetos 3D (solo presentación, sin costo)"
+        icon={<Palette size={16} strokeWidth={1.5} />}
+        secondaryActions={
+          canMutate && onCreateCategory ? (
             <button
               type="button"
               className="btn"
@@ -629,8 +628,10 @@ export function AmbientMaterialsCatalog({
               <Pencil size={16} strokeWidth={1.5} aria-hidden />
               Editar categorías
             </button>
-          ) : null}
-          {canMutate ? (
+          ) : undefined
+        }
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -640,9 +641,9 @@ export function AmbientMaterialsCatalog({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nuevo acabado
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       <div className={showCategorySidebar ? 'module-list-layout' : 'catalog-layout'}>
         {showCategorySidebar ? (
@@ -720,15 +721,18 @@ export function AmbientMaterialsCatalog({
 
         <div className="module-list-main">
           {!isTrulyEmpty ? (
-            <div className="catalog-page__filters">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Buscar acabados…"
-                aria-label="Buscar acabados"
-              />
-              <StatusChips value={status} onChange={setStatus} />
-            </div>
+            <PageToolbar
+              ariaLabel="Buscar y filtrar acabados"
+              search={
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Buscar acabados…"
+                  aria-label="Buscar acabados"
+                />
+              }
+              filters={<StatusChips value={status} onChange={setStatus} />}
+            />
           ) : null}
 
           {isTrulyEmpty ? (

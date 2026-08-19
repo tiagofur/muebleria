@@ -5,7 +5,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { Agregado } from '@muebles/domain';
 import { Blocks, Layers, Plus, Settings2 } from 'lucide-react';
-import { EmptyState, SearchInput } from '../../common';
+import { EmptyState, PageHeader, PageToolbar, SearchInput } from '../../common';
 
 export type AgregadoListViewProps = {
   readonly rows: readonly Agregado[];
@@ -28,46 +28,46 @@ export function AgregadoListView({
 
   return (
     <>
-      <header className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Agregados</h2>
-          <p className="page-header__subtitle">
-            Sub-ensambles reutilizables: cajones, puertas con bisagras y jaladeras, divisiones.
-          </p>
-        </div>
-        {canMutate ? (
-          <div className="catalog-page__toolbar">
+      <PageHeader
+        title="Agregados"
+        subtitle="Sub-ensambles reutilizables: cajones, puertas con bisagras y jaladeras, divisiones."
+        icon={<Blocks size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
               onClick={onCreate}
               data-testid="create-agregado-btn"
             >
-              <Plus size={16} /> Nuevo Agregado
+              <Plus size={16} strokeWidth={1.5} aria-hidden /> Nuevo agregado
             </button>
-          </div>
-        ) : null}
-      </header>
+          ) : undefined
+        }
+      />
 
-      <div className="catalog-page__filters">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Buscar por código o nombre…"
-        />
-      </div>
+      <PageToolbar
+        ariaLabel="Buscar y filtrar agregados"
+        search={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por código o nombre…"
+          />
+        }
+      />
 
       {rows.length === 0 ? (
         <EmptyState
           icon={Blocks}
-          title={isFilterEmpty ? 'No se encontraron agregados' : 'Sin Agregados'}
+          title={isFilterEmpty ? 'No se encontraron agregados' : 'Sin agregados'}
           description={
             isFilterEmpty
               ? 'Probá cambiando la búsqueda.'
-              : 'Creá tu primer Agregado: una puerta con bisagras y jaladera, un cajón maderero, etc.'
+              : 'Creá tu primer agregado: una puerta con bisagras y jaladera, un cajón maderero, etc.'
           }
           actionLabel={
-            isFilterEmpty ? 'Limpiar búsqueda' : canMutate ? 'Crear Agregado' : undefined
+            isFilterEmpty ? 'Limpiar búsqueda' : canMutate ? 'Crear agregado' : undefined
           }
           onAction={
             isFilterEmpty ? () => setSearch('') : canMutate ? onCreate : undefined

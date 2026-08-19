@@ -8,6 +8,8 @@ import type { Structure } from '@muebles/domain';
 import { LayoutGrid, Plus } from 'lucide-react';
 import {
   EmptyState,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
 } from '../../common';
@@ -39,40 +41,42 @@ export function StructureListView({
 
   return (
     <>
-      <header className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Estructuras</h2>
-          <p className="page-header__subtitle">
-            Cuerpos de ingeniería reutilizables para el taller
-          </p>
-        </div>
-        {canMutate ? (
-          <div className="catalog-page__toolbar">
+      <PageHeader
+        title="Estructuras"
+        subtitle="Cuerpos de ingeniería reutilizables para el taller"
+        icon={<LayoutGrid size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
               onClick={onCreate}
               data-testid="create-structure-btn"
             >
-              <Plus size={16} /> Nueva estructura
+              <Plus size={16} strokeWidth={1.5} aria-hidden /> Nueva estructura
             </button>
-          </div>
-        ) : null}
-      </header>
+          ) : undefined
+        }
+      />
 
-      <div className="catalog-page__filters">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Buscar por código o nombre…"
-          data-testid="structure-search"
-        />
-        <StatusChips
-          value={status}
-          onChange={setStatus}
-          data-testid="structure-status-chips"
-        />
-      </div>
+      <PageToolbar
+        ariaLabel="Buscar y filtrar estructuras"
+        search={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por código o nombre…"
+            data-testid="structure-search"
+          />
+        }
+        filters={
+          <StatusChips
+            value={status}
+            onChange={setStatus}
+            data-testid="structure-status-chips"
+          />
+        }
+      />
 
       {rows.length === 0 ? (
         <EmptyState

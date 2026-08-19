@@ -8,6 +8,8 @@ import type { Component } from '@muebles/domain';
 import { Plus, Puzzle } from 'lucide-react';
 import {
   EmptyState,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
 } from '../../common';
@@ -57,57 +59,61 @@ export function ComponentListView({
 
   return (
     <>
-      <header className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Componentes</h2>
-          <p className="page-header__subtitle">
-            Piezas reutilizables de ingeniería para composición de muebles
-          </p>
-        </div>
-        {canMutate ? (
-          <div className="catalog-page__toolbar">
+      <PageHeader
+        title="Componentes"
+        subtitle="Piezas reutilizables de ingeniería para composición de muebles"
+        icon={<Puzzle size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
               onClick={onCreate}
               data-testid="create-component-btn"
             >
-              <Plus size={16} /> Nuevo componente
+              <Plus size={16} strokeWidth={1.5} aria-hidden /> Nuevo componente
             </button>
-          </div>
-        ) : null}
-      </header>
+          ) : undefined
+        }
+      />
 
-      <div className="catalog-page__filters">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Buscar por código, nombre o ubicación…"
-        />
-        <StatusChips
-          value={status}
-          onChange={setStatus}
-          data-testid="component-status-chips"
-        />
-        <label className="component-list__placement-filter">
-          <span className="component-list__placement-filter-label">
-            Ubicación
-          </span>
-          <select
-            value={placementFilter}
-            onChange={(e) => setPlacementFilter(e.target.value)}
-            aria-label="Filtrar por ubicación"
-            data-testid="component-placement-filter"
-          >
-            <option value="all">Todas</option>
-            {COMPONENT_PLACEMENTS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <PageToolbar
+        ariaLabel="Buscar y filtrar componentes"
+        search={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por código, nombre o ubicación…"
+          />
+        }
+        filters={
+          <>
+            <StatusChips
+              value={status}
+              onChange={setStatus}
+              data-testid="component-status-chips"
+            />
+            <label className="component-list__placement-filter">
+              <span className="component-list__placement-filter-label">
+                Ubicación
+              </span>
+              <select
+                value={placementFilter}
+                onChange={(e) => setPlacementFilter(e.target.value)}
+                aria-label="Filtrar por ubicación"
+                data-testid="component-placement-filter"
+              >
+                <option value="all">Todas</option>
+                {COMPONENT_PLACEMENTS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        }
+      />
 
       {rows.length === 0 ? (
         <EmptyState

@@ -32,6 +32,8 @@ import {
   EmptyState,
   formatMoneyDisplay,
   Modal,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
   useDebouncedValue,
@@ -566,15 +568,12 @@ export function MaterialsCatalog({
 
   return (
     <section className="catalog-page" aria-label="Catálogo de materiales">
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Materiales</h2>
-          <p className="page-header__subtitle">
-            Tableros del catálogo (melamina, MDF, etc.)
-          </p>
-        </div>
-        <div className="catalog-page__toolbar">
-          {canMutate ? (
+      <PageHeader
+        title="Materiales"
+        subtitle="Tableros del catálogo (melamina, MDF, etc.)"
+        icon={<Layers size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -583,20 +582,23 @@ export function MaterialsCatalog({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nuevo material
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {!isTrulyEmpty ? (
-        <div className="catalog-page__filters">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Buscar materiales…"
-            aria-label="Buscar materiales"
-          />
-          <StatusChips value={status} onChange={setStatus} />
-        </div>
+        <PageToolbar
+          ariaLabel="Buscar y filtrar materiales"
+          search={
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Buscar materiales…"
+              aria-label="Buscar materiales"
+            />
+          }
+          filters={<StatusChips value={status} onChange={setStatus} />}
+        />
       ) : null}
 
       <div className="catalog-layout">

@@ -16,6 +16,8 @@ import {
   EmptyState,
   formatMoneyDisplay,
   Modal,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
   useDebouncedValue,
@@ -298,15 +300,12 @@ export function HardwareCatalog({
 
   return (
     <section className="catalog-page" aria-label="Catálogo de herrajes">
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Herrajes</h2>
-          <p className="page-header__subtitle">
-            Bisagras, correderas y demás del catálogo
-          </p>
-        </div>
-        <div className="catalog-page__toolbar">
-          {canMutate ? (
+      <PageHeader
+        title="Herrajes"
+        subtitle="Bisagras, correderas y demás del catálogo"
+        icon={<Settings2 size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -315,20 +314,23 @@ export function HardwareCatalog({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nuevo herraje
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {!isTrulyEmpty ? (
-        <div className="catalog-page__filters">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Buscar herrajes…"
-            aria-label="Buscar herrajes"
-          />
-          <StatusChips value={status} onChange={setStatus} />
-        </div>
+        <PageToolbar
+          ariaLabel="Buscar y filtrar herrajes"
+          search={
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Buscar herrajes…"
+              aria-label="Buscar herrajes"
+            />
+          }
+          filters={<StatusChips value={status} onChange={setStatus} />}
+        />
       ) : null}
 
       <div className="catalog-layout">

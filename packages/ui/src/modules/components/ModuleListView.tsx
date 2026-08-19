@@ -10,7 +10,7 @@ import {
   type CategoryFilterId,
 } from '@muebles/domain';
 import { Layers, Package, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
-import { CatalogImage, EmptyState, SearchInput } from '../../common';
+import { CatalogImage, EmptyState, PageHeader, PageToolbar, SearchInput } from '../../common';
 import { formatModuleMoney } from '../moduleHelpers';
 
 export type ModuleCategoryFilterCounts = {
@@ -148,10 +148,11 @@ export function ModuleListView({
 }: ModuleListViewProps): ReactNode {
   return (
     <>
-      <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Muebles</h2>
-        <div className="catalog-page__toolbar">
-          {canMutate && onCreateCategory ? (
+      <PageHeader
+        title="Muebles"
+        icon={<Package size={16} strokeWidth={1.5} />}
+        secondaryActions={
+          canMutate && onCreateCategory ? (
             <button
               type="button"
               className="btn"
@@ -161,8 +162,10 @@ export function ModuleListView({
               <Pencil size={16} strokeWidth={1.5} aria-hidden />
               Editar categorías
             </button>
-          ) : null}
-          {canMutate ? (
+          ) : undefined
+        }
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -171,9 +174,9 @@ export function ModuleListView({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nuevo mueble
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       <div className="module-list-layout">
         <aside
@@ -249,14 +252,17 @@ export function ModuleListView({
 
         <div className="module-list-main">
           {!isTrulyEmpty ? (
-            <div className="catalog-page__filters">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Buscar muebles…"
-                aria-label="Buscar muebles"
-              />
-            </div>
+            <PageToolbar
+              ariaLabel="Buscar y filtrar muebles"
+              search={
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Buscar muebles…"
+                  aria-label="Buscar muebles"
+                />
+              }
+            />
           ) : null}
 
           {isTrulyEmpty ? (

@@ -19,6 +19,8 @@ import { Pencil, Plus, SearchX, ToggleLeft, Trash2 } from 'lucide-react';
 import {
   EmptyState,
   Modal,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   useDebouncedValue,
   useRoutableEntitySelection,
@@ -296,15 +298,12 @@ export function OptionGroupsScreen({
 
   return (
     <section className="catalog-page" aria-label="Grupos">
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">Grupos</h2>
-          <p className="page-header__subtitle">
-            Opciones de material, canto o herraje que eligen los muebles
-          </p>
-        </div>
-        <div className="catalog-page__toolbar">
-          {canMutate ? (
+      <PageHeader
+        title="Grupos"
+        subtitle="Opciones de material, canto o herraje que eligen los muebles"
+        icon={<ToggleLeft size={16} strokeWidth={1.5} />}
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -313,19 +312,22 @@ export function OptionGroupsScreen({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nuevo grupo
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {!isTrulyEmpty ? (
-        <div className="catalog-page__filters">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Buscar grupos…"
-            aria-label="Buscar grupos de opciones"
-          />
-        </div>
+        <PageToolbar
+          ariaLabel="Buscar y filtrar grupos"
+          search={
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Buscar grupos…"
+              aria-label="Buscar grupos de opciones"
+            />
+          }
+        />
       ) : null}
 
       <div className="catalog-layout">
