@@ -340,3 +340,12 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - `AGENTS.md` (mapa): + roadmap-comercial-v2, + progress/archive/, + docs/roadmap-screens/, + docs/history/ como carpeta; app-excellence reclasificado; layout actualizado.
 - Se mantienen (vigentes): cut-plan-implementation.md (plan de fases aún no ejecutado del todo), structures.md (referencia de dominio), desktop-release.md (guía evergreen), roadmap_RN/mobile-*, PRODUCT.md.
 - Verificación: 974 tests UI verdes; solo docs y moves — sin cambios de código.
+
+
+## F100 — Area Tonal Theme Foundation (2026-08-19)
+
+- Aprobada en `progress/review_F100.md` sobre el commit publicado `72b0582`.
+- `docs/design.md` define el contexto tonal Sales / Engineering / Production / neutral, con canvas y chrome tonal pero superficies de trabajo neutrales.
+- `AppShell` propaga `data-area-context`; CTAs brand, focus y estados semánticos permanecen globales.
+- Tokens incluyen roles contextuales y 16 pares de contraste AA verificados por test (mínimo 5.87:1).
+- Evidencia: 22 tests focales de shell, 4 de integración web, `pnpm test`, `pnpm typecheck` y `./init.sh` verdes.
