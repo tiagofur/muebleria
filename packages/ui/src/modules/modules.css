@@ -583,14 +583,19 @@
   object-fit: cover;
 }
 
+/* Placeholder sin foto = silueta con tinte de área (no caja dashed):
+   el grid mantiene ritmo visual aunque falten fotos (critique 2026-08-19). */
 .module-card__media .catalog-image--placeholder {
   min-height: 100%;
   border: none;
-  border-bottom: 1px dashed var(--border-subtle);
+  border-bottom: none;
+  background: var(--area-eng-100);
+  color: var(--area-eng-400);
 }
 
 .module-card__media .catalog-image__ph-label {
   font-size: var(--text-xs);
+  color: var(--area-eng-600);
 }
 
 .module-detail__thumb {

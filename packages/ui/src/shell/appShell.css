@@ -63,7 +63,7 @@
   font-weight: var(--weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--text-inverse) 52%, transparent);
+  color: color-mix(in srgb, var(--text-inverse) 60%, transparent);
 }
 
 /* Fase 6: subgroups under INGENIERÍA (Composición / Catálogos). */
@@ -132,37 +132,52 @@
   box-shadow: var(--shadow-focus);
 }
 
+/* Tonal v2.1: el activo debe verse — superficie al 28% + ícono en el color
+   del área (señal de ubicación, no de acción). */
 .app-sidebar__item.is-active {
   border-left-color: var(--brand-400);
-  background: color-mix(in srgb, var(--brand-400) 18%, transparent);
+  background: color-mix(in srgb, var(--brand-400) 28%, transparent);
   color: var(--text-inverse);
   font-weight: var(--weight-semibold);
+}
+
+.app-sidebar__item.is-active .app-sidebar__icon {
+  color: var(--brand-300);
 }
 
 /* Área (§3.2.1): el ítem activo y el label de sección adoptan el color
    del área — señal de ubicación, sutil, nunca fondo completo. */
 .app-sidebar__section--sales .app-sidebar__section-label {
-  color: color-mix(in srgb, var(--area-sales-300) 80%, transparent);
+  color: var(--area-sales-300);
 }
 .app-sidebar__section--sales .app-sidebar__item.is-active {
   border-left-color: var(--area-sales-400);
-  background: color-mix(in srgb, var(--area-sales-400) 18%, transparent);
+  background: color-mix(in srgb, var(--area-sales-400) 28%, transparent);
+}
+.app-sidebar__section--sales .app-sidebar__item.is-active .app-sidebar__icon {
+  color: var(--area-sales-300);
 }
 
 .app-sidebar__section--eng .app-sidebar__section-label {
-  color: color-mix(in srgb, var(--area-eng-300) 80%, transparent);
+  color: var(--area-eng-300);
 }
 .app-sidebar__section--eng .app-sidebar__item.is-active {
   border-left-color: var(--area-eng-400);
-  background: color-mix(in srgb, var(--area-eng-400) 18%, transparent);
+  background: color-mix(in srgb, var(--area-eng-400) 28%, transparent);
+}
+.app-sidebar__section--eng .app-sidebar__item.is-active .app-sidebar__icon {
+  color: var(--area-eng-300);
 }
 
 .app-sidebar__section--work .app-sidebar__section-label {
-  color: color-mix(in srgb, var(--area-work-300) 80%, transparent);
+  color: var(--area-work-300);
 }
 .app-sidebar__section--work .app-sidebar__item.is-active {
   border-left-color: var(--area-work-400);
-  background: color-mix(in srgb, var(--area-work-400) 18%, transparent);
+  background: color-mix(in srgb, var(--area-work-400) 28%, transparent);
+}
+.app-sidebar__section--work .app-sidebar__item.is-active .app-sidebar__icon {
+  color: var(--area-work-300);
 }
 
 .app-sidebar__icon {

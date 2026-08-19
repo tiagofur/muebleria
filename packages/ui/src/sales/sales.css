@@ -391,7 +391,7 @@
   position: relative;
 }
 
-/* Animar con transform (compositor) en vez de transition: width (layout) */
+/* Crecimiento del segmento vía transform (compositor), nunca animar layout */
 .sales-pipeline__seg::before {
   content: '';
   position: absolute;
@@ -410,9 +410,9 @@
   .sales-pipeline__seg::before { animation: none; }
 }
 
-.sales-pipeline__seg--abiertas { background: hsl(245 78% 55%); }
-.sales-pipeline__seg--cerradas { background: hsl(142 55% 40%); }
-.sales-pipeline__seg--canceladas { background: hsl(0 65% 55%); }
+.sales-pipeline__seg--abiertas { background: var(--brand-400); }
+.sales-pipeline__seg--cerradas { background: var(--success-500); }
+.sales-pipeline__seg--canceladas { background: var(--danger-500); }
 
 @media (prefers-reduced-motion: reduce) {
   .sales-pipeline__seg { transition: none; }

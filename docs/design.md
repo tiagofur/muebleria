@@ -1,9 +1,9 @@
 # Design Guide — Muebles App
 
-> **Estado:** v2.0 — post-critique de estandarización (2026-08-18)  
-> **Autores:** Producto + agente de diseño  
-> **Fecha:** 2026-08-18  
-> **Referencia de implementación:** critique `.impeccable/critique/2026-08-18T18-53-56Z__*.md` + plan de unificación acordado (esqueleto único · título único · color de área · stat-card/badge únicos)
+> **Estado:** v2.1 — capa de craft post-critique 28/40 (2026-08-19)
+> **Autores:** Producto + agente de diseño
+> **Fecha:** 2026-08-19
+> **Referencia de implementación:** critique `.impeccable/critique/2026-08-19T00-19-38Z__*.md` — plan acordado: controles+profundidad primero · paquete P1+P2 completo · temperamento **tonal** (un paso más allá de restrained, sin committed generalizado)
 
 ---
 
@@ -278,11 +278,13 @@ Default del producto: **herramienta densa**, no landing. Tokens semánticos en `
 ```css
 --radius-sm:   4px;
 --radius-md:   8px;
---radius-lg:  12px;
---radius-xl:  16px;
---radius-2xl: 24px;
+--radius-lg:   12px;
+--radius-xl:   16px;
+--radius-2xl:  24px;
 --radius-full: 9999px;
 ```
+
+**Política de geometría (v2.1):** TODO control interactivo (`.btn`, chips de filtro, tabs, inputs, select) usa `--radius-md`. `--radius-full` queda **reservado** a tags de estado (`.status-badge`) y barras de progreso. Cards: `--radius-md` (entity) / `--radius-lg` (secundarias). `--radius-sm` solo para detalles intra-componente (kbd, chips diminutos).
 
 ---
 
@@ -467,7 +469,7 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 
 CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», …
 
-- **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo e ícono en el **color de área** (§3.2.1); label de sección en color de área al 70%
+- **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo + **superficie del color de área al 28%** + ícono en color de área `-300` (v2.1 tonal — el activo tiene que verse); label de sección en color de área `-300` pleno
 - **Brand chrome (issue #53):** `BrandMark` monochrome (tile + paneles) + wordmark «Muebles» — **sin emoji**; mismo mark en Login/Register y favicon web
 - **Command palette (issue #54):** `Cmd/Ctrl+K` en el shell — secciones de nav + cotizaciones/muebles recientes; teclado ↑↓ Enter Esc; denso, sin búsqueda de marketing
 - **TopBar**: `--surface-card` con `--shadow-sm`; **NO repite el título de la pantalla** (ver §4.1b); acciones opcionales (`headerActions`, p. ej. **Salir**)
@@ -637,6 +639,11 @@ Definidos en `packages/ui/src/catalogs/catalogs.css` con **BEM** (base + modific
 
 **Regla:** en cualquier grupo de acciones, max **1** `.btn--primary`. La secundaria es el `.btn` base (sin modificador de variante).
 
+**Estados táctiles (v2.1 — obligatorio en todo control):**
+- `:hover` — state layer: cambio de tono + `--border-strong` (secundarios) o elevación `--shadow-xs → --shadow-sm` (rellenos sólidos: primary/success).
+- `:active` — `translateY(1px)` + oscurecimiento un paso (`brand-500→700` en primary). Mismo lenguaje que `.tab-btn`. Se desactiva el translate bajo `prefers-reduced-motion`.
+- Primario en reposo lleva `--shadow-xs` (profundidad mínima que invita al toque); **nunca** sombra mayor a `--shadow-sm` en botones.
+
 ### 5.2 Badges de Status (v2 — vocabulario único)
 
 Un SOLO sistema de badge de estado con modificadores **semánticos** (no por entidad):
@@ -656,6 +663,7 @@ Un SOLO sistema de badge de estado con modificadores **semánticos** (no por ent
 ```
 
 - Vive en `common/statusBadge.css` (a extraer de `projects.css` en v2). Las familias propias (`purch-badge`, `warranty-badge`, `internal-comms__status-badge`, `eng-badge`, `users-role-badge`, …) migran a este vocabulario y se eliminan.
+- **Sin borde en los semánticos (v2.1):** badge = tinte de fondo (`-50`) + texto (`-700`) + dot. El borde 1px a saturación plena (`-500`) engorda y compite con el texto. Solo los neutrales (draft/cancelled/inactive) conservan `--border-default` para definirse sobre blanco.
 - Estados de USO (activo/inactivo) y de FLUJO (draft/quoted/…) usan semánticos (§3.2), **nunca** color de área.
 - Badges de categoría/meta (no estado) que no mappeen acá: texto `--text-secondary` sin cápsula de color, o chip neutral.
 
@@ -679,7 +687,7 @@ Un SOLO componente de indicador KPI, `.stat-card` en `common/statCard.css`
 ```
 
 - Variante interactiva `.stat-card--button` (clickeable como filtro): borde `--area-*-400` + fondo `--area-*-100` cuando activo; NUNCA tinte de fondo en estado rest.
-- Variante énfasis `.stat-card--emphasis` (KPI principal de dashboards).
+- Variante énfasis `.stat-card--emphasis` (KPI principal de dashboards) — **momento editorial (v2.1)**: borde `--brand-300`, lavado tonal sutil (`--brand-50` → card), chip de ícono brand y valor a escala hero `--text-2xl` incluso en `--stack`. Las demás stats de la fila quedan visiblemente secundarias.
 - Iconos usan el color de ÁREA si el KPI es de área, o semántico si es de estado.
 - Prohibido crear stat-cards por pantalla.
 
@@ -752,7 +760,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/modules/`
 - **Título de pantalla:** **Muebles**
 - **Patrón:** card-detalle + `EntityEditorLayout` (lista → detalle → editor full-page). Shell de detalle: `EngineeringDetailLayout` (`.eng-detail`).
-- **Lista:** cards con código, nombre, conteos de partes/herrajes, estimate de precio de venta (shell)
+- **Lista:** cards con **media 4:3/16:10 arriba** (foto si existe; sin foto = silueta con tinte `--area-eng-100` e ícono `--area-eng-400`, nunca caja dashed vacía — v2.1), código, nombre, conteos de partes/herrajes, estimate de precio de venta (shell)
 - **Detalle (wave 3 UI):**
   - **Chrome sticky:** código, nombre, categoría/meta, **Precio est.**, Vista 3D, Editar (primary), menú **Más** (Duplicar / Eliminar)
   - **Body 2-col:** primario = preview de costo + componentes; secundario = estructura/medidas + herrajes + presets comerciales
@@ -916,6 +924,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/auth/LoginScreen.tsx`
 - **CSS:** `login.css` — solo tokens del design system (sin colores hardcodeados)
 - **Comportamiento:** pantalla completa **antes** del shell; no usa `AppShell`
+- **Panel de marca (v2.1, desktop ≥900px):** split con panel indigo (`--brand-800`, borde `--brand-400` 30%) a la izquierda — `BrandMark` 64px + wordmark + tagline «Cotización y producción para talleres de carpintería» + meta de módulos — y la card de form a la derecha. Es el único momento "committed" del producto. En <900px el panel se oculta (card centrada). RegisterScreen comparte la hoja sin el aside.
 - **Acciones:**
   - Login API: `POST …/auth/login` → JWT en `localStorage` (`muebles_token`) + modo `auth` en `sessionStorage` (`muebles_session`)
   - Invitado: `WifiOff` + «Acceder sin conexión» → modo `guest` (sin token); workspace seed local

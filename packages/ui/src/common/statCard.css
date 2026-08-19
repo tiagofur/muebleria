@@ -110,9 +110,29 @@
   font-size: var(--text-xl);
 }
 
-/* ── Variante énfasis (KPI principal de dashboards) ──────────────────────── */
-
+/* ── Variante énfasis (KPI principal de dashboards) ────────────────────────
+   v2.1 tonal: es el momento editorial del dashboard — borde de marca, chip
+   brand y número a escala hero (28px incluso en variantes --stack). */
 .stat-card--emphasis {
-  border-color: var(--border-brand);
+  border-color: var(--brand-300);
   padding: var(--space-4);
+  background: linear-gradient(
+    to bottom,
+    var(--brand-50),
+    var(--surface-card) 60%
+  );
+}
+
+.stat-card--emphasis .stat-card__icon {
+  --stat-card-icon-bg: var(--brand-100);
+  --stat-card-icon-fg: var(--brand-500);
+}
+
+.stat-card--emphasis .stat-card__label {
+  font-weight: var(--weight-semibold);
+  color: var(--brand-700);
+}
+
+.stat-card--stack.stat-card--emphasis .stat-card__value {
+  font-size: var(--text-2xl);
 }

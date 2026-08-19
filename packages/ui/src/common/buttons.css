@@ -18,17 +18,25 @@
  * Rule: in any action group there is at most ONE .btn--primary.
  */
 
+/*
+ * Geometría de controles (v2.1): TODO control interactivo (btn, chips, tabs,
+ * inputs) usa --radius-md; --radius-full queda reservado a tags de estado
+ * (badges). El pressed state es translateY(1px) — mismo lenguaje que .tab-btn.
+ */
+
 .btn {
   font: inherit;
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   padding: var(--density-btn-pad-y) var(--density-btn-pad-x);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
   background: var(--surface-card);
   color: var(--text-primary);
   cursor: pointer;
-  transition: var(--transition-colors);
+  transition:
+    var(--transition-colors),
+    box-shadow var(--duration-fast) var(--ease-out);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -37,6 +45,12 @@
 
 .btn:hover:not(:disabled) {
   background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn:active:not(:disabled) {
+  background: var(--surface-hover);
+  transform: translateY(1px);
 }
 
 .btn:disabled {
@@ -55,11 +69,21 @@
   background: var(--brand-500);
   border-color: var(--brand-500);
   color: var(--text-inverse);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn--primary:hover:not(:disabled) {
   background: var(--brand-600);
   border-color: var(--brand-600);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Pressed: se hunde — baja el tono y pierde la elevación. */
+.btn--primary:active:not(:disabled) {
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+  box-shadow: var(--shadow-xs);
+  transform: translateY(1px);
 }
 
 .btn--ghost {
@@ -69,6 +93,11 @@
 
 .btn--ghost:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+
+.btn--ghost:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  transform: translateY(1px);
 }
 
 .btn--danger {
@@ -81,15 +110,28 @@
   background: var(--danger-50);
 }
 
+.btn--danger:active:not(:disabled) {
+  color: var(--danger-700);
+  border-color: var(--danger-700);
+  transform: translateY(1px);
+}
+
 .btn--success {
   background: var(--success-500);
   color: var(--text-inverse);
   border-color: var(--success-500);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn--success:hover:not(:disabled) {
   background: var(--success-700);
   border-color: var(--success-700);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn--success:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-xs);
 }
 
 /* —— Sizes —— */
@@ -131,5 +173,9 @@
 @media (prefers-reduced-motion: reduce) {
   .btn {
     transition: none;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: none;
   }
 }

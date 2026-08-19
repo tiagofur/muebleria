@@ -1,5 +1,45 @@
 # Sesión activa
 
+- **Capa de craft v2.1 (2026-08-19): IMPLEMENTADA — post re-critique 28/40.**
+  - Plan acordado con el dueño: controles+profundidad primero · P1+P2
+    completo · temperamento **tonal** (Apple execution + Google M3 tonal).
+  - Cambios (todo tokens, 0 hex nuevo):
+    - **Controles**: `.btn` a `--radius-md` (8px) + `:active` (translateY 1px,
+      primary 500→700) + primario con `--shadow-xs`→`sm`; chips de filtro a
+      8px + active; Mismo lenguaje que `.tab-btn` (que ya lo tenía).
+    - **Badges**: sin borde en semánticos (tinte `-50` + texto `-700` + dot);
+      neutrales conservan borde. Fin del borde a saturación plena.
+    - **Sidebar tonal**: activo 18%→28% del color de área + ícono en `-300`;
+      labels de sección a `-300` pleno.
+    - **Dashboard hero**: `.stat-card--emphasis` = borde brand-300 + lavado
+      tonal sutil + chip brand + valor 28px (momento editorial).
+    - **Muebles**: placeholder sin foto = silueta tintada `--area-eng-100`
+      (antes caja dashed vacía).
+    - **Login**: panel de marca indigo (brand-800 + BrandMark 64 + tagline)
+      a la izquierda en ≥900px; submit con estados táctiles.
+    - **sales.css**: 3 hsl sueltos → tokens; comentario que disparaba el
+      detector reescrito (detector ahora **0 hallazgos**).
+  - docs/design.md → v2.1 (política de radios §3.5, estados táctiles §5.1,
+    badges §5.2, hero §5.4, sidebar §4.1, login §6.12, media Muebles §6.3).
+  - Verificación: `pnpm test` monorepo verde + `pnpm typecheck` verde +
+    detector 0 + pantallas verificadas en vivo (login/dashboard/materiales/
+    muebles; screenshots V2-*.png en /tmp/muebles-critique2/, efímero).
+  - Pendiente sugerido: re-critique para medir (meta 32+); P3 menores no
+    tocados ("schema v3" en topbar — vive en App.tsx del shell (apps/web);
+    teléfono crudo en card; dos ítems "Dashboard" en nav).
+- **Re-critique UI (2026-08-18): completado — score 24 → 28/40.**
+  - Score **24 → 28/40** (Good). Snapshot:
+    `.impeccable/critique/2026-08-19T00-19-38Z__packages-ui-src-todas-las-pantallas-de-la-app-web.md`.
+  - Veredicto: NO es slop AI banneado (detector: 1 hallazgo, `transition: width`
+    sales.css:394, reincidencia). El gap restante es **craft estético** (heurística
+    8 = 2/40): "crafted pero de molde". Traducción del "se ve web IA" del dueño:
+    botones radio 4px sin `:active`/state layers, cards sin hover elevation,
+    3 lenguajes de radio (4px btn / 8px input / pill chip), badges con borde
+    -500 pleno, sidebar activo 18% alpha casi invisible, dashboard hero-metric
+    template, login sin marca, cards de Muebles 100% texto.
+  - Evidencia: 16 screenshots admin en `/tmp/muebles-critique2/` (efímero);
+    init.sh verde (2114+ tests). Pendiente: plan de acción acordado con el dueño
+    (preguntas de prioridad/alcance/intensidad).
 - **Cerrada (2026-08-18): estandarización UI integral — IMPLEMENTADA y pushed.**
   - Commits: `bc9c526` (docs design v2) + `24f8923` (feat(ui) estandarización).
   - Todo el plan ①–⑦ ejecutado: headers unificados (aliases de .page-header,

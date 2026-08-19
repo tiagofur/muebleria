@@ -16,7 +16,7 @@
   font-weight: var(--weight-medium);
   padding: var(--space-1) var(--space-3);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -26,6 +26,10 @@
 .ui-status-chips__chip:hover {
   color: var(--text-primary);
   background: var(--surface-card);
+}
+
+.ui-status-chips__chip:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .ui-status-chips__chip.is-selected {
@@ -39,4 +43,10 @@
 .ui-status-chips__chip:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-status-chips__chip:active:not(:disabled) {
+    transform: none;
+  }
 }

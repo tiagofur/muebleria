@@ -41,6 +41,16 @@ export function LoginScreen({
 
   return (
     <div className="login-screen">
+      {/* Panel de marca (desktop ≥900px) — el único momento "committed"
+          permitido por el registro product (design.md §6.12 v2.1). */}
+      <aside className="login-brand" aria-hidden="true">
+        <BrandMark size={64} className="login-brand__mark" />
+        <p className="login-brand__name">Muebles</p>
+        <p className="login-brand__tagline">
+          Cotización y producción para talleres de carpintería.
+        </p>
+        <p className="login-brand__meta">Catálogos · Muebles · Órdenes · Corte</p>
+      </aside>
       <div className="login-card">
         <header className="login-card__header">
           <BrandMark size={40} className="login-card__mark" />

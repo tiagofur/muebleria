@@ -15,6 +15,59 @@
   font-family: var(--font-sans);
 }
 
+/* —— Panel de marca (desktop ≥900px) — v2.1 ——
+   Split: panel indigo con marca a la izquierda + form a la derecha.
+   En <900px el panel se oculta y queda la card centrada (comportamiento
+   previo). RegisterScreen comparte esta hoja sin el aside: sin cambio. */
+
+.login-brand {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .login-screen {
+    gap: var(--space-16);
+    padding: var(--space-10);
+  }
+
+  .login-brand {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-4);
+    width: 24rem;
+    max-width: 32vw;
+    padding: var(--space-8);
+    border: 1px solid color-mix(in srgb, var(--brand-400) 30%, transparent);
+    border-radius: var(--radius-xl);
+    background: var(--brand-800);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .login-brand__name {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.02em;
+    color: var(--text-inverse);
+  }
+
+  .login-brand__tagline {
+    margin: 0;
+    font-size: var(--text-md);
+    color: color-mix(in srgb, var(--text-inverse) 75%, transparent);
+    line-height: var(--leading-normal);
+  }
+
+  .login-brand__meta {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-sm);
+    letter-spacing: 0.04em;
+    color: color-mix(in srgb, var(--brand-300) 85%, transparent);
+  }
+}
+
 .login-card {
   box-sizing: border-box;
   width: 100%;
@@ -171,12 +224,23 @@
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   cursor: pointer;
-  transition: var(--transition-colors);
+  box-shadow: var(--shadow-xs);
+  transition:
+    var(--transition-colors),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .login-submit:hover:not(:disabled) {
   background: var(--brand-600);
   border-color: var(--brand-600);
+  box-shadow: var(--shadow-sm);
+}
+
+.login-submit:active:not(:disabled) {
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+  box-shadow: var(--shadow-xs);
+  transform: translateY(1px);
 }
 
 .login-submit:disabled {
@@ -243,6 +307,10 @@
   .login-submit,
   .login-guest {
     transition: none;
+  }
+
+  .login-submit:active:not(:disabled) {
+    transform: none;
   }
 }
 
