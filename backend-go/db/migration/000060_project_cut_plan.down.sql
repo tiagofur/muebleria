@@ -1,0 +1,2 @@
+ALTER TABLE projects
+  DROP COLUMN IF EXISTS cut_plan;

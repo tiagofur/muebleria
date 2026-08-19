@@ -162,9 +162,9 @@ function ResumenTab({
           </span>
           <div className="stat-card__body">
             <div className="stat-card__value">
-              {totals ? totals.totalPieces : '—'}
+              {totals ? totals.totalAreaM2.toLocaleString('es-MX') : '—'}
             </div>
-            <div className="stat-card__label">tableros</div>
+            <div className="stat-card__label">m² de tablero</div>
           </div>
         </div>
         <div className="stat-card stat-card--eng">
@@ -191,7 +191,7 @@ function ResumenTab({
                   <li key={m.key}>
                     <span className="eng-resumen__breakdown-material">{m.name}</span>
                     <span className="eng-resumen__breakdown-num">
-                      {m.pieces} tablero{m.pieces !== 1 ? 's' : ''}
+                      {m.pieces} {m.pieces === 1 ? 'pieza' : 'piezas'} · {m.areaM2.toLocaleString('es-MX')} m²
                     </span>
                   </li>
                 ))}
@@ -336,6 +336,8 @@ export function EngineeringWorkspace({
   onExportAssemblySheets,
   onExportCncPilot,
   onExportDespiecePdf,
+  onSaveCutPlan,
+  onExportCutPlanPdf,
   onImportNesting,
   // Permissions
   canImportNesting,
@@ -372,6 +374,8 @@ export function EngineeringWorkspace({
   readonly onExportAssemblySheets?: () => void | Promise<void>;
   readonly onExportCncPilot?: () => void | Promise<void>;
   readonly onExportDespiecePdf?: () => void | Promise<void>;
+  readonly onSaveCutPlan?: (cutPlan: import('@muebles/domain').CutPlan) => void;
+  readonly onExportCutPlanPdf?: (cutPlan: import('@muebles/domain').CutPlan) => void | Promise<void>;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
   readonly exportBusy?: boolean;
@@ -607,9 +611,9 @@ export function EngineeringWorkspace({
             project={project}
             catalog={catalog}
             cutRows={cutRows}
-            onImportNesting={onImportNesting}
+            onSaveCutPlan={onSaveCutPlan}
+            onExportCutPlanPdf={onExportCutPlanPdf}
             exportBusy={exportBusy}
-            canImportNesting={canImportNesting}
           />
         )}
         {activeTab === 'documentos' && (

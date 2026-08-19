@@ -71,7 +71,7 @@ describe('EngineeringWorkspace — Resumen KPI stat cards (F111)', () => {
     expect(values).toContain('—');
     expect(labels.join(' ')).toContain('módulos');
     expect(labels.join(' ')).toContain('piezas de tablero');
-    expect(labels.join(' ')).toContain('tableros');
+    expect(labels.join(' ')).toContain('m² de tablero');
     expect(labels.join(' ')).toContain('ml de canto');
 
     // Old local stat family is gone.

@@ -718,6 +718,10 @@ export {
   type ProjectShowcaseGroup,
 } from './crm/showcase';
 
+// --- 2D Guillotine Cut Plan & Optimization Engine (F115) ---
+export * from './optimizer';
+
+
 
 
 

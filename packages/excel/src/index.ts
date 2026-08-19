@@ -95,6 +95,11 @@ export {
 } from './cutPreviewPdfExport';
 
 export {
+  cutPlanPdfExport,
+  type CutPlanPdfExportInput,
+} from './cutPlanPdfExport';
+
+export {
   cutListConfigurableCsvExport,
   type CsvDelimiter,
   type CsvOptimizerPreset,

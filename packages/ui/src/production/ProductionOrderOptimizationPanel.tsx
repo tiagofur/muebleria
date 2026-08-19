@@ -1,23 +1,26 @@
 /**
- * Production hub — Optimización L0 / L1 / L2 (PROD-2.1 + PROD-2.3).
- * Clear layer labels so estimate is never confused with machine nesting.
- * Official downloads (Optimizer, CSV, labels) live in Documentos/Etiquetas.
+ * Production hub — Plan de Corte 2D, Requisición de Almacén y Exportaciones de Taller (F115).
+ *
+ * - Plan de corte 2D guillotina nativo con refilado de 4 lados, veta, sobrecorte de cantos y retazos.
+ * - Requisición exacta de tableros completos para Almacén.
+ * - Visor interactivo y secuencia de cortes paso a paso.
+ * - Área de exportación para taller (PDF manual activo + seccionadoras/CNC futuro).
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
 import type {
-  BoardSheetEstimate,
   MaterialBoard,
   Project,
   ProductionCutRow,
+  CutPlan,
+  CutPlanConfig,
 } from '@muebles/domain';
 import {
   estimateBoardSheets,
   generateProjectMaterialSummary,
-  nestingImportFromRows,
-  parseNestingImportCsv,
+  optimizeCutPlan,
+  DEFAULT_CUT_PLAN_CONFIG,
   type Catalog,
-  type NestingImportResult,
 } from '@muebles/domain';
 import { ProductionBoardView } from './ProductionBoardView';
 
@@ -25,73 +28,48 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly project: Project;
   readonly catalog: Catalog | null;
   readonly cutRows: readonly ProductionCutRow[] | null;
-  readonly onImportNesting?: (nesting: NestingImportResult) => void;
+  readonly onSaveCutPlan?: (cutPlan: CutPlan) => void;
+  readonly onExportCutPlanPdf?: (cutPlan: CutPlan) => void;
   readonly exportBusy?: boolean;
-  /** When true, production role may import nesting (mutates project). */
-  readonly canImportNesting?: boolean;
 };
-
-function LayerBadge({
-  layer,
-  label,
-}: {
-  readonly layer: 'L0' | 'L1' | 'L2';
-  readonly label: string;
-}): ReactNode {
-  return (
-    <span className={`prod-opt__badge prod-opt__badge--${layer.toLowerCase()}`}>
-      {layer} · {label}
-    </span>
-  );
-}
-
-function groupCutRowsByMaterial(
-  rows: readonly ProductionCutRow[],
-): Map<string, ProductionCutRow[]> {
-  const map = new Map<string, ProductionCutRow[]>();
-  for (const row of rows) {
-    const key = row.materialName || 'Sin material';
-    const arr = map.get(key) ?? [];
-    arr.push(row);
-    map.set(key, arr);
-  }
-  return map;
-}
-
-function sheetSizeForMaterial(
-  materialName: string,
-  sheets: readonly BoardSheetEstimate[],
-  materials: readonly MaterialBoard[],
-): { w: number; h: number } {
-  const byName = sheets.find(
-    (s) => s.name === materialName || s.code === materialName,
-  );
-  if (byName && byName.sheetWidthMm > 0 && byName.sheetLengthMm > 0) {
-    return { w: byName.sheetWidthMm, h: byName.sheetLengthMm };
-  }
-  const mat = materials.find(
-    (m) => m.name === materialName || m.code === materialName,
-  );
-  if (mat && mat.widthMm > 0 && mat.lengthMm > 0) {
-    return { w: mat.widthMm, h: mat.lengthMm };
-  }
-  return { w: 2440, h: 1220 };
-}
 
 export function ProductionOrderOptimizationPanel({
   project,
   catalog,
   cutRows,
-  onImportNesting,
+  onSaveCutPlan,
+  onExportCutPlanPdf,
   exportBusy = false,
-  canImportNesting = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
-  /** null = use catalog waste; number = what-if override (PROD-4.3). */
-  const [wasteWhatIf, setWasteWhatIf] = useState<number | null>(null);
-  /** Honest feedback: CSV that parses to 0 rows is not a silent no-op. */
-  const [nestingFileError, setNestingFileError] = useState<string | null>(
-    null,
+  // Cut Configuration parameters
+  const [sawKerfMm, setSawKerfMm] = useState<number>(
+    project.cutPlan?.config.sawKerfMm ?? DEFAULT_CUT_PLAN_CONFIG.sawKerfMm,
   );
+  const [trimTopMm, setTrimTopMm] = useState<number>(
+    project.cutPlan?.config.trim.topMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.topMm,
+  );
+  const [trimBottomMm, setTrimBottomMm] = useState<number>(
+    project.cutPlan?.config.trim.bottomMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.bottomMm,
+  );
+  const [trimLeftMm, setTrimLeftMm] = useState<number>(
+    project.cutPlan?.config.trim.leftMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.leftMm,
+  );
+  const [trimRightMm, setTrimRightMm] = useState<number>(
+    project.cutPlan?.config.trim.rightMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.rightMm,
+  );
+  const [allowRotationNoGrain, setAllowRotationNoGrain] = useState<boolean>(
+    project.cutPlan?.config.allowRotationNoGrain ?? DEFAULT_CUT_PLAN_CONFIG.allowRotationNoGrain,
+  );
+  const [deductEdgeBand, setDeductEdgeBand] = useState<boolean>(
+    project.cutPlan?.config.deductEdgeBand ?? DEFAULT_CUT_PLAN_CONFIG.deductEdgeBand,
+  );
+
+  // Current active CutPlan (stored in state or loaded from project)
+  const [cutPlanState, setCutPlanState] = useState<CutPlan | null>(project.cutPlan ?? null);
+  const [activeSheetIndex, setActiveSheetIndex] = useState<number>(0);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  const currentCutPlan = cutPlanState ?? project.cutPlan ?? null;
 
   const summary = useMemo(() => {
     if (!catalog) return null;
@@ -107,236 +85,441 @@ export function ProductionOrderOptimizationPanel({
     return estimateBoardSheets(
       summary.materials,
       catalog.materials,
-      wasteWhatIf,
+      null,
     ).filter((s) => s.estimatedSheets > 0);
-  }, [summary, catalog, wasteWhatIf]);
+  }, [summary, catalog]);
 
-  const byMaterial = useMemo(
-    () => (cutRows ? groupCutRowsByMaterial(cutRows) : new Map()),
-    [cutRows],
-  );
+  const handleGenerateCutPlan = () => {
+    if (!cutRows || cutRows.length === 0) return;
+    const config: CutPlanConfig = {
+      sawKerfMm: Math.max(0, sawKerfMm),
+      trim: {
+        topMm: Math.max(0, trimTopMm),
+        bottomMm: Math.max(0, trimBottomMm),
+        leftMm: Math.max(0, trimLeftMm),
+        rightMm: Math.max(0, trimRightMm),
+      },
+      deductEdgeBand,
+      allowRotationNoGrain,
+      minRemnantLengthMm: DEFAULT_CUT_PLAN_CONFIG.minRemnantLengthMm,
+      minRemnantWidthMm: DEFAULT_CUT_PLAN_CONFIG.minRemnantWidthMm,
+      preferLongitudinalRips: true,
+      heuristic: 'guillotine-hybrid',
+    };
 
-  const nesting = project.nestingImport;
+    const newPlan = optimizeCutPlan(
+      project.id,
+      cutRows,
+      catalog?.materials ?? [],
+      config,
+      project.name,
+    );
+
+    setCutPlanState(newPlan);
+    setActiveSheetIndex(0);
+    setSaveSuccessMsg(null);
+  };
+
+  const handleSavePlan = () => {
+    if (!currentCutPlan) return;
+    onSaveCutPlan?.(currentCutPlan);
+    setSaveSuccessMsg('✓ Plan de corte guardado exitosamente en el proyecto');
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
+
+  const handleExportPdf = () => {
+    if (!currentCutPlan) return;
+    onExportCutPlanPdf?.(currentCutPlan);
+  };
+
+  const activeSheet = currentCutPlan?.sheets[activeSheetIndex] ?? null;
 
   return (
     <div className="prod-opt" data-testid="prod-hub-optimizacion">
-      <div className="prod-opt__intro">
-        <p className="prod-hub__exports-hint">
-          Tres capas de información. Solo el <strong>Optimizer Excel</strong>{' '}
-          (pestaña Documentos) es el plan de corte oficial para la sierra o el
-          nesting del taller.
-        </p>
-        <ul className="prod-opt__legend" aria-label="Leyenda de capas">
-          <li>
-            <LayerBadge layer="L0" label="Estimado" /> cuántos pliegos comprar
-            (heurística)
-          </li>
-          <li>
-            <LayerBadge layer="L1" label="Preview" /> cómo se ven las piezas en
-            un tablero (no es nesting real)
-          </li>
-          <li>
-            <LayerBadge layer="L2" label="Real" /> consumo importado del
-            software de corte
-          </li>
-        </ul>
-      </div>
-
-      {/* L0 — estimated sheets */}
+      {/* 1. CONFIGURATION BAR */}
       <section
-        className="prod-opt__layer"
-        data-testid="prod-opt-l0"
-        aria-label="Pliegos estimados"
+        className="prod-opt__config-section"
+        data-testid="prod-opt-config"
+        style={{
+          background: 'var(--surface-card)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg, 8px)',
+          padding: '16px 20px',
+          marginBottom: '20px',
+        }}
       >
-        <div className="prod-opt__layer-head">
-          <LayerBadge layer="L0" label="Pliegos estimados" />
-        </div>
-        <p className="prod-opt__disclaimer">
-          Solo para comprar material. No usés este número para programar la
-          máquina: el nesting real se hace afuera (o en L2 si ya importaste).
-        </p>
-        <label className="prod-opt__whatif" data-testid="prod-opt-waste-whatif">
-          <span>Probar otra merma (%)</span>
-          <input
-            type="range"
-            min={0}
-            max={30}
-            step={1}
-            value={wasteWhatIf ?? 10}
-            onChange={(e) => setWasteWhatIf(Number(e.target.value))}
-            aria-label="Merma what-if porcentaje"
-          />
-          <span className="prod-opt__whatif-val">
-            {wasteWhatIf == null ? 'catálogo' : `${wasteWhatIf}%`}
-          </span>
-          <button
-            type="button"
-            className="btn btn--small btn--ghost"
-            onClick={() => setWasteWhatIf(null)}
-            data-testid="prod-opt-waste-catalog"
-          >
-            Usar merma catálogo
-          </button>
-        </label>
-        {!catalog || sheetEstimates.length === 0 ? (
-          <p className="prod-hub__placeholder-body">
-            Sin datos de área de tablero para estimar pliegos.
-          </p>
-        ) : (
-          <ul className="prod-opt__list">
-            {sheetEstimates.map((s) => (
-              <li key={s.materialId}>
-                <span className="prod-opt__name">{s.name}</span>
-                <span className="prod-opt__meta">
-                  ~{s.estimatedSheets} pliego
-                  {s.estimatedSheets === 1 ? '' : 's'}
-                  {s.sheetWidthMm > 0
-                    ? ` · ${s.sheetWidthMm}×${s.sheetLengthMm} mm`
-                    : ''}
-                  {` · merma ${s.wastePercent}%`}
-                  {wasteWhatIf != null ? ' (what-if)' : ' (cat.)'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* L1 — visual board preview */}
-      <section
-        className="prod-opt__layer"
-        data-testid="prod-opt-l1"
-        aria-label="Preview visual de tableros"
-      >
-        <div className="prod-opt__layer-head">
-          <LayerBadge layer="L1" label="Preview de tableros" />
-        </div>
-        <p className="prod-opt__disclaimer">
-          Vista aproximada (piezas en rectángulos, empaquetado simple). Sirve
-          para revisar tamaños y códigos — <strong>no</strong> es el plan de
-          máquina ni sustituye el Optimizer.
-        </p>
-        {!cutRows || cutRows.length === 0 ? (
-          <p className="prod-hub__placeholder-body">
-            Sin piezas de corte para previsualizar. Revisá el despiece o el
-            BOM en cotización.
-          </p>
-        ) : (
-          <div className="prod-opt__boards">
-            {[...byMaterial.entries()].map(([materialName, rows]) => {
-              const size = sheetSizeForMaterial(
-                materialName,
-                sheetEstimates,
-                catalog?.materials ?? [],
-              );
-              return (
-                <div key={materialName} className="prod-opt__board-block">
-                  <h4 className="prod-opt__board-title">{materialName}</h4>
-                  <ProductionBoardView
-                    rows={rows}
-                    sheetWidthMm={size.w}
-                    sheetHeightMm={size.h}
-                    showEstimateMetrics
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* L2 — nesting import */}
-      <section
-        className="prod-opt__layer"
-        data-testid="prod-opt-l2"
-        aria-label="Import nesting real"
-      >
-        <div className="prod-opt__layer-head">
-          <LayerBadge layer="L2" label="Import nesting (real)" />
-        </div>
-        <p className="prod-opt__disclaimer">
-          Resultado real del optimizador externo del taller. Comparalo con L0
-          para ver si compraste de más o de menos.
-        </p>
-        {nesting && nesting.rows.length > 0 ? (
-          <div data-testid="prod-opt-nesting-data">
-            <p className="prod-vistas__hint">
-              {nesting.sourceName ?? 'CSV'} ·{' '}
-              {new Date(nesting.importedAt).toLocaleString()}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.1em', fontWeight: 600 }}>Parámetros del Plan de Corte 2D</h3>
+            <p style={{ margin: '2px 0 0', fontSize: '0.85em', color: 'var(--text-muted)' }}>
+              Ajustá el disco de corte, refilado de 4 lados y sobrecorte para optimizar el material.
             </p>
+          </div>
+          {currentCutPlan && (
+            <span style={{ fontSize: '0.82em', color: 'var(--text-muted)', background: 'var(--surface-muted)', padding: '4px 8px', borderRadius: 4 }}>
+              Plan activo · {new Date(currentCutPlan.generatedAt).toLocaleString()}
+            </span>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '16px',
+            alignItems: 'center',
+            background: 'var(--surface-muted)',
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.85em' }}>
+            <span style={{ fontWeight: 500 }}>Disco / Kerf (mm)</span>
+            <input
+              type="number"
+              min={0}
+              max={15}
+              step={0.5}
+              value={sawKerfMm}
+              onChange={(e) => setSawKerfMm(Number(e.target.value))}
+              style={{ width: 75, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border-default)' }}
+            />
+          </label>
+
+          {/* 4-sided Trim Margins */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85em', fontWeight: 500 }}>Refilados (mm):</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8em' }}>
+              <span>Sup:</span>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={trimTopMm}
+                onChange={(e) => setTrimTopMm(Number(e.target.value))}
+                style={{ width: 50, padding: '3px 4px' }}
+              />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8em' }}>
+              <span>Inf:</span>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={trimBottomMm}
+                onChange={(e) => setTrimBottomMm(Number(e.target.value))}
+                style={{ width: 50, padding: '3px 4px' }}
+              />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8em' }}>
+              <span>Izq:</span>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={trimLeftMm}
+                onChange={(e) => setTrimLeftMm(Number(e.target.value))}
+                style={{ width: 50, padding: '3px 4px' }}
+              />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8em' }}>
+              <span>Der:</span>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={trimRightMm}
+                onChange={(e) => setTrimRightMm(Number(e.target.value))}
+                style={{ width: 50, padding: '3px 4px' }}
+              />
+            </label>
+          </div>
+
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85em', cursor: 'pointer' }}
+            title="Descuenta el grosor del tapacanto en el corte. Desactívalo si tu enchapadora tiene pre-fresado que rebaja la cintilla."
+          >
+            <input
+              type="checkbox"
+              checked={deductEdgeBand}
+              onChange={(e) => setDeductEdgeBand(e.target.checked)}
+            />
+            <span>Descontar cintilla (Sobrecorte)</span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85em', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={allowRotationNoGrain}
+              onChange={(e) => setAllowRotationNoGrain(e.target.checked)}
+            />
+            <span>Giro libre en piezas sin veta</span>
+          </label>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn--primary btn--small"
+              onClick={handleGenerateCutPlan}
+              disabled={exportBusy || !cutRows || cutRows.length === 0}
+            >
+              ⚡ Generar Plan de Corte 2D
+            </button>
+            {currentCutPlan && onSaveCutPlan && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--small"
+                onClick={handleSavePlan}
+              >
+                💾 Guardar Plan
+              </button>
+            )}
+          </div>
+        </div>
+
+        {saveSuccessMsg && (
+          <p style={{ color: '#16a34a', fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0' }}>
+            {saveSuccessMsg}
+          </p>
+        )}
+      </section>
+
+      {/* 2. WAREHOUSE REQUISITION SUMMARY */}
+      <section
+        className="prod-opt__layer"
+        data-testid="prod-opt-summary"
+        aria-label="Requisición de almacén"
+        style={{ marginBottom: '24px' }}
+      >
+        <div className="prod-opt__layer-head" style={{ marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05em', fontWeight: 600 }}>Requisición para Almacén (Tableros Enteros)</h3>
+        </div>
+
+        {currentCutPlan ? (
+          <div className="prod-opt__exact-summary" style={{ margin: '8px 0' }}>
             <ul className="prod-opt__list">
-              {nesting.rows.map((r) => (
-                <li key={r.materialCode}>
-                  <span className="prod-opt__name">{r.materialCode}</span>
+              {currentCutPlan.stats.byMaterial.map((m) => (
+                <li key={m.materialCode} style={{ borderLeft: '4px solid var(--accent-primary, #3b82f6)' }}>
+                  <span className="prod-opt__name">{m.materialName} ({m.materialCode})</span>
                   <span className="prod-opt__meta">
-                    {r.sheetsUsed} pliego
-                    {r.sheetsUsed === 1 ? '' : 's'}
-                    {r.areaM2 != null ? ` · ${r.areaM2} m²` : ''}
+                    <strong style={{ color: 'var(--text-primary)', fontSize: '1.05em' }}>
+                      {m.sheetsNeeded} tablero{m.sheetsNeeded === 1 ? '' : 's'} completo{m.sheetsNeeded === 1 ? '' : 's'} a despachar
+                    </strong>
+                    {` · ${m.piecesCount} piezas · ${m.netAreaM2} m² netos · ${m.yieldPercent}% rendimiento (merma: ${m.wastePercent}%)`}
+                    {m.usefulRemnantsCount > 0 ? ` · ${m.usefulRemnantsCount} retazos útiles a inventario (${m.usefulRemnantsAreaM2} m²)` : ''}
                   </span>
                 </li>
               ))}
             </ul>
           </div>
         ) : (
-          <p className="prod-hub__placeholder-body">
-            Todavía no hay import de nesting en esta orden.
-          </p>
-        )}
-        {canImportNesting && onImportNesting ? (
-          <>
-            <label className="btn" style={{ cursor: 'pointer', alignSelf: 'flex-start' }}>
-              Importar nesting (CSV)
-              <input
-                type="file"
-                accept=".csv,text/csv,text/plain"
-                style={{ display: 'none' }}
-                data-testid="prod-opt-nesting-file"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = '';
-                  if (!file) return;
-                  setNestingFileError(null);
-                  void file.text().then((text) => {
-                    const rows = parseNestingImportCsv(text);
-                    if (rows.length === 0) {
-                      setNestingFileError(
-                        `"${file.name}" no tiene filas válidas. Columnas: material_code, sheets_used.`,
-                      );
-                      return;
-                    }
-                    onImportNesting(
-                      nestingImportFromRows(
-                        rows,
-                        new Date().toISOString(),
-                        file.name,
-                      ),
-                    );
-                  });
-                }}
-              />
-            </label>
-            {nestingFileError ? (
-              <p
-                className="catalog-form__error"
-                role="alert"
-                data-testid="prod-opt-nesting-error"
-              >
-                {nestingFileError}
+          <div>
+            <p className="prod-opt__disclaimer">
+              Estimación previa. Hacé clic en <strong>⚡ Generar Plan de Corte 2D</strong> arriba para obtener la requisición geométrica 100% exacta.
+            </p>
+            {sheetEstimates.length > 0 ? (
+              <ul className="prod-opt__list">
+                {sheetEstimates.map((s) => (
+                  <li key={s.materialId}>
+                    <span className="prod-opt__name">{s.name}</span>
+                    <span className="prod-opt__meta">
+                      ~{s.estimatedSheets} pliego{s.estimatedSheets === 1 ? '' : 's'}
+                      {s.sheetWidthMm > 0 ? ` · ${s.sheetWidthMm}×${s.sheetLengthMm} mm` : ''}
+                      {` · merma base ${s.wastePercent}%`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="prod-hub__placeholder-body">
+                Sin datos de piezas para estimar pliegos.
               </p>
-            ) : null}
-          </>
-        ) : null}
-        <p className="catalog-form__hint">
-          Columnas: material_code, sheets_used [, area_m2]
-        </p>
+            )}
+          </div>
+        )}
       </section>
 
-      <p className="prod-vistas__hint" data-testid="prod-opt-official-hint">
-        El plan de corte oficial (<strong>Plantilla_Optimizer.xlsx</strong>), el
-        CSV y las etiquetas se descargan desde{' '}
-        <strong>Documentos</strong> y <strong>Etiquetas</strong>.
-      </p>
+      {/* 3. 2D CUT PLAN & WORKSHOP WORKSPACE */}
+      <section
+        className="prod-opt__layer"
+        data-testid="prod-opt-workspace"
+        aria-label="Diagramas de corte para taller"
+        style={{ marginBottom: '24px' }}
+      >
+        <div className="prod-opt__layer-head" style={{ marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05em', fontWeight: 600 }}>Diagramas y Secuencia de Corte para Taller</h3>
+        </div>
+
+        {!cutRows || cutRows.length === 0 ? (
+          <p className="prod-hub__placeholder-body">
+            Sin piezas de corte para optimizar. Revisá el despiece o el BOM en cotización.
+          </p>
+        ) : currentCutPlan && currentCutPlan.sheets.length > 0 ? (
+          <div>
+            {/* Sheet Selector */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                margin: '10px 0 14px',
+                overflowX: 'auto',
+                paddingBottom: 4,
+              }}
+            >
+              <span style={{ fontSize: '0.85em', fontWeight: 600 }}>Tableros:</span>
+              {currentCutPlan.sheets.map((s, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  className={`btn btn--small ${activeSheetIndex === idx ? 'btn--primary' : 'btn--ghost'}`}
+                  onClick={() => setActiveSheetIndex(idx)}
+                >
+                  #{idx + 1} · {s.materialCode} ({s.yieldPercent}% uso)
+                </button>
+              ))}
+            </div>
+
+            {/* Board Diagram + Step-by-Step Cuts Sidebar */}
+            {activeSheet && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
+                <div>
+                  <ProductionBoardView sheet={activeSheet} />
+                </div>
+                <div
+                  style={{
+                    background: 'var(--surface-card)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 14,
+                    fontSize: '0.85em',
+                    maxHeight: 520,
+                    overflowY: 'auto',
+                  }}
+                >
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '0.95em', fontWeight: 600 }}>
+                    Secuencia de Corte ({activeSheet.instructions.length} pasos)
+                  </h4>
+                  <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.45 }}>
+                    {activeSheet.instructions.map((inst) => (
+                      <li key={inst.step} style={{ marginBottom: 6 }}>
+                        <span style={{ fontWeight: inst.phase === 1 ? 600 : 400 }}>
+                          {inst.description}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="prod-opt__boards">
+            <p className="prod-opt__disclaimer">
+              Hacé clic en <strong>⚡ Generar Plan de Corte 2D</strong> arriba para generar los diagramas acotados de taller.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* 4. WORKSHOP EXPORTS AREA */}
+      <section
+        className="prod-opt__exports-section"
+        data-testid="prod-opt-exports"
+        style={{
+          background: 'var(--surface-card)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg, 8px)',
+          padding: '18px 20px',
+          marginTop: '16px',
+        }}
+      >
+        <div style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05em', fontWeight: 600 }}>Exportaciones para Taller y Maquinaria</h3>
+          <p style={{ margin: '2px 0 0', fontSize: '0.85em', color: 'var(--text-muted)' }}>
+            Descargá los planos de corte para máquinas manuales o enviá los archivos a seccionadoras automáticas.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+          {/* Card 1: PDF Manual Cutting Plan (ACTIVE) */}
+          <div
+            style={{
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px 16px',
+              background: 'var(--surface-card)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: '1.2em' }}>📄</span>
+                <strong style={{ fontSize: '0.95em' }}>PDF Plan de Corte Manual (F072)</strong>
+              </div>
+              <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                Diagramas vectoriales acotados con cantos resaltados en color, marcas de veta, retazos útiles y carátula para Almacén.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn--primary btn--small"
+              onClick={handleExportPdf}
+              disabled={exportBusy || !currentCutPlan}
+              data-testid="prod-opt-export-pdf-manual"
+              style={{ alignSelf: 'flex-start' }}
+            >
+              Descargar PDF de Taller
+            </button>
+          </div>
+
+          {/* Card 2: Automatic Panel Saws (FUTURE ROADMAP) */}
+          <div
+            style={{
+              border: '1px dashed var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px 16px',
+              background: 'var(--surface-muted)',
+              opacity: 0.85,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: '1.2em' }}>⚡</span>
+              <strong style={{ fontSize: '0.95em' }}>Seccionadoras Automáticas</strong>
+              <span style={{ fontSize: '0.72em', background: 'var(--surface-card)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-muted)' }}>
+                Próximamente
+              </span>
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+              Generación de archivos para máquinas Homag (Cut Rite), Biesse, Giben y SCM.
+            </p>
+          </div>
+
+          {/* Card 3: CNC Nesting (FUTURE ROADMAP) */}
+          <div
+            style={{
+              border: '1px dashed var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px 16px',
+              background: 'var(--surface-muted)',
+              opacity: 0.85,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: '1.2em' }}>⚙</span>
+              <strong style={{ fontSize: '0.95em' }}>CNC Nesting / G-Code</strong>
+              <span style={{ fontSize: '0.72em', background: 'var(--surface-card)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-muted)' }}>
+                Próximamente
+              </span>
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+              Exportación de geometrías DXF y código de maquinado para centros de corte CNC.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
-

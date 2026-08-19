@@ -201,6 +201,7 @@ import { buildCncPilotExport } from './exportCncPilot';
 import { buildAssemblySheetsExport } from './exportAssemblySheets';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
 import { downloadDespiecePdf } from './exportDespiecePdf';
+import { downloadCutPlanPdf } from './exportCutPlanPdf';
 import {
   buildOptimizerExport,
   deliverExcelFile,
@@ -2783,6 +2784,31 @@ function AppContent({
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
   );
 
+  const handleExportCutPlanPdf = useCallback(
+    async (cutPlan: import('@muebles/domain').CutPlan) => {
+      setExportBusy(true);
+      try {
+        const fileName = `${cutPlan.projectName || 'proyecto'}-plan-de-corte.pdf`;
+        await downloadCutPlanPdf(cutPlan, fileName);
+        toast({
+          type: 'success',
+          message: `✓ ${fileName} descargado`,
+        });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Error al exportar plan de corte PDF',
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [toast],
+  );
+
   const handleReleaseToDelivery = useCallback(
     async (projectId: string) => {
       const project = projects.find((p) => p.id === projectId);
@@ -3380,6 +3406,8 @@ function AppContent({
             onExportAssemblySheets={() => { void handleExportAssemblySheets(engProject.id); }}
             onExportCncPilot={() => { void handleExportCncPilot(engProject.id); }}
             onExportDespiecePdf={() => { void handleExportDespiecePdf(engProject.id); }}
+            onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
+            onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             canImportNesting={canMarkProduced || roleCanExportProduction(actorRole)}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}

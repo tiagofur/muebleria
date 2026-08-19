@@ -956,6 +956,10 @@ export interface Project {
     }[];
   };
   /**
+   * 2D Guillotine Cut Plan for board cutting & warehouse exact sheet requisition (F115).
+   */
+  readonly cutPlan?: import('./optimizer/types').CutPlan;
+  /**
    * Factory OP revision / export tracking (PROD-3.2 / #227).
    */
   readonly production?: ProjectProductionState;

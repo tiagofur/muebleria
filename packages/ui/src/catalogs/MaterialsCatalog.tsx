@@ -906,6 +906,19 @@ export function MaterialsCatalog({
             </div>
             <div className="catalog-form__field-row">
               <div className="catalog-form__field catalog-form__field--grow">
+                <label htmlFor="mat-length">Largo del tablero — Veta (mm)</label>
+                <input
+                  id="mat-length"
+                  type="number"
+                  min={1}
+                  value={draft.lengthMm}
+                  onChange={(e) =>
+                    setDraft({ ...draft, lengthMm: Number(e.target.value) })
+                  }
+                  required
+                />
+              </div>
+              <div className="catalog-form__field catalog-form__field--grow">
                 <label htmlFor="mat-width">Ancho del tablero (mm)</label>
                 <input
                   id="mat-width"
@@ -914,19 +927,6 @@ export function MaterialsCatalog({
                   value={draft.widthMm}
                   onChange={(e) =>
                     setDraft({ ...draft, widthMm: Number(e.target.value) })
-                  }
-                  required
-                />
-              </div>
-              <div className="catalog-form__field catalog-form__field--grow">
-                <label htmlFor="mat-length">Largo del tablero (mm)</label>
-                <input
-                  id="mat-length"
-                  type="number"
-                  min={1}
-                  value={draft.lengthMm}
-                  onChange={(e) =>
-                    setDraft({ ...draft, lengthMm: Number(e.target.value) })
                   }
                   required
                 />
@@ -1115,29 +1115,8 @@ export function MaterialsCatalog({
                 </p>
                 <div className="catalog-form__field-row">
                   <div className="catalog-form__field catalog-form__field--grow">
-                    <label htmlFor="mat-tex-tile-w">
-                      Muestra textura X — ancho (mm)
-                    </label>
-                    <input
-                      id="mat-tex-tile-w"
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={draft.previewTextureTileWidthMm || ''}
-                      placeholder="280"
-                      onChange={(e) =>
-                        setDraft({
-                          ...draft,
-                          previewTextureTileWidthMm:
-                            Number(e.target.value) || 0,
-                        })
-                      }
-                      data-testid="material-texture-tile-width"
-                    />
-                  </div>
-                  <div className="catalog-form__field catalog-form__field--grow">
                     <label htmlFor="mat-tex-tile-l">
-                      Muestra textura Y — largo/veta (mm)
+                      Muestra textura — Largo / Veta (mm)
                     </label>
                     <input
                       id="mat-tex-tile-l"
@@ -1154,6 +1133,27 @@ export function MaterialsCatalog({
                         })
                       }
                       data-testid="material-texture-tile-length"
+                    />
+                  </div>
+                  <div className="catalog-form__field catalog-form__field--grow">
+                    <label htmlFor="mat-tex-tile-w">
+                      Muestra textura — Ancho (mm)
+                    </label>
+                    <input
+                      id="mat-tex-tile-w"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={draft.previewTextureTileWidthMm || ''}
+                      placeholder="280"
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          previewTextureTileWidthMm:
+                            Number(e.target.value) || 0,
+                        })
+                      }
+                      data-testid="material-texture-tile-width"
                     />
                   </div>
                 </div>

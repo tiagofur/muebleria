@@ -2400,6 +2400,39 @@
         "navigation",
         "rbac"
       ]
+    },
+    {
+      "id": "F115",
+      "phase": 0,
+      "name": "cut_plan_optimizer_engine_and_persistence",
+      "title": "Motor de optimización de plan de corte 2D guillotina, conteo exacto de almacén, PDF de taller y persistencia",
+      "description": "Implementar el motor de optimización 2D guillotina multi-heurística en domain (kerf, refilado individual de 4 lados, veta, cantos, retazos útiles); persistencia JSONB cut_plan en Go/Postgres y storage; conteo exacto de tableros para Almacén; diagramas PDF profesionales para taller y UI interactiva de corte.",
+      "acceptance": [
+        "Motor 2D guillotina puro en packages/domain con soporte de kerf, refilado por lado (top/bottom/left/right), veta, deducción de cantos y detección de retazos útiles.",
+        "Genera estadísticas exactas de tableros enteros para Almacén (superando la estimación heurística) y secuencia de corte paso a paso.",
+        "Persistencia de cut_plan JSONB en PostgreSQL y backend Go, serializado en Project y con soporte de auditoría/congelado.",
+        "Generador PDF vectorial profesional con carátula de Almacén, diagramas acotados por tablero, visualización de cantos, veta y fases de corte.",
+        "Panel interactivo de optimización en UI con controles de refilado por lado, kerf, visor SVG detallado, guardar plan y exportar PDF.",
+        "pnpm test, pnpm typecheck, go test y ./init.sh verdes al 100%."
+      ],
+      "references": [
+        "docs/cut-plan-implementation.md",
+        "docs/production-module.md",
+        "packages/domain/src/optimizer/",
+        "packages/excel/src/cutPlanPdfExport.ts",
+        "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx",
+        "backend-go/internal/storage/projects.go"
+      ],
+      "status": "done",
+      "tags": [
+        "domain",
+        "optimizer",
+        "cut_plan",
+        "production",
+        "pdf",
+        "backend",
+        "ui"
+      ]
     }
   ]
 }

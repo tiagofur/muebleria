@@ -507,6 +507,8 @@ type Project struct {
 	PlanEditSession       json.RawMessage `json:"plan_edit_session,omitempty"`
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
+	// CutPlan is the 2D Guillotine Cut Plan for sheet cutting & warehouse requisition (F115).
+	CutPlan               json.RawMessage `json:"cut_plan,omitempty"`
 	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
 	// Shape: { revision, revision_at, fingerprint, last_export_* }.
 	Production json.RawMessage `json:"production,omitempty"`

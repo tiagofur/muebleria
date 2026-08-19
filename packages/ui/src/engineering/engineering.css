@@ -208,7 +208,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-width: 900px;
+  width: 100%;
 }
 
 /* ── Totals row ──────────────────────────────────────────────────────────── */
@@ -227,7 +227,7 @@
   color: var(--text-muted);
 }
 
-/* ── Breakdown grid (Tablero / Canto) ────────────────────────────────────── */
+/* ── Breakdown grid (Tablero / Canto / Herrajes) ────────────────────────── */
 
 .eng-resumen__breakdown {
   display: grid;
@@ -235,9 +235,9 @@
   gap: var(--space-3);
 }
 
-@media (min-width: 720px) {
+@media (min-width: 640px) {
   .eng-resumen__breakdown {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
 }
 

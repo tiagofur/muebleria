@@ -1,8 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * Optimization layers (PROD-2.3) — rendered by EngineeringWorkspace since
- * the Hub trim (2211e2c); this test covers the panel directly.
+ * Cut Plan & Optimization Panel (F115) — Native 2D Cut Plan, Warehouse Requisition & Exports.
  */
 import { describe, expect, it, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -26,8 +25,8 @@ function project(): Project {
 
 afterEach(() => cleanup());
 
-describe('ProductionOrderOptimizationPanel (PROD-2.3)', () => {
-  it('shows L0/L1/L2 layers and points official exports to Documentos', () => {
+describe('ProductionOrderOptimizationPanel (F115)', () => {
+  it('renders cut plan parameters, warehouse requisition, workspace and exports area', () => {
     render(
       <ProductionOrderOptimizationPanel
         project={project()}
@@ -36,15 +35,10 @@ describe('ProductionOrderOptimizationPanel (PROD-2.3)', () => {
       />,
     );
     expect(screen.getByTestId('prod-hub-optimizacion')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-l0')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-l1')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-l2')).toBeTruthy();
-    // Official exports moved to Documentos/Etiquetas — optimización only
-    // points at them.
-    expect(
-      screen.getByTestId('prod-opt-official-hint').textContent,
-    ).toContain('Documentos');
-    expect(screen.queryByTestId('prod-opt-export-zpl')).toBeNull();
-    expect(screen.queryByTestId('prod-opt-export-optimizer')).toBeNull();
+    expect(screen.getByTestId('prod-opt-config')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-summary')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-workspace')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-exports')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-export-pdf-manual')).toBeTruthy();
   });
 });

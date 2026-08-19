@@ -1474,6 +1474,7 @@ export function projectToApi(p: Project): Record<string, unknown> {
           })),
         }
       : null,
+    cut_plan: p.cutPlan ? JSON.parse(JSON.stringify(p.cutPlan)) : null,
     installation_checklist: p.installationChecklist
       ? p.installationChecklist.map((c) => ({
           id: c.id,
@@ -1628,6 +1629,11 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
         sourceName: str(n.source_name ?? n.sourceName) || undefined,
         rows,
       };
+    })(),
+    cutPlan: (() => {
+      const rawCut = raw.cut_plan ?? raw.cutPlan;
+      if (!rawCut || typeof rawCut !== 'object' || Array.isArray(rawCut)) return undefined;
+      return rawCut as any;
     })(),
     production: (() => {
       const rawProd = raw.production;

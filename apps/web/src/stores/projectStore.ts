@@ -384,6 +384,10 @@ export interface ProjectState {
     projectId: string,
     nestingImport: NonNullable<Project['nestingImport']>,
   ) => void;
+  readonly saveCutPlan: (
+    projectId: string,
+    cutPlan: import('@muebles/domain').CutPlan,
+  ) => void;
   /** PROD-3.1 — shop-floor status per line item. */
   readonly setItemFloorStatus: (
     projectId: string,
@@ -1163,6 +1167,18 @@ export function createProjectStore(options: InternalOptions) {
         ),
       );
       toast({ type: 'success', message: '✓ Nesting importado' });
+    },
+
+    saveCutPlan: (projectId, cutPlan) => {
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) =>
+          p.id === projectId
+            ? { ...p, cutPlan, updatedAt: now }
+            : p,
+        ),
+      );
+      toast({ type: 'success', message: '✓ Plan de corte guardado en el proyecto' });
     },
 
     setItemFloorStatus: (projectId, itemId, status) => {
