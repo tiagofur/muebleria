@@ -251,7 +251,7 @@ export function InternalCommsPanel({
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   type="button"
-                  className="internal-comms__action-btn internal-comms__action-btn--primary"
+                  className="btn btn--primary"
                   onClick={() => handleConfirmTransitionWithComment(showCommentInputForStatus)}
                 >
                   Confirmar pase a {TECHNICAL_STATUS_METADATA[showCommentInputForStatus].shortLabel}
@@ -270,16 +270,21 @@ export function InternalCommsPanel({
               {availableTransitions.map((targetStatus) => {
                 const targetMeta = TECHNICAL_STATUS_METADATA[targetStatus];
                 let btnClass = 'internal-comms__action-btn--secondary';
-                if (targetStatus === 'approved_for_production') btnClass = 'internal-comms__action-btn--primary';
+                if (
+                  targetStatus === 'approved_for_production' ||
+                  targetStatus === 'in_workshop' ||
+                  targetStatus === 'ready_to_install'
+                ) {
+                  btnClass = 'btn--primary';
+                }
                 if (targetStatus === 'changes_requested') btnClass = 'internal-comms__action-btn--warning';
-                if (targetStatus === 'in_workshop') btnClass = 'internal-comms__action-btn--primary';
-                if (targetStatus === 'ready_to_install') btnClass = 'internal-comms__action-btn--primary';
 
+                const isPrimary = btnClass === 'btn--primary';
                 return (
                   <button
                     key={targetStatus}
                     type="button"
-                    className={`internal-comms__action-btn ${btnClass}`}
+                    className={isPrimary ? `btn ${btnClass}` : `internal-comms__action-btn ${btnClass}`}
                     onClick={() => handleTransitionClick(targetStatus)}
                   >
                     <ArrowRight size={13} />

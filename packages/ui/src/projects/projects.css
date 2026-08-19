@@ -1494,7 +1494,7 @@
   position: absolute;
   top: 100%;
   right: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
   margin-top: var(--space-1);
   min-width: 5rem;
   background: var(--surface-card);
@@ -1769,7 +1769,7 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
-  min-width: 2.5rem;
+  min-width: var(--touch-min);
 }
 
 .version-card__time {
@@ -1833,7 +1833,7 @@
 .project-presentation__shortcuts-overlay {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--z-toast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1935,7 +1935,7 @@
   bottom: calc(var(--space-16) + var(--space-4));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 95;
+  z-index: var(--z-toast);
   max-width: min(28rem, calc(100vw - var(--space-8)));
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);

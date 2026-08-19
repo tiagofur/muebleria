@@ -4,7 +4,7 @@
 .spatial-studio {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 1000);
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   background: var(--surface-app);
@@ -384,7 +384,7 @@
 /* Floating scene toolbar (Parte 1 SUPER 3D) */
 .spatial-studio__scene-toolbar {
   position: absolute;
-  z-index: 5;
+  z-index: var(--z-raised);
   top: var(--space-2);
   left: var(--space-2);
   right: var(--space-2);
@@ -430,7 +430,7 @@
 
 .spatial-studio__plan-mini {
   position: absolute;
-  z-index: 5;
+  z-index: var(--z-raised);
   right: var(--space-3);
   bottom: var(--space-3);
   width: min(220px, 42vw);

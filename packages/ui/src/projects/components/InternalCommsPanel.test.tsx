@@ -147,4 +147,29 @@ describe('InternalCommsPanel', () => {
     ).toBeTruthy();
   });
 
+
+
+describe('InternalCommsPanel — primary button vocabulary (F111)', () => {
+  it('uses global .btn .btn--primary for primary technical transitions', () => {
+    render(
+      <InternalCommsPanel
+        project={dummyProject}
+        messages={dummyMessages}
+        assignableOwners={assignableOwners}
+        onSendMessage={vi.fn()}
+        onUpdateTechnicalWorkflow={vi.fn()}
+      />,
+    );
+
+    const primaries = screen
+      .getAllByRole('button')
+      .filter((b) => b.classList.contains('btn--primary'));
+    expect(primaries.length).toBeGreaterThan(0);
+    for (const btn of primaries) {
+      expect(btn.classList.contains('btn')).toBe(true);
+      expect(btn.classList.contains('internal-comms__action-btn')).toBe(false);
+    }
+  });
+});
+
 });

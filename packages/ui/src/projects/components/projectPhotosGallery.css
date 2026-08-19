@@ -409,7 +409,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.9);
   backdrop-filter: blur(4px);
-  z-index: 9999;
+  z-index: var(--z-modal-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -439,7 +439,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 10;
+  z-index: var(--z-raised);
   transition: background 0.15s ease;
 }
 
@@ -462,7 +462,7 @@
   justify-content: center;
   cursor: pointer;
   transition: background 0.15s ease;
-  z-index: 10;
+  z-index: var(--z-raised);
 }
 
 .gallery-lightbox__nav:hover {

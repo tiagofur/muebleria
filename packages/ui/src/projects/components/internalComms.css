@@ -149,14 +149,10 @@
   border: 1px solid transparent;
 }
 
-.internal-comms__action-btn--primary {
-  background: var(--brand-500);
-  color: var(--text-inverse);
-}
-
-.internal-comms__action-btn--primary:hover {
-  background: var(--brand-600);
-}
+/* Primary action — migrado al vocabulario único .btn .btn--primary
+   (common/buttons.css §5.1). Las variantes --warning / --danger /
+   --secondary locales se mantienen (sin equivalente global semántico
+   de superficie en este panel). */
 
 .internal-comms__action-btn--warning {
   background: var(--warning-50);
