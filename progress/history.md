@@ -286,3 +286,43 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - El dashboard de Producción se alineó al sistema compartido: tokens y `.btn`, estados de carga/error recuperables, semántica ARIA de filtros y progreso, reflujo seguro en phone y focos visibles.
 - Todos los iconos Lucide del dashboard declaran `strokeWidth={1.5}` y `aria-hidden` cuando son decorativos; la regresión focal protege ambos contratos.
 - Verificación: dashboard focal 6 tests, `pnpm typecheck`, `./init.sh` (domain 632, UI 966, web 257, desktop 17, mobile 36) y `git diff --check` verdes.
+
+## 2026-08-18 — Gating por etapa del proceso (ventas → ingeniería → almacén → fábrica)
+
+- Dominio: `processStage.ts` (`projectProcessStage`, `canReleaseMaterials`, labels ES) + `canSendToProduction` exige ingeniería documentada + `Project.materialsRelease` (`{releasedBy, releasedAt}`).
+- Persistencia: `materials_release` JSONB en `projects` (migración Go aditiva 000059); mappers en `apiMappers.ts` con round-trip testeado.
+- UI: Ingeniería (cola = etapa ingeniería, "Enviadas" read-only), Almacén (proyectos en etapa almacén + "Material completo"), Fábrica exige `materialsRelease`, Órdenes filtrado a etapa producción. `sendProjectToProduction` sin bypass sin log.
+- Verificación: 2114 tests + `pnpm typecheck` + `go test ./internal/...` verde; server aplica 000059. Docs: `docs/project-lifecycle.md` §8.
+- Pendiente explícito que quedó: event log completo `ProjectEvent[]` con KPIs de tiempos.
+
+## 2026-08-18 — Ciclo de crítica UI: unificación v2 + craft v2.1 (score 24→28→30/40)
+
+- Tres critiques (snapshots en `.impeccable/critique/`): 24 → 28 → 30/40; detector de 1 hallazgo a 0.
+- Unificación v2 (commits `bc9c526` + `24f8923`): esqueleto único `.page-header` (aliases), 141 font-size → tokens, tokens muertos eliminados, color de área (VENTAS teal / INGENIERÍA indigo / PRODUCCIÓN naranja), `statusBadge.css` + `statCard.css` comunes, `ConfirmDialog` (0 window.confirm), destructivas `btn--danger`, copy sobrio.
+- Craft v2.1: controles táctiles (radius-md, `:active` translateY, state layers), badges semánticos sin borde a saturación plena, sidebar tonal 28%, `stat-card--emphasis`, placeholder de foto con silueta tintada, login con panel de marca indigo.
+- `docs/design.md` v2→v2.1 documentando cada capa. Pendiente sugerido de ese entonces (meta 32+): higiene de datos, nav, ayuda contextual — resuelto en las sesiones siguientes.
+
+## 2026-08-18 — docs design v3.0: estándar de excelencia UI/UX (09fcf7b)
+
+- §2.1 ADN visual Apple × Google con regla de desempate (decoración→Apple quita; completitud de sistema→Google completa); §2.2 prueba de las 8 horas; §3.3.1 semántica de elevación L0–L4; §3.6.1 state layers; §4.8 accesibilidad/teclado AA; §4.9 ayuda contextual; §7 contenido y copy (higiene de datos, formato, copy de estados); §8 Definición de Done de UI (gate 10 ítems); §4.0 touch estándar 44px.
+- `reviewer` skill: recorre gate §8 (D7) + copy/a11y (D8) en su veredicto.
+- Decisión: NO crear skill paralelo a impeccable — `docs/design.md` ya es su DESIGN vía `context.mjs`.
+
+## 2026-08-18 — Review UI de /orders como test del estándar v3 (217eb7e)
+
+- Gate §8 sobre cola + hub `/orders/:id`: 5/10 en verde; detector 0 hallazgos.
+- P1: guest en deep link `/orders` → main vacío (sin redirect); higiene de datos en vivo ("schema v3" en topbar, "#111" en hint, "payload QR" en placeholder; el "teléfono crudo" resultó ser el nombre creado por un test del backend contra la DB local). P2: doble primaria simultánea, stat-card/tabla propios, fecha numérica, separadores pegados.
+- El estándar quedó refinado por el test: regla de primaria "una por nivel de contexto" (§8) y workspaces tipo hub reconocidos en §4.1a. Spec §6.7 actualizada a la realidad del código (nav `orders`, rutas `/orders`, 5 tabs, despacho→Embarques).
+
+## 2026-08-18 — Mejoras UI /orders: backlog del review implementado (d1fdc81)
+
+- P1: redirect de guest con `navBlockedForSession` (routes.ts + tests); "schema v3" fuera del topbar; "#111" fuera del hint CNC; placeholder de Piso sin jerga; `formatIsoDate` humano es-MX «18 ago 2026» (global); medidas «400 × 720 × 590 mm»; "ML" mayúscula; cliente con ellipsis+title.
+- P2: primarias por contexto (`packAsPrimary`/`exportAsPrimary` — chrome Pack es la única primaria); Resumen con `.stat-card--work` (CSS propio `prod-hub__total-card` eliminado); Herrajes con `.data-table` + números right/tabular-nums + `formatMoneyDisplay`.
+- A11y: tabpanel con `aria-labelledby`; filtro Piso vacío con `EmptyState` no-results.
+- Verificación: monorepo tests verdes (263 web / 974 UI), typecheck verde, detector 0; todo confirmado en vivo (admin + guest).
+- P3 quedando: labels «Cut-list CSV»/«CNC pilot» (sancionados por §6.7), borde de canto redundante (dato), separadores "·" pegados en meta del hub.
+
+## 2026-08-18 — Limpieza de documentación
+
+- `docs/design.md` §1 (diagnóstico pre-rediseño U1–U8/I1–I8, ya resuelto) archivado en `docs/history/diagnostico-ui-pre-rediseno.md`; notas "pre-Fase 3" eliminadas (migración ya hecha); nota de extracción de statusBadge marcada completa; jerga de slice eliminada.
+- `progress/current.md` reseteado a plantilla limpia; sesiones cerradas movidas a esta bitácora.

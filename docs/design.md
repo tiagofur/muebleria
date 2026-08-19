@@ -11,35 +11,10 @@
 
 ## 1. Diagnóstico del estado actual
 
-> **Nota histórica:** esta sección documenta el **diagnóstico pre-rediseño** (estado previo a F016–F023). La app actual implementa los patrones de phase-4 (sidebar, modales, toasts, lista→detalle, dashboard, login gate, clientes). No borrar esta tabla: sirve como memoria de por qué se rediseñó.
-
-Antes de definir hacia dónde vamos, es crítico entender qué tenemos y qué duele.
-
-### 1.1 Problemas de UX
-
-| # | Problema | Evidencia en el código | Impacto |
-|---|---------|----------------------|---------|
-| U1 | **Navegación plana de tabs** — 6 tabs horizontales que mezclan configuración (Materiales, Cantos, Herrajes, Opciones) con el flujo productivo (Muebles, Proyectos) | `App.tsx` L754–807 | El usuario no distingue qué es setup de qué es su trabajo diario |
-| U2 | **Form inline siempre visible** — el formulario de crear/editar vive al costado de la tabla en un grid 60/40, sin modo "ver" | `MaterialsCatalog.tsx` L157–288 | Pierde contexto; no puede comparar ítems mientras edita |
-| U3 | **Sin modo lectura** — no hay "ver detalle" de un ítem; solo "editar" | Todos los `*Screen.tsx`: el click en un row arranca `startEdit()` | No se puede consultar información sin riesgo de modificarla |
-| U4 | **Sin búsqueda ni filtros** — solo un checkbox "mostrar inactivos" | `MaterialsCatalog.tsx` L63 | Con 50+ materiales es inmanejable |
-| U5 | **Sin jerarquía de acciones** — todos los botones lucen igual | `catalogs.css` L185–222 | No es claro cuál es la acción principal vs la destructiva |
-| U6 | **Sin feedback de acciones** — no hay toasts, spinners, ni confirmaciones visuales | No existe componente `Toast` en el codebase | Las acciones se sienten "muertas" |
-| U7 | **Sin pantalla de inicio** — la app abre en "Materiales", no en lo más útil | `App.tsx` L405: `useState<CatalogTab>('materials')` | El usuario siempre tiene que navegar hasta Proyectos |
-| U8 | **Sin modales** — crear/editar ocurre en la misma vista desplazando contenido | Todos los catálogos usan `setEditingId` + form inline | Pierde contexto visual al editar |
-
-### 1.2 Problemas de UI
-
-| # | Problema | Evidencia | Impacto |
-|---|---------|-----------|---------|
-| I1 | **Colores genéricos** — Google Blue `#1a73e8`, gris `#f0f2f5`, sin personalidad | `app.css` L11–14, `catalogs.css` L204–210 | Parece un prototipo interno, no una app terminada |
-| I2 | **Tipografía sin identidad** — `system-ui, -apple-system, Segoe UI, sans-serif` | `app.css` L14 | Sin personalidad visual; cada OS se ve diferente |
-| I3 | **Sin iconos** — navegación y acciones son puro texto | No hay dependencia de iconografía en el repo | La UI es pesada de escanear |
-| I4 | **Sin sombras ni profundidad** — borders planos `#d0d4d8` en todos los contenedores | `catalogs.css` L47 | Todo tiene el mismo peso visual |
-| I5 | **Sin animaciones** — cero transiciones en tabs, hover states | No hay `transition` ni `animation` en ningún `.css` | La app se siente estática y fría |
-| I6 | **Sin responsive real** — un solo breakpoint en 900px | `catalogs.css` L39, `modules.css` L142 | Experiencia deficiente en tablets y móvil |
-| I7 | **Cards sin jerarquía** — todo tiene el mismo peso visual | `module-part-card`, `project-item-card`: misma apariencia | Nada destaca; todo compite por atención |
-| I8 | **Estados vacíos sin contexto** — solo texto plano | `.catalog-empty` como `<p>` simple | Oportunidad perdida de guiar al usuario |
+> **Archivado.** El diagnóstico pre-rediseño (U1–U8 de UX, I1–I8 de UI) está
+> resuelto: F016–F023 + unificación v2 + capa de craft v2.1 lo cerraron.
+> Ver `docs/history/diagnostico-ui-pre-rediseno.md` como memoria de por qué
+> se rediseñó. Este documento describe el sistema **actual** (§2 en adelante).
 
 ---
 
@@ -323,7 +298,7 @@ Default del producto: **herramienta densa**, no landing. Tokens semánticos en `
 **Reglas:**
 - Preferir `--density-*` en tablas, toolbars, cards y modales de alta frecuencia.
 - Cuerpo de texto mínimo `--text-base` (14px); labels pueden usar `--text-sm` (12px). Compact ≠ ilegible.
-- Toggle «Cómoda / Compacta» es fase 2 (no en este slice); hoy la app **es** compacta por defecto.
+- Toggle «Cómoda / Compacta» no está implementado; hoy la app **es** compacta por defecto.
 - Solo tokens; sin hex ni `px` sueltos en feature CSS.
 
 ---
@@ -622,12 +597,7 @@ La lista elige su patrón según la **complejidad de la entidad**, no según la 
 | **Comercial** (sin edición, presentación) | **card-grid** | `.entity-card` o `.module-showcase-card` + Modal informativo MD | Showcase |
 | **Especial** | propio por feature | dashboard stats, queue, settings | Home, Production, Settings |
 
-**Regla dura:** si una entidad tiene partes/herrajes/opciones/dimensiones múltiples, **no** usar tabla-expand ni card-expand. Usar card-detalle (vista inline). La edición compleja vive en su propia ruta (`/:id/edit`) o en modal **LG** con tabs (Fase 3 migrará los modales LG a rutas propias).
-
-**Notas de estado actual (pre-Fase 3):**
-- **Conforme:** Projects, Modules (card-detalle + Modal MD/LG). Materials/Edges/Hardware/OptionGroups/Customers/Users (tabla-expand). Showcase (card-grid).
-- **Pendiente de migración a card-detalle (Fase 3):** Components y Structures hoy usan tabla-expand/card-expand + Modal LG con tabs. Deberían ser card-detalle igual que Modules.
-- **Pendiente de migrar editores LG a rutas propias (Fase 3):** ModuleEditorForm, StructureEditorForm, ComponentEditorForm viven en Modal LG con tabs; el plan es mudarlos a `/[section]/:id/edit` (vista detalle inline) siguiendo el modelo de ProjectsScreen.
+**Regla dura:** si una entidad tiene partes/herrajes/opciones/dimensiones múltiples, **no** usar tabla-expand ni card-expand. Usar card-detalle (vista inline). La edición compleja vive en su propia ruta (`/:id/edit`) o en modal **LG** con tabs.
 
 ### 4.3 Modales
 
@@ -790,7 +760,7 @@ Un SOLO sistema de badge de estado con modificadores **semánticos** (no por ent
 .status-badge--inactive   — gris     — "● Inactivo"
 ```
 
-- Vive en `common/statusBadge.css` (a extraer de `projects.css` en v2). Las familias propias (`purch-badge`, `warranty-badge`, `internal-comms__status-badge`, `eng-badge`, `users-role-badge`, …) migran a este vocabulario y se eliminan.
+- Vive en `common/statusBadge.css` (extracción v2 completada). Las familias propias (`purch-badge`, `warranty-badge`, `internal-comms__status-badge`, `eng-badge`, `users-role-badge`, …) migran a este vocabulario y se eliminan.
 - **Sin borde en los semánticos (v2.1):** badge = tinte de fondo (`-50`) + texto (`-700`) + dot. El borde 1px a saturación plena (`-500`) engorda y compite con el texto. Solo los neutrales (draft/cancelled/inactive) conservan `--border-default` para definirse sobre blanco.
 - Estados de USO (activo/inactivo) y de FLUJO (draft/quoted/…) usan semánticos (§3.2), **nunca** color de área.
 - Badges de categoría/meta (no estado) que no mappeen acá: texto `--text-secondary` sin cápsula de color, o chip neutral.
