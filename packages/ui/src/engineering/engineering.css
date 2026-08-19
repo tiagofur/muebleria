@@ -30,19 +30,6 @@
   }
 }
 
-/* ── Toolbar (search) ────────────────────────────────────────────────────── */
-
-.eng-landing__toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.eng-landing__search {
-  flex: 1 1 200px;
-  max-width: 360px;
-}
 
 /* ── Project list ────────────────────────────────────────────────────────── */
 

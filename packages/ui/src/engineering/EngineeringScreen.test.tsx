@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { EngineeringScreen } from './EngineeringScreen';
 import type { Project } from '@muebles/domain';
 import type { EngineeringLog } from '@muebles/domain';
@@ -200,5 +200,23 @@ describe('EngineeringScreen', () => {
     expect(screen.getByTestId('eng-sent-sent1')).not.toBeNull();
     expect(screen.getByText('En almacén')).not.toBeNull();
     expect(screen.getByTestId('eng-stat-pending').textContent).toContain('1');
+  });
+});
+
+
+describe('F101 page chrome migration', () => {
+  it('places Ingeniería search directly beneath the shared header', () => {
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    const header = screen.getByTestId('page-header');
+    const toolbar = screen.getByTestId('page-toolbar');
+    expect(header.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(header).getByRole('heading', { name: 'Ingeniería' })).toBeTruthy();
+    expect(within(toolbar).getByRole('searchbox', { name: 'Buscar proyecto de ingeniería' })).toBeTruthy();
   });
 });

@@ -6,6 +6,8 @@ import './statusBadge.css';
 import './statCard.css';
 
 export { BrandMark, type BrandMarkProps } from './BrandMark';
+export { PageHeader, type PageHeaderProps } from './PageHeader';
+export { PageToolbar, type PageToolbarProps } from './PageToolbar';
 export { CatalogImage, type CatalogImageProps } from './CatalogImage';
 export {
   DropdownMenu,

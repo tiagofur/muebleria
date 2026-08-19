@@ -15,6 +15,8 @@ import {
 import type { Customer, Project, ProjectTemplate } from '@muebles/domain';
 import {
   EmptyState,
+  PageHeader,
+  PageToolbar,
   SearchInput,
   StatusChips,
 } from '../../common';
@@ -76,10 +78,10 @@ export function ProjectsListView({
 
   return (
     <>
-      <div className="catalog-page__header">
-        <h2 className="catalog-page__title">Cotizaciones</h2>
-        <div className="catalog-page__toolbar">
-          {canMutate ? (
+      <PageHeader
+        title="Cotizaciones"
+        primaryAction={
+          canMutate ? (
             <button
               type="button"
               className="btn btn--primary"
@@ -88,49 +90,55 @@ export function ProjectsListView({
               <Plus size={16} strokeWidth={1.5} aria-hidden />
               Nueva cotización
             </button>
-          ) : null}
-          {canMutate && hasTemplates && hasCreateFromTemplate ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={onFromTemplate}
-              data-testid="new-from-template-btn"
-            >
-              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
-              Desde plantilla
-            </button>
-          ) : null}
-          {canMutate && hasTemplates && hasDeleteTemplate ? (
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={onManageTemplates}
-              data-testid="manage-templates-btn"
-              title="Gestionar plantillas"
-            >
-              <LayoutTemplate size={16} strokeWidth={1.5} aria-hidden />
-              Plantillas
-            </button>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+        overflowActions={
+          canMutate && hasTemplates
+            ? [
+                ...(hasCreateFromTemplate
+                  ? [
+                      {
+                        id: 'from-template',
+                        label: 'Desde plantilla',
+                        onSelect: onFromTemplate,
+                      },
+                    ]
+                  : []),
+                ...(hasDeleteTemplate
+                  ? [
+                      {
+                        id: 'manage-templates',
+                        label: 'Gestionar plantillas',
+                        onSelect: onManageTemplates,
+                      },
+                    ]
+                  : []),
+              ]
+            : []
+        }
+      />
 
       {!isTrulyEmpty ? (
-        <div className="catalog-page__filters">
-          <SearchInput
-            value={search}
-            onChange={onSearchChange}
-            placeholder="Buscar cotizaciones o clientes…"
-            aria-label="Buscar cotizaciones"
-          />
-          <StatusChips
-            value={statusFilter}
-            onChange={onStatusFilterChange}
-            options={PROJECT_STATUS_FILTER_OPTIONS}
-            aria-label="Filtrar cotizaciones por estado"
-            data-testid="project-status-chips"
-          />
-        </div>
+        <PageToolbar
+          ariaLabel="Buscar y filtrar cotizaciones"
+          search={
+            <SearchInput
+              value={search}
+              onChange={onSearchChange}
+              placeholder="Buscar cotizaciones o clientes…"
+              aria-label="Buscar cotizaciones"
+            />
+          }
+          filters={
+            <StatusChips
+              value={statusFilter}
+              onChange={onStatusFilterChange}
+              options={PROJECT_STATUS_FILTER_OPTIONS}
+              aria-label="Filtrar cotizaciones por estado"
+              data-testid="project-status-chips"
+            />
+          }
+        />
       ) : null}
 
       {isTrulyEmpty ? (

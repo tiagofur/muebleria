@@ -25,7 +25,7 @@ import {
   type EngineeringStatus,
   type Project,
 } from '@muebles/domain';
-import { EmptyState, SearchInput } from '../common';
+import { EmptyState, PageHeader, PageToolbar, SearchInput } from '../common';
 
 type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 
@@ -110,22 +110,22 @@ export function EngineeringScreen({
 
   return (
     <section className="eng-landing" aria-label="Ingeniería">
-      {/* Header */}
-      <header className="eng-landing__header">
-        <div>
-          <h2 className="eng-landing__title">Ingeniería</h2>
-          <p className="eng-landing__subtitle">
-            Documentación técnica, optimización y preparación de producción por proyecto.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title="Ingeniería"
+        subtitle="Documentación técnica, optimización y preparación de producción por proyecto."
+      />
 
-      {/* Toolbar (search) — inmediatamente bajo el header (design.md §4.1a) */}
-      <div className="eng-landing__toolbar">
-        <div className="eng-landing__search">
-          <SearchInput value={search} onChange={setSearch} placeholder="Buscar proyecto..." />
-        </div>
-      </div>
+      <PageToolbar
+        ariaLabel="Buscar proyectos de ingeniería"
+        search={
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar proyecto..."
+            aria-label="Buscar proyecto de ingeniería"
+          />
+        }
+      />
 
       {/* Stat cards */}
       <div className="eng-stats">

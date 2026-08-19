@@ -115,3 +115,103 @@
   gap: var(--density-filter-gap);
   width: 100%;
 }
+
+/* —— Page chrome contract (F101) —— */
+.page-header {
+  align-items: flex-start;
+  gap: var(--density-page-gap);
+}
+
+.page-header__identity {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.page-header__copy {
+  min-width: 0;
+}
+
+.page-header__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-size-compact);
+  height: var(--control-size-compact);
+  border-radius: var(--radius-md);
+  color: var(--area-ink);
+  background: var(--area-container);
+}
+
+.page-header__action-slot {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--density-toolbar-gap);
+}
+
+.page-header__secondary-actions,
+.page-header__contextual-controls,
+.page-header__primary-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--density-toolbar-gap);
+}
+
+.page-header__overflow-trigger {
+  min-height: var(--control-size-touch);
+}
+
+.page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--density-filter-gap);
+  width: 100%;
+}
+
+.page-toolbar__search {
+  flex: 1 1 var(--toolbar-search-min-width);
+  min-width: 0;
+}
+
+.page-toolbar__filters,
+.page-toolbar__tabs,
+.page-toolbar__contextual-controls {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--density-filter-gap);
+}
+
+.page-header__action-slot .btn:focus-visible,
+.page-toolbar .btn:focus-visible {
+  box-shadow: var(--shadow-focus);
+}
+
+@media (max-width: 639px) {
+  .page-header__action-slot {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+
+  .page-toolbar__search,
+  .page-toolbar__filters,
+  .page-toolbar__tabs,
+  .page-toolbar__contextual-controls {
+    flex-basis: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-header__action-slot .btn,
+  .page-toolbar .btn {
+    transition: none;
+  }
+}

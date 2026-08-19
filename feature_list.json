@@ -1954,6 +1954,41 @@
         "accessibility",
         "foundation"
       ]
+    },
+    {
+      "id": "F101",
+      "phase": 0,
+      "name": "page_chrome_toolbar_action_hierarchy",
+      "title": "Page Chrome, Toolbar & Action Hierarchy",
+      "description": "Establish a reusable page-header + optional toolbar contract and a single action hierarchy, then migrate one representative screen from Ventas, Ingeniería and Producción. This follows F100 area theming and intentionally proves the shared chrome before broader screen migration.",
+      "acceptance": [
+        "docs/design.md defines the shared page header/toolbar anatomy, named action slots, one-primary rule, overflow rules, workspace ownership, and hide-versus-disable behavior aligned with F100 area context.",
+        "Shared accessible PageHeader and PageToolbar primitives exist in packages/ui/src/common with typed slots for title, subtitle, actions, search, filters, tabs, and contextual controls; shared CSS uses semantic tokens only.",
+        "The introduced chrome controls define primary, secondary, overflow, disabled, keyboard-focus, compact/touch, and reduced-motion behavior; icon-only controls have accessible names and overflow is keyboard operable.",
+        "Cotizaciones (ProjectsListView), Ingeniería (EngineeringScreen), and Órdenes (ProductionOrderViewsPanel) use the common contract, preserve F100 tonal context, and expose no more than one visible page-level primary action.",
+        "The representative migrations preserve routing, RBAC, domain, persistence, and body workflows; focused UI tests assert the placement and accessible action semantics.",
+        "Focused UI tests, pnpm test, pnpm typecheck, ./init.sh, the Impeccable detector, and responsive evidence at 390px, 768px, and 1280px are green or explicitly environment-blocked without invented approval.",
+        "No IA/nav change, no forms/modal/cards/tables redesign, no all-screen migration, and no domain/backend/API/persistence work are included."
+      ],
+      "references": [
+        "progress/explore_f101_page_chrome_scope.md",
+        "docs/design.md §4.1a–b, §8",
+        "progress/explore_ui_design_system_audit.md",
+        "progress/explore_ui_ux_flow_critique.md",
+        "packages/ui/src/common/pageHeader.css",
+        "packages/ui/src/projects/components/ProjectsListView.tsx",
+        "packages/ui/src/engineering/EngineeringScreen.tsx",
+        "packages/ui/src/production/ProductionOrderViewsPanel.tsx"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "ui",
+        "design-system",
+        "page-chrome",
+        "toolbar",
+        "action-hierarchy",
+        "representative-migration"
+      ]
     }
   ]
 }

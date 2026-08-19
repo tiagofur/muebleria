@@ -253,6 +253,9 @@
   --density-btn-pad-x: var(--space-3);
   --density-control-pad-y: 0.35rem;
   --density-control-pad-x: var(--space-2);
+  --control-size-compact: 1.75rem;
+  --control-size-touch: 2.75rem;
+  --toolbar-search-min-width: 12.5rem;
 
   /*
    * Breakpoints (issue #34 / design.md §3.8) — documented here for agents.

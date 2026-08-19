@@ -879,7 +879,7 @@ describe('ProjectsScreen project templates (#110)', () => {
     const user = userEvent.setup();
     // No templates prop → no button.
     renderScreen();
-    expect(screen.queryByTestId('new-from-template-btn')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Más acciones/i })).toBeNull();
     cleanup();
 
     // With templates + handler → button appears.
@@ -887,9 +887,10 @@ describe('ProjectsScreen project templates (#110)', () => {
       projectTemplates: [sampleTemplate],
       onCreateFromTemplate: vi.fn(),
     });
-    expect(screen.getByTestId('new-from-template-btn')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Más acciones/i }));
+    expect(screen.getByRole('menuitem', { name: 'Desde plantilla' })).toBeTruthy();
 
-    await user.click(screen.getByTestId('new-from-template-btn'));
+    await user.click(screen.getByRole('menuitem', { name: 'Desde plantilla' }));
     expect(screen.getByText('Crear cotización desde plantilla')).toBeTruthy();
     expect(screen.getByTestId('template-pick-tmpl-test')).toBeTruthy();
   });
@@ -900,7 +901,8 @@ describe('ProjectsScreen project templates (#110)', () => {
       projectTemplates: [sampleTemplate],
     });
 
-    await user.click(screen.getByTestId('new-from-template-btn'));
+    await user.click(screen.getByRole('button', { name: /Más acciones/i }));
+    await user.click(screen.getByRole('menuitem', { name: 'Desde plantilla' }));
     await user.click(screen.getByTestId('template-pick-tmpl-test'));
 
     // Name input is pre-filled with the template name as a suggestion.
@@ -1014,7 +1016,8 @@ describe('ProjectsScreen project templates (#110)', () => {
       projectTemplates: [sampleTemplate],
     });
 
-    await user.click(screen.getByTestId('manage-templates-btn'));
+    await user.click(screen.getByRole('button', { name: /Más acciones/i }));
+    await user.click(screen.getByRole('menuitem', { name: 'Gestionar plantillas' }));
     await user.click(screen.getByTestId('delete-template-tmpl-test'));
 
     expect(onDeleteTemplate).toHaveBeenCalledWith('tmpl-test');
@@ -1045,5 +1048,17 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(
       screen.getByTestId('spatial-studio-filter-unplaced').className,
     ).toMatch(/filter--on/);
+  });
+});
+
+
+describe('F101 page chrome migration', () => {
+  it('places the Cotizaciones action hierarchy above its search and filters', () => {
+    renderScreen();
+    const header = screen.getByTestId('page-header');
+    const toolbar = screen.getByTestId('page-toolbar');
+    expect(header.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(header).getByRole('button', { name: /Nueva cotización/i })).toBeTruthy();
+    expect(within(toolbar).getByRole('searchbox', { name: 'Buscar cotizaciones' })).toBeTruthy();
   });
 });

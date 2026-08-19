@@ -23,6 +23,7 @@ import { ProductionElevationPreview } from './ProductionElevationPreview';
 import {
   FurnitureScene3D,
 } from '../preview3d/FurnitureScene3D';
+import { PageHeader } from '../common';
 import '../common/furniture3dViewer.css';
 
 export type ProductionOrderViewsPanelProps = {
@@ -112,32 +113,15 @@ export function ProductionOrderViewsPanel({
 
   return (
     <div className="prod-vistas" data-testid="prod-hub-vistas">
-      <section
-        className="prod-vistas__section"
-        aria-label="Planta de cocina"
-        data-testid="prod-vistas-planta"
-      >
-        <h3 className="prod-hub__section-title">Planta</h3>
-        <p className="prod-vistas__hint">
-          Solo lectura — códigos y posiciones de la obra aceptada. Sin edición
-          de muros ni placements.
-        </p>
-        <PresentationKitchenPlanSlide project={project} modules={modules} />
-      </section>
-
-      <section
-        className="prod-vistas__section"
-        aria-label="Elevaciones por muro"
-        data-testid="prod-vistas-elevaciones"
-      >
-        <div className="prod-modulos__toolbar">
-          <h3 className="prod-hub__section-title" style={{ margin: 0 }}>
-            Elevaciones por muro
-          </h3>
-          {onExportElevations ? (
+      <PageHeader
+        headingLevel={3}
+        title="Vistas de producción"
+        subtitle="Planta, elevaciones y vista 3D de la obra aceptada."
+        primaryAction={
+          onExportElevations ? (
             <button
               type="button"
-              className="btn btn--primary"
+              className="btn"
               disabled={exportBusy || elevations.walls.length === 0}
               onClick={() => {
                 void onExportElevations();
@@ -151,8 +135,28 @@ export function ProductionOrderViewsPanel({
             >
               Descargar PDF elevaciones
             </button>
-          ) : null}
-        </div>
+          ) : undefined
+        }
+      />
+      <section
+        className="prod-vistas__section"
+        aria-label="Planta de cocina"
+        data-testid="prod-vistas-planta"
+      >
+        <h4 className="prod-hub__section-title">Planta</h4>
+        <p className="prod-vistas__hint">
+          Solo lectura — códigos y posiciones de la obra aceptada. Sin edición
+          de muros ni placements.
+        </p>
+        <PresentationKitchenPlanSlide project={project} modules={modules} />
+      </section>
+
+      <section
+        className="prod-vistas__section"
+        aria-label="Elevaciones por muro"
+        data-testid="prod-vistas-elevaciones"
+      >
+        <h4 className="prod-hub__section-title">Elevaciones por muro</h4>
         <p className="prod-vistas__hint">
           Alzado frontal con códigos y anchos. Sin inventar posiciones para
           módulos sin colocar.
@@ -187,7 +191,7 @@ export function ProductionOrderViewsPanel({
         aria-label="Vista 3D de la obra"
         data-testid="prod-vistas-3d"
       >
-        <h3 className="prod-hub__section-title">Vista 3D</h3>
+        <h4 className="prod-hub__section-title">Vista 3D</h4>
         <p className="prod-vistas__hint">
           Orbitá y hacé zoom para entender el armado. No hay herramientas de
           diseño ni arrastre de muebles.

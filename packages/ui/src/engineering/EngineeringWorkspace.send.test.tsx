@@ -6,7 +6,7 @@
  * calls it on click, hidden once produced.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Project } from '@muebles/domain';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 
@@ -101,5 +101,34 @@ describe('EngineeringWorkspace — Enviar a Producción (2a.15)', () => {
   it('hides the button when the callback is not wired', () => {
     render(<EngineeringWorkspace {...baseProps} />);
     expect(screen.queryByTestId('eng-send-to-production')).toBeNull();
+  });
+});
+
+describe('EngineeringWorkspace — F101 action hierarchy composition', () => {
+  it('keeps Enviar a Producción as the only primary action when Vistas is active', () => {
+    render(
+      <EngineeringWorkspace
+        {...baseProps}
+        catalog3d={{
+          modules: [],
+          structures: [],
+          components: [],
+          materials: [],
+          edges: [],
+          hardware: [],
+          optionGroups: [],
+        }}
+        onSendToProduction={vi.fn()}
+        onExportElevations={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Vistas' }));
+
+    expect(screen.getByTestId('eng-send-to-production').className).toContain(
+      'btn--primary',
+    );
+    expect(screen.getByTestId('prod-vistas-export-elevations').className).toBe('btn');
+    expect(document.querySelectorAll('.btn--primary')).toHaveLength(1);
   });
 });

@@ -551,30 +551,39 @@ CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», �
 - **Content**: `--surface-app`, padding `--space-6`
 - **Entrada por defecto:** `home` (Dashboard) para todos los roles. El redirect al gate de sesión / falta de permiso usa `home`. Para produccion, `home` sigue siendo Dashboard (la cola es su propia ruta `/produccion`).
 
-#### 4.1a Esqueleto único de página (v2 — OBLIGATORIO)
+#### 4.1a Esqueleto único de página (v3 — OBLIGATORIO)
 
 TODA pantalla del producto usa el mismo esqueleto, en este orden:
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ PAGE-HEADER                                            │
-│ [icon-chip área 24px] Título (--text-xl, h2)  [Acciones]│  ← único título de la vista
-│ Subtítulo (--text-base, secondary)         [1 primary] │
+│ PAGE-HEADER                                             │
+│ [icon-chip área] Título (--text-xl, h2)  [acciones]     │
+│ Subtítulo (--text-base, secondary)       [1 primary]    │
 ├────────────────────────────────────────────────────────┤
-│ TOOLBAR (opcional): [Buscar…] [chips filtro] [tabs]    │
+│ PAGE-TOOLBAR (opcional): buscar · filtros · tabs        │
 ├────────────────────────────────────────────────────────┤
-│ CUERPO: lista / tabla / cards / board / form           │
+│ CUERPO: lista / tabla / cards / board / form            │
 ├────────────────────────────────────────────────────────┤
-│ ESTADOS: loading (skeleton) · empty (enseña) · error   │
+│ ESTADOS: loading (skeleton) · empty (enseña) · error    │
 └────────────────────────────────────────────────────────┘
 ```
 
-- **Page-header**: SIEMPRE `.page-header` de `common/pageHeader.css` (o alias `.catalog-page__header` / `.dashboard__header` / `.prod-queue__header`). **Prohibido** crear headers propios por pantalla. El título SIEMPRE `--text-xl` (22px) semibold en `h2`.
-- **Icon-chip de área**: cuadrado 24–28px, radio `--radius-md`, fondo `--area-*-100` e ícono `--area-*-500` (16–18px, strokeWidth 1.5). Opcional (las pantallas de catálogo hoy no lo llevan — unificar al migrar).
-- **Toolbar**: búsqueda y filtros viven INMEDIATAMENTE bajo el header, nunca desplazados a otra sección de la página.
-- **Gap raíz**: `--density-page-gap` (12px) para TODAS las pantallas — no `--space-5/6/8` por screen.
-- **Estados**: `EmptyState` / `ListSkeleton` / `PageLoading` comunes — prohibidos empty states propios.
-- **Workspaces tipo hub** (detalle de cotización, orden de producción `/orders/:id`): usan chrome propio (`.workspace-chrome` / `.prod-hub__header`) con back + título + meta densa + acciones — no `.page-header` de lista. El título único, la jerarquía de headings y los estados comunes aplican igual.
+- **Primitives obligatorios:** `PageHeader` y `PageToolbar` de `packages/ui/src/common/`; las pantallas no reconstruyen markup de header/toolbar. El header recibe slots tipados de `title`, `subtitle`, `icon`, `primaryAction`, `secondaryActions`, `overflowActions` y `contextualControls`. La toolbar recibe `search`, `filters`, `tabs` y `contextualControls`.
+- **Page-header:** es el único dueño de título, icono de área, subtítulo y acciones de nivel página. Título `h2` en `--text-xl`; un panel interno de workspace puede usar `h3`, sin competir con el título del workspace.
+- **Icon-chip de área:** cuadrado de 24–28px, radio `--radius-md`, fondo `--area-container` e ícono `--area-ink`. Es ubicación, nunca CTA ni estado semántico.
+- **Toolbar:** aparece directamente bajo el header cuando existen búsqueda, filtros, tabs o controles de contexto. No se crean toolbars con placeholders vacíos.
+- **Gap raíz:** `--density-page-gap` para TODAS las pantallas.
+- **Estados:** `EmptyState` / `ListSkeleton` / `PageLoading` comunes — prohibidos empty states propios.
+- **Workspaces tipo hub** (detalle de cotización, orden de producción `/orders/:id`): el chrome del workspace conserva back + título + meta densa + acciones. Dentro de una tab/panel, `PageHeader` puede presentar el contexto local en `h3`; nunca duplica la primaria del workspace.
+
+**Gramática de acciones:**
+
+1. Una página o tab activa tiene como máximo **una acción primaria visible**. La primaria vive en el `PageHeader` **o** en la tab activa, nunca en ambos niveles.
+2. Acciones secundarias permanecen visibles solo si son frecuentes y no destructivas. Acciones poco frecuentes, administrativas o destructivas no primarias se envían a `overflowActions` (`DropdownMenu`); el menú debe abrirse por mouse y teclado, cerrar con Escape y devolver foco al trigger.
+3. Una acción imposible por permiso o por ausencia de contexto se **oculta**. Una acción relevante pero bloqueada se mantiene `disabled` con un nombre/explicación accesible (por ejemplo `title`, texto auxiliar o descripción asociada); disabled no es sustituto de RBAC.
+4. Los controles icon-only tienen `aria-label`. Todo control de chrome mantiene foco visible, target táctil de al menos 44px cuando es compacto y respeta `prefers-reduced-motion`.
+5. El color de área solo ambienta `--area-canvas`, `--area-chrome` y el icon-chip. CTA primaria, focus y estados success/warning/danger/info conservan roles globales.
 
 #### 4.1b Regla de título único (v2)
 
@@ -1114,7 +1123,7 @@ aprobar (ver `reviewer` skill, bloque Diseño UI/UX).
 - [ ] **Solo tokens**: 0 hex, 0 px sueltos, 0 `font-size` literales; detector impeccable (`detect.mjs`) en 0 hallazgos
 - [ ] **A11y**: contraste AA, teclado completo (§4.8), icon-only con `aria-label`, significado nunca solo por color
 - [ ] **Copy**: taller + sentence case + datos formateados (§7.2) + errores que enseñan (§7.3)
-- [ ] **Esqueleto único** (§4.1a): `.page-header`, título = label de nav único, toolbar bajo el header
+- [ ] **Esqueleto único** (§4.1a): `PageHeader`, título = label de nav único, `PageToolbar` bajo el header cuando hay controles; acciones respetan una primaria + overflow accesible
 - [ ] **Responsive smoke**: 390px / 768px / 1280px sin overflow ni contenido cortado (breakpoints §4.0)
 - [ ] **Motion**: duraciones/easings del sistema + `prefers-reduced-motion` (§3.6)
 - [ ] **Screenshot review**: captura de la pantalla comparada contra la spec §6 — «se ve bien en mi cabeza» no cuenta
