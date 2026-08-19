@@ -357,3 +357,10 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Cotizaciones e Ingeniería adoptaron el chrome compartido; Vistas de producción usa el header contextual y conserva la descarga de elevaciones como acción secundaria.
 - La prueba de composición de `EngineeringWorkspace` garantiza que «Enviar a Producción» sigue siendo la única primaria cuando Vistas está activa.
 - Verificación: tests focales, `pnpm test`, `pnpm typecheck`, `./init.sh` y detector Impeccable verdes. Evidencia responsive queda declarada como bloqueada porque no hubo Browser/screenshot/Computer Use disponible.
+
+## F102 — Semantic Tabs: two patterns, one workspace family (2026-08-19)
+
+- Aprobada en `progress/review_F102.md` sobre el commit publicado `183e1cd`.
+- `WorkspaceTabs` unifica las vistas pares de Órdenes e Ingeniería; `WorkflowTabs` conserva el subrayado de estaciones de Fábrica.
+- Se garantizan roles ARIA, paneles existentes para toda referencia `aria-controls`, roving tabindex, teclas Arrow/Home/End, count/disabled y overflow horizontal de una sola fila.
+- Verificación: 33 pruebas focales, `pnpm test`, `pnpm typecheck` y `./init.sh` verdes; evidencia visual declarada bloqueada por ausencia de herramientas de captura.
