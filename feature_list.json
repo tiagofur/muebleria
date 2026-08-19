@@ -2305,6 +2305,36 @@
         "navigation",
         "cleanup"
       ]
+    },
+    {
+      "id": "F112",
+      "phase": 0,
+      "name": "library_area_context",
+      "title": "Área Library (Catálogos + Librería) en oliva/sage",
+      "description": "Split the engineering area: LIBRERÍA and CATÁLOGOS destinations become their own `library` area context (creation and maintenance of the system's reusable assets), distinct from Ingeniería (indigo 245) and Producción (orange 25). Owner-approved family: olive/sage hsl(95 ...). Includes the full F100 contract: primitive ramp, contextual roles via data-area-context, AA-verified pairs, sidebar/topbar adoption and docs/design.md §3.2.1 taxonomy update.",
+      "acceptance": [
+        "AppShell maps modules, structures, agregados, components, optionGroups, materials, edges, hardware and finishes nav ids to the new `library` area context; Ingeniería stays `eng`.",
+        "tokens.css defines the olive primitive ramp plus contextual roles (--area-canvas/chrome/container/border/selected/ink/state-*) under [data-area-context='library'], tokens-only.",
+        "All AA contrast pairs (ink over canvas/chrome/container/selected) verified >=4.5:1 by automated test, extending the F100 pair suite.",
+        "Sidebar section labels / active states for LIBRERÍA and CATÁLOGOS adopt the olive family; brand primary, focus and semantic states remain global.",
+        "docs/design.md §3.2.1 taxonomy table and context list include `library` with its purpose.",
+        "Focused shell tests, pnpm test, typecheck, ./init.sh and Impeccable detector green; visual smoke shows the olive canvas on /materials distinct from /engineering indigo."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "docs/design.md §3.2.1",
+        "packages/ui/src/design-system/tokens.css",
+        "packages/ui/src/shell/AppShell.tsx",
+        "packages/ui/src/shell/appShell.test.ts"
+      ],
+      "status": "done",
+      "tags": [
+        "ui",
+        "design-system",
+        "area-theme",
+        "color",
+        "navigation"
+      ]
     }
   ]
 }

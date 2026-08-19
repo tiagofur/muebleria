@@ -383,3 +383,14 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Título «Catálogo de Acabados» → «Acabados» (§4.1b) y copy sentence-case en Agregados; iconos normalizados a strokeWidth 1.5.
 - Verificación: 12 tests nuevos de composición, UI 1006/1006, typecheck, `./init.sh`, detector 0 hallazgos y smoke visual 390/768/1280 sin overflow.
 - Antes de esta feature: critique de estandarización 28/40 (`progress/explore_ui_standardization_critique.md`) y registro del programa F104–F111 a pedido del dueño.
+
+## F112 — Área Library (Catálogos + Librería) en oliva/sage (2026-08-19)
+
+- Aprobada en `progress/review_F112.md`; familia elegida por el dueño entre
+  3 propuestas (oliva/ciruela/violeta).
+- Nuevo contexto `library` (hue 95) con contrato F100 completo: rampa primitiva,
+  roles tonales, sidebar/topbar, variante stat-card y placeholder de Muebles.
+- 20 pares AA verificados por test (library mínimo 6.59:1); integración web de
+  rutas actualizada; docs/design.md §3.2.1 con la taxonomía de 5 contextos.
+- Verificación: UI 1008/1008, typecheck, ./init.sh, detector 0 y smoke visual
+  con canvas oliva rgb(247,250,245) en /materials y /modules.
