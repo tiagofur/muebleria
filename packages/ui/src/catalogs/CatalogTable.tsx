@@ -140,11 +140,14 @@ export function ActiveBadge({ active }: { readonly active: boolean }): ReactNode
     <span
       className={
         active
-          ? 'catalog-badge catalog-badge--active'
-          : 'catalog-badge catalog-badge--inactive'
+          ? 'status-badge status-badge--active'
+          : 'status-badge status-badge--inactive'
       }
     >
-      {active ? '● Activo' : '● Inactivo'}
+      <span className="status-badge__dot" aria-hidden>
+        ●
+      </span>
+      {active ? 'Activo' : 'Inactivo'}
     </span>
   );
 }

@@ -375,23 +375,8 @@
   background: var(--surface-card);
 }
 
-.catalog-badge {
-  display: inline-block;
-  padding: 0.1rem 0.45rem;
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.catalog-badge--active {
-  background: var(--success-50);
-  color: var(--success-700);
-}
-
-.catalog-badge--inactive {
-  background: var(--surface-hover);
-  color: var(--text-muted);
-}
+/* .catalog-badge / --active / --inactive migrados al vocabulario único
+   .status-badge--active / --inactive (common/statusBadge.css, §5.2). */
 
 .visually-hidden {
   position: absolute;
@@ -501,7 +486,7 @@
 
 .catalog-picker__popover {
   position: absolute;
-  z-index: 40;
+  z-index: var(--z-dropdown);
   top: calc(100% + var(--space-1));
   left: 0;
   right: 0;
@@ -722,7 +707,7 @@
   background: var(--surface-card);
   box-shadow: var(--shadow-lg);
   border-left: 1px solid var(--border-default);
-  z-index: 100;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   padding: var(--space-6);
