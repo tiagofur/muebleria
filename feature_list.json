@@ -2433,6 +2433,70 @@
         "backend",
         "ui"
       ]
+    },
+    {
+      "id": "F116",
+      "phase": 0,
+      "name": "catalogs_critical_bugfixes",
+      "title": "Bugfixes críticos de catálogos (pérdida de datos silenciosa + paridad seed)",
+      "description": "Surge del Judgment Day de Catálogos 2026-08-19 (docs/history/judgment-day-catalogos-2026-08-19.md §3). Corrige: (C1) PBR de materiales nunca persiste en catalogStore create/update; (C2) upsert API traga 409 → '✓ creado' que desaparece al refrescar (unificar regla de unicidad: pantalla valida solo activos pero SQL UNIQUE es total); (C3) thicknessMm de cantos fraccional (TS default 0.5 / seed 0.5 y 0) vs Go int + SQL CHECK > 0 → migrar columna a DOUBLE PRECISION y Go a float64; (C4) deleteAgregado sin REST delete (reaparece en modo auth) + endpoint Go que solo desactiva; (C5) previewColor crudo inválido sobrevive al normalize (doble asignación); (C6) guest localStorage sin migrateWorkspace; (C7) toasts de éxito antes de confirmar save (createEdge/createHardware/updateEdge/createModule/etc.) — unificar await-patch; (A1) Material PUT sin mapeo duplicate-key → 500 en Go; (A2) delete de módulo referenciado: FK RESTRICT tras borrado optimista local; (A3) seed upserts destructivos (ensurePlinthCatalog pisa ediciones; edges upsert reescribe PK); (A4) seed Go sin preview_shape en herrajes demo ni previewColor en materiales (paridad con seed TS).",
+      "acceptance": [
+        "Editar roughness/metalness/clearcoat de un material en la UI persiste y sobrevive refresh en modo local y API",
+        "Crear ítem con código duplicado (incluido código de un ítem inactivo) muestra error accionable y no toast de éxito; sin pérdida silenciosa",
+        "Cantos con espesor fraccional (0.4/0.5/0.8 mm) persisten en Go/Postgres y round-trip (migración aditiva DOUBLE PRECISION)",
+        "Eliminar agregado en modo auth no reaparece al refrescar",
+        "previewColor inválido queda normalizado o rechazado, nunca string crudo",
+        "Workspace guest viejo migra schemaVersion al cargar (migrateWorkspace en LocalStorageWorkspaceRepository)",
+        "Ningún handler de catálogo canta éxito antes de que el save resuelva o falle",
+        "Go: PUT material mapea duplicate-key a 409; DELETE módulo referenciado devuelve 409 claro y el FE no diverge",
+        "Seeds TS ↔ Go con paridad de campos visuales (preview_shape/previewColor) y sin upserts destructivos de datos del usuario",
+        "pnpm test + typecheck + go test + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-catalogos-2026-08-19.md",
+        "apps/web/src/stores/catalogStore.ts",
+        "packages/storage/src/apiWorkspaceRepository.ts",
+        "backend-go/internal/storage/materials.go",
+        "backend-go/internal/storage/seed.go"
+      ],
+      "status": "pending",
+      "tags": [
+        "catalogs",
+        "bugfix",
+        "data-integrity",
+        "backend",
+        "storage"
+      ]
+    },
+    {
+      "id": "F117",
+      "phase": 0,
+      "name": "catalogs_refactor_split",
+      "title": "Refactor: partir archivos grandes de catálogos (UI + store) sin cambio de comportamiento",
+      "description": "Surge del Judgment Day de Catálogos 2026-08-19 (§5). Divide para bajar contexto de lectura (agents) y cumplir presupuesto ~400-600 L de docs/conventions.md: MaterialsCatalog.tsx (1420) → catalogs/materials/ (screen <450 + MaterialFormModal + MaterialExpandedDetail + EdgeQuickCreateModal + MaterialPreviewFields); AmbientMaterialsCatalog.tsx (1310) → catalogs/ambient/ (screen <450 + AmbientMaterialFormModal + AmbientCategoryTree + AmbientCategoryModals + AmbientExpandedDetail); HardwareCatalog.tsx (769) → catalogs/hardware/ (screen <400 + HardwareFormModal + HardwarePreview3DFields); catalogStore.ts (1198) → stores/catalog/ un archivo por dominio (materials/edges/hardware/ambient/optionGroups/entities/customers) combinados en el mismo store zustand sin cambiar la API pública. Reescribe HardwareCatalog.test.tsx (hoy grep del fuente) a behavior tests. Refactor mecánico: cero cambio funcional, tests verdes antes y después. Idealmente después de F116 (no refactorizar sobre código que pierde datos).",
+      "acceptance": [
+        "MaterialsCatalog screen < 450 L con form/detail/edge-quick-create extraídos a components",
+        "AmbientMaterialsCatalog screen < 450 L con form/categorías extraídas",
+        "HardwareCatalog screen < 400 L; tests de comportamiento (render + flows) reemplazan grep del fuente",
+        "catalogStore dividido por dominio con useCatalogStore API pública idéntica (cero cambios en consumers)",
+        "Cero cambio funcional: rutas, deep-links, RBAC, toasts y validaciones intactas",
+        "Se remueven muertos señalados: SURFACE_TYPE_LABEL, botones duplicados de acción en MaterialsCatalog (unificar)",
+        "pnpm test + typecheck + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-catalogos-2026-08-19.md",
+        "docs/conventions.md",
+        "packages/ui/src/catalogs/",
+        "apps/web/src/stores/catalogStore.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "catalogs",
+        "refactor",
+        "clean-code",
+        "ui",
+        "stores"
+      ]
     }
   ]
 }

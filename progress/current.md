@@ -1,25 +1,27 @@
 # Sesión activa
 
-**Feature:** F115 — cut_plan_optimizer_engine_and_persistence
-**Estado:** Done
+**Feature:** Judgment Day CATÁLOGOS (auditoría, sin feature in_progress)
+**Estado:** Exploración/auditoría completada — reporte entregado
 **Fecha:** 2026-08-19
 
 ## Objetivo
-Implementar el motor de optimización de corte 2D guillotina multi-heurística en `packages/domain/src/optimizer/` (con kerf, refilado configurable de 4 lados [top/bottom/left/right], respeto estricto/libre de veta, deducción de cantos y detección automática de retazos útiles); persistencia de `cut_plan` JSONB en PostgreSQL y `backend-go`; conteo exacto de tableros enteros para Almacén; generador PDF vectorial profesional para taller con fases de corte y visualización acotada; y panel interactivo en UI.
 
-## Tareas
-- [x] **Dominio (Fase 1)**: Tipos y motor de optimización 2D guillotina en `packages/domain/src/optimizer/` (`types.ts`, `guillotine.ts`, `optimizer.ts`, `index.ts`), pruebas unitarias en `optimizer.test.ts` cubriendo kerf, veta, refilado de 4 lados, múltiples materiales y retazos útiles. Extender `Project` con `cutPlan?: CutPlan`.
-- [x] **Backend & Persistencia (Fase 2)**: Migración `000060_project_cut_plan.up.sql` en `backend-go`, tipos en `backend-go/internal/domain/types.go`, operaciones en `internal/storage/projects.go` y serialización en `packages/storage/src/apiMappers.ts`.
-- [x] **PDF de Taller (Fase 3)**: Generador vectorial `cutPlanPdfExport.ts` en `packages/excel` con carátula para Almacén, planos acotados por tablero con fases de corte, cantos, veta y retazos útiles. Tests unitarios en `cutPlanPdfExport.test.ts`.
-- [x] **UI & Integración (Fase 4)**: Renovar `ProductionOrderOptimizationPanel.tsx` y `ProductionBoardView.tsx` para mostrar tableros exactos para Almacén, controles de refilado de 4 lados + kerf, visor SVG con cantos y retazos, guardar/congelar plan y exportar PDF en `App.tsx` y `projectStore.ts`.
-- [x] **Verificación**: `./init.sh`, `pnpm test`, `pnpm typecheck`, `backend-go` tests verdes al 100%.
+Judgment day de la sección CATÁLOGOS: buscar errores, fallos de lógica y funciones que no cumplen lo esperado (foco en diseño de Herrajes: geometrías default, diseños importados, materiales por capas), producir reporte completo y registrar el refactor de archivos grandes.
 
-## Resultados de Verificación
-- `@muebles/domain`: 658 tests unitarios pasando.
-- `@muebles/storage`: 121 tests unitarios pasando.
-- `@muebles/excel`: 72 tests unitarios pasando.
-- `@muebles/ui`: 144 tests unitarios pasando.
-- `apps/web`, `apps/desktop`, `apps/mobile`: 292 tests pasando.
-- `backend-go`: tests pasando al 100%.
-- Typecheck del monorepo: 0 errores.
-- `./init.sh`: 100% verde.
+## Qué se hizo
+
+- `./init.sh` verde (verificación previa).
+- 3 exploraciones exhaustivas en paralelo: UI de catálogos, sistema de herrajes 3D, persistencia (TS storage + backend-go + seeds).
+- Verificación manual de los hallazgos graves contra el código (C1–C7 confirmados).
+- Reporte canónico: `docs/history/judgment-day-catalogos-2026-08-19.md`.
+- Features registradas: **F116** `catalogs_critical_bugfixes` (pending, prioridad alta), **F117** `catalogs_refactor_split` (pending, después de F116).
+
+## Hallazgos clave (resumen)
+
+- Veredicto de las 3 dudas de herrajes: geometrías default SÍ aparecen (7 formas paramétricas, pero sin inputs de dimensiones en la UI); diseños importados NO EXISTEN (ni tipos ni loader); capas por componente SÍ funcionan end-to-end (F080 shipped pero tracker lo marca CONGELADO — tracker mentiroso).
+- 7 bugs críticos de pérdida de datos silenciosa en modo API (PBR no persiste, 409 tragado, cantos 0.5mm vs Go int, deleteAgregado sin REST, previewColor crudo, guest sin migraciones, éxitos cantados antes de guardar).
+- Deuda: MaterialsCatalog 1420 L, AmbientMaterialsCatalog 1310 L, catalogStore 1198 L, HardwareCatalog 769 L; HardwarePlacementGizmo (F070) es código muerto; App.tsx volvió a 4101 L (deuda regenerada post-F064).
+
+## Próximo paso
+
+Tomar F116 de `feature_list.json` (bugfixes críticos) y luego F117 (refactor). El usuario definió que seguirá con judgment days por parte: próximos sugeridos → Cotizaciones/Proyectos, Producción, Proyectar 3D.
