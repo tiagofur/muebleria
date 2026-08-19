@@ -99,9 +99,6 @@ export type ProductionWorkspaceProps = {
   readonly canSetFloorStatus?: boolean;
   readonly onExportCncPilot?: (projectId: string) => void | Promise<void>;
   readonly onExportAssemblySheets?: (projectId: string) => void | Promise<void>;
-  readonly onReleaseToDelivery?: (projectId: string) => void | Promise<void>;
-  readonly canReleaseToDelivery?: boolean;
-  readonly isReleasing?: boolean;
   /** Active cutting/floor claims — used to filter the "Ya en producción" queue. */
   readonly activeClaims?: readonly FabricActiveClaim[];
 };
@@ -140,9 +137,6 @@ export function ProductionWorkspace({
   canSetFloorStatus = false,
   onExportCncPilot,
   onExportAssemblySheets,
-  onReleaseToDelivery,
-  canReleaseToDelivery = true,
-  isReleasing = false,
   activeClaims = [],
 }: ProductionWorkspaceProps): ReactNode {
   const [productionScopeId, setProductionScopeId] =
@@ -332,13 +326,6 @@ export function ProductionWorkspace({
             : undefined
         }
         canSetFloorStatus={canSetFloorStatus}
-        onReleaseToDelivery={
-          onReleaseToDelivery
-            ? () => onReleaseToDelivery(orderProject.id)
-            : undefined
-        }
-        canReleaseToDelivery={canReleaseToDelivery}
-        isReleasing={isReleasing}
         staleInfo={staleInfo}
         onExportCncPilot={
           onExportCncPilot

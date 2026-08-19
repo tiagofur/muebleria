@@ -120,17 +120,11 @@ describe('app routes', () => {
       projectId: id,
       tab: 'vistas',
     });
-    expect(productionOrderFromPath(`/orders/${id}/dispatch`)).toEqual({
-      projectId: id,
-      tab: 'despacho',
-    });
+    expect(productionOrderFromPath(`/orders/${id}/dispatch`)).toBeNull();
     expect(productionOrderFromPath(`/orders/${id}/labels`)).toEqual({
       projectId: id,
       tab: 'etiquetas',
     });
-    expect(productionOrderPath(id, 'despacho')).toBe(
-      `/orders/${id}/dispatch`,
-    );
     expect(productionOrderPath(id, 'etiquetas')).toBe(
       `/orders/${id}/labels`,
     );

@@ -85,7 +85,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     await user.click(screen.getByTestId('prod-hub-export-pack'));
     expect(onPack).toHaveBeenCalled();
 
-    // Hub tabs (HUB_TABS): resumen / piso / despacho / etiquetas / herrajes /
+    // Hub tabs (HUB_TABS): resumen / piso / etiquetas / herrajes /
     // documentos — technical tabs (modulos/despiece/optimizacion) live in
     // Engineering now (2211e2c Hub trim).
     await user.click(screen.getByTestId('prod-hub-tab-documentos'));
@@ -214,25 +214,4 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     expect(screen.getByTestId('prod-hub-not-ready')).toBeTruthy();
   });
 
-  it('renders dispatch panel when activeTab is despacho', () => {
-    const readiness = buildProductionOrderReadiness({
-      project: project(),
-      cutRows: [],
-    });
-    render(
-      <ProductionOrderHub
-        project={project()}
-        customerLabel="Ana"
-        salePrice={null}
-        readiness={readiness}
-        activeTab="despacho"
-        onTabChange={vi.fn()}
-        onBackToQueue={vi.fn()}
-        onOpenDesign={vi.fn()}
-        onExportOptimizer={vi.fn()}
-        onExportHardware={vi.fn()}
-      />,
-    );
-    expect(screen.getByTestId('prod-hub-despacho')).toBeTruthy();
-  });
 });

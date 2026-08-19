@@ -3578,9 +3578,6 @@ function AppContent({
           onExportAssemblySheets={(id) => {
             void handleExportAssemblySheets(id);
           }}
-          onReleaseToDelivery={(id) => {
-            void handleReleaseToDelivery(id);
-          }}
           activeClaims={fabricActiveClaims}
         />
       ) : null}

@@ -49,7 +49,6 @@ import {
   type ProductionDocumentItem,
 } from './ProductionOrderDocumentsPanel';
 import { ProductionOrderPaperlessPanel } from './ProductionOrderPaperlessPanel';
-import { ProductionOrderDispatchPanel } from './ProductionOrderDispatchPanel';
 import { ProductionOrderLabelsPanel } from './ProductionOrderLabelsPanel';
 import { CsvExportConfigModal } from './CsvExportConfigModal';
 import type { ProductionSpaceOption } from '@muebles/domain';
@@ -99,9 +98,6 @@ export type ProductionOrderHubProps = {
     status: ItemFloorStatus,
   ) => void;
   readonly canSetFloorStatus?: boolean;
-  readonly onReleaseToDelivery?: () => void | Promise<void>;
-  readonly canReleaseToDelivery?: boolean;
-  readonly isReleasing?: boolean;
   readonly staleInfo?: ProductionStaleInfo | null;
   readonly onExportCncPilot?: () => void | Promise<void>;
   readonly onExportAssemblySheets?: () => void | Promise<void>;
@@ -235,9 +231,6 @@ export function ProductionOrderHub({
   elevationsAvailable = false,
   onSetFloorStatus,
   canSetFloorStatus = false,
-  onReleaseToDelivery,
-  canReleaseToDelivery = true,
-  isReleasing = false,
   staleInfo = null,
   onExportCncPilot,
   onExportAssemblySheets,
@@ -671,20 +664,6 @@ export function ProductionOrderHub({
             modules={modules}
             onSetFloorStatus={onSetFloorStatus}
             canSetFloorStatus={canSetFloorStatus}
-          />
-        ) : null}
-
-        {activeTab === 'despacho' ? (
-          <ProductionOrderDispatchPanel
-            project={project}
-            modules={modules}
-            moduleLabels={moduleLabels}
-            customerName={customerLabel}
-            onSetFloorStatus={onSetFloorStatus}
-            canSetFloorStatus={canSetFloorStatus}
-            onReleaseToDelivery={onReleaseToDelivery}
-            canReleaseToDelivery={canReleaseToDelivery}
-            isReleasing={isReleasing}
           />
         ) : null}
 

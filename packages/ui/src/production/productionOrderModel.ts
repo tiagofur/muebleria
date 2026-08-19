@@ -14,7 +14,6 @@ export const PRODUCTION_ORDER_TABS = [
   'resumen',
   'modulos',
   'piso',
-  'despacho',
   'despiece',
   'etiquetas',
   'herrajes',
@@ -32,7 +31,6 @@ export const PRODUCTION_ORDER_TAB_LABELS: Readonly<
   resumen: 'Resumen',
   modulos: 'Módulos',
   piso: 'Piso',
-  despacho: 'Control de Carga',
   despiece: 'Despiece',
   etiquetas: 'Etiquetas',
   herrajes: 'Herrajes',
@@ -48,7 +46,6 @@ export const PRODUCTION_ORDER_TAB_LABELS: Readonly<
 export const HUB_TABS = [
   'resumen',
   'piso',
-  'despacho',
   'etiquetas',
   'herrajes',
   'documentos',

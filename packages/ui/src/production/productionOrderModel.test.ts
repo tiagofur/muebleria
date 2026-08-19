@@ -45,7 +45,6 @@ const cutRow: ProductionCutRow = {
 describe('productionOrderModel (PROD-0.1 / 0.3)', () => {
   it('parses tabs and defaults to resumen', () => {
     expect(isProductionOrderTab('despiece')).toBe(true);
-    expect(isProductionOrderTab('despacho')).toBe(true);
     expect(isProductionOrderTab('nope')).toBe(false);
     expect(isProductionOrderTab('exports')).toBe(false);
     expect(parseProductionOrderTab('vistas')).toBe('vistas');
