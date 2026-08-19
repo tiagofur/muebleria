@@ -1,5 +1,12 @@
 # Sesión activa
 
+- **Re-critique post-v2.1 (2026-08-19): score 28 → 30/40.** Trend: 24 → 28 → 30.
+  Snapshot: `.impeccable/critique/2026-08-19T03-12-17Z__*.md`. Detector: 0.
+  Veredicto visual: "ya tiene lenguaje visual propio" (cotizaciones),
+  "se ve que alguien está al mando" (muebles). Subieron Consistencia (3→4)
+  y Estética (2→3). Ruta a 32+: higiene de datos en UI (teléfono crudo,
+  "schema v3"), nav (dos "Dashboard", 24 ítems), título de cards de
+  cotización, ayuda contextual (H10=2).
 - **Capa de craft v2.1 (2026-08-19): IMPLEMENTADA — post re-critique 28/40.**
   - Plan acordado con el dueño: controles+profundidad primero · P1+P2
     completo · temperamento **tonal** (Apple execution + Google M3 tonal).
