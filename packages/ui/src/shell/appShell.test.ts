@@ -378,27 +378,53 @@ describe('AppShell tonal area context (F100)', () => {
     ) as Record<string, number>;
 
     expect(ratios).toMatchObject({
-      'sales/canvas': expect.closeTo(6.71, 2),
-      'sales/chrome': expect.closeTo(6.38, 2),
+      'sales/canvas': expect.closeTo(6.52, 2),
+      'sales/chrome': expect.closeTo(6.22, 2),
       'sales/container': expect.closeTo(5.87, 2),
       'sales/selected': expect.closeTo(6.1, 2),
-      'eng/canvas': expect.closeTo(11.78, 2),
-      'eng/chrome': expect.closeTo(10.63, 2),
+      'eng/canvas': expect.closeTo(10.98, 2),
+      'eng/chrome': expect.closeTo(9.86, 2),
       'eng/container': expect.closeTo(8.87, 2),
       'eng/selected': expect.closeTo(9.58, 2),
-      'library/canvas': expect.closeTo(7.61, 2),
-      'library/chrome': expect.closeTo(7.21, 2),
+      'library/canvas': expect.closeTo(7.38, 2),
+      'library/chrome': expect.closeTo(7.01, 2),
       'library/container': expect.closeTo(6.59, 2),
       'library/selected': expect.closeTo(6.85, 2),
-      'work/canvas': expect.closeTo(7.83, 2),
-      'work/chrome': expect.closeTo(7.33, 2),
+      'work/canvas': expect.closeTo(7.49, 2),
+      'work/chrome': expect.closeTo(7.01, 2),
       'work/container': expect.closeTo(6.54, 2),
       'work/selected': expect.closeTo(6.85, 2),
-      'neutral/canvas': expect.closeTo(11.12, 2),
-      'neutral/chrome': expect.closeTo(10.57, 2),
+      'neutral/canvas': expect.closeTo(10.54, 2),
+      'neutral/chrome': expect.closeTo(9.75, 2),
       'neutral/container': expect.closeTo(9.54, 2),
       'neutral/selected': expect.closeTo(9.77, 2),
     });
     expect(Object.values(ratios).every((ratio) => ratio >= 4.5)).toBe(true);
+  });
+
+  it('calibrates canvas/chrome tints to a perceivable-but-calm intensity (F107)', () => {
+    // A 97% lightness the canvas reads as neutral gray in live inspection;
+    // the calibration bounds keep the tint perceivable (canvas L<=95.5 with
+    // raised chroma, chrome one step above canvas) without tinting work
+    // surfaces: container/selected stay at their original steps.
+    for (const area of ['sales', 'eng', 'library', 'work', 'neutral']) {
+      const canvas = readAreaToken(area, 'canvas');
+      const chrome = readAreaToken(area, 'chrome');
+      const container = readAreaToken(area, 'container');
+
+      expect(canvas[2], `${area} canvas lightness`).toBeLessThanOrEqual(95.5);
+      expect(canvas[1], `${area} canvas chroma`).toBeGreaterThan(15);
+      expect(chrome[2], `${area} chrome lightness`).toBeLessThanOrEqual(92.5);
+      expect(chrome[2], `${area} chrome below canvas`).toBeLessThan(canvas[2]);
+      expect(chrome[2], `${area} chrome above container`).toBeGreaterThan(container[2]);
+    }
+
+    // Work surfaces, primary actions and semantic states stay untouched:
+    // the calibrated roles never leak into neutral surfaces or brand tokens.
+    const tokens = read('../design-system/tokens.css');
+    expect(tokens).toContain('--surface-app: hsl(220 20% 97%)');
+    expect(tokens).toContain('--surface-card: hsl(0 0% 100%)');
+    expect(tokens).toContain('--brand-500: hsl(245 58% 51%)');
+    expect(tokens).toContain('--warning-500: hsl(38 92% 50%)');
   });
 });

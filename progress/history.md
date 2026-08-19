@@ -423,3 +423,18 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   smoke /settings 1280/390 (rutas admin cubiertas por tests; guest redirige).
 - Con esto el esqueleto único §4.1a cubre todas las pantallas de lista/página
   del producto (F104–F106 completos).
+
+## F107 — Área tonal calibrada (2026-08-19)
+
+- Aprobada en `progress/review_F107.md`.
+- Canvas de área L 97→95 con croma al alza y chrome L 94→92 (un paso sobre el
+  canvas) en las 5 áreas; escalera completa canvas 95 → chrome 92 →
+  selected ~91 → container 89. Surfaces de trabajo, brand y semánticos
+  intactos (aserciones literales en test).
+- Perceptibilidad demostrada por cálculo CIELAB (dE76 vs `--surface-app`:
+  canvas 2.6–7.9 y chrome 5.9–14.5, antes 0.3–3.5 que se leía gris neutro) y
+  codificada como test de regresión de calibración en `appShell.test.ts`.
+- 20 pares AA recalculados; mínimo 5.87:1 (sales/container). docs/design.md
+  §3.2.1 con nueva guía "Intensidad calibrada".
+- Verificación: UI tests completos, typecheck, ./init.sh verde. Icon-chip
+  coverage cubierta por tests de rollout F104–F106.

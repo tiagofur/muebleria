@@ -2172,7 +2172,7 @@
         "packages/ui/src/shell/appShell.css",
         "packages/ui/src/shell/appShell.test.ts"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "ui",
         "design-system",

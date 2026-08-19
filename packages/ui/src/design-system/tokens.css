@@ -67,14 +67,18 @@
   --area-work-600: hsl(25 66% 38%);
 
 
-  /* —— Contextos tonales de área (design.md §3.2.1 / F100) ——
+  /* —— Contextos tonales de área (design.md §3.2.1 / F100, calibrado F107) ——
    * Cada pair --area-*-ink sobre canvas/chrome/container/selected cumple
    * WCAG AA para texto normal. Verificación sRGB: sales >=5.87:1,
    * eng >=8.87:1, work >=6.54:1, library >=6.59:1, neutral >=9.54:1.
    * Brand primary/focus y semantic state roles siguen fuera de esta cascada.
+   *
+   * Calibración F107: canvas L≈95% y chrome L≈92% (un paso por encima del
+   * canvas) para que el tinte sea perceptible pero calmo; a L97% el canvas
+   * se leía como gris neutro en inspección viva.
    */
-  --area-sales-canvas: hsl(170 35% 97%);
-  --area-sales-chrome: hsl(170 38% 94%);
+  --area-sales-canvas: hsl(170 45% 95%);
+  --area-sales-chrome: hsl(170 48% 92%);
   --area-sales-container: hsl(170 42% 89%);
   --area-sales-border: hsl(170 35% 78%);
   --area-sales-selected: hsl(170 45% 91%);
@@ -83,8 +87,8 @@
   --area-sales-state-pressed: hsl(170 45% 81%);
   --area-sales-state-focus: hsl(170 48% 75%);
 
-  --area-eng-canvas: hsl(245 55% 97%);
-  --area-eng-chrome: hsl(245 58% 94%);
+  --area-eng-canvas: hsl(245 60% 95%);
+  --area-eng-chrome: hsl(245 62% 92%);
   --area-eng-container: hsl(245 60% 89%);
   --area-eng-border: hsl(245 42% 78%);
   --area-eng-selected: hsl(245 58% 91%);
@@ -93,8 +97,8 @@
   --area-eng-state-pressed: hsl(245 58% 81%);
   --area-eng-state-focus: hsl(245 55% 75%);
 
-  --area-work-canvas: hsl(25 55% 97%);
-  --area-work-chrome: hsl(25 58% 94%);
+  --area-work-canvas: hsl(25 60% 95%);
+  --area-work-chrome: hsl(25 62% 92%);
   --area-work-container: hsl(25 62% 89%);
   --area-work-border: hsl(25 40% 78%);
   --area-work-selected: hsl(25 60% 91%);
@@ -103,8 +107,8 @@
   --area-work-state-pressed: hsl(25 60% 81%);
   --area-work-state-focus: hsl(25 58% 75%);
 
-  --area-library-canvas: hsl(95 30% 97%);
-  --area-library-chrome: hsl(95 30% 94%);
+  --area-library-canvas: hsl(95 38% 95%);
+  --area-library-chrome: hsl(95 38% 92%);
   --area-library-container: hsl(95 32% 89%);
   --area-library-border: hsl(95 28% 78%);
   --area-library-selected: hsl(95 34% 91%);
@@ -113,8 +117,8 @@
   --area-library-state-pressed: hsl(95 34% 81%);
   --area-library-state-focus: hsl(95 36% 75%);
 
-  --area-neutral-canvas: hsl(230 18% 97%);
-  --area-neutral-chrome: hsl(230 18% 95%);
+  --area-neutral-canvas: hsl(230 22% 95%);
+  --area-neutral-chrome: hsl(230 22% 92%);
   --area-neutral-container: hsl(230 18% 91%);
   --area-neutral-border: hsl(230 14% 80%);
   --area-neutral-selected: hsl(230 20% 92%);

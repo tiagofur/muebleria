@@ -1,12 +1,10 @@
 # Sesión activa
 
-> **Sin sesión activa.** F106 — page_chrome_rollout_production_config fue
-> aprobada, cerrada y publicada; ver `progress/history.md`.
-> **El esqueleto único §4.1a ya cubre todas las pantallas de lista/página
-> (F104–F106 completos).**
+> **Sin sesión activa.** F107 — area_tonal_calibration fue aprobada, cerrada
+> y publicada; ver `progress/history.md`.
 >
-> **Siguiente del programa:** F107 — Área tonal calibrada (tinte perceptible)
-> o F108 — Contraste AA, según `feature_list.json` (independientes entre sí).
+> **Siguiente del programa:** F108 — Contraste AA medido (o F109–F111 según
+> `feature_list.json`; independientes entre sí).
 >
 > Notas del working tree: `packages/domain/src/processStage.{ts,test.ts}`
 > modificados son WIP ajeno del dueño; no modificar, commitear ni mezclar sin

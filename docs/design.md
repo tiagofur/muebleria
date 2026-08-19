@@ -232,6 +232,15 @@ baja cromaticidad; no rellena indiscriminadamente superficies de trabajo ni
 sustituye colores semánticos o brand. Tablas conservan su body neutral. Una
 card estándar no recibe fondo de área solo para “agregar color”.
 
+**Intensidad calibrada (F107):** el tinte debe ser perceptible pero calmo. El
+canvas vive en **L≈95%** con croma del área (38–60%; neutral 22%), y el chrome
+un paso por encima en **L≈92%** — siempre más oscuro que el canvas y más
+claro que el container (L≈89%). A L97% el canvas se lee como gris neutro y la
+identidad de proceso se pierde; bajar de L92% empieza a competir con el
+contenido. Neutral es deliberadamente el contexto más quieto (sesgo brand
+suave). La escalera completa queda: canvas 95 → chrome 92 → selected ~91 →
+container 89. Verificado como test de calibración en `appShell.test.ts`.
+
 **Accesibilidad y temas:** cada par `--area-ink` / canvas, chrome, container y
 selected debe sostener contraste WCAG AA (4.5:1 para texto normal). Los valores
 light se verifican mediante los 20 cálculos de contraste en `packages/ui/src/shell/appShell.test.ts`; dark e increased-contrast requieren
