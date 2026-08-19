@@ -381,4 +381,18 @@ describe('PurchasingScreen (Fase 3)', () => {
       screen.getByTestId('purch-status-p1-herrajes').textContent,
     ).toContain('Despachado');
   });
+
+  it('clicking dashboard button calls onOpenDashboard', () => {
+    const onOpenDashboard = vi.fn();
+    render(
+      <PurchasingScreen
+        projects={projects}
+        role="almacen"
+        onOpenDashboard={onOpenDashboard}
+      />,
+    );
+    const dashBtn = screen.getByTestId('purch-goto-dashboard');
+    fireEvent.click(dashBtn);
+    expect(onOpenDashboard).toHaveBeenCalledTimes(1);
+  });
 });

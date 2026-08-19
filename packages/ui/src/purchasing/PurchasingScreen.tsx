@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   CircleDashed,
   Layers,
+  LayoutDashboard,
   PackageCheck,
   Ruler,
   Warehouse,
@@ -102,6 +103,8 @@ export type PurchasingScreenProps = {
     material: PickingMaterial;
     status: PickingStatus;
   }) => void;
+  /** Open warehouse analytics dashboard. */
+  readonly onOpenDashboard?: () => void;
   /**
    * Process stage gating — releases a project's materials to the production
    * floor ("Material completo"). Projects passed to this screen are already
@@ -225,6 +228,7 @@ export function PurchasingScreen({
   assignedSectors = null,
   initialPicking = null,
   onTogglePick,
+  onOpenDashboard,
   onReleaseMaterials,
   stock = null,
   stockMovements = null,
@@ -731,8 +735,21 @@ export function PurchasingScreen({
     <section className="purch-landing" aria-label="Compras y almacén">
       <PageHeader
         title="Almacén"
-        subtitle="Qué necesita cada proyecto activo, como lista de picking por material. Sin gestión de stock en esta fase."
+        subtitle="Listas de picking de herrajes, tableros y cintillas, gestión de stock y órdenes de compra."
         icon={<Warehouse size={16} strokeWidth={1.5} />}
+        secondaryActions={
+          onOpenDashboard ? (
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={onOpenDashboard}
+              data-testid="purch-goto-dashboard"
+            >
+              <LayoutDashboard size={14} strokeWidth={1.5} />
+              Dashboard
+            </button>
+          ) : undefined
+        }
         contextualControls={
           <span className="purch-landing__badge">
             <Warehouse size={14} strokeWidth={1.5} aria-hidden />
@@ -740,49 +757,6 @@ export function PurchasingScreen({
           </span>
         }
       />
-
-      {/* Stat cards */}
-      <div className="purch-stats">
-        <div className="stat-card stat-card--work" data-testid="purch-stat-projects">
-          <span className="stat-card__icon">
-            <Warehouse size={18} strokeWidth={1.5} />
-          </span>
-          <div className="stat-card__body">
-            <span className="stat-card__value">{stats.projects}</span>
-            <span className="stat-card__label">Proyectos activos</span>
-          </div>
-        </div>
-        <div className="stat-card stat-card--work" data-testid="purch-stat-hardware">
-          <span className="stat-card__icon">
-            <Wrench size={18} strokeWidth={1.5} />
-          </span>
-          <div className="stat-card__body">
-            <span className="stat-card__value">{stats.hardwareLines}</span>
-            <span className="stat-card__label">Líneas de herrajes</span>
-          </div>
-        </div>
-        <div className="stat-card stat-card--work" data-testid="purch-stat-tableros">
-          <span className="stat-card__icon">
-            <Layers size={18} strokeWidth={1.5} />
-          </span>
-          <div className="stat-card__body">
-            <span className="stat-card__value">{formatAreaM2(stats.areaM2)}</span>
-            <span className="stat-card__label">Tableros (área neta)</span>
-          </div>
-        </div>
-        <div className="stat-card stat-card--work" data-testid="purch-stat-cintillas">
-          <span className="stat-card__icon">
-            <Ruler size={18} strokeWidth={1.5} />
-          </span>
-          <div className="stat-card__body">
-            <span className="stat-card__value">
-              {stats.edgeMl.toLocaleString('es-AR', { maximumFractionDigits: 1 })}{' '}
-              ml
-            </span>
-            <span className="stat-card__label">Cintillas</span>
-          </div>
-        </div>
-      </div>
 
       {/* Tabs */}
       <WorkspaceTabs

@@ -4,6 +4,10 @@ export {
   type PurchasingScreenProps,
 } from './PurchasingScreen';
 export {
+  WarehouseDashboard,
+  type WarehouseDashboardProps,
+} from './WarehouseDashboard';
+export {
   StockPanel,
   type StockCatalogOption,
   type StockPanelProps,
