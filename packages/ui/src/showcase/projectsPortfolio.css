@@ -9,12 +9,8 @@
 }
 
 /* .portfolio-header / __title / subtitle are aliases of .page-header
-   (common/pageHeader.css). Title retired at screen level (F105); the header
-   row keeps only tab-context controls. */
-
-.portfolio-header--context {
-  justify-content: flex-end;
-}
+   (common/pageHeader.css). Retired at screen level (F105): the Showroom
+   toggle lives inside .portfolio-controls (right side). */
 
 .portfolio-star {
   color: var(--text-secondary);
@@ -29,6 +25,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  /* Right edge of the controls row (§4.1a: contextual control, not an action). */
+  margin-left: auto;
   padding: var(--space-2) var(--space-3);
   background: var(--surface-card);
   border: 1px solid var(--border-default);

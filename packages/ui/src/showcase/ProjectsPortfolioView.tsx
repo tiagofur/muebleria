@@ -71,31 +71,6 @@ export function ProjectsPortfolioView({
 
   return (
     <div className="portfolio-view" data-testid="projects-portfolio-view">
-      {/* Tab content of ShowcaseScreen: page title lives at screen level (§4.1a). */}
-      <div className="portfolio-header portfolio-header--context">
-        <button
-          type="button"
-          className={`portfolio-presentation-toggle ${
-            isPresentationMode ? 'portfolio-presentation-toggle--active' : ''
-          }`}
-          onClick={() => setIsPresentationMode(!isPresentationMode)}
-          title="Oculta nombres de clientes y datos privados para mostrar en tablet/showroom"
-          data-testid="portfolio-presentation-mode-toggle"
-        >
-          {isPresentationMode ? (
-            <>
-              <EyeOff size={16} aria-hidden />
-              <span>Modo Showroom / Cliente (Activo)</span>
-            </>
-          ) : (
-            <>
-              <Eye size={16} aria-hidden />
-              <span>Modo Showroom / Cliente</span>
-            </>
-          )}
-        </button>
-      </div>
-
       <div className="portfolio-controls">
         <div className="portfolio-filters" role="group" aria-label="Filtros de fotos">
           <button
@@ -162,6 +137,28 @@ export function ProjectsPortfolioView({
             data-testid="portfolio-search-input"
           />
         </div>
+
+        <button
+          type="button"
+          className={`portfolio-presentation-toggle ${
+            isPresentationMode ? 'portfolio-presentation-toggle--active' : ''
+          }`}
+          onClick={() => setIsPresentationMode(!isPresentationMode)}
+          title="Oculta nombres de clientes y datos privados para mostrar en tablet/showroom"
+          data-testid="portfolio-presentation-mode-toggle"
+        >
+          {isPresentationMode ? (
+            <>
+              <EyeOff size={16} aria-hidden />
+              <span>Modo Showroom / Cliente (Activo)</span>
+            </>
+          ) : (
+            <>
+              <Eye size={16} aria-hidden />
+              <span>Modo Showroom / Cliente</span>
+            </>
+          )}
+        </button>
       </div>
 
       {isLoading ? (
