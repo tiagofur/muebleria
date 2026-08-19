@@ -407,3 +407,19 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   pageHeader.css sin uso).
 - Verificación: 5 tests nuevos de composición, UI 1013/1013, typecheck,
   ./init.sh, detector 0, smoke 1280/390 sin overflow con una primaria en Inicio.
+
+## F106 — Page Chrome Rollout III: Producción, Almacén y Config (2026-08-19)
+
+- Aprobada en `progress/review_F106.md`.
+- Las 7 pantallas restantes (Dashboard de Producción, Producción/estaciones,
+  Embarques, Instalaciones, Almacén, Ajustes, Usuarios) migran a PageHeader
+  con icon-chips del mapa §3.7 y contexto (stats/toggle/badge) en
+  contextualControls.
+- A11y: icon-only de Usuarios (recargar, sectores, rol deshabilitado) con
+  aria-label.
+- Limpieza mayor de pageHeader.css: sólo queda vivo el alias `.prod-queue__*`
+  (hub de Órdenes); icon-chips y header CSS locales retirados.
+- Verificación: 7 tests nuevos, UI 1020/1020, typecheck, ./init.sh, detector 0,
+  smoke /settings 1280/390 (rutas admin cubiertas por tests; guest redirige).
+- Con esto el esqueleto único §4.1a cubre todas las pantallas de lista/página
+  del producto (F104–F106 completos).
