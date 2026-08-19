@@ -2,6 +2,8 @@
 
 > Cada vez que se cierra una sesión, su resumen se añade aquí.
 > No edites entradas anteriores. Solo añades al final.
+> Nota (2026-08-18): los artefactos que las entradas referencian
+> (`review_*`, `impl_*`, `close_*`, `explore_*`) viven en `progress/archive/`.
 
 ---
 
@@ -326,3 +328,15 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 
 - `docs/design.md` §1 (diagnóstico pre-rediseño U1–U8/I1–I8, ya resuelto) archivado en `docs/history/diagnostico-ui-pre-rediseno.md`; notas "pre-Fase 3" eliminadas (migración ya hecha); nota de extracción de statusBadge marcada completa; jerga de slice eliminada.
 - `progress/current.md` reseteado a plantilla limpia; sesiones cerradas movidas a esta bitácora.
+
+## 2026-08-18 — Limpieza integral de documentación (segunda pasada: todo el repo)
+
+- `progress/archive/` creado: **119 artefactos de sesiones cerradas** movidos con `git mv` (close_F001–F026, impl_*, implement_f095–f099, review_*, explore_*). `progress/` queda con current.md + history.md + archive/.
+- `docs/judgment-day-ui-2026-07-17.md` → `docs/history/` (sus pares ya vivían ahí).
+- `docs/guia-de-uso.md` §9 corregido: el hub de Órdenes tiene 5 tabs (Resumen · Piso · Etiquetas · Herrajes · Documentos); las técnicas viven en Ingeniería y el Control de Carga en Embarques. Decía 9 tabs.
+- `docs/production-module.md`: nav tree actualizado (Órdenes `/orders` sin "TEMPORAL M2", despacho en Embarques) + paths explícitos a `docs/roadmap-screens/`.
+- `docs/design.md`: referencias `roadmap-screens/` → `docs/roadmap-screens/` (resolvían ambiguas).
+- `docs/prd.md` §6.7: "Plan vivo" apunta a `roadmap-comercial-v2.md` (backlog canónico); app-excellence marcado histórico — se mantiene en docs/ porque production-module, prd y feature_list lo referencian como detalle.
+- `AGENTS.md` (mapa): + roadmap-comercial-v2, + progress/archive/, + docs/roadmap-screens/, + docs/history/ como carpeta; app-excellence reclasificado; layout actualizado.
+- Se mantienen (vigentes): cut-plan-implementation.md (plan de fases aún no ejecutado del todo), structures.md (referencia de dominio), desktop-release.md (guía evergreen), roadmap_RN/mobile-*, PRODUCT.md.
+- Verificación: 974 tests UI verdes; solo docs y moves — sin cambios de código.

@@ -62,12 +62,15 @@ Detalle de niveles de verificación → `docs/verification.md`.
 | `feature_list.json` | Tareas con estado (pending / in_progress / done / blocked) | Al empezar |
 | `progress/current.md` | Estado de la sesión activa | Al empezar |
 | `progress/history.md` | Bitácora de sesiones anteriores | Si necesitas contexto histórico |
+| `progress/archive/` | Artefactos de sesiones cerradas (impl/review/explore/close de features done) | Solo si un reviewer pide evidencia histórica |
 | `docs/prd.md` | Producto, usuarios del taller, dominio, fórmulas, anti-scope | Antes de dominio o producto |
 | `docs/project-lifecycle.md` | **Ciclo de vida del proyecto**: event log (`ProjectEvent`), timestamps con hora, gate "Enviar a producción", tiempos medibles por fase | Antes de tocar estados de proyecto, timestamps, reportes o flujo entre pantallas |
 | `docs/guia-de-uso.md` | **Guía de uso de la app para el usuario final** (roles, catálogo, cotizar, Proyectar, zócalos, producción) | Onboarding / capacitación / demo |
-| `docs/app-excellence.md` | Plan post-horizonte: ventas/ingeniería/producción, layout cocina, CNC policy, issues | Roadmap de excelencia / issues #125+ |
+| `docs/roadmap-comercial-v2.md` | **Roadmap comercial canónico** (reemplaza a app-excellence §roadmap y prd §17 como backlog vivo) | Planeación de producto / issues |
+| `docs/app-excellence.md` | Capítulos de excelencia producción/ventas (histórico — el backlog vivo es roadmap-comercial-v2) | Referencia de detalle producción |
 | `docs/production-module.md` | **Módulo Producción:** separación diseño vs fábrica, pantallas, pack, optimización, roadmap e issues | Antes de tocar nav/UI Producción, elevaciones PDF, pack ampliado o nesting visual |
-| `docs/history/judgment-day-wip-3d-2026-07-17.md` | Findings JD Round 1 (histórico) | Referencia histórica, no activo |
+| `docs/roadmap-screens/` | Specs de pantallas aprobadas (fabrica v2, overview M2) | Antes de implementar Producción/Fábrica v2 |
+| `docs/history/` | Documentos archivados (judgment days, diagnóstico UI pre-rediseño, planes viejos) | Referencia histórica, no activo |
 | `docs/PRODUCT.md` | Contexto Impeccable (register, personality, anti-refs) | Setup del skill UI; no reemplaza el PRD |
 | `docs/architecture.md` | Paquetes, boundaries, flujo de datos | Antes de crear archivos |
 | `docs/conventions.md` | Estilo, nombres, tests, errores, tipos | Antes de escribir código |
@@ -98,7 +101,7 @@ muebles/
 ├── packages/storage/  # persistencia (puertos + JSON local)
 ├── backend-go/        # API Go + Postgres (Etapa 2)
 ├── docs/              # prd, architecture, conventions, design, verification
-├── progress/          # sesión activa + reviews
+├── progress/          # sesión activa + bitácora (cerrados en progress/archive/)
 ├── feature_list.json  # backlog con estados
 └── init.sh            # gate de entorno + tests
 ```

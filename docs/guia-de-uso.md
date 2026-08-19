@@ -190,19 +190,15 @@ veas el patrón; desactalos o editá sus precios como con cualquier herraje.
 
 Con la cotización **aceptada**:
 
-1. **Producción** (o "Abrir en Producción" desde la cotización): la cola de
+1. **Órdenes** (o "Abrir en Producción" desde la cotización): la cola de
    órdenes de trabajo para planta.
 2. **Abrir orden**: sala de control con pestañas especializadas:
    - **Resumen:** checklist técnico "listo para cortar" y totales de fábrica.
-   - **Módulos:** inventario de muebles y estado de piso.
    - **Piso:** modo paperless para taller; escaneo continuo de piezas y módulos con lector USB, cámara o teclado para avanzar de estado (`cortado` → `encintado` → `armado` → `embalado`).
-   - **Control de Carga / Despacho:** checklist de bultos físicos para verificación de flete. Al cargar el camión, se escanean los bultos; la barra de progreso calcula el % de carga en tiempo real. **La liberación de salida a entrega está bloqueada hasta que el 100% de los muebles estén a bordo.**
-   - **Despiece:** lista detallada de piezas de tablero con export CSV.
    - **Etiquetas:** selector dual para generar e imprimir tanto **Etiquetas de Piezas de Tablero** como **Etiquetas de Muebles / Bultos**, con preview en vivo, descarga ZPL térmico (Zebra) y PDF A4. Tanto el rol `ingeniero` como `produccion` pueden imprimirlas.
    - **Herrajes:** lista de compras y herrajes por mueble.
-   - **Vistas / Elevaciones:** planos 2D acotados por muro de cocina.
-   - **Optimización:** estimación y preview de pliegos de melamina.
-   - **Documentos:** pack ZIP maestro de producción (incluye Optimizer, herrajes, elevaciones, hojas de armado y etiquetas de piezas y bultos).
+   - **Documentos:** pack ZIP maestro de producción (incluye Optimizer, herrajes, elevaciones, hojas de armado, cut-list CSV configurable y etiquetas de piezas y bultos).
+   - Las vistas técnicas (Módulos, Despiece, Vistas/Elevaciones, Optimización) viven en **Ingeniería**; el **Control de Carga** (checklist de bultos para el flete con escaneo y % de carga — bloquea la salida hasta que el 100% esté a bordo) vive en **Embarques**, con el botón "Ver control de carga" desde la obra.
 3. El banner de la orden avisa si el diseño cambió después del último pack.
 
 ## 10. Vitrina y clientes

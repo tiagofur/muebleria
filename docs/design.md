@@ -904,7 +904,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 ### 6.7 Órdenes (cola + hub de obra)
 
-- **Ruta nav:** `orders` (sección PRODUCCIÓN, label **Órdenes**). M2 puede consolidar dashboards — ver `roadmap-screens/00-overview.md`
+- **Ruta nav:** `orders` (sección PRODUCCIÓN, label **Órdenes**). M2 puede consolidar dashboards — ver `docs/roadmap-screens/00-overview.md`
 - **Paths:**
   - `/orders` — cola de trabajo
   - `/orders/:projectId` — hub de orden (OP)
@@ -930,7 +930,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/production/FabricScreen.tsx`
 - **Patrón:** tabs de estación (corte → encintado → armado → embalaje) con roving tabindex + cola por estación + toggle Cola/Métricas (gerente)
 - **Contenido v1 (actual):** lista de ítems en cola por estación con avance one-tap (`onAdvance` → server con scoping + evento F092); Operador sector-scoped ve solo sus tabs
-- **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
+- **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `docs/roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
 - **RBAC nav:** `roleCanAccessFabricNav` (admin, gerente_produccion, produccion)
 - **Icono:** `Factory`
 

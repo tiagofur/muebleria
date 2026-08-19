@@ -137,16 +137,17 @@ Inventario **ya implementado** (no reabrir issues cerrados como “nuevo trabajo
 | **Bitácora de piso** (`FloorStatusEvent`: quién/cuándo/cómo; saltos anotados) | ✅ F092 | migración `000048`, `floorScan.go`, `GET …/floor-events` |
 | **Estado de Planta** (tablero proyectos × sectores, visible a todos los roles) | ✅ F093 | `PlantBoardScreen`, ruta `/planta` |
 | **Franja de procesos** en detalle de cotización (accepted/produced) + chip en cola | ✅ F093 | `ProjectFloorProgressStrip` / `ProjectFloorStageChip` |
-| **Reorg de menú** (PRODUCCIÓN = Dashboard · Órdenes* · Producción · Embarques · Instalaciones) | ✅ 2026-08-18 | `roadmap-screens/00-overview.md` §2b |
+| **Reorg de menú** (PRODUCCIÓN = Dashboard · Órdenes* · Producción · Embarques · Instalaciones) | ✅ 2026-08-18 | `docs/roadmap-screens/00-overview.md` §2b |
 | **Gating por etapa** (ventas → ingeniería → almacén → producción; Fábrica/Órdenes solo ven obras con material liberado) | ✅ 2026-08-18 | `domain/processStage.ts` + `materialsRelease` (migración 000059) · `docs/project-lifecycle.md` §8 |
 | **Embarques / Instalaciones** como pantallas propias (board por obra) | ✅ 2026-08-18 | `EmbarquesScreen` / `InstalacionesScreen` |
 | **Roles/estaciones + picking + stock + OC** (F094, Fase 3/3b/3c) | ✅ 2026-08-17 | `rbac.ts`, `purchasing.ts`, migraciones 54–57 |
 | **Actividad de operario** (`ProductionActivity`: claim/pausa/finish/daño, duraciones) | ⚠️ **backend listo, UI dormida** | `productionActivity.go` — nadie llama a claim desde pantalla alguna (JD 2026-08-18); ver D9 |
-| **Board por obra en estaciones** (métricas por proceso para el operador) | 📐 plan aprobado | JD 2026-08-18 — ver D10 + `roadmap-screens/03-fabrica.md` §v2 |
+| **Board por obra en estaciones** (métricas por proceso para el operador) | 📐 plan aprobado | JD 2026-08-18 — ver D10 + `docs/roadmap-screens/03-fabrica.md` §v2 |
 | Acciones de fábrica también en pantalla de proyecto | ⚠️ mezcla de modos | `ProjectsScreen` / detalle |
 | CNC / DXF por pieza | 📄 doc / demanda | **#111** (open) |
 
-\* Órdenes = ex menú "Producción" (cola + hub OP). TEMPORAL: se elimina en M2.
+\* Órdenes = ex menú "Producción" (cola + hub OP). Nav `orders`, rutas `/orders`
+(`/orders/:id/:tab`). M2 puede consolidar dashboards — ver `docs/roadmap-screens/00-overview.md`.
 
 **Conclusión:** el pipeline de archivos y la visibilidad están maduros. La deuda
 está en la **pantalla del operador** (board por obra con métricas por estación,
@@ -190,18 +191,19 @@ TRABAJO (todos los roles)
 
 PRODUCCIÓN
 ├── Dashboard Producción     ← gerente: métricas por sector, operarios, trabajos activos
-├── Órdenes*                 ← cola + hub OP por obra (TEMPORAL, se elimina en M2)
+├── Órdenes*                 ← cola + hub OP por obra (/orders)
 ├── Producción               ← estaciones corte → embalaje (board por obra — D10)
-├── Embarques                ← embalado → cargado (board por obra)
+├── Embarques                ← embalado → cargado (board por obra + control de carga)
 └── Instalaciones            ← cargado → instalado (board por obra + contexto cliente)
 
 (al abrir una obra desde Órdenes*)
-├── Resumen · Piso · Control de Carga · Etiquetas · Herrajes · Documentos
-└── (módulos/despiece/vistas/optimización viven en Ingeniería)
+├── Resumen · Piso · Etiquetas · Herrajes · Documentos
+└── (módulos/despiece/vistas/optimización viven en Ingeniería;
+    el control de carga/despacho vive en Embarques)
 ```
 
-\* El hub conserva las tabs de piso mientras M2 migra Piso/despacho a las
-pantallas de estación. Ver `roadmap-screens/00-overview.md` §2b + §M2.
+\* El hub conserva las tabs de piso mientras M2 migra Piso a las pantallas de
+estación. Ver `docs/roadmap-screens/00-overview.md` §2b + §M2.
 
 **Nombre de nav:** `Producción` (ya existe entrada para cola).  
 **No** llamar a este workspace “Proyecto” para no confundir con diseño.
@@ -452,7 +454,7 @@ Mismo ZIP **más**, cuando existan generadores:
 | D7 | Contrato del payload QR de etiquetas | **JSON offline-friendly por default** (#141, F089). **F091 (2026-08-16): variante URL implementada** — `pieceLabelQrPayloadUrl` envuelve el MISMO JSON v2 en `muebles://scan#<json>` (o `https://<host>/scan#<json>` con dominio registrado); `unwrapPieceLabelQrUrl` + `parsePieceLabelScan` aceptan AMBAS formas; los QR impresos pre-F091 (JSON puro) siguen parseando igual — sin reimpresión. Etiquetas: opción persistida por usuario `qrFormat` json\|url + `qrHost` (tab Etiquetas → Impresora térmica → QR); aplica a preview, ZPL y PDF. Deep link RN: el scheme `muebles` está registrado (app.json) y App.tsx procesa links entrantes → scanner. Parser en `@muebles/domain` (TS puro), importable desde RN. |
 | D8 | Sectores y bitácora de piso (F092/F093, plan JD 2026-08-17) | **`ProductionSector`** (`warehouse\|cutting\|cnc\|edge_banding\|assembly\|packaging\|shipping\|installation`) mapea 1:1 los estados del pipeline vigente; `cnc` queda declarado pero sin estado propio hasta que exista `machined` (Fase 3 del plan). **Cada transición escribe un `FloorStatusEvent` inmutable** (from/to/quién/cuándo/source scan\|manual\|dispatch\|api + nota de salto): tabla `project_item_floor_events` (migración aditiva 000048), INSERT en floor-scan/PATCH (con usuario del JWT), upsert ON CONFLICT desde el PUT de proyecto (eventos del cliente web), `GET /api/projects/:id/floor-events` (sin gate de rol — visibilidad para todos). `advanceFloorStatus` es la transición UNIFICADA del dominio: rechaza saltos salvo `allowJump` (despacho/select de Módulos lo usan hoy preservando comportamiento, pero quedan auditados). Los gates por sector/rol llegan con los roles de estación (Fase 2). **Visibilidad (F093):** franja de procesos en detalle de cotización accepted\|produced, chip de sector en tarjetas de cola, y tablero **Estado de Planta** (`/planta`, nav `plantBoard` visible a TODOS los roles — vendedor ve su portfolio). |
 | D9 | "En progreso" del operador = **claim por obra × estación** (aprobado JD 2026-08-18) | El sistema `ProductionActivity` (claim/pausa/reanudar/finish/daño, con startedAt/duración/operario/máquina) **ya existe completo en backend** (`productionActivity.go`, endpoints `POST /api/production/activity/claim\|finish\|damage`) y en el storage client — pero está **dormido**: ninguna pantalla del operador lo llama, así que el dashboard lee "operarios activos 0" para siempre. **Decisión:** el claim se hace a nivel **obra × estación** (botón "Empezar [estación]" en la card de obra de la pantalla de estación), NO por ítem como quedó modelado originalmente. Requiere extensión aditiva (item_id nullable o claim de obra) + wiring UI. Finish ocurre al completar la estación en esa obra; las duraciones reales alimentan Dashboard Producción. |
-| D10 | Pantalla de estación = **board por obra con métricas de proceso** (aprobado JD 2026-08-18) | La unidad de trabajo del operador es la **obra**, no el ítem suelto (validado contra MES de mercado: *digital job packet* + verificación de material en punto de uso; Mozaik/Cabinet Vision agrupan cut lists por material por trabajo). Cada tab de estación muestra cards por obra, y cada card un bloque con lo que importa a ESE proceso, derivado del dominio: **Corte** → tableros por acabado (m² netos, piezas, planchas estimadas vía `computeProductionTotals` + `estimateBoardSheets`) + estado surtido del picking de almacén; **Encintado** → cintillas por código (ML, piezas, **lados a encintar** — agregar `pieces`/`sides` a `ProductionEdgeTotal`); **Armado** → lista de muebles de la obra; **Embalaje** → módulos/cantidades. Avance agrupado dentro de la obra (incluye batch) + claim D9. Spec: `roadmap-screens/03-fabrica.md` §v2. Extra aprobado: `EdgeBand.previewColor` (swatches por color, aditivo como Hardware). |
+| D10 | Pantalla de estación = **board por obra con métricas de proceso** (aprobado JD 2026-08-18) | La unidad de trabajo del operador es la **obra**, no el ítem suelto (validado contra MES de mercado: *digital job packet* + verificación de material en punto de uso; Mozaik/Cabinet Vision agrupan cut lists por material por trabajo). Cada tab de estación muestra cards por obra, y cada card un bloque con lo que importa a ESE proceso, derivado del dominio: **Corte** → tableros por acabado (m² netos, piezas, planchas estimadas vía `computeProductionTotals` + `estimateBoardSheets`) + estado surtido del picking de almacén; **Encintado** → cintillas por código (ML, piezas, **lados a encintar** — agregar `pieces`/`sides` a `ProductionEdgeTotal`); **Armado** → lista de muebles de la obra; **Embalaje** → módulos/cantidades. Avance agrupado dentro de la obra (incluye batch) + claim D9. Spec: `docs/roadmap-screens/03-fabrica.md` §v2. Extra aprobado: `EdgeBand.previewColor` (swatches por color, aditivo como Hardware). |
 
 ---
 
@@ -568,7 +570,7 @@ Fase 4  Excelencia (assembly sheets, paperless, what-if merma, OP parcial)
 
 Origen: Judgment Day 2026-08-18 (score 22/40, snapshot
 `.impeccable/critique/2026-08-18T14-35-54Z__packages-ui-src-production.md`).
-Decisiones D9 + D10. Spec de pantalla: `roadmap-screens/03-fabrica.md` §v2.
+Decisiones D9 + D10. Spec de pantalla: `docs/roadmap-screens/03-fabrica.md` §v2.
 
 | # | Ítem | Qué | Depende de |
 |---|------|-----|------------|

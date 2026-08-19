@@ -327,7 +327,7 @@ Roles `ingeniero`, `produccion`, `gerente_ventas` y `admin` pueden exportar Opti
 
 ### 6.7 App Excellence (post-horizonte H01–H12)
 
-Plan vivo: **`docs/app-excellence.md`**.  
+Plan vivo: **`docs/roadmap-comercial-v2.md`** (backlog canónico; `docs/app-excellence.md` queda como registro histórico).  
 Judgment Day WIP 3D (2026-07-17): **`docs/history/judgment-day-wip-3d-2026-07-17.md`**.
 
 #### 6.7.1 Plan de corte (política)
