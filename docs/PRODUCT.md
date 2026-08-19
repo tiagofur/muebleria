@@ -77,14 +77,18 @@ Agent-facing code stays English.
 
 ## Accessibility & Inclusion
 
-Baseline: WCAG 2.1 AA for interactive product UI.
+Baseline objetivo: WCAG 2.1 AA para UI interactiva. `docs/design.md` define el
+contrato verificable y distingue lo entregado de la migración pendiente.
 
-- Contrast verified for body and UI text (placeholders included), not eyeballed.
-- Keyboard navigation and visible focus on all interactive controls.
-- `prefers-reduced-motion` respected for every animation.
-- Semantic HTML first; ARIA only as supplement.
-- UI copy in Spanish, plain and short; technical codes (`MAT-001`, mm, ML)
-  may stay as domain vocabulary.
+- **implemented:** F100 verificó los pares de texto de área; F102 entrega tabs
+  con contrato ARIA y teclado.
+- **planned:** auditoría y migración global de contrastes (warnings, login y
+  placeholders incluidos) y la ampliación de targets: el token efectivo actual
+  continúa en 40px, por debajo del baseline de 44×44 CSS px.
+- Color nunca es el único portador de significado; foco visible, teclado y
+  semántica HTML preceden a ARIA.
+- Movimiento respeta `prefers-reduced-motion`; copy de UI en español, breve y
+  claro. Códigos (`MAT-001`, mm, ML) conservan vocabulario de dominio.
 
 ## Canonical docs (do not fork)
 
@@ -95,3 +99,5 @@ Baseline: WCAG 2.1 AA for interactive product UI.
 | Architecture boundaries | `docs/architecture.md` |
 | Code conventions | `docs/conventions.md` |
 | Agent navigation | `AGENTS.md` |
+| Paths and session access (executable authority) | `apps/web/src/routes.ts` → `NAV_PATHS`; `roleCanAccessNav` |
+| Historical UI/UX audit evidence (not active authority) | `progress/explore_ui_*.md` |

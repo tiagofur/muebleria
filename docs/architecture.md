@@ -98,6 +98,15 @@ El sistema soporta una arquitectura multi-usuario centralizada con las siguiente
 4. **Seguridad y CORS:**
    El tráfico está protegido mediante autenticación JWT y middleware de CORS configurado en el servidor Go.
 
+## Contratos de presentación y fuentes ejecutables
+
+`docs/design.md` define patrones de presentación y QA UI/UX; no modifica estos
+boundaries. Las rutas y permisos son hechos ejecutables de
+`apps/web/src/routes.ts` (`NAV_PATHS`) y `roleCanAccessNav`, no de una tabla
+narrativa. Los contratos de formularios, overlays, accesibilidad y layout sólo
+ordenan cómo presenta React: cálculos, validaciones de negocio y transiciones de
+estado permanecen en `packages/domain` o backend Go.
+
 ## Qué NO hacer
 
 - No calcular costos en componentes de presentación.

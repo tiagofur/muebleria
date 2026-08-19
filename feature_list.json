@@ -2023,6 +2023,288 @@
         "responsive",
         "representative-migration"
       ]
+    },
+    {
+      "id": "F103",
+      "phase": 0,
+      "name": "ui_ux_documentation_sync",
+      "title": "UI/UX Documentation Sync & Executable Source Contract",
+      "description": "Synchronize the UI/UX documentation after F100–F102 so future agents can distinguish executable truth from product intent. Correct navigation/route references against apps/web/src/routes.ts NAV_PATHS; introduce implemented/planned/deprecated states; and document the outstanding UI contracts without claiming unimplemented migration work is delivered.",
+      "acceptance": [
+        "docs/design.md, docs/PRODUCT.md, docs/production-module.md and docs/architecture.md distinguish executable sources from intent/roadmap, with apps/web/src/routes.ts NAV_PATHS authoritative for paths.",
+        "One navigation matrix covers all AppNavIds with UI label, section, current path and implemented|planned|deprecated state; no active documented path contradicts NAV_PATHS.",
+        "Historical aliases are isolated as deprecated with replacements, while Orders consolidation remains planned rather than falsely described as complete.",
+        "docs/design.md defines observable contracts and real status for form controls, Modal/FullscreenDialog/Drawer/Supporting pane, screen/mutation states, AA/placeholders, 44px touch targets, z-index, motion and compact/medium/expanded layouts.",
+        "F100–F102 are documented as implemented with their real boundaries; global contrast, 40px effective targets, parallel overlays, z-index scale and broad rollout remain explicitly planned until delivered.",
+        "The area-context contract keeps brand primary/focus and semantic states global; documentation does not introduce platform skins or authorize domain logic in UI.",
+        "Documentation is scannable, routes/links are verified against executable sources, and explore reports are labeled historical evidence rather than active authority.",
+        "Only documentation, feature backlog and progress artifacts change; no app/domain/backend/routes/RBAC code or processStage WIP is modified. JSON validity, obsolete-route search and git diff checks pass."
+      ],
+      "references": [
+        "progress/explore_f103_docs_sync_scope.md",
+        "progress/explore_docs_sync_audit.md",
+        "progress/explore_ui_design_system_audit.md",
+        "progress/explore_ui_ux_flow_critique.md",
+        "progress/explore_ui_platform_synthesis.md",
+        "apps/web/src/routes.ts",
+        "docs/design.md",
+        "docs/PRODUCT.md",
+        "docs/production-module.md",
+        "docs/architecture.md"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "ui",
+        "ux",
+        "documentation",
+        "design-system",
+        "navigation",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "F104",
+      "phase": 0,
+      "name": "page_chrome_rollout_catalogs_library",
+      "title": "Page Chrome Rollout I: Catálogos y Librería",
+      "description": "Migrate the nine engineering library/catalog list screens (Materiales, Cantos, Herrajes, Acabados, Muebles, Estructuras, Componentes, Agregados, Grupos) to the shared PageHeader/PageToolbar skeleton (docs/design.md §4.1a), removing local header vocabularies and aliases. Routes, RBAC, patterns (tabla-expand / card-detalle) and behavior unchanged.",
+      "acceptance": [
+        "All nine screens render title, icon-chip of area, subtitle, one primary action and overflow through PageHeader/PageToolbar; no local catalog-page__header-style markup remains.",
+        "Icon-chip uses --area-container/--area-ink (location, not CTA); one primary per level is preserved and rare/destructive actions move to overflowActions.",
+        "Legacy header CSS aliases used only by these screens are deleted; tokens-only styling and gate §8 of docs/design.md green per screen.",
+        "Responsive smoke at 390/768/1280 without overflow; focused UI tests, pnpm test, pnpm typecheck, ./init.sh and Impeccable detector green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "docs/design.md §4.1a, §4.1b, §8",
+        "packages/ui/src/common/PageHeader.tsx",
+        "packages/ui/src/common/PageToolbar.tsx",
+        "packages/ui/src/catalogs/",
+        "packages/ui/src/modules/",
+        "packages/ui/src/structures/",
+        "packages/ui/src/components/",
+        "packages/ui/src/agregados/",
+        "packages/ui/src/optionGroups/"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "page-chrome",
+        "standardization",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "F105",
+      "phase": 0,
+      "name": "page_chrome_rollout_sales_work",
+      "title": "Page Chrome Rollout II: Ventas y Trabajo",
+      "description": "Migrate Ventas (SalesDashboard, Clientes, Vitrina) and Trabajo/neutral screens (Inicio dashboard, Estado de Planta) to the shared PageHeader/PageToolbar skeleton, removing dashboard__header and other local vocabularies. Includes fixing the double solid primary on Inicio (Nueva cotización + Nuevo mueble) per the action grammar.",
+      "acceptance": [
+        "SalesDashboard, CustomersScreen, ModuleShowcase (Vitrina), Dashboard (Inicio) and PlantBoardScreen use PageHeader/PageToolbar exclusively for page-level chrome.",
+        "Inicio shows exactly one solid primary per level (secondary quick action uses .btn base or ghost).",
+        "Local dashboard__header-style CSS removed with the migration; tokens-only styling.",
+        "Responsive smoke at 390/768/1280; focused tests, pnpm test, pnpm typecheck, ./init.sh and detector green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "docs/design.md §4.1a, §4.1b, §6.1, §6.5, §6.6, §6.7b, §8",
+        "packages/ui/src/sales/",
+        "packages/ui/src/customers/",
+        "packages/ui/src/dashboard/",
+        "packages/ui/src/production/PlantBoardScreen.tsx"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "page-chrome",
+        "standardization",
+        "action-grammar"
+      ]
+    },
+    {
+      "id": "F106",
+      "phase": 0,
+      "name": "page_chrome_rollout_production_config",
+      "title": "Page Chrome Rollout III: Producción, Almacén y Config",
+      "description": "Migrate remaining work/neutral screens to the shared skeleton: ProductionManagerDashboard, FabricScreen, EmbarquesScreen, InstalacionesScreen, PurchasingScreen (Almacén), SettingsScreen, UsersScreen. Workspace hubs keep their own chrome per §4.1a but page-level lists/boards adopt the shared primitives.",
+      "acceptance": [
+        "All listed screens use PageHeader/PageToolbar for page-level chrome; fabric__/purch__/settings/users local header vocabularies removed.",
+        "One primary per context level preserved (boards keep per-card primary actions).",
+        "UsersScreen icon-only 'sectores' control gains aria-label if still present after migration.",
+        "Responsive smoke at 390/768/1280; focused tests, pnpm test, pnpm typecheck, ./init.sh and detector green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "docs/design.md §4.1a, §6.7a, §6.7c, §6.7d, §6.10, §6.11, §8",
+        "packages/ui/src/production/",
+        "packages/ui/src/purchasing/",
+        "packages/ui/src/settings/",
+        "packages/ui/src/users/"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "page-chrome",
+        "standardization"
+      ]
+    },
+    {
+      "id": "F107",
+      "phase": 0,
+      "name": "area_tonal_calibration",
+      "title": "Área tonal calibrada: atmósfera perceptible con pares AA",
+      "description": "The F100 tonal canvas exists but is imperceptible (canvas tokens at 97% lightness read as neutral gray in live inspection). Calibrate --area-*-canvas/--area-*-chrome to a perceivable-but-calm tint (drop lightness ~1-2 points and/or raise chroma, chrome one step above canvas), keeping work surfaces neutral and brand/semantic roles untouched.",
+      "acceptance": [
+        "Canvas and chrome tints are distinguishable in side-by-side live inspection per area (sales/eng/work/neutral); work surfaces, primary actions and semantic states unchanged.",
+        "All existing 16 AA contrast pairs in appShell.test.ts still pass; new pairs for adjusted tokens verified >=4.5:1.",
+        "Icon-chip coverage confirmed on migrated screens (depends on F104-F106).",
+        "docs/design.md §3.2.1 updated if intensity guidance changes; pnpm test, typecheck, ./init.sh green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "progress/explore_ui_platform_synthesis.md §3",
+        "docs/design.md §3.2.1",
+        "packages/ui/src/design-system/tokens.css",
+        "packages/ui/src/shell/appShell.css",
+        "packages/ui/src/shell/appShell.test.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "area-theme",
+        "color",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "F108",
+      "phase": 0,
+      "name": "text_contrast_aa",
+      "title": "Contraste AA de texto y warning (medido, no estimado)",
+      "description": "Fix measured AA failures: --text-muted is 4.13:1 on white / 3.82:1 on surface-app (used 197x incl. search placeholder), --warning-700 on --warning-50 is 3.68:1 for 11px badge text, login placeholder ~3.08:1. Darken tokens (or split decorative vs readable roles) and add automated contrast tests.",
+      "acceptance": [
+        "--text-muted (or its readable successor role) >=4.5:1 on white, surface-app, surface-card and surface-hover; placeholders comply.",
+        "Warning text pair >=4.5:1 (or >=3:1 only where text qualifies as large, documented).",
+        "Automated contrast test per foreground/surface pair in the UI test suite; docs/design.md §4.8 values updated to match tokens.",
+        "pnpm test, pnpm typecheck, ./init.sh green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "progress/explore_ui_design_system_audit.md",
+        "docs/design.md §4.8",
+        "packages/ui/src/design-system/tokens.css",
+        "packages/ui/src/common/statusBadge.css",
+        "packages/ui/src/common/searchInput.css",
+        "packages/ui/src/auth/login.css"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "accessibility",
+        "contrast",
+        "tokens"
+      ]
+    },
+    {
+      "id": "F109",
+      "phase": 0,
+      "name": "semantic_tabs_rollout",
+      "title": "Semantic Tabs Rollout: 15 implementaciones locales → 2 patrones",
+      "description": "Migrate the 15 files with local tab implementations to WorkspaceTabs/WorkflowTabs: editor forms (Module/Structure/Component/Agregado), production panels (Despiece, Labels, Paperless), ProductionQueue, purchasing (PurchaseOrdersPanel, StockPanel, PurchasingScreen), ShowcaseScreen, PresentationKitchenPlanSlide, ProjectPresentationMode, ProjectSpatialStudio. Peer views use pill tabs; ordered stations keep underline.",
+      "acceptance": [
+        "No local tab-btn/role=tablist implementations remain outside common/Tabs.tsx; each migrated case is classified peer vs workflow with rationale in the PR/progress notes.",
+        "Shared contract intact: ARIA roles, aria-controls/labelledby, roving tabindex, arrows/Home/End, single-row overflow at 390/768/1280.",
+        "Editor save-redirect flows and presentation/spatial special cases keep behavior identical.",
+        "Focused tests per migrated surface, pnpm test, typecheck, ./init.sh, detector green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "docs/design.md §4.0a",
+        "packages/ui/src/common/Tabs.tsx",
+        "packages/ui/src/modules/components/ModuleEditorForm.tsx",
+        "packages/ui/src/structures/components/StructureEditorForm.tsx",
+        "packages/ui/src/components/editor/ComponentEditorForm.tsx",
+        "packages/ui/src/agregados/editor/AgregadoEditorForm.tsx",
+        "packages/ui/src/purchasing/",
+        "packages/ui/src/showcase/",
+        "packages/ui/src/projects/components/"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "tabs",
+        "accessibility",
+        "standardization"
+      ]
+    },
+    {
+      "id": "F110",
+      "phase": 0,
+      "name": "overlay_modal_contract",
+      "title": "Overlays al contrato único: Modal + FullscreenDialog",
+      "description": "Consolidate parallel overlays into the accessible Modal contract: users/SectorAssignment (today without role=dialog), production/CsvExportConfigModal, onboarding/OnboardingTourModal, showcase/ProjectsPortfolioView lightbox, projects/components/ProjectPresentationMode. Extract a FullscreenDialog primitive with the same contract (portal, aria-labelledby, focus trap, Esc, restore focus) for presentation/lightbox cases.",
+      "acceptance": [
+        "All listed overlays render through Modal or FullscreenDialog: role=dialog + aria-labelledby, focus trap, Escape, focus restored to trigger; icon-only close buttons labeled.",
+        "No feature builds its own backdrop/focus handling; visual treatment stays token-only per elevation L4.",
+        "OnboardingTourModal remains skippable (no forced modal blocking first-run tasks).",
+        "Focused keyboard/SR tests per overlay, pnpm test, typecheck, ./init.sh, detector green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "progress/explore_ui_design_system_audit.md",
+        "docs/design.md §4.3, §4.8, §4.9",
+        "packages/ui/src/common/Modal.tsx",
+        "packages/ui/src/users/SectorAssignment.tsx",
+        "packages/ui/src/production/CsvExportConfigModal.tsx",
+        "packages/ui/src/onboarding/OnboardingTourModal.tsx",
+        "packages/ui/src/showcase/ProjectsPortfolioView.tsx",
+        "packages/ui/src/projects/components/ProjectPresentationMode.tsx"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "modal",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "F111",
+      "phase": 0,
+      "name": "vocabulary_consolidation_p2",
+      "title": "Vocabularios y sistema (P2): badges, stats, touch, labels, z-index",
+      "description": "Close the P2 debt group: migrate local badge families (catalog-badge, sales-badge, users-role-badge, eng-badge) to status-badge/meta-chip; migrate local stat families (dashboard, engineering, production, purchasing, sales) to .stat-card; replace internal-comms local primary button with .btn; raise --touch-min to 2.75rem (44px) per §4.0; dedupe the two 'Dashboard' nav labels (AppShell.tsx); add z-index token scale; reduce the 129 CSS color literals with a gate test.",
+      "acceptance": [
+        "Single status-badge vocabulary for state; metadata uses neutral chip/text; no local badge or stat families remain.",
+        "--touch-min = 2.75rem with coarse-pointer targets >=44px verified in smoke; desktop density unchanged.",
+        "Nav labels unique ('Dashboard Ventas' / 'Dashboard Producción' or equivalent); Cmd+K results disambiguated.",
+        "z-index scale tokens adopted by overlays/sticky chrome; literal-color gate added to designSystem tests (data/3D colors exempt and documented).",
+        "pnpm test, typecheck, ./init.sh, detector green."
+      ],
+      "references": [
+        "progress/explore_ui_standardization_critique.md",
+        "progress/explore_ui_design_system_audit.md",
+        "docs/design.md §4.0, §4.1, §5.2, §5.4",
+        "packages/ui/src/shell/AppShell.tsx",
+        "packages/ui/src/common/statusBadge.css",
+        "packages/ui/src/common/statCard.css",
+        "packages/ui/src/design-system/tokens.css"
+      ],
+      "status": "pending",
+      "tags": [
+        "ui",
+        "design-system",
+        "badges",
+        "touch",
+        "navigation",
+        "cleanup"
+      ]
     }
   ]
 }

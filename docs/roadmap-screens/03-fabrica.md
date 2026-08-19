@@ -1,7 +1,9 @@
 # Producción (estaciones) — Board de órdenes de trabajo por obra
 
 **Fase:** 1 (v1 implementada) → **v2 aprobada JD 2026-08-18, pendiente**
-**Nav:** `fabric` · **Ruta:** `/fabrica` · **Label UI:** Producción
+**Nav implementado:** `production` · **Ruta:** `/production` · **Label UI:** Producción
+
+> Alias histórico **deprecated:** `fabric` / `/fabrica`. La fuente ejecutable de rutas es `apps/web/src/routes.ts` → `NAV_PATHS`.
 **Decisiones:** `docs/production-module.md` §8 D9 (claim) + D10 (board por obra)
 
 ---

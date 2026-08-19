@@ -560,11 +560,11 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 | Nav / UI | Código (no renombrar) | Notas |
 |----------|------------------------|-------|
 | **Inicio** | `home` | No «Home». Dashboard para todos los roles (variantes por `homeMode`) |
-| **Producción** | `fabric` | Estaciones de fabricación (corte→embalaje), ex «Fábrica». Ruta `/fabrica` (histórica). Roles: `roleCanAccessFabricNav` |
-| **Embarques** | `embarques` | Carga al transporte (embalado→cargado), board por obra. Roles: `roleCanAccessShippingNav` (sin almacén) |
-| **Instalaciones** | `instalaciones` | Instalación en obra (cargado→instalado), board por obra + contador de instalados. Mismos roles que Embarques |
-| **Órdenes** | `production` | Cola + hub OP por obra (`/produccion/:id`) — TEMPORAL, se elimina en M2. Roles con `roleCanAccessProductionNav`. Ver `docs/production-module.md` |
-| **Cotizaciones** | `projects` / `Project` | No «Proyectos» en UI |
+| **Producción** | `production` | Estaciones de fabricación (corte→embalaje), ruta `/production`. Acceso: `roleCanAccessNav`. |
+| **Embarques** | `shipments` | Carga al transporte (embalado→cargado), board por obra. Acceso: `roleCanAccessNav`. |
+| **Instalaciones** | `installations` | Instalación en obra (cargado→instalado), board por obra. Acceso: `roleCanAccessNav`. |
+| **Órdenes** | `orders` | Cola + hub OP por obra (`/orders/:id/:tab`); su consolidación/retirada M2 es **planned**. Acceso: `roleCanAccessNav`. |
+| **Cotizaciones** | `quotes` / `Project` | No «Proyectos» en UI |
 | **Clientes** | `customers` | |
 | **Vitrina** | `showcase` | Catálogo comercial (sin BOM/costos). F040/F043 |
 | **Muebles** | `modules` / `Module` | No «Módulos» en UI (salvo jargon técnico de export) |
@@ -581,7 +581,7 @@ CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», �
 - **Command palette (issue #54):** `Cmd/Ctrl+K` en el shell — secciones de nav + cotizaciones/muebles recientes; teclado ↑↓ Enter Esc; denso, sin búsqueda de marketing
 - **TopBar**: `--surface-card` con `--shadow-sm`; **NO repite el título de la pantalla** (ver §4.1b); acciones opcionales (`headerActions`, p. ej. **Salir**)
 - **Content**: `--surface-app`, padding `--space-6`
-- **Entrada por defecto:** `home` (Dashboard) para todos los roles. El redirect al gate de sesión / falta de permiso usa `home`. Para produccion, `home` sigue siendo Dashboard (la cola es su propia ruta `/produccion`).
+- **Entrada por defecto:** `home` (Dashboard) para todos los roles. El redirect al gate de sesión / falta de permiso usa `home`. Para el rol `produccion`, `home` sigue siendo Dashboard; la cola/hub es `orders` (`/orders`) y las estaciones son `production` (`/production`).
 
 #### 4.1a Esqueleto único de página (v3 — OBLIGATORIO)
 
@@ -978,23 +978,23 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Pack ZIP ampliado: carátula + Optimizer + herrajes + etiquetas PDF/ZPL + resumen + despiece + elevaciones + hojas de armado + cut-list CSV configurable + CNC pilot JSON (`muebles.cnc-pilot.v1`) — no reemplaza Optimizer (#111)
   - Desde cotización accepted|produced: CTA **Abrir en Producción** (PROD-0.2: sin muro de exports en chrome ni Más)
   - Detalle de cotización accepted|produced: **franja de procesos** bajo el header (`ProjectFloorProgressStrip`, F093) — visible a cualquier rol con acceso a la obra (vendedor incl.)
-- **RBAC nav:** `roleCanAccessProductionNav`. La ruta `/orders` sin permiso **debe redirigir a `home`** (§4.1) — deuda conocida: hoy renderiza main vacío.
+- **RBAC nav:** `roleCanAccessProductionNav` mediante `roleCanAccessNav`. La ruta `/orders` sin permiso se redirige a `home` por `navBlockedForSession` en `apps/web/src/App.tsx`; no debe renderizar un main vacío.
 - **Icono:** `Factory`
 
 ### 6.7a Producción (estaciones de fabricación)
 
-- **Ruta nav:** `fabric` (sección PRODUCCIÓN, label **Producción**, ruta histórica `/fabrica`) — ex "Fábrica"
+- **Ruta nav:** `production` (sección PRODUCCIÓN, label **Producción**) · **Path:** `/production`
 - **Path:** `packages/ui/src/production/FabricScreen.tsx`
 - **Patrón:** tabs de estación (corte → encintado → armado → embalaje) con roving tabindex + cola por estación + toggle Cola/Métricas (gerente)
 - **Contenido v1 (actual):** lista de ítems en cola por estación con avance one-tap (`onAdvance` → server con scoping + evento F092); Operador sector-scoped ve solo sus tabs
 - **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `docs/roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
-- **RBAC nav:** `roleCanAccessFabricNav` (admin, gerente_produccion, produccion)
+- **RBAC nav:** `roleCanAccessNav` y guards de ruta (fuente ejecutable)
 - **Icono:** `Factory`
 
 ### 6.7b Estado de Planta (tablero de avance para todos — F093)
 
 - **Ruta nav:** `plantBoard` (sección TRABAJO, label **Estado de Planta**) — visible a **TODOS** los roles autenticados (vendedor y `user` incluidos) y a guest
-- **Path:** `/planta` (fuera de `/produccion/…` para no chocar con el deep link de orden)
+- **Path:** `/plant-board` (fuera del workspace de órdenes)
 - **Patrón:** tabla matriz proyectos × sectores (`PlantBoardScreen`); solo lectura
 - **Contenido:**
   - Filas: obras `accepted` | `produced` visibles para el rol (vendedor ve su portfolio vía ownership)
@@ -1008,21 +1008,21 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 ### 6.7c Embarques (carga al transporte)
 
-- **Ruta nav:** `embarques` (sección PRODUCCIÓN) · **Path:** `/embarques`
+- **Ruta nav:** `shipments` (sección COMPRAS / ALMACÉN) · **Path:** `/shipments`
 - **Path código:** `packages/ui/src/production/EmbarquesScreen.tsx` (CSS compartido `.ship-board__*` con Instalaciones)
 - **Patrón:** board por obra — cards de obra con la sección "Para cargar" (ítems `packaged` → "Marcar Cargado" → `loaded`)
 - **Contenido:** stats en header ("N para cargar"); por obra: nombre + cliente + ítems con qty y estado + botón "Ver control de carga" (linkea al tab despacho del hub Órdenes mientras M2 migra el checklist)
 - **Lo cargado pasa a Instalaciones** (subtítulo lo explica); avance por `handleFloorAdvance` compartido (server aplica scoping + evento F094)
-- **RBAC nav:** `roleCanAccessShippingNav` (admin, gerente_produccion, produccion — sin almacén)
+- **RBAC nav:** `roleCanAccessEmbarquesNav` (admin, gerente_produccion, almacen — no produccion)
 - **Icono:** `Truck`
 
 ### 6.7d Instalaciones (instalación en obra)
 
-- **Ruta nav:** `instalaciones` (sección PRODUCCIÓN) · **Path:** `/instalaciones`
+- **Ruta nav:** `installations` (sección PRODUCCIÓN) · **Path:** `/installations`
 - **Path código:** `packages/ui/src/production/InstalacionesScreen.tsx` (mismo `.ship-board__*`)
 - **Patrón:** board por obra — sección "En camino" (ítems `loaded` → "Marcar Instalado") + chip "N instalados" por obra
 - **Pendiente aprobado (JD 2026-08-18, Fase 5.5):** mostrar **dirección + contacto del cliente** en la card (dato ya existe en `Customer`; hoy solo llega el nombre) — JTBD del instalador
-- **RBAC nav:** mismo que Embarques
+- **RBAC nav:** `roleCanAccessShippingNav` (admin, gerente_produccion, produccion — no almacen)
 - **Icono:** `Hammer`
 
 ### 6.8 Estructuras
@@ -1181,6 +1181,127 @@ Si un ítem falla, no es done. Si un ítem no aplica, el commit/PR lo dice expl�
 13. **Gate de calidad UI** — toda pantalla nueva o modificada pasa el §8 DoD antes de pedir review; el copy y el formato de datos cumplen §7
 
 ---
+
+
+## 9.1 Estado del sistema y fuentes de autoridad (F103)
+
+Esta guía es el contrato humano de diseño. **No es autoridad de rutas, RBAC ni
+estado de entrega por sí sola:** paths y destino se derivan de
+[`apps/web/src/routes.ts`](../apps/web/src/routes.ts) → `NAV_PATHS`; acceso de
+sesión/rol de `roleCanAccessNav` y sus guards. Ante una discrepancia, se corrige
+aquí el documento, no se infiere una ruta nueva. Los informes
+`progress/explore_ui_*.md` son evidencia histórica: orientan decisiones, pero
+no sustituyen código ni esta guía vigente.
+
+### Matriz canónica de navegación
+
+Todos estos destinos existen en `NAV_PATHS` y son **implemented** como rutas.
+La visibilidad efectiva por sesión/rol la decide el guard ejecutable; esta tabla
+no reemplaza su matriz. `users` sólo se incorpora al nav cuando aplica el rol.
+
+| Sección | navId | Label UI | Path vigente | Estado |
+|---|---|---|---|---|
+| TRABAJO | `home` | Inicio | `/` | implemented |
+| TRABAJO | `plantBoard` | Estado de Planta | `/plant-board` | implemented |
+| VENTAS | `salesDashboard` | Dashboard | `/sales-dashboard` | implemented |
+| VENTAS | `quotes` | Cotizaciones | `/quotes` | implemented |
+| VENTAS | `customers` | Clientes | `/customers` | implemented |
+| VENTAS | `showcase` | Vitrina | `/showcase` | implemented |
+| PRODUCCIÓN | `productionDashboard` | Dashboard | `/production-dashboard` | implemented |
+| PRODUCCIÓN | `orders` | Órdenes | `/orders` | implemented |
+| PRODUCCIÓN | `production` | Producción | `/production` | implemented |
+| PRODUCCIÓN | `installations` | Instalaciones | `/installations` | implemented |
+| COMPRAS / ALMACÉN | `warehouse` | Almacén | `/warehouse` | implemented |
+| COMPRAS / ALMACÉN | `shipments` | Embarques | `/shipments` | implemented |
+| INGENIERÍA | `engineering` | Ingeniería | `/engineering` | implemented |
+| LIBRERÍA | `modules` | Muebles | `/modules` | implemented |
+| LIBRERÍA | `structures` | Estructuras | `/structures` | implemented |
+| LIBRERÍA | `addOns` | Agregados | `/add-ons` | implemented |
+| LIBRERÍA | `components` | Componentes | `/components` | implemented |
+| LIBRERÍA | `optionGroups` | Grupos | `/option-groups` | implemented |
+| CATÁLOGOS | `materials` | Materiales | `/materials` | implemented |
+| CATÁLOGOS | `edges` | Cantos | `/edges` | implemented |
+| CATÁLOGOS | `hardware` | Herrajes | `/hardware` | implemented |
+| CATÁLOGOS | `finishes` | Acabados | `/finishes` | implemented |
+| CONFIG | `settings` | Ajustes | `/settings` | implemented |
+| CONFIG | `users` | Usuarios | `/users` | implemented |
+
+**Aliases deprecated — no usar en links, código ni pantallas nuevas:**
+`/fabrica` → `/production`; `/planta` → `/plant-board`; `/embarques` →
+`/shipments`; `/instalaciones` → `/installations`; `fabric` → `production`;
+`projects` → `quotes`; `purchasing` → `warehouse`; `ambientMaterials` →
+`finishes`; `agregados` → `addOns`; y `production` como alias de Órdenes →
+`orders`. Consolidar o retirar Órdenes en M2 sigue **planned**; el ownership
+actual de Órdenes, estaciones y boards está en `docs/production-module.md`.
+
+### Primitives y patrones: estado real
+
+| Elemento | Estado | Fuente / owner | QA mínimo |
+|---|---|---|---|
+| Contexto tonal de área (F100) | implemented | `packages/ui/src/shell/AppShell.tsx`, `appShell.css` | canvas/chrome cambian; CTA, foco y semánticos siguen globales |
+| `PageHeader` + `PageToolbar` (F101) | implemented | `packages/ui/src/common/PageHeader.tsx`, `PageToolbar.tsx` | título único y una primaria visible |
+| Tabs workspace y de estaciones (F102) | implemented | `packages/ui/src/common/Tabs.tsx` | ARIA, teclas y panel asociado |
+| `Modal` | implemented | `packages/ui/src/common/Modal.tsx` | dialog label, trap, Escape y retorno de foco |
+| `Field` / controles unificados | planned | `docs/design.md` §9.2 | primitive, migración y cobertura |
+| Fullscreen dialog, Drawer / Inspector común | planned | `docs/design.md` §9.3 | no overlays paralelos ni clipping |
+| Estados uniformes de pantalla/mutación | planned | `docs/design.md` §9.4 | cada pantalla declara sus estados |
+| 44px, contraste global, z-index, breakpoints coherentes | planned | tokens + auditoría futura | evidencia por componente y viewport |
+
+### 9.2 Formularios y controles — planned
+
+Hasta que exista una primitive única y se migren CSS locales, este contrato es
+**planned**, no una descripción de cobertura actual. Todo `Field` tendrá label
+persistente, control, unidad/sufijo cuando aplique, hint y error. El label nunca
+se reemplaza con placeholder; placeholder, hint y texto UI normal deben tener
+≥4.5:1. Usar `aria-describedby` para hint/error, `required` semántico y llevar
+el foco al primer error al fallar Guardar.
+
+| Control | Estados obligatorios | Regla de uso |
+|---|---|---|
+| Input / Select / Textarea | default, hover, focus-visible, pressed, disabled, read-only, loading, error | catálogo/autocomplete antes que texto libre cuando sea posible |
+| Checkbox / Switch | mismos estados + valor comunicado por texto | switch sólo para cambio inmediato; checkbox para selección/formulario |
+| Number / date | mismos estados + unidad/formato visible | no esconder unidad ni formato crítico en placeholder |
+
+Agrupar por decisión del usuario. En `expanded`, campos cortos relacionados
+pueden usar hasta dos columnas; en `compact`, una. La automatización que detecte
+literales visuales en CSS y estilos inline también sigue **planned**: salvo datos
+visualizados o renderizado especializado documentado, feature CSS/TSX usa tokens.
+
+### 9.3 Superficies de edición y overlays — planned
+
+| Patrón | Elegibilidad | Accesibilidad / estado |
+|---|---|---|
+| Modal | decisión breve o edición acotada | **implemented** `Modal`: portal, `role=dialog`, label, trap, Escape y retorno de foco |
+| Fullscreen dialog | presentación/lightbox o contenido que excede diálogo normal | planned; mismo contrato, sin overlay manual |
+| Drawer / inspector | inspección/edición contextual sin perder comparación | planned; foco, Escape y restore según modalidad; nunca clipping |
+| Supporting pane | lectura/edición compleja en expanded | planned; preferir antes que encadenar modales |
+| Ruta/workspace | tabs, borrador o trabajo prolongado | guardar/descartar y guard de cambios antes de salida |
+
+### 9.4 Estados, accesibilidad y adaptación — planned salvo lo indicado
+
+- **Carga:** skeleton o `PageLoading`, sin layout shift. `EmptyState`,
+  `ListSkeleton`, `PageLoading` existen; la cobertura uniforme es **planned**.
+- **Empty / no-results / error / stale:** explican próximo paso; error nombra
+  objeto/acción y permite retry seguro. Conservar último dato sólo si es usable y
+  marcarlo stale. Cada pantalla debe declarar los estados que soporta.
+- **Mutación:** éxito breve junto al objeto + toast `aria-live`; error recuperable
+  junto al campo, no sólo toast. Operaciones largas comunican progreso,
+  cancelación/continuación si existen y nunca fingen éxito optimista.
+- **AA:** F100 tiene pares AA de área y F102 tabs ARIA **implemented**. Body,
+  texto UI, placeholder, hints y texto semántico normal requieren ≥4.5:1;
+  controles/bordes/indicadores no textuales ≥3:1; color no es señal única. La
+  verificación global (incluye warning/login/placeholders) sigue **planned**.
+- **Targets:** baseline 44×44 CSS px para touch y controles compactos. El token
+  efectivo es hoy 40px: su migración y auditoría de componentes son **planned**.
+- **Capas:** objetivo semántico `--z-base`, `--z-sticky`, `--z-dropdown`,
+  `--z-modal-backdrop`, `--z-modal`, `--z-toast`, `--z-tooltip`; valores locales
+  y `9999` son deuda **planned**.
+- **Motion:** tokens, 150–250ms cuando aplique, sin bounce; reduced motion
+  conserva feedback sin desplazamiento. La migración total es **planned**.
+- **Responsive:** diseñar compact / medium / expanded, no desktop encogido;
+  hover no es la única vía. Validar 390px, 768px y 1280px sin overflow, labels
+  truncados ni pérdida de foco. Los breakpoints ejecutables actuales prevalecen;
+  su reconciliación transversal sigue **planned**.
 
 ## 10. Referencias
 

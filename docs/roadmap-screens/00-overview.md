@@ -74,7 +74,7 @@ El hub conserva tabs que aún no migran: **Piso** (paperless), **despacho**
 carga"), **etiquetas/herrajes** (la generación ya está en Ingeniería —
 Documentos; quedan como vista por obra). Pasos: migrar Piso al workspace de
 Producción/Embarques → migrar o retirar el checklist de despacho → borrar
-nav `production` + `ProductionWorkspace`. Rutas `/produccion/:id` se
+nav `orders` + `ProductionWorkspace`. Rutas `/orders/:id/:tab` se
 redirigen o deprecian.
 
 ### M3 — Producción v2: board por obra + claim (aprobado JD 2026-08-18)
