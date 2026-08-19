@@ -37,10 +37,13 @@ describe('ProductionOrderViewsPanel F101 page chrome migration', () => {
     );
     const header = screen.getByTestId('page-header');
     expect(within(header).getByRole('heading', { level: 3, name: 'Vistas de producción' })).toBeTruthy();
-    const action = within(header).getByRole('button', { name: 'Descargar PDF elevaciones' });
+    const secondarySlot = header.querySelector('.page-header__secondary-actions');
+    expect(secondarySlot).not.toBeNull();
+    const action = within(secondarySlot as HTMLElement).getByRole('button', { name: 'Descargar PDF elevaciones' });
     expect((action as HTMLButtonElement).disabled).toBe(true);
     expect(action.getAttribute('title')).toBe('Sin muros en el layout');
     expect(screen.queryAllByRole('button', { name: 'Descargar PDF elevaciones' })).toHaveLength(1);
     expect(action.className).toBe('btn');
+    expect(header.querySelector('.page-header__primary-action')).toBeNull();
   });
 });

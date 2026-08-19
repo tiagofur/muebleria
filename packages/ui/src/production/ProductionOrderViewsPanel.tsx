@@ -117,7 +117,7 @@ export function ProductionOrderViewsPanel({
         headingLevel={3}
         title="Vistas de producción"
         subtitle="Planta, elevaciones y vista 3D de la obra aceptada."
-        primaryAction={
+        secondaryActions={
           onExportElevations ? (
             <button
               type="button"
