@@ -375,3 +375,11 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   ruta/RBAC de Órdenes, Embarques e Instalaciones tras revisión independiente.
 - Verificación: JSON válido, matriz de 24 `AppNavId` contrastada y `git diff --check`.
 - Commit: `649b6fc` (`docs(ui): synchronize UX design contracts`).
+
+## F104 — Page Chrome Rollout I: Catálogos y Librería (2026-08-19)
+
+- Aprobada en `progress/review_F104.md`.
+- Las 9 pantallas de catálogos/librería (Materiales, Cantos, Herrajes, Acabados, Grupos, Muebles, Estructuras, Componentes, Agregados) migraron al esqueleto único `PageHeader`/`PageToolbar` con icon-chip de área y una primaria por nivel.
+- Título «Catálogo de Acabados» → «Acabados» (§4.1b) y copy sentence-case en Agregados; iconos normalizados a strokeWidth 1.5.
+- Verificación: 12 tests nuevos de composición, UI 1006/1006, typecheck, `./init.sh`, detector 0 hallazgos y smoke visual 390/768/1280 sin overflow.
+- Antes de esta feature: critique de estandarización 28/40 (`progress/explore_ui_standardization_critique.md`) y registro del programa F104–F111 a pedido del dueño.
