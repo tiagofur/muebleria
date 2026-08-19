@@ -41,7 +41,7 @@ import {
   type PipelineSector,
   type ProductionSector,
 } from '@muebles/domain';
-import { EmptyState } from '../common';
+import { EmptyState, PageHeader } from '../common';
 import './productionManagerDashboard.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -299,39 +299,32 @@ export function ProductionManagerDashboard({
 
   return (
     <section className="pm-dashboard" aria-label="Dashboard del Gerente de Producción" data-testid={testId}>
-      {/* Header */}
-      <header className="pm-dashboard__header">
-        <div className="pm-dashboard__title-row">
-          <span className="pm-dashboard__title-icon" aria-hidden>
-            <Factory size={18} strokeWidth={1.5} aria-hidden />
-          </span>
-          <div>
-            <h2 className="pm-dashboard__title">Dashboard de Producción</h2>
-            <p className="pm-dashboard__subtitle">
-              Visibilidad completa de todas las áreas, operadores y métricas
-            </p>
-          </div>
-        </div>
-        <div className="pm-dashboard__header-actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={refresh}
-          >
-            <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
-            Actualizar
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setShowMetrics(!showMetrics)}
-            aria-pressed={showMetrics}
-          >
-            <BarChart3 size={16} strokeWidth={1.5} aria-hidden />
-            {showMetrics ? 'Ocultar Métricas' : 'Ver Métricas'}
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="Dashboard de Producción"
+        subtitle="Visibilidad completa de todas las áreas, operadores y métricas"
+        icon={<BarChart3 size={16} strokeWidth={1.5} />}
+        secondaryActions={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={refresh}
+            >
+              <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
+              Actualizar
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowMetrics(!showMetrics)}
+              aria-pressed={showMetrics}
+            >
+              <BarChart3 size={16} strokeWidth={1.5} aria-hidden />
+              {showMetrics ? 'Ocultar Métricas' : 'Ver Métricas'}
+            </button>
+          </>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="pm-dashboard__summary">

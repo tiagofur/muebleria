@@ -2007,17 +2007,6 @@
   gap: var(--space-4);
 }
 
-.fabric__title-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--area-work-500);
-  background: var(--area-work-100);
-  border-radius: var(--radius-md, 10px);
-}
-
 .fabric__total {
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-sm);
@@ -2030,12 +2019,6 @@
 }
 
 /* --- Header actions (total + supervisor view toggle) --- */
-.fabric__header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .fabric__view-toggle {
   display: inline-flex;
   padding: 2px;
@@ -2233,19 +2216,8 @@
   white-space: nowrap;
 }
 
-/* ── Fase 5.1 — mobile: header de Fábrica apila; tabla de métricas scrollea ── */
+/* ── Fase 5.1 — mobile: tabla de métricas scrollea (header ahora compartido) ── */
 @media (max-width: 720px) {
-  .fabric__header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-
-  .fabric__header-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .fabric__metrics {
     overflow-x: auto;
   }
@@ -2264,24 +2236,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-.ship-board__title-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--area-work-500);
-  background: var(--area-work-100);
-  border-radius: var(--radius-md, 10px);
-}
-
-.ship-board__header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
 }
 
 .ship-board__stat {
@@ -2470,14 +2424,8 @@
   white-space: nowrap;
 }
 
-/* Fase 5.1 — mobile: header apila, filas envuelven. */
+/* Fase 5.1 — mobile: filas envuelven (header ahora compartido). */
 @media (max-width: 720px) {
-  .ship-board__header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-
   .ship-board__card-header {
     flex-direction: column;
     align-items: flex-start;

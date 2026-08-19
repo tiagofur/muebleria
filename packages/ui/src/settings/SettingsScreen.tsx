@@ -7,7 +7,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { WorkshopSettings } from '@muebles/domain';
 import { Settings } from 'lucide-react';
-import { submitBusyLabel } from '../common';
+import { PageHeader, submitBusyLabel } from '../common';
 import '../catalogs/catalogs.css';
 import './settings.css';
 
@@ -75,22 +75,11 @@ export function SettingsScreen({
 
   return (
     <section className="catalog-page" aria-label="Ajustes del taller">
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">
-            <Settings
-              size={20}
-              strokeWidth={1.5}
-              aria-hidden
-              className="settings-title-icon"
-            />
-            Ajustes
-          </h2>
-          <p className="page-header__subtitle">
-            Defaults del taller para nuevas cotizaciones
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Ajustes"
+        subtitle="Defaults del taller para nuevas cotizaciones"
+        icon={<Settings size={16} strokeWidth={1.5} />}
+      />
 
       <form
         className="catalog-form settings-form"

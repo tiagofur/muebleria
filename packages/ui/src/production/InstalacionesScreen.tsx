@@ -20,7 +20,7 @@ import {
   type Project,
   type ProjectItem,
 } from '@muebles/domain';
-import { EmptyState } from '../common';
+import { EmptyState, PageHeader } from '../common';
 
 type InstalacionesRow = {
   readonly itemId: string;
@@ -113,33 +113,26 @@ export function InstalacionesScreen({
       aria-label="Instalaciones"
       data-testid={testId ?? 'instalaciones-screen'}
     >
-      <header className="ship-board__header">
-        <div className="ship-board__title-row">
-          <span className="ship-board__title-icon" aria-hidden>
-            <Hammer size={20} strokeWidth={1.5} />
-          </span>
-          <div>
-            <h2 className="ship-board__title">Instalaciones</h2>
-            <p className="ship-board__subtitle">
-              Qué va cargado y en camino a obra. Al marcar instalado, la obra
-              avanza en Estado de Planta.
-            </p>
-          </div>
-        </div>
-        <div className="ship-board__header-actions">
-          <span className="ship-board__stat" data-testid="instalaciones-to-install">
-            {totalToInstall} para instalar
-          </span>
-          {totalInstalled > 0 ? (
-            <span
-              className="ship-board__stat ship-board__stat--road"
-              data-testid="instalaciones-installed"
-            >
-              {totalInstalled} instalados
+      <PageHeader
+        title="Instalaciones"
+        subtitle="Qué va cargado y en camino a obra. Al marcar instalado, la obra avanza en Estado de Planta."
+        icon={<Hammer size={16} strokeWidth={1.5} />}
+        contextualControls={
+          <>
+            <span className="ship-board__stat" data-testid="instalaciones-to-install">
+              {totalToInstall} para instalar
             </span>
-          ) : null}
-        </div>
-      </header>
+            {totalInstalled > 0 ? (
+              <span
+                className="ship-board__stat ship-board__stat--road"
+                data-testid="instalaciones-installed"
+              >
+                {totalInstalled} instalados
+              </span>
+            ) : null}
+          </>
+        }
+      />
 
       {cards.length === 0 ? (
         <EmptyState

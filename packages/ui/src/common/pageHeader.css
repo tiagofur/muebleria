@@ -19,15 +19,7 @@
  */
 
 .page-header,
-.catalog-page__header,
-.dashboard__header,
-.prod-queue__header,
-.fabric__header,
-.ship-board__header,
-.pm-dashboard__header,
-.eng-landing__header,
-.purch-landing__header,
-.portfolio-header {
+.prod-queue__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -37,14 +29,7 @@
 
 /* —— Title —— */
 .page-header__title,
-.catalog-page__title,
-.dashboard__title,
-.prod-queue__title,
-.fabric__title,
-.ship-board__title,
-.pm-dashboard__title,
-.eng-landing__title,
-.purch-landing__title {
+.prod-queue__title {
   margin: 0;
   font-size: var(--text-xl);
   font-weight: var(--weight-bold);
@@ -54,10 +39,7 @@
 
 /* —— Title row (title + optional inline badge) —— */
 .page-header__title-row,
-.dashboard__title-row,
 .prod-queue__title-row,
-.fabric__title-row,
-.ship-board__title-row,
 .pm-dashboard__title-row {
   display: flex;
   flex-wrap: wrap;
@@ -67,13 +49,7 @@
 
 /* —— Subtitle / lead —— */
 .page-header__subtitle,
-.catalog-page__subtitle,
-.dashboard__subtitle,
 .prod-queue__subtitle,
-.fabric__subtitle,
-.ship-board__subtitle,
-.pm-dashboard__subtitle,
-.eng-landing__subtitle,
 .purch-landing__subtitle {
   margin: var(--space-1) 0 0;
   font-size: var(--text-base);
@@ -83,8 +59,6 @@
 
 /* —— Actions (right-aligned) —— */
 .page-header__actions,
-.catalog-page__toolbar,
-.dashboard__actions,
 .prod-queue__actions,
 .pm-dashboard__header-actions {
   display: flex;

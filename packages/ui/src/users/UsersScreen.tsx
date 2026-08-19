@@ -9,11 +9,12 @@ import {
   RefreshCw,
   SearchX,
   Settings2,
+  ShieldCheck,
   Trash2,
   Users,
   MapPin,
 } from 'lucide-react';
-import { ConfirmDialog, EmptyState, PageLoading, StatusChips } from '../common';
+import { ConfirmDialog, EmptyState, PageHeader, PageLoading, StatusChips } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
@@ -145,30 +146,30 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
         </div>
       ) : null}
 
-      <div className="catalog-page__header">
-        <div>
-          <h2 className="catalog-page__title">
-            Usuarios
+      <PageHeader
+        title="Usuarios"
+        subtitle={
+          <>
+            Aprobación de registros y puestos del taller
             {pendingCount > 0 ? (
               <span className="users-badge">{pendingCount} pendiente{pendingCount > 1 ? 's' : ''}</span>
             ) : null}
-          </h2>
-          <p className="page-header__subtitle">
-            Aprobación de registros y puestos del taller
-          </p>
-        </div>
-        <div className="catalog-page__toolbar">
+          </>
+        }
+        icon={<ShieldCheck size={16} strokeWidth={1.5} />}
+        secondaryActions={
           <button
             type="button"
             className="btn btn--ghost btn--small"
             onClick={load}
             disabled={loading}
             title="Recargar"
+            aria-label="Recargar usuarios"
           >
             <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filtros */}
       <div className="catalog-page__filters">
@@ -281,8 +282,9 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                           setSelectedUserRole(u.role);
                         }}
                         title="Asignar sectores"
+                        aria-label={`Asignar sectores de ${u.name}`}
                       >
-                        <MapPin size={15} strokeWidth={1.5} />
+                        <MapPin size={15} strokeWidth={1.5} aria-hidden />
                       </button>
                     )}
                     {u.active && (
@@ -291,8 +293,9 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         className="btn btn--ghost btn--small"
                         disabled
                         title="Gestionar rol con el selector de la izquierda"
+                        aria-label="Gestión de rol no disponible"
                       >
-                        <Settings2 size={15} strokeWidth={1.5} />
+                        <Settings2 size={15} strokeWidth={1.5} aria-hidden />
                       </button>
                     )}
                     {!u.active && (

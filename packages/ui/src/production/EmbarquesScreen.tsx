@@ -18,7 +18,7 @@ import {
   normalizeItemFloorStatus,
   type Project,
 } from '@muebles/domain';
-import { EmptyState } from '../common';
+import { EmptyState, PageHeader } from '../common';
 
 type EmbarquesProjectCard = {
   readonly projectId: string;
@@ -90,25 +90,16 @@ export function EmbarquesScreen({
       aria-label="Embarques"
       data-testid={testId ?? 'embarques-screen'}
     >
-      <header className="ship-board__header">
-        <div className="ship-board__title-row">
-          <span className="ship-board__title-icon" aria-hidden>
-            <Truck size={20} strokeWidth={1.5} />
-          </span>
-          <div>
-            <h2 className="ship-board__title">Embarques</h2>
-            <p className="ship-board__subtitle">
-              Obras con muebles embalados esperando carga al transporte. Seleccioná
-              una obra para ver el checklist de carga.
-            </p>
-          </div>
-        </div>
-        <div className="ship-board__header-actions">
+      <PageHeader
+        title="Embarques"
+        subtitle="Obras con muebles embalados esperando carga al transporte. Seleccioná una obra para ver el checklist de carga."
+        icon={<Truck size={16} strokeWidth={1.5} />}
+        contextualControls={
           <span className="ship-board__stat" data-testid="embarques-to-load">
             {totalPending} bultos por cargar
           </span>
-        </div>
-      </header>
+        }
+      />
 
       {cards.length === 0 ? (
         <EmptyState

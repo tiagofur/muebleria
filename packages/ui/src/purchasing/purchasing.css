@@ -11,7 +11,7 @@
   gap: var(--space-5);
 }
 
-/* .purch-landing__header / __title / __subtitle are aliases of .page-header
+/* .purch-landing__header / __title / __subtitle retired with the shared PageHeader (F106)
    (common/pageHeader.css). */
 
 .purch-landing__badge {

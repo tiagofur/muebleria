@@ -9,9 +9,6 @@
   margin: 0 auto;
 }
 
-.pm-dashboard__header,
-.pm-dashboard__title-row,
-.pm-dashboard__header-actions,
 .pm-dashboard__project-name,
 .pm-dashboard__project-progress,
 .pm-dashboard__project-stages,
@@ -24,22 +21,7 @@
   align-items: center;
 }
 
-.pm-dashboard__title-row { gap: var(--space-3); }
-
-/* Icon-chip de área — Producción usa --area-work-* (design.md §3.2.1) */
-.pm-dashboard__title-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 1.75rem;
-  height: 1.75rem;
-  color: var(--area-work-500);
-  background: var(--area-work-100);
-  border-radius: var(--radius-md);
-}
-
-.pm-dashboard__header-actions { flex-wrap: wrap; gap: var(--space-2); }
+/* Header retired with the shared PageHeader chrome (F106). */
 
 .pm-dashboard__summary,
 .pm-dashboard__metrics-grid {
@@ -273,9 +255,6 @@
 }
 
 @media (max-width: 720px) {
-  .pm-dashboard__header { flex-direction: column; }
-  .pm-dashboard__header-actions { width: 100%; }
-  .pm-dashboard__header-actions .btn { flex: 1; }
   .pm-dashboard__project-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
   .pm-dashboard__project-progress { max-width: 18rem; }
   .pm-dashboard__job-row { align-items: flex-start; flex-direction: column; }

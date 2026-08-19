@@ -10,7 +10,7 @@ import {
   type Project,
   type ProjectPickingState,
 } from '@muebles/domain';
-import { EmptyState, WorkflowTabs } from '../common';
+import { EmptyState, PageHeader, WorkflowTabs } from '../common';
 import type {
   DashboardMetrics,
   SectorDashboard,
@@ -473,51 +473,44 @@ export function FabricScreen({
       aria-label="Producción"
       data-testid={testId ?? 'fabric-screen'}
     >
-      <header className="fabric__header">
-        <div className="fabric__title-row">
-          <span className="fabric__title-icon" aria-hidden>
-            <Factory size={20} strokeWidth={1.5} />
-          </span>
-          <div>
-            <h2 className="fabric__title">Producción</h2>
-            <p className="fabric__subtitle">
-              Obras organizadas por estación. El avance se registra por módulo y
-              se refleja en Estado de Planta.
-            </p>
-          </div>
-        </div>
-        <div className="fabric__header-actions">
-          {metrics ? (
-            <div
-              className="fabric__view-toggle"
-              role="group"
-              aria-label="Vista de producción"
-            >
-              <button
-                type="button"
-                className={`fabric__view-btn ${!showMetrics ? 'fabric__view-btn--active' : ''}`}
-                aria-pressed={!showMetrics}
-                onClick={() => setShowMetrics(false)}
-                data-testid="fabric-view-queue"
+      <PageHeader
+        title="Producción"
+        subtitle="Obras organizadas por estación. El avance se registra por módulo y se refleja en Estado de Planta."
+        icon={<Factory size={16} strokeWidth={1.5} />}
+        contextualControls={
+          <>
+            {metrics ? (
+              <div
+                className="fabric__view-toggle"
+                role="group"
+                aria-label="Vista de producción"
               >
-                Cola
-              </button>
-              <button
-                type="button"
-                className={`fabric__view-btn ${showMetrics ? 'fabric__view-btn--active' : ''}`}
-                aria-pressed={showMetrics}
-                onClick={() => setShowMetrics(true)}
-                data-testid="fabric-view-metrics"
-              >
-                Métricas
-              </button>
-            </div>
-          ) : null}
-          <span className="fabric__total" data-testid="fabric-total-waiting">
-            {totalWaiting} por hacer
-          </span>
-        </div>
-      </header>
+                <button
+                  type="button"
+                  className={`fabric__view-btn ${!showMetrics ? 'fabric__view-btn--active' : ''}`}
+                  aria-pressed={!showMetrics}
+                  onClick={() => setShowMetrics(false)}
+                  data-testid="fabric-view-queue"
+                >
+                  Cola
+                </button>
+                <button
+                  type="button"
+                  className={`fabric__view-btn ${showMetrics ? 'fabric__view-btn--active' : ''}`}
+                  aria-pressed={showMetrics}
+                  onClick={() => setShowMetrics(true)}
+                  data-testid="fabric-view-metrics"
+                >
+                  Métricas
+                </button>
+              </div>
+            ) : null}
+            <span className="fabric__total" data-testid="fabric-total-waiting">
+              {totalWaiting} por hacer
+            </span>
+          </>
+        }
+      />
       {showMetrics && metrics && metricsTotals ? (
         <div
           className="fabric__metrics"

@@ -43,7 +43,7 @@ import {
   type StockMovementType,
   type Supplier,
 } from '@muebles/domain';
-import { EmptyState } from '../common';
+import { EmptyState, PageHeader } from '../common';
 import { useRovingTabList } from '../common/rovingTabList';
 import { StockPanel, type StockCatalogOption } from './StockPanel';
 import {
@@ -744,19 +744,17 @@ export function PurchasingScreen({
 
   return (
     <section className="purch-landing" aria-label="Compras y almacén">
-      <header className="purch-landing__header">
-        <div>
-          <h2 className="purch-landing__title">Almacén</h2>
-          <p className="purch-landing__subtitle">
-            Qué necesita cada proyecto activo, como lista de picking por
-            material. Sin gestión de stock en esta fase.
-          </p>
-        </div>
-        <span className="purch-landing__badge">
-          <Warehouse size={14} strokeWidth={1.5} aria-hidden />
-          {stats.projects} {stats.projects === 1 ? 'proyecto activo' : 'proyectos activos'}
-        </span>
-      </header>
+      <PageHeader
+        title="Almacén"
+        subtitle="Qué necesita cada proyecto activo, como lista de picking por material. Sin gestión de stock en esta fase."
+        icon={<Warehouse size={16} strokeWidth={1.5} />}
+        contextualControls={
+          <span className="purch-landing__badge">
+            <Warehouse size={14} strokeWidth={1.5} aria-hidden />
+            {stats.projects} {stats.projects === 1 ? 'proyecto activo' : 'proyectos activos'}
+          </span>
+        }
+      />
 
       {/* Stat cards */}
       <div className="purch-stats">
