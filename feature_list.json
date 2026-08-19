@@ -1980,7 +1980,7 @@
         "packages/ui/src/engineering/EngineeringScreen.tsx",
         "packages/ui/src/production/ProductionOrderViewsPanel.tsx"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "ui",
         "design-system",

@@ -349,3 +349,11 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - `AppShell` propaga `data-area-context`; CTAs brand, focus y estados semánticos permanecen globales.
 - Tokens incluyen roles contextuales y 16 pares de contraste AA verificados por test (mínimo 5.87:1).
 - Evidencia: 22 tests focales de shell, 4 de integración web, `pnpm test`, `pnpm typecheck` y `./init.sh` verdes.
+
+## F101 — Page Chrome, Toolbar & Action Hierarchy (2026-08-19)
+
+- Aprobada en `progress/review_F101.md` sobre los commits publicados `b02fa83` y `d9eccfb`.
+- Se incorporaron `PageHeader` y `PageToolbar` tipados y accesibles, con slots explícitos para título, acciones, overflow y controles de búsqueda/filtro/tabs.
+- Cotizaciones e Ingeniería adoptaron el chrome compartido; Vistas de producción usa el header contextual y conserva la descarga de elevaciones como acción secundaria.
+- La prueba de composición de `EngineeringWorkspace` garantiza que «Enviar a Producción» sigue siendo la única primaria cuando Vistas está activa.
+- Verificación: tests focales, `pnpm test`, `pnpm typecheck`, `./init.sh` y detector Impeccable verdes. Evidencia responsive queda declarada como bloqueada porque no hubo Browser/screenshot/Computer Use disponible.
