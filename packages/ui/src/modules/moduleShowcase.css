@@ -6,27 +6,7 @@
   gap: var(--space-5);
 }
 
-/* Header: title block + search. Shared page-header layout + local polish. */
-.module-showcase__header {
-  align-items: flex-start;
-  gap: var(--space-4);
-}
-
-.module-showcase__header-text {
-  min-width: min(100%, 18rem);
-  flex: 1 1 16rem;
-}
-
-.module-showcase__lead {
-  font-size: var(--text-sm);
-  max-width: 36rem;
-}
-
-.module-showcase__search {
-  flex: 0 1 18rem;
-  min-width: min(100%, 12rem);
-  justify-content: flex-end;
-}
+/* Header retired with the shared PageHeader/PageToolbar chrome (F105). */
 
 /* Category chips */
 .module-showcase__filters {

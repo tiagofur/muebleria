@@ -4,7 +4,6 @@ import {
   filterShowcasePhotos,
 } from '@muebles/domain';
 import {
-  Sparkles,
   Eye,
   EyeOff,
   Star,
@@ -72,17 +71,8 @@ export function ProjectsPortfolioView({
 
   return (
     <div className="portfolio-view" data-testid="projects-portfolio-view">
-      <header className="portfolio-header">
-        <div className="portfolio-title-group">
-          <h2 className="portfolio-title">
-            <Sparkles className="portfolio-title__icon" size={20} strokeWidth={1.5} aria-hidden />
-            Portafolio de Obras e Instalaciones
-          </h2>
-          <p className="portfolio-subtitle">
-            Galería comercial de proyectos reales terminados para presentación a clientes y ventas.
-          </p>
-        </div>
-
+      {/* Tab content of ShowcaseScreen: page title lives at screen level (§4.1a). */}
+      <div className="portfolio-header portfolio-header--context">
         <button
           type="button"
           className={`portfolio-presentation-toggle ${
@@ -104,7 +94,7 @@ export function ProjectsPortfolioView({
             </>
           )}
         </button>
-      </header>
+      </div>
 
       <div className="portfolio-controls">
         <div className="portfolio-filters" role="group" aria-label="Filtros de fotos">

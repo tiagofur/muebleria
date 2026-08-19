@@ -18,7 +18,7 @@ import {
   Plus,
   Store,
 } from 'lucide-react';
-import { EmptyState, PageLoading } from '../common';
+import { EmptyState, PageHeader, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import '../projects/projects.css';
 import {
@@ -209,58 +209,53 @@ export function Dashboard({
 
   return (
     <section className="dashboard" aria-label="Inicio">
-      <header className="dashboard__header">
-        <div className="dashboard__title-row">
-          <LayoutDashboard
-            className="dashboard__title-icon"
-            size={28}
-            strokeWidth={1.5}
-            aria-hidden
-          />
-          <div>
-            <h2 className="dashboard__title">Inicio</h2>
-            <p className="dashboard__subtitle">{subtitle}</p>
-          </div>
-        </div>
-        {/* Empty workspace: no header primary — sole primary lives on the active checklist step. */}
-        <div className="dashboard__actions">
-          {onNewProject ? (
-          <button
-            type="button"
-            className={
-              showGettingStarted ? 'btn btn--ghost' : 'btn btn--primary'
-            }
-            onClick={onNewProject}
-            data-testid="dashboard-new-project"
-          >
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nueva cotización
-          </button>
-          ) : null}
-          {isSales && onOpenShowcase ? (
-          <button
-            type="button"
-            className="btn"
-            onClick={onOpenShowcase}
-            data-testid="dashboard-open-showcase"
-          >
-            <Store size={16} strokeWidth={1.5} aria-hidden />
-            Ver vitrina
-          </button>
-          ) : null}
-          {onNewModule ? (
-          <button
-            type="button"
-            className={showGettingStarted ? 'btn btn--ghost' : 'btn'}
-            onClick={onNewModule}
-            data-testid="dashboard-new-module"
-          >
-            <Plus size={16} strokeWidth={1.5} aria-hidden />
-            Nuevo mueble
-          </button>
-          ) : null}
-        </div>
-      </header>
+      <PageHeader
+        title="Inicio"
+        subtitle={subtitle}
+        icon={<LayoutDashboard size={16} strokeWidth={1.5} />}
+        /* Empty workspace: no header primary — sole primary lives on the active checklist step. */
+        primaryAction={
+          onNewProject ? (
+            <button
+              type="button"
+              className={
+                showGettingStarted ? 'btn btn--ghost' : 'btn btn--primary'
+              }
+              onClick={onNewProject}
+              data-testid="dashboard-new-project"
+            >
+              <Plus size={16} strokeWidth={1.5} aria-hidden />
+              Nueva cotización
+            </button>
+          ) : undefined
+        }
+        secondaryActions={
+          <>
+            {isSales && onOpenShowcase ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={onOpenShowcase}
+                data-testid="dashboard-open-showcase"
+              >
+                <Store size={16} strokeWidth={1.5} aria-hidden />
+                Ver vitrina
+              </button>
+            ) : null}
+            {onNewModule ? (
+              <button
+                type="button"
+                className={showGettingStarted ? 'btn btn--ghost' : 'btn'}
+                onClick={onNewModule}
+                data-testid="dashboard-new-module"
+              >
+                <Plus size={16} strokeWidth={1.5} aria-hidden />
+                Nuevo mueble
+              </button>
+            ) : null}
+          </>
+        }
+      />
 
       {showGettingStarted ? (
         <section

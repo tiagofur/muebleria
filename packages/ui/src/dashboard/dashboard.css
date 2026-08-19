@@ -8,12 +8,8 @@
 }
 
 /* .dashboard__header / __title / __title-row / __subtitle / __actions moved
-   to common/pageHeader.css (F1 UI 1d). */
-
-.dashboard__title-icon {
-  color: var(--brand-500);
-  flex-shrink: 0;
-}
+   to common/pageHeader.css (F1 UI 1d). .dashboard__title-icon retired with
+   the shared icon-chip (F105). */
 
 /* Stat cards: 2 cols mobile, 4 cols md+ (acceptance #7) */
 .dashboard__stats {

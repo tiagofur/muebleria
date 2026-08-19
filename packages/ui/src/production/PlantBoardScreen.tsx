@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Factory } from 'lucide-react';
+import { KanbanSquare } from 'lucide-react';
 
 import {
   buildProjectFloorSummary,
@@ -8,7 +8,7 @@ import {
   type ProjectFloorSummary,
 } from '@muebles/domain';
 import type { Project } from '@muebles/domain';
-import { EmptyState } from '../common';
+import { EmptyState, PageHeader } from '../common';
 
 /**
  * Estado de Planta (F093 — Fase 1 visibilidad): every project in the
@@ -42,20 +42,11 @@ export function PlantBoardScreen({
 
   return (
     <section className="plant-board" aria-label="Estado de planta">
-      <header className="plant-board__header">
-        <div className="plant-board__title-row">
-          <span className="plant-board__title-icon" aria-hidden>
-            <Factory size={20} strokeWidth={1.5} />
-          </span>
-          <div>
-            <h2 className="plant-board__title">Estado de Planta</h2>
-            <p className="plant-board__subtitle">
-              Dónde está cada obra en el taller, por sector. Solo lectura —
-              el avance se marca desde Producción.
-            </p>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="Estado de Planta"
+        subtitle="Dónde está cada obra en el taller, por sector. Solo lectura — el avance se marca desde Producción."
+        icon={<KanbanSquare size={16} strokeWidth={1.5} />}
+      />
 
       {rows.length === 0 ? (
         <EmptyState

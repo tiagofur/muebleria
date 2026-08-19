@@ -8,7 +8,9 @@
  *   .page-header            .catalog-page__header
  *                           .dashboard__header
  *                           .prod-queue__header
- *                           .module-showcase__header
+ *
+ * Retired with the F104/F105 rollouts: .module-showcase__header,
+ * .sales-dashboard__header, .plant-board__header and their sub-blocks.
  *
  * Title sizes are unified to --text-xl (F1 UI 1d decision: every screen
  * title at 22px; subtitle at --text-base, secondary).
@@ -20,12 +22,9 @@
 .catalog-page__header,
 .dashboard__header,
 .prod-queue__header,
-.module-showcase__header,
 .fabric__header,
 .ship-board__header,
-.plant-board__header,
 .pm-dashboard__header,
-.sales-dashboard__header,
 .eng-landing__header,
 .purch-landing__header,
 .portfolio-header {
@@ -41,15 +40,11 @@
 .catalog-page__title,
 .dashboard__title,
 .prod-queue__title,
-.module-showcase__title,
 .fabric__title,
 .ship-board__title,
-.plant-board__title,
 .pm-dashboard__title,
-.sales-dashboard__title,
 .eng-landing__title,
-.purch-landing__title,
-.portfolio-title {
+.purch-landing__title {
   margin: 0;
   font-size: var(--text-xl);
   font-weight: var(--weight-bold);
@@ -63,7 +58,6 @@
 .prod-queue__title-row,
 .fabric__title-row,
 .ship-board__title-row,
-.plant-board__title-row,
 .pm-dashboard__title-row {
   display: flex;
   flex-wrap: wrap;
@@ -76,15 +70,11 @@
 .catalog-page__subtitle,
 .dashboard__subtitle,
 .prod-queue__subtitle,
-.module-showcase__lead,
 .fabric__subtitle,
 .ship-board__subtitle,
-.plant-board__subtitle,
 .pm-dashboard__subtitle,
-.sales-dashboard__subtitle,
 .eng-landing__subtitle,
-.purch-landing__subtitle,
-.portfolio-subtitle {
+.purch-landing__subtitle {
   margin: var(--space-1) 0 0;
   font-size: var(--text-base);
   color: var(--text-secondary);

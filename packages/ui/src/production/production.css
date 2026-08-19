@@ -1858,16 +1858,7 @@
   gap: var(--space-4);
 }
 
-.plant-board__title-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--area-work-500);
-  background: var(--area-work-100);
-  border-radius: var(--radius-md, 10px);
-}
+/* plant-board header retired with the shared PageHeader chrome (F105). */
 
 .plant-board__scroll {
   overflow-x: auto;

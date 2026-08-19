@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 import type { Project, ProjectStatus } from '@muebles/domain';
-import { formatMoneyDisplay, EmptyState } from '../common';
+import { formatMoneyDisplay, EmptyState, PageHeader, PageToolbar } from '../common';
 import {
   formatIsoDate,
   projectStatusLabel,
@@ -755,39 +755,44 @@ export function SalesDashboard({
 
   return (
     <section className="sales-dashboard" aria-label="Dashboard de Ventas">
-      {/* Header */}
-      <header className="sales-dashboard__header">
-        <div>
-          <h2 className="sales-dashboard__title">
-            Dashboard de Ventas
+      <PageHeader
+        title="Dashboard de Ventas"
+        subtitle={
+          <>
+            {isVendedor
+              ? 'Tus estadísticas y proyectos del mes.'
+              : 'Pipeline comercial y estadísticas del equipo.'}
             {selectedVendedorName ? (
               <span className="sales-dashboard__filter-badge">
                 — {selectedVendedorName}
               </span>
             ) : null}
-          </h2>
-          <p className="sales-dashboard__subtitle">
-            {isVendedor
-              ? 'Tus estadísticas y proyectos del mes.'
-              : 'Pipeline comercial y estadísticas del equipo.'}
-          </p>
-        </div>
-        {totalValue > 0 ? (
-          <div className="sales-dashboard__total">
-            <span className="sales-dashboard__total-label">Pipeline total</span>
-            <span className="sales-dashboard__total-value">
-              {formatMoneyDisplay(totalValue)}
-            </span>
-          </div>
-        ) : null}
-      </header>
+          </>
+        }
+        icon={<TrendingUp size={16} strokeWidth={1.5} />}
+        contextualControls={
+          totalValue > 0 ? (
+            <div className="sales-dashboard__total">
+              <span className="sales-dashboard__total-label">Pipeline total</span>
+              <span className="sales-dashboard__total-value">
+                {formatMoneyDisplay(totalValue)}
+              </span>
+            </div>
+          ) : undefined
+        }
+      />
 
       {/* Vendedor filter (gerente_ventas/admin only) */}
       {!isVendedor && vendedores.length > 0 ? (
-        <VendedorFilter
-          vendedores={vendedores}
-          selectedId={selectedVendedor}
-          onChange={setSelectedVendedor}
+        <PageToolbar
+          ariaLabel="Filtrar dashboard de ventas"
+          filters={
+            <VendedorFilter
+              vendedores={vendedores}
+              selectedId={selectedVendedor}
+              onChange={setSelectedVendedor}
+            />
+          }
         />
       ) : null}
 

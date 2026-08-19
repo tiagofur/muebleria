@@ -5,6 +5,8 @@ import {
 	EmptyState,
 	formatEmpty,
 	Modal,
+	PageHeader,
+	PageToolbar,
 	SearchInput,
 	StatusChips,
 	useDebouncedValue,
@@ -215,31 +217,31 @@ export function CustomersScreen({
 
 	return (
 		<section className="catalog-page" aria-label="Clientes">
-			<div className="catalog-page__header">
-				<div>
-					<h2 className="catalog-page__title">Clientes</h2>
-					<p className="page-header__subtitle">
-						Personas y talleres a los que cotizás
-					</p>
-				</div>
-				<div className="catalog-page__toolbar">
+			<PageHeader
+				title="Clientes"
+				subtitle="Personas y talleres a los que cotizás"
+				icon={<Users size={16} strokeWidth={1.5} />}
+				primaryAction={
 					<button type="button" className="btn btn--primary" onClick={startCreate}>
 						<Plus size={16} strokeWidth={1.5} aria-hidden />
 						Nuevo cliente
 					</button>
-				</div>
-			</div>
+				}
+			/>
 
 			{!isTrulyEmpty ? (
-				<div className="catalog-page__filters">
-					<SearchInput
-						value={search}
-						onChange={setSearch}
-						placeholder="Buscar clientes…"
-						aria-label="Buscar clientes"
-					/>
-					<StatusChips value={status} onChange={setStatus} />
-				</div>
+				<PageToolbar
+					ariaLabel="Buscar y filtrar clientes"
+					search={
+						<SearchInput
+							value={search}
+							onChange={setSearch}
+							placeholder="Buscar clientes…"
+							aria-label="Buscar clientes"
+						/>
+					}
+					filters={<StatusChips value={status} onChange={setStatus} />}
+				/>
 			) : null}
 
 			<div className="catalog-layout">

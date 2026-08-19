@@ -13,7 +13,7 @@ import {
 } from '@muebles/domain';
 import { Package, Search, ShoppingCart } from 'lucide-react';
 import { CatalogImage } from '../common/CatalogImage';
-import { EmptyState, Modal, SearchInput, useDebouncedValue } from '../common';
+import { EmptyState, Modal, PageHeader, PageToolbar, SearchInput, useDebouncedValue } from '../common';
 import { matchesCodeOrName } from '../catalogs/catalogHelpers';
 import './moduleShowcase.css';
 
@@ -103,32 +103,23 @@ export function ModuleShowcase({
   }
 
   return (
-    <section className="module-showcase" aria-label="Vitrina de muebles">
-      <header className="module-showcase__header page-header">
-        <div className="module-showcase__header-text">
-          <h2 className="module-showcase__title">Vitrina de muebles</h2>
-          <p className="module-showcase__lead">
-            Catálogo visual para cotizar. Elegí por foto; las medidas son de
-            referencia y el despiece lo arma ingeniería.
-          </p>
-        </div>
-        <div className="page-header__actions module-showcase__search">
+    <section className="module-showcase" aria-label="Catálogo de módulos de la vitrina">
+      {/* Tab content of ShowcaseScreen: page title lives at screen level (§4.1a). */}
+      <PageToolbar
+        ariaLabel="Buscar y filtrar catálogo de módulos"
+        search={
           <SearchInput
             value={query}
             onChange={setQuery}
             placeholder="Buscar mueble…"
             aria-label="Buscar en vitrina"
           />
-        </div>
-      </header>
-
-      {showCategoryFilter ? (
-        <div
-          className="module-showcase__filters"
-          role="toolbar"
-          aria-label="Filtrar por categoría"
-          data-testid="showcase-category-filters"
-        >
+        }
+        filters={showCategoryFilter ? (
+          <div
+            className="module-showcase__filters"
+            data-testid="showcase-category-filters"
+          >
           <button
             type="button"
             className={
@@ -182,8 +173,9 @@ export function ModuleShowcase({
               </span>
             </button>
           )}
-        </div>
-      ) : null}
+          </div>
+        ) : undefined}
+      />
 
       {modules.length === 0 ? (
         <EmptyState

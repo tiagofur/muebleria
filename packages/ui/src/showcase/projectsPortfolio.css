@@ -9,17 +9,11 @@
 }
 
 /* .portfolio-header / __title / subtitle are aliases of .page-header
-   (common/pageHeader.css). */
+   (common/pageHeader.css). Title retired at screen level (F105); the header
+   row keeps only tab-context controls. */
 
-.portfolio-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.portfolio-title__icon {
-  color: var(--warning-500);
-  flex: 0 0 auto;
+.portfolio-header--context {
+  justify-content: flex-end;
 }
 
 .portfolio-star {

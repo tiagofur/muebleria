@@ -36,7 +36,9 @@ const living: Module = {
 describe('ModuleShowcase (F040 / F043 redesign)', () => {
   it('renders photo-first cards: name dominant, image or placeholder', () => {
     render(<ModuleShowcase modules={[sample, living]} />);
-    expect(screen.getByText('Vitrina de muebles')).toBeTruthy();
+    // F105: page title lives in ShowcaseScreen; tab content has no page-header.
+    expect(screen.queryByTestId('page-header')).toBeNull();
+    expect(screen.getByRole('searchbox')).toBeTruthy();
     expect(screen.getByTestId('showcase-card-m1')).toBeTruthy();
     expect(screen.getByTestId('catalog-image')).toBeTruthy();
     expect(screen.getByTestId('catalog-image-placeholder')).toBeTruthy();
