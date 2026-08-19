@@ -155,7 +155,7 @@ La paleta usa HSL para permitir variaciones programáticas y preparar dark mode.
 ```css
 --text-primary:   hsl(230 18% 12%);
 --text-secondary: hsl(230 12% 40%);
---text-muted:     hsl(230 10% 58%);
+--text-muted:     hsl(230 12% 46%); /* F108: >=4.5:1 en surfaces claras */
 --text-disabled:  hsl(230 10% 74%);
 --text-inverse:   hsl(0   0%  100%);
 --text-brand:     var(--brand-600);
@@ -170,7 +170,7 @@ La paleta usa HSL para permitir variaciones programáticas y preparar dark mode.
 
 --warning-50:  hsl(38 100% 96%);
 --warning-500: hsl(38  92% 50%);
---warning-700: hsl(38  80% 38%);
+--warning-700: hsl(38  80% 32%); /* F108: 4.92:1 sobre warning-50 */
 
 --danger-50:  hsl(0 80% 97%);
 --danger-500: hsl(0 72% 51%);
@@ -749,6 +749,17 @@ La a11y no es una pasada final: es parte del sistema (§2.1, dominio Google).
 **Contraste:**
 - Texto body ≥ 4.5:1 · texto large (≥18px o bold ≥14px) y componentes UI ≥ 3:1 · placeholder ≥ 4.5:1 (mismo estándar que el texto — gris lavado prohibido).
 - Verificar `--text-muted` sobre CADA superficie donde se use; si no pasa, subir a `--text-secondary`.
+
+**Valores medidos (F108, sRGB — regression-tested en
+`packages/ui/src/design-system/textContrast.test.ts`):**
+
+| Par | Ratio |
+|-----|-------|
+| `--text-muted` sobre blanco / surface-app / card / hover / input / selected | 5.18 / 4.83 / 5.18 / 4.61 / 4.95 / 4.59 |
+| `--text-secondary` sobre las mismas surfaces | ≥5.69 |
+| `--warning-700` sobre `--warning-50` / blanco | 4.92 / 5.21 |
+| `--success-700`/`--danger-700`/`--info-700`/`--brand-700` sobre su `-50` | ≥5.81 |
+| Placeholder de login (blanco 60% sobre card brand-800) | 5.77 |
 
 **Teclado — mapa completo del producto:**
 

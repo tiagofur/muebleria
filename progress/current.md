@@ -1,10 +1,10 @@
 # Sesión activa
 
-> **Sin sesión activa.** F107 — area_tonal_calibration fue aprobada, cerrada
-> y publicada; ver `progress/history.md`.
+> **Sin sesión activa.** F108 — text_contrast_aa fue aprobada, cerrada y
+> publicada; ver `progress/history.md`.
 >
-> **Siguiente del programa:** F108 — Contraste AA medido (o F109–F111 según
-> `feature_list.json`; independientes entre sí).
+> **Siguiente del programa:** F109 — Semantic Tabs Rollout (o F110/F111 según
+> `feature_list.json`).
 >
 > Notas del working tree: `packages/domain/src/processStage.{ts,test.ts}`
 > modificados son WIP ajeno del dueño; no modificar, commitear ni mezclar sin

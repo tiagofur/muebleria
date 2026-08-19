@@ -167,7 +167,8 @@
 }
 
 .login-field__input::placeholder {
-  color: color-mix(in srgb, var(--text-inverse) 40%, transparent);
+  /* F108: 60% blanco sobre card brand-800 da >=5.7:1 (AA para placeholder) */
+  color: color-mix(in srgb, var(--text-inverse) 60%, transparent);
 }
 
 .login-field__input:focus-visible {

@@ -2202,7 +2202,7 @@
         "packages/ui/src/common/searchInput.css",
         "packages/ui/src/auth/login.css"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "ui",
         "accessibility",

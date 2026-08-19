@@ -438,3 +438,19 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   §3.2.1 con nueva guía "Intensidad calibrada".
 - Verificación: UI tests completos, typecheck, ./init.sh verde. Icon-chip
   coverage cubierta por tests de rollout F104–F106.
+
+## F108 — Contraste AA medido (2026-08-19)
+
+- Aprobada en `progress/review_F108.md`.
+- `--text-muted` → hsl(230 12% 46%): >=4.59:1 en blanco, surface-app, card,
+  hover, input y selected (antes 4.10/3.82); placeholder del search hereda el
+  fix. `--warning-700` → hsl(38 80% 32%): 4.92:1 sobre warning-50 y 5.21:1
+  sobre blanco (antes 3.68). Placeholder de login: blanco 60% (5.77:1 sobre
+  card brand-800, peor caso; antes ~3.1–3.7).
+- Nuevo `design-system/textContrast.test.ts` (25 tests): pares texto×surface,
+  pares de badge semántico, guard de alpha de login. Los badges (-xs 12px
+  semibold) no califican como large text → se exige 4.5:1.
+- docs/design.md §3.2 valores y §4.8 tabla de valores medidos actualizados.
+- Verificación: tests completos, typecheck, ./init.sh verde. Nota: uso de
+  `--warning-800` sin token en productionManagerDashboard.css queda como
+  deuda de vocabularios (F111).
