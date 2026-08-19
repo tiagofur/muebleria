@@ -77,7 +77,7 @@ describe('AppShell nav model (F017)', () => {
       'installations',
     ]);
     expect(produccion.items.map((i) => i.label)).toEqual([
-      'Dashboard',
+      'Dashboard Producción',
       'Órdenes',
       'Producción',
       'Instalaciones',
@@ -91,15 +91,25 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     expect(ingenieria.items.map((i) => i.id)).toEqual([
+      'engineeringDashboard',
       'engineering',
     ]);
     expect(ingenieria.items.map((i) => i.label)).toEqual([
+      'Dashboard Ingeniería',
       'Ingeniería',
     ]);
 
     const almacen = APP_NAV_SECTIONS.find((s) => s.id === 'almacen')!;
-    expect(almacen.items.map((i) => i.id)).toEqual(['warehouse', 'shipments']);
-    expect(almacen.items.map((i) => i.label)).toEqual(['Almacén', 'Embarques']);
+    expect(almacen.items.map((i) => i.id)).toEqual([
+      'warehouseDashboard',
+      'warehouse',
+      'shipments',
+    ]);
+    expect(almacen.items.map((i) => i.label)).toEqual([
+      'Dashboard Almacén',
+      'Almacén',
+      'Embarques',
+    ]);
 
     expect(libreria.items.map((i) => i.id)).toEqual([
       'modules',
@@ -214,6 +224,20 @@ describe('AppShell source structure (F017)', () => {
     expect(tsx).not.toContain('🪑');
   });
 
+  it('auto-scrolls the active sidebar item into view on navigation', () => {
+    const tsx = read('AppShell.tsx');
+    expect(tsx).toContain('scrollIntoView');
+    expect(tsx).toContain('[aria-current="page"]');
+    expect(tsx).toContain('typeof active.scrollIntoView');
+  });
+
+  it('persists sidebar scroll position across navigations', () => {
+    const tsx = read('AppShell.tsx');
+    expect(tsx).toContain('savedScrollRef');
+    expect(tsx).toContain('nav.scrollTop = saved');
+    expect(tsx).toContain('savedScrollRef.current = nav.scrollTop');
+  });
+
   it('active item uses is-active and Lucide strokeWidth 1.5', () => {
     const tsx = read('AppShell.tsx');
     expect(tsx).toContain('is-active');
@@ -242,7 +266,7 @@ describe('AppShell CSS (F017)', () => {
     expect(css).toContain('var(--brand-400)');
     expect(css).toContain('var(--text-inverse)');
     expect(css).toContain('var(--shadow-sm)');
-    expect(css).toMatch(/width:\s*240px/);
+    expect(css).toMatch(/width:\s*260px/);
     expect(css).toMatch(/height:\s*56px/);
     expect(css).toContain('.app-sidebar__item.is-active');
     expect(css).toContain('border-left-color: var(--brand-400)');
@@ -270,6 +294,14 @@ describe('AppShell CSS (F017)', () => {
     expect(css).not.toContain('#1a73e8');
     expect(css).not.toContain('#f0f2f5');
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+  });
+
+  it('styles the sidebar scrollbar thin and dark to match the sidebar theme', () => {
+    const css = read('appShell.css');
+    expect(css).toContain('scrollbar-width: thin');
+    expect(css).toContain('scrollbar-color:');
+    expect(css).toContain('::-webkit-scrollbar');
+    expect(css).toContain('::-webkit-scrollbar-thumb');
   });
 });
 

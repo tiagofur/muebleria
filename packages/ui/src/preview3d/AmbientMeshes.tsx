@@ -32,10 +32,10 @@ import type { FurnitureSceneWall } from './FurnitureScene3D';
 // Constants — verified against FurnitureScene3D.tsx (design #4151).
 // ---------------------------------------------------------------------------
 
-/** Default floor color when no ambient material — white, consistent with walls/ceiling. */
-export const FLOOR_DEFAULT_COLOR = '#ffffff';
-/** Default wall color when no ambient material — white, consistent with floor/ceiling. */
-export const WALL_DEFAULT_COLOR = '#ffffff';
+/** Default floor color when no ambient material — neutral warm gray (avoids light bounce from pure white). */
+export const FLOOR_DEFAULT_COLOR = '#f0eeeb';
+/** Default wall color when no ambient material — neutral warm gray (avoids light bounce from pure white). */
+export const WALL_DEFAULT_COLOR = '#f0eeeb';
 /** Clean white ceiling paint when no ambient material assigned. */
 export const CEILING_DEFAULT_COLOR = '#ffffff';
 /** Paint drag hover overlay (F067). Green signals "drop here to apply". */

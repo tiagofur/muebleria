@@ -5,7 +5,9 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -18,6 +20,7 @@ import {
   Layers,
   LayoutGrid,
   Boxes,
+  Compass,
   Hammer,
   ListChecks,
   LogOut,
@@ -63,7 +66,9 @@ export type AppNavId =
   | 'installations'
   | 'orders'
   | 'productionDashboard'
+  | 'engineeringDashboard'
   | 'engineering'
+  | 'warehouseDashboard'
   | 'warehouse'
   | 'salesDashboard'
   | 'modules'
@@ -190,7 +195,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
        * Dashboard Ventas — pipeline + summary for sales roles.
        * vendedor sees own portfolio; gerente_ventas and admin see all.
        */
-      { id: 'salesDashboard', label: 'Dashboard', icon: TrendingUp },
+      { id: 'salesDashboard', label: 'Dashboard Ventas', icon: TrendingUp },
       { id: 'quotes', label: 'Cotizaciones', icon: FileText },
       { id: 'customers', label: 'Clientes', icon: Users },
       /** Commercial catalog — not engineering ABM. */
@@ -209,7 +214,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       /**
        * Production Manager Dashboard: full visibility for gerente_produccion.
        */
-      { id: 'productionDashboard', label: 'Dashboard', icon: BarChart3 },
+      { id: 'productionDashboard', label: 'Dashboard Producción', icon: BarChart3 },
       /**
        * Órdenes — per-project production workspace queue (the old
        * "Producción" hub). TEMPORARY: slated for removal once its remaining
@@ -234,6 +239,10 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     label: 'INGENIERÍA',
     items: [
       /**
+       * Dashboard Ingeniería — analytics, cycle times & workload for technical leadership.
+       */
+      { id: 'engineeringDashboard', label: 'Dashboard Ingeniería', icon: Compass },
+      /**
        * Ingeniería — documentation workspace for engineers.
        * Landing page with project list + engineering status.
        */
@@ -244,6 +253,10 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     id: 'almacen',
     label: 'COMPRAS / ALMACÉN',
     items: [
+      /**
+       * Dashboard Almacén — analytics, material demand, stock health & POs.
+       */
+      { id: 'warehouseDashboard', label: 'Dashboard Almacén', icon: Compass },
       /**
        * Compras / Almacén (Fase 3) — picking lists per active project.
        * admin full, gerente_produccion read-only, almacen own sectors;
@@ -406,10 +419,49 @@ export function AppShell({
 }: AppShellProps): ReactNode {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const savedScrollRef = useRef<number | null>(null);
   const navSections = resolveNavSections({
     showAdminUsers,
     allowedNavIds,
   });
+
+  // Persist sidebar scroll position across navigations: save on unmount,
+  // restore on re-mount so the user never loses their scroll place.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return undefined;
+    return () => {
+      savedScrollRef.current = nav.scrollTop;
+    };
+  }, []);
+
+  // Restore saved position first; auto-scroll the active item only when the
+  // saved position doesn't already keep it visible.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const saved = savedScrollRef.current;
+    savedScrollRef.current = null;
+    if (saved != null) {
+      nav.scrollTop = saved;
+    }
+    // Check whether the active item is already visible after restore.
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!active) return;
+    if (saved == null && typeof active.scrollIntoView === 'function') {
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      return;
+    }
+    // If we restored a position, verify the active item is in the viewport.
+    const navRect = nav.getBoundingClientRect();
+    const itemRect = active.getBoundingClientRect();
+    if (itemRect.top < navRect.top || itemRect.bottom > navRect.bottom) {
+      if (typeof active.scrollIntoView === 'function') {
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    }
+  }, [activeId]);
 
   const handleNavigate = useCallback(
     (id: AppNavId) => {
@@ -504,7 +556,7 @@ export function AppShell({
           <span className="app-sidebar__brand-text">Muebles</span>
         </div>
 
-        <nav className="app-sidebar__nav" aria-label="Secciones">
+        <nav ref={navRef} className="app-sidebar__nav" aria-label="Secciones">
           {navSections.map((section) => {
             let lastGroup: NavItemGroup | undefined;
             return (

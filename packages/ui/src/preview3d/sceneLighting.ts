@@ -7,7 +7,7 @@ export type SceneLightingMode = 'workshop' | 'soft' | 'present' | 'catalog';
 export const DEFAULT_SCENE_LIGHTING_MODE: SceneLightingMode = 'present';
 
 /** Light studio backdrop for catalog product stills (not workshop charcoal). */
-export const CATALOG_PHOTO_BACKGROUND = '#eef1f4';
+export const CATALOG_PHOTO_BACKGROUND = '#dfe3e8';
 
 export type SceneLightPlan = {
   readonly ambient: number;
@@ -88,30 +88,31 @@ export function planSceneLighting(
         background: '#1a1c1e',
       };
     case 'catalog':
-      // Product still: light studio, no contact/floor shadow band.
+      // Product still: calibrated studio — enough fill to show detail,
+      // but restrained so colors stay saturated and contrast is preserved.
       // No spot (spot always cast shadows on the canvas), key without castShadow.
       return {
-        ambient: 0.72,
-        hemiSky: '#ffffff',
+        ambient: 0.28,
+        hemiSky: '#f0f2f4',
         hemiGround: CATALOG_PHOTO_BACKGROUND,
-        hemiIntensity: 0.42,
+        hemiIntensity: 0.20,
         key: {
           pos: [d * 0.9, d * 1.5, d * 0.55],
-          intensity: 0.95,
+          intensity: 0.75,
           castShadow: false,
         },
         fill: {
           pos: [-d * 0.9, d * 0.8, d * 0.3],
-          intensity: 0.55,
-          color: '#f0f4fa',
+          intensity: 0.30,
+          color: '#e0e4ec',
         },
         rim: {
           pos: [0, d * 0.6, -d * 1.0],
-          intensity: 0.3,
+          intensity: 0.25,
           color: '#fff8ee',
         },
         useEnvironment: true,
-        environmentIntensity: 0.42,
+        environmentIntensity: 0.20,
         background: CATALOG_PHOTO_BACKGROUND,
       };
     case 'present':
@@ -143,7 +144,7 @@ export function planSceneLighting(
           penumbra: 0.65,
         },
         useEnvironment: true,
-        environmentIntensity: 0.22,
+        environmentIntensity: 0.16,
         background: '#141618',
       };
   }
@@ -196,7 +197,7 @@ export function boardPhysicalResponse(params: {
       metalness: 0.04,
       clearcoat: present ? 0.28 : 0.15,
       clearcoatRoughness: 0.28,
-      envMapIntensity: present ? 0.48 : 0.25,
+      envMapIntensity: present ? 0.22 : 0.15,
     };
   }
 

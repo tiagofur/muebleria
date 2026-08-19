@@ -205,14 +205,14 @@ describe('resolveFloorColor', () => {
     expect(resolveFloorColor(floorMat)).toBe('#eeeeee');
   });
 
-  it('falls back to white (#ffffff) when no material (consistent with walls/ceiling)', () => {
-    expect(resolveFloorColor(undefined)).toBe('#ffffff');
+  it('falls back to neutral gray when no material (avoids light bounce from pure white)', () => {
+    expect(resolveFloorColor(undefined)).toBe('#f0eeeb');
   });
 
-  it('falls back to white when material has no previewColor', () => {
+  it('falls back to neutral gray when material has no previewColor', () => {
     expect(
       resolveFloorColor({ ...floorMat, previewColor: undefined }),
-    ).toBe('#ffffff');
+    ).toBe('#f0eeeb');
   });
 });
 
@@ -221,8 +221,8 @@ describe('resolveWallColor', () => {
     expect(resolveWallColor(wallMat)).toBe('#d8d2c8');
   });
 
-  it('falls back to white (#ffffff) when no material (consistent with floor/ceiling)', () => {
-    expect(resolveWallColor(undefined)).toBe('#ffffff');
+  it('falls back to neutral gray when no material (avoids light bounce from pure white)', () => {
+    expect(resolveWallColor(undefined)).toBe('#f0eeeb');
   });
 });
 
@@ -240,6 +240,7 @@ describe('resolveFloorPhysical', () => {
     expect(phys.roughness).toBeCloseTo(0.44, 5);
     expect(phys.metalness).toBeCloseTo(0.04, 5);
     expect(phys.clearcoat).toBeCloseTo(0.28, 5);
+    expect(phys.envMapIntensity).toBeCloseTo(0.22, 5);
   });
 
   it('uses partial overrides and falls back for the rest', () => {

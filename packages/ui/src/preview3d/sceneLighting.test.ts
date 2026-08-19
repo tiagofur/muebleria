@@ -59,7 +59,7 @@ describe('sceneLighting', () => {
       hasGrain: false,
       lightingMode: 'present',
     });
-    expect(tex.envMapIntensity).toBeGreaterThan(0.3);
+    expect(tex.envMapIntensity).toBeGreaterThan(0.2);
 
     const catalog = boardPhysicalResponse({
       hasMap: true,
