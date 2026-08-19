@@ -150,6 +150,7 @@ export function ModuleListView({
     <>
       <PageHeader
         title="Muebles"
+        subtitle="Plantillas de muebles reutilizables para cotizar y fabricar"
         icon={<Package size={16} strokeWidth={1.5} />}
         secondaryActions={
           canMutate && onCreateCategory ? (
