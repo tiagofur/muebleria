@@ -4,15 +4,13 @@
  */
 
 import {
-  useCallback,
-  useRef,
   type Dispatch,
   type FormEvent,
-  type KeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
 import type { Agregado, Component, DimensionPreset } from '@muebles/domain';
+import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import {
   STRUCTURE_EDITOR_TABS,
   type StructureDraft,
@@ -73,38 +71,26 @@ export function StructureEditorForm({
   onRemovePreset,
   onUpdatePreset,
 }: StructureEditorFormProps): ReactNode {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const componentsEmpty = draft.components.length === 0;
 
-  const focusTab = useCallback(
-    (index: number) => {
-      const tab = STRUCTURE_EDITOR_TABS[index];
-      if (!tab) return;
-      setEditorTab(tab.id);
-      tabRefs.current[index]?.focus();
-    },
-    [setEditorTab],
-  );
-
-  const onTabListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const n = STRUCTURE_EDITOR_TABS.length;
-    const current = STRUCTURE_EDITOR_TABS.findIndex((t) => t.id === editorTab);
-    if (current < 0) return;
-
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      focusTab((current + 1) % n);
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      focusTab((current - 1 + n) % n);
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      focusTab(0);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      focusTab(n - 1);
-    }
+  const counts: Partial<Record<StructureEditorTab, number>> = {
+    components: draft.components?.length ?? 0,
+    agregados: draft.agregados?.length ?? 0,
+    presets: draft.presets?.length ?? 0,
   };
+
+  const tabDefs: readonly TabDefinition<StructureEditorTab>[] =
+    STRUCTURE_EDITOR_TABS.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      count: counts[tab.id] || undefined,
+      alert:
+        tab.id === 'components' && componentsEmpty ? true : undefined,
+      title:
+        tab.id === 'components' && componentsEmpty
+          ? 'Agregá al menos un componente'
+          : undefined,
+    }));
 
   return (
     <form
@@ -119,62 +105,14 @@ export function StructureEditorForm({
         </p>
       ) : null}
 
-      <div
-        className="structure-editor__tabs"
-        role="tablist"
-        aria-label="Secciones del editor de estructura"
-        data-testid="structure-editor-tabs"
-        onKeyDown={onTabListKeyDown}
-      >
-        {STRUCTURE_EDITOR_TABS.map((tab, index) => {
-          const selected = editorTab === tab.id;
-          const showEmptyBadge = tab.id === 'components' && componentsEmpty;
-          const presLen = draft.presets?.length ?? 0;
-          const compLen = draft.components?.length ?? 0;
-          const agrLen = draft.agregados?.length ?? 0;
-          const countLabel =
-            tab.id === 'presets' && presLen > 0
-              ? ` (${presLen})`
-              : tab.id === 'components' && compLen > 0
-                ? ` (${compLen})`
-                : tab.id === 'agregados' && agrLen > 0
-                  ? ` (${agrLen})`
-                  : '';
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              ref={(el) => {
-                tabRefs.current[index] = el;
-              }}
-              id={`structure-editor-tab-${tab.id}`}
-              aria-selected={selected}
-              aria-controls={`structure-editor-panel-${tab.id}`}
-              tabIndex={selected ? 0 : -1}
-              className={
-                selected
-                  ? 'structure-editor__tab structure-editor__tab--active'
-                  : 'structure-editor__tab'
-              }
-              data-testid={`structure-editor-tab-${tab.id}`}
-              onClick={() => setEditorTab(tab.id)}
-            >
-              {tab.label}
-              {countLabel}
-              {showEmptyBadge ? (
-                <span
-                  className="structure-editor__tab-badge"
-                  data-testid="structure-editor-components-badge"
-                  title="Agregá al menos un componente"
-                >
-                  !
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <WorkspaceTabs
+        tabs={tabDefs}
+        activeTab={editorTab}
+        onTabChange={setEditorTab}
+        ariaLabel="Secciones del editor de estructura"
+        idPrefix="structure-editor"
+        testIdPrefix="structure-editor"
+      />
 
       <StructureEditorGeneralPanel
         formId={formId}

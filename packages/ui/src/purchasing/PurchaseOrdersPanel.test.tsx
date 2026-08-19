@@ -157,6 +157,26 @@ describe('PurchaseOrdersPanel (Fase 3c)', () => {
     );
   });
 
+  it('sub-tabs follow the shared tablist contract (roles, aria-controls, arrows)', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const tablist = screen.getByRole('tablist', { name: 'Compras y proveedores' });
+    const ordenes = within(tablist).getByTestId('purch-po-tab-ordenes');
+    const proveedores = within(tablist).getByTestId('purch-po-tab-proveedores');
+    expect(ordenes.getAttribute('aria-controls')).toBe('purch-po-panel-ordenes');
+    expect(proveedores.getAttribute('aria-controls')).toBe('purch-po-panel-proveedores');
+    const panel = document.getElementById('purch-po-panel-ordenes')!;
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe('purch-po-tab-ordenes');
+
+    // Roving tabindex: ArrowRight focuses (and selects) the next tab.
+    ordenes.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(proveedores);
+    expect(proveedores.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('read-only mode hides write actions (gerente_produccion)', () => {
     renderPanel({ canEdit: false });
     expect(screen.queryByTestId('purch-po-receive-po1')).toBeNull();

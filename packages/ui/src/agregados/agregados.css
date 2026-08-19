@@ -107,21 +107,6 @@
   gap: var(--space-3);
 }
 
-.agregado-editor__tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 var(--space-1);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-500) 15%, transparent);
-  color: var(--brand-600);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  margin-left: var(--space-1);
-}
-
 .agregado-editor__empty-slot {
   display: flex;
   align-items: center;

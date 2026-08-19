@@ -5,6 +5,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { ProductionCutRow } from '@muebles/domain';
 import { summarizeProductionTotals } from '@muebles/domain';
+import { WorkflowTabs } from '../common/Tabs';
 
 export type ProductionOrderDespiecePanelProps = {
   readonly cutRows: readonly ProductionCutRow[] | null;
@@ -190,29 +191,18 @@ export function ProductionOrderDespiecePanel({
             data-testid="prod-despiece-search"
           />
         </label>
-        <div className="prod-despiece__group" role="group" aria-label="Agrupar por">
-          {(
-            [
-              ['material', 'Material'],
-              ['module', 'Módulo'],
-              ['none', 'Lista'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={
-                groupBy === id
-                  ? 'tab-btn tab-btn--active'
-                  : 'tab-btn'
-              }
-              onClick={() => setGroupBy(id)}
-              data-testid={`prod-despiece-group-${id}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <WorkflowTabs
+          tabs={[
+            { id: 'material', label: 'Material' },
+            { id: 'module', label: 'Módulo' },
+            { id: 'none', label: 'Lista' },
+          ]}
+          activeTab={groupBy}
+          onTabChange={setGroupBy}
+          ariaLabel="Agrupar por"
+          idPrefix="prod-despiece"
+          testIdPrefix="prod-despiece"
+        />
         <label className="prod-labels__check prod-despiece__fronts-check">
           <input
             type="checkbox"
@@ -240,7 +230,12 @@ export function ProductionOrderDespiecePanel({
         ) : null}
       </div>
 
-      {groups.map((g) => (
+      <div
+        role="tabpanel"
+        id={`prod-despiece-panel-${groupBy}`}
+        aria-labelledby={`prod-despiece-tab-${groupBy}`}
+      >
+        {groups.map((g) => (
         <section key={g.key} className="prod-despiece__group-block">
           {groupBy !== 'none' ? (
             <h3 className="prod-hub__section-title">
@@ -305,7 +300,8 @@ export function ProductionOrderDespiecePanel({
             </table>
           </div>
         </section>
-      ))}
+        ))}
+      </div>
 
       <p className="prod-modulos__footnote">
         Solo lectura. Misma población de piezas que el Optimizer (sin herrajes).

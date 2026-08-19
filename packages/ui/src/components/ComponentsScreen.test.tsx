@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ComponentsScreen } from './ComponentsScreen';
 import type { Component, OptionGroup } from '@muebles/domain';
 
@@ -513,7 +514,11 @@ describe('ComponentsScreen', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
-    expect(screen.getByTestId('component-editor-options-badge')).toBeTruthy();
+    expect(
+      screen
+        .getByTestId('component-editor-tab-options')
+        .querySelector('.tabs__alert'),
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('input-code'), {
       target: { value: 'COM-X' },
@@ -536,6 +541,50 @@ describe('ComponentsScreen', () => {
     expect(screen.getByTestId('component-editor-panel-options').hidden).toBe(
       false,
     );
+  });
+
+  it('F109: component editor uses WorkspaceTabs (tablist contract + roving arrows)', async () => {
+    const user = userEvent.setup();
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
+
+    const tablist = screen.getByTestId('component-editor-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+
+    const general = screen.getByTestId('component-editor-tab-general');
+    expect(general.getAttribute('role')).toBe('tab');
+    expect(general.getAttribute('aria-controls')).toBe(
+      'component-editor-panel-general',
+    );
+    const panel = screen.getByTestId('component-editor-panel-general');
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      'component-editor-tab-general',
+    );
+
+    // Missing option roles → "!" alert with tooltip on Opciones.
+    const options = screen.getByTestId('component-editor-tab-options');
+    expect(options.querySelector('.tabs__alert')).toBeTruthy();
+    expect(options.getAttribute('title')).toBe(
+      'Falta al menos un rol de opción',
+    );
+
+    // Arrow-key roving: selection + focus move together.
+    general.focus();
+    await user.keyboard('{ArrowRight}');
+    const geometry = screen.getByTestId('component-editor-tab-geometry');
+    expect(geometry.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(geometry);
   });
 
   it('critique: apply placement size convention when formulas empty', () => {

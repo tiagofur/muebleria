@@ -196,6 +196,35 @@ describe('AgregadoEditorForm — General tab', () => {
     );
   });
 
+  it('F109: uses WorkspaceTabs (tablist contract + roving arrows)', () => {
+    const setEditorTab = vi.fn() as Dispatch<
+      SetStateAction<AgregadoEditorTab>
+    >;
+    renderForm({ editorTab: 'general', onSetEditorTab: setEditorTab });
+
+    const tablist = screen.getByTestId('agregado-editor-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+
+    const general = screen.getByTestId('agregado-editor-tab-general');
+    expect(general.getAttribute('role')).toBe('tab');
+    expect(general.getAttribute('aria-controls')).toBe(
+      'agregado-editor-panel-general',
+    );
+    const panel = screen.getByTestId('agregado-tab-general');
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      'agregado-editor-tab-general',
+    );
+
+    // Roving tabindex + arrow navigation (selection follows focus).
+    expect(general.getAttribute('tabindex')).toBe('0');
+    const components = screen.getByTestId('agregado-editor-tab-components');
+    expect(components.getAttribute('tabindex')).toBe('-1');
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(setEditorTab).toHaveBeenCalledWith('components');
+    expect(document.activeElement).toBe(components);
+  });
+
   it('reflects combined bulk and positioned hardware in the Herrajes tab badge and general summary', () => {
     const draft = doorDraft();
     draft.hardwareLines = [{ id: 'hl-1', quantity: 1, optionRole: 'BISAGRA' }];

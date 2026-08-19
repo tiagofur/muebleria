@@ -13,6 +13,7 @@ import {
   LayoutGrid,
 } from 'lucide-react';
 import { EmptyState, InlineLoading } from '../common';
+import { WorkspaceTabs } from '../common/Tabs';
 import { ProductionBoardView } from './ProductionBoardView';
 import { ProjectFloorStageChip } from './ProjectFloorProgressStrip';
 import {
@@ -141,44 +142,32 @@ export function ProductionQueue({
         </div>
       </header>
 
-      <div
-        className="prod-queue__tabs"
-        role="tablist"
-        aria-label="Estado de la cola"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'accepted'}
-          className={
-            tab === 'accepted'
-              ? 'prod-queue__tab prod-queue__tab--active'
-              : 'prod-queue__tab'
-          }
-          onClick={() => setTab('accepted')}
-          data-testid="prod-tab-accepted"
-        >
-          <ClipboardList size={16} strokeWidth={1.5} aria-hidden />
-          Para fabricar
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'produced'}
-          className={
-            tab === 'produced'
-              ? 'prod-queue__tab prod-queue__tab--active'
-              : 'prod-queue__tab'
-          }
-          onClick={() => setTab('produced')}
-          data-testid="prod-tab-produced"
-        >
-          <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
-          Ya en producción
-        </button>
-      </div>
+      <WorkspaceTabs
+        tabs={[
+          {
+            id: 'accepted',
+            label: 'Para fabricar',
+            icon: <ClipboardList size={16} strokeWidth={1.5} aria-hidden />,
+          },
+          {
+            id: 'produced',
+            label: 'Ya en producción',
+            icon: <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />,
+          },
+        ]}
+        activeTab={tab}
+        onTabChange={setTab}
+        ariaLabel="Estado de la cola"
+        idPrefix="prod-queue"
+        testIdPrefix="prod"
+      />
 
-      {rows.length === 0 ? (
+      <div
+        role="tabpanel"
+        id={`prod-queue-panel-${tab}`}
+        aria-labelledby={`prod-queue-tab-${tab}`}
+      >
+        {rows.length === 0 ? (
         <EmptyState
           variant="empty"
           icon={Factory}
@@ -358,7 +347,8 @@ export function ProductionQueue({
             );
           })}
         </ul>
-      )}
+        )}
+      </div>
     </section>
   );
 }

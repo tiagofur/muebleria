@@ -4,16 +4,13 @@
  */
 
 import {
-  useCallback,
-  useEffect,
-  useRef,
   type Dispatch,
   type FormEvent,
-  type KeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
 import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
+import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import type {
   MaterialColorLookup,
   MaterialTextureLookup,
@@ -68,43 +65,19 @@ export function ComponentEditorForm({
   showInContext,
   onShowInContextChange,
 }: ComponentEditorFormProps): ReactNode {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const roleCount = countOptionRoles(draft.optionRoles);
   const optionsMissing = roleCount === 0;
 
-  useEffect(() => {
-    const tabsEl = tabRefs.current[0]?.parentElement;
-    if (tabsEl && typeof tabsEl.scrollIntoView === 'function') {
-      tabsEl.scrollIntoView({ block: 'nearest', behavior: 'instant' });
-    }
-  }, [editorTab]);
-
-  const focusTab = useCallback((index: number) => {
-    const tab = COMPONENT_EDITOR_TABS[index];
-    if (!tab) return;
-    setEditorTab(tab.id);
-    tabRefs.current[index]?.focus();
-  }, [setEditorTab]);
-
-  const onTabListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const n = COMPONENT_EDITOR_TABS.length;
-    const current = COMPONENT_EDITOR_TABS.findIndex((t) => t.id === editorTab);
-    if (current < 0) return;
-
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      focusTab((current + 1) % n);
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      focusTab((current - 1 + n) % n);
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      focusTab(0);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      focusTab(n - 1);
-    }
-  };
+  const tabDefs: readonly TabDefinition<ComponentEditorTab>[] =
+    COMPONENT_EDITOR_TABS.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      alert: tab.id === 'options' && optionsMissing ? true : undefined,
+      title:
+        tab.id === 'options' && optionsMissing
+          ? 'Falta al menos un rol de opción'
+          : undefined,
+    }));
 
   return (
     <form id={formId} onSubmit={onSubmit} className="catalog-form component-editor" noValidate>
@@ -114,50 +87,14 @@ export function ComponentEditorForm({
         </p>
       ) : null}
 
-      <div
-        className="component-editor__tabs"
-        role="tablist"
-        aria-label="Secciones del editor de componente"
-        data-testid="component-editor-tabs"
-        onKeyDown={onTabListKeyDown}
-      >
-        {COMPONENT_EDITOR_TABS.map((tab, index) => {
-          const selected = editorTab === tab.id;
-          const showBadge = tab.id === 'options' && optionsMissing;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              ref={(el) => {
-                tabRefs.current[index] = el;
-              }}
-              id={`component-editor-tab-${tab.id}`}
-              aria-selected={selected}
-              aria-controls={`component-editor-panel-${tab.id}`}
-              tabIndex={selected ? 0 : -1}
-              className={
-                selected
-                  ? 'component-editor__tab component-editor__tab--active'
-                  : 'component-editor__tab'
-              }
-              data-testid={`component-editor-tab-${tab.id}`}
-              onClick={() => setEditorTab(tab.id)}
-            >
-              {tab.label}
-              {showBadge ? (
-                <span
-                  className="component-editor__tab-badge"
-                  data-testid="component-editor-options-badge"
-                  title="Falta al menos un rol de opción"
-                >
-                  !
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <WorkspaceTabs
+        tabs={tabDefs}
+        activeTab={editorTab}
+        onTabChange={setEditorTab}
+        ariaLabel="Secciones del editor de componente"
+        idPrefix="component-editor"
+        testIdPrefix="component-editor"
+      />
 
       <ComponentEditorGeneralPanel
         formId={formId}

@@ -4,13 +4,13 @@
  */
 
 import {
-  useRef,
   type Dispatch,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import type {
   Agregado,
   Component,
@@ -128,34 +128,33 @@ export function ModuleEditorForm({
     : MODULE_EDITOR_TABS;
   const structureMissing = !draft.structureId.trim();
 
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-
-  const onTabListKeyDown = (
-    event: ReactKeyboardEvent<HTMLDivElement>,
-  ): void => {
-    const n = tabs.length;
-    const current = tabs.findIndex((t) => t.id === editorTab);
-    if (current < 0) return;
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      const next = (current + 1) % n;
-      setEditorTab(tabs[next]!.id);
-      tabRefs.current[next]?.focus();
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const next = (current - 1 + n) % n;
-      setEditorTab(tabs[next]!.id);
-      tabRefs.current[next]?.focus();
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      setEditorTab(tabs[0]!.id);
-      tabRefs.current[0]?.focus();
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      setEditorTab(tabs[n - 1]!.id);
-      tabRefs.current[n - 1]?.focus();
-    }
+  const counts: Partial<Record<ModuleEditorTab, number>> = {
+    components: draft.components?.length ?? 0,
+    agregados: draft.agregados?.length ?? 0,
+    measures: draft.presets?.length ?? 0,
+    hardware: draft.hardwareLines?.length ?? 0,
   };
+
+  const tabDefs: readonly TabDefinition<ModuleEditorTab>[] = tabs.map((tab) => {
+    const requiresStructure =
+      tab.id === 'components' ||
+      tab.id === 'measures' ||
+      tab.id === 'hardware';
+    const gated = requiresStructure && structureMissing;
+    const count = counts[tab.id] ?? 0;
+    return {
+      id: tab.id,
+      label: tab.label,
+      count: count > 0 ? count : undefined,
+      disabled: gated || undefined,
+      title: gated
+        ? 'Elegí una estructura base primero'
+        : tab.id === 'structure' && structureMissing
+          ? 'Sin estructura base'
+          : undefined,
+      alert: tab.id === 'structure' && structureMissing ? true : undefined,
+    };
+  });
 
   return (
     <form
@@ -170,78 +169,14 @@ export function ModuleEditorForm({
         </p>
       ) : null}
 
-      <div
-        className="module-editor__tabs"
-        role="tablist"
-        aria-label="Secciones del editor de mueble"
-        data-testid="module-editor-tabs"
-        onKeyDown={onTabListKeyDown}
-      >
-        {tabs.map((tab, index) => {
-          const selected = editorTab === tab.id;
-          const requiresStructure =
-            tab.id === 'components' ||
-            tab.id === 'measures' ||
-            tab.id === 'hardware';
-          const gated = requiresStructure && structureMissing;
-          const compLen = draft.components?.length ?? 0;
-          const agrLen = draft.agregados?.length ?? 0;
-          const presLen = draft.presets?.length ?? 0;
-          const hwLen = draft.hardwareLines?.length ?? 0;
-          let badge = '';
-          if (tab.id === 'components' && compLen > 0) {
-            badge = ` (${compLen})`;
-          } else if (tab.id === 'agregados' && agrLen > 0) {
-            badge = ` (${agrLen})`;
-          } else if (tab.id === 'measures' && presLen > 0) {
-            badge = ` (${presLen})`;
-          } else if (tab.id === 'hardware' && hwLen > 0) {
-            badge = ` (${hwLen})`;
-          }
-          const showStructureBadge =
-            tab.id === 'structure' && structureMissing;
-          const tabId = `module-editor-tab-${tab.id}`;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              ref={(el) => {
-                tabRefs.current[index] = el;
-              }}
-              id={tabId}
-              aria-selected={selected}
-              aria-controls={`module-editor-panel-${tab.id}`}
-              tabIndex={selected ? 0 : -1}
-              className={[
-                selected
-                  ? 'module-editor__tab module-editor__tab--active'
-                  : 'module-editor__tab',
-                gated ? 'module-editor__tab--gated' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              data-testid={tabId}
-              onClick={() => setEditorTab(tab.id)}
-              title={
-                gated ? 'Elegí una estructura base primero' : undefined
-              }
-            >
-              {tab.label}
-              {badge}
-              {showStructureBadge ? (
-                <span
-                  className="module-editor__tab-badge"
-                  data-testid="module-editor-structure-badge"
-                  title="Sin estructura base"
-                >
-                  !
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <WorkspaceTabs
+        tabs={tabDefs}
+        activeTab={editorTab}
+        onTabChange={setEditorTab}
+        ariaLabel="Secciones del editor de mueble"
+        idPrefix="module-editor"
+        testIdPrefix="module-editor"
+      />
 
       <ModuleEditorGeneralPanel
         draft={draft}

@@ -212,70 +212,7 @@
    (.eng-detail / EngineeringDetailLayout). */
 
 /* —— Component editor shell (own identity, no module-editor dependency) —— */
-
-.component-editor__tabs {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin-bottom: var(--space-4);
-  padding: var(--space-1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-input);
-}
-
-.component-editor__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  white-space: nowrap;
-}
-
-.component-editor__tab:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-
-.component-editor__tab:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.component-editor__tab--active {
-  background: var(--surface-card);
-  color: var(--text-brand);
-  box-shadow: var(--shadow-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.component-editor__tab-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.1rem;
-  height: 1.1rem;
-  padding: 0 0.25rem;
-  border-radius: var(--radius-full);
-  background: var(--danger-600, #b91c1c);
-  color: var(--text-inverse);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  line-height: 1;
-}
+/* Editor tabs: shared WorkspaceTabs primitive (common/tabs.css). */
 
 .component-editor__grid {
   display: grid;

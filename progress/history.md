@@ -454,3 +454,23 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Verificación: tests completos, typecheck, ./init.sh verde. Nota: uso de
   `--warning-800` sin token en productionManagerDashboard.css queda como
   deuda de vocabularios (F111).
+
+## F109 — Semantic Tabs Rollout (2026-08-19)
+
+- Aprobada en `progress/review_F109.md`.
+- 16 superficies migradas al contrato único de common/Tabs.tsx: 4 editors +
+  ProductionQueue (peer), Despiece/Labels/Paperless (workflow ordenado),
+  purchasing completo (peer), Showcase, PresentationMode, KitchenPlanSlide,
+  SpatialStudio (3 tablists). Rationale peer-vs-workflow por superficie en la
+  review.
+- TabDefinition extendido: title/icon/alert (hacia atrás compatible);
+  `.tabs__alert` con tokens warning.
+- CSS legacy .tab-bar/.tab-btn eliminado de tabs.css (~150 líneas) +
+  selectores huérfanos podados en 7 archivos de feature. Copy-mode de labels
+  pasó a toggle aria-pressed (.prod-seg-btn), no tablist.
+- Gate test nuevo `common/tabsRollout.test.ts`: 0 role=tablist y 0 tab-btn
+  fuera del primitivo. Tests focales nuevos por superficie (contract ARIA +
+  roving).
+- Verificación: suites focales verde, ./init.sh completo, typecheck, detector
+  0 hallazgos. Deuda menor anotada: StructureEditorAgregadosPanel sin id de
+  tabpanel estático (compartido por dos editors).

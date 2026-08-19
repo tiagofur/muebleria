@@ -21,6 +21,7 @@ import {
 } from '@muebles/domain';
 import { LayoutTemplate } from 'lucide-react';
 import { EmptyState } from '../../common';
+import { WorkspaceTabs } from '../../common/Tabs';
 import {
   allFootprints,
   getCategoryTheme,
@@ -408,35 +409,21 @@ export function PresentationKitchenPlanSlide({
       data-testid="presentation-kitchen-plan"
     >
       {showLocalTabs ? (
-        <div
-          className="presentation-kitchen-plan__tabs"
-          role="tablist"
-          aria-label="Ambientes de la planta"
-          data-testid="presentation-kitchen-space-tabs"
-        >
-          {spaces.map((s) => {
-            const active = s.id === selectedSpace.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={
-                  active
-                    ? 'presentation-kitchen-plan__tab presentation-kitchen-plan__tab--active'
-                    : 'presentation-kitchen-plan__tab'
-                }
-                onClick={() => setSelectedSpaceId(s.id)}
-                data-testid={`presentation-kitchen-space-tab-${s.id}`}
-              >
-                {s.name}
-              </button>
-            );
-          })}
-        </div>
+        <WorkspaceTabs
+          tabs={spaces.map((s) => ({ id: s.id, label: s.name }))}
+          activeTab={selectedSpace.id}
+          onTabChange={setSelectedSpaceId}
+          ariaLabel="Ambientes de la planta"
+          idPrefix="presentation-kitchen-space"
+          testIdPrefix="presentation-kitchen-space"
+        />
       ) : null}
 
+      <div
+        role="tabpanel"
+        id={`presentation-kitchen-space-panel-${selectedSpace.id}`}
+        aria-labelledby={`presentation-kitchen-space-tab-${selectedSpace.id}`}
+      >
       <h3
         className="presentation-kitchen-plan__space-title"
         data-testid="presentation-kitchen-space-title"
@@ -460,6 +447,7 @@ export function PresentationKitchenPlanSlide({
         project={project}
         modules={modules}
       />
+      </div>
     </div>
   );
 }

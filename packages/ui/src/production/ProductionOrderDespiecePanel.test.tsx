@@ -97,10 +97,34 @@ describe('ProductionOrderDespiecePanel (PROD-1.3)', () => {
     const user = userEvent.setup();
     render(<ProductionOrderDespiecePanel cutRows={mockCutRows} />);
 
-    await user.click(screen.getByTestId('prod-despiece-group-module'));
+    await user.click(screen.getByTestId('prod-despiece-tab-module'));
     expect(screen.getByText('MOD-GAB-01')).toBeTruthy();
 
-    await user.click(screen.getByTestId('prod-despiece-group-none'));
+    await user.click(screen.getByTestId('prod-despiece-tab-none'));
     expect(screen.getByTestId('prod-despiece-table')).toBeTruthy();
+  });
+});
+
+describe('ProductionOrderDespiecePanel tablist contract (F109)', () => {
+  it('exposes workflow tablist with panel linkage and arrow-key roving', async () => {
+    const user = userEvent.setup();
+    render(<ProductionOrderDespiecePanel cutRows={mockCutRows} />);
+    const tablist = screen.getByTestId('prod-despiece-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(tablist.className).toContain('tabs--workflow');
+
+    const material = screen.getByTestId('prod-despiece-tab-material');
+    const mod = screen.getByTestId('prod-despiece-tab-module');
+    expect(material.getAttribute('aria-controls')).toBe('prod-despiece-panel-material');
+    expect(mod.getAttribute('aria-controls')).toBe('prod-despiece-panel-module');
+    expect(
+      document.getElementById('prod-despiece-panel-material')?.getAttribute('role'),
+    ).toBe('tabpanel');
+
+    material.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(mod.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(mod);
+    expect(document.getElementById('prod-despiece-panel-module')).toBeTruthy();
   });
 });

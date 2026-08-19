@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { StructuresScreen } from './StructuresScreen';
 import type { Component, Structure } from '@muebles/domain';
 
@@ -312,7 +313,11 @@ describe('StructuresScreen', () => {
     fireEvent.click(screen.getByTestId('structure-editor-tab-components'));
     expect(screen.getByTestId('structure-editor-panel-components')).toBeTruthy();
     // Empty body badge + empty CTA
-    expect(screen.getByTestId('structure-editor-components-badge')).toBeTruthy();
+    expect(
+      screen
+        .getByTestId('structure-editor-tab-components')
+        .querySelector('.tabs__alert'),
+    ).toBeTruthy();
     expect(screen.getByTestId('components-empty')).toBeTruthy();
   });
 
@@ -332,7 +337,7 @@ describe('StructuresScreen', () => {
     );
 
     fireEvent.click(screen.getByTestId('create-structure-btn'));
-    const tabs = screen.getByTestId('structure-editor-tabs');
+    const tabs = screen.getByTestId('structure-editor-tablist');
     const tabButtons = tabs.querySelectorAll('[role="tab"]');
     expect(tabButtons[0]?.getAttribute('data-testid')).toBe(
       'structure-editor-tab-general',
@@ -358,6 +363,50 @@ describe('StructuresScreen', () => {
     expect(screen.getByTestId('structure-editor-panel-components').hidden).toBe(
       false,
     );
+  });
+
+  it('F109: structure editor uses WorkspaceTabs (tablist contract + roving arrows)', async () => {
+    const user = userEvent.setup();
+    render(
+      <StructuresScreen
+        structures={[]}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('create-structure-btn'));
+
+    const tablist = screen.getByTestId('structure-editor-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+
+    const general = screen.getByTestId('structure-editor-tab-general');
+    expect(general.getAttribute('role')).toBe('tab');
+    expect(general.getAttribute('aria-controls')).toBe(
+      'structure-editor-panel-general',
+    );
+    const panel = screen.getByTestId('structure-editor-panel-general');
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      'structure-editor-tab-general',
+    );
+
+    // Empty components → "!" alert with tooltip.
+    const components = screen.getByTestId('structure-editor-tab-components');
+    expect(components.querySelector('.tabs__alert')).toBeTruthy();
+    expect(components.getAttribute('title')).toBe(
+      'Agregá al menos un componente',
+    );
+
+    // Arrow-key roving: selection + focus move together.
+    general.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(components.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(components);
   });
 
   it('critique: preset labeled fields and exterior hint on general', () => {

@@ -547,7 +547,7 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
-    expect(screen.getByTestId('spatial-studio-spaces')).toBeTruthy();
+    expect(screen.getByTestId('spatial-studio-space-tablist')).toBeTruthy();
     fireEvent.click(screen.getByTestId('spatial-studio-add-space'));
     expect(onChangeLayout).toHaveBeenCalled();
     const next = onChangeLayout.mock.calls.at(-1)![0] as {
@@ -694,7 +694,7 @@ EOF
       />,
     );
     fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    fireEvent.click(screen.getByTestId('spatial-studio-inspector-tab-position'));
     expect(screen.getByTestId('spatial-studio-free-mode')).toBeTruthy();
     expect(screen.getByTestId('spatial-studio-free-x')).toBeTruthy();
     expect(
@@ -754,7 +754,7 @@ EOF
       />,
     );
     fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    fireEvent.click(screen.getByTestId('spatial-studio-inspector-tab-position'));
     fireEvent.click(screen.getByTestId('spatial-studio-repack-wall'));
     expect(onChangeLayout).toHaveBeenCalled();
     const packed = onChangeLayout.mock.calls.at(-1)![0];
@@ -775,7 +775,7 @@ EOF
       />,
     );
     fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'));
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    fireEvent.click(screen.getByTestId('spatial-studio-inspector-tab-position'));
     fireEvent.click(screen.getByTestId('spatial-studio-nudge-right'));
     const undoBtn = screen.getByTestId(
       'spatial-studio-undo',
@@ -831,7 +831,7 @@ EOF
       />,
     );
     fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-position'));
+    fireEvent.click(screen.getByTestId('spatial-studio-inspector-tab-position'));
     const offsetInput = screen.getByTestId('spatial-studio-offset');
     fireEvent.change(offsetInput, { target: { value: '10' } });
     expect(onChangeLayout).toHaveBeenCalled();
@@ -1485,5 +1485,90 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     fireEvent.click(btnRoom);
     expect(btnRoom.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('spatial-studio-space-name')).toBeTruthy();
+  });
+
+  it('sidebar tabs follow the shared tablist contract (roles, linkage, roving arrows)', () => {
+    const onClose = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={project}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={onClose}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+
+    const tablist = screen.getByTestId('spatial-studio-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(tablist.getAttribute('aria-label')).toBe(
+      'Navegación del menú lateral',
+    );
+
+    const modulesTab = screen.getByTestId('spatial-studio-tab-modules');
+    expect(modulesTab.getAttribute('role')).toBe('tab');
+    expect(modulesTab.getAttribute('aria-selected')).toBe('true');
+    expect(modulesTab.getAttribute('tabIndex')).toBe('0');
+    expect(modulesTab.getAttribute('aria-controls')).toBe(
+      'spatial-studio-sidebar-panel-modules',
+    );
+    const panel = document.getElementById(
+      'spatial-studio-sidebar-panel-modules',
+    );
+    expect(panel?.getAttribute('role')).toBe('tabpanel');
+    expect(panel?.getAttribute('aria-labelledby')).toBe(
+      'spatial-studio-sidebar-tab-modules',
+    );
+
+    // Roving arrows move selection with focus (modules → materials → room)
+    const materialsTab = screen.getByTestId('spatial-studio-tab-materials');
+    const roomTab = screen.getByTestId('spatial-studio-tab-room');
+    expect(materialsTab.getAttribute('tabIndex')).toBe('-1');
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(materialsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(materialsTab);
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(roomTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(roomTab);
+    fireEvent.keyDown(tablist, { key: 'Home' });
+    expect(modulesTab.getAttribute('aria-selected')).toBe('true');
+
+    // Esc still closes the studio with the shared tabs mounted
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('spaces switcher links tabs to the viewport panel', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={project}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+
+    const spacesTablist = screen.getByTestId('spatial-studio-space-tablist');
+    expect(spacesTablist.getAttribute('role')).toBe('tablist');
+    expect(spacesTablist.getAttribute('aria-label')).toBe(
+      'Ambientes del plano',
+    );
+
+    const viewport = screen.getByTestId('spatial-studio-viewport');
+    expect(viewport.getAttribute('role')).toBe('tabpanel');
+    const labelledBy = viewport.getAttribute('aria-labelledby');
+    expect(labelledBy).toMatch(/^spatial-studio-spaces-tab-/);
+    expect(viewport.getAttribute('id')).toBe(
+      labelledBy!.replace('-tab-', '-panel-'),
+    );
+    const firstTab = spacesTablist.querySelector('[role="tab"]');
+    expect(firstTab?.getAttribute('aria-controls')).toBe(
+      viewport.getAttribute('id'),
+    );
   });
 });

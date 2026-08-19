@@ -411,7 +411,7 @@ describe('ProductionOrderLabelsPanel', () => {
     expect(screen.getByTestId('prod-labels-count').textContent).toContain('2 etiquetas');
 
     // Switch to modules mode
-    await user.click(screen.getByTestId('prod-labels-mode-modules'));
+    await user.click(screen.getByTestId('prod-labels-tab-modules'));
 
     expect(screen.getByTestId('prod-module-labels-count').textContent).toContain('2 bultos');
     expect(screen.getByTestId('prod-module-labels-preview-card').textContent).toContain('BULTO 1 DE 2');
@@ -426,5 +426,38 @@ describe('ProductionOrderLabelsPanel', () => {
     expect(onExportModulePdf).toHaveBeenCalledTimes(1);
     expect(onExportModulePdf.mock.calls[0]![0]).toHaveLength(1);
     expect(onExportModulePdf.mock.calls[0]![0][0].moduleName).toBe('Alacena Superior');
+  });
+});
+
+describe('ProductionOrderLabelsPanel tablist contract (F109)', () => {
+  it('exposes workflow tablist with counts, panel linkage and arrow-key roving', async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductionOrderLabelsPanel
+        project={projectFixture()}
+        labels={LABELS}
+        moduleLabels={MODULE_LABELS}
+      />,
+    );
+    const tablist = screen.getByTestId('prod-labels-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(tablist.className).toContain('tabs--workflow');
+
+    const pieces = screen.getByTestId('prod-labels-tab-pieces');
+    const modules = screen.getByTestId('prod-labels-tab-modules');
+    expect(pieces.getAttribute('aria-controls')).toBe('prod-labels-panel-pieces');
+    expect(modules.getAttribute('aria-controls')).toBe('prod-labels-panel-modules');
+    expect(
+      document.getElementById('prod-labels-panel-pieces')?.getAttribute('role'),
+    ).toBe('tabpanel');
+    // Counts survive via the count badge.
+    expect(pieces.textContent).toContain('2');
+    expect(modules.textContent).toContain('2');
+
+    pieces.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(modules.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(modules);
+    expect(document.getElementById('prod-labels-panel-modules')).toBeTruthy();
   });
 });

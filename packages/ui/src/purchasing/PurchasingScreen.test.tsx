@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import {
   PurchasingScreen,
   type ActiveProjectMaterial,
@@ -318,6 +318,42 @@ describe('PurchasingScreen (Fase 3)', () => {
       material: 'herrajes',
       status: 'pendiente',
     });
+  });
+
+  it('workspace tabs follow the shared tablist contract (roles, aria-controls, arrows)', () => {
+    render(<PurchasingScreen projects={projects} role="almacen" />);
+    const tablist = screen.getByRole('tablist', {
+      name: 'Tabs de compras y almacén',
+    });
+    const herrajes = within(tablist).getByTestId('purch-tab-herrajes');
+    expect(herrajes.getAttribute('aria-controls')).toBe('purch-panel-herrajes');
+    const panel = document.getElementById('purch-panel-herrajes')!;
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe('purch-tab-herrajes');
+
+    // Roving tabindex: ArrowRight moves focus to Tableros.
+    const tableros = within(tablist).getByTestId('purch-tab-tableros');
+    herrajes.focus();
+    fireEvent.keyDown(herrajes, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(tableros);
+  });
+
+  it('compras sub-tabs use the shared tablist with panel linkage', () => {
+    render(
+      <PurchasingScreen
+        projects={projects}
+        role="almacen"
+        stock={[{ kind: 'herrajes', materialId: 'h1', quantity: 5, minStock: 1 }]}
+        stockLabels={{ 'herrajes:h1': 'Bisagra' }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('purch-tab-compras'));
+    const tablist = screen.getByRole('tablist', { name: 'Compras' });
+    const stockTab = within(tablist).getByTestId('purch-compras-tab-stock');
+    expect(stockTab.getAttribute('aria-controls')).toBe('purch-compras-panel-stock');
+    const panel = document.getElementById('purch-compras-panel-stock')!;
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe('purch-compras-tab-stock');
   });
 
   it('rehydrates when initialPicking arrives after mount', () => {

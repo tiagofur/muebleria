@@ -31,7 +31,7 @@ import {
   type StockMaterialKind,
   type Supplier,
 } from '@muebles/domain';
-import { EmptyState } from '../common';
+import { EmptyState, WorkspaceTabs } from '../common';
 import { Modal } from '../common/Modal';
 import type { StockCatalogOption } from './StockPanel';
 import { STOCK_KIND_LABELS_ES } from '@muebles/domain';
@@ -559,25 +559,17 @@ export function PurchaseOrdersPanel({
   return (
     <div className="purch-purchasing">
       <div className="purch-purchasing__toolbar">
-        <div
-          className="purch-stock__filters"
-          role="tablist"
-          aria-label="Compras y proveedores"
-        >
-          {(['ordenes', 'proveedores'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              className={`tab-btn ${tab === t ? 'tab-btn--active' : ''}`}
-              onClick={() => setTab(t)}
-              data-testid={`purch-po-tab-${t}`}
-            >
-              {t === 'ordenes' ? 'Órdenes de compra' : 'Proveedores'}
-            </button>
-          ))}
-        </div>
+        <WorkspaceTabs
+          tabs={[
+            { id: 'ordenes', label: 'Órdenes de compra' },
+            { id: 'proveedores', label: 'Proveedores' },
+          ]}
+          activeTab={tab}
+          onTabChange={setTab}
+          ariaLabel="Compras y proveedores"
+          idPrefix="purch-po"
+          testIdPrefix="purch-po"
+        />
         <label className="purch-stock__search">
           <Search size={14} strokeWidth={1.5} aria-hidden />
           <input
@@ -614,7 +606,13 @@ export function PurchaseOrdersPanel({
         </div>
       ) : null}
 
-      {tab === 'ordenes' ? renderOrdersTab() : renderSuppliersTab()}
+      <div
+        id={`purch-po-panel-${tab}`}
+        role="tabpanel"
+        aria-labelledby={`purch-po-tab-${tab}`}
+      >
+        {tab === 'ordenes' ? renderOrdersTab() : renderSuppliersTab()}
+      </div>
 
       {/* ─── PO create/edit modal ─── */}
       <Modal

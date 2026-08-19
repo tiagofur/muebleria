@@ -1086,60 +1086,12 @@
   gap: var(--space-1);
 }
 
-.project-presentation__nav-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  padding: var(--space-1) var(--space-2);
-  min-height: var(--touch-min);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: var(--transition-colors);
-}
 
-.project-presentation__nav-tab:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
 
-.project-presentation__nav-tab--active {
-  border-color: var(--brand-400);
-  background: var(--surface-selected);
-  color: var(--text-brand);
-}
 
-.project-presentation__nav-tab:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
 
-.project-presentation__nav-tab-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  border-radius: var(--radius-full);
-  background: var(--surface-muted);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-}
 
-.project-presentation__nav-tab--active .project-presentation__nav-tab-index {
-  background: var(--brand-100);
-  color: var(--text-brand);
-}
 
-.project-presentation__nav-tab-label {
-  white-space: nowrap;
-}
 
 .project-presentation__nav-counter {
   font-size: var(--text-xs);
@@ -1382,71 +1334,18 @@
   flex-shrink: 0;
 }
 
-.project-presentation__space-tab {
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  padding: var(--space-1) var(--space-3);
-  min-height: var(--touch-min);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--surface-card);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: var(--transition-colors);
-}
 
-.project-presentation__space-tab:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-}
 
-.project-presentation__space-tab--active {
-  border-color: var(--brand-400);
-  background: var(--surface-selected);
-  color: var(--text-brand);
-}
 
-.project-presentation__space-tab:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
 
 /* Read-only presentation plan (multi-space + free) */
 .presentation-kitchen-plan {
   width: 100%;
 }
 
-.presentation-kitchen-plan__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-}
 
-.presentation-kitchen-plan__tab {
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  padding: var(--space-1) var(--space-3);
-  min-height: var(--touch-min, 44px);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--surface-card);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: var(--transition-colors);
-}
 
-.presentation-kitchen-plan__tab:hover {
-  background: var(--surface-hover);
-}
 
-.presentation-kitchen-plan__tab--active {
-  border-color: var(--brand-400);
-  background: var(--surface-selected);
-  color: var(--text-brand);
-}
 
 .presentation-kitchen-plan__space-title {
   margin: 0 0 var(--space-3);
@@ -2145,11 +2044,6 @@
 }
 
 @media (max-width: 640px) {
-  .project-presentation__nav-tab-label {
-    max-width: 5.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
   .project-presentation__nav-counter {
     display: none;
   }

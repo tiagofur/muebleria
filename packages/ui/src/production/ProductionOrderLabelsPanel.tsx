@@ -29,6 +29,7 @@ import {
   readLabelPrinterSettings,
   writeLabelPrinterSettings,
 } from './labelPrinterSettings';
+import { WorkflowTabs } from '../common/Tabs';
 
 /** Raw-print bridge — only injected by the desktop shell (zpl:printRaw). */
 type PrintRawBridge = (
@@ -392,48 +393,42 @@ export function ProductionOrderLabelsPanel({
   return (
     <div className="prod-labels" data-testid="prod-hub-etiquetas">
       {/* Top Type Selector: Piezas vs Muebles */}
-      <div
-        className="tab-bar tab-bar--compact"
-        role="tablist"
-        aria-label="Tipo de etiqueta"
-      >
-        <button
-          type="button"
-          className={
-            labelMode === 'pieces'
-              ? 'tab-btn tab-btn--active'
-              : 'tab-btn'
-          }
-          onClick={() => {
-            setLabelMode('pieces');
+      <WorkflowTabs
+        tabs={[
+          {
+            id: 'pieces',
+            label: 'Piezas de Tablero',
+            count: labels?.length ?? 0,
+            icon: <Layers size={14} strokeWidth={1.5} aria-hidden />,
+          },
+          {
+            id: 'modules',
+            label: 'Muebles y Bultos',
+            count: moduleLabels?.length ?? 0,
+            icon: <Box size={14} strokeWidth={1.5} aria-hidden />,
+          },
+        ]}
+        activeTab={labelMode}
+        onTabChange={(mode) => {
+          setLabelMode(mode);
+          if (mode === 'pieces') {
             setActiveIdx(0);
-            setQuery('');
-          }}
-          data-testid="prod-labels-mode-pieces"
-        >
-          <Layers size={14} strokeWidth={1.5} aria-hidden />
-          Piezas de Tablero ({labels?.length ?? 0})
-        </button>
-        <button
-          type="button"
-          className={
-            labelMode === 'modules'
-              ? 'tab-btn tab-btn--active'
-              : 'tab-btn'
-          }
-          onClick={() => {
-            setLabelMode('modules');
+          } else {
             setActiveModIdx(0);
-            setQuery('');
-          }}
-          data-testid="prod-labels-mode-modules"
-        >
-          <Box size={14} strokeWidth={1.5} aria-hidden />
-          Muebles y Bultos ({moduleLabels?.length ?? 0})
-        </button>
-      </div>
+          }
+          setQuery('');
+        }}
+        ariaLabel="Tipo de etiqueta"
+        idPrefix="prod-labels"
+        testIdPrefix="prod-labels"
+      />
 
-      {labelMode === 'pieces' ? (
+      <div
+        role="tabpanel"
+        id={`prod-labels-panel-${labelMode}`}
+        aria-labelledby={`prod-labels-tab-${labelMode}`}
+      >
+        {labelMode === 'pieces' ? (
         <>
           <div className="prod-modulos__toolbar">
             <label className="prod-modulos__search">
@@ -496,8 +491,9 @@ export function ProductionOrderLabelsPanel({
               <button
                 type="button"
                 className={
-                  perUnit ? 'tab-btn' : 'tab-btn tab-btn--active'
+                  perUnit ? 'prod-seg-btn' : 'prod-seg-btn prod-seg-btn--active'
                 }
+                aria-pressed={!perUnit}
                 onClick={() => setPerUnit(false)}
                 data-testid="prod-labels-per-piece"
               >
@@ -506,8 +502,9 @@ export function ProductionOrderLabelsPanel({
               <button
                 type="button"
                 className={
-                  perUnit ? 'tab-btn tab-btn--active' : 'tab-btn'
+                  perUnit ? 'prod-seg-btn prod-seg-btn--active' : 'prod-seg-btn'
                 }
+                aria-pressed={perUnit}
                 onClick={() => setPerUnit(true)}
                 data-testid="prod-labels-per-unit"
               >
@@ -1145,7 +1142,8 @@ export function ProductionOrderLabelsPanel({
             </section>
           </div>
         </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

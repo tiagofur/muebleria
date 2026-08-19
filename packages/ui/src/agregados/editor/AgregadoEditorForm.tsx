@@ -12,6 +12,7 @@ import {
 } from 'react';
 import type { Component, Hardware, HardwareLine, ModuleComponentInstance } from '@muebles/domain';
 import { Plus, Trash2 } from 'lucide-react';
+import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
 import { HardwarePlacementsEditor } from '../../modules/components/HardwarePlacementsEditor';
@@ -122,6 +123,14 @@ export function AgregadoEditorForm({
     hardware: draft.hardwareLines.length + totalHardwarePlacements,
   };
 
+  const tabDefs: readonly TabDefinition<AgregadoEditorTab>[] = TABS.map(
+    (tab) => ({
+      id: tab.id,
+      label: tab.label,
+      count: tabBadge[tab.id] || undefined,
+    }),
+  );
+
   return (
     <form
       id={formId}
@@ -136,35 +145,14 @@ export function AgregadoEditorForm({
       ) : null}
 
       {/* Tabs */}
-      <div
-        className="component-editor__tabs"
-        role="tablist"
-        aria-label="Secciones del editor de agregado"
-        data-testid="agregado-editor-tabs"
-      >
-        {TABS.map((tab) => {
-          const selected = editorTab === tab.id;
-          const badge = tabBadge[tab.id];
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`agregado-editor-tab-${tab.id}`}
-              aria-selected={selected}
-              tabIndex={selected ? 0 : -1}
-              className={selected ? 'component-editor__tab component-editor__tab--active' : 'component-editor__tab'}
-              data-testid={`agregado-editor-tab-${tab.id}`}
-              onClick={() => setEditorTab(tab.id)}
-            >
-              {tab.label}
-              {badge !== undefined && badge > 0 ? (
-                <span className="agregado-editor__tab-count">{badge}</span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <WorkspaceTabs
+        tabs={tabDefs}
+        activeTab={editorTab}
+        onTabChange={setEditorTab}
+        ariaLabel="Secciones del editor de agregado"
+        idPrefix="agregado-editor"
+        testIdPrefix="agregado-editor"
+      />
 
       {/* Tab: General */}
       {editorTab === 'general' && (
@@ -178,7 +166,13 @@ export function AgregadoEditorForm({
 
       {/* Tab: Piezas */}
       {editorTab === 'components' && (
-        <div className="agregado-editor__panel" data-testid="agregado-tab-components">
+        <div
+          className="agregado-editor__panel"
+          id="agregado-editor-panel-components"
+          role="tabpanel"
+          aria-labelledby="agregado-editor-tab-components"
+          data-testid="agregado-tab-components"
+        >
           <div
             className={
               catalogInput
@@ -318,7 +312,13 @@ export function AgregadoEditorForm({
 
       {/* Tab: Herrajes */}
       {editorTab === 'hardware' && (
-        <div className="agregado-editor__panel" data-testid="agregado-tab-hardware">
+        <div
+          className="agregado-editor__panel"
+          id="agregado-editor-panel-hardware"
+          role="tabpanel"
+          aria-labelledby="agregado-editor-tab-hardware"
+          data-testid="agregado-tab-hardware"
+        >
           <div
             className={
               catalogInput

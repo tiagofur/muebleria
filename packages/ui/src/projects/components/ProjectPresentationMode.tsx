@@ -30,6 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import { EmptyState, formatMoneyDisplay } from '../../common';
+import { WorkspaceTabs } from '../../common/Tabs';
 import {
   canUseWebGL,
   materialColorMap,
@@ -239,6 +240,10 @@ export function ProjectPresentationMode({
       }
       // Suppress navigation while overlay is open
       if (showShortcuts) return;
+      // Arrows on a tab button are owned by the shared roving tablist
+      // (aria-controls navigation); avoid double-advancing the deck.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('[role="tablist"]')) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
         goNext();
@@ -507,38 +512,32 @@ export function ProjectPresentationMode({
       </header>
 
       {multiSpacePresentation ? (
-        <div
-          className="project-presentation__space-tabs"
-          role="tablist"
-          aria-label="Ambiente en presentación"
-          data-testid="presentation-space-tabs"
-        >
-          {presentationSpaces.map((s) => {
-            const active = s.id === presentationSpaceId;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={
-                  active
-                    ? 'project-presentation__space-tab project-presentation__space-tab--active'
-                    : 'project-presentation__space-tab'
-                }
-                onClick={() => setPresentationSpaceId(s.id)}
-                data-testid={`presentation-space-tab-${s.id}`}
-              >
-                {s.name}
-              </button>
-            );
-          })}
+        <div className="project-presentation__space-tabs">
+          <WorkspaceTabs
+            tabs={presentationSpaces.map((s) => ({ id: s.id, label: s.name }))}
+            activeTab={presentationSpaceId ?? presentationSpaces[0]!.id}
+            onTabChange={setPresentationSpaceId}
+            ariaLabel="Ambiente en presentación"
+            idPrefix="presentation-space"
+            testIdPrefix="presentation-space"
+          />
         </div>
       ) : null}
 
       <div
         className="project-presentation__slides"
         data-testid="presentation-slides"
+        role={multiSpacePresentation ? 'tabpanel' : undefined}
+        id={
+          multiSpacePresentation
+            ? `presentation-space-panel-${presentationSpaceId ?? presentationSpaces[0]!.id}`
+            : undefined
+        }
+        aria-labelledby={
+          multiSpacePresentation
+            ? `presentation-space-tab-${presentationSpaceId ?? presentationSpaces[0]!.id}`
+            : undefined
+        }
       >
         {/* Slide 0: Resumen */}
         <div
@@ -547,6 +546,9 @@ export function ProjectPresentationMode({
           }`}
           aria-hidden={currentSlide !== 0}
           data-testid="presentation-slide-0"
+          role={currentSlide === 0 ? 'tabpanel' : undefined}
+          id={currentSlide === 0 ? 'presentation-slide-panel-0' : undefined}
+          aria-labelledby={currentSlide === 0 ? 'presentation-slide-tab-0' : undefined}
         >
           <section
             className="project-presentation__list"
@@ -600,6 +602,9 @@ export function ProjectPresentationMode({
           }`}
           aria-hidden={currentSlide !== 1}
           data-testid="presentation-slide-1"
+          role={currentSlide === 1 ? 'tabpanel' : undefined}
+          id={currentSlide === 1 ? 'presentation-slide-panel-1' : undefined}
+          aria-labelledby={currentSlide === 1 ? 'presentation-slide-tab-1' : undefined}
         >
           <section
             className="project-presentation__plan"
@@ -623,6 +628,9 @@ export function ProjectPresentationMode({
           }`}
           aria-hidden={currentSlide !== 2}
           data-testid="presentation-slide-2"
+          role={currentSlide === 2 ? 'tabpanel' : undefined}
+          id={currentSlide === 2 ? 'presentation-slide-panel-2' : undefined}
+          aria-labelledby={currentSlide === 2 ? 'presentation-slide-tab-2' : undefined}
         >
           <section
             className="project-presentation__options"
@@ -649,6 +657,9 @@ export function ProjectPresentationMode({
           }`}
           aria-hidden={currentSlide !== 3}
           data-testid="presentation-slide-3"
+          role={currentSlide === 3 ? 'tabpanel' : undefined}
+          id={currentSlide === 3 ? 'presentation-slide-panel-3' : undefined}
+          aria-labelledby={currentSlide === 3 ? 'presentation-slide-tab-3' : undefined}
         >
           <section
             className="project-presentation__viewer"
@@ -977,35 +988,18 @@ export function ProjectPresentationMode({
         >
           ← Anterior
         </button>
-        <div
-          className="project-presentation__nav-tabs"
-          role="tablist"
-          aria-label="Diapositivas"
-        >
-          {slideLabels.map((label, i) => {
-            const active = currentSlide === i;
-            return (
-              <button
-                key={i}
-                type="button"
-                className={
-                  active
-                    ? 'project-presentation__nav-tab project-presentation__nav-tab--active'
-                    : 'project-presentation__nav-tab'
-                }
-                onClick={() => setCurrentSlide(i)}
-                role="tab"
-                aria-selected={active}
-                aria-label={`${label} (diapositiva ${i + 1} de ${TOTAL_SLIDES})`}
-                data-testid={`presentation-slide-tab-${i}`}
-              >
-                <span className="project-presentation__nav-tab-index" aria-hidden>
-                  {i + 1}
-                </span>
-                <span className="project-presentation__nav-tab-label">{label}</span>
-              </button>
-            );
-          })}
+        <div className="project-presentation__nav-tabs">
+          <WorkspaceTabs
+            tabs={slideLabels.map((label, i) => ({
+              id: String(i),
+              label: `${i + 1}. ${label}`,
+            }))}
+            activeTab={String(currentSlide)}
+            onTabChange={(id) => setCurrentSlide(Number(id))}
+            ariaLabel="Diapositivas"
+            idPrefix="presentation-slide"
+            testIdPrefix="presentation-slide"
+          />
         </div>
         <button
           type="button"

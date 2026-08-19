@@ -5,7 +5,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Module, Project } from '@muebles/domain';
-import { pieceLabelQrPayload } from '@muebles/domain';
+import { ITEM_FLOOR_STATUSES, pieceLabelQrPayload } from '@muebles/domain';
 import {
   matchModuleFromScan,
   ProductionOrderPaperlessPanel,
@@ -255,5 +255,37 @@ describe('ProductionOrderPaperlessPanel scan-to-advance (F089)', () => {
       expect(screen.getByTestId('prod-piso-scan-result')).toBeTruthy(),
     );
     expect(onSetFloorStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProductionOrderPaperlessPanel tablist contract (F109)', () => {
+  it('exposes workflow tablist with counts, panel linkage and arrow-key roving', async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductionOrderPaperlessPanel project={project()} modules={modules} />,
+    );
+    const tablist = screen.getByTestId('prod-piso-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(tablist.className).toContain('tabs--workflow');
+
+    const all = screen.getByTestId('prod-piso-tab-all');
+    const firstStatus = screen.getByTestId(`prod-piso-tab-${ITEM_FLOOR_STATUSES[0]}`);
+    expect(all.getAttribute('aria-controls')).toBe('prod-piso-panel-all');
+    expect(
+      firstStatus.getAttribute('aria-controls'),
+    ).toBe(`prod-piso-panel-${ITEM_FLOOR_STATUSES[0]}`);
+    expect(
+      document.getElementById('prod-piso-panel-all')?.getAttribute('role'),
+    ).toBe('tabpanel');
+    // Counts survive via the count badge (2 modules total).
+    expect(all.textContent).toContain('2');
+
+    all.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(firstStatus.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(firstStatus);
+    expect(
+      document.getElementById(`prod-piso-panel-${ITEM_FLOOR_STATUSES[0]}`),
+    ).toBeTruthy();
   });
 });

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { Module, ModuleCategory, ShowcasePhotoItem } from '@muebles/domain';
 import { Sparkles, Boxes, Store } from 'lucide-react';
 import { PageHeader, PageToolbar } from '../common';
+import { WorkspaceTabs } from '../common/Tabs';
 import { ModuleShowcase } from '../modules/ModuleShowcase';
 import { ProjectsPortfolioView } from './ProjectsPortfolioView';
 
@@ -37,46 +38,36 @@ export function ShowcaseScreen({
       <PageToolbar
         ariaLabel="Vistas de la vitrina"
         tabs={
-          <nav
-            className="tab-bar__inner"
-            role="tablist"
-            aria-label="Vistas de la Vitrina Comercial"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'portfolio'}
-              className={
-                activeTab === 'portfolio'
-                  ? 'tab-btn tab-btn--active'
-                  : 'tab-btn'
-              }
-              onClick={() => setActiveTab('portfolio')}
-              data-testid="showcase-tab-portfolio"
-            >
-              <Sparkles size={16} aria-hidden />
-              Portafolio de Obras ({photos.length})
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'modules'}
-              className={
-                activeTab === 'modules'
-                  ? 'tab-btn tab-btn--active'
-                  : 'tab-btn'
-              }
-              onClick={() => setActiveTab('modules')}
-              data-testid="showcase-tab-modules"
-            >
-              <Boxes size={16} aria-hidden />
-              Catálogo de Módulos ({modules.length})
-            </button>
-          </nav>
+          <WorkspaceTabs
+            tabs={[
+              {
+                id: 'portfolio' as const,
+                label: 'Portafolio de Obras',
+                count: photos.length,
+                icon: <Sparkles size={16} aria-hidden />,
+              },
+              {
+                id: 'modules' as const,
+                label: 'Catálogo de Módulos',
+                count: modules.length,
+                icon: <Boxes size={16} aria-hidden />,
+              },
+            ]}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            ariaLabel="Vistas de la Vitrina Comercial"
+            idPrefix="showcase"
+            testIdPrefix="showcase"
+          />
         }
       />
 
-      <div className="showcase-screen-body">
+      <div
+        className="showcase-screen-body"
+        role="tabpanel"
+        id={`showcase-panel-${activeTab}`}
+        aria-labelledby={`showcase-tab-${activeTab}`}
+      >
         {activeTab === 'portfolio' ? (
           <ProjectsPortfolioView
             photos={photos}

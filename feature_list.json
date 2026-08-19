@@ -2234,7 +2234,7 @@
         "packages/ui/src/showcase/",
         "packages/ui/src/projects/components/"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "ui",
         "design-system",

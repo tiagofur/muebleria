@@ -43,8 +43,7 @@ import {
   type StockMovementType,
   type Supplier,
 } from '@muebles/domain';
-import { EmptyState, PageHeader } from '../common';
-import { useRovingTabList } from '../common/rovingTabList';
+import { EmptyState, PageHeader, WorkspaceTabs } from '../common';
 import { StockPanel, type StockCatalogOption } from './StockPanel';
 import {
   PurchaseOrdersPanel,
@@ -283,16 +282,6 @@ export function PurchasingScreen({
     ? activeTab
     : (visibleTabs[0] ?? 'compras');
 
-  const materialTabsKeyboard = useRovingTabList({
-    tabIds: visibleTabs,
-    selectedId: effectiveTab,
-    onSelect: setActiveTab,
-  });
-  const comprasTabsKeyboard = useRovingTabList({
-    tabIds: ['stock', 'purchase'] as const,
-    selectedId: comprasTab,
-    onSelect: setComprasTab,
-  });
 
   // Per-project derived totals (materials + edges) — computed once. Las filas
   // llevan el id de catálogo resuelto (materialId/edgeId) para el stock.
@@ -674,27 +663,22 @@ export function PurchasingScreen({
       onReceivePurchaseOrder != null;
     return (
       <div className="purch-compras">
+        <WorkspaceTabs
+          tabs={[
+            { id: 'stock', label: 'Stock' },
+            { id: 'purchase', label: 'Órdenes y proveedores' },
+          ]}
+          activeTab={comprasTab}
+          onTabChange={setComprasTab}
+          ariaLabel="Compras"
+          idPrefix="purch-compras"
+          testIdPrefix="purch-compras"
+        />
         <div
-          className="purch-stock__filters purch-compras__tabs"
-          role="tablist"
-          aria-label="Compras"
-          {...comprasTabsKeyboard.tabListProps}
+          id={`purch-compras-panel-${comprasTab}`}
+          role="tabpanel"
+          aria-labelledby={`purch-compras-tab-${comprasTab}`}
         >
-          {(['stock', 'purchase'] as const).map((t, index) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              {...comprasTabsKeyboard.tabPropsAt(index)}
-              aria-selected={comprasTab === t}
-              className={`tab-btn ${comprasTab === t ? 'tab-btn--active' : ''}`}
-              onClick={() => setComprasTab(t)}
-              data-testid={`purch-compras-tab-${t}`}
-            >
-              {t === 'stock' ? 'Stock' : 'Órdenes y proveedores'}
-            </button>
-          ))}
-        </div>
         {comprasTab === 'stock' ? (
           <StockPanel
             stock={stock ?? []}
@@ -738,6 +722,7 @@ export function PurchasingScreen({
             }}
           />
         )}
+        </div>
       </div>
     );
   };
@@ -800,37 +785,29 @@ export function PurchasingScreen({
       </div>
 
       {/* Tabs */}
-      <nav
-        className="tab-bar"
-        role="tablist"
-        aria-label="Tabs de compras y almacén"
-        {...materialTabsKeyboard.tabListProps}
-      >
-        <div className="tab-bar__inner">
-          {visibleTabs.map((tab, index) => {
-            const isActive = effectiveTab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                {...materialTabsKeyboard.tabPropsAt(index)}
-                aria-selected={isActive}
-                className={`tab-btn ${isActive ? 'tab-btn--active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-                data-testid={`purch-tab-${tab}`}
-              >
-                {TAB_LABELS[tab]}
-                {tab !== 'compras' && pendingCounts[tab] > 0 ? (
-                  <span className="tab-btn__badge">{pendingCounts[tab]}</span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      <WorkspaceTabs
+        tabs={visibleTabs.map((tab) => ({
+          id: tab,
+          label: TAB_LABELS[tab],
+          count:
+            tab !== 'compras' && pendingCounts[tab] > 0
+              ? pendingCounts[tab]
+              : undefined,
+        }))}
+        activeTab={effectiveTab}
+        onTabChange={setActiveTab}
+        ariaLabel="Tabs de compras y almacén"
+        idPrefix="purch"
+        testIdPrefix="purch"
+      />
 
-      <div className="purch-panel" data-testid={`purch-panel-${effectiveTab}`}>
+      <div
+        className="purch-panel"
+        id={`purch-panel-${effectiveTab}`}
+        role="tabpanel"
+        aria-labelledby={`purch-tab-${effectiveTab}`}
+        data-testid={`purch-panel-${effectiveTab}`}
+      >
         {effectiveTab === 'herrajes' ? renderHardwareTab() : null}
         {effectiveTab === 'tableros' ? renderTablerosTab() : null}
         {effectiveTab === 'cintillas' ? renderCintillasTab() : null}

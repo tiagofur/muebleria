@@ -190,7 +190,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Workspace tabs — see common/tabs.css for .tab-bar, .tab-btn
+   Workspace tabs — see common/Tabs.tsx + .tabs in common/tabs.css
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .eng-workspace__panel {

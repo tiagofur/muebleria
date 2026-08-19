@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { StockPanel } from './StockPanel';
 import type { MaterialStock, StockMovement } from '@muebles/domain';
 
@@ -81,11 +81,11 @@ describe('StockPanel (Fase 3b)', () => {
         onSetMin={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByTestId('purch-stock-filter-agotado'));
+    fireEvent.click(screen.getByTestId('purch-stock-tab-agotado'));
     expect(screen.getByTestId('purch-stock-row-herrajes-h2')).not.toBeNull();
     expect(screen.queryByTestId('purch-stock-row-herrajes-h1')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('purch-stock-filter-todos'));
+    fireEvent.click(screen.getByTestId('purch-stock-tab-todos'));
     fireEvent.change(screen.getByTestId('purch-stock-search'), {
       target: { value: 'MDF' },
     });
@@ -198,6 +198,40 @@ describe('StockPanel (Fase 3b)', () => {
     );
     expect(screen.getByText('Sin stock cargado')).not.toBeNull();
     expect(screen.getByTestId('purch-stock-receive-first')).not.toBeNull();
+  });
+
+  it('filter tabs follow the shared tablist contract (roles, aria-controls, arrows)', () => {
+    render(
+      <StockPanel
+        stock={stock}
+        labels={labels}
+        catalogOptions={catalogOptions}
+        canEdit={false}
+        onRecordMovement={vi.fn()}
+        onSetMin={vi.fn()}
+      />,
+    );
+    const tablist = screen.getByRole('tablist', { name: 'Filtros de stock' });
+    const tabs = within(tablist).getAllByRole('tab');
+    expect(tabs.map((t) => t.getAttribute('data-testid'))).toEqual([
+      'purch-stock-tab-todos',
+      'purch-stock-tab-bajo',
+      'purch-stock-tab-agotado',
+    ]);
+    // Single shared panel: it re-identifies with the selected filter.
+    const todos = within(tablist).getByTestId('purch-stock-tab-todos');
+    expect(todos.getAttribute('aria-selected')).toBe('true');
+    let panel = document.getElementById('purch-stock-panel-todos')!;
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('aria-labelledby')).toBe('purch-stock-tab-todos');
+    const bajo = within(tablist).getByTestId('purch-stock-tab-bajo');
+    expect(bajo.getAttribute('aria-controls')).toBe('purch-stock-panel-bajo');
+    // Roving tabindex: ArrowRight moves focus (and selection) to the next tab.
+    todos.focus();
+    fireEvent.keyDown(todos, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(bajo);
+    panel = document.getElementById('purch-stock-panel-bajo')!;
+    expect(panel.getAttribute('aria-labelledby')).toBe('purch-stock-tab-bajo');
   });
 
   it('hides cost columns and total by default (COST-01)', () => {

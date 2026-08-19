@@ -124,6 +124,7 @@ import {
   setItemOptionChoice,
 } from '../projectHelpers';
 import type { Catalog, ModuleBaseMode } from '@muebles/domain';
+import { WorkspaceTabs } from '../../common/Tabs';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -1629,29 +1630,15 @@ export function ProjectSpatialStudio({
             </span>
           ) : null}
         </div>
-        <div
-          className="spatial-studio__spaces"
-          role="tablist"
-          aria-label="Ambientes del plano"
-          data-testid="spatial-studio-spaces"
-        >
-          {spaces.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="tab"
-              aria-selected={s.id === activeSpaceId}
-              className={
-                s.id === activeSpaceId
-                  ? 'spatial-studio__space-tab spatial-studio__space-tab--active'
-                  : 'spatial-studio__space-tab'
-              }
-              onClick={() => switchSpace(s.id)}
-              data-testid={`spatial-studio-space-${s.id}`}
-            >
-              {s.name}
-            </button>
-          ))}
+        <div className="spatial-studio__spaces">
+          <WorkspaceTabs
+            tabs={spaces.map((s) => ({ id: s.id, label: s.name }))}
+            activeTab={activeSpaceId ?? spaces[0]?.id ?? ''}
+            onTabChange={switchSpace}
+            ariaLabel="Ambientes del plano"
+            idPrefix="spatial-studio-spaces"
+            testIdPrefix="spatial-studio-space"
+          />
           {canEdit ? (
             <button
               type="button"
@@ -1735,55 +1722,38 @@ export function ProjectSpatialStudio({
           data-testid="spatial-studio-sidebar"
           hidden={listCollapsed}
         >
-          <div
-            className="spatial-studio__sidebar-nav"
-            role="tablist"
-            aria-label="Navegación del menú lateral"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={sidebarTab === 'modules'}
-              className={
-                sidebarTab === 'modules'
-                  ? 'spatial-studio__sidebar-tab spatial-studio__sidebar-tab--active'
-                  : 'spatial-studio__sidebar-tab'
-              }
-              onClick={() => setSidebarTab('modules')}
-              data-testid="spatial-studio-tab-modules"
-            >
-              <Box size={14} aria-hidden /> Muebles
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={sidebarTab === 'materials'}
-              className={
-                sidebarTab === 'materials'
-                  ? 'spatial-studio__sidebar-tab spatial-studio__sidebar-tab--active'
-                  : 'spatial-studio__sidebar-tab'
-              }
-              onClick={() => setSidebarTab('materials')}
-              data-testid="spatial-studio-tab-materials"
-            >
-              <Palette size={14} aria-hidden /> Materiales
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={sidebarTab === 'room'}
-              className={
-                sidebarTab === 'room'
-                  ? 'spatial-studio__sidebar-tab spatial-studio__sidebar-tab--active'
-                  : 'spatial-studio__sidebar-tab'
-              }
-              onClick={() => setSidebarTab('room')}
-              data-testid="spatial-studio-tab-room"
-            >
-              <MapIcon size={14} aria-hidden /> Ambiente
-            </button>
+          <div className="spatial-studio__sidebar-nav">
+            <WorkspaceTabs
+              tabs={[
+                {
+                  id: 'modules' as const,
+                  label: 'Muebles',
+                  icon: <Box size={14} aria-hidden />,
+                },
+                {
+                  id: 'materials' as const,
+                  label: 'Materiales',
+                  icon: <Palette size={14} aria-hidden />,
+                },
+                {
+                  id: 'room' as const,
+                  label: 'Ambiente',
+                  icon: <MapIcon size={14} aria-hidden />,
+                },
+              ]}
+              activeTab={sidebarTab}
+              onTabChange={setSidebarTab}
+              ariaLabel="Navegación del menú lateral"
+              idPrefix="spatial-studio-sidebar"
+              testIdPrefix="spatial-studio"
+            />
           </div>
 
+          <div
+            role="tabpanel"
+            id={`spatial-studio-sidebar-panel-${sidebarTab}`}
+            aria-labelledby={`spatial-studio-sidebar-tab-${sidebarTab}`}
+          >
           {sidebarTab === 'modules' ? (
             <>
               <div className="spatial-studio__sidebar-head">
@@ -2521,9 +2491,16 @@ export function ProjectSpatialStudio({
               </ul>
             </section>
           ) : null}
+          </div>
         </aside>
 
-        <main className="spatial-studio__viewport" data-testid="spatial-studio-viewport">
+        <main
+          className="spatial-studio__viewport"
+          data-testid="spatial-studio-viewport"
+          role="tabpanel"
+          id={`spatial-studio-spaces-panel-${activeSpaceId ?? spaces[0]?.id ?? ''}`}
+          aria-labelledby={`spatial-studio-spaces-tab-${activeSpaceId ?? spaces[0]?.id ?? ''}`}
+        >
           <div
             className="spatial-studio__scene-toolbar"
             role="toolbar"
@@ -3030,45 +3007,27 @@ export function ProjectSpatialStudio({
                 </p>
               </div>
 
-              <div
-                className="spatial-studio__tabs"
-                role="tablist"
-                aria-label="Inspector"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={inspectorTab === 'props'}
-                  className={
-                    inspectorTab === 'props'
-                      ? 'spatial-studio__tab spatial-studio__tab--active'
-                      : 'spatial-studio__tab'
-                  }
-                  onClick={() => setInspectorTab('props')}
-                  data-testid="spatial-studio-tab-props"
-                >
-                  Mueble
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={inspectorTab === 'position'}
-                  className={
-                    inspectorTab === 'position'
-                      ? 'spatial-studio__tab spatial-studio__tab--active'
-                      : 'spatial-studio__tab'
-                  }
-                  onClick={() => setInspectorTab('position')}
-                  data-testid="spatial-studio-tab-position"
-                >
-                  Posición
-                </button>
+              <div className="spatial-studio__tabs">
+                <WorkspaceTabs
+                  tabs={[
+                    { id: 'props' as const, label: 'Mueble' },
+                    { id: 'position' as const, label: 'Posición' },
+                  ]}
+                  activeTab={inspectorTab}
+                  onTabChange={setInspectorTab}
+                  ariaLabel="Inspector"
+                  idPrefix="spatial-studio-inspector"
+                  testIdPrefix="spatial-studio-inspector"
+                />
               </div>
 
               {inspectorTab === 'props' ? (
                 <div
                   className="spatial-studio__tab-panel"
                   data-testid="spatial-studio-panel-props"
+                  role="tabpanel"
+                  id="spatial-studio-inspector-panel-props"
+                  aria-labelledby="spatial-studio-inspector-tab-props"
                 >
                   {(selectedModule?.presets?.length ?? 0) > 0 ? (
                     <div className="spatial-studio__field">
@@ -3316,6 +3275,9 @@ export function ProjectSpatialStudio({
                 <div
                   className="spatial-studio__tab-panel"
                   data-testid="spatial-studio-panel-position"
+                  role="tabpanel"
+                  id="spatial-studio-inspector-panel-position"
+                  aria-labelledby="spatial-studio-inspector-tab-position"
                 >
                   {!selectedPlacement ? (
                     <div className="spatial-studio__empty-walls">

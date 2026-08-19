@@ -272,11 +272,6 @@
   flex-wrap: wrap;
 }
 
-.purch-stock__filters {
-  display: flex;
-  gap: var(--space-1);
-}
-
 .purch-stock__search {
   display: inline-flex;
   align-items: center;
@@ -454,10 +449,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.purch-compras__tabs {
-  flex-wrap: wrap;
 }
 
 .purch-po-list {

@@ -46,3 +46,52 @@ describe('WorkspaceTabs', () => {
     expect(screen.getByTestId('example-tab-files').getAttribute('aria-selected')).toBe('true');
   });
 });
+
+describe('Tabs per-tab extensions (F109)', () => {
+  it('renders icon, native title tooltip and alert badge', () => {
+    render(
+      <WorkspaceTabs
+        tabs={[
+          {
+            id: 'structure',
+            label: 'Estructura',
+            alert: true,
+            title: 'Sin estructura base',
+          },
+          { id: 'general', label: 'General' },
+        ]}
+        activeTab="general"
+        onTabChange={() => undefined}
+        ariaLabel="Secciones"
+        idPrefix="ext"
+        testIdPrefix="ext"
+      />,
+    );
+    const structure = screen.getByTestId('ext-tab-structure');
+    expect(structure.getAttribute('title')).toBe('Sin estructura base');
+    const alert = structure.querySelector('.tabs__alert');
+    expect(alert?.textContent).toBe('!');
+    expect(alert?.getAttribute('title')).toBe('Sin estructura base');
+  });
+
+  it('renders a Lucide icon node before the label', () => {
+    render(
+      <WorkspaceTabs
+        tabs={[
+          {
+            id: 'portfolio',
+            label: 'Portafolio',
+            icon: <span data-testid="tab-icon" aria-hidden>◆</span>,
+          },
+        ]}
+        activeTab="portfolio"
+        onTabChange={() => undefined}
+        ariaLabel="Vistas"
+        idPrefix="icon"
+        testIdPrefix="icon"
+      />,
+    );
+    const tab = screen.getByTestId('icon-tab-portfolio');
+    expect(tab.firstChild).toBe(screen.getByTestId('tab-icon'));
+  });
+});

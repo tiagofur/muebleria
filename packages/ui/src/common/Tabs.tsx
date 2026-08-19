@@ -11,6 +11,12 @@ export type TabDefinition<TTabId extends string> = {
   readonly label: string;
   readonly count?: number;
   readonly disabled?: boolean;
+  /** Tooltip nativo (p. ej. razón por la que la tab está deshabilitada). */
+  readonly title?: string;
+  /** Icono Lucide opcional antes del label (pasar con aria-hidden). */
+  readonly icon?: ReactNode;
+  /** Marca "!" de atención (p. ej. falta de estructura base en editors). */
+  readonly alert?: boolean;
 };
 
 type TabsProps<TTabId extends string> = {
@@ -60,14 +66,21 @@ function Tabs<TTabId extends string>({
               aria-selected={selected}
               aria-controls={`${idPrefix}-panel-${tab.id}`}
               disabled={tab.disabled}
+              title={tab.title}
               className={`tabs__tab ${selected ? 'tabs__tab--active' : ''}`}
               onClick={() => onTabChange(tab.id)}
               data-testid={testIdPrefix ? `${testIdPrefix}-tab-${tab.id}` : undefined}
             >
+              {tab.icon}
               {tab.label}
               {tab.count !== undefined ? (
                 <span className="tabs__count" aria-label={`${tab.count} elementos`}>
                   {tab.count}
+                </span>
+              ) : null}
+              {tab.alert ? (
+                <span className="tabs__alert" title={tab.title ?? 'Atención'}>
+                  !
                 </span>
               ) : null}
             </button>

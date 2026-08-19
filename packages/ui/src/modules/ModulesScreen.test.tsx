@@ -320,10 +320,19 @@ describe('ModulesScreen navigation + modals (F021)', () => {
 
   it('shows flat tabs (General/Estructura/Componentes/Agregados/Medidas/Herrajes; Costo is aside)', async () => {
     const user = userEvent.setup();
-    renderScreen();
+    renderScreen({
+      structures: [
+        {
+          id: 'struct-1',
+          code: 'STR-1',
+          name: 'Cuerpo base',
+          components: [{ componentId: 'comp-lat', quantity: 2 }],
+        },
+      ],
+    });
     await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
     expect(screen.getByTestId('module-editor-page')).toBeTruthy();
-    expect(screen.getByTestId('module-editor-tabs')).toBeTruthy();
+    expect(screen.getByTestId('module-editor-tablist')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tab-general')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tab-structure')).toBeTruthy();
     expect(screen.getByTestId('module-editor-tab-components')).toBeTruthy();
@@ -332,13 +341,23 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.getByTestId('module-editor-cost-aside')).toBeTruthy();
     expect(screen.getByTestId('module-editor-panel-general').hidden).toBe(false);
 
-    // No structure yet → badge on structure tab.
-    expect(screen.getByTestId('module-editor-structure-badge')).toBeTruthy();
+    // No structure yet → "!" alert on structure tab.
+    expect(
+      screen
+        .getByTestId('module-editor-tab-structure')
+        .querySelector('.tabs__alert'),
+    ).toBeTruthy();
     await user.click(screen.getByTestId('module-editor-tab-structure'));
     expect(screen.getByTestId('module-editor-panel-structure').hidden).toBe(
       false,
     );
     expect(screen.getByTestId('structure-picker')).toBeTruthy();
+
+    // Gated tabs require a structure base first.
+    await user.selectOptions(
+      screen.getByTestId('structure-picker'),
+      'struct-1',
+    );
 
     await user.click(screen.getByTestId('module-editor-tab-components'));
     expect(screen.getByTestId('module-editor-panel-components').hidden).toBe(
@@ -360,9 +379,51 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(screen.queryByTestId('module-editor-panel-parts')).toBeNull();
   });
 
+  it('F109: module editor uses WorkspaceTabs (tablist contract + roving arrows)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+
+    const tablist = screen.getByTestId('module-editor-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+
+    const general = screen.getByTestId('module-editor-tab-general');
+    expect(general.getAttribute('role')).toBe('tab');
+    expect(general.getAttribute('aria-controls')).toBe(
+      'module-editor-panel-general',
+    );
+    const generalPanel = screen.getByTestId('module-editor-panel-general');
+    expect(generalPanel.getAttribute('role')).toBe('tabpanel');
+    expect(generalPanel.getAttribute('aria-labelledby')).toBe(
+      'module-editor-tab-general',
+    );
+
+    // Gated tab (no structure yet) is disabled with a reason tooltip.
+    const components = screen.getByTestId('module-editor-tab-components');
+    expect(components.hasAttribute('disabled')).toBe(true);
+    expect(components.getAttribute('title')).toBe(
+      'Elegí una estructura base primero',
+    );
+
+    // Arrow-key roving: selection + focus move together.
+    general.focus();
+    await user.keyboard('{ArrowRight}');
+    const structure = screen.getByTestId('module-editor-tab-structure');
+    expect(structure.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(structure);
+  });
+
   it('hybrid Components tab: keeps Agregar componente when boardEditorSlot is set', async () => {
     const user = userEvent.setup();
     renderScreen({
+      structures: [
+        {
+          id: 'struct-1',
+          code: 'STR-1',
+          name: 'Cuerpo base',
+          components: [{ componentId: 'comp-lat', quantity: 2 }],
+        },
+      ],
       boardEditorSlot: (
         <div data-testid="fake-board-editor">Board canvas</div>
       ),
@@ -372,6 +433,12 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     await user.click(screen.getByRole('button', { name: /^Editar$/ }));
     await screen.findByTestId('module-editor-page');
 
+    // Components tab is gated until a structure base is selected.
+    await user.click(screen.getByTestId('module-editor-tab-structure'));
+    await user.selectOptions(
+      screen.getByTestId('structure-picker'),
+      'struct-1',
+    );
     await user.click(screen.getByTestId('module-editor-tab-components'));
 
     const componentsPanel = screen.getByTestId(

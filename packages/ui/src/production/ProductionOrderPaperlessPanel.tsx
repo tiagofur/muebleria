@@ -26,6 +26,7 @@ import { buildProductionModuleRows } from './productionModuleRows';
 import { playScanFeedback } from './scanFeedback';
 import { ScanCameraModal } from './ScanCameraModal';
 import { useHidScanner } from './useHidScanner';
+import { WorkflowTabs } from '../common/Tabs';
 
 export type ProductionOrderPaperlessPanelProps = {
   readonly project: Project;
@@ -267,44 +268,28 @@ export function ProductionOrderPaperlessPanel({
         </p>
       ) : null}
 
-      <div
-        className="tab-bar tab-bar--compact"
-        role="toolbar"
-        aria-label="Filtrar por estado de piso"
-      >
-        <button
-          type="button"
-          className={
-            filter === 'all'
-              ? 'tab-btn tab-btn--active'
-              : 'tab-btn'
-          }
-          onClick={() => setFilter('all')}
-          data-testid="prod-piso-filter-all"
-        >
-          Todos ({rows.length})
-        </button>
-        {ITEM_FLOOR_STATUSES.map((s) => {
-          const n = rows.filter((r) => r.floorStatus === s).length;
-          return (
-            <button
-              key={s}
-              type="button"
-              className={
-                filter === s
-                  ? 'tab-btn tab-btn--active'
-                  : 'tab-btn'
-              }
-              onClick={() => setFilter(s)}
-              data-testid={`prod-piso-filter-${s}`}
-            >
-              {ITEM_FLOOR_STATUS_LABELS_ES[s]} ({n})
-            </button>
-          );
-        })}
-      </div>
+      <WorkflowTabs
+        tabs={[
+          { id: 'all', label: 'Todos', count: rows.length },
+          ...ITEM_FLOOR_STATUSES.map((s) => ({
+            id: s,
+            label: ITEM_FLOOR_STATUS_LABELS_ES[s],
+            count: rows.filter((r) => r.floorStatus === s).length,
+          })),
+        ]}
+        activeTab={filter}
+        onTabChange={setFilter}
+        ariaLabel="Filtrar por estado de piso"
+        idPrefix="prod-piso"
+        testIdPrefix="prod-piso"
+      />
 
-      {filtered.length === 0 ? (
+      <div
+        role="tabpanel"
+        id={`prod-piso-panel-${filter}`}
+        aria-labelledby={`prod-piso-tab-${filter}`}
+      >
+        {filtered.length === 0 ? (
         <EmptyState
           variant="no-results"
           title="Sin módulos en este filtro"
@@ -350,7 +335,8 @@ export function ProductionOrderPaperlessPanel({
             );
           })}
         </ul>
-      )}
+        )}
+      </div>
 
       <ScanCameraModal
         open={cameraOpen}

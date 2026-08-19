@@ -215,3 +215,37 @@ describe('ProductionQueue (F038)', () => {
     expect(screen.queryByTestId('prod-board-toggle-p1')).toBeNull();
   });
 });
+
+describe('ProductionQueue tablist contract (F109)', () => {
+  it('exposes workspace tablist with panel linkage and arrow-key roving', async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductionQueue
+        projects={[project('pq1', 'accepted', 'Obra tabs')]}
+        customerLabelFor={() => 'Ana'}
+        salePriceFor={() => null}
+        onMarkProduced={vi.fn()}
+      />,
+    );
+    const tablist = screen.getByTestId('prod-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(tablist.className).toContain('tabs--workspace');
+
+    const accepted = screen.getByTestId('prod-tab-accepted');
+    const produced = screen.getByTestId('prod-tab-produced');
+    expect(accepted.getAttribute('aria-controls')).toBe('prod-queue-panel-accepted');
+    expect(produced.getAttribute('aria-controls')).toBe('prod-queue-panel-produced');
+    expect(
+      document.getElementById('prod-queue-panel-accepted')?.getAttribute('role'),
+    ).toBe('tabpanel');
+    expect(accepted.getAttribute('aria-selected')).toBe('true');
+
+    accepted.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(produced.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(produced);
+    expect(
+      document.getElementById('prod-queue-panel-produced'),
+    ).toBeTruthy();
+  });
+});

@@ -327,7 +327,7 @@ describe('PresentationKitchenPlanSlide', () => {
     });
     render(<PresentationKitchenPlanSlide project={project} modules={modules} />);
 
-    expect(screen.getByTestId('presentation-kitchen-space-tabs')).toBeTruthy();
+    expect(screen.getByTestId('presentation-kitchen-space-tablist')).toBeTruthy();
     expect(screen.getByTestId('presentation-kitchen-space-tab-sp-cocina')).toBeTruthy();
     expect(screen.getByTestId('presentation-kitchen-space-tab-sp-lav')).toBeTruthy();
     expect(screen.getByTestId('presentation-kitchen-space-title').textContent).toBe(
@@ -389,7 +389,7 @@ describe('PresentationKitchenPlanSlide', () => {
         onSelectedSpaceIdChange={() => {}}
       />,
     );
-    expect(screen.queryByTestId('presentation-kitchen-space-tabs')).toBeNull();
+    expect(screen.queryByTestId('presentation-kitchen-space-tablist')).toBeNull();
     expect(screen.getByTestId('presentation-kitchen-space-title').textContent).toBe(
       'Lavandería',
     );
@@ -857,7 +857,7 @@ describe('ProjectPresentationMode', () => {
       }),
     });
 
-    expect(screen.getByTestId('presentation-space-tabs')).toBeTruthy();
+    expect(screen.getByTestId('presentation-space-tablist')).toBeTruthy();
     expect(screen.getByTestId('presentation-space-tab-sp-cocina')).toBeTruthy();
     expect(screen.getByTestId('presentation-space-tab-sp-lav')).toBeTruthy();
 
@@ -925,6 +925,34 @@ describe('ProjectPresentationMode', () => {
     renderPresentation();
     const nav = screen.getByLabelText('Navegación de diapositivas');
     expect(nav).toBeTruthy();
+  });
+
+  it('slide tabs follow the shared tablist contract (linkage + roving arrows)', () => {
+    renderPresentation();
+    const tablist = screen.getByTestId('presentation-slide-tablist');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(tablist.getAttribute('aria-label')).toBe('Diapositivas');
+
+    const tab0 = screen.getByTestId('presentation-slide-tab-0');
+    expect(tab0.getAttribute('aria-controls')).toBe('presentation-slide-panel-0');
+    // Active slide carries the tabpanel role and back-reference
+    const slide0 = screen.getByTestId('presentation-slide-0');
+    expect(slide0.getAttribute('role')).toBe('tabpanel');
+    expect(slide0.getAttribute('aria-labelledby')).toBe(
+      'presentation-slide-tab-0',
+    );
+    expect(screen.getByTestId('presentation-slide-1').getAttribute('role')).toBeNull();
+
+    // Roving arrows on the tablist advance the deck (selection + focus)
+    const tab1 = screen.getByTestId('presentation-slide-tab-1');
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(tab1.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(tab1);
+    expect(screen.getByTestId('presentation-slide-1').getAttribute('role')).toBe(
+      'tabpanel',
+    );
+    fireEvent.keyDown(tablist, { key: 'Home' });
+    expect(tab0.getAttribute('aria-selected')).toBe('true');
   });
 
   it('resets to slide 0 when open changes from false to true', () => {

@@ -21,7 +21,7 @@
 /*
  * Geometría de controles (v2.1): TODO control interactivo (btn, chips, tabs,
  * inputs) usa --radius-md; --radius-full queda reservado a tags de estado
- * (badges). El pressed state es translateY(1px) — mismo lenguaje que .tab-btn.
+ * (badges). El pressed state es translateY(1px) — mismo lenguaje que .tabs__tab.
  */
 
 .btn {

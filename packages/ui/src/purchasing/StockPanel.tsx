@@ -26,7 +26,7 @@ import {
   type StockMovement,
   type StockMovementType,
 } from '@muebles/domain';
-import { EmptyState, formatMoneyDisplay } from '../common';
+import { EmptyState, formatMoneyDisplay, WorkspaceTabs } from '../common';
 import { StockMovementModal } from './StockMovementModal';
 
 export type StockCatalogOption = { readonly id: string; readonly label: string };
@@ -195,21 +195,18 @@ export function StockPanel({
       ) : null}
 
       <div className="purch-stock__toolbar">
-        <div className="purch-stock__filters" role="tablist" aria-label="Filtros de stock">
-          {(['todos', 'bajo', 'agotado'] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              role="tab"
-              aria-selected={filter === f}
-              className={`tab-btn ${filter === f ? 'tab-btn--active' : ''}`}
-              onClick={() => setFilter(f)}
-              data-testid={`purch-stock-filter-${f}`}
-            >
-              {f === 'todos' ? 'Todos' : f === 'bajo' ? 'Bajo mínimo' : 'Agotados'}
-            </button>
-          ))}
-        </div>
+        <WorkspaceTabs
+          tabs={[
+            { id: 'todos', label: 'Todos' },
+            { id: 'bajo', label: 'Bajo mínimo' },
+            { id: 'agotado', label: 'Agotados' },
+          ]}
+          activeTab={filter}
+          onTabChange={setFilter}
+          ariaLabel="Filtros de stock"
+          idPrefix="purch-stock"
+          testIdPrefix="purch-stock"
+        />
         <label className="purch-stock__search">
           <Search size={14} strokeWidth={1.5} aria-hidden />
           <input
@@ -234,7 +231,12 @@ export function StockPanel({
         ) : null}
       </div>
 
-      <div className="purch-stock__table-wrap">
+      <div
+        className="purch-stock__table-wrap"
+        id={`purch-stock-panel-${filter}`}
+        role="tabpanel"
+        aria-labelledby={`purch-stock-tab-${filter}`}
+      >
         <table className="purch-stock__table" data-testid="purch-stock-table">
           <thead>
             <tr>
