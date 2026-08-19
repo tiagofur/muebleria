@@ -157,7 +157,7 @@
 }
 
 .prod-queue-card__actions .btn {
-  min-height: 2.5rem;
+  min-height: var(--touch-min);
 }
 
 @media (max-width: 719px) {
@@ -258,7 +258,7 @@
 
 .prod-hub__chrome-secondary .btn {
   flex: 1 1 auto;
-  min-height: 2.5rem;
+  min-height: var(--touch-min);
   justify-content: center;
 }
 
@@ -1883,7 +1883,7 @@
 .plant-board__th--project {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: var(--z-base);
   min-width: 200px;
   text-align: left;
   background: var(--surface-card);
@@ -1908,7 +1908,7 @@
 .plant-board__td--project {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: var(--z-base);
   text-align: left;
   background: var(--surface-card);
 }

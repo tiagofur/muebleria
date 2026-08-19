@@ -2296,7 +2296,7 @@
         "packages/ui/src/common/statCard.css",
         "packages/ui/src/design-system/tokens.css"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "ui",
         "design-system",
@@ -2334,6 +2334,71 @@
         "area-theme",
         "color",
         "navigation"
+      ]
+    },
+    {
+      "id": "F113",
+      "phase": 0,
+      "name": "engineering_dashboard_separation",
+      "title": "Separación de cola operativa de Ingeniería y creación del Dashboard de Ingeniería",
+      "description": "Separación canónica de responsabilidades en INGENIERÍA: crear EngineeringDashboard (/engineering-dashboard) para métricas y analítica técnica (tiempos de ciclo, volumen técnico, alertas, carga por ingeniero); refactorizar EngineeringScreen (/engineering) como cola de trabajo limpia con StatusChips; registrar engineeringDashboard en AppShell, routes, App y RBAC.",
+      "acceptance": [
+        "Dashboard Ingeniería (/engineering-dashboard) muestra métricas analíticas (proyectos en cola/proceso/documentados/enviados, tiempos promedio, volumen técnico, alertas de estancamiento y carga por ingeniero).",
+        "Ingeniería (/engineering) queda como cola de trabajo pura sin tarjetas de métricas intrusivas, con toolbar de StatusChips (Todos/Pendientes/En proceso/Documentados) y acciones directas (Iniciar, Continuar, Ver documentación).",
+        "Sidebar INGENIERÍA muestra 'Dashboard Ingeniería' primero y luego 'Ingeniería' según las directrices de design.md §5.4.",
+        "RBAC habilita engineeringDashboard para admin, ingeniero y gerente_produccion.",
+        "pnpm test, pnpm typecheck y ./init.sh verdes con tests unitarios para dominio, RBAC, dashboard y cola de trabajo."
+      ],
+      "references": [
+        "docs/design.md §5.4",
+        "packages/domain/src/engineering.ts",
+        "packages/domain/src/rbac.ts",
+        "packages/ui/src/engineering/EngineeringDashboard.tsx",
+        "packages/ui/src/engineering/EngineeringScreen.tsx",
+        "packages/ui/src/shell/AppShell.tsx",
+        "apps/web/src/routes.ts",
+        "apps/web/src/App.tsx"
+      ],
+      "status": "done",
+      "tags": [
+        "ui",
+        "engineering",
+        "dashboard",
+        "navigation",
+        "rbac"
+      ]
+    },
+    {
+      "id": "F114",
+      "phase": 0,
+      "name": "warehouse_dashboard_separation",
+      "title": "Separación de cola operativa de Almacén y creación del Dashboard de Almacén",
+      "description": "Separación canónica de responsabilidades en COMPRAS / ALMACÉN: crear WarehouseDashboard (/warehouse-dashboard) para métricas y analítica de materiales (demanda agregada de tableros/cintillas/herrajes, salud de stock, órdenes de compra, avance de picking por proyecto); refactorizar PurchasingScreen (/warehouse) como espacio operativo limpio sin tarjetas fijas intrusivas; registrar warehouseDashboard en AppShell, routes, App y RBAC.",
+      "acceptance": [
+        "Dashboard Almacén (/warehouse-dashboard) muestra métricas analíticas (proyectos en picking, demanda de materiales en m²/ml/piezas, alertas de stock bajo/crítico, resumen de órdenes de compra y tabla de proyectos).",
+        "Almacén (/warehouse) queda como espacio de trabajo operativo puro sin tarjetas de métricas fijas superiores, con botón hacia el Dashboard en el header.",
+        "Sidebar COMPRAS / ALMACÉN muestra 'Dashboard Almacén' primero, seguido de 'Almacén' y 'Embarques', según design.md §5.4.",
+        "RBAC habilita warehouseDashboard para admin, almacen y gerente_produccion.",
+        "pnpm test, pnpm typecheck y ./init.sh verdes con tests unitarios para dominio, RBAC, dashboard y pantalla operativa."
+      ],
+      "references": [
+        "docs/design.md §5.4",
+        "packages/domain/src/purchasing.ts",
+        "packages/domain/src/rbac.ts",
+        "packages/ui/src/purchasing/WarehouseDashboard.tsx",
+        "packages/ui/src/purchasing/PurchasingScreen.tsx",
+        "packages/ui/src/shell/AppShell.tsx",
+        "apps/web/src/routes.ts",
+        "apps/web/src/App.tsx"
+      ],
+      "status": "done",
+      "tags": [
+        "ui",
+        "purchasing",
+        "warehouse",
+        "dashboard",
+        "navigation",
+        "rbac"
       ]
     }
   ]

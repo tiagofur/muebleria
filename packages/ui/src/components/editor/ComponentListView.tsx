@@ -157,7 +157,10 @@ export function ComponentListView({
                 <div className="component-card__meta">
                   <span className="component-card__code">{item.code}</span>
                   {!item.active ? (
-                    <span className="catalog-badge catalog-badge--inactive">
+                    <span className="status-badge status-badge--inactive">
+                      <span className="status-badge__dot" aria-hidden>
+                        ●
+                      </span>
                       Inactivo
                     </span>
                   ) : null}

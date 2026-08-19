@@ -493,3 +493,14 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
   Esc, trap, restore, close con nombre accesible).
 - Verificación: focused verde (169+19 y 71/71), ./init.sh completo,
   typecheck, detector 0 hallazgos.
+
+## F111 — Vocabularios y sistema (P2): badges, stats, touch, labels, z-index (2026-08-19)
+
+- Migración de badges locales (`catalog-badge`, `sales-badge`, `users-role-badge`, `eng-badge`) a `.status-badge` / `.meta-chip` neutral (§5.2).
+- Migración de stats locales (`dashboard`, `engineering`, `production`, `purchasing`, `sales`) a `.stat-card` compartido.
+- Botón primario de internal-comms migrado al botón estándar `.btn`.
+- Elevación de `--touch-min` a 2.75rem (44px) por §4.0 y adopción de escala canónica de z-index (`--z-base` a `--z-tooltip`).
+- Desambiguación de labels de navegación en AppShell (`Dashboard Ventas` y `Dashboard Producción`) y Cmd+K.
+- Gate test de colores literales añadido a `packages/ui/src/design-system/designSystem.test.ts`.
+- Verificación: `./init.sh` pasa al 100%, `pnpm typecheck` verde, monorepo limpio.
+

@@ -31,7 +31,7 @@
 /* Overlay on canvas (studio) — does not steal vertical space */
 .module-scene-3d__hint--overlay {
   position: absolute;
-  z-index: 2;
+  z-index: var(--z-raised);
   top: var(--space-2);
   left: var(--space-2);
   right: var(--space-2);

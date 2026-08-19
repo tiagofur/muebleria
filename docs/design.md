@@ -491,7 +491,7 @@ Los media queries **no pueden** leer custom properties; los px de abajo son lite
 
 **Tablas de catálogo / usuarios:** `overflow-x: auto` + fade de bordes + `min-width` en phone para no aplastar celdas.
 
-**Touch:** en `max-width: 767px`, `.btn` / `.btn--small` / acciones de fila usan `min-height: var(--touch-min)`. **Estándar v3: 44px** (Apple HIG; 48dp en móvil nativo, ver `docs/mobile-ui-ux.md`). Hoy `--touch-min` es 2.5rem (40px) — migrar a 2.75rem al tocar CSS de touch. Desktop compacto (#49) no cambia.
+**Touch:** en `max-width: 767px`, `.btn` / `.btn--small` / acciones de fila usan `min-height: var(--touch-min)`. **Estándar v3: 44px** (Apple HIG; 48dp en móvil nativo, ver `docs/mobile-ui-ux.md`). Desde F111 `--touch-min` es 2.75rem (44px). Desktop compacto (#49) no cambia.
 
 **Shell:** collapse drawer en `max-width: 899px` (sin cambio de contrato F017).
 

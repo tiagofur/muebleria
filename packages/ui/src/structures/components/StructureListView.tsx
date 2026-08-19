@@ -123,7 +123,10 @@ export function StructureListView({
                       testId={`structure-revision-${item.code}`}
                     />
                     {!item.active ? (
-                      <span className="catalog-badge catalog-badge--inactive">
+                      <span className="status-badge status-badge--inactive">
+                        <span className="status-badge__dot" aria-hidden>
+                          ●
+                        </span>
                         Inactivo
                       </span>
                     ) : null}

@@ -144,7 +144,7 @@
   left: var(--space-2);
   display: flex;
   gap: var(--space-1);
-  z-index: 2;
+  z-index: var(--z-raised);
 }
 
 .portfolio-badge {
@@ -213,7 +213,7 @@
   align-items: center;
   padding: var(--space-4) var(--space-6);
   color: #fff;
-  z-index: 10;
+  z-index: var(--z-raised);
 }
 
 .portfolio-lightbox-title {
