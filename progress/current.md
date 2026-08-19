@@ -1,5 +1,32 @@
 # Sesión activa
 
+- **Mejoras UI de `/orders` implementadas (2026-08-18): backlog del review aplicado.**
+  - **P1 redirect**: guest en deep link `/orders` ya no ve main vacío — vuelve a
+    home + toast explicativo. Guard extraído a `navBlockedForSession` (routes.ts)
+    con tests (guest/auth × roles). El "teléfono crudo" resultó ser el NOMBRE de
+    un cliente creado por un test del backend (structures_108_test.go) contra la
+    DB local — no era bug de UI; se mitigó con ellipsis+title en cards (§7.2).
+  - **Higiene §7.2**: "schema v3" eliminado del topbar (prop meta de AppShell);
+    "#111" fuera del hint de CNC; placeholder de Piso sin "payload";
+    `formatIsoDate` ahora humano es-MX «18 ago 2026» (global: dashboard,
+    cotizaciones, producción); medidas «400 × 720 × 590 mm» con espacios;
+    "ml"→"ML" en totales de canto.
+  - **Primarias por contexto (§8)**: con chrome Pack presente, Documentos y
+    Herrajes renderizan sus acciones como secundarias (`packAsPrimary` /
+    `exportAsPrimary` props). El pack del chrome es la única primaria.
+  - **Vocabulario común (§5.4/§6.4)**: Resumen usa `.stat-card stat-card--work`
+    (tinte Producción) — CSS propio `prod-hub__total-card` eliminado; Herrajes
+    usa `.data-table-wrap`/`.data-table` con columnas numéricas alineadas a la
+    derecha (tabular-nums) y `lineCost` con `formatMoneyDisplay` ($140.00 MXN).
+  - **A11y**: tabpanel del hub con nombre accesible (`aria-labelledby` + ids);
+    empty de filtro de Piso ahora es `EmptyState` no-results con CTA «Ver todos».
+  - Verificación: `pnpm test` monorepo verde (263 web / 974 ui), typecheck
+    verde, detector 0. En vivo (admin): fecha humana, ML, pack secundario en
+    Documentos, tabla data-table con moneda, EmptyState de filtro, topbar sin
+    schema, guest redirect a home — todo confirmado en navegador.
+  - Pendiente (P3, no tocado): labels en inglés «Cut-list CSV»/«CNC pilot»
+    (sancionados por §6.7), borde de canto redundante «1x19mm · 1 mm» (dato),
+    separadores "·" pegados en meta del hub (necesita spans con margen).
 - **Review UI de `/orders` como test del estándar v3 (2026-08-18): COMPLETADO.**
   - Alcance: cola + hub `/orders/:id` (tabs Resumen · Piso · Etiquetas · Herrajes ·
     Documentos) contra `docs/design.md` v3.0 (gate §8 + §7 + §4.8). Sin tocar código.

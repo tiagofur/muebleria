@@ -21,6 +21,7 @@ import {
   parsePieceLabelScan,
 } from '@muebles/domain';
 import { Camera, ScanLine } from 'lucide-react';
+import { EmptyState } from '../common';
 import { buildProductionModuleRows } from './productionModuleRows';
 import { playScanFeedback } from './scanFeedback';
 import { ScanCameraModal } from './ScanCameraModal';
@@ -188,7 +189,7 @@ export function ProductionOrderPaperlessPanel({
             setScan(e.target.value);
             setScanMiss(false);
           }}
-          placeholder="MOD-03, MOD-03-L2 o payload QR…"
+          placeholder="MOD-03, MOD-03-L2 o el código del QR…"
           data-testid="prod-piso-scan-input"
         />
         <button
@@ -304,9 +305,13 @@ export function ProductionOrderPaperlessPanel({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="prod-hub__placeholder-body">
-          No hay módulos en este filtro.
-        </p>
+        <EmptyState
+          variant="no-results"
+          title="Sin módulos en este filtro"
+          description="Ningún módulo de esta obra está en ese estado de piso."
+          actionLabel="Ver todos"
+          onAction={() => setFilter('all')}
+        />
       ) : (
         <ul className="prod-paperless__grid">
           {filtered.map((row) => {

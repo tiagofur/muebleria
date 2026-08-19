@@ -65,7 +65,7 @@ function measuresForItem(
         widthMm: preset.width,
         heightMm: preset.height,
         depthMm: preset.depth,
-        label: `${preset.width}×${preset.height}×${preset.depth} mm`,
+        label: `${preset.width} × ${preset.height} × ${preset.depth} mm`,
       };
     }
   } catch {
@@ -77,7 +77,7 @@ function measuresForItem(
       widthMm: width,
       heightMm: height,
       depthMm: depth,
-      label: `${width}×${height}×${depth} mm`,
+      label: `${width} × ${height} × ${depth} mm`,
     };
   }
   return {

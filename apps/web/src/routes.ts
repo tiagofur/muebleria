@@ -4,6 +4,7 @@
  */
 
 import type { AppNavId } from '@muebles/ui';
+import { roleCanAccessNav } from '@muebles/domain';
 
 /** Canonical path for each sidebar destination. URLs name the screen. */
 export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
@@ -32,6 +33,20 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   settings: '/settings',
   users: '/users',
 } as const;
+
+/**
+ * Deep-link guard (design.md §4.1): a route the current session can't open
+ * must bounce to home instead of rendering an empty screen. Guest (local
+ * mode) has a narrower nav set — no Órdenes/Fábrica workspace — so a guest
+ * hitting /orders/* directly gets redirected, not a blank main.
+ */
+export function navBlockedForSession(
+  session: 'guest' | 'auth',
+  role: string | null | undefined,
+  navId: AppNavId,
+): boolean {
+  return !roleCanAccessNav(session === 'auth' ? role ?? null : null, navId);
+}
 
 /** Sections that support `/section/:id` deep links for entity rows. */
 export type EntitySection = Exclude<

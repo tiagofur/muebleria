@@ -40,6 +40,12 @@ export type ProductionDocumentItem = {
 export type ProductionOrderDocumentsPanelProps = {
   readonly documents: readonly ProductionDocumentItem[];
   readonly exportBusy?: boolean;
+  /**
+   * Pack as the tab's primary action. The hub chrome already owns the primary
+   * when a pack button exists there — pass false then (design.md §8: one
+   * primary per context level, chrome OR tab, never both).
+   */
+  readonly packAsPrimary?: boolean;
 };
 
 const ICONS: Record<ProductionDocumentId, typeof FileText> = {
@@ -61,6 +67,7 @@ const ICONS: Record<ProductionDocumentId, typeof FileText> = {
 export function ProductionOrderDocumentsPanel({
   documents,
   exportBusy = false,
+  packAsPrimary = true,
 }: ProductionOrderDocumentsPanelProps): ReactNode {
   return (
     <div className="prod-docs" data-testid="prod-hub-documentos">
@@ -88,7 +95,9 @@ export function ProductionOrderDocumentsPanel({
               <button
                 type="button"
                 className={
-                  doc.id === 'pack' ? 'btn btn--primary' : 'btn'
+                  packAsPrimary && doc.id === 'pack'
+                    ? 'btn btn--primary'
+                    : 'btn'
                 }
                 disabled={exportBusy || !doc.available || !doc.onDownload}
                 onClick={() => {

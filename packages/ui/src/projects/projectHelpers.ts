@@ -594,10 +594,11 @@ export function formatIsoDate(iso: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('es-UY', {
+  // Humano es-MX «18 ago 2026» (design.md §7.2) — nunca dd/MM/yyyy crudo.
+  return d.toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'short',
     year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
   });
 }
 

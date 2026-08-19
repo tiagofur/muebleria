@@ -8,6 +8,7 @@ import {
   entityPath,
   isEntityEditPath,
   isEntitySection,
+  navBlockedForSession,
   isNewEntityEditPath,
   moduleEditIdFromPath,
   moduleEditPath,
@@ -177,5 +178,26 @@ describe('plant board route (F093)', () => {
     expect(entityIdFromPath('/finishes/x', 'finishes')).toBe(
       'x',
     );
+  });
+
+  describe('navBlockedForSession (deep-link guard, design.md §4.1)', () => {
+    it('guest deep links to /orders bounce to home instead of an empty main', () => {
+      expect(navBlockedForSession('guest', null, 'orders')).toBe(true);
+      expect(navBlockedForSession('guest', null, 'production')).toBe(true);
+      expect(navBlockedForSession('guest', null, 'warehouse')).toBe(true);
+    });
+
+    it('guest keeps local-mode sections (quotes, materials, settings)', () => {
+      expect(navBlockedForSession('guest', null, 'quotes')).toBe(false);
+      expect(navBlockedForSession('guest', null, 'materials')).toBe(false);
+      expect(navBlockedForSession('guest', null, 'settings')).toBe(false);
+    });
+
+    it('auth blocks by role and the guest role set does not leak in', () => {
+      expect(navBlockedForSession('auth', 'vendedor', 'orders')).toBe(true);
+      expect(navBlockedForSession('auth', 'produccion', 'orders')).toBe(false);
+      // A null role under auth is blocked everywhere except home-ish basics.
+      expect(navBlockedForSession('auth', null, 'orders')).toBe(true);
+    });
   });
 });

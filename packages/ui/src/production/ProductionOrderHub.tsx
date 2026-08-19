@@ -188,7 +188,7 @@ function FactoryTotalsBlock({
                     {e.thicknessMm ? ` · ${e.thicknessMm} mm` : ''}
                   </span>
                   <span className="prod-hub__totals-num">
-                    {e.ml.toLocaleString('es-MX')} ml
+                    {e.ml.toLocaleString('es-MX')} ML
                   </span>
                 </li>
               ))}
@@ -336,7 +336,7 @@ export function ProductionOrderHub({
     {
       id: 'cnc-pilot',
       label: 'CNC pilot (JSON)',
-      hint: 'Metadatos rectangulares por pieza — no reemplaza Optimizer (#111)',
+      hint: 'Metadatos rectangulares por pieza — no reemplaza al Optimizer',
       available: readiness.materialsResolved && Boolean(onExportCncPilot),
       reason: 'Requiere piezas de tablero',
       onDownload: onExportCncPilot,
@@ -507,7 +507,9 @@ export function ProductionOrderHub({
                 key={tab}
                 type="button"
                 role="tab"
+                id={`prod-hub-tab-${tab}`}
                 aria-selected={selected}
+                aria-controls="prod-hub-tabpanel"
                 className={
                   selected
                     ? 'tab-btn tab-btn--active'
@@ -523,54 +525,65 @@ export function ProductionOrderHub({
         </nav>
       </div>
 
-      <div className="prod-hub__body" role="tabpanel">
+      <div
+        className="prod-hub__body"
+        role="tabpanel"
+        id="prod-hub-tabpanel"
+        aria-labelledby={`prod-hub-tab-${activeTab}`}
+      >
         {activeTab === 'resumen' ? (
           <div className="prod-hub__resumen" data-testid="prod-hub-resumen">
             <div className="prod-hub__totals" aria-label="Totales de fábrica">
-              <div className="prod-hub__total-card">
-                <LayoutGrid size={18} strokeWidth={1.5} aria-hidden />
-                <div>
-                  <p className="prod-hub__total-value" data-testid="prod-hub-modules">
+              <div className="stat-card stat-card--work">
+                <span className="stat-card__icon" aria-hidden>
+                  <LayoutGrid size={18} strokeWidth={1.5} />
+                </span>
+                <div className="stat-card__body">
+                  <p className="stat-card__value" data-testid="prod-hub-modules">
                     {readiness.moduleUnitCount}
                   </p>
-                  <p className="prod-hub__total-label">
-                    {readiness.moduleUnitCount === 1 ? 'módulo' : 'módulos'}
-                    <span className="prod-hub__total-sub">
-                      {' '}
-                      ({readiness.moduleLineCount} líneas)
-                    </span>
+                  <p className="stat-card__label">
+                    {readiness.moduleUnitCount === 1 ? 'módulo' : 'módulos'} (
+                    {readiness.moduleLineCount}{' '}
+                    {readiness.moduleLineCount === 1 ? 'línea' : 'líneas'})
                   </p>
                 </div>
               </div>
-              <div className="prod-hub__total-card">
-                <FileSpreadsheet size={18} strokeWidth={1.5} aria-hidden />
-                <div>
-                  <p className="prod-hub__total-value" data-testid="prod-hub-pieces">
+              <div className="stat-card stat-card--work">
+                <span className="stat-card__icon" aria-hidden>
+                  <FileSpreadsheet size={18} strokeWidth={1.5} />
+                </span>
+                <div className="stat-card__body">
+                  <p className="stat-card__value" data-testid="prod-hub-pieces">
                     {readiness.cutListOk ? readiness.cutRowCount : '—'}
                   </p>
-                  <p className="prod-hub__total-label">piezas de tablero</p>
+                  <p className="stat-card__label">piezas de tablero</p>
                 </div>
               </div>
-              <div className="prod-hub__total-card">
-                <Layers size={18} strokeWidth={1.5} aria-hidden />
-                <div>
-                  <p className="prod-hub__total-value" data-testid="prod-hub-board-m2">
+              <div className="stat-card stat-card--work">
+                <span className="stat-card__icon" aria-hidden>
+                  <Layers size={18} strokeWidth={1.5} />
+                </span>
+                <div className="stat-card__body">
+                  <p className="stat-card__value" data-testid="prod-hub-board-m2">
                     {cutRows && cutRows.length > 0
                       ? summarizeProductionTotals(cutRows).totalAreaM2.toLocaleString('es-MX')
                       : '—'}
                   </p>
-                  <p className="prod-hub__total-label">m² de tablero</p>
+                  <p className="stat-card__label">m² de tablero</p>
                 </div>
               </div>
-              <div className="prod-hub__total-card">
-                <Ruler size={18} strokeWidth={1.5} aria-hidden />
-                <div>
-                  <p className="prod-hub__total-value" data-testid="prod-hub-edge-ml">
+              <div className="stat-card stat-card--work">
+                <span className="stat-card__icon" aria-hidden>
+                  <Ruler size={18} strokeWidth={1.5} />
+                </span>
+                <div className="stat-card__body">
+                  <p className="stat-card__value" data-testid="prod-hub-edge-ml">
                     {cutRows && cutRows.length > 0
                       ? summarizeProductionTotals(cutRows).totalEdgeMl.toLocaleString('es-MX')
                       : '—'}
                   </p>
-                  <p className="prod-hub__total-label">ml de canto</p>
+                  <p className="stat-card__label">ML de canto</p>
                 </div>
               </div>
             </div>
@@ -692,6 +705,8 @@ export function ProductionOrderHub({
             onExportHardware={onExportHardware}
             exportBusy={exportBusy}
             hideCosts={hideHardwareCosts}
+            currency={project.currency}
+            exportAsPrimary={!onExportProductionPack}
           />
         ) : null}
 
@@ -699,6 +714,7 @@ export function ProductionOrderHub({
           <ProductionOrderDocumentsPanel
             documents={documents}
             exportBusy={exportBusy}
+            packAsPrimary={!onExportProductionPack}
           />
         ) : null}
 

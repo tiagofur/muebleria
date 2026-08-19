@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react';
 import type { HardwarePurchaseRow } from '@muebles/domain';
 import { Wrench } from 'lucide-react';
+import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 
 export type ProductionOrderHardwarePanelProps = {
   readonly rows: readonly HardwarePurchaseRow[] | null;
@@ -13,6 +14,13 @@ export type ProductionOrderHardwarePanelProps = {
   readonly exportBusy?: boolean;
   /** When true, hide unit costs (COST-01). */
   readonly hideCosts?: boolean;
+  /** Project currency for money display (default MXN, design.md §7.2). */
+  readonly currency?: string;
+  /**
+   * Export as the tab's primary action. The hub chrome owns the primary when
+   * it renders a pack button — pass false then (design.md §8).
+   */
+  readonly exportAsPrimary?: boolean;
 };
 
 function formatQty(n: number): string {
@@ -26,6 +34,8 @@ export function ProductionOrderHardwarePanel({
   onExportHardware,
   exportBusy = false,
   hideCosts = false,
+  currency = 'MXN',
+  exportAsPrimary = true,
 }: ProductionOrderHardwarePanelProps): ReactNode {
   return (
     <div className="prod-herrajes" data-testid="prod-hub-herrajes">
@@ -36,7 +46,7 @@ export function ProductionOrderHardwarePanel({
         {onExportHardware ? (
           <button
             type="button"
-            className="btn btn--primary"
+            className={exportAsPrimary ? 'btn btn--primary' : 'btn'}
             disabled={exportBusy || !rows || rows.length === 0}
             onClick={() => {
               void onExportHardware();
@@ -58,16 +68,24 @@ export function ProductionOrderHardwarePanel({
           No hay herrajes en esta orden.
         </p>
       ) : (
-        <div className="prod-modulos__table-wrap">
-          <table className="prod-modulos__table" data-testid="prod-herrajes-table">
+        <div className="data-table-wrap">
+          <table className="data-table" data-testid="prod-herrajes-table">
             <thead>
               <tr>
                 <th scope="col">Código</th>
                 <th scope="col">Descripción</th>
-                <th scope="col">Cant.</th>
-                <th scope="col">Compra</th>
+                <th scope="col" className="prod-herrajes__num">
+                  Cant.
+                </th>
+                <th scope="col" className="prod-herrajes__num">
+                  Compra
+                </th>
                 <th scope="col">Unidad</th>
-                {!hideCosts ? <th scope="col">Costo línea</th> : null}
+                {!hideCosts ? (
+                  <th scope="col" className="prod-herrajes__num">
+                    Costo línea
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -77,11 +95,15 @@ export function ProductionOrderHardwarePanel({
                     <code className="prod-modulos__code">{row.code}</code>
                   </td>
                   <td>{row.description}</td>
-                  <td>{formatQty(row.quantity)}</td>
-                  <td>{formatQty(row.purchaseQuantity)}</td>
+                  <td className="prod-herrajes__num">{formatQty(row.quantity)}</td>
+                  <td className="prod-herrajes__num">
+                    {formatQty(row.purchaseQuantity)}
+                  </td>
                   <td>{row.unit}</td>
                   {!hideCosts ? (
-                    <td>{row.lineCost.toFixed(2)}</td>
+                    <td className="prod-herrajes__num">
+                      {formatMoneyDisplay(row.lineCost, { currency })}
+                    </td>
                   ) : null}
                 </tr>
               ))}

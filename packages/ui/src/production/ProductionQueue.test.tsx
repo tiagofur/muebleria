@@ -90,7 +90,7 @@ describe('ProductionQueue (F038)', () => {
         onMarkProduced={vi.fn()}
       />,
     );
-    expect(screen.getByText(/Aceptado 10\/08\/2026/)).toBeTruthy();
+    expect(screen.getByText(/Aceptado 10 ago 2026/)).toBeTruthy();
   });
 
   it('lists accepted jobs and marks produced', async () => {

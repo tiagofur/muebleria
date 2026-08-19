@@ -69,7 +69,6 @@ import {
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   resolveWorkshopSettings,
-  roleCanAccessNav,
   roleCanAssignOwner,
   roleCanDeleteProject,
   canExportProductionForProject,
@@ -213,6 +212,7 @@ import {
   isEntitySection,
   moduleEditIdFromPath,
   moduleEditPath,
+  navBlockedForSession,
   navFromPath,
   pathForNav,
   productionOrderFromPath,
@@ -1225,11 +1225,16 @@ function AppContent({
       navigate(pathForNav('home'), { replace: true });
       return;
     }
-    if (session === 'auth' && !roleCanAccessNav(actorRole, resolved)) {
+    const blocked =
+      (session === 'auth' || session === 'guest') &&
+      navBlockedForSession(session, actorRole, resolved);
+    if (blocked) {
       toast({
         type: 'error',
         message:
-          'No tenés permiso para esta sección. Pedile a un admin que te asigne el puesto correcto.',
+          session === 'guest'
+            ? 'Esta sección necesita sesión con el servidor. Salí del modo local y entrá con tu cuenta.'
+            : 'No tenés permiso para esta sección. Pedile a un admin que te asigne el puesto correcto.',
       });
       navigate(pathForNav('home'), { replace: true });
     }
@@ -3053,7 +3058,6 @@ function AppContent({
       activeId={navId}
       onNavigate={onNavigate}
       hrefForNav={pathForNav}
-      meta={`schema v${workspace.schemaVersion}`}
       onLogout={onLogout}
       sessionMode={session}
       user={

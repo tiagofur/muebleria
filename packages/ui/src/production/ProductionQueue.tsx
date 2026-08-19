@@ -207,7 +207,10 @@ export function ProductionQueue({
                       <h3 className="prod-queue-card__name">{project.name}</h3>
                       <StatusBadge status={project.status} />
                     </div>
-                    <p className="prod-queue-card__client">
+                    <p
+                      className="prod-queue-card__client"
+                      title={customerLabelFor(project.customerId) || undefined}
+                    >
                       {customerLabelFor(project.customerId) || '—'}
                     </p>
                     <p className="prod-queue-card__meta">

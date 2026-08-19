@@ -80,7 +80,7 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
     const totals = screen.getByTestId('prod-hub-factory-totals');
     expect(totals.textContent).toContain('Tablero');
     expect(totals.textContent).toContain('m²');
-    expect(totals.textContent).toContain('ml');
+    expect(totals.textContent).toContain('ML');
 
     await user.click(screen.getByTestId('prod-hub-export-pack'));
     expect(onPack).toHaveBeenCalled();

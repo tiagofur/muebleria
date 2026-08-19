@@ -121,6 +121,9 @@
   margin: 0;
   font-size: var(--text-sm);
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prod-queue-card__meta {
@@ -306,35 +309,7 @@
   gap: var(--space-3);
 }
 
-.prod-hub__total-card {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-card);
-  color: var(--text-brand);
-}
-
-.prod-hub__total-value {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
-  color: var(--text-primary);
-  line-height: var(--leading-tight);
-}
-
-.prod-hub__total-label {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.prod-hub__total-sub {
-  color: var(--text-muted);
-}
-
+/* Totales de fábrica: cards comunes .stat-card (design.md §5.4) */
 .prod-hub__factory-totals {
   display: flex;
   flex-direction: column;
@@ -667,6 +642,12 @@
 /* --- Phase 1: despiece, herrajes, docs, elevations --- */
 
 .prod-despiece,
+/* Números de herrajes: alineados a la derecha, tabulares (design.md §7.2) */
+.prod-herrajes__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .prod-herrajes,
 .prod-docs {
   display: flex;
