@@ -372,6 +372,9 @@ describe('AppShell tonal area context (F100)', () => {
     ['library', 'modules'],
     ['library', 'materials'],
     ['work', 'production'],
+    ['warehouse', 'warehouse'],
+    ['warehouse', 'shipments'],
+    ['warehouse', 'warehouseDashboard'],
     ['neutral', 'home'],
     ['neutral', 'settings'],
   ] as const)('renders %s context for %s navigation', (expected, activeId) => {
@@ -399,9 +402,9 @@ describe('AppShell tonal area context (F100)', () => {
     expect(css).toContain('border-bottom: 1px solid var(--area-border)');
   });
 
-  it('calculates all 20 area ink contrast pairs at WCAG AA or higher', () => {
+  it('calculates all area ink contrast pairs at WCAG AA or higher', () => {
     const ratios = Object.fromEntries(
-      ['sales', 'eng', 'library', 'work', 'neutral'].flatMap((area) =>
+      ['sales', 'eng', 'library', 'work', 'warehouse', 'neutral'].flatMap((area) =>
         ['canvas', 'chrome', 'container', 'selected'].map((surface) => [
           `${area}/${surface}`,
           contrastRatio(readAreaToken(area, 'ink'), readAreaToken(area, surface)),
@@ -426,6 +429,10 @@ describe('AppShell tonal area context (F100)', () => {
       'work/chrome': expect.closeTo(7.01, 2),
       'work/container': expect.closeTo(6.54, 2),
       'work/selected': expect.closeTo(6.85, 2),
+      'warehouse/canvas': expect.closeTo(9.00, 2),
+      'warehouse/chrome': expect.closeTo(8.43, 2),
+      'warehouse/container': expect.closeTo(7.87, 2),
+      'warehouse/selected': expect.closeTo(8.24, 2),
       'neutral/canvas': expect.closeTo(10.54, 2),
       'neutral/chrome': expect.closeTo(9.75, 2),
       'neutral/container': expect.closeTo(9.54, 2),
@@ -439,7 +446,7 @@ describe('AppShell tonal area context (F100)', () => {
     // the calibration bounds keep the tint perceivable (canvas L<=95.5 with
     // raised chroma, chrome one step above canvas) without tinting work
     // surfaces: container/selected stay at their original steps.
-    for (const area of ['sales', 'eng', 'library', 'work', 'neutral']) {
+    for (const area of ['sales', 'eng', 'library', 'work', 'warehouse', 'neutral']) {
       const canvas = readAreaToken(area, 'canvas');
       const chrome = readAreaToken(area, 'chrome');
       const container = readAreaToken(area, 'container');

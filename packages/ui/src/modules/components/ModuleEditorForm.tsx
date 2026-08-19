@@ -224,6 +224,7 @@ export function ModuleEditorForm({
         catalogHardware={activeHardware}
         optionGroups={hardwareRoles}
         hidden={editorTab !== 'agregados'}
+        idPrefix="module-editor"
       />
 
       <ModuleEditorMeasuresPanel

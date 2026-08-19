@@ -316,4 +316,35 @@ describe('StructureEditorAgregadosPanel', () => {
     expect(screen.queryByTestId('structure-agr-body-0')).toBeNull();
     expect(screen.queryByTestId('structure-agr-body-1')).toBeNull();
   });
+
+  it('renders with accessible tabpanel role and default idPrefix', () => {
+    render(<TestHarness />);
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toBeDefined();
+    expect(panel.getAttribute('id')).toBe('structure-editor-panel-agregados');
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      'structure-editor-tab-agregados',
+    );
+    expect(panel.getAttribute('hidden')).toBeNull();
+  });
+
+  it('renders with custom idPrefix and respects hidden prop', () => {
+    render(
+      <StructureEditorAgregadosPanel
+        draft={emptyStructureDraft()}
+        setDraft={vi.fn()}
+        catalogAgregados={mockAgregados}
+        idPrefix="module-editor"
+        hidden={true}
+      />,
+    );
+    const panel = screen.getByTestId('structure-editor-agregados-panel');
+    expect(panel.getAttribute('role')).toBe('tabpanel');
+    expect(panel.getAttribute('id')).toBe('module-editor-panel-agregados');
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      'module-editor-tab-agregados',
+    );
+    expect(panel.getAttribute('hidden')).not.toBeNull();
+  });
 });
+

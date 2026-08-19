@@ -194,7 +194,7 @@ La paleta usa HSL para permitir variaciones programáticas y preparar dark mode.
 
 El color de área comunica **ubicación dentro del proceso del taller**, no prioridad
 ni estado. Cada destino del shell resuelve exactamente un contexto: `sales`,
-`eng`, `library`, `work` o `neutral`. El contexto se aplica en el frame compartido
+`eng`, `library`, `work`, `warehouse` o `neutral`. El contexto se aplica en el frame compartido
 y se propaga mediante roles semánticos, nunca mediante hex o mezclas locales.
 
 | Contexto | Secciones actuales | Familia | Propósito |
@@ -202,7 +202,8 @@ y se propaga mediante roles semánticos, nunca mediante hex o mezclas locales.
 | `sales` | VENTAS | teal | relación comercial y avance |
 | `eng` | INGENIERÍA | indigo | precisión y estructura técnica |
 | `library` | LIBRERÍA, CATÁLOGOS | oliva/sage (hue 95) | creación y mantenimiento del sistema de activos reutilizables (F112) |
-| `work` | PRODUCCIÓN, COMPRAS / ALMACÉN | naranja taller | operación física y secuencia |
+| `work` | PRODUCCIÓN | naranja taller | operación física y secuencia de planta |
+| `warehouse` | COMPRAS / ALMACÉN | azul acero / pizarra (hue 200) | inventario, abastecimiento y logística de embarques |
 | `neutral` | TRABAJO, CONFIG | neutral con sesgo brand | visión transversal y administración |
 
 Apple aporta la jerarquía calma del frame y feedback de interacción; Material 3

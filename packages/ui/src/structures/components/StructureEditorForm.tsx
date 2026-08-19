@@ -140,6 +140,7 @@ export function StructureEditorForm({
         catalogHardware={catalogInput?.hardware}
         optionGroups={catalogInput?.optionGroups}
         hidden={editorTab !== 'agregados'}
+        idPrefix="structure-editor"
       />
 
       <StructureEditorPresetsPanel

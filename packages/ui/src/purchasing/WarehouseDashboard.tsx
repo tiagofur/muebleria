@@ -138,7 +138,7 @@ export function WarehouseDashboard({
 
       {/* Main KPI Stat Cards */}
       <div className="warehouse-dashboard__stats">
-        <div className="stat-card stat-card--work" data-testid="wh-stat-projects">
+        <div className="stat-card stat-card--warehouse" data-testid="wh-stat-projects">
           <span className="stat-card__icon">
             <Warehouse size={18} strokeWidth={1.5} />
           </span>
@@ -151,7 +151,7 @@ export function WarehouseDashboard({
           </div>
         </div>
 
-        <div className="stat-card stat-card--work" data-testid="wh-stat-boards">
+        <div className="stat-card stat-card--warehouse" data-testid="wh-stat-boards">
           <span className="stat-card__icon">
             <Layers size={18} strokeWidth={1.5} />
           </span>
@@ -162,7 +162,7 @@ export function WarehouseDashboard({
           </div>
         </div>
 
-        <div className="stat-card stat-card--work" data-testid="wh-stat-edges">
+        <div className="stat-card stat-card--warehouse" data-testid="wh-stat-edges">
           <span className="stat-card__icon">
             <Ruler size={18} strokeWidth={1.5} />
           </span>
@@ -174,7 +174,7 @@ export function WarehouseDashboard({
         </div>
 
         <div
-          className={`stat-card ${stats.stockAlerts.length > 0 ? 'stat-card--danger' : 'stat-card--work'}`}
+          className={`stat-card ${stats.stockAlerts.length > 0 ? 'stat-card--danger' : 'stat-card--warehouse'}`}
           data-testid="wh-stat-stock"
         >
           <span className="stat-card__icon">

@@ -63,14 +63,20 @@
   --area-work-100: hsl(25 100% 96%);
   --area-work-300: hsl(25 90% 78%);
   --area-work-400: hsl(25 82% 60%);
-  --area-work-500: hsl(25 72% 46%); /* PRODUCCIÓN+ALMACÉN — naranja taller */
+  --area-work-500: hsl(25 72% 46%); /* PRODUCCIÓN — naranja taller */
   --area-work-600: hsl(25 66% 38%);
+
+  --area-warehouse-100: hsl(200 40% 95%);
+  --area-warehouse-300: hsl(200 35% 72%);
+  --area-warehouse-400: hsl(200 38% 56%);
+  --area-warehouse-500: hsl(200 36% 42%); /* COMPRAS / ALMACÉN — azul acero / pizarra industrial */
+  --area-warehouse-600: hsl(200 38% 32%);
 
 
   /* —— Contextos tonales de área (design.md §3.2.1 / F100, calibrado F107) ——
    * Cada pair --area-*-ink sobre canvas/chrome/container/selected cumple
    * WCAG AA para texto normal. Verificación sRGB: sales >=5.87:1,
-   * eng >=8.87:1, work >=6.54:1, library >=6.59:1, neutral >=9.54:1.
+   * eng >=8.87:1, work >=6.54:1, library >=6.59:1, warehouse >=7.60:1, neutral >=9.54:1.
    * Brand primary/focus y semantic state roles siguen fuera de esta cascada.
    *
    * Calibración F107: canvas L≈95% y chrome L≈92% (un paso por encima del
@@ -106,6 +112,16 @@
   --area-work-state-hover: hsl(25 60% 86%);
   --area-work-state-pressed: hsl(25 60% 81%);
   --area-work-state-focus: hsl(25 58% 75%);
+
+  --area-warehouse-canvas: hsl(200 32% 95%);
+  --area-warehouse-chrome: hsl(200 35% 92%);
+  --area-warehouse-container: hsl(200 30% 89%);
+  --area-warehouse-border: hsl(200 24% 78%);
+  --area-warehouse-selected: hsl(200 32% 91%);
+  --area-warehouse-ink: hsl(200 45% 24%);
+  --area-warehouse-state-hover: hsl(200 30% 86%);
+  --area-warehouse-state-pressed: hsl(200 32% 81%);
+  --area-warehouse-state-focus: hsl(200 35% 75%);
 
   --area-library-canvas: hsl(95 38% 95%);
   --area-library-chrome: hsl(95 38% 92%);
@@ -377,6 +393,18 @@
   --area-state-hover: var(--area-work-state-hover);
   --area-state-pressed: var(--area-work-state-pressed);
   --area-state-focus: var(--area-work-state-focus);
+}
+
+[data-area-context='warehouse'] {
+  --area-canvas: var(--area-warehouse-canvas);
+  --area-chrome: var(--area-warehouse-chrome);
+  --area-container: var(--area-warehouse-container);
+  --area-border: var(--area-warehouse-border);
+  --area-selected: var(--area-warehouse-selected);
+  --area-ink: var(--area-warehouse-ink);
+  --area-state-hover: var(--area-warehouse-state-hover);
+  --area-state-pressed: var(--area-warehouse-state-pressed);
+  --area-state-focus: var(--area-warehouse-state-focus);
 }
 
 [data-area-context='library'] {

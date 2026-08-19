@@ -19,6 +19,8 @@ describe('web shell area-context integration (F100)', () => {
     ['/materials', 'library'],
     ['/modules', 'library'],
     ['/production', 'work'],
+    ['/warehouse', 'warehouse'],
+    ['/shipments', 'warehouse'],
     ['/', 'neutral'],
   ] as const)('propagates %s through AppShell as %s', (path, expected) => {
     const activeId = navFromPath(path);

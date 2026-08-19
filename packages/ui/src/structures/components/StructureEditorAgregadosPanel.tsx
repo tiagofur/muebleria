@@ -41,6 +41,7 @@ export interface StructureEditorAgregadosPanelProps<
   readonly catalogHardware?: readonly Hardware[];
   readonly optionGroups?: readonly OptionGroup[];
   readonly hidden?: boolean;
+  readonly idPrefix?: string;
 }
 
 export function getOptionRolesForAgregado(
@@ -120,6 +121,7 @@ export function StructureEditorAgregadosPanel<
   catalogHardware = [],
   optionGroups = [],
   hidden = false,
+  idPrefix = 'structure-editor',
 }: StructureEditorAgregadosPanelProps<T>): ReactNode {
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
   const [pendingRemove, setPendingRemove] = useState<{
@@ -163,8 +165,6 @@ export function StructureEditorAgregadosPanel<
     });
     setExpandedMap(next);
   };
-
-  if (hidden) return null;
 
   const handleAddAgregado = () => {
     if (!selectedCatalogId) return;
@@ -236,9 +236,15 @@ export function StructureEditorAgregadosPanel<
   };
 
   const agregadosCount = (draft.agregados ?? []).length;
+  const panelId = `${idPrefix}-panel-agregados`;
+  const tabId = `${idPrefix}-tab-agregados`;
 
   return (
     <div
+      role="tabpanel"
+      id={panelId}
+      aria-labelledby={tabId}
+      hidden={hidden}
       className="structure-editor__panel structure-editor__agregados-panel"
       data-testid="structure-editor-agregados-panel"
     >

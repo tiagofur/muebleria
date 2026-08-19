@@ -83,6 +83,13 @@
   --stat-card-active-bg: var(--area-work-100);
 }
 
+.stat-card--warehouse {
+  --stat-card-icon-bg: var(--area-warehouse-100);
+  --stat-card-icon-fg: var(--area-warehouse-500);
+  --stat-card-active-border: var(--area-warehouse-400);
+  --stat-card-active-bg: var(--area-warehouse-100);
+}
+
 /* ── Variante interactiva (filtro clickeable) ────────────────────────────── */
 
 .stat-card--button {
