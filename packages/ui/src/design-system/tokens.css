@@ -60,6 +60,64 @@
   --area-work-500: hsl(25 72% 46%); /* PRODUCCIÓN+ALMACÉN — naranja taller */
   --area-work-600: hsl(25 66% 38%);
 
+
+  /* —— Contextos tonales de área (design.md §3.2.1 / F100) ——
+   * Cada pair --area-*-ink sobre canvas/chrome/container/selected cumple
+   * WCAG AA para texto normal. Verificación sRGB: sales >=5.87:1,
+   * eng >=8.87:1, work >=6.54:1, neutral >=9.54:1.
+   * Brand primary/focus y semantic state roles siguen fuera de esta cascada.
+   */
+  --area-sales-canvas: hsl(170 35% 97%);
+  --area-sales-chrome: hsl(170 38% 94%);
+  --area-sales-container: hsl(170 42% 89%);
+  --area-sales-border: hsl(170 35% 78%);
+  --area-sales-selected: hsl(170 45% 91%);
+  --area-sales-ink: hsl(170 55% 25%);
+  --area-sales-state-hover: hsl(170 42% 86%);
+  --area-sales-state-pressed: hsl(170 45% 81%);
+  --area-sales-state-focus: hsl(170 48% 75%);
+
+  --area-eng-canvas: hsl(245 55% 97%);
+  --area-eng-chrome: hsl(245 58% 94%);
+  --area-eng-container: hsl(245 60% 89%);
+  --area-eng-border: hsl(245 42% 78%);
+  --area-eng-selected: hsl(245 58% 91%);
+  --area-eng-ink: hsl(245 52% 30%);
+  --area-eng-state-hover: hsl(245 58% 86%);
+  --area-eng-state-pressed: hsl(245 58% 81%);
+  --area-eng-state-focus: hsl(245 55% 75%);
+
+  --area-work-canvas: hsl(25 55% 97%);
+  --area-work-chrome: hsl(25 58% 94%);
+  --area-work-container: hsl(25 62% 89%);
+  --area-work-border: hsl(25 40% 78%);
+  --area-work-selected: hsl(25 60% 91%);
+  --area-work-ink: hsl(25 66% 28%);
+  --area-work-state-hover: hsl(25 60% 86%);
+  --area-work-state-pressed: hsl(25 60% 81%);
+  --area-work-state-focus: hsl(25 58% 75%);
+
+  --area-neutral-canvas: hsl(230 18% 97%);
+  --area-neutral-chrome: hsl(230 18% 95%);
+  --area-neutral-container: hsl(230 18% 91%);
+  --area-neutral-border: hsl(230 14% 80%);
+  --area-neutral-selected: hsl(230 20% 92%);
+  --area-neutral-ink: hsl(230 18% 24%);
+  --area-neutral-state-hover: hsl(230 18% 89%);
+  --area-neutral-state-pressed: hsl(230 18% 84%);
+  --area-neutral-state-focus: hsl(230 20% 76%);
+
+  /* Neutral default prevents unscoped surfaces from inheriting stale color. */
+  --area-canvas: var(--area-neutral-canvas);
+  --area-chrome: var(--area-neutral-chrome);
+  --area-container: var(--area-neutral-container);
+  --area-border: var(--area-neutral-border);
+  --area-selected: var(--area-neutral-selected);
+  --area-ink: var(--area-neutral-ink);
+  --area-state-hover: var(--area-neutral-state-hover);
+  --area-state-pressed: var(--area-neutral-state-pressed);
+  --area-state-focus: var(--area-neutral-state-focus);
+
   /* —— Surfaces —— */
   --surface-app: hsl(220 20% 97%);
   --surface-sidebar: hsl(230 18% 16%);
@@ -245,4 +303,54 @@
   --canvas-ghost: hsl(220 10% 70% / 0.25);
   --canvas-part-stroke: hsl(230 18% 25%);
   --canvas-part-stroke-selected: var(--brand-500);
+}
+
+
+/* F100: AppShell owns area context; descendants consume only generic roles. */
+[data-area-context='sales'] {
+  --area-canvas: var(--area-sales-canvas);
+  --area-chrome: var(--area-sales-chrome);
+  --area-container: var(--area-sales-container);
+  --area-border: var(--area-sales-border);
+  --area-selected: var(--area-sales-selected);
+  --area-ink: var(--area-sales-ink);
+  --area-state-hover: var(--area-sales-state-hover);
+  --area-state-pressed: var(--area-sales-state-pressed);
+  --area-state-focus: var(--area-sales-state-focus);
+}
+
+[data-area-context='eng'] {
+  --area-canvas: var(--area-eng-canvas);
+  --area-chrome: var(--area-eng-chrome);
+  --area-container: var(--area-eng-container);
+  --area-border: var(--area-eng-border);
+  --area-selected: var(--area-eng-selected);
+  --area-ink: var(--area-eng-ink);
+  --area-state-hover: var(--area-eng-state-hover);
+  --area-state-pressed: var(--area-eng-state-pressed);
+  --area-state-focus: var(--area-eng-state-focus);
+}
+
+[data-area-context='work'] {
+  --area-canvas: var(--area-work-canvas);
+  --area-chrome: var(--area-work-chrome);
+  --area-container: var(--area-work-container);
+  --area-border: var(--area-work-border);
+  --area-selected: var(--area-work-selected);
+  --area-ink: var(--area-work-ink);
+  --area-state-hover: var(--area-work-state-hover);
+  --area-state-pressed: var(--area-work-state-pressed);
+  --area-state-focus: var(--area-work-state-focus);
+}
+
+[data-area-context='neutral'] {
+  --area-canvas: var(--area-neutral-canvas);
+  --area-chrome: var(--area-neutral-chrome);
+  --area-container: var(--area-neutral-container);
+  --area-border: var(--area-neutral-border);
+  --area-selected: var(--area-neutral-selected);
+  --area-ink: var(--area-neutral-ink);
+  --area-state-hover: var(--area-neutral-state-hover);
+  --area-state-pressed: var(--area-neutral-state-pressed);
+  --area-state-focus: var(--area-neutral-state-focus);
 }

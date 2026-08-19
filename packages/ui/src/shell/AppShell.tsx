@@ -314,6 +314,7 @@ export function sectionLabelForNavId(id: AppNavId): string {
  * producción/almacén → naranja taller · trabajo/config → neutro.
  */
 export type AppAreaId = 'sales' | 'eng' | 'work';
+export type AppAreaContext = AppAreaId | 'neutral';
 
 const SECTION_AREA: Readonly<Record<string, AppAreaId | null>> = {
   trabajo: null,
@@ -331,6 +332,11 @@ export function areaIdForNavId(id: AppNavId): AppAreaId | null {
     if (section.items.some((i) => i.id === id)) return SECTION_AREA[section.id] ?? null;
   }
   return null;
+}
+
+/** Stable frame context: every destination resolves to an explicit tonal family. */
+export function areaContextForNavId(id: AppNavId): AppAreaContext {
+  return areaIdForNavId(id) ?? 'neutral';
 }
 
 export type ResolveNavOptions = {
@@ -472,11 +478,12 @@ export function AppShell({
 
   const areaLabel = sectionLabelForNavId(activeId);
   const areaId = areaIdForNavId(activeId);
+  const areaContext = areaContextForNavId(activeId);
   const hasIdentity = Boolean(user) || sessionMode === 'guest' || sessionMode === 'auth';
   const hasActions = Boolean(headerActions) || Boolean(onLogout) || hasIdentity;
 
   return (
-    <div className="app-layout">
+    <div className="app-layout" data-area-context={areaContext}>
       {sidebarOpen ? (
         <button
           type="button"

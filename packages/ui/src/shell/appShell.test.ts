@@ -1,11 +1,15 @@
 /**
+ * @vitest-environment jsdom
+ *
  * F017 — AppShell layout structure, nav map, and collapse CSS.
  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { cleanup, render } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   FileText,
   Factory,
@@ -24,6 +28,8 @@ import {
 } from 'lucide-react';
 import {
   APP_NAV_SECTIONS,
+  AppShell,
+  areaContextForNavId,
   labelForNavId,
   resolveNavSections,
 } from './AppShell';
@@ -232,7 +238,7 @@ describe('AppShell CSS (F017)', () => {
     const css = read('appShell.css');
     expect(css).toContain('var(--surface-sidebar)');
     expect(css).toContain('var(--surface-card)');
-    expect(css).toContain('var(--surface-app)');
+    expect(css).toContain('var(--area-canvas)');
     expect(css).toContain('var(--brand-400)');
     expect(css).toContain('var(--text-inverse)');
     expect(css).toContain('var(--shadow-sm)');
@@ -281,5 +287,112 @@ describe('AppShell session identity (issue #29)', () => {
     expect(css).toMatch(/\.app-topbar__identity/);
     expect(css).toMatch(/var\(--surface-card\)/);
     expect(css).toMatch(/var\(--text-secondary\)/);
+  });
+});
+
+
+afterEach(() => cleanup());
+
+type HslColor = readonly [number, number, number];
+
+function readAreaToken(area: string, role: string): HslColor {
+  const tokens = read('../design-system/tokens.css');
+  const match = tokens.match(
+    new RegExp(`--area-${area}-${role}: hsl\\((\\d+) (\\d+)% (\\d+)%\\)`),
+  );
+  if (!match) throw new Error(`Missing area token: ${area}-${role}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function relativeLuminance([hue, saturation, lightness]: HslColor): number {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const huePrime = hue / 60;
+  const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+  const [r, g, b] =
+    huePrime < 1 ? [chroma, x, 0]
+      : huePrime < 2 ? [x, chroma, 0]
+        : huePrime < 3 ? [0, chroma, x]
+          : huePrime < 4 ? [0, x, chroma]
+            : huePrime < 5 ? [x, 0, chroma]
+              : [chroma, 0, x];
+  const offset = l - chroma / 2;
+  const channel = (value: number): number => {
+    const srgb = value + offset;
+    return srgb <= 0.04045
+      ? srgb / 12.92
+      : ((srgb + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(foreground: HslColor, background: HslColor): number {
+  const [first, second] = [relativeLuminance(foreground), relativeLuminance(background)]
+    .sort((a, b) => b - a);
+  return (first! + 0.05) / (second! + 0.05);
+}
+
+describe('AppShell tonal area context (F100)', () => {
+  it.each([
+    ['sales', 'quotes'],
+    ['eng', 'modules'],
+    ['work', 'production'],
+    ['neutral', 'home'],
+    ['neutral', 'settings'],
+  ] as const)('renders %s context for %s navigation', (expected, activeId) => {
+    const { container } = render(
+      createElement(
+        AppShell,
+        {
+          activeId,
+          onNavigate: () => undefined,
+          children: createElement('div', null, 'Contenido de prueba'),
+        },
+      ),
+    );
+
+    expect(
+      container.querySelector('.app-layout')?.getAttribute('data-area-context'),
+    ).toBe(expected);
+    expect(areaContextForNavId(activeId)).toBe(expected);
+  });
+
+  it('uses the semantic context aliases in the shared chrome and canvas', () => {
+    const css = read('appShell.css');
+    expect(css).toContain('background: var(--area-canvas)');
+    expect(css).toContain('background: var(--area-chrome)');
+    expect(css).toContain('border-bottom: 1px solid var(--area-border)');
+  });
+
+  it('calculates all 16 area ink contrast pairs at WCAG AA or higher', () => {
+    const ratios = Object.fromEntries(
+      ['sales', 'eng', 'work', 'neutral'].flatMap((area) =>
+        ['canvas', 'chrome', 'container', 'selected'].map((surface) => [
+          `${area}/${surface}`,
+          contrastRatio(readAreaToken(area, 'ink'), readAreaToken(area, surface)),
+        ]),
+      ),
+    ) as Record<string, number>;
+
+    expect(ratios).toMatchObject({
+      'sales/canvas': expect.closeTo(6.71, 2),
+      'sales/chrome': expect.closeTo(6.38, 2),
+      'sales/container': expect.closeTo(5.87, 2),
+      'sales/selected': expect.closeTo(6.1, 2),
+      'eng/canvas': expect.closeTo(11.78, 2),
+      'eng/chrome': expect.closeTo(10.63, 2),
+      'eng/container': expect.closeTo(8.87, 2),
+      'eng/selected': expect.closeTo(9.58, 2),
+      'work/canvas': expect.closeTo(7.83, 2),
+      'work/chrome': expect.closeTo(7.33, 2),
+      'work/container': expect.closeTo(6.54, 2),
+      'work/selected': expect.closeTo(6.85, 2),
+      'neutral/canvas': expect.closeTo(11.12, 2),
+      'neutral/chrome': expect.closeTo(10.57, 2),
+      'neutral/container': expect.closeTo(9.54, 2),
+      'neutral/selected': expect.closeTo(9.77, 2),
+    });
+    expect(Object.values(ratios).every((ratio) => ratio >= 4.5)).toBe(true);
   });
 });

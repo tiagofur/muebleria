@@ -6,7 +6,7 @@
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: var(--surface-app);
+  background: var(--area-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
 }
@@ -201,7 +201,8 @@
   align-items: center;
   gap: var(--space-3);
   padding: 0 var(--space-6);
-  background: var(--surface-card);
+  background: var(--area-chrome);
+  border-bottom: 1px solid var(--area-border);
   box-shadow: var(--shadow-sm);
   z-index: 1;
 }
@@ -348,7 +349,7 @@
 .app-content {
   flex: 1 1 auto;
   padding: var(--space-6);
-  background: var(--surface-app);
+  background: var(--area-canvas);
 }
 
 /* —— Mobile backdrop —— */

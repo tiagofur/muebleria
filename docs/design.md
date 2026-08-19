@@ -190,39 +190,55 @@ La paleta usa HSL para permitir variaciones programáticas y preparar dark mode.
 --border-brand:   var(--brand-400);
 ```
 
-#### 3.2.1 Color de área (identidad por proceso) — v2
+#### 3.2.1 Contexto tonal de área — identidad por proceso
 
-El color **señala en qué parte del proceso del taller estás**, no decora.
-Se mapea al pipeline real (ventas → ingeniería → almacén → producción):
+El color de área comunica **ubicación dentro del proceso del taller**, no prioridad
+ni estado. Cada destino del shell resuelve exactamente un contexto: `sales`,
+`eng`, `work` o `neutral`. El contexto se aplica en el frame compartido y se
+propaga mediante roles semánticos, nunca mediante hex o mezclas locales.
 
-| Área | Secciones del sidebar | Rampa | Uso |
-|------|----------------------|-------|-----|
-| **Ventas** | VENTAS (Dashboard, Cotizaciones, Clientes, Vitrina) | `--area-sales-*` teal (hue 170; hoy `--accent-*`) | label de sección + ítem activo del nav + icon-chip del page-header |
-| **Ingeniería** | INGENIERÍA + LIBRERÍA + CATÁLOGOS | `--area-eng-*` = rampa `--brand-*` (hue 245; el core del producto YA es indigo) | ídem |
-| **Producción** | COMPRAS/ALMACÉN + PRODUCCIÓN (Órdenes, Producción, Embarques, Instalaciones) | `--area-work-*` naranja taller (hue 25) — rampa nueva | ídem |
-| **Overview / Config** | TRABAJO + CONFIG | sin tinte (neutro) — son cross-area | — |
+| Contexto | Secciones actuales | Familia | Propósito |
+|---|---|---|---|
+| `sales` | VENTAS | teal | relación comercial y avance |
+| `eng` | INGENIERÍA, LIBRERÍA, CATÁLOGOS | indigo | precisión y estructura técnica |
+| `work` | PRODUCCIÓN, COMPRAS / ALMACÉN | naranja taller | operación física y secuencia |
+| `neutral` | TRABAJO, CONFIG | neutral con sesgo brand | visión transversal y administración |
 
-```css
-/* Producción / Almacén — naranja taller (nuevo en v2) */
---area-work-100: hsl(25 100% 96%);
---area-work-300: hsl(25  90% 78%);
---area-work-400: hsl(25  82% 60%);
---area-work-500: hsl(25  72% 46%);
---area-work-600: hsl(25  66% 38%);
-/* Alias semánticos */
---area-sales-*: mapear a --accent-* (teal, hue 170)
---area-eng-*:   mapear a --brand-*  (indigo, hue 245)
-```
+Apple aporta la jerarquía calma del frame y feedback de interacción; Material 3
+aporta roles, state layers y pares accesibles; Muebles decide la taxonomía y
+significado de cada área. Si hay conflicto, la prevención de errores del taller
+prevalece; después, Apple guía chrome/jerarquía y Material guía sistema/a11y.
+No se copian skins ni componentes de plataforma.
 
-**Reglas duras (registro product, "restrained"):**
-- El color de área **solo señala ubicación**: label de sección del sidebar, ítem activo del nav, icon-chip del page-header. Nada más.
-- **Nunca** reemplaza al brand en botones primarios, links ni focus (eso sigue siendo `--brand-*`).
-- **Nunca** pinta superficies completas (fondos de página, cards, toolbars) ni texto de contenido.
-- No confundir con semánticos: success (verde 145) / warning (ámbar 38) / danger (rojo 0) / info (azul 210) siguen siendo de ESTADO, no de ubicación. Por eso Producción es naranja 25 (distinto del warning 38) y Ventas teal 170 (distinto del info 210).
-- Badges de estado usan SIEMPRE semánticos, nunca el color de área.
+**Cascada de roles:** el `AppShell` declara `data-area-context` y ese atributo
+resuelve `--area-canvas`, `--area-chrome`, `--area-container`, `--area-border`,
+`--area-selected`, `--area-ink`, `--area-state-hover`, `--area-state-pressed` y
+`--area-state-focus`. El contenido usa únicamente estos aliases contextuales;
+los aliases cambian de familia, no de significado.
 
----
+| Superficie o estado | Rol | Regla observable |
+|---|---|---|
+| Main canvas completo | `--area-canvas` | El fondo del trabajo cambia sutilmente al navegar entre Sales, Engineering, Production y neutral. |
+| Topbar/chrome compartido | `--area-chrome` + `--area-border` | Ancla el área sin competir con el contenido. |
+| Selección e inspector contextual | `--area-selected` / `--area-container` | Tinte medio, acompañado de texto, icono o forma; nunca color solo. |
+| Texto/icono sobre tinte de área | `--area-ink` | Par AA verificado sobre canvas, chrome, container y selected. |
+| Cards, body de tablas e inputs | superficies `--surface-*` neutrales | Siguen siendo superficies de concentración y lectura de datos. |
+| CTA primaria y focus | `--brand-*`, `--shadow-focus` globales | No cambian entre áreas. |
+| Success/warning/danger/info | roles semánticos globales | No cambian entre áreas ni se reutilizan para ubicación. |
 
+**Reglas duras:** el área tiñe el canvas y chrome de la pantalla completa con
+baja cromaticidad; no rellena indiscriminadamente superficies de trabajo ni
+sustituye colores semánticos o brand. Tablas conservan su body neutral. Una
+card estándar no recibe fondo de área solo para “agregar color”.
+
+**Accesibilidad y temas:** cada par `--area-ink` / canvas, chrome, container y
+selected debe sostener contraste WCAG AA (4.5:1 para texto normal). Los valores
+light se verifican mediante los 16 cálculos de contraste en `packages/ui/src/shell/appShell.test.ts`; dark e increased-contrast requieren
+sus propios tokens y una feature dedicada, no una inversión automática.
+
+**QA:** al alternar `data-area-context` en el shell, canvas y topbar cambian de
+familia; cards, formularios y tablas permanecen neutrales; primary, focus y
+estados semánticos conservan su significado global.
 ### 3.3 Sombras
 
 ```css

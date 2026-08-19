@@ -1922,6 +1922,38 @@
         "accessibility",
         "fase5"
       ]
+    },
+    {
+      "id": "F100",
+      "phase": 0,
+      "name": "area_tonal_theme_foundation",
+      "title": "Area Tonal Theme Foundation",
+      "description": "Establish the application-wide area-theme foundation: replace the restricted area-color rule with a verified tonal-context contract; implement semantic area tokens and apply the active context in the shell/main canvas. This feature establishes the reusable foundation only, without reorganizing information architecture or migrating individual screens.",
+      "acceptance": [
+        "docs/design.md §2.1 and §3.2.1 define the Apple × Material × Muebles decision, the area-context cascade, and an explicit matrix for canvas, chrome, neutral work surfaces, selected states and semantic states; the old prohibition against area-colored surfaces is removed.",
+        "packages/ui/src/design-system/tokens.css exposes semantic per-area roles for canvas, chrome, container, border, selected, ink and interaction state layers, with AA-verified foreground/surface pairs; brand primary/focus and success/warning/danger/info remain global semantic roles.",
+        "packages/ui/src/shell/AppShell.tsx and the web shell apply the active area context to main canvas and shared chrome so Sales, Engineering, Production and neutral overview/config contexts are perceptible beyond sidebar and page title while cards, data tables and forms stay legible work surfaces.",
+        "Focused UI tests cover area-context selection and shell propagation, including a neutral context; token-level tests or documented contrast assertions cover all foreground/surface role pairs introduced by this feature.",
+        "No information-architecture/navigation reorganization, modal/form/button redesign, or screen-by-screen migrations are included; those changes require separate features after this foundation lands.",
+        "pnpm test, pnpm typecheck and ./init.sh are green."
+      ],
+      "references": [
+        "docs/design.md §2.1, §3.2, §3.2.1, §3.3.1, §4.1",
+        "progress/explore_ui_design_system_audit.md — P1 area identity",
+        "progress/explore_ui_ux_flow_critique.md — P1 area identity",
+        "progress/explore_ui_platform_synthesis.md §3, §6–7",
+        "packages/ui/src/design-system/tokens.css",
+        "packages/ui/src/shell/AppShell.tsx",
+        "apps/web/src/App.tsx"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "ui",
+        "design-system",
+        "area-theme",
+        "accessibility",
+        "foundation"
+      ]
     }
   ]
 }
