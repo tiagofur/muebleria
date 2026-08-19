@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type {
   Customer,
   EdgeBand,
@@ -616,7 +616,10 @@ describe('ProjectPresentationMode', () => {
     const dialog = screen.getByTestId('project-presentation-mode');
     expect(dialog.getAttribute('role')).toBe('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(dialog.getAttribute('aria-label')).toContain('Cocina Ana');
+    const labelledBy = dialog.getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    const titleEl = dialog.ownerDocument.getElementById(labelledBy!);
+    expect(titleEl?.textContent).toContain('Cocina Ana');
   });
 
   it('shows workshop name (branding) in header', () => {
@@ -719,6 +722,71 @@ describe('ProjectPresentationMode', () => {
     renderPresentation();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  /* ── FullscreenDialog migration (F110) ───────────────── */
+
+  it('Escape is layered: closes shortcuts overlay first, then the presentation', () => {
+    renderPresentation();
+    fireEvent.keyDown(window, { key: '?' });
+    expect(screen.getByTestId('presentation-shortcuts-overlay')).toBeTruthy();
+
+    // First Esc dismisses the inner overlay only (single Esc path: the
+    // presentation's own keydown handler; FullscreenDialog escapeEnabled=false).
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('presentation-shortcuts-overlay')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Second Esc closes the presentation.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Tab is trapped inside the presentation dialog', () => {
+    renderPresentation();
+    const dialog = screen.getByTestId('project-presentation-mode');
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    expect(focusable.length).toBeGreaterThan(1);
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+
+    last.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+
+    first.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('restores focus to the trigger element on close', async () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Abrir presentación';
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = renderPresentation();
+    // FullscreenDialog moves focus into the dialog (async initial focus).
+    await waitFor(() => {
+      expect(document.activeElement).not.toBe(trigger);
+    });
+    unmount();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
+  it('arrow keys from a tablist do not advance the deck (guard preserved)', () => {
+    renderPresentation();
+    const tablist = screen.getByTestId('presentation-slide-tablist');
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    // Roving tablist owns the event: slide 1 becomes the tabpanel.
+    expect(
+      screen.getByTestId('presentation-slide-1').getAttribute('role'),
+    ).toBe('tabpanel');
   });
 
   it('calls onClose when clicking "Salir" button', () => {

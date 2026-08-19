@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ProductionCutRow } from '@muebles/domain';
 import { CsvExportConfigModal } from './CsvExportConfigModal';
@@ -38,7 +39,7 @@ describe('CsvExportConfigModal', () => {
       />,
     );
 
-    expect(screen.getByTestId('csv-modal-overlay')).toBeTruthy();
+    expect(screen.getByTestId('csv-modal')).toBeTruthy();
     expect(screen.getByTestId('csv-preset-select')).toBeTruthy();
     expect(screen.getByTestId('csv-preview-text').textContent).toContain('piece_code;module_code;material');
   });
@@ -76,5 +77,79 @@ describe('CsvExportConfigModal', () => {
       expect.stringContaining('piece_code;module_code'),
       'plan_corte_casa_standard.csv',
     );
+  });
+
+  it('exposes role=dialog with resolvable aria-labelledby title', () => {
+    render(
+      <CsvExportConfigModal isOpen={true} onClose={vi.fn()} cutRows={mockCutRows} />,
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const labelledBy = dialog.getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    expect(document.getElementById(labelledBy!)?.textContent).toBe(
+      'Exportar CSV Configurable',
+    );
+  });
+
+  it('has an accessible name on the close button', () => {
+    render(
+      <CsvExportConfigModal isOpen={true} onClose={vi.fn()} cutRows={mockCutRows} />,
+    );
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeTruthy();
+  });
+
+  it('closes on Escape', async () => {
+    const user = userEvent.setup();
+    const handleClose = vi.fn();
+    render(
+      <CsvExportConfigModal isOpen={true} onClose={handleClose} cutRows={mockCutRows} />,
+    );
+    await user.keyboard('{Escape}');
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('traps Tab focus within the dialog', async () => {
+    const user = userEvent.setup();
+    render(
+      <CsvExportConfigModal isOpen={true} onClose={vi.fn()} cutRows={mockCutRows} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    });
+    for (let i = 0; i < 8; i += 1) {
+      await user.tab();
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    }
+  });
+
+  it('returns focus to the trigger after closing', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Abrir CSV
+          </button>
+          <CsvExportConfigModal
+            isOpen={open}
+            onClose={() => setOpen(false)}
+            cutRows={mockCutRows}
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: 'Abrir CSV' });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    });
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(document.activeElement).toBe(trigger);
   });
 });

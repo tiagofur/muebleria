@@ -204,17 +204,9 @@
   color: var(--text-muted);
 }
 
-/* Lightbox Modal */
-.portfolio-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0, 0, 0, 0.9);
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(8px);
-}
-
+/* Lightbox — shell (portal, surface, focus/Esc) owned by FullscreenDialog.
+ * The dialog already renders a dark edge-to-edge surface, so only the inner
+ * chrome (header / content / footer) is styled here. */
 .portfolio-lightbox-header {
   display: flex;
   justify-content: space-between;

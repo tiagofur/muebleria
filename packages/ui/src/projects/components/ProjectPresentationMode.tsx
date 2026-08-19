@@ -29,7 +29,7 @@ import {
   Settings2,
   X,
 } from 'lucide-react';
-import { EmptyState, formatMoneyDisplay } from '../../common';
+import { EmptyState, FullscreenDialog, formatMoneyDisplay } from '../../common';
 import { WorkspaceTabs } from '../../common/Tabs';
 import {
   canUseWebGL,
@@ -466,12 +466,15 @@ export function ProjectPresentationMode({
 
 
   return (
+    <FullscreenDialog
+      open={open}
+      onClose={onClose}
+      title={`Presentación: ${project.name}`}
+      escapeEnabled={false}
+      dataTestId="project-presentation-mode"
+    >
     <div
       className="project-presentation"
-      data-testid="project-presentation-mode"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Presentación: ${project.name}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -1057,5 +1060,6 @@ export function ProjectPresentationMode({
         </div>
       ) : null}
     </div>
+    </FullscreenDialog>
   );
 }

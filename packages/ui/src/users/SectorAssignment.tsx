@@ -4,9 +4,11 @@
  *
  * All sectors are first-class — no sub-sector nesting. For almacen,
  * herrajes/tableros/cintillas appear as direct checkboxes.
+ *
+ * Rendered through the shared Modal primitive (F110): focus trap, Esc close,
+ * overlay click close and labeled close button come from Modal.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import {
   PIPELINE_SECTORS,
   PRODUCTION_SECTOR_LABELS_ES,
@@ -14,6 +16,7 @@ import {
   type ProductionSector,
   type ProductRole,
 } from '@muebles/domain';
+import { Modal } from '../common/Modal';
 import './sectorAssignment.css';
 
 export interface UserSector {
@@ -134,38 +137,45 @@ export function SectorAssignment({
       if (!res.ok) throw new Error('Error saving sectors');
       showToast('✓ Sectores actualizados');
       onClose();
-    } catch (err) {
+    } catch {
       showToast('Error al guardar sectores');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="sector-assignment-overlay">
-        <div className="sector-assignment-modal">
-          <div className="sector-assignment-loading">Cargando sectores...</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="sector-assignment-overlay">
-      <div className="sector-assignment-modal">
-        <div className="sector-assignment-header">
-          <h3>Sectores de {userName}</h3>
-          <button className="sector-assignment-close" onClick={onClose}>
-            <XCircle size={20} />
+    <Modal
+      open
+      onClose={onClose}
+      title="Asignación de sectores"
+      size="md"
+      dataTestId="sector-assignment-modal"
+      footer={
+        <>
+          {toast && <span className="sector-assignment-toast">{toast}</span>}
+          <button type="button" className="btn btn--secondary" onClick={onClose}>
+            Cancelar
           </button>
-        </div>
-
-        <div className="sector-assignment-body">
+          <button
+            type="button"
+            className="btn btn--primary sector-assignment-save"
+            onClick={save}
+            disabled={saving}
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </>
+      }
+    >
+      {loading ? (
+        <div className="sector-assignment-loading">Cargando sectores...</div>
+      ) : (
+        <>
           <p className="sector-assignment-description">
             {role === 'almacen'
-              ? 'Seleccioná los tipos de material que este operador de almacén gestiona:'
-              : 'Seleccioná los sectores donde este operador puede trabajar:'}
+              ? `Seleccioná los tipos de material que ${userName} (almacén) gestiona:`
+              : `Seleccioná los sectores donde ${userName} puede trabajar:`}
           </p>
 
           <div className="sector-assignment-list">
@@ -182,23 +192,8 @@ export function SectorAssignment({
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="sector-assignment-footer">
-          <button className="sector-assignment-cancel" onClick={onClose}>
-            Cancelar
-          </button>
-          <button
-            className="sector-assignment-save"
-            onClick={save}
-            disabled={saving}
-          >
-            {saving ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-
-        {toast && <div className="sector-assignment-toast">{toast}</div>}
-      </div>
-    </div>
+        </>
+      )}
+    </Modal>
   );
 }

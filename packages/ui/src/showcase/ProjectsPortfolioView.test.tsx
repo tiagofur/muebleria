@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import userEvent from '@testing-library/user-event';
 import type { ShowcasePhotoItem } from '@muebles/domain';
@@ -98,6 +98,81 @@ describe('ProjectsPortfolioView', () => {
 
     await user.click(screen.getByTestId('portfolio-use-reference-btn'));
     expect(onUseRef).toHaveBeenCalledWith('proj-1');
+  });
+
+  /* ── FullscreenDialog migration (F110) ───────────────── */
+
+  it('lightbox is a dialog named after the project (aria-labelledby)', async () => {
+    const user = userEvent.setup();
+    render(<ProjectsPortfolioView photos={MOCK_PHOTOS} />);
+    await user.click(screen.getByTestId('portfolio-card-photo-1'));
+
+    const dialog = screen.getByTestId('portfolio-lightbox');
+    expect(dialog.getAttribute('role')).toBe('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const labelledBy = dialog.getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    const titleEl = dialog.ownerDocument.getElementById(labelledBy!);
+    expect(titleEl?.textContent).toContain('Cocina Isla Granito');
+  });
+
+  it('Escape closes the lightbox and restores focus to the trigger', async () => {
+    const user = userEvent.setup();
+    render(<ProjectsPortfolioView photos={MOCK_PHOTOS} />);
+    const trigger = screen.getAllByRole('button', { name: 'Ampliar' })[0]!;
+    await user.click(trigger);
+    expect(screen.getByTestId('portfolio-lightbox')).toBeTruthy();
+
+    // FullscreenDialog listens on document.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByTestId('portfolio-lightbox')).toBeNull();
+    });
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('close button is labeled for screen readers', async () => {
+    const user = userEvent.setup();
+    render(<ProjectsPortfolioView photos={MOCK_PHOTOS} />);
+    await user.click(screen.getByTestId('portfolio-card-photo-1'));
+    expect(
+      screen.getByTestId('portfolio-lightbox-close').getAttribute('aria-label'),
+    ).toBe('Cerrar vista');
+  });
+
+  it('arrow keys navigate photos without leaving the lightbox', async () => {
+    const user = userEvent.setup();
+    render(<ProjectsPortfolioView photos={MOCK_PHOTOS} />);
+    await user.click(screen.getByTestId('portfolio-card-photo-1'));
+    expect(screen.getAllByText('Isla de 2.40m con desayunador').length).toBeGreaterThan(0);
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(screen.getAllByText('Hueco de obra para embutir').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('portfolio-lightbox')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(screen.getAllByText('Isla de 2.40m con desayunador').length).toBeGreaterThan(0);
+  });
+
+  it('Tab is trapped inside the lightbox (cycles, does not escape)', async () => {
+    const user = userEvent.setup();
+    render(<ProjectsPortfolioView photos={MOCK_PHOTOS} />);
+    await user.click(screen.getByTestId('portfolio-card-photo-1'));
+
+    const dialog = screen.getByTestId('portfolio-lightbox');
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>('button'),
+    ).filter((b) => !b.hasAttribute('disabled'));
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+
+    last.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+
+    first.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
   });
 });
 

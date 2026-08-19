@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -6,8 +6,8 @@ import {
   Factory,
   Layers,
   Sparkles,
-  X,
 } from 'lucide-react';
+import { Modal } from '../common/Modal';
 import './onboardingTourModal.css';
 
 export type OnboardingTourModalProps = {
@@ -94,25 +94,17 @@ export function OnboardingTourModal({
 }: OnboardingTourModalProps): ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setHasSeenOnboardingTour(true);
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   const currentStep = STEPS[currentStepIndex]!;
   const isLastStep = currentStepIndex === STEPS.length - 1;
 
-  // Any dismiss (finish, skip or Esc) marks the tour as seen — it must never
-  // interrupt the app again on subsequent page loads.
+  // Any dismiss (finish, skip, Esc or overlay click) marks the tour as seen —
+  // it must never interrupt the app again on subsequent page loads, and it
+  // never blocks first-run tasks (always skippable).
+  const handleDismiss = () => {
+    setHasSeenOnboardingTour(true);
+    onClose();
+  };
+
   const handleFinish = () => {
     setHasSeenOnboardingTour(true);
     if (onLoadDemoProject) {
@@ -121,107 +113,90 @@ export function OnboardingTourModal({
     onClose();
   };
 
-  const handleSkip = () => {
-    setHasSeenOnboardingTour(true);
-    onClose();
-  };
-
   return (
-    <div className="onboarding-tour-overlay" data-testid="onboarding-tour-modal">
-      <div className="onboarding-tour-card" role="dialog" aria-modal="true">
-        <header className="onboarding-tour__header">
-          <h3 className="onboarding-tour__header-title">
-            {currentStep.icon}
-            <span>Tour de Bienvenida — Muebles App</span>
-          </h3>
-          <button
-            type="button"
-            className="onboarding-tour__close-btn"
-            onClick={handleSkip}
-            aria-label="Cerrar tour"
-            data-testid="onboarding-tour-close"
-          >
-            <X size={18} strokeWidth={1.5} />
-          </button>
-        </header>
+    <Modal
+      open={isOpen}
+      onClose={handleDismiss}
+      title="Tour de Bienvenida — Muebles App"
+      size="md"
+      dataTestId="onboarding-tour-modal"
+      footer={
+        <div className="onboarding-tour__actions">
+          {currentStepIndex > 0 ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setCurrentStepIndex((prev) => prev - 1)}
+              data-testid="onboarding-tour-prev"
+            >
+              <ChevronLeft size={16} strokeWidth={1.5} />
+              Anterior
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={handleDismiss}
+              data-testid="onboarding-tour-skip"
+            >
+              Omitir
+            </button>
+          )}
 
-        <div className="onboarding-tour__body">
-          <div className="onboarding-tour__step-indicator" aria-label="Progreso del tour">
-            {STEPS.map((_, idx) => (
-              <div
-                key={idx}
-                className={`onboarding-tour__dot ${
-                  idx === currentStepIndex ? 'onboarding-tour__dot--active' : ''
-                }`}
-              />
-            ))}
-          </div>
-
-          <div className="onboarding-tour__step-content">
-            <span className="onboarding-tour__step-badge">{currentStep.badge}</span>
-            <h4 className="onboarding-tour__title">{currentStep.title}</h4>
-            <p className="onboarding-tour__description">{currentStep.description}</p>
-            <ul className="onboarding-tour__highlights">
-              {currentStep.highlights.map((item, idx) => (
-                <li key={idx} className="onboarding-tour__highlight-item">
-                  <CheckCircle2
-                    className="onboarding-tour__highlight-check"
-                    size={16}
-                    strokeWidth={1.5}
-                  />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {!isLastStep ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => setCurrentStepIndex((prev) => prev + 1)}
+              data-testid="onboarding-tour-next"
+            >
+              Siguiente
+              <ChevronRight size={16} strokeWidth={1.5} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={handleFinish}
+              data-testid="onboarding-tour-finish"
+            >
+              Explorar Cocina López 3D
+            </button>
+          )}
         </div>
-
-        <footer className="onboarding-tour__footer">
-          <div className="onboarding-tour__actions">
-            {currentStepIndex > 0 ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setCurrentStepIndex((prev) => prev - 1)}
-                data-testid="onboarding-tour-prev"
-              >
-                <ChevronLeft size={16} strokeWidth={1.5} />
-                Anterior
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={handleSkip}
-                data-testid="onboarding-tour-skip"
-              >
-                Omitir
-              </button>
-            )}
-
-            {!isLastStep ? (
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={() => setCurrentStepIndex((prev) => prev + 1)}
-                data-testid="onboarding-tour-next"
-              >
-                Siguiente
-                <ChevronRight size={16} strokeWidth={1.5} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={handleFinish}
-                data-testid="onboarding-tour-finish"
-              >
-                Explorar Cocina López 3D
-              </button>
-            )}
-          </div>
-        </footer>
+      }
+    >
+      <div className="onboarding-tour__step-indicator" aria-label="Progreso del tour">
+        {STEPS.map((_, idx) => (
+          <div
+            key={idx}
+            className={`onboarding-tour__dot ${
+              idx === currentStepIndex ? 'onboarding-tour__dot--active' : ''
+            }`}
+          />
+        ))}
       </div>
-    </div>
+
+      <div className="onboarding-tour__step-content">
+        <span className="onboarding-tour__step-badge">{currentStep.badge}</span>
+        <h4 className="onboarding-tour__title">
+          {currentStep.icon}
+          {currentStep.title}
+        </h4>
+        <p className="onboarding-tour__description">{currentStep.description}</p>
+        <ul className="onboarding-tour__highlights">
+          {currentStep.highlights.map((item, idx) => (
+            <li key={idx} className="onboarding-tour__highlight-item">
+              <CheckCircle2
+                className="onboarding-tour__highlight-check"
+                size={16}
+                strokeWidth={1.5}
+              />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Modal>
   );
 }

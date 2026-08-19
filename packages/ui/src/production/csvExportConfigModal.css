@@ -1,74 +1,5 @@
-.csv-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background-color: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  padding: 1rem;
-}
-
-.csv-modal {
-  background-color: var(--surface-card);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 680px;
-  display: flex;
-  flex-direction: column;
-  max-height: 90vh;
-  overflow: hidden;
-  color: var(--text-primary);
-}
-
-.csv-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.csv-modal__title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--text-primary);
-}
-
-.csv-modal__icon {
-  color: var(--brand-500);
-}
-
-.csv-modal__close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem;
-  color: var(--text-muted);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-}
-
-.csv-modal__close-btn:hover {
-  background-color: var(--surface-muted);
-  color: var(--text-primary);
-}
-
-.csv-modal__body {
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  overflow-y: auto;
-}
+/* CSV Export Config Modal — content styles only.
+   Overlay/panel/header/footer/close come from the shared Modal (common/modal.css, F110). */
 
 .csv-modal__grid {
   display: grid;
@@ -109,6 +40,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
+  margin-top: 1.25rem;
 }
 
 .csv-modal__preview-label {
@@ -134,18 +66,10 @@
   word-break: break-all;
 }
 
-.csv-modal__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-top: 1px solid var(--border-subtle);
-  background-color: var(--surface-muted);
-}
-
 .csv-modal__info {
   font-size: var(--text-base);
   color: var(--text-muted);
+  margin-right: auto;
 }
 
 .csv-modal__actions {

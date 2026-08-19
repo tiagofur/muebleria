@@ -16,6 +16,10 @@ export {
   type DropdownMenuProps,
 } from './DropdownMenu';
 export { Modal, type ModalProps, type ModalSize } from './Modal';
+export {
+  FullscreenDialog,
+  type FullscreenDialogProps,
+} from './FullscreenDialog';
 export { SearchInput, type SearchInputProps } from './SearchInput';
 export {
   StatusChips,

@@ -474,3 +474,22 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Verificación: suites focales verde, ./init.sh completo, typecheck, detector
   0 hallazgos. Deuda menor anotada: StructureEditorAgregadosPanel sin id de
   tabpanel estático (compartido por dos editors).
+
+## F110 — Overlays al contrato único (2026-08-19)
+
+- Aprobada en `progress/review_F110.md`.
+- Nuevo primitivo `common/FullscreenDialog` (F110): portal, role=dialog +
+  aria-labelledby, focus trap, Esc (desactivable para capas anidadas),
+  restore de foco y scroll lock; superficie edge-to-edge tokenizada.
+  Exportado del barrel common y del paquete.
+- SectorAssignment, CsvExportConfigModal y OnboardingTourModal migran a
+  Modal (sin backdrop/Esc/focus casero; onboarding sigue skippable vía un
+  único handleDismiss).
+- Lightbox de Vitrina y PresentationMode migran a FullscreenDialog. Esc de
+  presentación en capas (shortcuts → onClose) queda como único camino
+  (escapeEnabled=false). Lightbox gana navegación por flechas.
+- CSS de features reducido a contenido; backdrop rgba del lightbox
+  reemplazado por token. Tests focales keyboard/SR por overlay (labelledby,
+  Esc, trap, restore, close con nombre accesible).
+- Verificación: focused verde (169+19 y 71/71), ./init.sh completo,
+  typecheck, detector 0 hallazgos.

@@ -1,4 +1,4 @@
-import { useState, useMemo, type ReactNode } from 'react';
+import { useEffect, useState, useMemo, type ReactNode } from 'react';
 import type { ShowcasePhotoItem, ProjectPhotoStage } from '@muebles/domain';
 import {
   filterShowcasePhotos,
@@ -15,7 +15,7 @@ import {
   PlusCircle,
   ImageIcon,
 } from 'lucide-react';
-import { EmptyState, SearchInput, useDebouncedValue } from '../common';
+import { EmptyState, FullscreenDialog, SearchInput, useDebouncedValue } from '../common';
 import './projectsPortfolio.css';
 
 export interface ProjectsPortfolioViewProps {
@@ -68,6 +68,28 @@ export function ProjectsPortfolioView({
       (selectedPhotoIndex - 1 + filteredPhotos.length) % filteredPhotos.length,
     );
   };
+
+  // Arrow keys navigate photos while the lightbox is open (F110). Only
+  // ArrowLeft/ArrowRight are handled here — Tab cycling belongs to
+  // FullscreenDialog's focus trap, and Esc close to the dialog itself.
+  useEffect(() => {
+    if (selectedPhotoIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setSelectedPhotoIndex((i) =>
+          i === null ? i : (i + 1) % filteredPhotos.length,
+        );
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setSelectedPhotoIndex((i) =>
+          i === null ? i : (i - 1 + filteredPhotos.length) % filteredPhotos.length,
+        );
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedPhotoIndex, filteredPhotos.length]);
 
   return (
     <div className="portfolio-view" data-testid="projects-portfolio-view">
@@ -245,14 +267,15 @@ export function ProjectsPortfolioView({
         </div>
       )}
 
-      {/* Fullscreen Lightbox Modal */}
-      {activePhoto ? (
-        <div
-          className="portfolio-lightbox"
-          role="dialog"
-          aria-modal="true"
-          data-testid="portfolio-lightbox"
-        >
+      {/* Fullscreen Lightbox — dialog contract owned by FullscreenDialog (F110) */}
+      <FullscreenDialog
+        open={activePhoto !== null}
+        onClose={() => setSelectedPhotoIndex(null)}
+        title={activePhoto?.projectName ?? 'Foto del proyecto'}
+        dataTestId="portfolio-lightbox"
+      >
+        {activePhoto ? (
+          <>
           <div className="portfolio-lightbox-header">
             <div>
               <h3 className="portfolio-lightbox-title">{activePhoto.projectName}</h3>
@@ -332,8 +355,9 @@ export function ProjectsPortfolioView({
               </button>
             ) : null}
           </div>
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </FullscreenDialog>
     </div>
   );
 }

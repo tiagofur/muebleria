@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   OnboardingTourModal,
@@ -99,13 +99,13 @@ describe('OnboardingTourModal', () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
-  it('marks the tour as seen when dismissed with the X button', async () => {
+  it('marks the tour as seen when dismissed with the header close button', async () => {
     const user = userEvent.setup();
     setHasSeenOnboardingTour(false);
     const handleClose = vi.fn();
 
     render(<OnboardingTourModal isOpen={true} onClose={handleClose} />);
-    await user.click(screen.getByTestId('onboarding-tour-close'));
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
 
     expect(handleClose).toHaveBeenCalledTimes(1);
     expect(getHasSeenOnboardingTour()).toBe(true);
@@ -133,6 +133,72 @@ describe('OnboardingTourModal', () => {
 
     expect(handleClose).toHaveBeenCalledTimes(1);
     expect(getHasSeenOnboardingTour()).toBe(true);
+  });
+
+  it('closes on overlay click and marks the tour as seen (skippable, never blocking)', async () => {
+    const user = userEvent.setup();
+    setHasSeenOnboardingTour(false);
+    const handleClose = vi.fn();
+
+    render(<OnboardingTourModal isOpen={true} onClose={handleClose} />);
+    await user.click(screen.getByTestId('ui-modal-overlay'));
+
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(getHasSeenOnboardingTour()).toBe(true);
+  });
+
+  it('exposes role=dialog with resolvable aria-labelledby title', () => {
+    render(<OnboardingTourModal isOpen={true} onClose={vi.fn()} />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const labelledBy = dialog.getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    expect(document.getElementById(labelledBy!)?.textContent).toBe(
+      'Tour de Bienvenida — Muebles App',
+    );
+  });
+
+  it('has an accessible name on the close button', () => {
+    render(<OnboardingTourModal isOpen={true} onClose={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeTruthy();
+  });
+
+  it('traps Tab focus within the dialog', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingTourModal isOpen={true} onClose={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    });
+    for (let i = 0; i < 8; i += 1) {
+      await user.tab();
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    }
+  });
+
+  it('returns focus to the trigger after closing', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Abrir tour
+          </button>
+          <OnboardingTourModal isOpen={open} onClose={() => setOpen(false)} />
+        </>
+      );
+    }
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: 'Abrir tour' });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    });
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('manages onboarding tour preference in storage', () => {
