@@ -51,8 +51,14 @@
   --area-eng-100: var(--brand-100);
   --area-eng-300: var(--brand-300);
   --area-eng-400: var(--brand-400);
-  --area-eng-500: var(--brand-500); /* INGENIERÍA+LIBRERÍA+CATÁLOGOS — indigo marca */
+  --area-eng-500: var(--brand-500); /* INGENIERÍA — indigo marca */
   --area-eng-600: var(--brand-600);
+
+  --area-library-100: hsl(95 45% 95%);
+  --area-library-300: hsl(95 40% 72%);
+  --area-library-400: hsl(95 45% 58%);
+  --area-library-500: hsl(95 42% 40%); /* LIBRERÍA+CATÁLOGOS — oliva/sage (F112) */
+  --area-library-600: hsl(95 45% 32%);
 
   --area-work-100: hsl(25 100% 96%);
   --area-work-300: hsl(25 90% 78%);
@@ -64,7 +70,7 @@
   /* —— Contextos tonales de área (design.md §3.2.1 / F100) ——
    * Cada pair --area-*-ink sobre canvas/chrome/container/selected cumple
    * WCAG AA para texto normal. Verificación sRGB: sales >=5.87:1,
-   * eng >=8.87:1, work >=6.54:1, neutral >=9.54:1.
+   * eng >=8.87:1, work >=6.54:1, library >=6.59:1, neutral >=9.54:1.
    * Brand primary/focus y semantic state roles siguen fuera de esta cascada.
    */
   --area-sales-canvas: hsl(170 35% 97%);
@@ -96,6 +102,16 @@
   --area-work-state-hover: hsl(25 60% 86%);
   --area-work-state-pressed: hsl(25 60% 81%);
   --area-work-state-focus: hsl(25 58% 75%);
+
+  --area-library-canvas: hsl(95 30% 97%);
+  --area-library-chrome: hsl(95 30% 94%);
+  --area-library-container: hsl(95 32% 89%);
+  --area-library-border: hsl(95 28% 78%);
+  --area-library-selected: hsl(95 34% 91%);
+  --area-library-ink: hsl(95 45% 24%);
+  --area-library-state-hover: hsl(95 32% 86%);
+  --area-library-state-pressed: hsl(95 34% 81%);
+  --area-library-state-focus: hsl(95 36% 75%);
 
   --area-neutral-canvas: hsl(230 18% 97%);
   --area-neutral-chrome: hsl(230 18% 95%);
@@ -344,6 +360,18 @@
   --area-state-hover: var(--area-work-state-hover);
   --area-state-pressed: var(--area-work-state-pressed);
   --area-state-focus: var(--area-work-state-focus);
+}
+
+[data-area-context='library'] {
+  --area-canvas: var(--area-library-canvas);
+  --area-chrome: var(--area-library-chrome);
+  --area-container: var(--area-library-container);
+  --area-border: var(--area-library-border);
+  --area-selected: var(--area-library-selected);
+  --area-ink: var(--area-library-ink);
+  --area-state-hover: var(--area-library-state-hover);
+  --area-state-pressed: var(--area-library-state-pressed);
+  --area-state-focus: var(--area-library-state-focus);
 }
 
 [data-area-context='neutral'] {

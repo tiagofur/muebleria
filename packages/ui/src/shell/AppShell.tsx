@@ -310,10 +310,10 @@ export function sectionLabelForNavId(id: AppNavId): string {
 
 /**
  * Área funcional (design.md §3.2.1) — color de ubicación, nunca de acción.
- * ventas → teal · ingeniería/librería/catálogos → indigo marca ·
+ * ventas → teal · ingeniería → indigo marca · librería/catálogos → oliva ·
  * producción/almacén → naranja taller · trabajo/config → neutro.
  */
-export type AppAreaId = 'sales' | 'eng' | 'work';
+export type AppAreaId = 'sales' | 'eng' | 'work' | 'library';
 export type AppAreaContext = AppAreaId | 'neutral';
 
 const SECTION_AREA: Readonly<Record<string, AppAreaId | null>> = {
@@ -322,8 +322,8 @@ const SECTION_AREA: Readonly<Record<string, AppAreaId | null>> = {
   produccion: 'work',
   ingenieria: 'eng',
   almacen: 'work',
-  libreria: 'eng',
-  catalogos: 'eng',
+  libreria: 'library',
+  catalogos: 'library',
   config: null,
 };
 

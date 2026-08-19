@@ -69,6 +69,13 @@
   --stat-card-active-bg: var(--area-eng-100);
 }
 
+.stat-card--library {
+  --stat-card-icon-bg: var(--area-library-100);
+  --stat-card-icon-fg: var(--area-library-500);
+  --stat-card-active-border: var(--area-library-400);
+  --stat-card-active-bg: var(--area-library-100);
+}
+
 .stat-card--work {
   --stat-card-icon-bg: var(--area-work-100);
   --stat-card-icon-fg: var(--area-work-500);

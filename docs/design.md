@@ -194,13 +194,14 @@ La paleta usa HSL para permitir variaciones programáticas y preparar dark mode.
 
 El color de área comunica **ubicación dentro del proceso del taller**, no prioridad
 ni estado. Cada destino del shell resuelve exactamente un contexto: `sales`,
-`eng`, `work` o `neutral`. El contexto se aplica en el frame compartido y se
-propaga mediante roles semánticos, nunca mediante hex o mezclas locales.
+`eng`, `library`, `work` o `neutral`. El contexto se aplica en el frame compartido
+y se propaga mediante roles semánticos, nunca mediante hex o mezclas locales.
 
 | Contexto | Secciones actuales | Familia | Propósito |
 |---|---|---|---|
 | `sales` | VENTAS | teal | relación comercial y avance |
-| `eng` | INGENIERÍA, LIBRERÍA, CATÁLOGOS | indigo | precisión y estructura técnica |
+| `eng` | INGENIERÍA | indigo | precisión y estructura técnica |
+| `library` | LIBRERÍA, CATÁLOGOS | oliva/sage (hue 95) | creación y mantenimiento del sistema de activos reutilizables (F112) |
 | `work` | PRODUCCIÓN, COMPRAS / ALMACÉN | naranja taller | operación física y secuencia |
 | `neutral` | TRABAJO, CONFIG | neutral con sesgo brand | visión transversal y administración |
 
@@ -218,7 +219,7 @@ los aliases cambian de familia, no de significado.
 
 | Superficie o estado | Rol | Regla observable |
 |---|---|---|
-| Main canvas completo | `--area-canvas` | El fondo del trabajo cambia sutilmente al navegar entre Sales, Engineering, Production y neutral. |
+| Main canvas completo | `--area-canvas` | El fondo del trabajo cambia sutilmente al navegar entre Sales, Engineering, Library, Production y neutral. |
 | Topbar/chrome compartido | `--area-chrome` + `--area-border` | Ancla el área sin competir con el contenido. |
 | Selección e inspector contextual | `--area-selected` / `--area-container` | Tinte medio, acompañado de texto, icono o forma; nunca color solo. |
 | Texto/icono sobre tinte de área | `--area-ink` | Par AA verificado sobre canvas, chrome, container y selected. |
@@ -233,7 +234,7 @@ card estándar no recibe fondo de área solo para “agregar color”.
 
 **Accesibilidad y temas:** cada par `--area-ink` / canvas, chrome, container y
 selected debe sostener contraste WCAG AA (4.5:1 para texto normal). Los valores
-light se verifican mediante los 16 cálculos de contraste en `packages/ui/src/shell/appShell.test.ts`; dark e increased-contrast requieren
+light se verifican mediante los 20 cálculos de contraste en `packages/ui/src/shell/appShell.test.ts`; dark e increased-contrast requieren
 sus propios tokens y una feature dedicada, no una inversión automática.
 
 **QA:** al alternar `data-area-context` en el shell, canvas y topbar cambian de

@@ -180,6 +180,17 @@
   color: var(--area-work-300);
 }
 
+.app-sidebar__section--library .app-sidebar__section-label {
+  color: var(--area-library-300);
+}
+.app-sidebar__section--library .app-sidebar__item.is-active {
+  border-left-color: var(--area-library-400);
+  background: color-mix(in srgb, var(--area-library-400) 28%, transparent);
+}
+.app-sidebar__section--library .app-sidebar__item.is-active .app-sidebar__icon {
+  color: var(--area-library-300);
+}
+
 .app-sidebar__icon {
   flex-shrink: 0;
 }
@@ -254,6 +265,10 @@
 
 .app-topbar__area[data-area='work'] {
   color: var(--area-work-600);
+}
+
+.app-topbar__area[data-area='library'] {
+  color: var(--area-library-600);
 }
 
 .app-topbar__meta {

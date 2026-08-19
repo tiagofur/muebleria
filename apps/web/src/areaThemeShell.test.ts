@@ -16,7 +16,8 @@ import { navFromPath } from './routes';
 describe('web shell area-context integration (F100)', () => {
   it.each([
     ['/quotes', 'sales'],
-    ['/modules', 'eng'],
+    ['/materials', 'library'],
+    ['/modules', 'library'],
     ['/production', 'work'],
     ['/', 'neutral'],
   ] as const)('propagates %s through AppShell as %s', (path, expected) => {

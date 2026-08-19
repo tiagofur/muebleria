@@ -589,13 +589,13 @@
   min-height: 100%;
   border: none;
   border-bottom: none;
-  background: var(--area-eng-100);
-  color: var(--area-eng-400);
+  background: var(--area-library-100);
+  color: var(--area-library-400);
 }
 
 .module-card__media .catalog-image__ph-label {
   font-size: var(--text-xs);
-  color: var(--area-eng-600);
+  color: var(--area-library-600);
 }
 
 .module-detail__thumb {

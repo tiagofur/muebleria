@@ -336,7 +336,9 @@ function contrastRatio(foreground: HslColor, background: HslColor): number {
 describe('AppShell tonal area context (F100)', () => {
   it.each([
     ['sales', 'quotes'],
-    ['eng', 'modules'],
+    ['eng', 'engineering'],
+    ['library', 'modules'],
+    ['library', 'materials'],
     ['work', 'production'],
     ['neutral', 'home'],
     ['neutral', 'settings'],
@@ -365,9 +367,9 @@ describe('AppShell tonal area context (F100)', () => {
     expect(css).toContain('border-bottom: 1px solid var(--area-border)');
   });
 
-  it('calculates all 16 area ink contrast pairs at WCAG AA or higher', () => {
+  it('calculates all 20 area ink contrast pairs at WCAG AA or higher', () => {
     const ratios = Object.fromEntries(
-      ['sales', 'eng', 'work', 'neutral'].flatMap((area) =>
+      ['sales', 'eng', 'library', 'work', 'neutral'].flatMap((area) =>
         ['canvas', 'chrome', 'container', 'selected'].map((surface) => [
           `${area}/${surface}`,
           contrastRatio(readAreaToken(area, 'ink'), readAreaToken(area, surface)),
@@ -384,6 +386,10 @@ describe('AppShell tonal area context (F100)', () => {
       'eng/chrome': expect.closeTo(10.63, 2),
       'eng/container': expect.closeTo(8.87, 2),
       'eng/selected': expect.closeTo(9.58, 2),
+      'library/canvas': expect.closeTo(7.61, 2),
+      'library/chrome': expect.closeTo(7.21, 2),
+      'library/container': expect.closeTo(6.59, 2),
+      'library/selected': expect.closeTo(6.85, 2),
       'work/canvas': expect.closeTo(7.83, 2),
       'work/chrome': expect.closeTo(7.33, 2),
       'work/container': expect.closeTo(6.54, 2),
