@@ -243,7 +243,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         ))}
                       </select>
                     ) : (
-                      <span className="users-role-badge">{u.role}</span>
+                      <span className="meta-chip">{u.role}</span>
                     )}
                   </td>
                   <td>

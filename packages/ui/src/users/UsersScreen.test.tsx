@@ -30,6 +30,15 @@ describe('UsersScreen (F026 admin approval)', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
+  it('renders roles as neutral meta-chip, not semantic badge (§5.2)', () => {
+    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
+    expect(src).toContain('meta-chip');
+    expect(src).not.toContain('users-role-badge');
+    // users.css no longer defines the local role badge family
+    const css = readFileSync(join(here, 'users.css'), 'utf8');
+    expect(css).not.toContain('.users-role-badge');
+  });
+
   it('uses PageLoading for async list load (issue #30)', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
     expect(src).toContain('PageLoading');
