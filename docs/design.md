@@ -1,9 +1,11 @@
 # Design Guide — Muebles App
 
-> **Estado:** v2.1 — capa de craft post-critique 28/40 (2026-08-19)
+> **Estado:** v3.0 — estándar de excelencia UI/UX: ejecución Apple × sistema Material (2026-08-18)
 > **Autores:** Producto + agente de diseño
-> **Fecha:** 2026-08-19
-> **Referencia de implementación:** critique `.impeccable/critique/2026-08-19T00-19-38Z__*.md` — plan acordado: controles+profundidad primero · paquete P1+P2 completo · temperamento **tonal** (un paso más allá de restrained, sin committed generalizado)
+> **Fecha:** 2026-08-18
+> **Referencias:** critique 30/40 (`.impeccable/critique/2026-08-19T03-12-17Z__*.md` — la ruta a 32+ queda codificada en este doc) · capa de craft v2.1 (2026-08-19) · unificación v2 (2026-08-18)
+
+**Cómo leer:** §2 = el estándar (ADN + bar de calidad) · §3–5 = el sistema (tokens, patrones, componentes) · §6 = specs por pantalla · §7–8 = contenido y gate de calidad · §9–10 = implementación y referencias.
 
 ---
 
@@ -51,6 +53,42 @@ Estos principios no son decorativos — son restricciones que todo componente de
 4. **Contexto preservado.** El usuario nunca pierde de vista dónde está ni qué estaba haciendo. Los modales preservan el contexto de la lista.
 5. **Progressive disclosure.** Mostrar lo mínimo necesario. Los detalles aparecen cuando se piden.
 6. **Consistencia de patrones.** Un mismo problema siempre se resuelve de la misma manera. Si crear un Material usa un modal, crear un Herraje también usa un modal.
+
+### 2.1 ADN visual — Apple × Google (regla de fusión)
+
+El estándar de **ejecución** es Apple (Human Interface Guidelines); el estándar de **sistema** es Google (Material 3). La mezcla no es "un poco de cada": cada casa aporta a un **dominio distinto** y hay una regla de desempate para que la combinación no degenere.
+
+| Dominio | Gana | Qué significa aquí |
+|---------|------|--------------------|
+| **Chrome y movimiento** | Apple | Contenido primero, chrome que se difumina. Si un efecto no explica jerarquía o estado, no existe. Animaciones 150–250ms, sin bounce, sin coreografías de carga (§3.6). |
+| **Profundidad** | Apple | La elevación dice dónde está el usuario — contenido < toolbar < modal < overlay (§3.3.1). Nunca como adorno: glassmorphism prohibido por defecto. |
+| **Precisión táctil** | Apple | Cada control "se siente" físico: hover, press (`translateY(1px)` + oscurecimiento), foco visible. Un botón plano que no responde está roto, no "minimalista". |
+| **Estados de componentes** | Google (M3) | Todo control interactivo nace con su matriz completa: default/hover/focus/active/disabled (+loading/error si aplica). Fusionar con estados a medias es un bug, no una omisión menor (§3.6.1). |
+| **Color por roles** | Google (M3) | Color como sistema de roles — brand / área / semántico / superficie (§3.2) — con state layers tonales. Nunca color decorativo ni bordes a saturación plena para señalizar estado. |
+| **Accesibilidad** | Google (M3) | AA no es opcional: contraste, targets, teclado, lectores de pantalla (§4.8). La a11y es parte del diseño, no un parche posterior. |
+| **Densidad** | Google (M3) | Herramienta profesional: densa pero con aire (tokens `--density-*`). La densidad nunca compra legibilidad por debajo de 14px cuerpo / 12px labels. |
+
+**Regla de desempate:** si la decisión es sobre *decoración* → gana Apple (se quita).
+Si la decisión es sobre *completitud del sistema* (estados, roles, a11y) → gana
+Google (se completa). Lo prohibido es el cruce inverso: decoración ruidosa con
+estados incompletos — eso es la app mediocre y fea que este documento existe
+para impedir.
+
+**Clase de referencia:** Linear y Stripe Dashboard (registro `product`, ver
+`docs/PRODUCT.md`). El test no es "se parece a Apple"; es "Apple o Google
+firmarían esta pantalla" — ejecutando el producto de un taller.
+
+### 2.2 La prueba de las 8 horas
+
+El usuario de Muebles pasa la jornada laboral entera dentro de esta app, en un
+taller, con prisa, donde los errores cuestan dinero. El bar de calidad se mide
+contra eso — no contra una demo:
+
+1. **Cero deuda visual.** A las 6 horas de uso, lo que molesta no es lo que falta: es lo que sobra. Cada elemento que no sirve a la tarea se vuelve ruido acumulado. Se elimina.
+2. **Todo responde.** Cada acción tiene feedback < 150ms (hover, toast, cambio de estado). Una app que no responde se siente rota aunque funcione perfecto.
+3. **Nada grita.** Superficies calmadas, UNA acción primaria por vista, color con rol. El drama visual cansa a la hora; la confianza no cansa nunca.
+4. **Consistencia = velocidad.** Mismo patrón resuelve mismo problema (§4.2): la memoria muscular del usuario es la característica más valiosa del producto. Una excepción "solo esta vez" cuesta un micro-error por día, por usuario, para siempre.
+5. **El detalle se nota sin nombrarse.** Números tabulares alineados a la derecha, teléfonos formateados, `—` en vez de vacío, truncado con ellipsis, unidades correctas (§7.2). Nadie lo señala, pero todos lo sienten: *"esta app la hizo alguien que sabe lo que hace"*. Ese es el estándar "digno de premio".
 
 ---
 
@@ -231,6 +269,23 @@ Se mapea al pipeline real (ventas → ingeniería → almacén → producción):
 - `--shadow-lg` — modales, drawers
 - `--shadow-xl` — paleta global (Cmd+K)
 
+#### 3.3.1 Semántica de elevación (capas del producto)
+
+La profundidad dice **dónde estás**, no decora. El producto entero vive en cinco niveles:
+
+| Nivel | Superficie | Tratamiento |
+|-------|-----------|-------------|
+| **L0** | Fondo de app (`--surface-app`) | Plano, sin sombra |
+| **L1** | Cards, panels, formularios (`--surface-card`) | Borde `--border-subtle` + `--shadow-xs/sm` |
+| **L2** | Chrome sticky (topbar, workspace-chrome, `th` sticky, tabs) | `--surface-card` + `--shadow-sm` + borde inferior |
+| **L3** | Dropdowns, popovers, tooltips | `--surface-card` + `--shadow-md` |
+| **L4** | Modales, drawers, toasts, command palette | `--surface-card` + `--shadow-lg/xl` + overlay |
+
+**Reglas:**
+- Cada elemento pertenece a UN nivel. Prohibido apilar borde + sombra grande como decoración ("ghost card"): en L1 se elige borde sutil **o** `--shadow-sm`. Las sombras del sistema son de blur chico a propósito.
+- Elevar = subir **exactamente un nivel** (L1→L2 en hover de card). Saltarse dos niveles rompe la metáfora espacial.
+- La elevación nunca reemplaza jerarquía tipográfica: un título no "sube de nivel", se hace más grande.
+
 ---
 
 ### 3.4 Spacing
@@ -315,6 +370,23 @@ Default del producto: **herramienta densa**, no landing. Tokens semánticos en `
 - Slide-in de drawers → `transform translateX` con `--duration-slow`
 - Siempre envolver en `@media (prefers-reduced-motion: no-preference)`
 
+#### 3.6.1 State layers — el sistema táctil completo (M3)
+
+El estado de un control se expresa con **capas tonales sobre el color propio del
+control**, nunca cambiando su tamaño ni estructura:
+
+| Estado | Receta |
+|--------|--------|
+| `:hover` | Overlay tonal ~6–8% (ink o color del control) — o, en rellenos sólidos, un paso de la rampa (500→600) |
+| `:active` | Overlay ~10–12% + `translateY(1px)` (se desactiva con reduced motion) |
+| `:focus-visible` | `--shadow-focus` (ring 3px brand 25%). Nunca `outline: none` sin alternativa |
+| `:disabled` | Opacidad ~50% + `cursor: not-allowed`; sin hover ni active |
+| Selected/pressed persistente | Fondo tonal de la rampa (`-100`/`-200`) — no borde a saturación plena |
+
+**Reglas:**
+- El cambio de estado **nunca mueve el layout**: solo color, sombra u overlay. Nada crece 1px al hacer hover (provoca jitter y mis-clicks).
+- La matriz completa aplica a TODO control interactivo: botones, chips, tabs, filas, cards, inputs, badges clickeables. Un control sin sus estados no se mergea (ver §8 DoD).
+
 ---
 
 ### 3.7 Iconografía
@@ -360,11 +432,17 @@ pnpm add lucide-react --filter @muebles/ui
 | Email (login) | `Mail` |
 | Contraseña (login) | `KeyRound` |
 
+**Reglas de uso (v3):**
+- **Icono + texto por defecto** en nav y acciones. Icono solo (`btn--icon`) exige `aria-label` + tooltip; un icono nunca es la única pista de una acción.
+- **Un solo weight visual:** `strokeWidth={1.5}` en todo tamaño; no se "compensa" con stroke más grueso en iconos chicos.
+- El icono hereda el color del texto adyacente; color propio solo con rol explícito (área `--area-*-500`, semántico §3.2, o inverse sobre brand).
+- Icono nuevo = fila nueva en esta tabla. Prohibido importar de otra librería o dibujar SVG propio.
+
 ---
 
 ## 4. Patrones de Interacción
 
-### 3.8 Breakpoints canónicos (issue #34)
+### 4.0 Breakpoints canónicos (issue #34)
 
 Los media queries **no pueden** leer custom properties; los px de abajo son literales fijos y se documentan también en `tokens.css` (`--bp-*`, `--touch-min`).
 
@@ -380,7 +458,7 @@ Los media queries **no pueden** leer custom properties; los px de abajo son lite
 
 **Tablas de catálogo / usuarios:** `overflow-x: auto` + fade de bordes + `min-width` en phone para no aplastar celdas.
 
-**Touch:** en `max-width: 767px`, `.btn` / `.btn--small` / acciones de fila usan `min-height: var(--touch-min)` (2.5rem ≈ 40px). Desktop compacto (#49) no cambia.
+**Touch:** en `max-width: 767px`, `.btn` / `.btn--small` / acciones de fila usan `min-height: var(--touch-min)`. **Estándar v3: 44px** (Apple HIG; 48dp en móvil nativo, ver `docs/mobile-ui-ux.md`). Hoy `--touch-min` es 2.5rem (40px) — migrar a 2.75rem al tocar CSS de touch. Desktop compacto (#49) no cambia.
 
 **Shell:** collapse drawer en `max-width: 899px` (sin cambio de contrato F017).
 
@@ -443,6 +521,12 @@ La app autenticada/invitada usa un layout de **sidebar + content area**, NO tabs
 **Regla de orden** (menu reorg): dashboards PRIMERO, luego lo más general
 bajando a lo más específico siguiendo el orden de proceso del taller
 (orden de obra → fabricar → cargar → instalar).
+
+**Reglas de carga del nav (v3 — salud de la IA):**
+- **Labels únicos en TODO el nav** (y por ende en ⌘K). Prohibido repetir label entre secciones: dos «Dashboard» son ambigüedad en la paleta y en la memoria del usuario. Si dos dashboards coexisten, el label lleva el área: «Dashboard Ventas» / «Dashboard Producción» (el título de pantalla puede ser más corto).
+- **Máx ~5 ítems visibles por sección**, ~24 ítems totales por rol. Si una sección crece más, se sub-agrupa o se mueve a una pantalla hub — no se "achata" el label para que quepa.
+- El orden es fijo por proceso; NO se reordena por rol.
+- Badge contador en ítems del nav: máximo 1 por sección (si todo tiene badge, nada lo tiene).
 
 Secciones vacías por rol se auto-ocultan (AppShell filtra por `allowedNavIds`).
 
@@ -619,6 +703,49 @@ Reglas:
 - Respetar `prefers-reduced-motion` en spinners/skeletons.
 - Empty y error son estados **distintos** del loading (ver §4.5 y toasts §4.4).
 - El busy es *durante* la operación; el toast de éxito/error va al terminar.
+
+### 4.8 Accesibilidad y teclado (estándar AA)
+
+La a11y no es una pasada final: es parte del sistema (§2.1, dominio Google).
+
+**Contraste:**
+- Texto body ≥ 4.5:1 · texto large (≥18px o bold ≥14px) y componentes UI ≥ 3:1 · placeholder ≥ 4.5:1 (mismo estándar que el texto — gris lavado prohibido).
+- Verificar `--text-muted` sobre CADA superficie donde se use; si no pasa, subir a `--text-secondary`.
+
+**Teclado — mapa completo del producto:**
+
+| Tecla | Acción |
+|-------|--------|
+| `Tab` / `Shift+Tab` | Orden natural: el orden del DOM = orden visual |
+| `Cmd/Ctrl+K` | Command palette (§4.1) |
+| `Esc` | Cierra modal / drawer / dropdown / palette. NUNCA navega hacia atrás |
+| `↑ ↓` | Roving focus en listas y boards (patrón ya usado en estaciones de Producción) |
+| `Enter` | Activa el ítem enfocado |
+| Focus trap | En modales: Tab no sale; al cerrar, el foco **vuelve al trigger** |
+
+**Lectores de pantalla (VoiceOver/NVDA):**
+- Landmarks: `nav` (sidebar), `main` (content), `dialog` (modales) + `aria-label` en cada uno.
+- Toasts: `aria-live="polite"`; errores de form junto al campo con `aria-describedby`.
+- El significado nunca viaja solo por color: los badges llevan dot + texto (§5.2); el estado de una fila nunca es solo un color.
+- Botones icon-only: `aria-label` SIEMPRE.
+
+**Targets y motor:** ≥44×44px en touch (§4.0), foco siempre visible (`:focus-visible` + `--shadow-focus`), `prefers-reduced-motion` en todo el sistema (§3.6).
+
+### 4.9 Ayuda contextual
+
+La ayuda vive DONDE se necesita, no en un centro de documentación. (Existe para subir el H10 del critique: 2/4.)
+
+| Patrón | Cuándo | Regla |
+|--------|--------|-------|
+| **Hint inline** (`--text-sm` secondary bajo el campo) | Campos con consecuencias de negocio: margen, merma, presets, `structureRevisionPin` | Solo en campos críticos — hint en TODO es ruido |
+| **Tooltip** (icono `Info` 14px, o sobre acciones icon-only) | Jerga técnica del taller/producto: «zócalo», «Optimizer», «pack», «rev» | Menos de 2 líneas; define el término, no un tutorial |
+| **EmptyState que enseña** (§4.5) | Listas vacías | Ya estándar |
+| **Error que enseña** (§7.3) | Validaciones | Dice qué pasó y cómo resolverlo |
+| **Subtítulo de contexto** (§4.1a) | Pantallas con flujo no obvio («el avance se marca desde Producción») | Ya estándar en Estado de Planta |
+
+**Prohibido:** tours forzados, popups de onboarding bloqueantes, "centro de ayuda"
+al que haya que ir. El usuario experto no puede ser frenado por la ayuda al
+novato: la ayuda es contextual u opt-in, nunca modal.
 
 ---
 
@@ -945,7 +1072,73 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 ---
 
-## 7. Reglas de Implementación
+## 7. Contenido, datos y copy
+
+El copy es UI. Estas reglas existen porque el critique 30/40 encontró datos
+crudos en pantalla (teléfono `195130.707627` como customerLabel, «schema v3» en
+el topbar): la UI habla **humano de taller**, nunca interno de sistema.
+
+### 7.1 Tono
+
+- Español de taller, directo y sobrio. Sin marketing («¡Excelente!»), sin tecnicismos de sistema («schema», «id», «registro persistido»).
+- **Sentence case en TODO** (botones, títulos, labels, toasts). ALL CAPS queda confinado a los labels de sección del sidebar existentes — en ningún texto nuevo.
+- Botones = **verbo + objeto**: «Nueva cotización», «Guardar cambios», «Marcar cargado». «OK»/«Aceptar» solos están prohibidos; el primary de la vista empieza con el verbo.
+
+### 7.2 Formato de datos (higiene de UI)
+
+| Dato | Formato | Ejemplo |
+|------|---------|---------|
+| Dinero | `formatMoneyDisplay` (es-MX, MXN default) | `$1,250.50 MXN` |
+| Números en tablas | `tabular-nums`, **alineados a la derecha** | `1,250.50` |
+| Fecha | Humana `d MMM yyyy` es-MX, nunca timestamp crudo | `18 ago 2026` |
+| Teléfono | Formateado con espacios, nunca el crudo de DB | `81 2345 6789` |
+| Códigos | Mono, uppercase, prefijo del dominio | `MAT-001`, `MOD-GAB-01` |
+| Dimensiones | `ancho × alto × prof` con `×` (U+00D7), unidad una vez al final | `600 × 800 × 450 mm` |
+| Valor ausente | `—` (em dash), nunca vacío ni `null`/`undefined`/`N/A` | `—` |
+
+**Reglas:**
+- La UI **nunca** muestra internos del sistema: versiones de schema, ids de DB, timestamps crudos, keys, nombres de tablas. Eso es diagnóstico de dev y vive en logs.
+- Nombres largos: ellipsis + `title` con el valor completo. Los CÓDIGOS nunca se truncan — son identidad.
+- Números siempre con unidad en contexto de taller (`mm`, `m²`, `ML`, `pzs`): pegada al número o declarada en el header de columna, no repetida en cada celda.
+- En cards de lista, el **nombre del ítem manda** la primera línea visual; el código mono lo acompaña en muted (nunca al revés).
+
+### 7.3 Copy de estados
+
+| Caso | Fórmula | Ejemplo |
+|------|---------|---------|
+| **Error** | Qué pasó (1 línea) + cómo resolverlo + acción si existe | «No se pudo guardar: el código MAT-001 ya existe. Cambiá el código o editá el material existente.» |
+| **Confirmación destructiva** | Consecuencia + qué NO se pierde + botón con verbo específico | «Eliminar "MOD-GAB-01". Las cotizaciones que lo usan conservan su copia. Esta acción no se puede deshacer.» → [Eliminar] |
+| **Toast de éxito** | Sujeto + verbo | «"Arauco 15mm" desactivado» |
+| **Cargando** | Qué se está cargando | «Cargando órdenes…» (no «Cargando…») |
+| **Vacío** | Estado + causa + siguiente paso | Cubierto por `EmptyState` (§4.5) |
+
+**Prohibido:** «Algo salió mal», «Error inesperado», códigos de error visibles al
+usuario, humor en errores, disculpas largas («Lo sentimos mucho, pero…»).
+
+---
+
+## 8. Definición de Done de UI (gate de calidad)
+
+Una pantalla o feature de UI **no está done** hasta que pasa este gate completo.
+Es el checklist del implementador ANTES de pedir review, y del reviewer para
+aprobar (ver `reviewer` skill, bloque Diseño UI/UX).
+
+- [ ] **Estados de pantalla**: loading (skeleton), empty, sin resultados, error — los 4 presentes o justificación escrita en el PR
+- [ ] **Estados de control**: hover, focus-visible, active, disabled en TODO control interactivo nuevo (§3.6.1)
+- [ ] **Una acción primaria** por vista; jerarquía primary → secundarias → menú
+- [ ] **Solo tokens**: 0 hex, 0 px sueltos, 0 `font-size` literales; detector impeccable (`detect.mjs`) en 0 hallazgos
+- [ ] **A11y**: contraste AA, teclado completo (§4.8), icon-only con `aria-label`, significado nunca solo por color
+- [ ] **Copy**: taller + sentence case + datos formateados (§7.2) + errores que enseñan (§7.3)
+- [ ] **Esqueleto único** (§4.1a): `.page-header`, título = label de nav único, toolbar bajo el header
+- [ ] **Responsive smoke**: 390px / 768px / 1280px sin overflow ni contenido cortado (breakpoints §4.0)
+- [ ] **Motion**: duraciones/easings del sistema + `prefers-reduced-motion` (§3.6)
+- [ ] **Screenshot review**: captura de la pantalla comparada contra la spec §6 — «se ve bien en mi cabeza» no cuenta
+
+Si un ítem falla, no es done. Si un ítem no aplica, el commit/PR lo dice explícitamente.
+
+---
+
+## 9. Reglas de Implementación
 
 1. **Todas las variables CSS en `src/design-system/tokens.css`** — ningún valor hardcoded
 2. **Un solo reset** (`src/design-system/reset.css`) que todos importan
@@ -959,11 +1152,14 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 10. **Phased delivery** — una feature a la vez según `feature_list.json`
 11. **Botones BEM** — usar `.btn` / `.btn--primary` / `.btn--ghost` / `.btn--danger` / `.btn--small` (ver §5.1)
 12. **Pantallas nuevas** — documentar en §6 antes o junto con la implementación
+13. **Gate de calidad UI** — toda pantalla nueva o modificada pasa el §8 DoD antes de pedir review; el copy y el formato de datos cumplen §7
 
 ---
 
-## 8. Referencias
+## 10. Referencias
 
+- **Ejecución (estándar Apple):** [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) — claridad, deferencia, profundidad
+- **Sistema (estándar Google):** [Material 3](https://m3.material.io) — roles de color, state layers, componentes con estados completos
 - Inspiración de layout: [Linear](https://linear.app), [Notion](https://notion.so)
 - Inspiración de design system: [Radix Themes](https://www.radix-ui.com/themes), [shadcn/ui](https://ui.shadcn.com)
 - Iconos: [Lucide](https://lucide.dev)

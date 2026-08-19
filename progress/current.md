@@ -1,5 +1,38 @@
 # Sesión activa
 
+- **Sesión activa (2026-08-18): docs design v3.0 — estándar de excelencia UI/UX.**
+  - Pedido del dueño: elevar la documentación de diseño a estándar Apple/Google
+    (app "digna de premio", usable 8hs/día); evaluar si hace falta un skill
+    especializado. Solo documentación — 0 código tocado.
+  - `docs/design.md` v2.1 → **v3.0**:
+    - **§2.1 ADN visual Apple × Google**: dominios por casa (Apple: chrome/motion/
+      profundidad/táctil · Google M3: estados completos/roles de color/a11y/
+      densidad) + regla de desempate (decoración → Apple quita; completitud de
+      sistema → Google completa; prohibido el cruce inverso).
+    - **§2.2 Prueba de las 8 horas**: bar de calidad del producto.
+    - **§3.3.1** semántica de elevación L0–L4 · **§3.6.1** state layers M3 (matriz
+      de estados, cambios sin mover layout) · reglas de iconos en §3.7.
+    - **§4.0** (ex-§3.8, numbering bug) + touch estándar 44px (hoy `--touch-min`
+      40px — migración anotada en el doc).
+    - **§4.1** reglas de carga del nav: labels únicos (fix "dos Dashboard"),
+      máx ~5 ítems/sección, máx 1 badge/sección.
+    - **§4.8** Accesibilidad y teclado (AA, mapa de teclas, lectores de pantalla)
+      · **§4.9** Ayuda contextual (sube H10=2 del critique).
+    - **§7** Contenido, datos y copy: higiene de UI (prohibido schema/ids/crudos
+      en pantalla — fix "schema v3" y teléfono crudo), formato de dinero/fechas/
+      teléfono/dimensiones/`—`, copy de errores y confirmaciones destructivas.
+    - **§8** Definición de Done de UI: gate de 10 ítems exigible por reviewer.
+    - §9 (ex-7) reglas +13 (gate §8) · §10 (ex-8) referencias + Apple HIG + M3.
+  - `reviewer` skill: paso 8 recorre ahora gate §8 + estados §3.6.1 + copy §7 +
+    a11y §4.8; formato de veredicto agrega D7/D8.
+  - **Decisión skill dedicado:** NO se crea uno paralelo. `impeccable` ya carga
+    `docs/design.md` como DESIGN vía `context.mjs`, así que el doc v3 fortalece
+    todas las sesiones UI automáticamente; un skill duplicado violaría la regla
+    de vocabulario único del propio sistema (§2.1/§4.2).
+  - Pendiente código (para próxima sesión UI, desde el doc): migrar `--touch-min`
+    40→44px, renombrar labels duplicados "Dashboard" (Ventas/Producción), quitar
+    meta "schema v3" del topbar, formatear teléfono en customerLabel, hints
+    inline en campos críticos (margen/merma/presets).
 - **Re-critique post-v2.1 (2026-08-19): score 28 → 30/40.** Trend: 24 → 28 → 30.
   Snapshot: `.impeccable/critique/2026-08-19T03-12-17Z__*.md`. Detector: 0.
   Veredicto visual: "ya tiene lenguaje visual propio" (cotizaciones),

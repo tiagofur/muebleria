@@ -24,12 +24,15 @@ Tu única función es **aprobar o rechazar** cambios. No editas código.
 7. Si la feature incluye motor de dominio o export: verifica que el golden test
    o fixture test pasa y que los valores son correctos.
 8. **Si la feature toca UI/UX** (fase 4 o componentes de presentación), verifica además:
+   - Recorre el gate **`docs/design.md §8` (Definición de Done de UI)** completo — es el checklist canónico.
    - ¿Los colores, espaciados, sombras y radios usan variables CSS del design system (no hardcoded)?
    - ¿El layout usa el patrón correcto para esa pantalla (ver `docs/design.md §6`)?
    - ¿Los modales respetan tamaño (sm/md/lg), tienen focus trap, cierre con Esc, y backdrop?
    - ¿Los toasts van en top-right, auto-dismiss 4s, max 3 simultáneos, y tipo correcto?
    - ¿Los iconos son de Lucide React únicamente, con `strokeWidth={1.5}`?
    - ¿Los tokens de animación incluyen `@media (prefers-reduced-motion: no-preference)`?
+   - ¿Todo control interactivo nuevo tiene hover/focus-visible/active/disabled (`design.md §3.6.1`)?
+   - ¿El copy cumple `design.md §7` (sentence case, datos formateados, sin internos de sistema en UI) y la a11y `§4.8` (contraste AA, teclado, aria-label en icon-only)?
 9. Emite veredicto.
 
 ## Formato del veredicto
@@ -55,6 +58,8 @@ Escribe en `progress/review_<feature_id>.md`:
 - D4: [x] Toasts correctos
 - D5: [x] Solo iconos Lucide con strokeWidth=1.5
 - D6: [x] Animaciones con prefers-reduced-motion
+- D7: [x] Gate docs/design.md §8 (DoD de UI) completo
+- D8: [x] Copy y datos según §7; a11y según §4.8
 
 ## Cambios requeridos (si aplica)
 1. ...
