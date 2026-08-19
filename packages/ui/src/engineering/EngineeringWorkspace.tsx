@@ -131,49 +131,51 @@ function ResumenTab({
     <div className="eng-resumen">
       {/* Totals row */}
       <div className="eng-resumen__totals" aria-label="Totales de fábrica">
-        <div className="eng-resumen__stat">
-          <span className="eng-resumen__stat-icon eng-resumen__stat-icon--modules">
+        {/* Stat cards — migrado a .stat-card--eng (common/statCard.css);
+            área Ingeniería → tinte --area-eng-* (design.md §3.2.1). */}
+        <div className="stat-card stat-card--eng">
+          <span className="stat-card__icon">
             <LayoutGrid size={18} strokeWidth={1.5} />
           </span>
-          <div className="eng-resumen__stat-body">
-            <span className="eng-resumen__stat-value">{readiness.moduleUnitCount}</span>
-            <span className="eng-resumen__stat-label">
+          <div className="stat-card__body">
+            <div className="stat-card__value">{readiness.moduleUnitCount}</div>
+            <div className="stat-card__label">
               {readiness.moduleUnitCount === 1 ? 'módulo' : 'módulos'}
               <span className="eng-resumen__stat-sub"> ({readiness.moduleLineCount} líneas)</span>
-            </span>
+            </div>
           </div>
         </div>
-        <div className="eng-resumen__stat">
-          <span className="eng-resumen__stat-icon eng-resumen__stat-icon--pieces">
+        <div className="stat-card stat-card--eng">
+          <span className="stat-card__icon">
             <FileSpreadsheet size={18} strokeWidth={1.5} />
           </span>
-          <div className="eng-resumen__stat-body">
-            <span className="eng-resumen__stat-value">
+          <div className="stat-card__body">
+            <div className="stat-card__value">
               {cutRows && cutRows.length > 0 ? readiness.cutRowCount : '—'}
-            </span>
-            <span className="eng-resumen__stat-label">piezas de tablero</span>
+            </div>
+            <div className="stat-card__label">piezas de tablero</div>
           </div>
         </div>
-        <div className="eng-resumen__stat">
-          <span className="eng-resumen__stat-icon eng-resumen__stat-icon--area">
+        <div className="stat-card stat-card--eng">
+          <span className="stat-card__icon">
             <Layers size={18} strokeWidth={1.5} />
           </span>
-          <div className="eng-resumen__stat-body">
-            <span className="eng-resumen__stat-value">
+          <div className="stat-card__body">
+            <div className="stat-card__value">
               {totals ? totals.totalPieces : '—'}
-            </span>
-            <span className="eng-resumen__stat-label">tableros</span>
+            </div>
+            <div className="stat-card__label">tableros</div>
           </div>
         </div>
-        <div className="eng-resumen__stat">
-          <span className="eng-resumen__stat-icon eng-resumen__stat-icon--edge">
+        <div className="stat-card stat-card--eng">
+          <span className="stat-card__icon">
             <Ruler size={18} strokeWidth={1.5} />
           </span>
-          <div className="eng-resumen__stat-body">
-            <span className="eng-resumen__stat-value">
+          <div className="stat-card__body">
+            <div className="stat-card__value">
               {totals ? totals.totalEdgeMl.toLocaleString('es-MX') : '—'}
-            </span>
-            <span className="eng-resumen__stat-label">ml de canto</span>
+            </div>
+            <div className="stat-card__label">ml de canto</div>
           </div>
         </div>
       </div>

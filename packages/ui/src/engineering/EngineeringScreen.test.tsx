@@ -107,7 +107,7 @@ describe('EngineeringScreen', () => {
     expect(screen.getByText('Escritorio Ejecutivo')).not.toBeNull();
   });
 
-  it('filters by status', () => {
+  it('filters by status chips', () => {
     render(
       <EngineeringScreen
         projects={mockProjects}
@@ -115,9 +115,9 @@ describe('EngineeringScreen', () => {
         onOpenProject={vi.fn()}
       />,
     );
-    // Click the "Documentado" stat card to filter.
-    const documentedButton = screen.getByTestId('eng-stat-documented');
-    fireEvent.click(documentedButton);
+    // Click the "Documentados" status chip to filter.
+    const documentedChip = screen.getByRole('button', { name: 'Documentados' });
+    fireEvent.click(documentedChip);
     expect(screen.queryByText('Cocina Moderna')).toBeNull();
     expect(screen.queryByText('Placard Walk-in')).toBeNull();
     expect(screen.getByText('Escritorio Ejecutivo')).not.toBeNull();
@@ -149,6 +149,21 @@ describe('EngineeringScreen', () => {
     const row = screen.getByText('Placard Walk-in');
     fireEvent.click(row);
     expect(onOpen).toHaveBeenCalledWith('p2');
+  });
+
+  it('clicking dashboard button calls onOpenDashboard', () => {
+    const onOpenDashboard = vi.fn();
+    render(
+      <EngineeringScreen
+        projects={mockProjects}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+        onOpenDashboard={onOpenDashboard}
+      />,
+    );
+    const dashBtn = screen.getByTestId('eng-goto-dashboard');
+    fireEvent.click(dashBtn);
+    expect(onOpenDashboard).toHaveBeenCalledTimes(1);
   });
 
   it('empty state when no projects', () => {
@@ -195,11 +210,9 @@ describe('EngineeringScreen', () => {
     );
     // Draft never appears.
     expect(screen.queryByText('Borrador')).toBeNull();
-    // Sent work is in the read-only section, not in the working queue stats
-    // (3 queue projects: p1 pending, p2 in_progress, p3 documented).
+    // Sent work is in the read-only section
     expect(screen.getByTestId('eng-sent-sent1')).not.toBeNull();
     expect(screen.getByText('En almacén')).not.toBeNull();
-    expect(screen.getByTestId('eng-stat-pending').textContent).toContain('1');
   });
 });
 

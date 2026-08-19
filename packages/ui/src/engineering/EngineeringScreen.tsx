@@ -10,9 +10,8 @@
 import { useMemo, useState } from 'react';
 import {
   ClipboardList,
-  Clock,
-  FileCheck,
   FileText,
+  LayoutDashboard,
   SearchX,
 } from 'lucide-react';
 
@@ -25,15 +24,24 @@ import {
   type EngineeringStatus,
   type Project,
 } from '@muebles/domain';
-import { EmptyState, PageHeader, PageToolbar, SearchInput } from '../common';
+import {
+  EmptyState,
+  PageHeader,
+  PageToolbar,
+  SearchInput,
+  StatusChips,
+  type StatusChipOption,
+} from '../common';
 
 type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 
-/** Status filter options. */
-const STATUS_FILTERS: readonly EngineeringStatus[] = [
-  'pending',
-  'in_progress',
-  'documented',
+type FilterStatus = EngineeringStatus | 'all';
+
+const STATUS_CHIP_OPTIONS: readonly StatusChipOption<FilterStatus>[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'pending', label: 'Pendientes' },
+  { value: 'in_progress', label: 'En proceso' },
+  { value: 'documented', label: 'Documentados' },
 ];
 
 /** Engineering status → semantic status-badge modifier (design.md §5.2). */
@@ -43,17 +51,11 @@ const STATUS_BADGE_MODIFIER: Readonly<Record<EngineeringStatus, string>> = {
   documented: 'done',
 };
 
-/** Status → stat card icon. */
-const STATUS_ICON: Readonly<Record<EngineeringStatus, typeof ClipboardList>> = {
-  pending: Clock,
-  in_progress: FileText,
-  documented: FileCheck,
-};
-
 export function EngineeringScreen({
   projects,
   onStartEngineering,
   onOpenProject,
+  onOpenDashboard,
   currentUserId,
 }: {
   /** All projects (already role-filtered). */
@@ -62,11 +64,13 @@ export function EngineeringScreen({
   readonly onStartEngineering: (projectId: string) => void;
   /** Called when user clicks a project row to open the workspace. */
   readonly onOpenProject: (projectId: string) => void;
+  /** Optional navigation to the Engineering Dashboard. */
+  readonly onOpenDashboard?: () => void;
   /** Current user id for display. */
   readonly currentUserId?: string;
 }) {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<EngineeringStatus | null>(null);
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
 
   // Process stage gating — the working queue is ONLY projects in the
   // ingeniería stage (accepted, engineering not sent yet). Projects already
@@ -94,29 +98,34 @@ export function EngineeringScreen({
           (p.customerLabel ?? '').toLowerCase().includes(q),
       );
     }
-    if (statusFilter) {
+    if (statusFilter !== 'all') {
       result = result.filter((p) => engineeringStatus(p.engineeringLog) === statusFilter);
     }
     return result;
   }, [queue, search, statusFilter]);
 
-  const counts = useMemo(() => {
-    const c: Record<EngineeringStatus, number> = { pending: 0, in_progress: 0, documented: 0 };
-    for (const p of queue) {
-      c[engineeringStatus(p.engineeringLog)]++;
-    }
-    return c;
-  }, [queue]);
-
   return (
     <section className="eng-landing" aria-label="Ingeniería">
       <PageHeader
         title="Ingeniería"
-        subtitle="Documentación técnica, optimización y preparación de producción por proyecto."
+        subtitle="Cola de documentación técnica, despiece y preparación de producción por proyecto."
+        secondaryActions={
+          onOpenDashboard ? (
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={onOpenDashboard}
+              data-testid="eng-goto-dashboard"
+            >
+              <LayoutDashboard size={14} strokeWidth={1.5} />
+              Dashboard
+            </button>
+          ) : undefined
+        }
       />
 
       <PageToolbar
-        ariaLabel="Buscar proyectos de ingeniería"
+        ariaLabel="Buscar y filtrar proyectos de ingeniería"
         search={
           <SearchInput
             value={search}
@@ -125,34 +134,16 @@ export function EngineeringScreen({
             aria-label="Buscar proyecto de ingeniería"
           />
         }
+        filters={
+          <StatusChips<FilterStatus>
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={STATUS_CHIP_OPTIONS}
+            aria-label="Filtrar por estado de ingeniería"
+            data-testid="eng-status-chips"
+          />
+        }
       />
-
-      {/* Stat cards */}
-      <div className="eng-stats">
-        {STATUS_FILTERS.map((s) => {
-          const Icon = STATUS_ICON[s];
-          const isActive = statusFilter === s;
-          return (
-            <button
-              key={s}
-              type="button"
-              className={`stat-card stat-card--eng stat-card--button${
-                isActive ? ' stat-card--active' : ''
-              }`}
-              onClick={() => setStatusFilter(isActive ? null : s)}
-              data-testid={`eng-stat-${s}`}
-            >
-              <span className="stat-card__icon" aria-hidden>
-                <Icon size={18} strokeWidth={1.5} />
-              </span>
-              <div className="stat-card__body">
-                <span className="stat-card__value">{counts[s]}</span>
-                <span className="stat-card__label">{ENGINEERING_STATUS_LABELS_ES[s]}</span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
 
       {/* Project list */}
       {filtered.length === 0 && queue.length > 0 ? (
@@ -161,7 +152,7 @@ export function EngineeringScreen({
           title="Sin resultados"
           description="No hay proyectos que coincidan con los filtros."
           actionLabel="Limpiar filtros"
-          onAction={() => { setSearch(''); setStatusFilter(null); }}
+          onAction={() => { setSearch(''); setStatusFilter('all'); }}
         />
       ) : filtered.length === 0 ? (
         <EmptyState
