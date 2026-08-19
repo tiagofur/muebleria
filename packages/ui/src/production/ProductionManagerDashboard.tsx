@@ -372,7 +372,7 @@ export function ProductionManagerDashboard({
             <Clock size={20} strokeWidth={1.5} aria-hidden />
           </div>
           <div className="stat-card__body">
-            <span className="stat-card__value">{totalMetrics.avgProgress}%</span>
+            <span className="stat-card__value">{totalMetrics.avgProgress.toFixed(2)}%</span>
             <span className="stat-card__label">Avance Promedio</span>
           </div>
         </div>
@@ -574,7 +574,7 @@ function ProjectDashboardRow({
           />
         </div>
         <span className="pm-dashboard__progress-text">
-          {hasItems ? `${summary.percentage}%` : '—'}
+          {hasItems ? `${summary.percentage.toFixed(2)}%` : '—'}
         </span>
       </div>
 
