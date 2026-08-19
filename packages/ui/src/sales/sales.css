@@ -558,22 +558,9 @@
   color: var(--text-muted);
 }
 
-/* ── Status badges ──────────────────────────────────────────────────────── */
-
-.sales-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2em 0.6em;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.sales-badge--cancelled {
-  background: hsl(0 60% 92%);
-  color: hsl(0 70% 40%);
-}
+/* ── Status badges ────────────────────────────────────────────────────────
+   .sales-badge / --cancelled migrados al vocabulario único .status-badge--*
+   (common/statusBadge.css, §5.2). Sin overrides locales. */
 
 .sales-list__cancel-btn {
   font-size: var(--text-sm);

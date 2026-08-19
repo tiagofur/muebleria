@@ -871,11 +871,19 @@ export function SalesDashboard({
                       {formatMoneyDisplay(row.salePrice, { currency: row.project.currency })}
                     </span>
                   ) : null}
-                  <span className={`sales-badge ${projectStatusBadgeClass(row.project.status)}`}>
+                  <span className={`status-badge ${projectStatusBadgeClass(row.project.status)}`}>
+                    <span className="status-badge__dot" aria-hidden>
+                      ●
+                    </span>
                     {projectStatusLabel(row.project.status)}
                   </span>
                   {row.project.cancelledAt ? (
-                    <span className="sales-badge sales-badge--cancelled">Cancelada</span>
+                    <span className="status-badge status-badge--cancelled">
+                      <span className="status-badge__dot" aria-hidden>
+                        ●
+                      </span>
+                      Cancelada
+                    </span>
                   ) : null}
                   <span className="sales-list__date">
                     {formatIsoDate(row.project.updatedAt)}

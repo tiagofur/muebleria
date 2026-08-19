@@ -84,6 +84,23 @@ describe('SalesDashboard', () => {
     expect(screen.getByText('Todos los proyectos')).toBeDefined();
   });
 
+  it('renders project statuses with the shared status-badge vocabulary (§5.2)', () => {
+    const projects = [
+      makeProject({ id: 'p1', name: 'Cocina Moderna', status: 'quoted' }),
+      makeProject({ id: 'p2', name: 'Estudio Executive', status: 'accepted' }),
+    ];
+
+    render(<SalesDashboard projects={projects} onOpenProject={vi.fn()} />);
+
+    const quoted = screen.getByText('Cotizado');
+    expect(quoted.className).toContain('status-badge--quoted');
+    expect(quoted.querySelector('.status-badge__dot')).not.toBeNull();
+
+    const accepted = screen.getByText('Aceptado');
+    expect(accepted.className).toContain('status-badge--accepted');
+    expect(accepted.className).not.toContain('sales-badge');
+  });
+
   it('calls onOpenProject when project row is clicked', () => {
     const onOpen = vi.fn();
     const projects = [
