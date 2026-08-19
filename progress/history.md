@@ -364,3 +364,14 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - `WorkspaceTabs` unifica las vistas pares de Órdenes e Ingeniería; `WorkflowTabs` conserva el subrayado de estaciones de Fábrica.
 - Se garantizan roles ARIA, paneles existentes para toda referencia `aria-controls`, roving tabindex, teclas Arrow/Home/End, count/disabled y overflow horizontal de una sola fila.
 - Verificación: 33 pruebas focales, `pnpm test`, `pnpm typecheck` y `./init.sh` verdes; evidencia visual declarada bloqueada por ausencia de herramientas de captura.
+
+## 2026-08-19 — F103 UI/UX Documentation Sync & Executable Source Contract
+
+- Sincronizada la documentación UI/UX con `apps/web/src/routes.ts` → `NAV_PATHS`
+  y guards ejecutables; rutas y RBAC narrativos ya no son autoridad.
+- Documentados F100–F102 como **implemented** y formularios, overlays, AA global,
+  targets de 44px, z-index, motion y rollout responsive como **planned**.
+- Normalizados aliases históricos como **deprecated** y corregidas las reglas de
+  ruta/RBAC de Órdenes, Embarques e Instalaciones tras revisión independiente.
+- Verificación: JSON válido, matriz de 24 `AppNavId` contrastada y `git diff --check`.
+- Commit: `649b6fc` (`docs(ui): synchronize UX design contracts`).
