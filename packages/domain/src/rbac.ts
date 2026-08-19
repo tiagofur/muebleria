@@ -199,6 +199,20 @@ export function roleCanAccessEngineeringNav(
 }
 
 /**
+ * Engineering Dashboard: analytics, queue wait times, cycle times, workload.
+ * Accessible by admin, ingeniero, and gerente_produccion.
+ */
+export function roleCanAccessEngineeringDashboard(
+  role: string | null | undefined,
+): boolean {
+  return (
+    role === 'admin' ||
+    role === 'ingeniero' ||
+    role === 'gerente_produccion'
+  );
+}
+
+/**
  * Sales dashboard: pipeline, summary cards, project list, alerts.
  * Vendedor sees own portfolio; gerente_ventas and admin see all.
  */
@@ -244,6 +258,20 @@ export function roleCanAccessPurchasingNav(
     role === 'admin' ||
     role === 'gerente_produccion' ||
     role === 'almacen'
+  );
+}
+
+/**
+ * Warehouse Dashboard: analytics, material demand, stock health, PO summary.
+ * Accessible by admin, almacen, and gerente_produccion.
+ */
+export function roleCanAccessWarehouseDashboard(
+  role: string | null | undefined,
+): boolean {
+  return (
+    role === 'admin' ||
+    role === 'almacen' ||
+    role === 'gerente_produccion'
   );
 }
 
@@ -522,10 +550,14 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
   if (roleCanAccessProductionNav(role)) ids.add('orders');
   // Production Manager Dashboard: full visibility for gerente_produccion
   if (roleCanAccessProductionDashboard(role)) ids.add('productionDashboard');
+  // Dashboard Ingeniería: analytics + cycle times for engineers and management.
+  if (roleCanAccessEngineeringDashboard(role)) ids.add('engineeringDashboard');
   // Ingeniería: documentation workspace for engineers and admins.
   if (roleCanAccessEngineeringNav(role)) ids.add('engineering');
   // Dashboard Ventas: pipeline + summary for sales roles.
   if (roleCanAccessSalesDashboard(role)) ids.add('salesDashboard');
+  // Dashboard Almacén: analytics, material demand, stock health for warehouse roles.
+  if (roleCanAccessWarehouseDashboard(role)) ids.add('warehouseDashboard');
   // Compras/Almacén: picking lists for warehouse + supervisors (Fase 3).
   if (roleCanAccessPurchasingNav(role)) ids.add('warehouse');
   return ids;

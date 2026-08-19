@@ -68,6 +68,18 @@ export function canReleaseMaterials(project: Project): boolean {
   );
 }
 
+/**
+ * Whether a project is ready for the production floor. Each prior phase
+ * (ventas → ingeniería → almacén) already filters its own queue; only the
+ * Almacén release stamp is needed to gate production visibility.
+ */
+export function isProductionReady(project: Project): boolean {
+  return (
+    (project.status === 'accepted' || project.status === 'produced') &&
+    Boolean(project.materialsRelease)
+  );
+}
+
 /** Spanish labels for the process stages. */
 export const PROCESS_STAGE_LABELS_ES: Readonly<Record<ProjectProcessStage, string>> = {
   ventas: 'Ventas',

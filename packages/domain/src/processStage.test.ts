@@ -3,6 +3,7 @@ import {
   projectProcessStage,
   filterProjectsByProcessStage,
   canReleaseMaterials,
+  isProductionReady,
   PROCESS_STAGE_LABELS_ES,
   type MaterialsRelease,
 } from './processStage';
@@ -154,6 +155,23 @@ describe('canSendToProduction', () => {
       ),
     ).toBe(true);
     expect(canSendToProduction(makeProject({ status: 'draft' }))).toBe(false);
+  });
+});
+
+describe('isProductionReady', () => {
+  it('returns true only for accepted/produced with materialsRelease', () => {
+    expect(isProductionReady(makeProject())).toBe(false);
+    expect(
+      isProductionReady(makeProject({ engineeringLog: sentLog() })),
+    ).toBe(false);
+    expect(
+      isProductionReady(
+        makeProject({ engineeringLog: sentLog(), materialsRelease: RELEASE }),
+      ),
+    ).toBe(true);
+    expect(
+      isProductionReady(makeProject({ status: 'produced', materialsRelease: RELEASE })),
+    ).toBe(true);
   });
 });
 

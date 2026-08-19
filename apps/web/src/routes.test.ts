@@ -164,14 +164,18 @@ describe('plant board route (F093)', () => {
     expect(NAV_PATHS.production).toBe('/production');
     expect(NAV_PATHS.productionDashboard).toBe('/production-dashboard');
     expect(NAV_PATHS.salesDashboard).toBe('/sales-dashboard');
+    expect(NAV_PATHS.engineeringDashboard).toBe('/engineering-dashboard');
     expect(NAV_PATHS.engineering).toBe('/engineering');
+    expect(NAV_PATHS.warehouseDashboard).toBe('/warehouse-dashboard');
     expect(NAV_PATHS.warehouse).toBe('/warehouse');
     expect(NAV_PATHS.finishes).toBe('/finishes');
     expect(NAV_PATHS.addOns).toBe('/add-ons');
     expect(navFromPath('/production')).toBe('production');
     expect(navFromPath('/production-dashboard')).toBe('productionDashboard');
     expect(navFromPath('/sales-dashboard')).toBe('salesDashboard');
+    expect(navFromPath('/engineering-dashboard')).toBe('engineeringDashboard');
     expect(navFromPath('/engineering')).toBe('engineering');
+    expect(navFromPath('/warehouse-dashboard')).toBe('warehouseDashboard');
     expect(navFromPath('/warehouse')).toBe('warehouse');
     expect(navFromPath('/finishes')).toBe('finishes');
     expect(navFromPath('/add-ons')).toBe('addOns');

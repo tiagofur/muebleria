@@ -272,13 +272,17 @@ export {
 export {
   EngineeringScreen,
   EngineeringWorkspace,
+  EngineeringDashboard,
+  type EngineeringDashboardProps,
 } from './engineering';
 
 export {
   PurchasingScreen,
+  WarehouseDashboard,
   PurchaseOrdersPanel,
   type ActiveProjectMaterial,
   type PurchasingScreenProps,
+  type WarehouseDashboardProps,
   type PoLineInput,
 } from './purchasing';
 

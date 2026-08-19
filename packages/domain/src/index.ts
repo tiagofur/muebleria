@@ -142,6 +142,7 @@ export {
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleCanAccessProductionDashboard,
+  roleCanAccessEngineeringDashboard,
   roleCanAccessEngineeringNav,
   roleCanAccessSalesDashboard,
   roleCanClaimProductionJob,
@@ -152,6 +153,7 @@ export {
   sectorsAllowedForRole,
   roleCanAdvanceStation,
   roleCanAccessPurchasingNav,
+  roleCanAccessWarehouseDashboard,
   roleCanMarkPicking,
   roleCanManageStock,
   roleCanManagePurchasing,
@@ -464,9 +466,14 @@ export {
   PICKING_MATERIALS,
   PICKING_STATUS_LABELS_ES,
   pickingKey,
+  computeWarehouseDashboardStats,
   type PickingMaterial,
   type PickingStatus,
   type ProjectPickingState,
+  type WarehouseProjectMetrics,
+  type WarehouseStockAlert,
+  type WarehouseDashboardStats,
+  type WarehouseProjectInput,
 } from './purchasing';
 
 export {
@@ -517,9 +524,13 @@ export {
   createEngineeringLog,
   recordGeneration,
   recordSentToProduction,
+  computeEngineeringDashboardStats,
   ENGINEERING_STATUS_LABELS_ES,
   type EngineeringLog,
   type EngineeringStatus,
+  type EngineeringDashboardProjectMetrics,
+  type EngineerWorkloadSummary,
+  type EngineeringDashboardStats,
 } from './engineering';
 
 export {

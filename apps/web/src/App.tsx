@@ -98,6 +98,7 @@ import {
   isProductionReady,
   suggestDuplicateCode,
   transitionProjectStatus,
+  type WarehouseProjectInput,
 } from '@muebles/domain';
 
 
@@ -124,6 +125,7 @@ import {
   type FabricStation,
   EmptyState,
   ScreenBoundary,
+  EngineeringDashboard,
   EngineeringScreen,
   EngineeringWorkspace,
   SalesDashboard,
@@ -162,6 +164,7 @@ import {
   type ProjectDraft,
   type ActiveProjectMaterial,
   PurchasingScreen,
+  WarehouseDashboard,
   type PoLineInput,
   CustomersScreen,
   type CustomerDraft,
@@ -1391,6 +1394,31 @@ function AppContent({
       };
     });
   }, [catalog, projects, materials]);
+
+  const warehouseProjects = useMemo((): readonly WarehouseProjectInput[] => {
+    return filterProjectsByProcessStage(
+      filterProductionVisible(projects),
+      'almacen',
+    ).map((project) => {
+      const purchProj = purchasingProjects.find((p) => p.projectId === project.id);
+      let boardAreaM2 = 0;
+      let edgeLengthMl = 0;
+      let hardwareCount = 0;
+      if (purchProj) {
+        const totals = computeProductionTotals(purchProj.cutRows);
+        boardAreaM2 = totals.totalAreaM2;
+        edgeLengthMl = totals.totalEdgeMl;
+        hardwareCount = purchProj.hardware.reduce((sum, row) => sum + row.quantity, 0);
+      }
+      return {
+        ...project,
+        customerLabel: resolveCustomerName(project.customerId, customers),
+        boardAreaM2: Math.round(boardAreaM2 * 100) / 100,
+        edgeLengthMl: Math.round(edgeLengthMl * 10) / 10,
+        hardwareCount,
+      };
+    });
+  }, [projects, purchasingProjects, customers]);
 
   // F096 — presentation DTO for the FabricScreen board. The shell owns the
   // domain calls; the React screen only renders this already-resolved data.
@@ -3206,6 +3234,26 @@ function AppContent({
         />
         </ScreenBoundary>
       ) : null}
+      {navId === 'engineeringDashboard' ? (
+        <ScreenBoundary screenLabel="Dashboard de Ingeniería" onGoHome={goHomeFromScreen}>
+        <EngineeringDashboard
+          projects={projectsForRole.map((p) => ({
+            ...p,
+            customerLabel: resolveCustomerName(p.customerId, customers),
+          }))}
+          onOpenProject={(id) => {
+            const target = engineeringProjectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
+          onOpenQueue={() => {
+            const target = pathForNav('engineering');
+            if (location.pathname !== target) navigate(target);
+          }}
+          assignableEngineers={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
+          engineerLabels={ownerLabels}
+        />
+        </ScreenBoundary>
+      ) : null}
       {navId === 'engineering' && !routeEngineeringProjectId ? (
         <ScreenBoundary screenLabel="Ingeniería" onGoHome={goHomeFromScreen}>
         <EngineeringScreen
@@ -3216,6 +3264,10 @@ function AppContent({
           onStartEngineering={startEngineering}
           onOpenProject={(id) => {
             const target = engineeringProjectPath(id);
+            if (location.pathname !== target) navigate(target);
+          }}
+          onOpenDashboard={() => {
+            const target = pathForNav('engineeringDashboard');
             if (location.pathname !== target) navigate(target);
           }}
           currentUserId={authUser?.id}
@@ -3350,6 +3402,25 @@ function AppContent({
         })()}
         </ScreenBoundary>
       ) : null}
+      {navId === 'warehouseDashboard' ? (
+        <ScreenBoundary screenLabel="Dashboard de Almacén" onGoHome={goHomeFromScreen}>
+        <WarehouseDashboard
+          projects={warehouseProjects}
+          stock={stockRows}
+          purchaseOrders={purchaseOrders}
+          initialPicking={pickingStates}
+          onOpenQueue={() => {
+            const target = pathForNav('warehouse');
+            if (location.pathname !== target) navigate(target);
+          }}
+          onOpenProject={(_id) => {
+            const target = pathForNav('warehouse');
+            if (location.pathname !== target) navigate(target);
+          }}
+          materialLabels={stockCatalog.labels}
+        />
+        </ScreenBoundary>
+      ) : null}
       {navId === 'warehouse' ? (
         <ScreenBoundary screenLabel="Compras y Almacén" onGoHome={goHomeFromScreen}>
         <PurchasingScreen
@@ -3358,6 +3429,10 @@ function AppContent({
           assignedSectors={mySectors}
           initialPicking={pickingStates}
           onTogglePick={handleTogglePick}
+          onOpenDashboard={() => {
+            const target = pathForNav('warehouseDashboard');
+            if (location.pathname !== target) navigate(target);
+          }}
           onReleaseMaterials={(projectId) =>
             projectActions.releaseProjectMaterials(
               projectId,

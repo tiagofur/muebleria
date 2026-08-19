@@ -19,6 +19,7 @@ import {
   roleUsesProductionQueue,
   roleCanClaimProductionJob,
   roleCanAccessProductionDashboard,
+  roleCanAccessEngineeringDashboard,
   roleCanAccessSalesDashboard,
   roleIsScopedBySector,
   roleCanAccessFabricNav,
@@ -27,6 +28,7 @@ import {
   sectorsAllowedForRole,
   roleCanAdvanceStation,
   roleCanAccessPurchasingNav,
+  roleCanAccessWarehouseDashboard,
   roleCanMarkPicking,
   roleCanManagePurchasing,
 } from './rbac';
@@ -386,5 +388,39 @@ describe('rbac (F035)', () => {
     expect(sectorsAllowedForRole('vendedor')).toEqual([]);
     expect(sectorsAllowedForRole('user')).toEqual([]);
     expect(sectorsAllowedForRole(null)).toEqual([]);
+  });
+
+  it('roleCanAccessEngineeringDashboard gates access to admin, ingeniero, gerente_produccion', () => {
+    expect(roleCanAccessEngineeringDashboard('admin')).toBe(true);
+    expect(roleCanAccessEngineeringDashboard('ingeniero')).toBe(true);
+    expect(roleCanAccessEngineeringDashboard('gerente_produccion')).toBe(true);
+    expect(roleCanAccessEngineeringDashboard('gerente_ventas')).toBe(false);
+    expect(roleCanAccessEngineeringDashboard('vendedor')).toBe(false);
+    expect(roleCanAccessEngineeringDashboard('produccion')).toBe(false);
+    expect(roleCanAccessEngineeringDashboard('almacen')).toBe(false);
+    expect(roleCanAccessEngineeringDashboard('user')).toBe(false);
+    expect(roleCanAccessEngineeringDashboard(null)).toBe(false);
+
+    expect(navIdsForRole('ingeniero').has('engineeringDashboard')).toBe(true);
+    expect(navIdsForRole('admin').has('engineeringDashboard')).toBe(true);
+    expect(navIdsForRole('gerente_produccion').has('engineeringDashboard')).toBe(true);
+    expect(navIdsForRole('vendedor').has('engineeringDashboard')).toBe(false);
+  });
+
+  it('roleCanAccessWarehouseDashboard gates access to admin, almacen, gerente_produccion', () => {
+    expect(roleCanAccessWarehouseDashboard('admin')).toBe(true);
+    expect(roleCanAccessWarehouseDashboard('almacen')).toBe(true);
+    expect(roleCanAccessWarehouseDashboard('gerente_produccion')).toBe(true);
+    expect(roleCanAccessWarehouseDashboard('ingeniero')).toBe(false);
+    expect(roleCanAccessWarehouseDashboard('gerente_ventas')).toBe(false);
+    expect(roleCanAccessWarehouseDashboard('vendedor')).toBe(false);
+    expect(roleCanAccessWarehouseDashboard('produccion')).toBe(false);
+    expect(roleCanAccessWarehouseDashboard('user')).toBe(false);
+    expect(roleCanAccessWarehouseDashboard(null)).toBe(false);
+
+    expect(navIdsForRole('almacen').has('warehouseDashboard')).toBe(true);
+    expect(navIdsForRole('admin').has('warehouseDashboard')).toBe(true);
+    expect(navIdsForRole('gerente_produccion').has('warehouseDashboard')).toBe(true);
+    expect(navIdsForRole('vendedor').has('warehouseDashboard')).toBe(false);
   });
 });
