@@ -149,3 +149,130 @@
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
 }
+
+/* ── Semantic workspace and workflow tabs (F102) ───────────────────────── */
+
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: var(--space-2) var(--space-2) 0;
+  background: var(--area-canvas, var(--surface-app));
+  border-bottom: 1px solid var(--area-border, var(--border-default));
+}
+
+.tabs__scroller {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--space-2);
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+
+.tabs__scroller::-webkit-scrollbar { height: 4px; }
+.tabs__scroller::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.tabs__tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+
+.tabs__tab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.tabs__tab:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.tabs__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  padding: 0 var(--space-1);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs--workspace .tabs__tab {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.tabs--workspace .tabs__tab:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.tabs--workspace .tabs__tab:active:not(:disabled) { transform: translateY(1px); }
+
+.tabs--workspace .tabs__tab--active,
+.tabs--workspace .tabs__tab--active:hover {
+  color: var(--text-brand);
+  background: var(--surface-selected);
+  border-color: var(--border-brand);
+  font-weight: var(--weight-bold);
+}
+
+.tabs--workspace .tabs__tab--active .tabs__count {
+  color: var(--text-brand);
+  background: var(--area-selected, var(--surface-selected));
+}
+
+.tabs--workflow .tabs__scroller { gap: var(--space-1); }
+
+.tabs--workflow .tabs__tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+
+.tabs--workflow .tabs__tab:hover:not(:disabled) { color: var(--text-primary); }
+
+.tabs--workflow .tabs__tab--active {
+  color: var(--text-brand);
+  border-bottom-color: var(--brand-500);
+  font-weight: var(--weight-semibold);
+}
+
+.tabs--workflow .tabs__tab--active .tabs__count {
+  color: var(--text-inverse);
+  background: var(--brand-500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabs__tab { transition: none; }
+  .tabs__tab:active { transform: none; }
+}

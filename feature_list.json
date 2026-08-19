@@ -1989,6 +1989,40 @@
         "action-hierarchy",
         "representative-migration"
       ]
+    },
+    {
+      "id": "F102",
+      "phase": 0,
+      "name": "semantic_tabs_workspace_normalization",
+      "title": "Semantic Tabs: two patterns, one workspace family",
+      "description": "Normalize tabs into exactly two semantic patterns: underline tabs for ordered workflow/stations and one shared pill-tab family for peer workspace views. Migrate only the Production order hub and Engineering workspace, preserving routes, RBAC, and body workflows.",
+      "acceptance": [
+        "docs/design.md defines exactly two tab patterns—workflow/station underline and workspace peer pill—with explicit semantic eligibility, visual/state behavior, keyboard behavior, and responsive overflow rules.",
+        "A shared accessible tab primitive or documented compatible consolidation provides role=tablist/tab/tabpanel semantics, ARIA relationships, roving tabindex, visible focus, and token-only styling for each pattern.",
+        "ProductionOrderHub and EngineeringWorkspace use the same workspace peer-pill family; labels, item count, and content may differ but geometry and interaction contract may not.",
+        "Fabric station tabs retain their underline workflow treatment and pass regression coverage for the shared accessibility and overflow baseline.",
+        "At 390px, 768px, and 1280px, tabs do not accidentally wrap, clip the active item, hide labels, trap focus, or cause page-level horizontal overflow.",
+        "Focused UI tests, pnpm test, pnpm typecheck, ./init.sh, the Impeccable detector, and visual evidence are green or explicitly environment-blocked without invented approval.",
+        "No navigation/IA, AI/Operations consolidation, forms/modal/card/table/status redesign, all-editor migration, domain/backend/API/persistence/RBAC change, or process-stage WIP change is included."
+      ],
+      "references": [
+        "progress/explore_f102_tabs_scope.md",
+        "docs/design.md §2.1, §3.6.1, §4.0, §4.8, §6.7, §6.7a, §8",
+        "progress/explore_ui_design_system_audit.md",
+        "progress/explore_ui_ux_flow_critique.md",
+        "progress/explore_ui_platform_synthesis.md",
+        "packages/ui/src/production/",
+        "packages/ui/src/engineering/"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "ui",
+        "design-system",
+        "tabs",
+        "accessibility",
+        "responsive",
+        "representative-migration"
+      ]
     }
   ]
 }

@@ -75,6 +75,7 @@ export {
   useRovingTabList,
   type RovingTabList,
 } from './rovingTabList';
+export { WorkflowTabs, WorkspaceTabs, type TabDefinition } from './Tabs';
 export {
   ScreenBoundary,
   type ScreenBoundaryProps,

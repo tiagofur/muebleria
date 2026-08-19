@@ -47,6 +47,20 @@ describe('FabricScreen — Producción (manufacturing stations)', () => {
     makeProject('p3', [makeItem('d')], 'draft'),
   ];
 
+  it('uses the workflow underline tab contract with linked panels', () => {
+    render(
+      <FabricScreen projects={projects} assignedSectors={['cutting', 'edge_banding']} canAdvance onAdvance={() => undefined} />,
+    );
+    const tablist = screen.getByTestId('fabric-tablist');
+    const cutting = screen.getByTestId('fabric-tab-cutting');
+    expect(tablist.className).toContain('tabs--workflow');
+    expect(cutting.getAttribute('aria-controls')).toBe('fabric-panel-cutting');
+    expect(cutting.getAttribute('tabindex')).toBe('0');
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(document.getElementById(tab.getAttribute('aria-controls') ?? '')).toBeTruthy();
+    }
+  });
+
   it('shows the first assigned station tab as active by default', () => {
     render(
       <FabricScreen

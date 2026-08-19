@@ -39,7 +39,7 @@ import {
   type NestingImportResult,
 } from '@muebles/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
-import { useRovingTabList } from '../common/rovingTabList';
+import { WorkspaceTabs } from '../common/Tabs';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 import { ProductionOrderModulesPanel } from '../production/ProductionOrderModulesPanel';
 import { ProductionOrderDespiecePanel } from '../production/ProductionOrderDespiecePanel';
@@ -383,13 +383,6 @@ export function EngineeringWorkspace({
 }) {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
 
-  // Fase 5.2 — ARIA tabs keyboard pattern (arrows/Home/End + roving tabindex).
-  const engineeringTabs = useRovingTabList({
-    tabIds: ENGINEERING_TABS,
-    selectedId: activeTab,
-    onSelect: setActiveTab,
-  });
-
   // Build documents list for the Documentos tab.
   const documents: readonly ProductionDocumentItem[] = useMemo(() => [
     {
@@ -529,33 +522,14 @@ export function EngineeringWorkspace({
       </header>
 
       {/* Tab bar */}
-      <nav
-        className="tab-bar"
-        role="tablist"
-        aria-label="Tabs de ingeniería"
-        {...engineeringTabs.tabListProps}
-      >
-        <div className="tab-bar__inner">
-          {ENGINEERING_TABS.map((tab, index) => {
-            const isActive = tab === activeTab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                {...engineeringTabs.tabPropsAt(index)}
-                aria-selected={isActive}
-                aria-controls={`eng-panel-${tab}`}
-                id={`eng-tab-${tab}`}
-                className={`tab-btn ${isActive ? 'tab-btn--active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {TAB_LABELS[tab]}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      <WorkspaceTabs
+        tabs={ENGINEERING_TABS.map((tab) => ({ id: tab, label: TAB_LABELS[tab] }))}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        ariaLabel="Tabs de ingeniería"
+        idPrefix="eng"
+        testIdPrefix="eng"
+      />
 
       {/* Tab panel */}
       <div
@@ -643,6 +617,15 @@ export function EngineeringWorkspace({
           />
         )}
       </div>
+      {ENGINEERING_TABS.filter((tab) => tab !== activeTab).map((tab) => (
+        <div
+          key={tab}
+          role="tabpanel"
+          id={`eng-panel-${tab}`}
+          aria-labelledby={`eng-tab-${tab}`}
+          hidden
+        />
+      ))}
     </section>
   );
 }

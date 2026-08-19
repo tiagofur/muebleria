@@ -85,6 +85,32 @@ const baseProps = {
 afterEach(() => cleanup());
 
 describe('EngineeringWorkspace — Documentos (Hub trim)', () => {
+  it('uses the shared peer-workspace tab family with ARIA linkage', () => {
+    render(<EngineeringWorkspace {...baseProps} />);
+    const tablist = screen.getByTestId('eng-tablist');
+    const summary = screen.getByTestId('eng-tab-resumen');
+    const modules = screen.getByTestId('eng-tab-modulos');
+    expect(tablist.className).toContain('tabs--workspace');
+    expect(summary.getAttribute('aria-controls')).toBe('eng-panel-resumen');
+    expect(summary.getAttribute('tabindex')).toBe('0');
+    expect(modules.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('moves engineering peer selection with roving keyboard keys and keeps controls valid', async () => {
+    const user = userEvent.setup();
+    render(<EngineeringWorkspace {...baseProps} />);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(document.getElementById(tab.getAttribute('aria-controls') ?? '')).toBeTruthy();
+    }
+    const summary = screen.getByTestId('eng-tab-resumen');
+    summary.focus();
+    await user.keyboard('{End}');
+    expect(screen.getByTestId('eng-tab-documentos').getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{Home}{ArrowRight}');
+    expect(screen.getByTestId('eng-tab-modulos').getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('eng-panel-modulos')?.getAttribute('aria-labelledby')).toBe('eng-tab-modulos');
+  });
+
   it('despiece doc says "Ver tab" and navigates to the despiece tab', async () => {
     const user = userEvent.setup();
     render(<EngineeringWorkspace {...baseProps} />);

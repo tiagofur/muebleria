@@ -35,7 +35,11 @@ export function useRovingTabList<TTabId extends string>(params: {
       const tabId = tabIds[index];
       if (tabId === undefined) return;
       onSelect(tabId);
-      tabRefs.current[index]?.focus();
+      const tab = tabRefs.current[index];
+      tab?.focus();
+      if (tab && typeof tab.scrollIntoView === 'function') {
+        tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     },
     [tabIds, onSelect],
   );

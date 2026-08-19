@@ -37,6 +37,7 @@ import {
   projectStatusLabel,
 } from '../projects/projectHelpers';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
+import { WorkspaceTabs } from '../common/Tabs';
 import {
   HUB_TABS,
   PRODUCTION_ORDER_TAB_LABELS,
@@ -494,41 +495,22 @@ export function ProductionOrderHub({
         </div>
       </header>
 
-      <div className="tab-bar">
-        <nav
-          className="tab-bar__inner"
-          role="tablist"
-          aria-label="Secciones de la orden de producción"
-        >
-          {HUB_TABS.map((tab) => {
-            const selected = activeTab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                id={`prod-hub-tab-${tab}`}
-                aria-selected={selected}
-                aria-controls="prod-hub-tabpanel"
-                className={
-                  selected
-                    ? 'tab-btn tab-btn--active'
-                    : 'tab-btn'
-                }
-                onClick={() => onTabChange(tab)}
-                data-testid={`prod-hub-tab-${tab}`}
-              >
-                {PRODUCTION_ORDER_TAB_LABELS[tab]}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <WorkspaceTabs
+        tabs={HUB_TABS.map((tab) => ({
+          id: tab,
+          label: PRODUCTION_ORDER_TAB_LABELS[tab],
+        }))}
+        activeTab={activeTab}
+        onTabChange={onTabChange}
+        ariaLabel="Secciones de la orden de producción"
+        idPrefix="prod-hub"
+        testIdPrefix="prod-hub"
+      />
 
       <div
         className="prod-hub__body"
         role="tabpanel"
-        id="prod-hub-tabpanel"
+        id={`prod-hub-panel-${activeTab}`}
         aria-labelledby={`prod-hub-tab-${activeTab}`}
       >
         {activeTab === 'resumen' ? (
@@ -726,6 +708,15 @@ export function ProductionOrderHub({
         cutRows={cutRows ?? []}
         projectName={project.name}
       />
+      {HUB_TABS.filter((tab) => tab !== activeTab).map((tab) => (
+        <div
+          key={tab}
+          role="tabpanel"
+          id={`prod-hub-panel-${tab}`}
+          aria-labelledby={`prod-hub-tab-${tab}`}
+          hidden
+        />
+      ))}
     </section>
   );
 }

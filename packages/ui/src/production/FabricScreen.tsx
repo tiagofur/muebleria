@@ -10,8 +10,7 @@ import {
   type Project,
   type ProjectPickingState,
 } from '@muebles/domain';
-import { EmptyState } from '../common';
-import { useRovingTabList } from '../common/rovingTabList';
+import { EmptyState, WorkflowTabs } from '../common';
 import type {
   DashboardMetrics,
   SectorDashboard,
@@ -430,11 +429,6 @@ export function FabricScreen({
     () => (metrics ? summarizeFabricMetrics(metrics.sectors) : null),
     [metrics],
   );
-  const sectorTabs = useRovingTabList({
-    tabIds: visibleTabs,
-    selectedId: effectiveTab,
-    onSelect: setActiveTab,
-  });
   const cards = useMemo(
     () =>
       fabricProjectCards({
@@ -573,45 +567,28 @@ export function FabricScreen({
         />
       ) : (
         <>
-          <nav
-            className="fabric__tabs"
-            aria-label="Estaciones de producción"
-            role="tablist"
-            {...sectorTabs.tabListProps}
-          >
-            {visibleTabs.map((station, index) => {
-              const count = fabricProjectCards({
+          <WorkflowTabs
+            tabs={visibleTabs.map((station) => ({
+              id: station,
+              label: TAB_LABELS[station],
+              count: fabricProjectCards({
                 projects,
                 station,
                 metricsByProject,
                 pickingStates,
                 activeClaims,
-              }).reduce((total, card) => total + card.items.length, 0);
-              return (
-                <button
-                  key={station}
-                  type="button"
-                  role="tab"
-                  {...sectorTabs.tabPropsAt(index)}
-                  aria-selected={station === effectiveTab}
-                  aria-controls={`fabric-tab-panel-${station}`}
-                  id={`fabric-tab-${station}`}
-                  className={`fabric__tab ${station === effectiveTab ? 'fabric__tab--active' : ''}`}
-                  onClick={() => setActiveTab(station)}
-                  data-testid={`fabric-tab-${station}`}
-                >
-                  {TAB_LABELS[station]}
-                  {count > 0 ? (
-                    <span className="fabric__tab-count">{count}</span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </nav>
+              }).reduce((total, card) => total + card.items.length, 0),
+            }))}
+            activeTab={effectiveTab}
+            onTabChange={setActiveTab}
+            ariaLabel="Estaciones de producción"
+            idPrefix="fabric"
+            testIdPrefix="fabric"
+          />
           <div
             className="fabric__panel"
             role="tabpanel"
-            id={`fabric-tab-panel-${effectiveTab}`}
+            id={`fabric-panel-${effectiveTab}`}
             aria-labelledby={`fabric-tab-${effectiveTab}`}
             data-testid={`fabric-panel-${effectiveTab}`}
           >
@@ -642,6 +619,15 @@ export function FabricScreen({
               </ul>
             )}
           </div>
+          {visibleTabs.filter((station) => station !== effectiveTab).map((station) => (
+            <div
+              key={station}
+              role="tabpanel"
+              id={`fabric-panel-${station}`}
+              aria-labelledby={`fabric-tab-${station}`}
+              hidden
+            />
+          ))}
         </>
       )}
     </section>

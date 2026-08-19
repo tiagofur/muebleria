@@ -433,6 +433,38 @@ pnpm add lucide-react --filter @muebles/ui
 
 ## 4. Patrones de Interacción
 
+### 4.0a Tabs semánticos — dos patrones, nunca variantes locales
+
+La app usa exactamente dos familias de tabs. Una variante nueva requiere una
+tarea de usuario distinta, no una preferencia visual local.
+
+| Patrón | Cuándo usarlo | Tratamiento |
+|---|---|---|
+| **Workspace peer** | Vistas pares dentro de una obra o workspace (Resumen, Módulos, Documentos) | Píldora con borde, selección tonal y altura `2.75rem` |
+| **Workflow / estación** | Pasos ordenados de una operación (Corte → Encintado → Armado → Embalaje) | Texto con subrayado activo; nunca se convierte en píldora |
+
+**Contrato común:** `WorkspaceTabs` y `WorkflowTabs` viven en
+`packages/ui/src/common/Tabs.tsx`. Ambos usan tokens, `role="tablist"`,
+`role="tab"` y el panel vinculado por `aria-controls` / `aria-labelledby`.
+Hay exactamente una tab seleccionada (`aria-selected="true"`, `tabIndex=0`);
+las demás usan `tabIndex=-1`. Flechas izquierda/derecha, Home y End mueven foco
+y selección; Enter/Espacio mantienen la activación nativa. El foco visible
+(`--shadow-focus`) es distinto de la selección. Un count opcional acompaña al
+label, nunca lo reemplaza.
+
+**Estados:** default = texto secundario y borde sutil (peer) o sin subrayado
+(workflow); hover = superficie hover / texto primario; pressed = desplazamiento
+vertical sólo en peer; selected = tinta brand y selección tonal (peer) o
+subrayado brand (workflow); focus-visible = `--shadow-focus`; disabled =
+`--text-disabled`, sin puntero. La selección nunca depende sólo del color:
+`aria-selected`, peso y borde/subrayado la acompañan.
+
+**Responsive:** la fila nunca envuelve. A 390px, 768px y 1280px conserva una
+sola línea con scroll horizontal del contenedor; la tab activa se desplaza a la
+vista al navegar por teclado. El scroller no debe crear overflow horizontal de
+la página ni ocultar labels. Hover, pressed, disabled y reduced motion siguen
+la matriz de estados de §3.6.1.
+
 ### 4.0 Breakpoints canónicos (issue #34)
 
 Los media queries **no pueden** leer custom properties; los px de abajo son literales fijos y se documentan también en `tokens.css` (`--bp-*`, `--touch-min`).

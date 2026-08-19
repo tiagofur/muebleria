@@ -4,9 +4,13 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import type { ProductionCutRow, Project } from '@muebles/domain';
 import { ProductionOrderHub } from './ProductionOrderHub';
-import { buildProductionOrderReadiness } from './productionOrderModel';
+import {
+  buildProductionOrderReadiness,
+  type ProductionOrderTab,
+} from './productionOrderModel';
 
 function project(status: Project['status'] = 'accepted'): Project {
   return {
@@ -26,6 +30,44 @@ function project(status: Project['status'] = 'accepted'): Project {
 afterEach(() => cleanup());
 
 describe('ProductionOrderHub (PROD-0.3)', () => {
+  it('keeps every peer tab linked to a real panel and supports roving keys', async () => {
+    const user = userEvent.setup();
+    const readiness = buildProductionOrderReadiness({ project: project(), cutRows: [] });
+    function HubWithState() {
+      const [activeTab, setActiveTab] = useState<ProductionOrderTab>('resumen');
+      return <ProductionOrderHub project={project()} customerLabel="Ana" salePrice={null} readiness={readiness} activeTab={activeTab} onTabChange={setActiveTab} onBackToQueue={vi.fn()} onOpenDesign={vi.fn()} onExportOptimizer={vi.fn()} onExportHardware={vi.fn()} />;
+    }
+    render(<HubWithState />);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(document.getElementById(tab.getAttribute('aria-controls') ?? '')).toBeTruthy();
+    }
+    const summary = screen.getByTestId('prod-hub-tab-resumen');
+    summary.focus();
+    await user.keyboard('{End}');
+    expect(screen.getByTestId('prod-hub-tab-documentos').getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('prod-hub-panel-documentos')?.getAttribute('aria-labelledby')).toBe('prod-hub-tab-documentos');
+    await user.keyboard('{Home}');
+    expect(summary.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('uses the shared peer-workspace tab contract', () => {
+    const readiness = buildProductionOrderReadiness({ project: project(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        project={project()} customerLabel="Ana" salePrice={null} readiness={readiness}
+        activeTab="resumen" onTabChange={vi.fn()} onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()} onExportOptimizer={vi.fn()} onExportHardware={vi.fn()}
+      />,
+    );
+    const tablist = screen.getByTestId('prod-hub-tablist');
+    const summary = screen.getByTestId('prod-hub-tab-resumen');
+    const floor = screen.getByTestId('prod-hub-tab-piso');
+    expect(tablist.getAttribute('role')).toBe('tablist');
+    expect(summary.getAttribute('aria-controls')).toBe('prod-hub-panel-resumen');
+    expect(summary.getAttribute('tabindex')).toBe('0');
+    expect(floor.getAttribute('tabindex')).toBe('-1');
+  });
+
   it('shows checklist, totals, and opens pack when ready', async () => {
     const user = userEvent.setup();
     const onPack = vi.fn();
