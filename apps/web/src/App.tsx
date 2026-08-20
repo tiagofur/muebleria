@@ -270,6 +270,7 @@ import {
   resetPurchasingStore,
   type PurchasingState,
 } from './stores';
+import { SessionGate } from './SessionGate';
 import { ToastViewport } from './components/ToastViewport';
 import { BoardEditor } from './components/BoardEditor';
 
@@ -299,69 +300,24 @@ export function App(): ReactNode {
     }
   }, [appSession]);
 
+  const logout = useWorkspaceStore((s) => s.logout);
+
   return (
     <>
-      <SessionGate />
+      {appSession != null ? (
+        <SessionGate>
+          <AppContent session={appSession} onLogout={logout} />
+        </SessionGate>
+      ) : (
+        <SessionGate>
+          <span />
+        </SessionGate>
+      )}
       <ToastViewport />
     </>
   );
 }
 
-/**
- * Login gate: session null → LoginScreen | RegisterScreen;
- * guest|auth → workspace app. Reads session/auth state from workspaceStore
- * (F057). No local state — just wiring.
- */
-function SessionGate(): ReactNode {
-  const session = useWorkspaceStore((s) => s.session);
-  const authGate = useWorkspaceStore((s) => s.authGate);
-  const loginLoading = useWorkspaceStore((s) => s.loginLoading);
-  const loginError = useWorkspaceStore((s) => s.loginError);
-  const registerLoading = useWorkspaceStore((s) => s.registerLoading);
-  const registerError = useWorkspaceStore((s) => s.registerError);
-  const setAuthGate = useWorkspaceStore((s) => s.setAuthGate);
-  const clearAuthErrors = useWorkspaceStore((s) => s.clearAuthErrors);
-  const enterAsGuest = useWorkspaceStore((s) => s.enterAsGuest);
-  const login = useWorkspaceStore((s) => s.login);
-  const register = useWorkspaceStore((s) => s.register);
-  const logout = useWorkspaceStore((s) => s.logout);
-  const sessionEndReason = useWorkspaceStore((s) => s.sessionEndReason);
-
-  if (session === null) {
-    if (authGate === 'register') {
-      return (
-        <RegisterScreen
-          onRegister={register}
-          onBack={() => {
-            setAuthGate('login');
-            clearAuthErrors();
-          }}
-          loading={registerLoading}
-          error={registerError}
-        />
-      );
-    }
-    return (
-      <LoginScreen
-        onLogin={login}
-        onGuestAccess={enterAsGuest}
-        onRegister={() => {
-          clearAuthErrors();
-          setAuthGate('register');
-        }}
-        loading={loginLoading}
-        error={loginError}
-        notice={
-          sessionEndReason === 'expired'
-            ? 'Tu sesión expiró. Volvé a iniciar sesión para continuar donde estabas.'
-            : null
-        }
-      />
-    );
-  }
-
-  return <AppContent session={session} onLogout={logout} />;
-}
 
 function AppContent({
   session,

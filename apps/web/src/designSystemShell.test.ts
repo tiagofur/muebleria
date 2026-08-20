@@ -145,12 +145,12 @@ describe('web shell login gate (Slice E)', () => {
     const app = readFileSync(appTsxPath, 'utf8');
     expect(app).toContain('LoginScreen');
     expect(app).toContain('SessionGate');
-    expect(app).toContain('session === null');
     // App.tsx delegates auth actions to workspaceStore (not local handlers).
     expect(app).toContain('useWorkspaceStore');
-    expect(app).toContain('enterAsGuest');
-    expect(app).toContain('onGuestAccess={enterAsGuest}');
-    expect(app).toContain('onLogin={login}');
+    // F120: SessionGate lives in its own module.
+    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain('enterAsGuest');
+    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain('onGuestAccess={enterAsGuest}');
+    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain('onLogin={login}');
 
     // Behavior: the store exposes the full auth lifecycle.
     const { createWorkspaceStore } = await import('./stores/workspaceStore');
@@ -169,7 +169,7 @@ describe('web shell login gate (Slice E)', () => {
     expect(app).toContain('showAdminUsers');
     expect(app).toContain('isAdminRole');
     expect(app).toContain('storeAuthUser');
-    expect(app).toContain("authGate === 'register'");
+    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain("authGate === 'register'");
   });
 
   it('session helpers module exists with token, user and auth routes', () => {
