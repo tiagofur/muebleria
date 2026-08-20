@@ -9,7 +9,7 @@
 
 import type { ProductionCutRow } from '../types';
 import type { PieceToPlace, PlacementResult } from './pieces';
-import { unrollRows } from './pieces';
+import { isUsefulRemnant, unrollRows } from './pieces';
 import type { CutPlanConfig, CutPlanPlacedPiece, CutPlanRemnant } from './types';
 import { DEFAULT_TOOL_SPACING_MM } from './types';
 
@@ -80,14 +80,6 @@ function splitFreeRects(free: FreeRect[], used: FreeRect): void {
     if (next.some((o) => o !== r && rectContains(o, r))) continue;
     free.push(r);
   }
-}
-
-function isUsefulRemnantRect(r: FreeRect, config: CutPlanConfig): boolean {
-  return (
-    ((r.length >= config.minRemnantLengthMm && r.width >= config.minRemnantWidthMm) ||
-      (r.length >= config.minRemnantWidthMm && r.width >= config.minRemnantLengthMm)) &&
-    (r.length * r.width) / 1_000_000 >= 0.24
-  );
 }
 
 /**
@@ -233,7 +225,7 @@ export function packSingleSheetMaxRects(
     areaM2: (r.length * r.width) / 1_000_000,
     materialName,
     materialCode,
-    isUseful: isUsefulRemnantRect(r, config),
+    isUseful: isUsefulRemnant(r.length, r.width, config),
   }));
 
   return {

@@ -6,6 +6,7 @@
 import type { ProductionCutRow } from '../types';
 import type {
   CutInstruction,
+  CutPlanConfig,
   CutPlanPlacedPiece,
   CutPlanRemnant,
   CutStrategy,
@@ -31,6 +32,18 @@ export interface PlacementResult {
   materialName: string;
   thicknessMm?: number;
   strategy?: CutStrategy;
+}
+
+/**
+ * Shared useful-remnant (retazo útil) rule for both engines: big enough on
+ * both axes (either orientation) and at least 0.24 m² of usable area.
+ */
+export function isUsefulRemnant(lengthMm: number, widthMm: number, config: CutPlanConfig): boolean {
+  return (
+    ((lengthMm >= config.minRemnantLengthMm && widthMm >= config.minRemnantWidthMm) ||
+      (lengthMm >= config.minRemnantWidthMm && widthMm >= config.minRemnantLengthMm)) &&
+    (lengthMm * widthMm) / 1_000_000 >= 0.24
+  );
 }
 
 export function unrollRows(

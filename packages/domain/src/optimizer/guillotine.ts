@@ -17,7 +17,7 @@ import type {
 } from './types';
 import { DEFAULT_CUT_PLAN_CONFIG } from './types';
 import { optimizeSingleMaterialNesting } from './nesting';
-import { unrollRows, type PieceToPlace, type PlacementResult } from './pieces';
+import { isUsefulRemnant, unrollRows, type PieceToPlace, type PlacementResult } from './pieces';
 
 interface FreeRect {
   x: number;
@@ -185,10 +185,7 @@ function packSingleSheetGuillotineBestFit(
   const remnants: CutPlanRemnant[] = freeRects
     .filter((r) => r.length > 5 && r.width > 5)
     .map((r, idx) => {
-      const isUseful =
-        ((r.length >= config.minRemnantLengthMm && r.width >= config.minRemnantWidthMm) ||
-         (r.length >= config.minRemnantWidthMm && r.width >= config.minRemnantLengthMm)) &&
-        (r.length * r.width) / 1_000_000 >= 0.24;
+      const isUseful = isUsefulRemnant(r.length, r.width, config);
       return {
         id: `rem-s${sheetIndex}-${idx + 1}`,
         sheetIndex,
@@ -414,10 +411,7 @@ function packSingleSheetStrip(
     if (maxX - currentX > 10) {
       const remL = maxX - currentX;
       const remW = stripHeight;
-      const isUseful =
-        ((remL >= config.minRemnantLengthMm && remW >= config.minRemnantWidthMm) ||
-         (remL >= config.minRemnantWidthMm && remW >= config.minRemnantLengthMm)) &&
-        (remL * remW) / 1_000_000 >= 0.24;
+      const isUseful = isUsefulRemnant(remL, remW, config);
       remnants.push({
         id: `rem-s${sheetIndex}-str${stripIdx}`,
         sheetIndex,

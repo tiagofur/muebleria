@@ -129,6 +129,7 @@ describe('CNC Nesting (MaxRects) strategy', () => {
     const totalPieces = plan.sheets.reduce((sum, s) => sum + s.pieces.length, 0);
     expect(totalPieces).toBe(17);
 
+    const separationIssues: string[] = [];
     for (const sheet of plan.sheets) {
       for (const p of sheet.pieces) {
         expect(p.xMm).toBeGreaterThanOrEqual(trim.leftMm);
@@ -145,14 +146,16 @@ describe('CNC Nesting (MaxRects) strategy', () => {
             a.xMm + a.lengthMm + spacing <= b.xMm || b.xMm + b.lengthMm + spacing <= a.xMm;
           const separatedY =
             a.yMm + a.widthMm + spacing <= b.yMm || b.yMm + b.widthMm + spacing <= a.yMm;
-          expect(
-            `${a.partCode}@${a.xMm},${a.yMm} vs ${b.partCode}@${b.xMm},${b.yMm}: ${
-              separatedX || separatedY ? 'ok' : 'SOLAPE'
-            }`,
-          ).toContain('ok');
+          if (!separatedX && !separatedY) {
+            separationIssues.push(
+              `${a.partCode}@${a.xMm},${a.yMm} (${a.lengthMm}x${a.widthMm}) vs ` +
+                `${b.partCode}@${b.xMm},${b.yMm} (${b.lengthMm}x${b.widthMm}) en tablero ${sheet.sheetIndex}`,
+            );
+          }
         }
       }
     }
+    expect(separationIssues).toEqual([]);
   });
 
   it('nunca rota piezas con veta (grain=1)', () => {
