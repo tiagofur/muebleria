@@ -9,7 +9,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import type { MaterialBoard } from '@muebles/domain';
 import { MaterialsCatalog } from './materials/MaterialsCatalog';
 import { EdgesCatalog } from './EdgesCatalog';
-import { HardwareCatalog } from './HardwareCatalog';
+import { HardwareCatalog } from './hardware/HardwareCatalog';
 import { AmbientMaterialsCatalog } from './ambient/AmbientMaterialsCatalog';
 import { OptionGroupsScreen } from '../optionGroups/OptionGroupsScreen';
 

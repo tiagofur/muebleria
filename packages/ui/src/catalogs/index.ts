@@ -53,7 +53,7 @@ export {
   HardwareCatalog,
   type HardwareDraft,
   type HardwareCatalogProps,
-} from './HardwareCatalog';
+} from './hardware/HardwareCatalog';
 
 export {
   AmbientMaterialsCatalog,
