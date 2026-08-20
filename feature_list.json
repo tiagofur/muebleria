@@ -2786,7 +2786,7 @@
         "packages/domain/src/partDrilling.ts (heurísticas que esta serie reemplaza)",
         "docs/design.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "cnc",
         "perforaciones",

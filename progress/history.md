@@ -532,3 +532,14 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Tests: 6 en el panel (swap de inputs, exclusividad por modo, variantes DXF, secuencia condicional). Suite total 2338 verde; typecheck 7 workspaces.
 - Review: APPROVED con fix de typo de copy («nesteado») aplicado; emojis→Lucide y btn--secondary listados como polish futuro (no mezclados).
 - Spec del tab actualizada: docs/roadmap-screens/02-ingenieria.md.
+
+## F127 — Perfiles de maquinado en catálogo de herrajes (perforaciones CNC — 1/5) (2026-08-20)
+
+- Re-escpeo de F081 con el dueño del producto: perforaciones CNC driven-by-herraje como datos estructurados (sin CSG), DXF por capas como salida (importable en SCM Maestro), sistema 32mm como defaults, coords desde cantos, reglas automáticas + excepciones manuales. Serie F127–F132 creada; F132 (post-procesador SCM nativo) postergado hasta confirmar máquina.
+- `MachiningOperation` (blind_hole/through_hole/counterbore/screw_pilot; Ø, profundidad, offsets x/y mm, face anchor|opposite) + `HardwareMachiningPart` (rol) + `HardwareMachiningProfile` en `types.ts`, colgado de `Hardware.machining?` (retrocompatible).
+- `hardwareMachining.ts`: `validateMachiningProfile` (ValidationError accionable con contexto de parte/operación), `normalizeMachiningProfile` (sanitización leniente — garbage never enters), `countMachiningOperations`.
+- Seeds paridad TS/Go para los 4 básicos: bisagra (taza Ø35×12.5 + 2 fijaciones Ø5 a 45mm), placa base nueva HER-PLACA-BIS (2×Ø5 a 32mm — sistema 32), taquete HER-TAQ-8X30 (ciego Ø8×15 por lado), minifix juego HER-MIN-15 (cazuela Ø15×13 + piloto perno Ø5×12 en partes separadas), tornillo 4×50 (piloto Ø3×35).
+- UI: `HardwareMachiningSection.tsx` — disclosure «Maquinado CNC» en el modal de herraje (auto-open si el ítem tiene perfil, patrón F117), edición de partes/operaciones, validación en submit vía dominio, resumen en fila expandida; CSS tokens-only en `catalogs.css`.
+- Persistencia completa: apiMappers TS (normaliza en ingest, null legacy), store web (create/update/drop), Go struct + scan/insert/update JSONB, migración aditiva `000063_hardware_machining` (embed automático).
+- Tests: domain +22 (validación/normalize/golden seeds), storage +3 (round-trip API), ui +5 (editor), web +2 (store preserva perfil), Go `TestHardware_PersistsMachiningProfile` integración real Postgres (nil preservado, clear on update, dos partes con profundidades). Suite 2376 + typecheck 7/7 + go test verdes.
+- Review: APPROVED tras fixes (push + imports fusionados en catalog/hardware.ts); evidencia en `progress/review_F127.md`.
