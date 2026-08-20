@@ -91,11 +91,12 @@ describe('@muebles/web #15 setState side effects / stale patches', () => {
     expect(appSrc).not.toContain('patchCatalog');
 
     // Behavior: catalogStore + projectStore expose patch-style semantics.
+    // F117: patch lives in the catalog/shared slice now.
     const catalogStoreSrc = readFileSync(
-      join(here, 'stores/catalogStore.ts'),
+      join(here, 'stores/catalog/shared.ts'),
       'utf8',
     );
-    expect(catalogStoreSrc).toMatch(/updater:\s*\(catalog: Catalog\)/);
+    expect(catalogStoreSrc).toMatch(/updater: \(catalog: Catalog\) => Catalog/);
     const projectStoreSrc = readFileSync(
       join(here, 'stores/projectStore.ts'),
       'utf8',

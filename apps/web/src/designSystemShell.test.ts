@@ -229,10 +229,10 @@ describe('web shell Toast wiring (F019)', () => {
     // F062 moved catalog handlers (and their toasts) to catalogStore.ts.
     // Export handlers (and their toasts) stay in App.tsx.
     const app = readFileSync(appTsxPath, 'utf8');
-    const catalogStoreSrc = readFileSync(
-      join(here, 'stores/catalogStore.ts'),
-      'utf8',
-    );
+    // F117: catalog mutation toasts live in the domain slices.
+    const catalogStoreSrc =
+      readFileSync(join(here, 'stores/catalog/materials.ts'), 'utf8') +
+      readFileSync(join(here, 'stores/catalog/edges.ts'), 'utf8');
     // design.md §4.4: create material → success with code; in catalogStore now.
     expect(catalogStoreSrc).toMatch(/type:\s*'success',\s*message:\s*`✓ "\$\{code\}" creado`/);
     expect(catalogStoreSrc).toContain("message: '✓ Cambios guardados'");

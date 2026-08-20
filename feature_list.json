@@ -2491,7 +2491,7 @@
         "packages/ui/src/catalogs/",
         "apps/web/src/stores/catalogStore.ts"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "catalogs",
         "refactor",
