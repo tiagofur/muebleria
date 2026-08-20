@@ -35,6 +35,16 @@ export const DEFAULT_SAW_KERF_MM = 4;
 export const DEFAULT_MIN_REMNANT_LENGTH_MM = 600;
 export const DEFAULT_MIN_REMNANT_WIDTH_MM = 400;
 
+/**
+ * Cutting strategy for a board sheet. Saw cutting is guillotine-only (straight
+ * cuts spanning the board); CNC nesting places pieces freely, mixing large and
+ * small parts on the same sheet.
+ */
+export type CutStrategy = 'saw-guillotine' | 'cnc-nesting';
+
+/** CNC nesting spacing between pieces: 6mm router bit + 2mm safety margin. */
+export const DEFAULT_TOOL_SPACING_MM = 8;
+
 export interface CutPlanConfig {
   /** Saw blade kerf thickness (mm) — espesor de disco de corte */
   readonly sawKerfMm: number;
@@ -53,6 +63,13 @@ export interface CutPlanConfig {
   readonly minRemnantLengthMm: number;
   /** When true, prefers longitudinal strip cuts first (rip cuts along length) */
   readonly preferLongitudinalRips: boolean;
+  /**
+   * Cutting strategy dispatch (default 'saw-guillotine'). 'cnc-nesting' packs
+   * pieces with the MaxRects engine using tool spacing instead of saw kerf.
+   */
+  readonly cutStrategy?: CutStrategy;
+  /** CNC nesting: spacing between pieces = tool diameter + safety (mm). */
+  readonly toolSpacingMm?: number;
   /** Name of the optimization heuristic used */
   readonly heuristic?: 'guillotine-strip' | 'guillotine-best-fit' | 'guillotine-hybrid';
 }
@@ -145,6 +162,8 @@ export interface CutInstruction {
  */
 export interface CutPlanSheet {
   readonly sheetIndex: number;
+  /** Engine that produced this sheet; persisted pre-F124 plans default to saw. */
+  readonly strategy?: CutStrategy;
   readonly materialId?: string;
   readonly materialCode: string;
   readonly materialName: string;
