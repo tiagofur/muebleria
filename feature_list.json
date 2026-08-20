@@ -2726,7 +2726,7 @@
         "packages/domain/src/optimizer/types.ts",
         "packages/domain/src/cncPilot.ts"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "production",
         "export",
@@ -2755,7 +2755,7 @@
         "packages/ui/src/engineering/EngineeringWorkspace.tsx",
         "docs/design.md"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "production",
         "ui",

@@ -514,3 +514,12 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Remanentes: subset disjunto greedy por área para stats sin doble conteo.
 - Fixture determinista kerf 12 vs spacing 4: sierra 3 tableros → nesting 1.
 - Verificación: `pnpm test` completo (2376), `pnpm typecheck` 7 workspaces, review APPROVED (code), push a origin.
+
+## F125 — Exportador DXF R12 para plan de corte nesting (2026-08-20)
+
+- `packages/excel/src/dxfCutPlanExport.ts`: writer ASCII DXF R12 propio (sin deps nuevas), unidades mm, Y arriba.
+- Variantes: `sheets` (tableros en fila con contorno, encabezado material/espesor, retazos útiles) y `pieces` (piezas sueltas en grilla con material, para nesting externo).
+- Capas TABLERO/PIEZA/ETIQUETA/VETA/PERF/RETAZO; etiquetas partCode+medidas+módulo+labelRef+cantos; texto sanitizado ASCII.
+- Veta con flecha (VETA); perforaciones opcionales en PERF solo en caras front/back y piezas no rotadas (espejo/canto indefinido sin convención de máquina).
+- Tests: golden ×2 + estructura R12 + conteos por capa + ASCII + ValidationError (79/79 excel; 2333 total).
+- Review: código aprobado con validación DXF por parser propio del reviewer; fix de proceso (push + bitácora) y filtro de caras adoptados.
