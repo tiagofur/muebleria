@@ -30,6 +30,7 @@ import {
   productionCoverPdfExport,
   assemblySheetsPdfExport,
   cutPreviewPdfExport,
+  ptxCutPlanExport,
 } from '@muebles/excel';
 
 export type ExportProductionPackResult =
@@ -231,6 +232,21 @@ export async function buildProductionPackExport(
       }
     } catch {
       omissions.push('etiquetas de muebles');
+    }
+
+    // 12. PTX Cut Plan for automatic beam saws (SCM, Homag, Biesse, Giben)
+    if (project.cutPlan && project.cutPlan.sheets.length > 0) {
+      try {
+        const ptxBytes = ptxCutPlanExport({
+          cutPlan: project.cutPlan,
+          projectName: project.name,
+          customerName,
+          projectCode: project.id,
+        });
+        zip.file(`seccionadora_${baseName}.ptx`, ptxBytes);
+      } catch {
+        omissions.push('corte PTX seccionadora');
+      }
     }
 
     const zipContent = await zip.generateAsync({ type: 'uint8array' });

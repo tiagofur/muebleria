@@ -6,6 +6,7 @@ import {
   commercialQuoteExport,
   hardwareListExport,
   optimizerExport,
+  ptxCutPlanExport,
 } from './index';
 
 describe('@muebles/excel', () => {
@@ -14,6 +15,7 @@ describe('@muebles/excel', () => {
     expect(typeof optimizerExport).toBe('function');
     expect(typeof hardwareListExport).toBe('function');
     expect(typeof commercialQuoteExport).toBe('function');
+    expect(typeof ptxCutPlanExport).toBe('function');
     expect(OPTIMIZER_DATA_HEADERS).toHaveLength(10);
     expect(HARDWARE_LIST_HEADERS).toHaveLength(8);
   });

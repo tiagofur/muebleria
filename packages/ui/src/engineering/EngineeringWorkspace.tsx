@@ -101,6 +101,7 @@ export function EngineeringWorkspace({
   onSaveCutPlan,
   onExportCutPlanPdf,
   onExportCutPlanDxf,
+  onExportCutPlanPtx,
   onImportNesting: _onImportNesting,
   // Permissions
   canImportNesting: _canImportNesting,
@@ -154,6 +155,9 @@ export function EngineeringWorkspace({
   readonly onExportCutPlanDxf?: (
     cutPlan: import('@muebles/domain').CutPlan,
     variant: 'sheets' | 'pieces',
+  ) => void | Promise<void>;
+  readonly onExportCutPlanPtx?: (
+    cutPlan: import('@muebles/domain').CutPlan,
   ) => void | Promise<void>;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
@@ -328,6 +332,7 @@ export function EngineeringWorkspace({
             onExportCutPlanPdf={onExportCutPlanPdf}
             onExportOptimizer={onExportOptimizer}
             onExportCutPlanDxf={onExportCutPlanDxf}
+            onExportCutPlanPtx={onExportCutPlanPtx}
             exportBusy={exportBusy}
           />
         )}

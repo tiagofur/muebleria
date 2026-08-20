@@ -43,6 +43,7 @@ import { buildAssemblySheetsExport } from '../exportAssemblySheets';
 import { downloadDespiecePdf } from '../exportDespiecePdf';
 import { downloadCutPlanPdf } from '../exportCutPlanPdf';
 import { downloadCutPlanDxf } from '../exportCutPlanDxf';
+import { downloadCutPlanPtx, ptxFileName } from '../exportCutPlanPtx';
 import { runExport, type ExportDelivery } from './runExport';
 
 export interface ExportHandlersDeps {
@@ -454,6 +455,38 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     [toast],
   );
 
+  const handleExportCutPlanPtx = useCallback(
+    async (cutPlan: import('@muebles/domain').CutPlan) => {
+      setExportBusy(true);
+      try {
+        const fileName = ptxFileName(cutPlan.projectName || cutPlan.projectId);
+        await downloadCutPlanPtx(
+          cutPlan,
+          {
+            projectName: cutPlan.projectName,
+            projectCode: cutPlan.projectId,
+          },
+          fileName,
+        );
+        toast({
+          type: 'success',
+          message: `✓ ${fileName} descargado`,
+        });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Error al exportar plan de corte PTX',
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [toast],
+  );
+
   const handleReleaseToDelivery = useCallback(
     async (projectId: string) => {
       const project = projects.find((p) => p.id === projectId);
@@ -568,6 +601,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     handleExportDespiecePdf,
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,
+    handleExportCutPlanPtx,
     handleReleaseToDelivery,
     handleExportProductionPack,
     handleExportCommercialQuote,

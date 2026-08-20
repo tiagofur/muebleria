@@ -180,7 +180,8 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
     expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('plan sierra: exporta PDF + Optimizer XLSX y no ofrece DXF', () => {
+  it('plan sierra: exporta PDF, Optimizer XLSX y PTX, y no ofrece DXF', () => {
+    const onExportCutPlanPtx = vi.fn();
     render(
       <ProductionOrderOptimizationPanel
         project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
@@ -188,13 +189,18 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
         cutRows={[]}
         onExportOptimizer={() => {}}
         onExportCutPlanDxf={() => {}}
+        onExportCutPlanPtx={onExportCutPlanPtx}
       />,
     );
 
     expect(screen.getByTestId('prod-opt-export-pdf-manual')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-export-optimizer-xlsx')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-export-ptx')).toBeTruthy();
     expect(screen.queryByTestId('prod-opt-export-dxf-sheets')).toBeNull();
     expect(screen.queryByTestId('prod-opt-export-dxf-pieces')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('prod-opt-export-ptx'));
+    expect(onExportCutPlanPtx).toHaveBeenCalledTimes(1);
   });
 
   it('plan nesting: exporta DXF (tableros y piezas) y oculta PDF/Optimizer', () => {

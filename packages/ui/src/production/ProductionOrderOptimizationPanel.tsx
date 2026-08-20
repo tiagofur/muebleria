@@ -36,6 +36,7 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly onExportCutPlanPdf?: (cutPlan: CutPlan) => void;
   readonly onExportOptimizer?: () => void;
   readonly onExportCutPlanDxf?: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => void;
+  readonly onExportCutPlanPtx?: (cutPlan: CutPlan) => void;
   readonly exportBusy?: boolean;
 };
 
@@ -47,6 +48,7 @@ export function ProductionOrderOptimizationPanel({
   onExportCutPlanPdf,
   onExportOptimizer,
   onExportCutPlanDxf,
+  onExportCutPlanPtx,
   exportBusy = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
   // Cut strategy dispatch (F126): saw guillotine vs CNC nesting
@@ -631,26 +633,39 @@ export function ProductionOrderOptimizationPanel({
                 </button>
               </div>
 
-              {/* Automatic Panel Saws (FUTURE ROADMAP) */}
+              {/* Automatic Panel Saws (PTX v1.14) */}
               <div
                 style={{
-                  border: '1px dashed var(--border-default)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: 'var(--radius-md)',
                   padding: '14px 16px',
-                  background: 'var(--surface-muted)',
-                  opacity: 0.85,
+                  background: 'var(--surface-card)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: '1.2em' }}>⚡</span>
-                  <strong style={{ fontSize: '0.95em' }}>Seccionadoras Automáticas</strong>
-                  <span style={{ fontSize: '0.72em', background: 'var(--surface-card)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-muted)' }}>
-                    Próximamente
-                  </span>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: '1.2em' }}>⚡</span>
+                    <strong style={{ fontSize: '0.95em' }}>PTX Seccionadoras (SCM / Homag / Biesse)</strong>
+                  </div>
+                  <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                    Patrón de corte pre-optimizado v1.14 para seccionadoras automáticas SCM (Maestro Cut / WinCut), Homag (Cut Rite), Biesse (Selco) y Giben.
+                  </p>
                 </div>
-                <p style={{ margin: '4px 0 0', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-                  Generación de archivos para máquinas Homag (Cut Rite), Biesse, Giben y SCM.
-                </p>
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={() => {
+                    if (currentCutPlan) onExportCutPlanPtx?.(currentCutPlan);
+                  }}
+                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanPtx}
+                  data-testid="prod-opt-export-ptx"
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  Descargar PTX
+                </button>
               </div>
             </>
           )}
