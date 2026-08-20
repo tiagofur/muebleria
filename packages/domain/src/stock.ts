@@ -102,9 +102,25 @@ export function stockMovementDelta(
   type: StockMovementType,
   quantity: number,
 ): number {
-  if (type === 'entrada') return quantity;
-  if (type === 'salida' || type === 'despacho') return -quantity;
-  return quantity; // ajuste
+  if (type === 'entrada') {
+    if (quantity <= 0) {
+      throw new Error('la entrada debe ser mayor a cero');
+    }
+    return quantity;
+  }
+  if (type === 'salida' || type === 'despacho') {
+    if (quantity <= 0) {
+      throw new Error('la cantidad debe ser mayor a cero');
+    }
+    return -quantity;
+  }
+  if (type === 'ajuste') {
+    if (quantity === 0) {
+      throw new Error('el ajuste no puede ser cero');
+    }
+    return quantity; // ajuste
+  }
+  throw new Error(`tipo de movimiento inválido: ${String(type)}`);
 }
 
 /** Saldo tras aplicar un movimiento (el servidor nunca deja saldo negativo). */

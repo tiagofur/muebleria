@@ -10,6 +10,7 @@ package api
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -153,10 +154,14 @@ func (s *Server) HandleStockMovementCreate(w http.ResponseWriter, r *http.Reques
 	// Reversión (desmarcar un despacho): un movimiento `despacho` con
 	// reverts_id ACREDITA de vuelta el saldo (delta positivo), enlazado al
 	// movimiento original para auditoría. Solo se revierten despachos del
-	// mismo material.
+	// mismo material y con el monto exacto del original.
 	reverting := false
 	revertsID := strings.TrimSpace(body.RevertsID)
 	if revertsID != "" {
+		if body.Type != string(domain.StockMovementDespacho) {
+			respondWithError(w, http.StatusBadRequest, "solo un movimiento de tipo despacho puede tener reverts_id")
+			return
+		}
 		original, mErr := s.Store.GetStockMovementByID(r.Context(), revertsID)
 		if mErr != nil || original == nil {
 			respondWithError(w, http.StatusNotFound, "movimiento a revertir no encontrado")
@@ -168,6 +173,15 @@ func (s *Server) HandleStockMovementCreate(w http.ResponseWriter, r *http.Reques
 		}
 		if original.Kind != domain.StockMaterialKind(kind) || original.MaterialID != materialID {
 			respondWithError(w, http.StatusBadRequest, "el movimiento a revertir no corresponde a este material")
+			return
+		}
+		if math.Abs(body.Quantity)-math.Abs(original.Delta) > 1e-6 || math.Abs(original.Delta)-math.Abs(body.Quantity) > 1e-6 {
+			respondWithError(w, http.StatusBadRequest, "el monto de la reversión debe ser exactamente igual al despacho original")
+			return
+		}
+		alreadyReverted, rErr := s.Store.GetStockMovementByRevertsID(r.Context(), revertsID)
+		if rErr == nil && alreadyReverted != nil {
+			respondWithError(w, http.StatusConflict, "este despacho ya fue revertido")
 			return
 		}
 		reverting = true
@@ -214,6 +228,10 @@ func (s *Server) HandleStockMovementCreate(w http.ResponseWriter, r *http.Reques
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if isDuplicateKey(err) {
+			respondWithError(w, http.StatusConflict, "este despacho ya fue revertido")
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, "no se pudo registrar el movimiento")
 		return
 	}
@@ -221,7 +239,7 @@ func (s *Server) HandleStockMovementCreate(w http.ResponseWriter, r *http.Reques
 }
 
 // HandleStockMovementsList handles GET /api/stock/movements — the ledger,
-// newest first, optionally filtered by kind/material_id. Visible to the
+// newest first, optionally filtered by kind/material_id/project_id. Visible to the
 // workspace roles (read-only for gerente_produccion).
 func (s *Server) HandleStockMovementsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -239,6 +257,7 @@ func (s *Server) HandleStockMovementsList(w http.ResponseWriter, r *http.Request
 		return
 	}
 	materialID := strings.TrimSpace(q.Get("material_id"))
+	projectID := strings.TrimSpace(q.Get("project_id"))
 	limit := 50
 	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -252,7 +271,7 @@ func (s *Server) HandleStockMovementsList(w http.ResponseWriter, r *http.Request
 		limit = n
 	}
 
-	moves, err := s.Store.ListStockMovements(r.Context(), domain.StockMaterialKind(kind), materialID, limit)
+	moves, err := s.Store.ListStockMovements(r.Context(), domain.StockMaterialKind(kind), materialID, projectID, limit)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "no se pudo leer el historial de stock")
 		return

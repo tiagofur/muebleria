@@ -305,6 +305,10 @@ func (s *Server) HandlePurchaseOrderReceive(w http.ResponseWriter, r *http.Reque
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if strings.Contains(err.Error(), "no pertenece a esta orden") || strings.Contains(err.Error(), "excede el restante") || strings.Contains(err.Error(), "mayor a cero") {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, "no se pudo registrar la recepción")
 		return
 	}

@@ -160,8 +160,8 @@ func TestPurchaseOrders_CreateBuildsBorradorWithNumber(t *testing.T) {
 	if po.Status != domain.POBorrador {
 		t.Errorf("status %q want borrador", po.Status)
 	}
-	if po.Number != "OC-PO-ABC" {
-		t.Errorf("number %q want OC-PO-ABC", po.Number)
+	if po.Number != "OC-0001" {
+		t.Errorf("number %q want OC-0001", po.Number)
 	}
 	if len(po.Items) != 1 || po.Items[0].Quantity != 50 {
 		t.Errorf("items: %#v", po.Items)

@@ -44,6 +44,7 @@ const STOCK_LOCAL_STORAGE_KEY = 'muebles_guest_stock';
 const STOCK_MOVEMENTS_LOCAL_STORAGE_KEY = 'muebles_guest_stock_movements';
 const SUPPLIERS_LOCAL_STORAGE_KEY = 'muebles_guest_suppliers';
 const PURCHASE_ORDERS_LOCAL_STORAGE_KEY = 'muebles_guest_purchase_orders';
+const PO_COUNTER_LOCAL_STORAGE_KEY = 'muebles_guest_po_counter';
 
 export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
   private getWorkspace(): Workspace {
@@ -462,9 +463,34 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     const current = rows.find(
       (r) => r.kind === payload.kind && r.materialId === payload.materialId,
     );
+    const moves = this.getStockMovements();
+
     // Despacho con reverts_id → reversión: acredita (paridad con el server).
-    const reverting =
-      payload.type === 'despacho' && Boolean(payload.revertsId);
+    let reverting = false;
+    if (payload.revertsId) {
+      if (payload.type !== 'despacho') {
+        throw new Error('solo un movimiento de tipo despacho puede tener reverts_id');
+      }
+      const original = moves.find((m) => m.id === payload.revertsId);
+      if (!original) {
+        throw new Error('movimiento a revertir no encontrado');
+      }
+      if (original.type !== 'despacho') {
+        throw new Error('solo se puede revertir un despacho');
+      }
+      if (original.kind !== payload.kind || original.materialId !== payload.materialId) {
+        throw new Error('el movimiento a revertir no corresponde a este material');
+      }
+      if (Math.abs(payload.quantity) - Math.abs(original.delta) > 1e-6 || Math.abs(original.delta) - Math.abs(payload.quantity) > 1e-6) {
+        throw new Error('el monto de la reversión debe ser exactamente igual al despacho original');
+      }
+      const alreadyReverted = moves.some((m) => m.revertsId === payload.revertsId);
+      if (alreadyReverted) {
+        throw new Error('este despacho ya fue revertido');
+      }
+      reverting = true;
+    }
+
     let delta = stockMovementDelta(payload.type, payload.quantity);
     if (reverting) delta = -delta;
 
@@ -519,12 +545,16 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
   async listStockMovements(filter?: {
     kind?: StockMaterialKind;
     materialId?: string;
+    projectId?: string;
     limit?: number;
   }): Promise<readonly StockMovement[]> {
     let list = this.getStockMovements();
     if (filter?.kind) list = list.filter((m) => m.kind === filter.kind);
     if (filter?.materialId) {
       list = list.filter((m) => m.materialId === filter.materialId);
+    }
+    if (filter?.projectId) {
+      list = list.filter((m) => m.projectId === filter.projectId);
     }
     if (filter?.limit) list = list.slice(0, filter.limit);
     return list;
@@ -574,9 +604,19 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     }
   }
 
-  private poNumber(id: string): string {
-    const short = id.length > 6 ? id.slice(0, 6) : id;
-    return `OC-${short.toUpperCase()}`;
+  private nextPoNumber(): string {
+    if (typeof globalThis === 'undefined' || !('localStorage' in globalThis)) {
+      return 'OC-0001';
+    }
+    try {
+      const raw = globalThis.localStorage.getItem(PO_COUNTER_LOCAL_STORAGE_KEY);
+      const current = raw ? parseInt(raw, 10) : 0;
+      const next = isNaN(current) || current < 0 ? 1 : current + 1;
+      globalThis.localStorage.setItem(PO_COUNTER_LOCAL_STORAGE_KEY, String(next));
+      return `OC-${String(next).padStart(4, '0')}`;
+    } catch {
+      return 'OC-0001';
+    }
   }
 
   async listSuppliers(): Promise<readonly Supplier[]> {
@@ -665,7 +705,7 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     const now = new Date().toISOString();
     const order: PurchaseOrder = {
       id: po.id,
-      number: this.poNumber(po.id),
+      number: this.nextPoNumber(),
       supplierId: po.supplierId,
       status: 'borrador',
       items: po.items.map((it) => ({
@@ -757,6 +797,29 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
       throw new Error('solo una orden emitida se puede recibir');
     }
 
+    // Validar líneas antes de modificar stock o la orden
+    const itemMap = new Map<string, PurchaseOrderItem>();
+    for (const it of current.items) {
+      itemMap.set(`${it.kind}:${it.materialId}`, it);
+    }
+    const byQty = new Map<string, number>();
+    for (const line of lines) {
+      if (line.quantity <= 0) {
+        throw new Error('la cantidad a recibir debe ser mayor a cero');
+      }
+      const key = `${line.kind}:${line.materialId}`;
+      const poItem = itemMap.get(key);
+      if (!poItem) {
+        throw new Error(`el material ${line.materialId} (${line.kind}) no pertenece a esta orden de compra`);
+      }
+      const prevQty = byQty.get(key) ?? 0;
+      const totalAttempted = prevQty + line.quantity;
+      if (poItem.receivedQuantity + totalAttempted > poItem.quantity + 1e-6) {
+        throw new Error(`la cantidad a recibir de ${line.materialId} excede el restante pendiente`);
+      }
+      byQty.set(key, totalAttempted);
+    }
+
     // Stock entradas for every received line (note references the OC number).
     for (const line of lines) {
       await this.recordStockMovement({
@@ -768,11 +831,6 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
       });
     }
 
-    const byQty = new Map<string, number>();
-    for (const line of lines) {
-      const key = `${line.kind}:${line.materialId}`;
-      byQty.set(key, (byQty.get(key) ?? 0) + line.quantity);
-    }
     const items: PurchaseOrderItem[] = current.items.map((it) => {
       const received = it.receivedQuantity + (byQty.get(`${it.kind}:${it.materialId}`) ?? 0);
       return { ...it, receivedQuantity: received };

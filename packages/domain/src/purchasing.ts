@@ -1,4 +1,4 @@
-import type { MaterialStock, StockMaterialKind, StockStatus } from './stock';
+import type { MaterialStock, StockMaterialKind, StockMovement, StockStatus } from './stock';
 import { stockStatus } from './stock';
 import type { PurchaseOrder } from './purchasingOrders';
 import type { Project } from './types';
@@ -36,6 +36,32 @@ export function pickingKey(
   material: PickingMaterial,
 ): string {
   return `${projectId}:${material}`;
+}
+
+/**
+ * Filtra los movimientos de tipo despacho de un proyecto y tipo de material
+ * que aún se encuentran activos (es decir, que no han sido revertidos por
+ * otro movimiento con `revertsId`).
+ */
+export function activeDespachosFor(
+  projectId: string,
+  material: PickingMaterial,
+  movements: readonly StockMovement[],
+): StockMovement[] {
+  const revertedIds = new Set<string>();
+  for (const m of movements) {
+    if (m.revertsId) {
+      revertedIds.add(m.revertsId);
+    }
+  }
+  return movements.filter(
+    (m) =>
+      m.type === 'despacho' &&
+      m.kind === material &&
+      m.projectId === projectId &&
+      !m.revertsId &&
+      !revertedIds.has(m.id),
+  );
 }
 
 export type WarehouseProjectMetrics = {

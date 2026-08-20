@@ -697,6 +697,15 @@ func (s *stubStore) GetStockMovementByID(_ context.Context, id string) (*domain.
 	}
 	return nil, nil
 }
+func (s *stubStore) GetStockMovementByRevertsID(_ context.Context, revertsID string) (*domain.StockMovement, error) {
+	for i := range s.stockMovements {
+		if s.stockMovements[i].RevertsID != nil && *s.stockMovements[i].RevertsID == revertsID {
+			m := s.stockMovements[i]
+			return &m, nil
+		}
+	}
+	return nil, nil
+}
 func (s *stubStore) RecordStockMovement(_ context.Context, mov domain.StockMovement) (domain.StockMovement, error) {
 	if s.stockBalances == nil {
 		s.stockBalances = map[string]float64{}
@@ -717,7 +726,7 @@ func (s *stubStore) RecordStockMovement(_ context.Context, mov domain.StockMovem
 	s.stockMovements = append(s.stockMovements, saved)
 	return saved, nil
 }
-func (s *stubStore) ListStockMovements(_ context.Context, _ domain.StockMaterialKind, _ string, _ int) ([]domain.StockMovement, error) {
+func (s *stubStore) ListStockMovements(_ context.Context, _ domain.StockMaterialKind, _ string, _ string, _ int) ([]domain.StockMovement, error) {
 	if s.stockMovementsList != nil {
 		return s.stockMovementsList, nil
 	}
@@ -782,6 +791,9 @@ func (s *stubStore) GetPurchaseOrderByID(_ context.Context, id string) (*domain.
 func (s *stubStore) CreatePurchaseOrder(_ context.Context, po domain.PurchaseOrder) error {
 	if s.createPOErr != nil {
 		return s.createPOErr
+	}
+	if po.Number == "" || strings.HasPrefix(po.Number, "OC-PO-") {
+		po.Number = fmt.Sprintf("OC-%04d", len(s.posList)+1)
 	}
 	s.posList = append(s.posList, po)
 	return nil

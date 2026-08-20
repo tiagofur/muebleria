@@ -11,16 +11,18 @@
 
 import { create } from 'zustand';
 
-import type {
-  MaterialStock,
-  PickingMaterial,
-  PickingStatus,
-  ProjectPickingState,
-  PurchaseOrder,
-  StockMaterialKind,
-  StockMovement,
-  StockMovementType,
-  Supplier,
+import {
+  activeDespachosFor,
+  pickingKey,
+  type MaterialStock,
+  type PickingMaterial,
+  type PickingStatus,
+  type ProjectPickingState,
+  type PurchaseOrder,
+  type StockMaterialKind,
+  type StockMovement,
+  type StockMovementType,
+  type Supplier,
 } from '@muebles/domain';
 import type { WorkspaceRepository } from '@muebles/storage';
 import type { PoLineInput } from '@muebles/ui';
@@ -28,6 +30,9 @@ import type { PoLineInput } from '@muebles/ui';
 import { getUiStoreState } from './uiStore';
 import { useWorkspaceStore } from './workspaceStore';
 import type { ToastFn } from './catalogStore';
+
+/** In-flight picking guards per project x material to serialize fast clicks */
+const inFlightPicks = new Set<string>();
 
 export interface PurchasingStoreDeps {
   /** Repository for the current session (from workspaceStore). */
@@ -168,14 +173,18 @@ export function createPurchasingStore(options: InternalOptions) {
           suppliers: [...sps],
           purchaseOrders: [...pos],
         });
-      } catch {
-        // Read failure → treat as empty so the screens still work.
+      } catch (err) {
+        // Si la sesión expiró (401), delegar a workspaceStore
+        if (err instanceof Error && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
+          useWorkspaceStore.getState().markSessionExpired();
+        }
+        // Read failure → resetear a [] para no arrastrar arrays de la sesión previa
         set({
-          pickingStates: get().pickingStates ?? [],
-          stockRows: get().stockRows ?? [],
-          stockMovements: get().stockMovements ?? [],
-          suppliers: get().suppliers ?? [],
-          purchaseOrders: get().purchaseOrders ?? [],
+          pickingStates: [],
+          stockRows: [],
+          stockMovements: [],
+          suppliers: [],
+          purchaseOrders: [],
         });
       }
     },
@@ -332,6 +341,12 @@ export function createPurchasingStore(options: InternalOptions) {
       { projectId, material, status },
       debitLinesFor,
     ) => {
+      const lockKey = pickingKey(projectId, material);
+      if (inFlightPicks.has(lockKey)) {
+        return;
+      }
+      inFlightPicks.add(lockKey);
+
       const repo = getRepository();
 
       const persistPicking = async (nextStatus: PickingStatus): Promise<void> => {
@@ -401,13 +416,8 @@ export function createPurchasingStore(options: InternalOptions) {
             // Desmarcar: revierte los despachos activos de esta obra/tipo
             // (ledger, sobrevive a recargas) y persiste pendiente.
             if (repo.listStockMovements && repo.recordStockMovement) {
-              const moves = await repo.listStockMovements({ kind: material, limit: 200 });
-              const actives = moves.filter(
-                (m) =>
-                  m.type === 'despacho' &&
-                  m.projectId === projectId &&
-                  !m.revertsId,
-              );
+              const moves = await repo.listStockMovements({ kind: material, projectId, limit: 200 });
+              const actives = activeDespachosFor(projectId, material, moves);
               for (const m of actives) {
                 await repo.recordStockMovement({
                   kind: m.kind,
@@ -424,6 +434,8 @@ export function createPurchasingStore(options: InternalOptions) {
           }
         } catch (err) {
           fail(err);
+        } finally {
+          inFlightPicks.delete(lockKey);
         }
       })();
     },

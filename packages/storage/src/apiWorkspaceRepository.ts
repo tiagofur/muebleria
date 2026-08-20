@@ -1525,11 +1525,13 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async listStockMovements(filter?: {
     kind?: StockMaterialKind;
     materialId?: string;
+    projectId?: string;
     limit?: number;
   }): Promise<readonly StockMovement[]> {
     const params = new URLSearchParams();
     if (filter?.kind) params.set('kind', filter.kind);
     if (filter?.materialId) params.set('material_id', filter.materialId);
+    if (filter?.projectId) params.set('project_id', filter.projectId);
     if (filter?.limit) params.set('limit', String(filter.limit));
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${this.baseUrl}/stock/movements${query}`, {

@@ -7,6 +7,7 @@ import {
   stockUnitPlural,
   stockValue,
   roleCanManageStock,
+  activeDespachosFor,
 } from './index';
 
 describe('stock (Fase 3b)', () => {
@@ -24,6 +25,24 @@ describe('stock (Fase 3b)', () => {
     expect(stockMovementDelta('despacho', 12)).toBe(-12);
     expect(stockMovementDelta('ajuste', -5)).toBe(-5);
     expect(stockMovementDelta('ajuste', 2)).toBe(2);
+    expect(() => stockMovementDelta('entrada', 0)).toThrow('mayor a cero');
+    expect(() => stockMovementDelta('entrada', -5)).toThrow('mayor a cero');
+    expect(() => stockMovementDelta('salida', 0)).toThrow('mayor a cero');
+    expect(() => stockMovementDelta('despacho', -1)).toThrow('mayor a cero');
+    expect(() => stockMovementDelta('ajuste', 0)).toThrow('no puede ser cero');
+  });
+
+  it('activeDespachosFor excludes already reverted dispatches', () => {
+    const movements = [
+      { id: 'm1', kind: 'herrajes' as const, materialId: 'h1', type: 'despacho' as const, delta: -5, balanceAfter: 15, projectId: 'p1', byUserId: 'u1', at: '2026-08-20T10:00:00Z' },
+      { id: 'm2', kind: 'herrajes' as const, materialId: 'h1', type: 'despacho' as const, delta: 5, balanceAfter: 20, projectId: 'p1', revertsId: 'm1', byUserId: 'u1', at: '2026-08-20T10:05:00Z' },
+      { id: 'm3', kind: 'herrajes' as const, materialId: 'h1', type: 'despacho' as const, delta: -5, balanceAfter: 15, projectId: 'p1', byUserId: 'u1', at: '2026-08-20T10:10:00Z' },
+      { id: 'm4', kind: 'tableros' as const, materialId: 't1', type: 'despacho' as const, delta: -2, balanceAfter: 8, projectId: 'p1', byUserId: 'u1', at: '2026-08-20T10:10:00Z' },
+    ];
+    const activeHw = activeDespachosFor('p1', 'herrajes', movements);
+    expect(activeHw.map((m) => m.id)).toEqual(['m3']);
+    const activeTb = activeDespachosFor('p1', 'tableros', movements);
+    expect(activeTb.map((m) => m.id)).toEqual(['m4']);
   });
 
   it('applyStockMovement adds the delta to the balance', () => {

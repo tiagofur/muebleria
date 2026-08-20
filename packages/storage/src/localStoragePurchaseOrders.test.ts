@@ -56,7 +56,7 @@ describe('LocalStorageWorkspaceRepository — proveedores + PO (Fase 3c)', () =>
       items: [{ kind: 'herrajes', materialId: 'h1', quantity: 50 }],
     });
     expect(created.status).toBe('borrador');
-    expect(created.number).toBe('OC-PO1');
+    expect(created.number).toBe('OC-0001');
     expect(created.items[0]?.receivedQuantity).toBe(0);
 
     // Editar solo en borrador.
@@ -87,9 +87,9 @@ describe('LocalStorageWorkspaceRepository — proveedores + PO (Fase 3c)', () =>
     expect(done.status).toBe('recibida');
     expect(done.receivedAt).toBeTruthy();
     const moves = await repo.listStockMovements({ kind: 'herrajes' });
-    // inicial + 30 + 10 = 3 movimientos, todos entrada con nota OC-PO1.
+    // inicial + 30 + 10 = 3 movimientos, todos entrada con nota OC-0001.
     expect(moves).toHaveLength(3);
-    expect(moves.every((m) => m.note === 'OC-PO1' || m.note === 'inicial')).toBe(true);
+    expect(moves.every((m) => m.note === 'OC-0001' || m.note === 'inicial')).toBe(true);
   });
 
   it('receive is rejected unless emitida, edit rejected unless borrador', async () => {
@@ -101,19 +101,27 @@ describe('LocalStorageWorkspaceRepository — proveedores + PO (Fase 3c)', () =>
     });
 
     await expect(
-      repo.receivePurchaseOrder('po1', [
-        { kind: 'herrajes', materialId: 'h1', quantity: 5 },
-      ]),
-    ).rejects.toThrow(/emitida/);
+      repo.receivePurchaseOrder('po1', [{ kind: 'herrajes', materialId: 'h1', quantity: 5 }]),
+    ).rejects.toThrow('solo una orden emitida');
 
     await repo.emitPurchaseOrder('po1');
+
     await expect(
-      repo.updatePurchaseOrder({
-        id: 'po1',
-        supplierId: 's2',
-        items: [{ kind: 'herrajes', materialId: 'h1', quantity: 1 }],
-      }),
-    ).rejects.toThrow(/borrador/);
+      repo.updatePurchaseOrder({ id: 'po1', supplierId: 's2', items: [] }),
+    ).rejects.toThrow('solo se puede editar una orden en borrador');
+
+    // Reject receiving non-member lines or over-remaining
+    await expect(
+      repo.receivePurchaseOrder('po1', [{ kind: 'herrajes', materialId: 'h_foreign', quantity: 5 }]),
+    ).rejects.toThrow('no pertenece a esta orden');
+
+    await expect(
+      repo.receivePurchaseOrder('po1', [{ kind: 'herrajes', materialId: 'h1', quantity: 50 }]),
+    ).rejects.toThrow('excede el restante');
+
+    await expect(
+      repo.receivePurchaseOrder('po1', [{ kind: 'herrajes', materialId: 'h1', quantity: 0 }]),
+    ).rejects.toThrow('mayor a cero');
 
     // Cancelar una emitida es válido; cancelar una recibida no.
     await repo.receivePurchaseOrder('po1', [

@@ -342,10 +342,11 @@ export interface WorkspaceRepository {
     note?: string;
     revertsId?: string;
   }): Promise<StockMovement>;
-  /** Ledger, newest first, optionally filtered by kind/material_id. */
+  /** Ledger, newest first, optionally filtered by kind/material_id/projectId. */
   listStockMovements?(filter?: {
     kind?: StockMaterialKind;
     materialId?: string;
+    projectId?: string;
     limit?: number;
   }): Promise<readonly StockMovement[]>;
 

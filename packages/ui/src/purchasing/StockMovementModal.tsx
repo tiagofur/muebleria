@@ -73,7 +73,7 @@ export function StockMovementModal({
       setError('Elegí un material');
       return;
     }
-    if (!Number.isFinite(qty) || qty === 0) {
+    if (!Number.isFinite(qty) || (type !== 'ajuste' && qty <= 0) || (type === 'ajuste' && qty === 0)) {
       setError(
         type === 'ajuste'
           ? 'El ajuste no puede ser cero'

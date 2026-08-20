@@ -111,4 +111,53 @@ describe('LocalStorageWorkspaceRepository — stock (Fase 3b)', () => {
     const limited = await repo.listStockMovements({ limit: 2 });
     expect(limited).toHaveLength(2);
   });
+
+  it('rejects duplicate or invalid reverts of despachos', async () => {
+    const repo = new LocalStorageWorkspaceRepository();
+    await repo.recordStockMovement({ kind: 'herrajes', materialId: 'h1', type: 'entrada', quantity: 20 });
+    const d = await repo.recordStockMovement({
+      kind: 'herrajes',
+      materialId: 'h1',
+      type: 'despacho',
+      quantity: 5,
+      projectId: 'proj-1',
+    });
+
+    const rev = await repo.recordStockMovement({
+      kind: 'herrajes',
+      materialId: 'h1',
+      type: 'despacho',
+      quantity: 5,
+      revertsId: d.id,
+    });
+    expect(rev.delta).toBe(5);
+    expect(rev.balanceAfter).toBe(20);
+
+    // Double revert rejected
+    await expect(
+      repo.recordStockMovement({
+        kind: 'herrajes',
+        materialId: 'h1',
+        type: 'despacho',
+        quantity: 5,
+        revertsId: d.id,
+      }),
+    ).rejects.toThrow('este despacho ya fue revertido');
+
+    // Amount mismatch rejected
+    await expect(
+      repo.recordStockMovement({
+        kind: 'herrajes',
+        materialId: 'h1',
+        type: 'despacho',
+        quantity: 10,
+        revertsId: d.id,
+      }),
+    ).rejects.toThrow();
+
+    // Filter by projectId
+    const projMoves = await repo.listStockMovements({ projectId: 'proj-1' });
+    expect(projMoves).toHaveLength(1);
+    expect(projMoves[0]?.id).toBe(d.id);
+  });
 });

@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -142,16 +144,17 @@ func (s *PostgresStore) listPOItems(ctx context.Context, poID string) ([]domain.
 
 // CreatePurchaseOrder inserts a borrador PO with its items (replace semantics:
 // items are deleted + reinserted so the client sends the full line set).
+// Returns the saved PO with its generated number.
 func (s *PostgresStore) CreatePurchaseOrder(ctx context.Context, po domain.PurchaseOrder) error {
-	return s.upsertPOItems(ctx, po, true)
+	return s.upsertPOItems(ctx, &po, true)
 }
 
 // UpdatePurchaseOrder replaces a borrador PO's fields + items (used for edits).
 func (s *PostgresStore) UpdatePurchaseOrder(ctx context.Context, po domain.PurchaseOrder) error {
-	return s.upsertPOItems(ctx, po, false)
+	return s.upsertPOItems(ctx, &po, false)
 }
 
-func (s *PostgresStore) upsertPOItems(ctx context.Context, po domain.PurchaseOrder, create bool) error {
+func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOrder, create bool) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -159,6 +162,14 @@ func (s *PostgresStore) upsertPOItems(ctx context.Context, po domain.PurchaseOrd
 	defer tx.Rollback(ctx)
 
 	if create {
+		if po.Number == "" || strings.HasPrefix(po.Number, "OC-PO-") {
+			var seq int64
+			if err := tx.QueryRow(ctx, `SELECT nextval('purchase_order_number_seq')`).Scan(&seq); err != nil {
+				// Fallback if sequence not found
+				seq = time.Now().UnixMilli() % 10000
+			}
+			po.Number = fmt.Sprintf("OC-%04d", seq)
+		}
 		_, err = tx.Exec(ctx, `
 			INSERT INTO purchase_orders (id, number, supplier_id, status, notes, created_by)
 			VALUES ($1, $2, $3, $4, $5, $6)
@@ -260,12 +271,31 @@ func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lin
 	if err != nil {
 		return domain.PurchaseOrder{}, err
 	}
+
+	// Validar que cada línea a recibir pertenezca a la OC y no exceda el remaining
+	itemMap := map[string]*domain.PurchaseOrderItem{}
+	for i := range items {
+		key := string(items[i].Kind) + ":" + items[i].MaterialID
+		itemMap[key] = &items[i]
+	}
+
 	byQty := map[domain.StockMaterialKind]map[string]float64{}
 	for _, line := range lines {
+		if line.Quantity <= 0 {
+			return domain.PurchaseOrder{}, fmt.Errorf("la cantidad a recibir debe ser mayor a cero")
+		}
+		key := string(line.Kind) + ":" + line.MaterialID
+		poItem, ok := itemMap[key]
+		if !ok {
+			return domain.PurchaseOrder{}, fmt.Errorf("el material %s (%s) no pertenece a esta orden de compra", line.MaterialID, line.Kind)
+		}
 		if byQty[line.Kind] == nil {
 			byQty[line.Kind] = map[string]float64{}
 		}
 		byQty[line.Kind][line.MaterialID] += line.Quantity
+		if poItem.ReceivedQuantity+byQty[line.Kind][line.MaterialID] > poItem.Quantity+1e-6 {
+			return domain.PurchaseOrder{}, fmt.Errorf("la cantidad a recibir de %s excede el restante pendiente", line.MaterialID)
+		}
 	}
 
 	updated := make([]domain.PurchaseOrderItem, 0, len(items))

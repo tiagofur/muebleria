@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -59,6 +60,24 @@ func (s *PostgresStore) GetStockMovementByID(ctx context.Context, id string) (*d
 		       project_id, note, reverts_id, by_user_id, by_name, at
 		FROM stock_movements WHERE id = $1
 	`, id)
+	var m domain.StockMovement
+	if err := row.Scan(&m.ID, &m.Kind, &m.MaterialID, &m.Type, &m.Delta, &m.BalanceAfter,
+		&m.ProjectID, &m.Note, &m.RevertsID, &m.ByUserID, &m.ByName, &m.At); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &m, nil
+}
+
+// GetStockMovementByRevertsID loads a ledger row that reverts the given movement id.
+func (s *PostgresStore) GetStockMovementByRevertsID(ctx context.Context, revertsID string) (*domain.StockMovement, error) {
+	row := s.Pool.QueryRow(ctx, `
+		SELECT id, kind, material_id, type, delta, balance_after,
+		       project_id, note, reverts_id, by_user_id, by_name, at
+		FROM stock_movements WHERE reverts_id = $1
+	`, revertsID)
 	var m domain.StockMovement
 	if err := row.Scan(&m.ID, &m.Kind, &m.MaterialID, &m.Type, &m.Delta, &m.BalanceAfter,
 		&m.ProjectID, &m.Note, &m.RevertsID, &m.ByUserID, &m.ByName, &m.At); err != nil {
@@ -153,29 +172,33 @@ func recordStockMovementTx(ctx context.Context, tx pgx.Tx, mov domain.StockMovem
 	return saved, err
 }
 
-// ListStockMovements returns the ledger, newest first. kind/materialID filter
+// ListStockMovements returns the ledger, newest first. kind/materialID/projectID filter
 // optionally; limit caps the page (handler enforces max).
-func (s *PostgresStore) ListStockMovements(ctx context.Context, kind domain.StockMaterialKind, materialID string, limit int) ([]domain.StockMovement, error) {
+func (s *PostgresStore) ListStockMovements(ctx context.Context, kind domain.StockMaterialKind, materialID string, projectID string, limit int) ([]domain.StockMovement, error) {
 	query := `
 		SELECT id, kind, material_id, type, delta, balance_after,
 		       project_id, note, reverts_id, by_user_id, by_name, at
 		FROM stock_movements
 	`
+	whereClauses := []string{}
 	args := []any{}
 	if kind != "" {
 		args = append(args, kind)
-		query += ` WHERE kind = $` + fmt.Sprint(len(args))
+		whereClauses = append(whereClauses, fmt.Sprintf("kind = $%d", len(args)))
 	}
 	if materialID != "" {
 		args = append(args, materialID)
-		if len(args) == 1 {
-			query += ` WHERE material_id = $1`
-		} else {
-			query += ` AND material_id = $` + fmt.Sprint(len(args))
-		}
+		whereClauses = append(whereClauses, fmt.Sprintf("material_id = $%d", len(args)))
+	}
+	if projectID != "" {
+		args = append(args, projectID)
+		whereClauses = append(whereClauses, fmt.Sprintf("project_id = $%d", len(args)))
+	}
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 	args = append(args, limit)
-	query += ` ORDER BY at DESC LIMIT $` + fmt.Sprint(len(args))
+	query += fmt.Sprintf(" ORDER BY at DESC LIMIT $%d", len(args))
 
 	rows, err := s.Pool.Query(ctx, query, args...)
 	if err != nil {

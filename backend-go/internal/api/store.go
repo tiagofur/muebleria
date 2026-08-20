@@ -176,7 +176,8 @@ type Store interface {
 	UpsertStockMin(ctx context.Context, kind domain.StockMaterialKind, materialID string, minStock float64) (domain.MaterialStock, error)
 	RecordStockMovement(ctx context.Context, mov domain.StockMovement) (domain.StockMovement, error)
 	GetStockMovementByID(ctx context.Context, id string) (*domain.StockMovement, error)
-	ListStockMovements(ctx context.Context, kind domain.StockMaterialKind, materialID string, limit int) ([]domain.StockMovement, error)
+	GetStockMovementByRevertsID(ctx context.Context, revertsID string) (*domain.StockMovement, error)
+	ListStockMovements(ctx context.Context, kind domain.StockMaterialKind, materialID string, projectID string, limit int) ([]domain.StockMovement, error)
 
 	// Compras/Almacén suppliers + purchase orders (Fase 3c).
 	ListSuppliers(ctx context.Context) ([]domain.Supplier, error)

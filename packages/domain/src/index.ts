@@ -466,6 +466,7 @@ export {
   PICKING_MATERIALS,
   PICKING_STATUS_LABELS_ES,
   pickingKey,
+  activeDespachosFor,
   computeWarehouseDashboardStats,
   type PickingMaterial,
   type PickingStatus,

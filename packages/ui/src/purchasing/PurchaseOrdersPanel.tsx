@@ -229,6 +229,18 @@ export function PurchaseOrdersPanel({
 
   const submitReceive = (): void => {
     if (!receiveModal) return;
+    for (const it of receiveModal.items) {
+      const q = receiveQtys[`${it.kind}:${it.materialId}`] ?? 0;
+      if (q < 0) {
+        setError('Las cantidades no pueden ser negativas');
+        return;
+      }
+      const rem = poRemaining(it);
+      if (q > rem + 1e-6) {
+        setError(`La cantidad a recibir de ${it.materialId} no puede superar lo pendiente (${formatQty(rem)})`);
+        return;
+      }
+    }
     const lines = receiveModal.items
       .map((it) => ({
         kind: it.kind,
@@ -827,6 +839,7 @@ export function PurchaseOrdersPanel({
                   <input
                     type="number"
                     min={0}
+                    max={remaining}
                     step="any"
                     value={receiveQtys[`${it.kind}:${it.materialId}`] ?? 0}
                     onChange={(e) =>

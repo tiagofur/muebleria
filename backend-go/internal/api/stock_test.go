@@ -344,6 +344,14 @@ func TestStock_MovementDespachoReversalCreditsBack(t *testing.T) {
 	if reversion.RevertsID == nil || *reversion.RevertsID != despacho.ID {
 		t.Fatalf("reversión must link the original: %#v", reversion)
 	}
+	// Reverting twice → 409 Conflict.
+	if code := post(`{"kind":"herrajes","material_id":"h1","type":"despacho","quantity":4,"reverts_id":"` + despacho.ID + `"}`); code != http.StatusConflict {
+		t.Fatalf("revert twice: status %d want 409", code)
+	}
+	// Reverting with non-matching quantity → 400.
+	if code := post(`{"kind":"herrajes","material_id":"h1","type":"despacho","quantity":100,"reverts_id":"sm-999"}`); code != http.StatusNotFound {
+		t.Fatalf("revert unknown: %d", code)
+	}
 }
 
 func TestStock_MovementReversalRejectsNonDespachoOrMismatch(t *testing.T) {
@@ -365,6 +373,10 @@ func TestStock_MovementReversalRejectsNonDespachoOrMismatch(t *testing.T) {
 	// Reverting an entrada (not a despacho) → 400.
 	if code := post(`{"kind":"herrajes","material_id":"h1","type":"despacho","quantity":5,"reverts_id":"sm-1"}`); code != http.StatusBadRequest {
 		t.Fatalf("revert non-despacho: %d", code)
+	}
+	// Reverting with type entrada when reverts_id is set → 400.
+	if code := post(`{"kind":"herrajes","material_id":"h1","type":"entrada","quantity":5,"reverts_id":"sm-1"}`); code != http.StatusBadRequest {
+		t.Fatalf("revert with type entrada: %d", code)
 	}
 	// Reverting a despacho of a different material → 400.
 	if code := post(`{"kind":"herrajes","material_id":"h1","type":"despacho","quantity":2,"reverts_id":"sm-2"}`); code != http.StatusBadRequest {

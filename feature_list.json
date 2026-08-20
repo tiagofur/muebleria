@@ -2638,7 +2638,7 @@
         "backend-go/internal/storage/purchaseOrders.go",
         "packages/storage/src/localStorageWorkspaceRepository.ts"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "purchasing",
         "stock",
