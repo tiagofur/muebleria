@@ -1,28 +1,21 @@
 # Sesión activa
 
-**Feature:** F124 (`cnc_nesting_engine`) — primera de la serie nesting de corte: F124 (motor) → F125 (DXF) → F126 (UI)
+**Feature:** F125 (`dxf_cut_plan_export`) — serie nesting de corte: F124 ✅ → **F125** → F126
 **Estado:** in_progress
 **Fecha:** 2026-08-20
 
 ## Objetivo
 
-Habilitar corte CNC nesting diferenciado del corte con sierra, conforme al plan acordado con el dueño del producto:
-
-1. **F124 (esta feature):** `CutStrategy` en el dominio + motor MaxRects no-guillotina (`optimizer/nesting.ts`) que mezcla piezas grandes y chicas con espaciado de herramienta (`toolSpacingMm`) en vez de kerf. Dispatch por estrategia en `optimizeCutPlan` (default sierra = comportamiento actual intacto).
-2. **F125:** writer DXF R12 ASCII en `packages/excel` (variantes tableros nesteados / piezas sueltas).
-3. **F126:** UI — selector de tipo de corte + export exclusivo por modo (sierra → XLSX+PDF; nesting → DXF).
-
-**Decisión de producto registrada:** D5 (production-module.md) revisada 2026-08-20 — nesting nativo habilitado por pedido explícito; Optimizer.xlsx sigue siendo la verdad de corte para sierra; DXF es la salida CNC. D6 (sin post-procesadores de marca) sigue vigente.
-
-## Plan F124
-
-- `optimizer/types.ts`: `CutStrategy`, `DEFAULT_TOOL_SPACING_MM = 8`, `CutPlanConfig.cutStrategy?` + `toolSpacingMm?`, `CutPlanSheet.strategy?` (todo opcional → retrocompatible con `Project.cutPlan` persistido).
-- Extraer `unrollRows`/`PieceToPlace` a `optimizer/pieces.ts` (compartido guillotine/nesting, sin ciclo).
-- `optimizer/nesting.ts`: `packSingleSheetMaxRects` (Best Short Side Fit, split de rectángulos libres maximalistas, spacing infla el rect usado en +X/+Y) + `optimizeSingleMaterialNesting`.
-- `guillotine.ts`: dispatch en `optimizeSingleMaterial` cuando `cutStrategy === 'cnc-nesting'`; `buildSheetModels` registra `strategy` (default saw).
-- Tests `nesting.test.ts`: invariantes (sin solapes, bounds con trims, spacing, veta grain=1 nunca rota, todo colocado), strategy/instructions vacías, fixture determinista kerf 12 vs spacing 4 donde nesting gana un tablero, y backward-compat del default.
+Writer DXF R12 ASCII en `packages/excel` que serializa un `CutPlan` generado con estrategia `cnc-nesting` (F124). Dos variantes: `sheets` (tableros nesteados en fila, referencia CAM) y `pieces` (piezas sueltas para software de nesting externo). Capas TABLERO/PIEZA/ETIQUETA/VETA/PERF/RETAZO.
 
 ## Bitácora
 
-- [14:10] Entorno `./init.sh` verde. F122 (terminado, verificado) estaba sin commitear → commit aparte `fc02f62` para no mezclar features.
-- [14:15] F124-F126 registradas en feature_list.json. F123 (hardening Compras) sigue pending — no es parte de esta serie.
+- [14:46] F124 cerrada (done + history + push). F125 in_progress.
+- [14:48] `dxfCutPlanExport.ts` escrito (sin deps nuevas): pares código-valor R12, POLYLINE cerrada por contorno, TEXT con sanitización ASCII (map á/é/ñ/×/·…, ≤250), flecha de veta en VETA, círculos PERF, retazos útiles en RETAZO. Exportado desde `@muebles/excel`.
+- [14:48] Golden fixtures generados (UPDATE_GOLDEN=1) + 7 tests: golden sheets/pieces, estructura R12, conteos por capa, ASCII, ValidationError.
+- [14:52] Excel 79/79 verde; suite completa 2333 verde; typecheck 7 workspaces.
+- [14:55] Review F125: código aprobado (validó DXF con parser propio). Bloqueantes de proceso: falta push + esta bitácora stale. Observación adoptada: PERF ahora filtra a caras proyectables (`front`/`back`) — agujeros de canto no proyectan al plano 2D; test cubre con hole `face:'left'` que no se dibuja.
+
+## Próximo paso
+
+Cerrar F125 (push + done + history) y arrancar F126 (UI): leer `docs/design.md` completo antes de tocar `.tsx`.

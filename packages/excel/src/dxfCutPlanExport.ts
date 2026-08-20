@@ -11,7 +11,9 @@
  * VETA (grain direction), PERF (drilling circles), RETAZO (useful remnants).
  * Units are millimeters, Y axis up, origin at each block's bottom-left corner.
  * Drilling holes are projected on the piece plane for non-rotated pieces only
- * (rotated hole mirroring is undefined without a machine-side convention).
+ * (rotated hole mirroring is undefined without a machine-side convention), and
+ * only for faces parallel to the piece plane ('front'/'back') — edge-drilled
+ * holes (top/bottom/left/right) do not project onto the 2D contour.
  */
 
 import type {
@@ -42,6 +44,8 @@ const PIECES_ROW_MAX_MM = 6000;
 const PIECES_GAP_MM = 100;
 const LABEL_HEIGHT_MM = 30;
 const LABEL_LINE_STEP_MM = 38;
+
+const PROJECTED_DRILLING_FACES: ReadonlySet<string> = new Set(['front', 'back']);
 
 const ASCII_MAP: Record<string, string> = {
   á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ü: 'u', ñ: 'n',
@@ -160,6 +164,7 @@ function drawPiece(
     const pattern = drillingByPiece.get(p.partCode);
     if (pattern) {
       for (const hole of pattern.holes) {
+        if (!PROJECTED_DRILLING_FACES.has(hole.face)) continue;
         entities.push(circle('PERF', x + hole.xMm, y + hole.yMm, hole.diameterMm / 2));
       }
     }
