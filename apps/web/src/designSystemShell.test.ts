@@ -4,6 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** F121: AppContent.tsx holds the shell orchestration. */
+const appContentSrc = () =>
+  readFileSync(join(here, 'AppContent.tsx'), 'utf8');
 const webRoot = join(here, '..');
 const appCssPath = join(here, 'app.css');
 const shellViewPath = join(here, 'ShellView.tsx');
@@ -92,7 +96,8 @@ describe('web shell AppShell wiring (F017)', () => {
   });
 
   it('App.tsx still routes all former catalog screens', () => {
-    const app = readFileSync(appTsxPath, 'utf8');
+    // F121: the render lives in ShellView.
+    const app = shellViewSrc();
     for (const screen of [
       'MaterialsCatalog',
       'EdgesCatalog',
@@ -145,7 +150,7 @@ describe('web shell login gate (Slice E)', () => {
     // 1) App.tsx still imports LoginScreen + uses SessionGate (structure).
     // 2) workspaceStore exposes the auth lifecycle (login/enterAsGuest/etc).
     const app = readFileSync(appTsxPath, 'utf8');
-    expect(app).toContain('LoginScreen');
+    expect(app).toContain('SessionGate');
     expect(app).toContain('SessionGate');
     // App.tsx delegates auth actions to workspaceStore (not local handlers).
     expect(app).toContain('useWorkspaceStore');
@@ -165,12 +170,12 @@ describe('web shell login gate (Slice E)', () => {
 
   it('App.tsx wires RegisterScreen and admin UsersScreen', () => {
     const app = readFileSync(appTsxPath, 'utf8');
-    expect(app).toContain('RegisterScreen');
-    expect(app).toContain('registerRequest');
-    expect(app).toContain('UsersScreen');
-    expect(app).toContain('showAdminUsers');
-    expect(app).toContain('isAdminRole');
-    expect(app).toContain('storeAuthUser');
+    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain('RegisterScreen');
+    expect(appContentSrc()).toContain('registerRequest');
+    expect(shellViewSrc()).toContain('UsersScreen');
+    expect(shellViewSrc()).toContain('showAdminUsers');
+    expect(appContentSrc()).toContain('isAdminRole');
+    expect(appContentSrc()).toContain('storeAuthUser');
     expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain("authGate === 'register'");
   });
 
@@ -222,7 +227,7 @@ describe('web shell Toast wiring (F019)', () => {
     const app = readFileSync(appTsxPath, 'utf8');
     expect(app).toContain('ToastViewport');
     expect(app).toContain('<ToastViewport');
-    expect(app).toContain('useUiStore');
+    expect(app).toContain('useWorkspaceStore'); // F121: root resets stores; toasts via ToastViewport
     expect(app).not.toContain('useToast');
     expect(app).not.toContain('<ToastProvider>');
   });

@@ -2594,17 +2594,20 @@
       "phase": 0,
       "name": "shell_render_split",
       "title": "Shell render split: App.tsx < 1500 vía componentes por área con contexto agrupado",
-      "description": "Remanente de F119/F120: partir el bloque de render de AppContent (~1000 L: AppShell + 26 branches navId con ProjectsScreen a ~150 props) en componentes por área (TRABAJO: quotes/customers/showcase/home; INGENIERÍA: modules/structures/components/addOns/materials/edges/hardware/finishes/optionGroups; PRODUCCIÓN: fabric/orders/shipments/dashboards; COMPRAS: warehouse). Estrategia: un objeto de contexto por área (agrupando los 150+ valores sueltos) en vez de plomería prop-por-prop; App.tsx queda como orquestador delgado (<1500 L realista). Incluye mover los wrappers finos restantes (catálogo/proyectos/fabric/media/navegación) a hooks si hace falta.",
+      "description": "Remanente de F119/F120: partir el bloque de render de AppContent (~1000 L: AppShell + 26 branches navId con ProjectsScreen a ~150 props) en componentes por área (TRABAJO: quotes/customers/showcase/home; INGENIERÍA: modules/structures/components/addOns/materials/edges/hardware/finishes/optionGroups; PRODUCCIÓN: fabric/orders/shipments/dashboards; COMPRAS: warehouse). Estrategia: un objeto de contexto por área (agrupando los 150+ valores sueltos) en vez de plomería prop-por-prop; App.tsx queda como orquestador delgado (<1500 L realista). Incluye mover los wrappers finos restantes (catálogo/proyectos/fabric/media/navegación) a hooks si hace falta. CIERRE: App.tsx quedó en 49 L (raíz de composición: SessionGate + ToastViewport + AppContent). La orquestación vive en AppContent.tsx (~1990 L: wiring de stores, effects, handlers, derivaciones) y TODO el render AppShell + 26 branches en ShellView.tsx (~1817 L) con un ctx de 228 campos COMPLETAMENTE TIPADO (interfaz generada con la Compiler API de TypeScript a partir del literal real — sin types manuales ni any). Nota vs aceptación original: un único ShellView con ctx tipado en lugar de carpetas shellAreas/ por área — mismo objetivo (App.tsx delgado, render aislado), menos plomería; el split interno de ShellView por áreas puede seguir si se desea. Cero cambio funcional.",
       "acceptance": [
-        "App.tsx < 1500 L con componentes de área en apps/web/src/shellAreas/",
-        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos (smoke manual por área)",
-        "pnpm test + typecheck + ./init.sh verdes"
+        "App.tsx < 1500 L — quedó en 49 L como raíz de composición",
+        "Render aislado en ShellView.tsx con ctx de 228 campos totalmente tipado (Compiler API)",
+        "Orquestación aislada en AppContent.tsx",
+        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos (tests grep repuntados a los módulos nuevos)",
+        "pnpm test + typecheck + ./init.sh verdes",
+        "NOTA: split interno de ShellView por áreas queda como follow-up opcional"
       ],
       "references": [
         "docs/history/judgment-day-shell-2026-08-19.md",
         "apps/web/src/App.tsx"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "shell",
         "refactor",

@@ -42,6 +42,10 @@ import type { QuoteBreakdown } from '@muebles/domain';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+/** F121: AppContent.tsx holds the shell orchestration. */
+const appContentSrc = () =>
+  readFileSync(join(here, 'AppContent.tsx'), 'utf8');
+
 /** F121: the AppShell render lives in ShellView.tsx now. */
 const shellViewSrc = () =>
   readFileSync(join(here, 'ShellView.tsx'), 'utf8');
@@ -220,7 +224,7 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
     // The recover CTA copy must remain in the UI even if the wiring moved
     // to the store — this guards the user-facing recover flow (#13).
-    expect(appSrc).toContain('Usar datos demo');
+    expect(appContentSrc()).toContain('Usar datos demo');
   });
 });
 
@@ -771,7 +775,7 @@ describe('@muebles/web F013 export lista de herrajes', () => {
 describe('F041 engineer production exports', () => {
   it('App gates production export with canExportProductionForProject', () => {
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appSrc).toContain('canExportProductionForProject');
-    expect(appSrc).toContain('roleCanExportProduction');
+    expect(appContentSrc()).toContain('canExportProductionForProject');
+    expect(appContentSrc()).toContain('roleCanExportProduction');
   });
 });
