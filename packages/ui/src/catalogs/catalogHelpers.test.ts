@@ -22,15 +22,17 @@ describe('normalizeCode', () => {
   });
 });
 
-describe('findActiveCodeConflict / validateUniqueCode (CAT-04)', () => {
+describe('findActiveCodeConflict / validateUniqueCode (CAT-04 + F116 C2)', () => {
   it('detects conflict among active items (case-insensitive)', () => {
     const conflict = findActiveCodeConflict('tab-ara-bla', items);
     expect(conflict?.id).toBe('1');
   });
 
-  it('ignores inactive items with same code', () => {
-    expect(findActiveCodeConflict('TAB-OLD', items)).toBeUndefined();
-    expect(validateUniqueCode('TAB-OLD', items)).toBeNull();
+  it('F116 C2: also rejects the code of an INACTIVE item (matches SQL UNIQUE)', () => {
+    // Reusing an inactive code passed client validation but was rejected by
+    // the server with a swallowed 409 — the new item vanished on refresh.
+    expect(findActiveCodeConflict('TAB-OLD', items)?.id).toBe('3');
+    expect(validateUniqueCode('TAB-OLD', items)).toMatch(/Ya existe/);
   });
 
   it('allows same code when editing the same id', () => {
@@ -40,7 +42,7 @@ describe('findActiveCodeConflict / validateUniqueCode (CAT-04)', () => {
 
   it('returns Spanish error for duplicate active code', () => {
     const err = validateUniqueCode('TAB-MAD-FRE', items);
-    expect(err).toMatch(/Ya existe un ítem activo/);
+    expect(err).toMatch(/Ya existe un ítem/);
     expect(err).toMatch(/TAB-MAD-FRE/);
   });
 

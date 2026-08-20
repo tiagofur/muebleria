@@ -26,8 +26,11 @@ export function normalizeCode(code: string): string {
 }
 
 /**
- * CAT-04: no two *active* entities of the same type may share a code.
- * Inactive codes may be reused by a new/edited active item.
+ * CAT-04 + F116 C2: no two entities of the same type may share a code,
+ * matching the SQL `UNIQUE(code)` constraint. Reusing the code of a
+ * deactivated item would pass this check and then be silently rejected by
+ * the server (409 swallowed as success = data loss), so inactive codes are
+ * included too. Reactivate the old item instead of recreating it.
  */
 export function findActiveCodeConflict(
   code: string,
@@ -37,10 +40,7 @@ export function findActiveCodeConflict(
   const normalized = normalizeCode(code);
   if (!normalized) return undefined;
   return items.find(
-    (item) =>
-      item.active &&
-      item.id !== excludeId &&
-      normalizeCode(item.code) === normalized,
+    (item) => item.id !== excludeId && normalizeCode(item.code) === normalized,
   );
 }
 
@@ -59,7 +59,7 @@ export function validateUniqueCode(
   }
   const conflict = findActiveCodeConflict(trimmed, items, excludeId);
   if (conflict) {
-    return `Ya existe un ítem activo con el código "${conflict.code}".`;
+    return `Ya existe un ítem con el código "${conflict.code}" (activos e inactivos). Reactivalo si querés reutilizarlo.`;
   }
   return null;
 }

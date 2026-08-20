@@ -358,7 +358,7 @@ describe('APIWorkspaceRepository', () => {
     expect(methods.some((m) => m.startsWith('POST'))).toBe(true);
   });
 
-  it('saveCatalog treats PUT 409 conflict as already exists (no POST, no error)', async () => {
+  it('F116 C2: saveCatalog rejects on PUT 409 conflict (code collision surfaces)', async () => {
     const methods: string[] = [];
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(fetch).mockImplementation(async (input, init) => {
@@ -376,37 +376,41 @@ describe('APIWorkspaceRepository', () => {
     });
 
     const repo = new APIWorkspaceRepository();
-    await repo.saveCatalog({
-      materials: [
-        {
-          id: 'dup-id',
-          code: 'DUP',
-          name: 'Dup',
-          widthMm: 100,
-          lengthMm: 200,
-          thicknessMm: 15,
-          grainDefault: false,
-          boardPrice: 10,
-          wastePercent: 0,
-          costPerM2: 1,
-          active: true,
-        },
-      ],
-      edges: [],
-      hardware: [],
-      optionGroups: [],
-      modules: [],
-      categories: [],
-      customers: [],
-    });
+    // The conflict must reject so the shell can surface an error instead of
+    // claiming success over data the server never accepted (F116 C2).
+    await expect(
+      repo.saveCatalog({
+        materials: [
+          {
+            id: 'dup-id',
+            code: 'DUP',
+            name: 'Dup',
+            widthMm: 100,
+            lengthMm: 200,
+            thicknessMm: 15,
+            grainDefault: false,
+            boardPrice: 10,
+            wastePercent: 0,
+            costPerM2: 1,
+            active: true,
+          },
+        ],
+        edges: [],
+        hardware: [],
+        optionGroups: [],
+        modules: [],
+        categories: [],
+        customers: [],
+      }),
+    ).rejects.toThrow(/conflict/i);
 
     expect(methods.filter((m) => m.startsWith('PUT'))).toHaveLength(1);
-    // No POST should follow a conflict: the entity already exists.
+    // No POST should follow a conflict.
     expect(methods.some((m) => m.startsWith('POST'))).toBe(false);
-    expect(errSpy).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalled();
   });
 
-  it('saveCatalog treats POST 409 conflict as already exists (no error logged)', async () => {
+  it('F116 C2: saveCatalog rejects on POST 409 conflict (silent data loss fixed)', async () => {
     const methods: string[] = [];
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(fetch).mockImplementation(async (input, init) => {
@@ -431,22 +435,22 @@ describe('APIWorkspaceRepository', () => {
     });
 
     const repo = new APIWorkspaceRepository();
-    await repo.saveCatalog({
-      materials: [],
-      edges: [],
-      hardware: [],
-      optionGroups: [],
-      modules: [],
-      categories: [],
-      customers: [
-        { id: 'dup-cust', name: 'Dup', active: true },
-      ],
-    });
+    await expect(
+      repo.saveCatalog({
+        materials: [],
+        edges: [],
+        hardware: [],
+        optionGroups: [],
+        modules: [],
+        categories: [],
+        customers: [
+          { id: 'dup-cust', name: 'Dup', active: true },
+        ],
+      }),
+    ).rejects.toThrow(/create failed/i);
 
     expect(methods.some((m) => m.startsWith('PUT') && m.includes('/customers/'))).toBe(true);
     expect(methods.some((m) => m.startsWith('POST') && m.includes('/customers'))).toBe(true);
-    // Conflict is not an error: console stays clean.
-    expect(errSpy).not.toHaveBeenCalled();
   });
 
   it('saveCatalog PUTs agregados body', async () => {

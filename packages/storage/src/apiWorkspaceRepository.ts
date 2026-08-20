@@ -352,11 +352,11 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
    * Upsert entity: PUT by id; only POST when missing (404) or transport error.
    * Avoids POST-on-500 which caused duplicate-key / cascade noise.
    *
-   * Conflict handling: a 409 (or 400 with a duplicate-key message) from either
-   * PUT or POST means the entity already exists — the upsert's goal is met, so
-   * it returns silently instead of logging an error. This keeps the console
-   * clean when React re-invokes saves (StrictMode double-fire, re-renders) or
-   * when demo/seed data overlaps existing rows.
+   * Conflict handling (F116 C2): a 409 (or 400 with a duplicate-key message)
+   * from either PUT or POST means the payload's code collides with another
+   * row. It is rethrown so saveCatalog rejects and the shell surfaces an
+   * error — swallowing it made the UI claim "✓ creado" for entities the
+   * server never accepted (they vanished on refresh).
    */
   private async upsert(
     pathById: string,
@@ -377,8 +377,11 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (res?.ok) return;
 
     const putBody = res ? await res.text().catch(() => '') : '';
-    // Already exists → upsert goal met, nothing more to do.
-    if (res && isConflict(res.status, putBody)) return;
+    if (res && isConflict(res.status, putBody)) {
+      const msg = `API upsert conflict ${pathById}: el código ya existe en el servidor`;
+      console.error(msg);
+      throw new Error(msg);
+    }
 
     const missing =
       !res ||
@@ -404,12 +407,9 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       });
       if (!created.ok) {
         const text = await created.text().catch(() => '');
-        // Conflict on POST = already created concurrently → treat as success.
-        if (!isConflict(created.status, text)) {
-          const msg = `API create failed ${pathCollection}: ${created.status} ${text}`;
-          console.error(msg);
-          throw new Error(msg);
-        }
+        const msg = `API create failed ${pathCollection}: ${created.status} ${text}`;
+        console.error(msg);
+        throw new Error(msg);
       }
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('API create failed')) {
