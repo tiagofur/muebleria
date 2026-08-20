@@ -273,6 +273,7 @@ import {
   type PurchasingState,
 } from './stores';
 import { SessionGate } from './SessionGate';
+import { ShellView } from './ShellView';
 import { ToastViewport } from './components/ToastViewport';
 import { BoardEditor } from './components/BoardEditor';
 
@@ -1748,1048 +1749,236 @@ function AppContent({
     );
   }
 
-  return (
-    <AppShell
-      activeId={navId}
-      onNavigate={onNavigate}
-      hrefForNav={pathForNav}
-      onLogout={onLogout}
-      sessionMode={session}
-      user={
-        authUser ? { email: authUser.email, role: authUser.role } : null
-      }
-      showAdminUsers={showAdminUsers}
-      allowedNavIds={allowedNavIds}
-      commandItems={commandItems}
-      onCommandItem={onCommandItem}
-    >
-      {navId === 'home' ? (
-        <Dashboard
-          stats={dashboardStats}
-          recentProjects={dashboardRecent}
-          projectsCount={projects.length}
-          onOpenProject={onDashboardOpenProject}
-          onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
-          onNewModule={canMutateModules ? onDashboardNewModule : undefined}
-          onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
-          ownerBreakdown={dashboardOwnerBreakdown}
-          homeMode={dashboardHomeMode}
-          analytics={workshopAnalytics}
-          analyticsPeriod={analyticsPeriod}
-          onAnalyticsPeriodChange={
-            workshopAnalytics ? setAnalyticsPeriod : undefined
-          }
-          analyticsLoading={warrantyTickets === null}
-          onOpenShowcase={
-            dashboardHomeMode === 'sales'
-              ? onDashboardOpenShowcase
-              : undefined
-          }
-          onOpenMaterials={
-            dashboardHomeMode === 'engineering'
-              ? onDashboardOpenMaterials
-              : undefined
-          }
-          onOpenModules={
-            dashboardHomeMode === 'engineering'
-              ? onDashboardOpenModules
-              : undefined
-          }
-          modulesWithoutPhotoCount={
-            dashboardHomeMode === 'engineering'
-              ? modulesWithoutPhotoCount
-              : undefined
-          }
-        />
-      ) : null}
-      {navId === 'production' && canOpenFabric ? (
-        <ScreenBoundary screenLabel="Producción" onGoHome={goHomeFromScreen}>
-        <FabricScreen
-          projects={projectsForRole}
-          assignedSectors={isSectorScoped ? mySectors : null}
-          metrics={isSectorScoped ? undefined : fabricMetrics}
-          canAdvance={
-            session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
-          }
-          onAdvance={handleFloorAdvance}
-          customerLabelFor={(customerId) =>
-            resolveCustomerName(customerId, customers)
-          }
-          moduleLabelFor={moduleLabelForFabric}
-          metricsByProject={fabricMetricsByProject}
-          pickingStates={pickingStates ?? []}
-          activeClaims={fabricActiveClaims}
-          onClaim={session === 'auth' ? handleFabricClaim : undefined}
-          onFinish={session === 'auth' ? handleFabricFinish : undefined}
-          onAdvanceBatch={handleFabricBatchAdvance}
-          confirmBatchMessage={fabricBatchConfirmMessage}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'shipments' && roleCanAccessEmbarquesNav(actorRole) ? (
-        <ScreenBoundary screenLabel="Embarques" onGoHome={goHomeFromScreen}>
-        {routeShipmentProjectId ? (() => {
-          const shipmentProject = projectsForRole.find(
-            (p) => p.id === routeShipmentProjectId,
-          );
-          if (!shipmentProject) {
-            return (
-              <EmptyState
-                title="Obra no encontrada"
-                description="Esa obra no está en embarques o no tenés acceso."
-                actionLabel="Volver a Embarques"
-                onAction={() => navigate(pathForNav('shipments'))}
-              />
-            );
-          }
-          return (
-            <EmbarquesProjectDetail
-              project={shipmentProject}
-              modules={modules}
-              catalog={catalog}
-              customerName={resolveCustomerName(
-                shipmentProject.customerId,
-                customers,
-              )}
-              onSetFloorStatus={
-                session === 'auth'
-                  ? (itemId, status) =>
-                      handleFloorAdvance(shipmentProject.id, itemId, status)
-                  : undefined
-              }
-              canSetFloorStatus={
-                session === 'auth' &&
-                roleCanAccessEmbarquesNav(actorRole)
-              }
-              onReleaseToDelivery={() => {
-                void handleReleaseToDelivery(shipmentProject.id);
-              }}
-              canReleaseToDelivery={
-                session === 'auth' &&
-                roleCanAccessEmbarquesNav(actorRole)
-              }
-              onBack={() => navigate(pathForNav('shipments'))}
-            />
-          );
-        })() : (
-          <EmbarquesScreen
-            projects={projectsForRole}
-            customerLabelFor={(customerId) =>
-              resolveCustomerName(customerId, customers)
-            }
-            onOpenProject={(id) => {
-              const target = shipmentDetailPath(id);
-              if (location.pathname !== target) navigate(target);
-            }}
-          />
-        )}
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'installations' && roleCanAccessShippingNav(actorRole) ? (
-        <ScreenBoundary screenLabel="Instalaciones" onGoHome={goHomeFromScreen}>
-        <InstalacionesScreen
-          projects={projectsForRole}
-          canAdvance={
-            session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
-          }
-          onAdvance={handleFloorAdvance}
-          customerFor={(customerId) =>
-            customers.find((customer) => customer.id === customerId)
-          }
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'engineeringDashboard' ? (
-        <ScreenBoundary screenLabel="Dashboard de Ingeniería" onGoHome={goHomeFromScreen}>
-        <EngineeringDashboard
-          projects={projectsForRole.map((p) => ({
-            ...p,
-            customerLabel: resolveCustomerName(p.customerId, customers),
-          }))}
-          onOpenProject={(id) => {
-            const target = engineeringProjectPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-          onOpenQueue={() => {
-            const target = pathForNav('engineering');
-            if (location.pathname !== target) navigate(target);
-          }}
-          assignableEngineers={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
-          engineerLabels={ownerLabels}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'engineering' && !routeEngineeringProjectId ? (
-        <ScreenBoundary screenLabel="Ingeniería" onGoHome={goHomeFromScreen}>
-        <EngineeringScreen
-          projects={projectsForRole.map((p) => ({
-            ...p,
-            customerLabel: resolveCustomerName(p.customerId, customers),
-          }))}
-          onStartEngineering={startEngineering}
-          onOpenProject={(id) => {
-            const target = engineeringProjectPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-          onOpenDashboard={() => {
-            const target = pathForNav('engineeringDashboard');
-            if (location.pathname !== target) navigate(target);
-          }}
-          currentUserId={authUser?.id}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'engineering' && routeEngineeringProjectId ? (
-        <ScreenBoundary screenLabel="Ingeniería" onGoHome={goHomeFromScreen}>
-        {(() => {
-        const engProject = projects.find((p) => p.id === routeEngineeringProjectId);
-        if (!engProject) {
-          return (
-            <EmptyState
-              icon={FileQuestion}
-              title="Proyecto no encontrado"
-              description="Puede haberse eliminado o el enlace es de otra obra."
-              actionLabel="Volver a Ingeniería"
-              onAction={() => navigate(pathForNav('engineering'))}
-            />
-          );
-        }
-        const engModules = modules.filter((m) =>
-          engProject.items.some((item) => item.moduleId === m.id),
-        );
-        let engCutRows: ReturnType<typeof generateCutRows> | null = null;
-        let engCutError: string | null = null;
-        if (catalog) {
-          try {
-            engCutRows = generateCutRows(engProject, catalog);
-          } catch (err) {
-            engCutError = err instanceof Error ? err.message : 'Error al resolver despiece';
-          }
-        }
-        const engReadiness = buildProductionOrderReadiness({
-          project: engProject,
-          cutRows: engCutRows,
-          cutListError: engCutError,
-        });
-        let engLabels: ReturnType<typeof generatePieceLabels> | null = null;
-        let engLabelsError: string | null = null;
-        let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
-        let engModuleLabelsError: string | null = null;
-        if (catalog) {
-          try {
-            engLabels = generatePieceLabels(engProject, catalog);
-          } catch (err) {
-            engLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
-          }
-          try {
-            engModuleLabels = generateModuleLabels(engProject, catalog, {
-              customerName: resolveCustomerName(engProject.customerId, customers),
-              revision: engProject.production?.revision?.toString(),
-            });
-          } catch (err) {
-            engModuleLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas de módulo';
-          }
-        }
-        let engHardwareRows: ReturnType<typeof generateHardwareList> | null = null;
-        let engHardwareError: string | null = null;
-        if (catalog) {
-          try {
-            engHardwareRows = generateHardwareList(engProject, catalog);
-          } catch (err) {
-            engHardwareError = err instanceof Error ? err.message : 'Error al resolver herrajes';
-          }
-        }
-        return (
-          <EngineeringWorkspace
-            project={engProject}
-            modules={engModules}
-            catalog={catalog}
-            catalog3d={
-              catalog
-                ? {
-                    modules,
-                    structures,
-                    components,
-                    agregados,
-                    materials,
-                    edges,
-                    hardware,
-                    optionGroups,
-                    ambientMaterials,
-                    ambientCategories,
-                  }
-                : null
-            }
-            cutRows={engCutRows}
-            cutError={engCutError}
-            readiness={engReadiness}
-            labels={engLabels}
-            labelsError={engLabelsError}
-            moduleLabels={engModuleLabels}
-            moduleLabelsError={engModuleLabelsError}
-            hardwareRows={engHardwareRows}
-            hardwareError={engHardwareError}
-            customerLabel={resolveCustomerName(engProject.customerId, customers)}
-            onBack={() => navigate(pathForNav('engineering'))}
-            resolveMediaUrl={resolveMediaUrl}
-            onExportModulePdf={(labels) => { void handleExportModuleLabels(engProject.id, { labels }); }}
-            onExportHardware={() => { void handleExportHardwareList(engProject.id); }}
-            onExportElevations={() => { void handleExportElevations(engProject.id); }}
-            onExportOptimizer={() => { void handleExportOptimizer(engProject.id); }}
-            onExportProductionPack={() => { void handleExportProductionPack(engProject.id); }}
-            onExportCutListCsv={() => { void handleExportCutListCsv(engProject.id); }}
-            onExportPieceLabels={(lbls, opts) => { void handleExportPieceLabels(engProject.id, { labels: lbls, perUnit: opts.perUnit }); }}
-            onExportModuleLabels={(lbls) => { void handleExportModuleLabels(engProject.id, { labels: lbls }); }}
-            onExportAssemblySheets={() => { void handleExportAssemblySheets(engProject.id); }}
-            onExportCncPilot={() => { void handleExportCncPilot(engProject.id); }}
-            onExportDespiecePdf={() => { void handleExportDespiecePdf(engProject.id); }}
-            onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
-            onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
-            canImportNesting={canMarkProduced || roleCanExportProduction(actorRole)}
-            onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
-            exportBusy={exportBusy}
-            onSendToProduction={() => {
-              if (!catalog) return;
-              projectActions.sendProjectToProduction(
-                engProject.id,
-                authUser?.id ?? 'unknown',
-                catalog,
-              );
-            }}
-            onMarkDocumented={() => {
-              projectActions.recordEngineeringGeneration(
-                engProject.id,
-                authUser?.id ?? 'unknown',
-              );
-            }}
-          />
-        );
-        })()}
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'warehouseDashboard' ? (
-        <ScreenBoundary screenLabel="Dashboard de Almacén" onGoHome={goHomeFromScreen}>
-        <WarehouseDashboard
-          projects={warehouseProjects}
-          stock={stockRows}
-          purchaseOrders={purchaseOrders}
-          initialPicking={pickingStates}
-          onOpenQueue={() => {
-            const target = pathForNav('warehouse');
-            if (location.pathname !== target) navigate(target);
-          }}
-          onOpenProject={(_id) => {
-            const target = pathForNav('warehouse');
-            if (location.pathname !== target) navigate(target);
-          }}
-          materialLabels={stockCatalog.labels}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'warehouse' ? (
-        <ScreenBoundary screenLabel="Compras y Almacén" onGoHome={goHomeFromScreen}>
-        <PurchasingScreen
-          projects={purchasingProjects}
-          role={actorRole ?? null}
-          assignedSectors={mySectors}
-          initialPicking={pickingStates}
-          onTogglePick={handleTogglePick}
-          onOpenDashboard={() => {
-            const target = pathForNav('warehouseDashboard');
-            if (location.pathname !== target) navigate(target);
-          }}
-          onReleaseMaterials={(projectId) =>
-            projectActions.releaseProjectMaterials(
-              projectId,
-              authUser?.id ?? 'unknown',
-            )
-          }
-          stock={stockRows}
-          stockMovements={stockMovements}
-          stockLabels={stockCatalog.labels}
-          stockCatalogOptions={stockCatalog.options}
-          materialIdByCode={stockCatalog.materialIdByCode}
-          edgeIdByCode={stockCatalog.edgeIdByCode}
-          stockPrices={stockCatalog.prices}
-          showStockCosts={showCosts}
-          currency={workshopSettings.defaultCurrency ?? undefined}
-          onRecordStockMovement={handleRecordStockMovement}
-          onUpsertStockMin={handleUpsertStockMin}
-          suppliers={suppliers}
-          purchaseOrders={purchaseOrders}
-          onSaveSupplier={handleSaveSupplier}
-          onDeactivateSupplier={handleDeactivateSupplier}
-          onSavePurchaseOrder={handleSavePurchaseOrder}
-          onEmitPurchaseOrder={handleEmitPurchaseOrder}
-          onCancelPurchaseOrder={handleCancelPurchaseOrder}
-          onReceivePurchaseOrder={handleReceivePurchaseOrder}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'salesDashboard' ? (
-        <ScreenBoundary screenLabel="Dashboard de Ventas" onGoHome={goHomeFromScreen}>
-        <SalesDashboard
-          projects={projectsForRole.map((p) => ({
-            ...p,
-            customerLabel: resolveCustomerName(p.customerId, customers),
-          }))}
-          onOpenProject={(id) => {
-            const target = projectPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-          onCancelProject={(id) => projectActions.cancelProject(id)}
-          isVendedor={actorRole === 'vendedor'}
-          currentUserId={authUser?.id}
-          vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
-          ownerLabels={ownerLabels}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'plantBoard' ? (
-        <ScreenBoundary screenLabel="Estado de Planta" onGoHome={goHomeFromScreen}>
-        <PlantBoardScreen
-          projects={projectsForRole}
-          customerLabelFor={(customerId) =>
-            resolveCustomerName(customerId, customers)
-          }
-          onOpenOrder={
-            useProductionWorkspace
-              ? (id) => {
-                  const target = productionOrderPath(id);
-                  if (location.pathname !== target) navigate(target);
-                }
-              : undefined
-          }
-          onOpenProject={(id) => {
-            const target = projectPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'productionDashboard' ? (
-        <ScreenBoundary screenLabel="Panel de producción">
-        <ProductionManagerDashboard
-          projects={projectsForRole}
-          customerLabelFor={(customerId) =>
-            resolveCustomerName(customerId, customers)
-          }
-          onOpenOrder={
-            useProductionWorkspace
-              ? (id) => {
-                  const target = productionOrderPath(id);
-                  if (location.pathname !== target) navigate(target);
-                }
-              : undefined
-          }
-          onOpenProject={(id) => {
-            const target = projectPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-          repo={getRepository()}
-        />
-        </ScreenBoundary>
-      ) : null}
-      {navId === 'orders' && useProductionWorkspace ? (
-        <ProductionWorkspace
-          projects={(filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).filter(isProductionReady)}
-          orderProjectId={routeProductionOrderId}
-          orderTab={routeProductionOrderTab}
-          onOrderTabChange={(tab) => {
-            if (!routeProductionOrderId) return;
-            const target = productionOrderPath(routeProductionOrderId, tab);
-            if (location.pathname !== target) navigate(target);
-          }}
-          onOpenOrder={(id) => {
-            const target = productionOrderPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-          onBackToQueue={() => {
-            const target = pathForNav('orders');
-            if (location.pathname !== target) navigate(target);
-          }}
-          onOpenDesign={(id) => {
-            const target = projectPath(id);
-            if (location.pathname !== target) navigate(target);
-          }}
-          customerLabelFor={(customerId) =>
-            resolveCustomerName(customerId, customers)
-          }
-          salePriceFor={(id) => projectEstimates[id] ?? null}
-          resolveCutRows={(projectId) => {
-            if (!catalog) {
-              return { rows: null, error: 'Catálogo no disponible' };
-            }
-            const project = projects.find((p) => p.id === projectId);
-            if (!project) {
-              return { rows: null, error: 'Proyecto no encontrado' };
-            }
-            try {
-              return { rows: generateCutRows(project, catalog) };
-            } catch (err) {
-              const message =
-                err instanceof Error ? err.message : 'Error al resolver despiece';
-              return { rows: null, error: message };
-            }
-          }}
-          onExportOptimizer={(id) => {
-            void handleExportOptimizer(id);
-          }}
-          onExportHardware={(id) => {
-            void handleExportHardwareList(id);
-          }}
-          onExportPieceLabels={(id, labels, options) => {
-            void handleExportPieceLabels(id, { labels, perUnit: options.perUnit });
-          }}
-          onExportModuleLabels={(id, labels) => {
-            void handleExportModuleLabels(id, { labels });
-          }}
-          onExportProductionPack={(id) => {
-            void handleExportProductionPack(id);
-          }}
-          onExportElevations={(id) => {
-            void handleExportElevations(id);
-          }}
-          onExportCutListCsv={(id) => {
-            void handleExportCutListCsv(id);
-          }}
-          onMarkProduced={markProjectProduced}
-          exportBusy={exportBusy}
-          cutRowsFor={
-            catalog
-              ? (projectId) => {
-                  const project = projects.find((p) => p.id === projectId);
-                  if (!project) return undefined;
-                  try {
-                    return generateCutRows(project, catalog);
-                  } catch {
-                    return undefined;
-                  }
-                }
-              : undefined
-          }
-          resolveHardware={
-            catalog
-              ? (projectId) => {
-                  const project = projects.find((p) => p.id === projectId);
-                  if (!project) {
-                    return { rows: null, error: 'Proyecto no encontrado' };
-                  }
-                  try {
-                    return { rows: generateHardwareList(project, catalog) };
-                  } catch (err) {
-                    return {
-                      rows: null,
-                      error:
-                        err instanceof Error
-                          ? err.message
-                          : 'Error al resolver herrajes',
-                    };
-                  }
-                }
-              : undefined
-          }
-          modules={modules}
-          catalog={catalog}
-          catalog3d={
-            catalog
-              ? {
-                  modules,
-                  structures,
-                  components,
-                  agregados,
-                  materials,
-                  edges,
-                  hardware,
-                  optionGroups,
-                  ambientMaterials,
-                  ambientCategories,
-                }
-              : null
-          }
-          resolveMediaUrl={resolveMediaUrl}
-          hideHardwareCosts={!showCosts}
-          onImportNesting={importNestingResult}
-          canImportNesting={canMutateProjects || canMarkProduced}
-          onSetFloorStatus={(projectId, itemId, status) => {
-            setItemFloorStatus(projectId, itemId, status);
-          }}
-          canSetFloorStatus={
-            session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
-          }
-          onExportCncPilot={(id) => {
-            void handleExportCncPilot(id);
-          }}
-          onExportAssemblySheets={(id) => {
-            void handleExportAssemblySheets(id);
-          }}
-          activeClaims={fabricActiveClaims}
-        />
-      ) : null}
-      {navId === 'materials' ? (
-        <MaterialsCatalog
-          materials={materials}
-          edges={edges}
-          onCreate={createMaterial}
-          onCreateEdge={createEdge}
-          onUpdate={updateMaterial}
-          onDeactivate={(id) => setMaterialActive(id, false)}
-          onReactivate={(id) => setMaterialActive(id, true)}
-          getCostPerM2={getMaterialCostPerM2}
-          openEntityId={routeEntityId}
-          onSelectionChange={(id) => onEntitySelectionChange('materials', id)}
-          requestCreateKey={materialsCreateKey}
-          canMutate={canMutateCatalog}
-          showCosts={showCosts}
-          resolveImageUrl={resolveMediaUrl}
-          onUploadImage={
-            canMutateCatalog && session === 'auth' && authToken
-              ? uploadCatalogImage
-              : undefined
-          }
-        />
-      ) : null}
-      {navId === 'edges' ? (
-        <EdgesCatalog
-          edges={edges}
-          onCreate={createEdge}
-          onUpdate={updateEdge}
-          onDeactivate={(id) => setEdgeActive(id, false)}
-          onReactivate={(id) => setEdgeActive(id, true)}
-          openEntityId={routeEntityId}
-          onSelectionChange={(id) => onEntitySelectionChange('edges', id)}
-          canMutate={canMutateCatalog}
-          showCosts={showCosts}
-        />
-      ) : null}
-      {navId === 'hardware' ? (
-        <HardwareCatalog
-          hardware={hardware}
-          onCreate={createHardware}
-          onUpdate={updateHardware}
-          onDeactivate={(id) => setHardwareActive(id, false)}
-          onReactivate={(id) => setHardwareActive(id, true)}
-          openEntityId={routeEntityId}
-          onSelectionChange={(id) => onEntitySelectionChange('hardware', id)}
-          canMutate={canMutateCatalog}
-          showCosts={showCosts}
-          resolveImageUrl={resolveMediaUrl}
-          onUploadImage={
-            canMutateCatalog && session === 'auth' && authToken
-              ? uploadCatalogImage
-              : undefined
-          }
-        />
-      ) : null}
-      {navId === 'finishes' ? (
-        <AmbientMaterialsCatalog
-          openEntityId={navId === 'finishes' ? routeEntityId : null}
-          onSelectionChange={onFinishesSelectionChange}
-          materials={ambientMaterials}
-          categories={ambientCategories}
-          onCreate={createAmbientMaterial}
-          onUpdate={updateAmbientMaterial}
-          onDeactivate={(id) => setAmbientMaterialActive(id, false)}
-          onReactivate={(id) => setAmbientMaterialActive(id, true)}
-          onCreateCategory={createAmbientCategory}
-          onUpdateCategory={updateAmbientCategory}
-          onDeleteCategory={deleteAmbientCategory}
-          canMutate={canMutateCatalog}
-          resolveImageUrl={resolveMediaUrl}
-          onUploadImage={
-            canMutateCatalog && session === 'auth' && authToken
-              ? uploadCatalogImage
-              : undefined
-          }
-        />
-      ) : null}
-      {navId === 'optionGroups' ? (
-        <OptionGroupsScreen
-          optionGroups={optionGroups}
-          materials={materials}
-          edges={edges}
-          hardware={hardware}
-          modules={modules}
-          catalogComponents={components}
-          catalogStructures={structures}
-          onCreate={createOptionGroup}
-          onUpdate={updateOptionGroup}
-          onDelete={deleteOptionGroup}
-          openEntityId={routeEntityId}
-          onSelectionChange={(id) =>
-            onEntitySelectionChange('optionGroups', id)
-          }
-          canMutate={canMutateCatalog}
-        />
-      ) : null}
-      {navId === 'customers' ? (
-        <CustomersScreen
-          customers={customers}
-          projects={projectsForRole}
-          onOpenProject={(projectId) => {
-            // F118 S4: '/cotizaciones' does not exist in NAV_PATHS — the
-            // guard bounced this to Home. Use the route helper.
-            navigate(projectPath(projectId));
-          }}
-          workshopName={workshopSettings?.workshopName}
-          onCreate={createCustomer}
-          onUpdate={updateCustomer}
-          onDeactivate={(id) => setCustomerActive(id, false)}
-          onReactivate={(id) => setCustomerActive(id, true)}
-          openEntityId={routeEntityId}
-          onSelectionChange={(id) => onEntitySelectionChange('customers', id)}
-          canAssignOwner={canAssignOwner}
-          assignableOwners={assignableOwners}
-          currentUserId={authUser?.id ?? ''}
-          ownerLabels={ownerLabels}
-        />
-      ) : null}
+  const shellViewCtx = {
+    acquirePlanEditSession,
+    actorRole,
+    addProjectItem,
+    agregados,
+    allowedNavIds,
+    ambientCategories,
+    ambientMaterials,
+    analyticsPeriod,
+    applyScenarioB,
+    assignableOwners,
+    authToken,
+    authUser,
+    backendBreakdown,
+    boardOverrides,
+    breakdownError,
+    breakdownLoading,
+    canAssignOwner,
+    canDeleteProjects,
+    canExportProduction,
+    canForceReopenClosed,
+    canMarkProduced,
+    canMutateCatalog,
+    canMutateModules,
+    canMutateProjects,
+    canOpenFabric,
+    canReopenProjects,
+    catalog,
+    categories,
+    changeProjectStatus,
+    commandItems,
+    components,
+    createAgregado,
+    createAmbientCategory,
+    createAmbientMaterial,
+    createCategory,
+    createComponent,
+    createCustomer,
+    createEdge,
+    createFromTemplate,
+    createHardware,
+    createMaterial,
+    createModule,
+    createOptionGroup,
+    createProject,
+    createStructure,
+    customers,
+    dashboardHomeMode,
+    dashboardOwnerBreakdown,
+    dashboardRecent,
+    dashboardStats,
+    deleteAgregado,
+    deleteAmbientCategory,
+    deleteCategory,
+    deleteModule,
+    deleteOptionGroup,
+    deleteProject,
+    deleteStructure,
+    deleteTemplate,
+    dismissGuestImport,
+    duplicateModuleById,
+    duplicateProjectById,
+    duplicateWithScenarioB,
+    edges,
+    exportBusy,
+    exportCommercialScenarioPdf,
+    exportErrors,
+    fabricActiveClaims,
+    fabricBatchConfirmMessage,
+    fabricMetrics,
+    fabricMetricsByProject,
+    filterProjectsToPlant,
+    getMaterialCostPerM2,
+    getRepository,
+    goHomeFromScreen,
+    groupLabels,
+    guestImportError,
+    guestImportLoading,
+    handleCancelPurchaseOrder,
+    handleDeactivateSupplier,
+    handleEmitPurchaseOrder,
+    handleExportAssemblySheets,
+    handleExportCncPilot,
+    handleExportCommercialQuote,
+    handleExportCommercialQuotePdf,
+    handleExportCutListCsv,
+    handleExportCutPlanPdf,
+    handleExportDespiecePdf,
+    handleExportElevations,
+    handleExportHardwareList,
+    handleExportModuleLabels,
+    handleExportOptimizer,
+    handleExportPieceLabels,
+    handleExportProductionPack,
+    handleFabricBatchAdvance,
+    handleFabricClaim,
+    handleFabricFinish,
+    handleFloorAdvance,
+    handleLoadCocinaLopezDemo,
+    handleOverridesChange,
+    handleReceivePurchaseOrder,
+    handleRecordStockMovement,
+    handleReleaseToDelivery,
+    handleSavePurchaseOrder,
+    handleSaveSupplier,
+    handleTogglePick,
+    handleUpsertStockMin,
+    hardware,
+    importGuestWorkspace,
+    importNestingResult,
+    isLoadingShowcase,
+    isSectorScoped,
+    location,
+    markProjectProduced,
+    materialSummary,
+    materials,
+    materialsCreateKey,
+    moduleEstimates,
+    moduleLabelForFabric,
+    modulePreview,
+    modules,
+    modulesCreateKey,
+    modulesWithoutPhotoCount,
+    mySectors,
+    navId,
+    navigate,
+    onAddOnsSelectionChange,
+    onCommandItem,
+    onComponentSelectionChange,
+    onDashboardNewMaterial,
+    onDashboardNewModule,
+    onDashboardNewProject,
+    onDashboardOpenMaterials,
+    onDashboardOpenModules,
+    onDashboardOpenProject,
+    onDashboardOpenShowcase,
+    onEntityEditRequest,
+    onEntitySelectionChange,
+    onFinishesSelectionChange,
+    onLogout,
+    onModuleSelectionChange,
+    onNavigate,
+    onProjectSelectionChange,
+    onShowcaseUseInQuote,
+    onShowcaseUseProjectAsReference,
+    onStructureSelectionChange,
+    optionGroups,
+    ownerLabels,
+    pendingGuestImport,
+    pickingStates,
+    planActor,
+    presentId,
+    projectActions,
+    projectEstimates,
+    projectQuote,
+    projectTemplates,
+    projects,
+    projectsCreateKey,
+    projectsForRole,
+    purchaseOrders,
+    purchasingProjects,
+    releasePlanEditSession,
+    removeProjectItem,
+    renewPlanEditSession,
+    reopenProject,
+    resolveMediaUrl,
+    restoreProjectVersion,
+    routeComponentEditId,
+    routeComponentId,
+    routeEngineeringProjectId,
+    routeEntityId,
+    routeModuleEditId,
+    routeModuleId,
+    routeProductionOrderId,
+    routeProductionOrderTab,
+    routeProjectId,
+    routeShipmentProjectId,
+    routeStructureEditId,
+    routeStructureId,
+    saveAsTemplate,
+    saveWorkshopSettings,
+    selectedProjectCutRows,
+    selectedProjectId,
+    session,
+    setAmbientMaterialActive,
+    setAnalyticsPeriod,
+    setCustomerActive,
+    setEdgeActive,
+    setEditingModuleId,
+    setHardwareActive,
+    setItemFloorStatus,
+    setMaterialActive,
+    setShowOnboardingTour,
+    setStructureActive,
+    showAdminUsers,
+    showCosts,
+    showOnboardingTour,
+    showcasePhotos,
+    startEngineering,
+    stockCatalog,
+    stockMovements,
+    stockRows,
+    structures,
+    suppliers,
+    toggleComponentActive,
+    updateAgregado,
+    updateAmbientCategory,
+    updateAmbientMaterial,
+    updateCategory,
+    updateComponent,
+    updateCustomer,
+    updateEdge,
+    updateHardware,
+    updateInstallationChecklist,
+    updateKitchenLayout,
+    updateMaterial,
+    updateMeasureDefaults,
+    updateModule,
+    updateOptionGroup,
+    updateProject,
+    updateProjectItem,
+    updateProjectLevelChoices,
+    updateStructure,
+    uploadCatalogImage,
+    useProductionWorkspace,
+    warehouseProjects,
+    warrantyTickets,
+    workshopAnalytics,
+    workshopSettings,
+  };
 
-      {navId === 'users' && showAdminUsers && authToken ? (
-        <UsersScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
-      ) : null}
-      {navId === 'settings' ? (
-        <SettingsScreen
-          settings={workshopSettings}
-          onSave={saveWorkshopSettings}
-          onOpenOnboardingTour={() => setShowOnboardingTour(true)}
-        />
-      ) : null}
-      {navId === 'showcase' ? (
-        <ShowcaseScreen
-          photos={showcasePhotos}
-          modules={modules}
-          categories={categories}
-          resolveImageUrl={resolveMediaUrl}
-          isLoadingPhotos={isLoadingShowcase}
-          onUseModuleInQuote={
-            canMutateProjects ? onShowcaseUseInQuote : undefined
-          }
-          onUseProjectAsReference={
-            canMutateProjects ? onShowcaseUseProjectAsReference : undefined
-          }
-        />
-      ) : null}
-
-      {navId === 'modules' ? (
-        <ModulesScreen
-          modules={modules}
-          optionGroups={optionGroups}
-          hardware={hardware}
-          categories={categories}
-          onCreate={createModule}
-          onUpdate={updateModule}
-          onDelete={deleteModule}
-          onCreateCategory={createCategory}
-          onUpdateCategory={updateCategory}
-          onDeleteCategory={deleteCategory}
-          onDuplicate={duplicateModuleById}
-          onEditingChange={setEditingModuleId}
-          onSelectionChange={onModuleSelectionChange}
-          openModuleId={routeModuleId}
-          openModuleEditId={routeModuleEditId}
-          onRequestEdit={(id) => onEntityEditRequest('modules', id)}
-          costPreview={showCosts ? modulePreview.costPreview : null}
-          previewBlocked={modulePreview.previewBlocked}
-          previewError={modulePreview.previewError}
-          missingGroups={modulePreview.missingGroups}
-          groupLabels={groupLabels}
-          moduleEstimates={moduleEstimates}
-          requestCreateKey={modulesCreateKey}
-          structures={structures}
-          catalogComponents={components}
-          catalogAgregados={agregados}
-          materials={materials}
-          edges={edges}
-          canMutate={canMutateModules}
-          resolveImageUrl={resolveMediaUrl}
-          onUploadImage={
-            canMutateModules && session === 'auth' && authToken
-              ? uploadCatalogImage
-              : undefined
-          }
-          renderBoardEditor={
-            catalog
-              ? ({ module, compositionKey }) => (
-                  <BoardEditor
-                    module={module}
-                    catalog={catalog}
-                    moduleWidth={module.externalDims?.width}
-                    moduleHeight={module.externalDims?.height}
-                    moduleDepth={module.externalDims?.depth}
-                    compositionKey={compositionKey}
-                    onOverridesChange={handleOverridesChange}
-                  />
-                )
-              : undefined
-          }
-          boardOverrides={boardOverrides}
-        />
-      ) : null}
-      {navId === 'structures' ? (
-        <StructuresScreen
-          structures={structures}
-          optionGroups={optionGroups}
-          catalogComponents={components}
-          catalogAgregados={agregados}
-          catalogMaterials={materials}
-          catalogEdges={edges}
-          catalogHardware={hardware}
-          onCreate={createStructure}
-          onUpdate={updateStructure}
-          onDelete={deleteStructure}
-          onDeactivate={(id) => setStructureActive(id, false)}
-          onReactivate={(id) => setStructureActive(id, true)}
-          openStructureId={routeStructureId}
-          openStructureEditId={routeStructureEditId}
-          onRequestEdit={(id) => onEntityEditRequest('structures', id)}
-          onSelectionChange={onStructureSelectionChange}
-          canMutate={canMutateModules}
-          resolveImageUrl={resolveMediaUrl}
-        />
-      ) : null}
-      {navId === 'components' ? (
-        <ComponentsScreen
-          components={components}
-          optionGroups={optionGroups}
-          materials={materials}
-          onCreate={createComponent}
-          onUpdate={updateComponent}
-          onToggleActive={toggleComponentActive}
-          openComponentId={routeComponentId}
-          openComponentEditId={routeComponentEditId}
-          onRequestEdit={(id) => onEntityEditRequest('components', id)}
-          onSelectionChange={onComponentSelectionChange}
-          canMutate={canMutateModules}
-        />
-      ) : null}
-      {navId === 'addOns' ? (
-        <AgregadosScreen
-          agregados={agregados}
-          openAgregadoId={navId === 'addOns' ? routeEntityId : null}
-          onSelectionChange={onAddOnsSelectionChange}
-          catalogComponents={components}
-          catalogHardware={hardware}
-          onCreate={createAgregado}
-          onUpdate={updateAgregado}
-          onDelete={deleteAgregado}
-          canMutate={canMutateModules}
-          optionGroups={optionGroups}
-          catalogMaterials={materials}
-          catalogEdges={edges}
-          resolveImageUrl={resolveMediaUrl}
-        />
-      ) : null}
-      {navId === 'quotes' ? (
-        <ProjectsScreen
-          projects={projectsForRole}
-          modules={modules}
-          categories={categories}
-          optionGroups={optionGroups}
-          materials={materials}
-          edges={edges}
-          hardware={hardware}
-          ambientMaterials={ambientMaterials}
-          ambientCategories={ambientCategories}
-          catalogStructures={structures}
-          catalogComponents={components}
-          catalogAgregados={agregados}
-          resolveImageUrl={resolveMediaUrl}
-          customers={customers}
-          canAssignOwner={canAssignOwner}
-          assignableOwners={assignableOwners}
-          ownerLabels={ownerLabels}
-          onCreate={createProject}
-          onUpdate={updateProject}
-          onDelete={deleteProject}
-          onDuplicate={duplicateProjectById}
-          projectTemplates={projectTemplates}
-          onSaveAsTemplate={saveAsTemplate}
-          onCreateFromTemplate={createFromTemplate}
-          onDeleteTemplate={deleteTemplate}
-          onAddItem={addProjectItem}
-          onUpdateItem={updateProjectItem}
-          onRemoveItem={removeProjectItem}
-          onUpdateProjectLevelChoices={updateProjectLevelChoices}
-          onUpdateMeasureDefaults={updateMeasureDefaults}
-          onUpdateKitchenLayout={updateKitchenLayout}
-          planActor={planActor}
-          onAcquirePlanEdit={
-            planActor ? acquirePlanEditSession : undefined
-          }
-          onRenewPlanEdit={planActor ? renewPlanEditSession : undefined}
-          onReleasePlanEdit={
-            planActor ? releasePlanEditSession : undefined
-          }
-          onApplyScenarioB={applyScenarioB}
-          onDuplicateWithScenarioB={duplicateWithScenarioB}
-          onExportScenarioPdf={exportCommercialScenarioPdf}
-          onUpdateInstallationChecklist={updateInstallationChecklist}
-          onImportNesting={importNestingResult}
-          onSelectionChange={onProjectSelectionChange}
-          breakdown={resolveDisplayBreakdown(
-            projectQuote.breakdown,
-            backendBreakdown,
-            showCosts,
-          )}
-          materialSummary={materialSummary}
-          breakdownLoading={breakdownLoading}
-          breakdownError={breakdownError ?? projectQuote.breakdownError}
-          previewBlocked={projectQuote.previewBlocked}
-          missingGroups={projectQuote.missingGroups}
-          groupLabels={groupLabels}
-          onExport={
-            canExportProduction
-              ? () => {
-                  void handleExportOptimizer();
-                }
-              : undefined
-          }
-          onExportHardware={
-            canExportProduction
-              ? () => {
-                  void handleExportHardwareList();
-                }
-              : undefined
-          }
-          onExportPieceLabels={
-            canExportProduction
-              ? () => {
-                  void handleExportPieceLabels();
-                }
-              : undefined
-          }
-          onExportProductionPack={
-            canExportProduction
-              ? () => {
-                  void handleExportProductionPack();
-                }
-              : undefined
-          }
-          onOpenInProduction={
-            useProductionWorkspace
-              ? (projectId) => {
-                  const target = productionOrderPath(projectId);
-                  if (location.pathname !== target) navigate(target);
-                }
-              : undefined
-          }
-          onExportCommercialQuote={
-            filterProjectsToPlant ? undefined : handleExportCommercialQuote
-          }
-          onExportCommercialQuotePdf={
-            filterProjectsToPlant
-              ? undefined
-              : (variant) => {
-                  void handleExportCommercialQuotePdf(variant);
-                }
-          }
-          exportErrors={exportErrors}
-          exportBusy={exportBusy}
-          projectEstimates={projectEstimates}
-          openProjectId={routeProjectId}
-          requestCreateKey={projectsCreateKey}
-          workshopSettings={workshopSettings}
-          canMutate={canMutateProjects}
-          canDelete={canDeleteProjects}
-          canReopen={canReopenProjects}
-          canForceReopenClosed={canForceReopenClosed}
-          canMarkProduced={canMarkProduced}
-          onMarkProduced={markProjectProduced}
-          onChangeStatus={changeProjectStatus}
-          onReopen={reopenProject}
-          onRestoreVersion={restoreProjectVersion}
-          showCosts={showCosts}
-          autoPresentId={presentId}
-          photos={selectedProjectId ? projectActions.photos[selectedProjectId] : undefined}
-          onUploadPhotos={projectActions.uploadProjectPhotos}
-          onUpdatePhoto={projectActions.updateProjectPhoto}
-          onDeletePhoto={projectActions.deleteProjectPhoto}
-          workshopName={workshopSettings?.workshopName}
-          internalMessages={selectedProjectId ? projectActions.internalMessages[selectedProjectId] : undefined}
-          onSendInternalMessage={projectActions.sendProjectMessage}
-          onUpdateTechnicalWorkflow={projectActions.updateProjectTechnicalWorkflow}
-          currentUserId={authUser?.id}
-          warranties={selectedProjectId ? projectActions.warranties[selectedProjectId] : undefined}
-          availableCutRows={selectedProjectCutRows}
-          onCreateWarrantyTicket={projectActions.createWarrantyTicket}
-          onUpdateWarrantyTicket={projectActions.updateWarrantyTicket}
-          onDeleteWarrantyTicket={(ticketId) => {
-            if (selectedProjectId) {
-              return projectActions.deleteWarrantyTicket(ticketId, selectedProjectId);
-            }
-            return Promise.resolve();
-          }}
-          onUploadWarrantyPhoto={(ticketId, file, kind, caption) => {
-            if (selectedProjectId) {
-              return projectActions.uploadWarrantyPhoto(ticketId, selectedProjectId, file, kind, caption);
-            }
-            return Promise.resolve();
-          }}
-          onExportWarrantyRefabricationOptimizer={projectActions.exportWarrantyRefabricationOptimizer}
-        />
-
-
-
-
-
-      ) : null}
-
-      {/* F118 S3: guest → auth handoff — offer to bring guest work in
-          instead of discarding it silently. */}
-      <Modal
-        open={pendingGuestImport}
-        onClose={dismissGuestImport}
-        title="Tenés trabajo como invitado"
-        size="sm"
-        dataTestId="guest-import-modal"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={dismissGuestImport}
-              disabled={guestImportLoading}
-            >
-              Dejarlo local
-            </button>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => {
-                void importGuestWorkspace();
-              }}
-              disabled={guestImportLoading}
-              data-testid="guest-import-confirm"
-            >
-              {guestImportLoading ? 'Importando…' : 'Traer a mi cuenta'}
-            </button>
-          </>
-        }
-      >
-        <div className="catalog-form">
-          <p>
-            Encontramos cotizaciones hechas en modo invitado en este
-            navegador. Podés importarlas a tu cuenta (catálogo, proyectos y
-            plantillas) o dejarlas guardadas localmente para volver al modo
-            invitado.
-          </p>
-          {guestImportError ? (
-            <p className="catalog-form__error" data-testid="guest-import-error">
-              {guestImportError}
-            </p>
-          ) : null}
-        </div>
-      </Modal>
-
-      <OnboardingTourModal
-        isOpen={showOnboardingTour}
-        onClose={() => setShowOnboardingTour(false)}
-        onLoadDemoProject={handleLoadCocinaLopezDemo}
-      />
-    </AppShell>
-  );
+  return <ShellView ctx={shellViewCtx} />;
 }

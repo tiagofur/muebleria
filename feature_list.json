@@ -2604,7 +2604,7 @@
         "docs/history/judgment-day-shell-2026-08-19.md",
         "apps/web/src/App.tsx"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "shell",
         "refactor",

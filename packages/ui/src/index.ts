@@ -1,3 +1,4 @@
+export type { OwnerPortfolioRow } from './dashboard/dashboardHelpers';
 /**
  * Shared React UI components (no business logic).
  */

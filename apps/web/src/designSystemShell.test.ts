@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
 const appCssPath = join(here, 'app.css');
+const shellViewPath = join(here, 'ShellView.tsx');
+const shellViewSrc = () => readFileSync(shellViewPath, 'utf8');
 const appTsxPath = join(here, 'App.tsx');
 const mainTsxPath = join(here, 'main.tsx');
 const indexHtmlPath = join(webRoot, 'index.html');
@@ -76,14 +78,14 @@ describe('web shell design system wiring (F016)', () => {
 describe('web shell AppShell wiring (F017)', () => {
   it('App.tsx uses AppShell instead of horizontal tabs', () => {
     const app = readFileSync(appTsxPath, 'utf8');
-    expect(app).toContain('AppShell');
-    expect(app).toContain('activeId={navId}');
-    expect(app).toContain('onNavigate={onNavigate}');
-    expect(app).toContain('hrefForNav={pathForNav}');
+    expect(/* F121 */ shellViewSrc()).toContain('AppShell');
+    expect(/* F121: render lives in ShellView */ shellViewSrc()).toContain('activeId={navId}');
+    expect(shellViewSrc()).toContain('onNavigate={onNavigate}');
+    expect(/* F121 */ shellViewSrc()).toContain('hrefForNav={pathForNav}');
     expect(app).not.toContain('HomePlaceholder');
-    expect(app).toContain('Dashboard');
-    expect(app).toContain('navFromPath');
-    expect(app).toContain('pathForNav');
+    expect(shellViewSrc()).toContain('Dashboard');
+    expect(/* F121 */ shellViewSrc()).toContain('navFromPath');
+    expect(/* F121 */ shellViewSrc()).toContain('pathForNav');
     expect(app).not.toContain('app-nav__tab');
     expect(app).not.toContain('className="app-nav"');
     expect(app).not.toContain("useState<CatalogTab>");
@@ -102,31 +104,31 @@ describe('web shell AppShell wiring (F017)', () => {
     ]) {
       expect(app, `missing screen ${screen}`).toContain(screen);
     }
-    expect(app).toContain("navId === 'materials'");
-    expect(app).toContain("navId === 'edges'");
-    expect(app).toContain("navId === 'hardware'");
-    expect(app).toContain("navId === 'optionGroups'");
-    expect(app).toContain("navId === 'modules'");
-    expect(app).toContain("navId === 'quotes'");
-    expect(app).toContain("navId === 'home'");
+    expect(/* F121: render lives in ShellView */ shellViewSrc()).toContain("navId === 'materials'");
+    expect(/* F121 */ shellViewSrc()).toContain("navId === 'edges'");
+    expect(/* F121 */ shellViewSrc()).toContain("navId === 'hardware'");
+    expect(shellViewSrc()).toContain("navId === 'optionGroups'");
+    expect(shellViewSrc()).toContain("navId === 'modules'");
+    expect(shellViewSrc()).toContain("navId === 'quotes'");
+    expect(/* F121 */ shellViewSrc()).toContain("navId === 'home'");
   });
 
   it('App.tsx wires Dashboard home with open-from-outside props (F023)', () => {
     const app = readFileSync(appTsxPath, 'utf8');
-    expect(app).toContain('dashboardStats');
-    expect(app).toContain('dashboardRecent');
-    expect(app).toContain('onDashboardOpenProject');
-    expect(app).toContain('onDashboardNewProject');
-    expect(app).toContain('onDashboardNewModule');
-    expect(app).toContain('onDashboardNewMaterial');
-    expect(app).toContain('projectsCount={projects.length}');
-    expect(app).toContain('openProjectId={routeProjectId}');
-    expect(app).toContain('openModuleId={routeModuleId}');
-    expect(app).toContain('requestCreateKey={projectsCreateKey}');
-    expect(app).toContain('requestCreateKey={modulesCreateKey}');
-    expect(app).toContain('requestCreateKey={materialsCreateKey}');
-    expect(app).toContain('sumMonthlyQuotedTotal');
-    expect(app).toContain('selectRecentProjects');
+    expect(/* F121 */ shellViewSrc()).toContain('dashboardStats');
+    expect(/* F121 */ shellViewSrc()).toContain('dashboardRecent');
+    expect(shellViewSrc()).toContain('onDashboardOpenProject');
+    expect(/* F121 */ shellViewSrc()).toContain('onDashboardNewProject');
+    expect(/* F121 */ shellViewSrc()).toContain('onDashboardNewModule');
+    expect(/* F121 */ shellViewSrc()).toContain('onDashboardNewMaterial');
+    expect(/* F121: render lives in ShellView */ shellViewSrc()).toContain('projectsCount={projects.length}');
+    expect(/* F121 */ shellViewSrc()).toContain('openProjectId={routeProjectId}');
+    expect(/* F121 */ shellViewSrc()).toContain('openModuleId={routeModuleId}');
+    expect(/* F121 */ shellViewSrc()).toContain('requestCreateKey={projectsCreateKey}');
+    expect(/* F121 */ shellViewSrc()).toContain('requestCreateKey={modulesCreateKey}');
+    expect(/* F121 */ shellViewSrc()).toContain('requestCreateKey={materialsCreateKey}');
+    expect(/* F121 */ shellViewSrc()).toContain('sumMonthlyQuotedTotal');
+    expect(/* F121 */ shellViewSrc()).toContain('selectRecentProjects');
   });
 
   it('optionGroups nav mounts only OptionGroupsScreen (no OPT-05 demo)', () => {

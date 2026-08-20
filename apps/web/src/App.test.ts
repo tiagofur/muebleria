@@ -42,6 +42,10 @@ import type { QuoteBreakdown } from '@muebles/domain';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+/** F121: the AppShell render lives in ShellView.tsx now. */
+const shellViewSrc = () =>
+  readFileSync(join(here, 'ShellView.tsx'), 'utf8');
+
 const localBd: QuoteBreakdown = {
   materialsCost: 100,
   edgeTotal: 10,
@@ -86,7 +90,9 @@ describe('@muebles/web #15 setState side effects / stale patches', () => {
     // F062 moved catalog mutations to catalogStore. F063 moved project mutations
     // (including the old `patchProjects` wrapper) to projectStore. App.tsx no
     // longer owns either wrapper or any of the 19+28 handlers.
-    const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
+    const shellViewSrc = () =>
+  readFileSync(join(here, 'ShellView.tsx'), 'utf8');
+const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
     expect(appSrc).not.toContain('patchProjects');
     expect(appSrc).not.toContain('patchCatalog');
 
@@ -152,11 +158,12 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
   it('#12: breakdown loading/error props wired to ProjectsScreen (F063 hook)', () => {
     // The props still come from projectStore (hook sets the state).
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appSrc).toContain('breakdownLoading={breakdownLoading}');
-    expect(appSrc).toContain('breakdownError={breakdownError ?? projectQuote.breakdownError}');
-    // List vs detail: display uses resolveDisplayBreakdown (local-first when costs visible).
-    expect(appSrc).toContain('resolveDisplayBreakdown(');
-    expect(appSrc).not.toContain(
+    expect(/* F121: render lives in ShellView */ shellViewSrc()).toContain('breakdownLoading={breakdownLoading}');
+    expect(shellViewSrc()).toContain('breakdownError={breakdownError ?? projectQuote.breakdownError}');
+    // List vs detail: display uses resolveDisplayBreakdown (local-first when
+    // costs visible). F121: the call lives in ShellView's render.
+    expect(shellViewSrc()).toContain('resolveDisplayBreakdown(');
+    expect(shellViewSrc()).not.toContain(
       'breakdown={backendBreakdown ?? projectQuote.breakdown}',
     );
     // Fallback copy + error toast moved to projectStore hook.
