@@ -504,3 +504,13 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Gate test de colores literales añadido a `packages/ui/src/design-system/designSystem.test.ts`.
 - Verificación: `./init.sh` pasa al 100%, `pnpm typecheck` verde, monorepo limpio.
 
+
+## F124 — Estrategia de corte CNC nesting: motor MaxRects (2026-08-20)
+
+- `CutStrategy ('saw-guillotine'|'cnc-nesting')` opcional en `CutPlanConfig` y `CutPlanSheet.strategy` — retrocompatible con `Project.cutPlan` persistido (JSONB Go sin cambios).
+- `optimizer/nesting.ts`: MaxRects Best Short Side Fit; espaciado de herramienta `toolSpacingMm` (default 8mm) inflando el rect usado en los 4 lados → sin solapes y holgura ≥ spacing en ≥1 eje (verificado por stress test del reviewer: 200 seeds × spacing 0–12).
+- `unrollRows`/`PlacementResult`/regla de retazo útil extraídos a `optimizer/pieces.ts` (compartido, sin ciclos).
+- Dispatch por estrategia en `optimizeSingleMaterial`; camino sierra intacto (tests preexistentes sin cambios).
+- Remanentes: subset disjunto greedy por área para stats sin doble conteo.
+- Fixture determinista kerf 12 vs spacing 4: sierra 3 tableros → nesting 1.
+- Verificación: `pnpm test` completo (2376), `pnpm typecheck` 7 workspaces, review APPROVED (code), push a origin.

@@ -2697,7 +2697,7 @@
         "packages/domain/src/optimizer/guillotine.ts",
         "docs/production-module.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "production",
         "optimizer",
@@ -2726,7 +2726,7 @@
         "packages/domain/src/optimizer/types.ts",
         "packages/domain/src/cncPilot.ts"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "production",
         "export",
