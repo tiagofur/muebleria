@@ -2676,6 +2676,93 @@
         "ui",
         "backend"
       ]
+    },
+    {
+      "id": "F124",
+      "phase": 0,
+      "name": "cnc_nesting_engine",
+      "title": "Estrategia de corte CNC nesting: motor MaxRects no-guillotina + tool spacing",
+      "description": "Habilita dos estrategias de optimización: sierra guillotina (existente) y CNC nesting (nueva). El motor MaxRects coloca piezas libremente mezclando grandes y chicas en el mismo tablero, usa espaciado de herramienta (toolSpacingMm) en lugar de kerf de disco y no genera secuencia de cortes (el CNC consume el layout DXF, no instrucciones manuales). D5 revisada 2026-08-20 por decisión explícita del dueño del producto.",
+      "acceptance": [
+        "CutStrategy ('saw-guillotine' | 'cnc-nesting') en CutPlanConfig (opcional, default sierra) y CutPlanSheet.strategy (opcional, retrocompatible con planes persistidos)",
+        "Motor MaxRects en optimizer/nesting.ts: sin solapes, dentro del área útil (trims), spacing entre piezas, todas las piezas colocadas o tablero nuevo",
+        "optimizeCutPlan despacha por estrategia; con config por defecto el resultado queda exactamente igual (tests de guillotine sin cambios)",
+        "Veta respetada: piezas grain=1 nunca rotan; rotación solo con grain=0 y allowRotationNoGrain",
+        "Fixture determinista donde nesting usa menos tableros que guillotine (kerf 12 vs spacing 4)",
+        "Tableros nesting con instructions=[] y strategy registrada; remanentes con mismo criterio de retazo útil",
+        "pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "docs/cut-plan-implementation.md",
+        "packages/domain/src/optimizer/guillotine.ts",
+        "docs/production-module.md"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "production",
+        "optimizer",
+        "nesting",
+        "cnc",
+        "domain"
+      ]
+    },
+    {
+      "id": "F125",
+      "phase": 0,
+      "name": "dxf_cut_plan_export",
+      "title": "Exportador DXF R12 para plan de corte nesting (tableros nesteados + piezas sueltas)",
+      "description": "Writer DXF R12 ASCII propio (sin dependencias nuevas) que serializa un CutPlan generado con estrategia cnc-nesting. Dos variantes: 'sheets' (tableros nesteados en grilla, para referencia CAM) y 'pieces' (piezas sueltas con etiquetas, para software de nesting externo que prefiere anidar él mismo). Capas TABLERO/PIEZA/ETIQUETA/VETA y PERF opcional con perforaciones por partCode.",
+      "acceptance": [
+        "dxfCutPlanExport en packages/excel emite DXF R12 ASCII válido (HEADER/TABLES/ENTITIES/EOF) sin dependencias nuevas",
+        "Variante 'sheets': un bloque por tablero con contorno en capa TABLERO, piezas en PIEZA, etiquetas en ETIQUETA e indicador de veta en VETA",
+        "Variante 'pieces': piezas sueltas en grilla con etiquetas, sin contornos de tablero",
+        "Etiquetas con partCode, medidas LxW, módulo, cantos (L1/L2/W1/W2) y labelRef; texto ASCII sanitizado",
+        "Perforaciones opcionales por partCode dibujadas como círculos en capa PERF",
+        "Golden test contra fixture + aserciones estructurales (conteo de POLYLINE/TEXT, EOF, capas declaradas)",
+        "Exportado desde @muebles/excel; pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "packages/excel/src/cutPlanPdfExport.ts",
+        "packages/domain/src/optimizer/types.ts",
+        "packages/domain/src/cncPilot.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "production",
+        "export",
+        "dxf",
+        "cnc",
+        "excel"
+      ]
+    },
+    {
+      "id": "F126",
+      "phase": 4,
+      "name": "cut_strategy_ui_export_dispatch",
+      "title": "UI: selector de tipo de corte (Sierra | CNC Nesting) y despacho exclusivo de export (XLSX+PDF vs DXF)",
+      "description": "El panel de optimización permite elegir la estrategia antes de generar. La configuración se adapta (sierra: kerf + refilados; nesting: espaciado de herramienta) y el área de export muestra SOLO las salidas pertinentes al modo elegido: sierra → Optimizer XLSX + PDF de plan; nesting → botón Exportar DXF (reemplaza la card placeholder 'CNC Nesting / G-Code — Próximamente').",
+      "acceptance": [
+        "Selector 'Tipo de corte' en ProductionOrderOptimizationPanel que cambia la config del optimizeCutPlan (cutStrategy + toolSpacingMm)",
+        "Config adaptativa: kerf+refilados para sierra, espaciado de herramienta para nesting; veta y deducción de canto comunes",
+        "Área de export exclusiva: sierra muestra XLSX/PDF, nesting muestra DXF; nunca ambas a la vez",
+        "La card placeholder 'Próximamente CNC Nesting/G-Code' se reemplaza por el botón real de DXF",
+        "Prop onExportCutPlanDxf cableada por EngineeringWorkspace → ShellView → helper de descarga en apps/web",
+        "UI según docs/design.md (tokens, patrones) sin estilos hardcodeados",
+        "pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx",
+        "packages/ui/src/engineering/EngineeringWorkspace.tsx",
+        "docs/design.md"
+      ],
+      "status": "pending",
+      "tags": [
+        "production",
+        "ui",
+        "export",
+        "dxf",
+        "nesting"
+      ]
     }
   ]
 }

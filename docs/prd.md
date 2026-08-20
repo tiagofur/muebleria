@@ -334,9 +334,9 @@ Judgment Day WIP 3D (2026-07-17): **`docs/history/judgment-day-wip-3d-2026-07-17
 
 | Ahora | Futuro (solo documentado hasta demanda real) |
 |-------|-----------------------------------------------|
-| `ProductionCutRow[]` → `Plantilla_Optimizer.xlsx` → nesting/corte **externo** | Metadatos por pieza → DXF/JSON → post-procesadores CNC de marca → nesting interno opcional |
+| Sierra: `ProductionCutRow[]` → `Plantilla_Optimizer.xlsx`. CNC nesting: `optimizeCutPlan` con `cutStrategy: 'cnc-nesting'` (motor MaxRects) → **DXF R12** (F124–F126) | Post-procesadores CNC de marca → G-code (F081, congelado) |
 
-El Optimizer Excel sigue siendo la **única** salida de plan de corte implementada. No hay nesting 2D embebido ni G-code en producto.
+El Optimizer Excel es la salida oficial de plan de corte para **sierra**. Para **CNC nesting** (D5 revisada 2026-08-20) el dominio anida con motor propio (MaxRects) y exporta DXF R12 neutro — piezas rectangulares, sin G-code ni marcas de máquina.
 
 #### 6.7.2 CNC / máquinas
 

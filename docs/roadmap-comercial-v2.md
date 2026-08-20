@@ -101,10 +101,12 @@ vio el 3D, generó plan de corte, etiquetó las piezas con su Zebra, cortó a
 mano con el PDF de corte, armó con la lista de piezas— sin tocar Excel ni
 Software externo (salvo el optimizador de corte opcional).
 
-> **Nota sobre optimizador de corte:** el nesting 2D nativo sigue fuera de
-> alcance (decisión D5 heredada). El taller exporta al optimizador externo
-> (Plantilla_Optimizer.xlsx o CSV) o corta a mano con F072. Si demanda real
-> aparece, se evalúa nesting nativo post-Fase D.
+> **Nota sobre optimizador de corte (actualizada 2026-08-20):** el nesting
+> nativo fue habilitado por decisión explícita del dueño del producto (D5
+> revisada). Serie F124–F126: motor MaxRects diferenciado para CNC (mezcla
+> piezas grandes y chicas con espaciado de herramienta) + export DXF R12
+> exclusivo del modo nesting. Para sierra, el taller sigue exportando al
+> optimizador externo (Plantilla_Optimizer.xlsx o CSV) o corta a mano con F072.
 
 ---
 
@@ -148,7 +150,8 @@ adelantarlas es morir puliendo lo que nadie pidió.
 - **No** construir un modelador 3D tipo SketchUp. Si el cliente quiere
   modelar libre, integramos (F078, congelado).
 - **No** migrar a C#/Qt/nativo. El stack actual cumple.
-- **No** nesting 2D nativo hasta demanda probada (D5 heredada).
+- **No** G-code ni post-procesadores CNC de marca hasta hardware real del
+  usuario (D6; el DXF neutro de F124–F126 es el límite).
 - **No** mobile nativo (iOS/Android apps) en este horizonte.
 - **No** multi-idioma más allá de español/portugués en este horizonte.
 - **No** marketplace de catálogos de terceros en este horizonte.

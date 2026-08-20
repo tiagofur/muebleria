@@ -1,46 +1,28 @@
 # Sesión activa
 
-**Feature:** F122 (`purchasing_critical_bugfixes`)
-**Estado:** done
+**Feature:** F124 (`cnc_nesting_engine`) — primera de la serie nesting de corte: F124 (motor) → F125 (DXF) → F126 (UI)
+**Estado:** in_progress
 **Fecha:** 2026-08-20
 
 ## Objetivo
 
-Implementar los bugfixes críticos de inventario Compras/Almacén surgidos del Judgment Day:
-1. C1: Doble reintegro al desmarcar picking (`activeDespachosFor`, validación Go/Guest + índice único parcial en `reverts_id`).
-2. C2: Números de OC secuenciales sin colisiones (secuencia Postgres `purchase_order_number_seq` `OC-0001+`, guest persistent counter).
-3. C3: Recepción de OC con validación de membresía y cap a remaining (Go, guest y modal max).
-4. A1 & A2: Serialización mutex de `togglePick` y soporte de `project_id` en query de movimientos.
-5. A5: Validación de signos en delta de stock (TS/Go/Modal).
-6. A9: `loadAll` sin mezclar datos de sesión anterior y detección de 401 para expirar sesión.
+Habilitar corte CNC nesting diferenciado del corte con sierra, conforme al plan acordado con el dueño del producto:
 
-## Qué se hizo
+1. **F124 (esta feature):** `CutStrategy` en el dominio + motor MaxRects no-guillotina (`optimizer/nesting.ts`) que mezcla piezas grandes y chicas con espaciado de herramienta (`toolSpacingMm`) en vez de kerf. Dispatch por estrategia en `optimizeCutPlan` (default sierra = comportamiento actual intacto).
+2. **F125:** writer DXF R12 ASCII en `packages/excel` (variantes tableros nesteados / piezas sueltas).
+3. **F126:** UI — selector de tipo de corte + export exclusivo por modo (sierra → XLSX+PDF; nesting → DXF).
 
-1. **Dominio TypeScript (`packages/domain`)**:
-   - `packages/domain/src/stock.ts`: `stockMovementDelta` valida `quantity > 0` (y `!== 0` para ajuste).
-   - `packages/domain/src/purchasing.ts`: Implementado `activeDespachosFor(projectId, material, movements)`.
-   - `packages/domain/src/stock.test.ts`: Tests unitarios de `stockMovementDelta` y `activeDespachosFor`.
+**Decisión de producto registrada:** D5 (production-module.md) revisada 2026-08-20 — nesting nativo habilitado por pedido explícito; Optimizer.xlsx sigue siendo la verdad de corte para sierra; DXF es la salida CNC. D6 (sin post-procesadores de marca) sigue vigente.
 
-2. **Backend Go (`backend-go`)**:
-   - Migración `000062_stock_reverts_unique.up.sql` y `.down.sql`: Secuencia `purchase_order_number_seq` e índice único parcial en `stock_movements.reverts_id WHERE reverts_id IS NOT NULL`.
-   - `storage/stock.go`: Implementado `GetStockMovementByRevertsID` y soporte de filtro `project_id` en `ListStockMovements`.
-   - `api/stock.go`: Validación en reversiones (tipo `despacho`, monto idéntico a `|delta|`, no revertido previamente `409 Conflict`), query param `project_id`.
-   - `storage/purchaseOrders.go`: Generación de números secuenciales (`OC-0001+`) y validación estricta de items en recepción (membresía y cap contra `remaining`).
-   - `api/purchaseOrders.go`: Mapeo de errores de validación de recepción a `400 Bad Request`.
-   - Tests en `stock_test.go` y `purchaseOrders_test.go` actualizados y pasando al 100%.
+## Plan F124
 
-3. **Almacenamiento TypeScript (`packages/storage`)**:
-   - `workspaceRepository.ts` & `apiWorkspaceRepository.ts`: Soporte de `projectId` en `listStockMovements`.
-   - `localStorageWorkspaceRepository.ts`: Contador persistido `muebles_guest_po_counter`, validación estricta de reversión única y validación de items/remaining en recepción.
-   - Tests en `localStorageStock.test.ts` y `localStoragePurchaseOrders.test.ts` actualizados y pasando.
+- `optimizer/types.ts`: `CutStrategy`, `DEFAULT_TOOL_SPACING_MM = 8`, `CutPlanConfig.cutStrategy?` + `toolSpacingMm?`, `CutPlanSheet.strategy?` (todo opcional → retrocompatible con `Project.cutPlan` persistido).
+- Extraer `unrollRows`/`PieceToPlace` a `optimizer/pieces.ts` (compartido guillotine/nesting, sin ciclo).
+- `optimizer/nesting.ts`: `packSingleSheetMaxRects` (Best Short Side Fit, split de rectángulos libres maximalistas, spacing infla el rect usado en +X/+Y) + `optimizeSingleMaterialNesting`.
+- `guillotine.ts`: dispatch en `optimizeSingleMaterial` cuando `cutStrategy === 'cnc-nesting'`; `buildSheetModels` registra `strategy` (default saw).
+- Tests `nesting.test.ts`: invariantes (sin solapes, bounds con trims, spacing, veta grain=1 nunca rota, todo colocado), strategy/instructions vacías, fixture determinista kerf 12 vs spacing 4 donde nesting gana un tablero, y backward-compat del default.
 
-4. **Frontend (`apps/web` y `packages/ui`)**:
-   - `purchasingStore.ts`: Mutex in-flight (`inFlightPicks`) por `pickingKey`, `activeDespachosFor` con filtro `projectId` al desmarcar, limpieza de estado en `loadAll` y captura de 401.
-   - `PurchaseOrdersPanel.tsx`: `max={remaining}` y validación contra negativos/excedentes en submit.
-   - `StockMovementModal.tsx`: Validación de `quantity > 0`.
+## Bitácora
 
-5. **Verificación**:
-   - `go test ./...` verde.
-   - `pnpm test` verde en todos los paquetes.
-   - `pnpm typecheck` verde.
-   - `./init.sh` completamente verde.
+- [14:10] Entorno `./init.sh` verde. F122 (terminado, verificado) estaba sin commitear → commit aparte `fc02f62` para no mezclar features.
+- [14:15] F124-F126 registradas en feature_list.json. F123 (hardening Compras) sigue pending — no es parte de esta serie.
