@@ -1,24 +1,23 @@
 # Sesión activa
 
-**Feature:** F126 (`cut_strategy_ui_export_dispatch`) — serie nesting de corte: F124 ✅ → F125 ✅ → **F126**
-**Estado:** in_progress
-**Fecha:** 2026-08-20
+**Feature:** Serie nesting de corte CNC — F124 ✅ F125 ✅ F126 ✅ (2026-08-20)
+**Estado:** done (sesión cerrada)
 
-## Objetivo
+## Resumen de la serie
 
-UI del tab Optimización (Ingeniería): selector de tipo de corte antes de generar y export exclusivo por modo. `docs/design.md` leído completo antes de tocar `.tsx` (regla dura).
+Corte CNC nesting diferenciado del corte con sierra, conforme al plan acordado:
 
-## Bitácora
+1. **F124 — Motor:** `CutStrategy` en el dominio + MaxRects (`optimizer/nesting.ts`) que mezcla piezas grandes y chicas con espaciado de fresa (`toolSpacingMm`). Default sierra intacto (retrocompatible con planes persistidos).
+2. **F125 — DXF:** writer DXF R12 ASCII en `packages/excel` (variantes tableros nesteados / piezas sueltas; capas TABLERO/PIEZA/ETIQUETA/VETA/PERF/RETAZO; sin deps nuevas).
+3. **F126 — UI:** selector «Tipo de corte» en el tab Optimización (Ingeniería) + export exclusivo por modo: sierra → PDF + Optimizer XLSX; nesting → DXF.
 
-- [15:00] Panel `ProductionOrderOptimizationPanel.tsx`: selector «Tipo de corte: Sierra | CNC Nesting» (toggles con `aria-pressed`, patrón de los selectores de tablero existentes), input condicional (kerf ↔ espaciado fresa con tooltip), subtítulo dinámico.
-- [15:02] `handleGenerateCutPlan` envía `cutStrategy` + `toolSpacingMm` al `optimizeCutPlan`. El área de export sigue la estrategia del PLAN GENERADO (`planStrategy`), no la del selector vivo — el archivo siempre corresponde al layout en pantalla.
-- [15:03] Export exclusivo: sierra → PDF de taller + **Optimizer XLSX** (card nueva, prop `onExportOptimizer` ya existente en EngineeringWorkspace) + placeholder seccionadoras; nesting → card **DXF** (tableros/piezas) que reemplaza el placeholder «CNC Nesting / G-Code — Próximamente». Sidebar de secuencia de cortes solo sierra (nesting no tiene secuencia).
-- [15:04] Wiring: `EngineeringWorkspace` pasa `onExportOptimizer`/`onExportCutPlanDxf` → `ShellView` prop `handleExportCutPlanDxf` → `useExportHandlers` handler con toast + busy → `apps/web/src/exportCutPlanDxf.ts` (nuevo) → `dxfCutPlanExport` de `@muebles/excel`. MIME `.dxf` agregado a `downloadOptimizerXlsx`.
-- [15:05] Tests panel (6): testids + selector swap kerf/espaciado + exclusividad sierra/nesting + calls DXF con variante + secuencia condicional (requiere `cutRows` no vacío — la sección 3 muestra empty state si no).
-- [15:08] `pnpm test` completo verde (2338), `pnpm typecheck` 7 workspaces.
-- [15:10] `docs/roadmap-screens/02-ingenieria.md` actualizado: selector + card DXF en spec del tab.
+**Gobernanza:** D5 revisada (production-module.md), prd §6.7.1 y roadmap-comercial-v2 actualizados. D6 vigente: sin post-procesadores de marca.
 
-## Próximo paso
+## Verificación final
 
-Review F126 → done + history → push final de la serie.
+- `./init.sh` completo verde: 2338 tests (domain 666, storage 126, excel 79, ui 1129, mobile 36, desktop 17, web 285), 0 features in_progress.
+- `pnpm typecheck` verde en los 7 workspaces.
+- Las tres features revisadas por reviewer (F124/F125 con verificación algorítmica/estructural independiente; fixes de review aplicados).
+- `git push` — HEAD local == origin (`d251d62`).
 
+Detalle por feature: `progress/history.md` (F124/F125/F126) y `progress/review_F12{4,5,6}.md`.
