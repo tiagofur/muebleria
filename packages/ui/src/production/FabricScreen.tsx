@@ -1,6 +1,7 @@
 /** Production board by project for the four manufacturing stations. */
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { Modal } from '../common';
 import { Check, Factory, Play } from 'lucide-react';
 
 import {
@@ -205,7 +206,7 @@ function ProjectCard({
   canAdvance,
   onAdvance,
   onAdvanceBatch,
-  onConfirmBatch,
+  confirmBatchMessage,
   onClaim,
   onFinish,
 }: {
@@ -222,10 +223,11 @@ function ProjectCard({
     itemIds: readonly string[],
     target: ItemFloorStatus,
   ) => void;
-  readonly onConfirmBatch?: (
+  /** Message for the batch-confirm modal; absent → no confirmation. */
+  readonly confirmBatchMessage?: (
     itemCount: number,
     target: ItemFloorStatus,
-  ) => boolean;
+  ) => string;
   readonly onClaim?: (
     projectId: string,
     sector: FabricStation,
@@ -239,21 +241,43 @@ function ProjectCard({
   const stationLabel = TAB_LABELS[station].toLowerCase();
   const hasClaims = card.activeClaims.length > 0;
   const itemIds = card.items.map((item) => item.itemId);
-  const confirmBatch = (): boolean =>
-    onConfirmBatch ? onConfirmBatch(itemIds.length, target) : true;
+  // F120: batch confirmation is a design-system modal (window.confirm before).
+  const [pendingAction, setPendingAction] = useState<
+    | { readonly kind: 'batch' }
+    | { readonly kind: 'finish'; readonly activityId: string }
+    | null
+  >(null);
   const finishAndAdvance = async (activityId: string): Promise<void> => {
     if (!onFinish) return;
     const isLastActiveClaim = card.activeClaims.length === 1;
-    if (isLastActiveClaim && !confirmBatch()) return;
+    if (isLastActiveClaim && confirmBatchMessage) {
+      setPendingAction({ kind: 'finish', activityId });
+      return;
+    }
     await onFinish(activityId, itemIds.length);
     if (isLastActiveClaim) onAdvanceBatch?.(card.projectId, itemIds, target);
   };
   const advanceBatch = (): void => {
-    if (!confirmBatch()) return;
+    if (confirmBatchMessage) {
+      setPendingAction({ kind: 'batch' });
+      return;
+    }
+    onAdvanceBatch?.(card.projectId, itemIds, target);
+  };
+  const runPending = async (): Promise<void> => {
+    const pending = pendingAction;
+    setPendingAction(null);
+    if (!pending) return;
+    if (pending.kind === 'batch') {
+      onAdvanceBatch?.(card.projectId, itemIds, target);
+      return;
+    }
+    await onFinish?.(pending.activityId, itemIds.length);
     onAdvanceBatch?.(card.projectId, itemIds, target);
   };
 
   return (
+    <>
     <li
       className={`fabric-card ${hasClaims ? 'fabric-card--active' : ''}`}
       data-testid={`fabric-card-${card.projectId}`}
@@ -357,6 +381,40 @@ function ProjectCard({
         ) : null}
       </section>
     </li>
+      <Modal
+        open={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        title="Confirmar avance"
+        size="sm"
+        dataTestId="fabric-batch-confirm-modal"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setPendingAction(null)}
+              data-testid="fabric-batch-confirm-cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                void runPending();
+              }}
+              data-testid="fabric-batch-confirm-ok"
+            >
+              Confirmar
+            </button>
+          </>
+        }
+      >
+        <p data-testid="fabric-batch-confirm-message">
+          {confirmBatchMessage?.(itemIds.length, target) ?? ''}
+        </p>
+      </Modal>
+    </>
   );
 }
 
@@ -373,7 +431,7 @@ export function FabricScreen({
   onClaim,
   onFinish,
   onAdvanceBatch,
-  onConfirmBatch,
+  confirmBatchMessage,
   metrics = null,
   testId,
 }: {
@@ -405,10 +463,11 @@ export function FabricScreen({
     itemIds: readonly string[],
     target: ItemFloorStatus,
   ) => void;
-  readonly onConfirmBatch?: (
+  /** Message for the batch-confirm modal (design.md §4.3 pattern, F120). */
+  readonly confirmBatchMessage?: (
     itemCount: number,
     target: ItemFloorStatus,
-  ) => boolean;
+  ) => string;
   readonly metrics?: DashboardMetrics | null;
   readonly testId?: string;
 }): ReactNode {
@@ -604,7 +663,7 @@ export function FabricScreen({
                     canAdvance={canAdvance}
                     onAdvance={onAdvance}
                     onAdvanceBatch={onAdvanceBatch}
-                    onConfirmBatch={onConfirmBatch}
+                    confirmBatchMessage={confirmBatchMessage}
                     onClaim={onClaim}
                     onFinish={onFinish}
                   />

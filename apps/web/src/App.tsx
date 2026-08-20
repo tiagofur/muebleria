@@ -1490,11 +1490,11 @@ function AppContent({
     [handleFloorAdvance],
   );
 
-  const confirmFabricBatch = useCallback(
-    (itemCount: number, target: ItemFloorStatus): boolean =>
-      window.confirm(
-        `¿Marcar ${itemCount} módulos como ${ITEM_FLOOR_STATUS_LABELS_ES[target]}? Cada avance queda registrado por separado.`,
-      ),
+  // F120: batch confirmation renders a design-system modal in FabricScreen;
+  // the shell only provides the message.
+  const fabricBatchConfirmMessage = useCallback(
+    (itemCount: number, target: ItemFloorStatus): string =>
+      `¿Marcar ${itemCount} módulos como ${ITEM_FLOOR_STATUS_LABELS_ES[target]}? Cada avance queda registrado por separado.`,
     [],
   );
 
@@ -1823,7 +1823,7 @@ function AppContent({
           onClaim={session === 'auth' ? handleFabricClaim : undefined}
           onFinish={session === 'auth' ? handleFabricFinish : undefined}
           onAdvanceBatch={handleFabricBatchAdvance}
-          onConfirmBatch={confirmFabricBatch}
+          confirmBatchMessage={fabricBatchConfirmMessage}
         />
         </ScreenBoundary>
       ) : null}

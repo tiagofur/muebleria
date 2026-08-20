@@ -439,10 +439,9 @@ describe('FabricScreen — project board actions (F096)', () => {
     expect(screen.queryByText('Surtido por almacén')).toBeNull();
   });
 
-  it('confirms before finishing the last claim and only then advances its batch', async () => {
+  it('F120: confirms via modal before finishing the last claim, then advances its batch', async () => {
     const onFinish = vi.fn(async () => undefined);
     const onBatch = vi.fn();
-    const onConfirmBatch = vi.fn(() => false);
     render(
       <FabricScreen
         projects={[makeProject('p1', [makeItem('a'), makeItem('b')])]}
@@ -452,18 +451,27 @@ describe('FabricScreen — project board actions (F096)', () => {
         activeClaims={[{ activityId: 'claim-1', projectId: 'p1', sector: 'cutting', operatorName: 'Ana', startedAt: '2026-08-18T14:32:00.000Z' }]}
         onFinish={onFinish}
         onAdvanceBatch={onBatch}
-        onConfirmBatch={onConfirmBatch}
+        confirmBatchMessage={(count, target) => `¿Marcar ${count} módulos como ${target}?`}
       />,
     );
 
     expect(screen.getByText(/En curso · empezó/)).not.toBeNull();
+    // First click opens the confirm modal — nothing runs yet.
     fireEvent.click(screen.getByTestId('fabric-finish-claim-1'));
-    expect(onConfirmBatch).toHaveBeenCalledWith(2, 'cut');
+    expect(screen.getByTestId('fabric-batch-confirm-modal')).not.toBeNull();
+    expect(screen.getByTestId('fabric-batch-confirm-message').textContent).toBe(
+      '¿Marcar 2 módulos como cut?',
+    );
+    expect(onFinish).not.toHaveBeenCalled();
+
+    // Cancel keeps everything untouched.
+    fireEvent.click(screen.getByTestId('fabric-batch-confirm-cancel'));
     expect(onFinish).not.toHaveBeenCalled();
     expect(onBatch).not.toHaveBeenCalled();
 
-    onConfirmBatch.mockReturnValue(true);
+    // Confirm runs the finish + batch advance.
     fireEvent.click(screen.getByTestId('fabric-finish-claim-1'));
+    fireEvent.click(screen.getByTestId('fabric-batch-confirm-ok'));
     await waitFor(() => expect(onFinish).toHaveBeenCalledWith('claim-1', 2));
     expect(onBatch).toHaveBeenCalledWith('p1', ['a', 'b'], 'cut');
   });
