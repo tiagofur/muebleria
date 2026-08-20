@@ -2613,6 +2613,69 @@
         "refactor",
         "clean-code"
       ]
+    },
+    {
+      "id": "F122",
+      "phase": 0,
+      "name": "purchasing_critical_bugfixes",
+      "title": "Bugfixes críticos de inventario Compras/Almacén (doble reintegro, colisión de OC, recepción libre)",
+      "description": "Surge del Judgment Day Compras/Almacén 2026-08-20 (docs/history/judgment-day-compras-almacen-2026-08-20.md §2-3). (C1) Doble reintegro al desmarcar picking: filtro !revertsId no distingue despachos ya revertidos (mark→unmark→mark→unmark acredita dos veces); fix en dominio (helper que excluya despachos con revert existente), Go (validación ya-revertido + monto==|delta| + type despacho forzado + unique parcial en reverts_id) y guest. (C2) Números de OC colisionan: OC-+3hex=4096 valores con UNIQUE → server genera número con secuencia (OC-0001), guest con contador persistido, 23505→409. (C3) Recepción acredita líneas ajenas a la OC sin tope: validar membresía contra items + cap a remaining (Go y guest) + modal max + quantity>0. (A1) ventana 200 movimientos del revert scan. (A2) serialización de togglePick (in-flight guard por pickingKey). (A5) validación de signos en stockMovementDelta paridad Go + modal. (A9) loadAll sin conservar arrays de sesión anterior, repos parciales, 401→markSessionExpired.",
+      "acceptance": [
+        "mark→unmark→mark→unmark deja el saldo EXACTO al original — test que lo reproduce en store + Go",
+        "Revertir un despacho ya revertido (o con monto distinto al original) es rechazado por Go y guest",
+        "Unique parcial en reverts_id vía migración aditiva; type de revert forzado a despacho",
+        "Números de OC generados server-side con secuencia (OC-0001+), sin colisiones; guest con contador persistido",
+        "Recibir líneas ajenas a la OC o por encima del remaining es rechazado (Go + guest); modal con max por línea",
+        "Entrada/salida/despacho con cantidad ≤0 rechazado en dominio TS, modal y guest (paridad Go)",
+        "togglePick serializado por pickingKey; revert scan sin ventana de 200 (página completo o filtro server-side por projectId)",
+        "loadAll no muestra datos de la sesión anterior tras error ni ignora repos parciales; 401 expira sesión",
+        "pnpm test + typecheck + go test + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-compras-almacen-2026-08-20.md",
+        "apps/web/src/stores/purchasingStore.ts",
+        "backend-go/internal/storage/stock.go",
+        "backend-go/internal/storage/purchaseOrders.go",
+        "packages/storage/src/localStorageWorkspaceRepository.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "purchasing",
+        "stock",
+        "bugfix",
+        "data-integrity",
+        "backend"
+      ]
+    },
+    {
+      "id": "F123",
+      "phase": 0,
+      "name": "purchasing_hardening_tests",
+      "title": "Hardening + tests de Compras/Almacén (store tests, integración Go, UX pendientes)",
+      "description": "Surge del Judgment Day Compras/Almacén 2026-08-20 (§5-6). (1) purchasingStore.test.ts — togglePick completo: doble-revert, ventana, carrera, fallo parcial del débito con compensación; stockDebitLinesFor (paquete vs neto, tableros sin sheetEstimates). (2) Tests de storage Go contra Postgres real (patrón de integración existente): idempotencia de reverts, membresía/cap en receive, rows-affected en UpdatePurchaseOrder (A6: race reescribe items de OC emitida). (3) UX pendientes: despachos huérfanos al salir del stage almacén (A7 — guard de stage o purga), copy de canceladas con recepción (A8), unidades de herrajes consistentes (A10), badges CSS bajo/agotado (→warning/danger), 'Ver picking' del dashboard navega al proyecto, 'Días' desde ingreso a almacén no desde creación, muertos y doc comments mentirosos. (4) Decisión de producto documentada: débito por paquete vs consumo neto (A3).",
+      "acceptance": [
+        "purchasingStore.test.ts cubre togglePick (doble-revert, carrera, compensación parcial) y el revert scan paginado",
+        "Tests de integración Go para reverts idempotentes, receive con membresía/cap y update-borrador race",
+        "UpdatePurchaseOrder verifica rows-affected (no reescribe items de OC emitida bajo carrera)",
+        "Unidades de herrajes consistentes entre StockPanel/chips/recepción; badges bajo/agotado con estilo real",
+        "Dashboard: Ver picking navega al proyecto; Días desde stage almacén; copy de canceladas con recepción correcto",
+        "Muertos removidos + doc comments corregidos; decisión paquete-vs-neto documentada en docs/",
+        "pnpm test + typecheck + go test + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-compras-almacen-2026-08-20.md",
+        "apps/web/src/stores/purchasingStore.ts",
+        "backend-go/internal/storage/purchaseOrders.go",
+        "packages/ui/src/purchasing/"
+      ],
+      "status": "pending",
+      "tags": [
+        "purchasing",
+        "tests",
+        "hardening",
+        "ui",
+        "backend"
+      ]
     }
   ]
 }
