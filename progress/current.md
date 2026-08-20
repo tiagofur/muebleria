@@ -1,27 +1,22 @@
 # Sesión activa
 
-**Feature:** Judgment Day CATÁLOGOS (auditoría, sin feature in_progress)
-**Estado:** Exploración/auditoría completada — reporte entregado
-**Fecha:** 2026-08-19
+**Feature:** F116 — catalogs_critical_bugfixes
+**Estado:** in_progress
+**Inicio:** 2026-08-19
 
-## Objetivo
+## Plan
 
-Judgment day de la sección CATÁLOGOS: buscar errores, fallos de lógica y funciones que no cumplen lo esperado (foco en diseño de Herrajes: geometrías default, diseños importados, materiales por capas), producir reporte completo y registrar el refactor de archivos grandes.
+1. **Bloque 1 (store TS):** C1 PBR de materiales persiste; C5 previewColor sin doble asignación; C7 toasts solo tras save resuelto; C6 migrateWorkspace en guest localStorage.
+2. **Bloque 2 (unicidad C2):** validar código contra todos (activos+inactivos) en pantallas de materiales/cantos/herrajes/acabados; upsert API no traga 409 como éxito silencioso.
+3. **Bloque 3 (Go/Postgres):** C3 espesor cantos INT→DOUBLE PRECISION + float64 + CHECK >= 0; C4 deleteAgregado REST real con guard; A1 PUT material 409; A2 delete módulo referenciado 409 + FE sin divergencia; A3 seeds no destructivos; A4 paridad seed (preview_shape/previewColor).
+4. **Bloque 4 (trackers):** F080 → done; notas divergencia F069/F070.
+5. Tests de comportamiento por fix + verificación completa (pnpm test, typecheck, go test, ./init.sh).
 
-## Qué se hizo
+## Decisiones tomadas
 
-- `./init.sh` verde (verificación previa).
-- 3 exploraciones exhaustivas en paralelo: UI de catálogos, sistema de herrajes 3D, persistencia (TS storage + backend-go + seeds).
-- Verificación manual de los hallazgos graves contra el código (C1–C7 confirmados).
-- Reporte canónico: `docs/history/judgment-day-catalogos-2026-08-19.md`.
-- Features registradas: **F116** `catalogs_critical_bugfixes` (pending, prioridad alta), **F117** `catalogs_refactor_split` (pending, después de F116).
+- Unicidad: validar contra TODOS los ítems (consistente con UNIQUE(code) de SQL y con OptionGroups). Recuperar código viejo → Reactivar.
+- Espesor cantos: `CHECK (thickness_mm >= 0)` para respetar seed TS existente (0 = sin canto).
 
-## Hallazgos clave (resumen)
+## Resultados de Verificación
 
-- Veredicto de las 3 dudas de herrajes: geometrías default SÍ aparecen (7 formas paramétricas, pero sin inputs de dimensiones en la UI); diseños importados NO EXISTEN (ni tipos ni loader); capas por componente SÍ funcionan end-to-end (F080 shipped pero tracker lo marca CONGELADO — tracker mentiroso).
-- 7 bugs críticos de pérdida de datos silenciosa en modo API (PBR no persiste, 409 tragado, cantos 0.5mm vs Go int, deleteAgregado sin REST, previewColor crudo, guest sin migraciones, éxitos cantados antes de guardar).
-- Deuda: MaterialsCatalog 1420 L, AmbientMaterialsCatalog 1310 L, catalogStore 1198 L, HardwareCatalog 769 L; HardwarePlacementGizmo (F070) es código muerto; App.tsx volvió a 4101 L (deuda regenerada post-F064).
-
-## Próximo paso
-
-Tomar F116 de `feature_list.json` (bugfixes críticos) y luego F117 (refactor). El usuario definió que seguirá con judgment days por parte: próximos sugeridos → Cotizaciones/Proyectos, Producción, Proyectar 3D.
+(pendiente)

@@ -2459,7 +2459,7 @@
         "backend-go/internal/storage/materials.go",
         "backend-go/internal/storage/seed.go"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "catalogs",
         "bugfix",

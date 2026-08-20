@@ -229,7 +229,7 @@ describe('catalogStore — materials', () => {
     expect(toasts.find((t) => t.type === 'info')).toBeUndefined();
   });
 
-  it('setMaterialActive toggles + toasts info with arrow', () => {
+  it('setMaterialActive toggles + toasts info with arrow', async () => {
     const { deps, toasts } = makeDeps();
     const store = createCatalogStore({ deps });
     const cat = seedCatalog();
@@ -237,9 +237,11 @@ describe('catalogStore — materials', () => {
     const first = cat.materials[0]!;
 
     store.getState().setMaterialActive(first.id, false);
+    await flush();
 
     const updated = store.getState().catalog!.materials.find((m) => m.id === first.id)!;
     expect(updated.active).toBe(false);
+    // F116 C7: the info toast fires only after the save resolves.
     expect(toasts[0]).toMatchObject({ type: 'info' });
     expect(toasts[0]!.message).toContain('↓');
   });
@@ -501,6 +503,12 @@ describe('catalogStore — categories (atypical)', () => {
 // ---------------------------------------------------------------------------
 
 describe('catalogStore — modules', () => {
+  async function flush(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
   it('deleteModule invokes onModuleDeleted callback (guest, no backend DELETE)', async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     const { deps } = makeDeps({
@@ -551,7 +559,7 @@ describe('catalogStore — modules', () => {
     ).toBe(false);
   });
 
-  it('duplicateModuleById creates a copy with suggested code', () => {
+  it('duplicateModuleById creates a copy with suggested code', async () => {
     const { deps, toasts } = makeDeps();
     const store = createCatalogStore({ deps });
     const cat = seedCatalog();
@@ -560,6 +568,7 @@ describe('catalogStore — modules', () => {
     const before = cat.modules.length;
 
     store.getState().duplicateModuleById(first.id);
+    await flush();
 
     expect(store.getState().catalog!.modules).toHaveLength(before + 1);
     const copy = store.getState().catalog!.modules[before]!;
@@ -858,6 +867,130 @@ describe('catalogStore — media helpers', () => {
       expect.objectContaining({
         method: 'POST',
         headers: { Authorization: 'Bearer jwt' },
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F116 — critical catalog bugfixes
+// ---------------------------------------------------------------------------
+
+describe('catalogStore — F116 bugfixes', () => {
+  async function flush(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('C1: createMaterial persists PBR finish fields (roughness/metalness/clearcoat)', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    const before = store.getState().catalog!.materials.length;
+
+    store.getState().createMaterial({
+      ...materialDraft,
+      previewRoughness: 0.4,
+      previewMetalness: 0.8,
+      previewClearcoat: 1.5, // clamped to 1
+    } as typeof materialDraft & { previewRoughness?: number; previewMetalness?: number; previewClearcoat?: number });
+    await flush();
+
+    const added = store.getState().catalog!.materials[before]!;
+    expect(added.previewRoughness).toBe(0.4);
+    expect(added.previewMetalness).toBe(0.8);
+    expect(added.previewClearcoat).toBe(1);
+  });
+
+  it('C1: updateMaterial can set PBR fields on an existing material', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const target = cat.materials[0]!;
+
+    store.getState().updateMaterial(target.id, {
+      ...materialDraft,
+      code: target.code,
+      previewRoughness: 0.25,
+    } as typeof materialDraft & { previewRoughness?: number });
+    await flush();
+
+    const updated = store
+      .getState()
+      .catalog!.materials.find((m) => m.id === target.id)!;
+    expect(updated.previewRoughness).toBe(0.25);
+  });
+
+  it('C5: invalid previewColor is dropped, never stored raw', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    const before = store.getState().catalog!.materials.length;
+
+    store.getState().createMaterial({
+      ...materialDraft,
+      previewColor: 'not-a-color',
+    });
+    await flush();
+
+    const added = store.getState().catalog!.materials[before]!;
+    expect(added.previewColor).toBeUndefined();
+  });
+
+  it('C7: createEdge does not toast success when the save fails', async () => {
+    const failing = makeDeps({
+      saveCatalog: async () => {
+        throw new Error('boom');
+      },
+    });
+    const store = createCatalogStore({ deps: failing.deps });
+    store.getState().setCatalog(seedCatalog());
+
+    store.getState().createEdge({
+      code: 'EDGE-X',
+      name: 'Edge X',
+      thicknessMm: 0.5,
+      costPerMl: 10,
+      notes: '',
+      previewColor: '',
+    });
+    await flush();
+
+    const messages = failing.toasts.map((t) => t.message);
+    expect(messages.some((m) => m.includes('EDGE-X') && m.includes('✓'))).toBe(
+      false,
+    );
+    expect(
+      failing.toasts.some((t) => t.type === 'error'),
+    ).toBe(true);
+  });
+
+  it('C4: deleteAgregado hits the REST endpoint when authenticated', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        ({ ok: true, text: async () => '' }) as unknown as Response,
+    );
+    const { deps } = makeDeps({
+      getSession: () => 'auth',
+      getAuthToken: () => 'jwt',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const store = createCatalogStore({ deps });
+    const cat = seedCatalog();
+    store.getState().setCatalog(cat);
+    const target = (cat.agregados ?? [])[0];
+    if (!target) return; // seed without agregados: nothing to assert
+
+    await store.getState().deleteAgregado(target.id);
+    await flush();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://test/api/catalog/agregados/' + target.id,
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ Authorization: 'Bearer jwt' }),
       }),
     );
   });

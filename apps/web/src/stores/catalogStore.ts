@@ -147,10 +147,11 @@ export interface CatalogState {
   readonly updateComponent: (id: string, draft: ComponentDraft) => void;
   readonly toggleComponentActive: (id: string) => void;
 
-  // --- Agregados ---
-  readonly createAgregado: (item: Agregado) => void;
-  readonly updateAgregado: (item: Agregado) => void;
-  readonly deleteAgregado: (id: string) => void;
+    // --- Agregados ---
+    readonly createAgregado: (item: Agregado) => void;
+    readonly updateAgregado: (item: Agregado) => void;
+    /** Auth: also DELETE /catalog/agregados/{id}. */
+    readonly deleteAgregado: (id: string) => Promise<void>;
 
   // --- Customers ---
   readonly createCustomer: (
@@ -197,6 +198,30 @@ function parsePbr(v: number | '' | undefined): number | undefined {
   return typeof v === 'number' && Number.isFinite(v)
     ? Math.min(1, Math.max(0, v))
     : undefined;
+}
+
+/**
+ * Normalized 3D finish fields (color + PBR) shared by material create/update.
+ * The color is only persisted when `normalizePreviewColor` accepts it, so an
+ * invalid hex never survives into the catalog raw (F116 C5), and PBR values
+ * are clamped the same way ambient materials do it (F116 C1).
+ */
+function materialPreviewFinishFields(
+  draft: MaterialDraft,
+): Pick<
+  MaterialBoard,
+  'previewColor' | 'previewRoughness' | 'previewMetalness' | 'previewClearcoat'
+> {
+  const previewColor = normalizePreviewColor(draft.previewColor);
+  const roughness = parsePbr(draft.previewRoughness);
+  const metalness = parsePbr(draft.previewMetalness);
+  const clearcoat = parsePbr(draft.previewClearcoat);
+  return {
+    ...(previewColor ? { previewColor } : {}),
+    ...(roughness !== undefined ? { previewRoughness: roughness } : {}),
+    ...(metalness !== undefined ? { previewMetalness: metalness } : {}),
+    ...(clearcoat !== undefined ? { previewClearcoat: clearcoat } : {}),
+  };
 }
 
 /**
@@ -294,6 +319,45 @@ export function createCatalogStore(options: InternalOptions) {
   }
 
   /**
+   * patch + success toast only after the save resolves (F116 C7). On failure
+   * the error toast is already emitted by patch, so nothing is claimed here.
+   */
+  function saveAndToast(
+    set: (partial: Partial<CatalogState>) => void,
+    get: () => CatalogState,
+    updater: (catalog: Catalog) => Catalog,
+    message: string | null,
+    type: 'success' | 'info' = 'success',
+  ): void {
+    void patch(set, get, updater).then(
+      () => {
+        if (message) toast({ type, message });
+      },
+      () => {
+        /* error toast already shown by patch */
+      },
+    );
+  }
+
+  /**
+   * Awaits a patch and reports whether the save landed (F116 C7). Use in async
+   * actions that follow up with a REST hard-delete: skip the delete when the
+   * local save already failed.
+   */
+  async function patchSaved(
+    set: (partial: Partial<CatalogState>) => void,
+    get: () => CatalogState,
+    updater: (catalog: Catalog) => Catalog,
+  ): Promise<boolean> {
+    try {
+      await patch(set, get, updater);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Hard-delete on the API when authenticated. Guest mode only needs the local
    * catalog rewrite (saveCatalog); saveCatalog is upsert-only and never DELETEs
    * missing rows, so auth deletes must hit the REST endpoint or the entity
@@ -363,7 +427,6 @@ export function createCatalogStore(options: InternalOptions) {
         wastePercent: draft.wastePercent,
         defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
         imageUrl: draft.imageUrl?.trim() || undefined,
-        previewColor: draft.previewColor?.trim() || undefined,
         previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
         previewTextureTileWidthMm:
           draft.previewTextureTileWidthMm && draft.previewTextureTileWidthMm > 0
@@ -375,7 +438,7 @@ export function createCatalogStore(options: InternalOptions) {
             ? draft.previewTextureTileLengthMm
             : undefined,
         notes: optionalNotes(draft.notes),
-        ...(normalizePreviewColor(draft.previewColor) ? { previewColor: normalizePreviewColor(draft.previewColor) } : {}),
+        ...materialPreviewFinishFields(draft),
         active: true,
       };
       if (!get().catalog) return;
@@ -433,12 +496,11 @@ export function createCatalogStore(options: InternalOptions) {
                 wastePercent: draft.wastePercent,
                 defaultEdgeBandId: draft.defaultEdgeBandId || undefined,
                 imageUrl: draft.imageUrl?.trim() || undefined,
-                previewColor: draft.previewColor?.trim() || undefined,
                 previewTextureUrl: draft.previewTextureUrl?.trim() || undefined,
                 previewTextureTileWidthMm: tileW,
                 previewTextureTileLengthMm: tileL,
                 notes: optionalNotes(draft.notes),
-                ...(normalizePreviewColor(draft.previewColor) ? { previewColor: normalizePreviewColor(draft.previewColor) } : {}),
+                ...materialPreviewFinishFields(draft),
               }
             : m,
         ),
@@ -465,18 +527,20 @@ export function createCatalogStore(options: InternalOptions) {
 
     setMaterialActive: (id, active) => {
       const target = get().catalog?.materials.find((m) => m.id === id);
-      patch(set, get, (c) => ({
-        ...c,
-        materials: c.materials.map((m) => (m.id === id ? { ...m, active } : m)),
-      }));
-      if (target) {
-        toast({
-          type: 'info',
-          message: active
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          materials: c.materials.map((m) => (m.id === id ? { ...m, active } : m)),
+        }),
+        target
+          ? active
             ? `↑ "${target.name}" reactivado`
-            : `↓ "${target.name}" desactivado`,
-        });
-      }
+            : `↓ "${target.name}" desactivado`
+          : null,
+        'info',
+      );
     },
 
     // --- Edges ---
@@ -494,46 +558,56 @@ export function createCatalogStore(options: InternalOptions) {
         ...(previewColor ? { previewColor } : {}),
         active: true,
       };
-      patch(set, get, (c) => ({ ...c, edges: [...c.edges, item] }));
-      toast({ type: 'success', message: `✓ "${code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({ ...c, edges: [...c.edges, item] }),
+        `✓ "${code}" creado`,
+      );
       return id;
     },
 
     updateEdge: (id, draft) => {
       const previewColor = normalizePreviewColor(draft.previewColor);
-      patch(set, get, (c) => ({
-        ...c,
-        edges: c.edges.map((e) =>
-          e.id === id
-            ? {
-                ...e,
-                code: draft.code.trim(),
-                name: draft.name.trim(),
-                thicknessMm: draft.thicknessMm,
-                costPerMl: draft.costPerMl,
-                notes: optionalNotes(draft.notes),
-                previewColor,
-              }
-            : e,
-        ),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          edges: c.edges.map((e) =>
+            e.id === id
+              ? {
+                  ...e,
+                  code: draft.code.trim(),
+                  name: draft.name.trim(),
+                  thicknessMm: draft.thicknessMm,
+                  costPerMl: draft.costPerMl,
+                  notes: optionalNotes(draft.notes),
+                  previewColor,
+                }
+              : e,
+          ),
+        }),
+        '✓ Cambios guardados',
+      );
     },
 
     setEdgeActive: (id, active) => {
       const target = get().catalog?.edges.find((e) => e.id === id);
-      patch(set, get, (c) => ({
-        ...c,
-        edges: c.edges.map((e) => (e.id === id ? { ...e, active } : e)),
-      }));
-      if (target) {
-        toast({
-          type: 'info',
-          message: active
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          edges: c.edges.map((e) => (e.id === id ? { ...e, active } : e)),
+        }),
+        target
+          ? active
             ? `↑ "${target.name}" reactivado`
-            : `↓ "${target.name}" desactivado`,
-        });
-      }
+            : `↓ "${target.name}" desactivado`
+          : null,
+        'info',
+      );
     },
 
     // --- Hardware ---
@@ -554,15 +628,22 @@ export function createCatalogStore(options: InternalOptions) {
         active: true,
         ...hardwarePreviewFields(draft),
       };
-      patch(set, get, (c) => ({ ...c, hardware: [...c.hardware, item] }));
-      toast({ type: 'success', message: `✓ "${code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({ ...c, hardware: [...c.hardware, item] }),
+        `✓ "${code}" creado`,
+      );
     },
 
     updateHardware: (id, draft) => {
       const pkg = Number(draft.packageSize);
       const packageSize =
         Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
-      patch(set, get, (c) => ({
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
         ...c,
         hardware: c.hardware.map((h) => {
           if (h.id !== id) return h;
@@ -591,24 +672,27 @@ export function createCatalogStore(options: InternalOptions) {
             ...hardwarePreviewFields(draft),
           };
         }),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      }),
+        '✓ Cambios guardados',
+      );
     },
 
     setHardwareActive: (id, active) => {
       const target = get().catalog?.hardware.find((h) => h.id === id);
-      patch(set, get, (c) => ({
-        ...c,
-        hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),
-      }));
-      if (target) {
-        toast({
-          type: 'info',
-          message: active
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),
+        }),
+        target
+          ? active
             ? `↑ "${target.name}" reactivado`
-            : `↓ "${target.name}" desactivado`,
-        });
-      }
+            : `↓ "${target.name}" desactivado`
+          : null,
+        'info',
+      );
     },
 
     // --- Ambient materials (presentation-only: finishes & scene textures) ---
@@ -712,20 +796,22 @@ export function createCatalogStore(options: InternalOptions) {
 
     setAmbientMaterialActive: (id, active) => {
       const target = get().catalog?.ambientMaterials?.find((m) => m.id === id);
-      patch(set, get, (c) => ({
-        ...c,
-        ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
-          m.id === id ? { ...m, active } : m,
-        ),
-      }));
-      if (target) {
-        toast({
-          type: 'info',
-          message: active
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
+            m.id === id ? { ...m, active } : m,
+          ),
+        }),
+        target
+          ? active
             ? `↑ "${target.name}" reactivado`
-            : `↓ "${target.name}" desactivado`,
-        });
-      }
+            : `↓ "${target.name}" desactivado`
+          : null,
+        'info',
+      );
     },
 
     createAmbientCategory: (draft) => {
@@ -735,28 +821,36 @@ export function createCatalogStore(options: InternalOptions) {
         parentId: draft.parentId.trim() || undefined,
         sortOrder: Number(draft.sortOrder) || 0,
       };
-      patch(set, get, (c) => ({
-        ...c,
-        ambientCategories: [...(c.ambientCategories ?? []), item],
-      }));
-      toast({ type: 'success', message: `✓ Categoría "${item.name}" creada` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          ambientCategories: [...(c.ambientCategories ?? []), item],
+        }),
+        `✓ Categoría "${item.name}" creada`,
+      );
     },
 
     updateAmbientCategory: (id, draft) => {
-      patch(set, get, (cat) => ({
-        ...cat,
-        ambientCategories: (cat.ambientCategories ?? []).map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                name: draft.name.trim(),
-                parentId: draft.parentId.trim() || undefined,
-                sortOrder: Number(draft.sortOrder) || 0,
-              }
-            : c,
-        ),
-      }));
-      toast({ type: 'success', message: '✓ Categoría actualizada' });
+      saveAndToast(
+        set,
+        get,
+        (cat) => ({
+          ...cat,
+          ambientCategories: (cat.ambientCategories ?? []).map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  name: draft.name.trim(),
+                  parentId: draft.parentId.trim() || undefined,
+                  sortOrder: Number(draft.sortOrder) || 0,
+                }
+              : c,
+          ),
+        }),
+        'Categoría actualizada',
+      );
     },
 
     deleteAmbientCategory: async (id) => {
@@ -769,13 +863,14 @@ export function createCatalogStore(options: InternalOptions) {
         });
         return;
       }
-      patch(set, get, (c) => ({
+      const saved = await patchSaved(set, get, (c) => ({
         ...c,
         ambientCategories: (c.ambientCategories ?? []).filter((cat) => cat.id !== id),
         ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
           m.categoryId === id ? { ...m, categoryId: undefined } : m,
         ),
       }));
+      if (!saved) return;
       const ok = await hardDeleteOnAuth(`/catalog/ambient-categories/${id}`);
       if (ok) {
         toast({ type: 'info', message: 'Categoría eliminada' });
@@ -793,34 +888,43 @@ export function createCatalogStore(options: InternalOptions) {
         required: draft.required,
         optionIds: [...draft.optionIds],
       };
-      patch(set, get, (c) => ({ ...c, optionGroups: [...c.optionGroups, item] }));
-      toast({ type: 'success', message: `✓ "${code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({ ...c, optionGroups: [...c.optionGroups, item] }),
+        `✓ "${code}" creado`,
+      );
     },
 
     updateOptionGroup: (id, draft) => {
-      patch(set, get, (c) => ({
-        ...c,
-        optionGroups: c.optionGroups.map((g) =>
-          g.id === id
-            ? {
-                ...g,
-                code: draft.code.trim(),
-                name: draft.name.trim(),
-                kind: draft.kind,
-                required: draft.required,
-                optionIds: [...draft.optionIds],
-              }
-            : g,
-        ),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          optionGroups: c.optionGroups.map((g) =>
+            g.id === id
+              ? {
+                  ...g,
+                  code: draft.code.trim(),
+                  name: draft.name.trim(),
+                  kind: draft.kind,
+                  required: draft.required,
+                  optionIds: [...draft.optionIds],
+                }
+              : g,
+          ),
+        }),
+        '✓ Cambios guardados',
+      );
     },
 
     deleteOptionGroup: async (id) => {
-      patch(set, get, (c) => ({
+      const saved = await patchSaved(set, get, (c) => ({
         ...c,
         optionGroups: c.optionGroups.filter((g) => g.id !== id),
       }));
+      if (!saved) return;
       const ok = await hardDeleteOnAuth(`/catalog/option-groups/${id}`);
       if (ok) {
         toast({ type: 'info', message: 'Grupo de opciones eliminado' });
@@ -835,28 +939,36 @@ export function createCatalogStore(options: InternalOptions) {
         parentId: draft.parentId.trim() || undefined,
         sortOrder: Number(draft.sortOrder) || 0,
       };
-      patch(set, get, (c) => ({
-        ...c,
-        categories: [...(c.categories ?? []), item],
-      }));
-      toast({ type: 'success', message: `✓ Categoría "${item.name}" creada` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          categories: [...(c.categories ?? []), item],
+        }),
+        `✓ Categoría "${item.name}" creada`,
+      );
     },
 
     updateCategory: (id, draft) => {
-      patch(set, get, (cat) => ({
-        ...cat,
-        categories: (cat.categories ?? []).map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                name: draft.name.trim(),
-                parentId: draft.parentId.trim() || undefined,
-                sortOrder: Number(draft.sortOrder) || 0,
-              }
-            : c,
-        ),
-      }));
-      toast({ type: 'success', message: '✓ Categoría actualizada' });
+      saveAndToast(
+        set,
+        get,
+        (cat) => ({
+          ...cat,
+          categories: (cat.categories ?? []).map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  name: draft.name.trim(),
+                  parentId: draft.parentId.trim() || undefined,
+                  sortOrder: Number(draft.sortOrder) || 0,
+                }
+              : c,
+          ),
+        }),
+        'Categoría actualizada',
+      );
     },
 
     deleteCategory: async (id) => {
@@ -869,13 +981,14 @@ export function createCatalogStore(options: InternalOptions) {
         });
         return;
       }
-      patch(set, get, (c) => ({
+      const saved = await patchSaved(set, get, (c) => ({
         ...c,
         categories: (c.categories ?? []).filter((cat) => cat.id !== id),
         modules: c.modules.map((m) =>
           m.categoryId === id ? { ...m, categoryId: undefined } : m,
         ),
       }));
+      if (!saved) return;
       const ok = await hardDeleteOnAuth(`/catalog/categories/${id}`);
       if (ok) {
         toast({ type: 'info', message: 'Categoría eliminada' });
@@ -885,23 +998,32 @@ export function createCatalogStore(options: InternalOptions) {
     // --- Modules ---
     createModule: (draft) => {
       const item = draftToModule(newId(), draft);
-      patch(set, get, (c) => ({ ...c, modules: [...c.modules, item] }));
-      toast({ type: 'success', message: `✓ "${item.code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({ ...c, modules: [...c.modules, item] }),
+        `✓ "${item.code}" creado`,
+      );
     },
 
     updateModule: (id, draft) => {
-      patch(set, get, (c) => ({
-        ...c,
-        modules: c.modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          modules: c.modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
+        }),
+        '✓ Cambios guardados',
+      );
     },
 
     deleteModule: async (id, onModuleDeleted) => {
-      patch(set, get, (c) => ({
+      const saved = await patchSaved(set, get, (c) => ({
         ...c,
         modules: c.modules.filter((m) => m.id !== id),
       }));
+      if (!saved) return;
       const ok = await hardDeleteOnAuth(`/catalog/modules/${id}`);
       if (ok) {
         onModuleDeleted?.(id);
@@ -921,43 +1043,56 @@ export function createCatalogStore(options: InternalOptions) {
         newCode,
         nextNestedId: newId,
       });
-      patch(set, get, (c) => ({ ...c, modules: [...c.modules, copy] }));
-      toast({ type: 'success', message: `✓ Duplicado como ${newCode}` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({ ...c, modules: [...c.modules, copy] }),
+        `✓ Duplicado como ${newCode}`,
+      );
     },
 
     // --- Structures ---
     createStructure: (draft) => {
       const item = draftToStructure(newId(), draft);
-      patch(set, get, (c) => ({
-        ...c,
-        structures: [...(c.structures ?? []), item],
-      }));
-      toast({ type: 'success', message: `✓ "${item.code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          structures: [...(c.structures ?? []), item],
+        }),
+        `✓ "${item.code}" creado`,
+      );
     },
 
     updateStructure: (id, draft) => {
-      patch(set, get, (c) => ({
-        ...c,
-        structures: (c.structures ?? []).map((s) => {
-          if (s.id !== id) return s;
-          // #108: editing a structure bumps its revision and pushes an immutable
-          // snapshot of the previous revision into history. Quotes that already
-          // pinned a prior revision keep resolving to the frozen snapshot.
-          const { structure } = bumpStructureRevision(
-            s,
-            draftToStructure(id, draft),
-          );
-          return structure;
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          structures: (c.structures ?? []).map((s) => {
+            if (s.id !== id) return s;
+            // #108: editing a structure bumps its revision and pushes an immutable
+            // snapshot of the previous revision into history. Quotes that already
+            // pinned a prior revision keep resolving to the frozen snapshot.
+            const { structure } = bumpStructureRevision(
+              s,
+              draftToStructure(id, draft),
+            );
+            return structure;
+          }),
         }),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+        '✓ Cambios guardados',
+      );
     },
 
     deleteStructure: async (id) => {
-      patch(set, get, (c) => ({
+      const saved = await patchSaved(set, get, (c) => ({
         ...c,
         structures: (c.structures ?? []).filter((s) => s.id !== id),
       }));
+      if (!saved) return;
       const ok = await hardDeleteOnAuth(`/catalog/structures/${id}`);
       if (ok) {
         toast({ type: 'info', message: 'Estructura eliminada' });
@@ -965,40 +1100,50 @@ export function createCatalogStore(options: InternalOptions) {
     },
 
     setStructureActive: (id, active) => {
-      patch(set, get, (c) => ({
-        ...c,
-        structures: (c.structures ?? []).map((s) =>
-          s.id === id ? { ...s, active } : s,
-        ),
-      }));
-      toast({
-        type: 'info',
-        message: active ? 'Estructura activada' : 'Estructura desactivada',
-      });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          structures: (c.structures ?? []).map((s) =>
+            s.id === id ? { ...s, active } : s,
+          ),
+        }),
+        active ? 'Estructura activada' : 'Estructura desactivada',
+        'info',
+      );
     },
 
     // --- Components ---
     createComponent: (draft) => {
       const item = draftToComponent(newId(), draft);
-      patch(set, get, (c) => ({
-        ...c,
-        components: [...(c.components ?? []), item],
-      }));
-      toast({ type: 'success', message: `✓ "${item.code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          components: [...(c.components ?? []), item],
+        }),
+        `✓ "${item.code}" creado`,
+      );
     },
 
     updateComponent: (id, draft) => {
-      patch(set, get, (c) => ({
-        ...c,
-        components: (c.components ?? []).map((comp) =>
-          comp.id === id ? draftToComponent(id, draft) : comp,
-        ),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          components: (c.components ?? []).map((comp) =>
+            comp.id === id ? draftToComponent(id, draft) : comp,
+          ),
+        }),
+        '✓ Cambios guardados',
+      );
     },
 
     toggleComponentActive: (id) => {
-      patch(set, get, (c) => ({
+      void patch(set, get, (c) => ({
         ...c,
         components: (c.components ?? []).map((comp) =>
           comp.id === id ? { ...comp, active: !comp.active } : comp,
@@ -1008,27 +1153,39 @@ export function createCatalogStore(options: InternalOptions) {
 
     // --- Agregados ---
     createAgregado: (item) => {
-      patch(set, get, (c) => ({
-        ...c,
-        agregados: [...(c.agregados ?? []), item],
-      }));
-      toast({ type: 'success', message: `✓ "${item.code}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          agregados: [...(c.agregados ?? []), item],
+        }),
+        `✓ "${item.code}" creado`,
+      );
     },
 
     updateAgregado: (item) => {
-      patch(set, get, (c) => ({
-        ...c,
-        agregados: (c.agregados ?? []).map((a) => (a.id === item.id ? item : a)),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          agregados: (c.agregados ?? []).map((a) => (a.id === item.id ? item : a)),
+        }),
+        '✓ Cambios guardados',
+      );
     },
 
-    deleteAgregado: (id) => {
-      patch(set, get, (c) => ({
+    deleteAgregado: async (id) => {
+      const saved = await patchSaved(set, get, (c) => ({
         ...c,
         agregados: (c.agregados ?? []).filter((a) => a.id !== id),
       }));
-      toast({ type: 'info', message: 'Agregado eliminado' });
+      if (!saved) return;
+      const ok = await hardDeleteOnAuth(`/catalog/agregados/${id}`);
+      if (ok) {
+        toast({ type: 'info', message: 'Agregado eliminado' });
+      }
     },
 
     // --- Customers ---
@@ -1048,11 +1205,15 @@ export function createCatalogStore(options: InternalOptions) {
         active: true,
         ownerUserId,
       };
-      patch(set, get, (c) => ({
-        ...c,
-        customers: [...(c.customers ?? []), item],
-      }));
-      toast({ type: 'success', message: `✓ Cliente "${item.name}" creado` });
+      saveAndToast(
+        set,
+        get,
+        (c) => ({
+          ...c,
+          customers: [...(c.customers ?? []), item],
+        }),
+        `✓ Cliente "${item.name}" creado`,
+      );
     },
 
     updateCustomer: (id, draft, actor) => {
@@ -1062,41 +1223,47 @@ export function createCatalogStore(options: InternalOptions) {
         existing?.ownerUserId,
         draft.ownerUserId,
       );
-      patch(set, get, (cat) => ({
-        ...cat,
-        customers: (cat.customers ?? []).map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                name: draft.name.trim(),
-                email: draft.email.trim() || undefined,
-                phone: draft.phone.trim() || undefined,
-                address: draft.address.trim() || undefined,
-                notes: draft.notes.trim() || undefined,
-                ownerUserId,
-              }
-            : c,
-        ),
-      }));
-      toast({ type: 'success', message: '✓ Cambios guardados' });
+      saveAndToast(
+        set,
+        get,
+        (cat) => ({
+          ...cat,
+          customers: (cat.customers ?? []).map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  name: draft.name.trim(),
+                  email: draft.email.trim() || undefined,
+                  phone: draft.phone.trim() || undefined,
+                  address: draft.address.trim() || undefined,
+                  notes: draft.notes.trim() || undefined,
+                  ownerUserId,
+                }
+              : c,
+          ),
+        }),
+        '✓ Cambios guardados',
+      );
     },
 
     setCustomerActive: (id, active) => {
       const target = get().catalog?.customers?.find((c) => c.id === id);
-      patch(set, get, (cat) => ({
-        ...cat,
-        customers: (cat.customers ?? []).map((c) =>
-          c.id === id ? { ...c, active } : c,
-        ),
-      }));
-      if (target) {
-        toast({
-          type: 'info',
-          message: active
+      saveAndToast(
+        set,
+        get,
+        (cat) => ({
+          ...cat,
+          customers: (cat.customers ?? []).map((c) =>
+            c.id === id ? { ...c, active } : c,
+          ),
+        }),
+        target
+          ? active
             ? `↑ "${target.name}" reactivado`
-            : `↓ "${target.name}" desactivado`,
-        });
-      }
+            : `↓ "${target.name}" desactivado`
+          : null,
+        'info',
+      );
     },
 
     upsertCustomers: (customers) => {

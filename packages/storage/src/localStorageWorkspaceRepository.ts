@@ -33,6 +33,7 @@ import {
 } from '@muebles/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import { createSeedWorkspace } from './seed';
+import { migrateWorkspace } from './migrateWorkspace';
 
 const LOCAL_STORAGE_KEY = 'muebles_guest_workspace';
 const PICKING_LOCAL_STORAGE_KEY = 'muebles_guest_picking';
@@ -49,7 +50,9 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     try {
       const raw = globalThis.localStorage.getItem(LOCAL_STORAGE_KEY);
       if (raw) {
-        return withWorkshopSettings(JSON.parse(raw) as Workspace);
+        // F116 C6: guest workspaces persisted at an older schemaVersion must
+        // migrate on load, exactly like the JSON file storage does.
+        return withWorkshopSettings(migrateWorkspace(JSON.parse(raw) as Workspace));
       }
     } catch {
       // ignore
