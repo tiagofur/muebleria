@@ -1306,7 +1306,7 @@
       "phase": 13,
       "name": "herrajes_variantes_acabado",
       "title": "Variantes de acabado para herrajes (cromado/negro/bronce/mate)",
-      "description": "Fase B (Roadmap Comercial v2). Modelo D2: cada herraje del catálogo ofrece N acabados predefinidos (variantes cerradas, no capas por componente). Selector en inspector (F066). Migración aditiva hardware_finishes: tabla de acabados + FK en hardware. Swap de material PBR (metalness/roughness/color) al elegir variante. Capas por componente queda congelado (F080).",
+      "description": "Fase B (Roadmap Comercial v2). Modelo D2: cada herraje del catálogo ofrece N acabados predefinidos (variantes cerradas, no capas por componente). Selector en inspector (F066). Migración aditiva hardware_finishes: tabla de acabados + FK en hardware. Swap de material PBR (metalness/roughness/color) al elegir variante. Capas por componente queda congelado (F080). NOTA (JD Catálogos 2026-08-19): la implementación real diverge de la aceptación — los acabados son presets en código (hardwareFinishes.ts) en vez de tabla hardware_finishes, el herraje guarda escalares PBR, y el selector vive en HardwareCatalog, no en el inspector 3D. El tracker queda done por el comportamiento equivalente; ver docs/history/judgment-day-catalogos-2026-08-19.md §2.4.",
       "acceptance": [
         "Migración aditiva backend-go (000038 o siguiente): CREATE TABLE IF NOT EXISTS hardware_finishes (id, code, name, color_hex, metalness, roughness, clearcoat)",
         "Hardware tiene finishes: HardwareFinish[] (al menos 1 por default)",
@@ -1329,7 +1329,7 @@
       "phase": 13,
       "name": "herrajes_editor_placement_3d",
       "title": "Editor de placement de herrajes en 3D (gizmo interactivo)",
-      "description": "Fase B (Roadmap Comercial v2). Gizmo de posición/rotación interactivo en el viewport 3D para herrajes. Ajuste fino en inspector (F066) con campos numéricos (mm y grados). Multi-selección para mover varios herrajes juntos. Construye sobre HardwarePlacement (relativePosition + anchorFace + rotationDeg + scale) y hardwarePlacement resolver existente.",
+      "description": "Fase B (Roadmap Comercial v2). Gizmo de posición/rotación interactivo en el viewport 3D para herrajes. Ajuste fino en inspector (F066) con campos numéricos (mm y grados). Multi-selección para mover varios herrajes juntos. Construye sobre HardwarePlacement (relativePosition + anchorFace + rotationDeg + scale) y hardwarePlacement resolver existente. NOTA (JD Catálogos 2026-08-19): el gizmo (HardwarePlacementGizmo.tsx) existe con tests de helpers pero NUNCA fue montado en el viewport — los inputs del PartInspector tampoco están cableados. El único camino vivo de authoring es HardwarePlacementsEditor en el editor de módulo/agregado. Reabrir como feature nueva si se quiere el gizmo real; ver docs/history/judgment-day-catalogos-2026-08-19.md §2.4.",
       "acceptance": [
         "Gizmo 3D (translate/rotate) aparece al seleccionar un herraje en el viewport",
         "Drag del gizmo actualiza relativePosition (conversión mm→percent del face)",
@@ -1536,15 +1536,17 @@
       "id": "F080",
       "phase": 16,
       "name": "herrajes_capas_acabado_componente",
-      "title": "Capas de acabado por componente de herraje [CONGELADO]",
-      "description": "Roadmap Comercial v2 Fase Congelada. Modelo avanzado (vs F069 variantes): un herraje se compone de partes (cuerpo, base, empuñadura) y cada parte tiene acabado independiente. Más tipo Promob Builder. Postergado hasta demanda de catálogo complejo.",
+      "title": "Capas de acabado por componente de herraje",
+      "description": "Roadmap Comercial v2. Modelo avanzado (vs F069 variantes): un herraje se compone de partes (cuerpo, base, empuñadura) y cada parte tiene acabado independiente. CORRECCIÓN (JD Catálogos 2026-08-19): esta feature FUE implementada y funciona end-to-end (commit 951631f, 2026-08-15) — partFinishes Partial<Record<HardwarePartRole, HardwareFinishId>> en Hardware, selects por parte en HardwareCatalog, migración 000046 en Go, render por sub-mesh en HardwareMesh. El tracker y roadmap-comercial-v2.md quedaban desactualizados. Limitaciones conocidas: solo los 5 presets fijos por parte (sin color custom) y 'grip' solo tiene efecto visual en bar-pull.",
       "acceptance": [
-        "[CONGELADO] No se implementa hasta disparador comercial"
+        "[SUPERADO] Implementado en 951631f antes de este update — ver docs/history/judgment-day-catalogos-2026-08-19.md §2.3"
       ],
       "references": [
-        "docs/roadmap-comercial-v2.md Fase Congelada, Decisión D2"
+        "docs/roadmap-comercial-v2.md Fase Congelada, Decisión D2",
+        "packages/domain/src/hardwareFinishes.ts",
+        "backend-go/db/migration/000046_hardware_part_finishes.up.sql"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F081",
@@ -2459,7 +2461,7 @@
         "backend-go/internal/storage/materials.go",
         "backend-go/internal/storage/seed.go"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "catalogs",
         "bugfix",

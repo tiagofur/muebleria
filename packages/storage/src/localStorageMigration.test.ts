@@ -48,8 +48,12 @@ describe('migrateWorkspace (F116 C6)', () => {
 
     const migrated = migrateWorkspace(v1);
     expect(migrated.schemaVersion).toBeGreaterThanOrEqual(2);
-    for (const mod of migrated.catalog.modules) {
-      for (const part of mod.boardParts) {
+    // Untyped on purpose: v1 payloads predate the current Module shape.
+    const mods = migrated.catalog.modules as unknown as {
+      boardParts?: { [k: string]: unknown }[];
+    }[];
+    for (const mod of mods) {
+      for (const part of mod.boardParts ?? []) {
         expect('grain' in part).toBe(false);
       }
     }
@@ -109,8 +113,11 @@ describe('LocalStorageWorkspaceRepository — guest migration (F116 C6)', () => 
     const ws = await repo.load();
 
     expect(ws.schemaVersion).toBeGreaterThanOrEqual(3);
-    for (const mod of ws.catalog.modules) {
-      for (const part of mod.boardParts) {
+    const mods = ws.catalog.modules as unknown as {
+      boardParts?: { [k: string]: unknown }[];
+    }[];
+    for (const mod of mods) {
+      for (const part of mod.boardParts ?? []) {
         expect('grain' in part).toBe(false);
       }
     }
