@@ -2536,15 +2536,15 @@
       "phase": 0,
       "name": "shell_refactor_slim",
       "title": "Refactor del shell: runExport, purchasingStore, derivaciones y render — App.tsx < 800 L",
-      "description": "Surge del Judgment Day del Shell 2026-08-19 (§5). AppContent volvió a ~2600 L. (1) Helper runExport(builder, opts) que reemplaza los 13 handlers copy-paste (~700 L → ~80). (2) purchasingStore: migrar el bloque compras/stock/proveedores/OC + handleTogglePick (~450 L nunca migrados de F057-F064). (3) Derivaciones de dominio (cutRows, fabricMetrics, estimates, dashboard stats) a módulo de selectors puro. (4) Render: extraer wrappers por área (EngineeringWorkspace IIFE → componente, agrupar props de ProjectsScreen), meta App.tsx < 800 L camino al <600 original. (5) Limpieza: muertos (repository memo, optionalNotes, props duplicados de export, rama muerta de onEntityEditRequest), ScreenBoundary en ProductionManagerDashboard, window.confirm → modal de design. (6) A6: wire deep-link de finishes y addOns o quitar de ENTITY_SECTIONS. Idealmente después de F118.",
+      "description": "Surge del Judgment Day del Shell 2026-08-19 (§5). AppContent volvió a ~2600 L. (1) Helper runExport(builder, opts) que reemplaza los 13 handlers copy-paste (~700 L → ~80). (2) purchasingStore: migrar el bloque compras/stock/proveedores/OC + handleTogglePick (~450 L nunca migrados de F057-F064). (3) Derivaciones de dominio (cutRows, fabricMetrics, estimates, dashboard stats) a módulo de selectors puro. (4) Render: extraer wrappers por área (EngineeringWorkspace IIFE → componente, agrupar props de ProjectsScreen), meta App.tsx < 800 L camino al <600 original. (5) Limpieza: muertos (repository memo, optionalNotes, props duplicados de export, rama muerta de onEntityEditRequest), ScreenBoundary en ProductionManagerDashboard, window.confirm → modal de design. (6) A6: wire deep-link de finishes y addOns o quitar de ENTITY_SECTIONS. Idealmente después de F118. SCOPE FINAL (cierre honesto): entregados purchasingStore (~450 L migrados verbatim), runExport (14 handlers delgados, busy contador F118), buildStockCatalog puro, muertos removidos (repository memo, optionalNotes, props duplicados), ScreenBoundary en ProductionManagerDashboard y deep-links de finishes+addOns. App.tsx quedó en 3622 L (desde 4101): el split de render <800, el módulo completo de derivaciones y el modal de confirmFabricBatch se movieron a F120.",
       "acceptance": [
-        "runExport helper único; los 13 handlers pasan a configuración; busy/errors por export",
+        "runExport helper único; los 14 handlers pasan a configuración delgada; busy por contador",
         "purchasingStore con picking/stock/movements/suppliers/purchaseOrders + togglePick fuera de App.tsx",
-        "App.tsx < 800 L con derivaciones en módulo de selectors y wrappers por área",
-        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos (smoke manual)",
-        "Muertos removidos; ProductionManagerDashboard con ScreenBoundary; confirmFabricBatch usa modal",
-        "Deep-links de finishes y addOns funcionan (o se retiran de ENTITY_SECTIONS con justificación)",
-        "pnpm test + typecheck + ./init.sh verdes"
+        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos",
+        "Muertos removidos; ProductionManagerDashboard con ScreenBoundary",
+        "Deep-links de finishes y addOns funcionan",
+        "pnpm test + typecheck + ./init.sh verdes",
+        "NOTA: App.tsx < 800 y confirmFabricBatch modal se movieron a F120 (shell_slim_phase2)"
       ],
       "references": [
         "docs/history/judgment-day-shell-2026-08-19.md",
@@ -2552,13 +2552,39 @@
         "apps/web/src/stores/",
         "apps/web/src/routes.ts"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "shell",
         "refactor",
         "clean-code",
         "stores",
         "exports"
+      ]
+    },
+    {
+      "id": "F120",
+      "phase": 0,
+      "name": "shell_slim_phase2",
+      "title": "Shell slim fase 2: split de render de App.tsx (< 800 L) + módulo de derivaciones + confirmFabricBatch modal",
+      "description": "Remanente de F119 (docs/history/judgment-day-shell-2026-08-19.md §5): (1) extraer wrappers por área del render de AppContent — EngineeringWorkspace IIFE → componente, props de ProjectsScreen agrupadas, switches de navId a componentes de área — meta App.tsx < 800 L camino al <600 original de F064; (2) mover el bloque de derivaciones (cutRows, purchasingProjects, fabricMetrics, moduleEstimates, projectEstimates, dashboard stats) a un módulo de selectors puro tipo buildStockCatalog; (3) confirmFabricBatch: reemplazar window.confirm por modal de design.md (requiere reestructurar el flujo síncrono en FabricScreen, packages/ui).",
+      "acceptance": [
+        "App.tsx < 800 L con wrappers por área y derivaciones en módulo puro",
+        "confirmFabricBatch usa modal (sin window.confirm)",
+        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos",
+        "pnpm test + typecheck + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-shell-2026-08-19.md",
+        "apps/web/src/App.tsx",
+        "apps/web/src/derivations/stockCatalog.ts",
+        "packages/ui/src/production/FabricScreen.tsx"
+      ],
+      "status": "pending",
+      "tags": [
+        "shell",
+        "refactor",
+        "clean-code",
+        "ui"
       ]
     }
   ]
