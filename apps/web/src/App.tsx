@@ -189,6 +189,7 @@ import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
 import { buildStockCatalog } from './derivations/stockCatalog';
 import { usePurchasingDerivations } from './derivations/usePurchasingDerivations';
+import { useQuoteDerivations } from './derivations/useQuoteDerivations';
 import {
   computeModuleCostPreview,
   computeSelectedProjectBreakdown,
@@ -1002,127 +1003,32 @@ function AppContent({
     },
     [stockDebitLinesFor],
   );
-  const workshopSettings = resolveWorkshopSettings(workspace?.settings);
-  /** Guest/local: full costs; auth uses COST-01 + COST-02 flag (F039/F044). */
-  const showCosts =
-    session === 'guest' ||
-    roleCanViewCosts(actorRole, {
-      vendedorCanViewCosts: workshopSettings.vendedorCanViewCosts,
-    });
-
-  const modulePreview = useMemo(() => {
-    if (!editingModuleId || !catalog) {
-      return {
-        costPreview: null as QuoteBreakdown | null,
-        previewBlocked: false,
-        missingGroups: [] as readonly string[],
-        previewError: null as string | null,
-      };
-    }
-    const mod = modules.find((m) => m.id === editingModuleId);
-    if (!mod) {
-      return {
-        costPreview: null,
-        previewBlocked: true,
-        missingGroups: [] as readonly string[],
-        previewError: null as string | null,
-      };
-    }
-    return computeModuleCostPreview(mod, catalog);
-  }, [editingModuleId, modules, catalog]);
-
-  /** Sale-price estimates for module cards — domain only in the shell (F021). */
-  const moduleEstimates = useMemo(() => {
-    const map: Record<string, number | null> = {};
-    if (!catalog) return map;
-    for (const mod of modules) {
-      const preview = computeModuleCostPreview(mod, catalog);
-      map[mod.id] = preview.costPreview?.salePrice ?? null;
-    }
-    return map;
-  }, [modules, catalog]);
-
-  const projectQuote = useMemo(
-    () =>
-      catalog
-        ? computeSelectedProjectBreakdown(selectedProject, catalog)
-        : {
-            breakdown: null as QuoteBreakdown | null,
-            previewBlocked: false,
-            missingGroups: [] as readonly string[],
-            breakdownError: null as string | null,
-          },
-    [selectedProject, catalog],
-  );
-
-  /** F047: m² / herrajes summary — same gate as price preview. */
-  const materialSummary = useMemo((): ProjectMaterialSummary | null => {
-    if (!catalog || !selectedProject) return null;
-    if (projectQuote.previewBlocked || !projectQuote.breakdown) return null;
-    try {
-      return generateProjectMaterialSummary(selectedProject, catalog);
-    } catch {
-      return null;
-    }
-  }, [catalog, selectedProject, projectQuote.previewBlocked, projectQuote.breakdown]);
-
-  /** Sale-price estimates for project cards — domain only in the shell (F022). */
-  const projectEstimates = useMemo(() => {
-    const map: Record<string, number | null> = {};
-    if (!catalog) return map;
-    for (const project of projects) {
-      if (project.priceSnapshot) {
-        map[project.id] = project.priceSnapshot.breakdown.salePrice;
-        continue;
-      }
-      const quote = computeSelectedProjectBreakdown(project, catalog);
-      map[project.id] = quote.breakdown?.salePrice ?? null;
-    }
-    return map;
-  }, [projects, catalog]);
-
-  /**
-   * Dashboard stats + recent list (F023).
-   * monthlyQuotedTotal: sum of sale prices for quoted/accepted projects whose
-   * updatedAt falls in the current calendar month (uses projectEstimates /
-   * priceSnapshot — domain engine only in shell).
-   */
-  const dashboardStats = useMemo(
-    () => ({
-      activeProjects: countActiveProjects(projects),
-      monthlyQuotedTotal: sumMonthlyQuotedTotal(projects, projectEstimates),
-      modulesCount: countModules(modules),
-      activeMaterials: countActiveMaterials(materials),
-    }),
-    [projects, projectEstimates, modules, materials],
-  );
-
-  const dashboardRecent = useMemo(() => {
-    return selectRecentProjects(projects, 5).map((project) => ({
-      id: project.id,
-      name: project.name,
-      customerLabel: resolveCustomerName(project.customerId, customers),
-      status: project.status,
-      updatedAt: project.updatedAt,
-      salePrice: projectEstimates[project.id] ?? null,
-    }));
-  }, [projects, customers, projectEstimates]);
-
-  /** F037: multi-owner portfolio table for gerente/admin only. */
-  const dashboardOwnerBreakdown = useMemo(() => {
-    if (!canViewPortfolioDashboard) return undefined;
-    return aggregatePortfolioByOwner(
-      projects,
-      projectEstimates,
-      assignableOwners,
-      (role) => roleLabelEs(role),
-    );
-  }, [
-    canViewPortfolioDashboard,
-    projects,
+  // F120: quote/dashboard derivations live in useQuoteDerivations.
+  const {
+    workshopSettings,
+    showCosts,
+    modulePreview,
+    moduleEstimates,
+    projectQuote,
+    materialSummary,
     projectEstimates,
+    dashboardStats,
+    dashboardRecent,
+    dashboardOwnerBreakdown,
+  } = useQuoteDerivations({
+    workspaceSettings: workspace?.settings,
+    session,
+    actorRole,
+    catalog,
+    modules,
+    materials,
+    customers,
+    projects,
+    selectedProject,
+    editingModuleId,
+    canViewPortfolioDashboard,
     assignableOwners,
-  ]);
+  });
 
   /** F090: workshop analytics — funnel + warranties for gerente/admin. */
   const [analyticsPeriod, setAnalyticsPeriod] =
