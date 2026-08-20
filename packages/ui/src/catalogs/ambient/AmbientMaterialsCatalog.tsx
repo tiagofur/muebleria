@@ -38,6 +38,7 @@ import {
   SearchInput,
   StatusChips,
   useDebouncedValue,
+  useRoutableEntitySelection,
 } from '../../common';
 import {
   filterCatalogItems,
@@ -75,6 +76,9 @@ export interface AmbientMaterialsCatalogProps {
   /** F042: upload media; returns relative media URL. */
   readonly onUploadImage?: (file: File) => Promise<string>;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** URL handoff: `/finishes/:id` expands that row (F119 deep-link). */
+  readonly openEntityId?: string | null;
+  readonly onSelectionChange?: (id: string | null) => void;
 }
 
 export function AmbientMaterialsCatalog({
@@ -90,6 +94,8 @@ export function AmbientMaterialsCatalog({
   canMutate = true,
   onUploadImage,
   resolveImageUrl = (u) => u,
+  openEntityId = null,
+  onSelectionChange,
 }: AmbientMaterialsCatalogProps): ReactNode {
   const formId = useId();
 
@@ -97,7 +103,16 @@ export function AmbientMaterialsCatalog({
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const materialIds = useMemo(
+    () => materials.map((m) => m.id),
+    [materials],
+  );
+  const { selectedId: expandedId, toggleSelectedId } =
+    useRoutableEntitySelection({
+      openEntityId,
+      onSelectionChange,
+      knownIds: materialIds,
+    });
 
   // Material Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -439,9 +454,7 @@ export function AmbientMaterialsCatalog({
               rows={rows}
               expandedId={expandedId}
               isInactive={(r) => !r.active}
-              onRowClick={(row) =>
-                setExpandedId((prev) => (prev === row.id ? null : row.id))
-              }
+              onRowClick={(row) => toggleSelectedId(row.id)}
               renderExpandedDetail={(row) => {
                 const path = categoryPath(row.categoryId, categories);
                 return (

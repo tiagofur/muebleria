@@ -120,6 +120,7 @@ const ENTITY_SECTIONS: readonly EntitySection[] = [
   'modules',
   'structures',
   'components',
+  'addOns',
   'materials',
   'edges',
   'hardware',

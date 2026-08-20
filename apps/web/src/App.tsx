@@ -2450,6 +2450,17 @@ function AppContent({
     [navigate],
   );
 
+  /** Screen-level selection callback for sections without a bespoke one. */
+  const onAddOnsSelectionChange = useCallback(
+    (id: string | null) => onEntitySelectionChange('addOns', id),
+    [onEntitySelectionChange],
+  );
+
+  const onFinishesSelectionChange = useCallback(
+    (id: string | null) => onEntitySelectionChange('finishes', id),
+    [onEntitySelectionChange],
+  );
+
   /**
    * Navigate to the inline editor route `/section/:id/edit` (Fase 3 UI).
    * Used by ModulesScreen / StructuresScreen / ComponentsScreen when the user
@@ -3202,6 +3213,8 @@ function AppContent({
       ) : null}
       {navId === 'finishes' ? (
         <AmbientMaterialsCatalog
+          openEntityId={navId === 'finishes' ? routeEntityId : null}
+          onSelectionChange={onFinishesSelectionChange}
           materials={ambientMaterials}
           categories={ambientCategories}
           onCreate={createAmbientMaterial}
@@ -3383,6 +3396,8 @@ function AppContent({
       {navId === 'addOns' ? (
         <AgregadosScreen
           agregados={agregados}
+          openAgregadoId={navId === 'addOns' ? routeEntityId : null}
+          onSelectionChange={onAddOnsSelectionChange}
           catalogComponents={components}
           catalogHardware={hardware}
           onCreate={createAgregado}
