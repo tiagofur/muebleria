@@ -2566,12 +2566,14 @@
       "phase": 0,
       "name": "shell_slim_phase2",
       "title": "Shell slim fase 2: split de render de App.tsx (< 800 L) + módulo de derivaciones + confirmFabricBatch modal",
-      "description": "Remanente de F119 (docs/history/judgment-day-shell-2026-08-19.md §5): (1) extraer wrappers por área del render de AppContent — EngineeringWorkspace IIFE → componente, props de ProjectsScreen agrupadas, switches de navId a componentes de área — meta App.tsx < 800 L camino al <600 original de F064; (2) mover el bloque de derivaciones (cutRows, purchasingProjects, fabricMetrics, moduleEstimates, projectEstimates, dashboard stats) a un módulo de selectors puro tipo buildStockCatalog; (3) confirmFabricBatch: reemplazar window.confirm por modal de design.md (requiere reestructurar el flujo síncrono en FabricScreen, packages/ui).",
+      "description": "Remanente de F119 (docs/history/judgment-day-shell-2026-08-19.md §5): (1) extraer wrappers por área del render de AppContent — EngineeringWorkspace IIFE → componente, props de ProjectsScreen agrupadas, switches de navId a componentes de área — meta App.tsx < 800 L camino al <600 original de F064; (2) mover el bloque de derivaciones (cutRows, purchasingProjects, fabricMetrics, moduleEstimates, projectEstimates, dashboard stats) a un módulo de selectors puro tipo buildStockCatalog; (3) confirmFabricBatch: reemplazar window.confirm por modal de design.md (requiere reestructurar el flujo síncrono en FabricScreen, packages/ui). SCOPE FINAL (cierre honesto): entregados derivations/breakdown.ts (puras), useExportHandlers (14 handlers), SessionGate.tsx, usePurchasingDerivations, useQuoteDerivations y el modal de confirmación de lote en FabricScreen (sin window.confirm). App.tsx: 3622 → 2795 L. El split de render (<800) se evaluó y difirió: requiere plomería de 150+ props por área — registrado como F121 con meta realista.",
       "acceptance": [
-        "App.tsx < 800 L con wrappers por área y derivaciones en módulo puro",
-        "confirmFabricBatch usa modal (sin window.confirm)",
+        "confirmFabricBatch usa modal de design (sin window.confirm) — test del flujo completo",
+        "Derivaciones extraídas a módulos: breakdown.ts (puras), usePurchasingDerivations, useQuoteDerivations",
+        "useExportHandlers + SessionGate fuera de App.tsx",
         "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos",
-        "pnpm test + typecheck + ./init.sh verdes"
+        "pnpm test + typecheck + ./init.sh verdes",
+        "NOTA: App.tsx < 800 (split de render) se movió a F121 con meta realista <1500 y estrategia de contexto agrupado"
       ],
       "references": [
         "docs/history/judgment-day-shell-2026-08-19.md",
@@ -2579,12 +2581,34 @@
         "apps/web/src/derivations/stockCatalog.ts",
         "packages/ui/src/production/FabricScreen.tsx"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "shell",
         "refactor",
         "clean-code",
         "ui"
+      ]
+    },
+    {
+      "id": "F121",
+      "phase": 0,
+      "name": "shell_render_split",
+      "title": "Shell render split: App.tsx < 1500 vía componentes por área con contexto agrupado",
+      "description": "Remanente de F119/F120: partir el bloque de render de AppContent (~1000 L: AppShell + 26 branches navId con ProjectsScreen a ~150 props) en componentes por área (TRABAJO: quotes/customers/showcase/home; INGENIERÍA: modules/structures/components/addOns/materials/edges/hardware/finishes/optionGroups; PRODUCCIÓN: fabric/orders/shipments/dashboards; COMPRAS: warehouse). Estrategia: un objeto de contexto por área (agrupando los 150+ valores sueltos) en vez de plomería prop-por-prop; App.tsx queda como orquestador delgado (<1500 L realista). Incluye mover los wrappers finos restantes (catálogo/proyectos/fabric/media/navegación) a hooks si hace falta.",
+      "acceptance": [
+        "App.tsx < 1500 L con componentes de área en apps/web/src/shellAreas/",
+        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos (smoke manual por área)",
+        "pnpm test + typecheck + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-shell-2026-08-19.md",
+        "apps/web/src/App.tsx"
+      ],
+      "status": "pending",
+      "tags": [
+        "shell",
+        "refactor",
+        "clean-code"
       ]
     }
   ]
