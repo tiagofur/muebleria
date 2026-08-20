@@ -186,6 +186,7 @@ import {
 } from '@muebles/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
+import { buildStockCatalog } from './derivations/stockCatalog';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import {
@@ -272,11 +273,6 @@ function newId(): string {
     return crypto.randomUUID();
   }
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function optionalNotes(notes: string): string | undefined {
-  const trimmed = notes.trim();
-  return trimmed ? trimmed : undefined;
 }
 
 /**
@@ -862,57 +858,8 @@ function AppContent({
     [canManagePurchasing],
   );
 
-  /** Catálogo para el panel de stock: labels, opciones del modal y códigos→ids. */
-  const stockCatalog = useMemo(() => {
-    if (!catalog) {
-      return {
-        labels: {},
-        options: [],
-        materialIdByCode: {},
-        edgeIdByCode: {},
-        prices: {},
-      };
-    }
-    const labels: Record<string, string> = {};
-    const materialIdByCode: Record<string, string> = {};
-    const edgeIdByCode: Record<string, string> = {};
-    const prices: Record<string, number> = {};
-    const options: Array<{
-      kind: StockMaterialKind;
-      items: Array<{ id: string; label: string }>;
-    }> = [
-      {
-        kind: 'herrajes',
-        items: catalog.hardware.map((h) => {
-          labels[`herrajes:${h.id}`] = h.name;
-          // Valor de inventario: precio unitario del herraje (pieza/juego/metro).
-          prices[`herrajes:${h.id}`] = h.costPerUnit;
-          return { id: h.id, label: h.code ? `${h.name} (${h.code})` : h.name };
-        }),
-      },
-      {
-        kind: 'tableros',
-        items: catalog.materials.map((m) => {
-          labels[`tableros:${m.id}`] = m.name;
-          materialIdByCode[m.code] = m.id;
-          // Valor de inventario: precio por plancha (boardPrice).
-          prices[`tableros:${m.id}`] = m.boardPrice;
-          return { id: m.id, label: m.code ? `${m.name} (${m.code})` : m.name };
-        }),
-      },
-      {
-        kind: 'cintillas',
-        items: catalog.edges.map((e) => {
-          labels[`cintillas:${e.id}`] = e.name;
-          edgeIdByCode[e.code] = e.id;
-          // Valor de inventario: costo por metro lineal (costPerMl).
-          prices[`cintillas:${e.id}`] = e.costPerMl;
-          return { id: e.id, label: e.code ? `${e.name} (${e.code})` : e.name };
-        }),
-      },
-    ];
-    return { labels, options, materialIdByCode, edgeIdByCode, prices };
-  }, [catalog]);
+  /** Catálogo para el panel de stock (derivación pura, F119). */
+  const stockCatalog = useMemo(() => buildStockCatalog(catalog), [catalog]);
   const canMutateCatalog =
     session === 'guest' || roleCanMutateCatalog(actorRole);
   const canMutateModules =
@@ -940,10 +887,6 @@ function AppContent({
   /** PROD-0.1: factory workspace nav (export roles). */
   const useProductionWorkspace =
     session === 'auth' && roleCanAccessProductionNav(actorRole);
-  const repository = useMemo(
-    () => getRepository(),
-    [getRepository],
-  );
 
   useEffect(() => {
     if (!canAssignOwner || !authToken) {
@@ -2907,8 +2850,6 @@ function AppContent({
             customerLabel={resolveCustomerName(engProject.customerId, customers)}
             onBack={() => navigate(pathForNav('engineering'))}
             resolveMediaUrl={resolveMediaUrl}
-            onExportCsv={() => { void handleExportCutListCsv(engProject.id); }}
-            onExportPdf={(labels, perUnit) => { void handleExportPieceLabels(engProject.id, { labels, perUnit }); }}
             onExportModulePdf={(labels) => { void handleExportModuleLabels(engProject.id, { labels }); }}
             onExportHardware={() => { void handleExportHardwareList(engProject.id); }}
             onExportElevations={() => { void handleExportElevations(engProject.id); }}
@@ -3045,6 +2986,7 @@ function AppContent({
         </ScreenBoundary>
       ) : null}
       {navId === 'productionDashboard' ? (
+        <ScreenBoundary screenLabel="Panel de producción">
         <ProductionManagerDashboard
           projects={projectsForRole}
           customerLabelFor={(customerId) =>
@@ -3064,6 +3006,7 @@ function AppContent({
           }}
           repo={getRepository()}
         />
+        </ScreenBoundary>
       ) : null}
       {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
