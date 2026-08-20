@@ -60,4 +60,4 @@ export {
   type AmbientCategoryDraft,
   type AmbientMaterialDraft,
   type AmbientMaterialsCatalogProps,
-} from './AmbientMaterialsCatalog';
+} from './ambient/AmbientMaterialsCatalog';

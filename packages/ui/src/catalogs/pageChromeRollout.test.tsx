@@ -10,7 +10,7 @@ import type { MaterialBoard } from '@muebles/domain';
 import { MaterialsCatalog } from './materials/MaterialsCatalog';
 import { EdgesCatalog } from './EdgesCatalog';
 import { HardwareCatalog } from './HardwareCatalog';
-import { AmbientMaterialsCatalog } from './AmbientMaterialsCatalog';
+import { AmbientMaterialsCatalog } from './ambient/AmbientMaterialsCatalog';
 import { OptionGroupsScreen } from '../optionGroups/OptionGroupsScreen';
 
 afterEach(cleanup);
