@@ -2499,6 +2499,67 @@
         "ui",
         "stores"
       ]
+    },
+    {
+      "id": "F118",
+      "phase": 0,
+      "name": "shell_critical_bugfixes",
+      "title": "Bugfixes críticos del shell (clobber de workspace, carreras de sesión, nav rota)",
+      "description": "Surge del Judgment Day del Shell 2026-08-19 (docs/history/judgment-day-shell-2026-08-19.md). (S1) saveWorkshopSettings construye el workspace desde el snapshot de carga y llama repository.save() que re-PUTea catálogo+proyectos+plantillas viejos al servidor — guardar un ajuste después de editar revierte UI y SERVER; fix: persistir solo settings + sync effects keyeados por sesión/loadSeq. (S2) carreras de sesión: loadWorkspace sin re-validar session tras el await, saves en vuelo que 401ean sobre la pantalla de login, logout no limpia catalogStore/projectStore singletons. (S3) guest→login descarta el trabajo guest sin flush/prompt — agregar modal de decisión. (S4) navigate('/cotizaciones/...') hardcodeado roto → projectPath(). (S5) 'users' en el set nav guest → ítem muerto. (S6) botón 'datos demo' no persiste ni resetea flags; demo cocina navega a id hardcodeado inexistente en auth. (A1) exports: busy global para 13 handlers, exportErrors stale al cambiar pantalla, builders sin try/catch uniforme.",
+      "acceptance": [
+        "Guardar ajustes del taller después de editar catálogo/proyectos NO revierte ninguna edición (UI ni servidor) — test de comportamiento que reproduce el escenario S1",
+        "loadWorkspace que resuelve tras logout no repuebla workspace; saves post-logout no toastean en el login; logout limpia catalogStore y projectStore",
+        "Login con datos guest existentes ofrece decisión explícita (migrar o mantener local) — no descarte silencioso",
+        "Click en 'abrir cotización' desde la ficha de cliente navega a la cotización correcta",
+        "Sidebar guest sin ítem Usuarios muerto",
+        "'Usar datos demo' persiste el seed y deja el estado consistente; demo de cocina resuelve el id real del workspace",
+        "Exports: busy por-handler (no un boolean global), exportErrors se limpia al cambiar de pantalla, excepciones de builders llegan a toast",
+        "pnpm test + typecheck + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-shell-2026-08-19.md",
+        "apps/web/src/stores/workspaceStore.ts",
+        "apps/web/src/App.tsx",
+        "packages/storage/src/apiWorkspaceRepository.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "shell",
+        "bugfix",
+        "data-integrity",
+        "session",
+        "routing"
+      ]
+    },
+    {
+      "id": "F119",
+      "phase": 0,
+      "name": "shell_refactor_slim",
+      "title": "Refactor del shell: runExport, purchasingStore, derivaciones y render — App.tsx < 800 L",
+      "description": "Surge del Judgment Day del Shell 2026-08-19 (§5). AppContent volvió a ~2600 L. (1) Helper runExport(builder, opts) que reemplaza los 13 handlers copy-paste (~700 L → ~80). (2) purchasingStore: migrar el bloque compras/stock/proveedores/OC + handleTogglePick (~450 L nunca migrados de F057-F064). (3) Derivaciones de dominio (cutRows, fabricMetrics, estimates, dashboard stats) a módulo de selectors puro. (4) Render: extraer wrappers por área (EngineeringWorkspace IIFE → componente, agrupar props de ProjectsScreen), meta App.tsx < 800 L camino al <600 original. (5) Limpieza: muertos (repository memo, optionalNotes, props duplicados de export, rama muerta de onEntityEditRequest), ScreenBoundary en ProductionManagerDashboard, window.confirm → modal de design. (6) A6: wire deep-link de finishes y addOns o quitar de ENTITY_SECTIONS. Idealmente después de F118.",
+      "acceptance": [
+        "runExport helper único; los 13 handlers pasan a configuración; busy/errors por export",
+        "purchasingStore con picking/stock/movements/suppliers/purchaseOrders + togglePick fuera de App.tsx",
+        "App.tsx < 800 L con derivaciones en módulo de selectors y wrappers por área",
+        "Cero cambio funcional: rutas, deep-links, RBAC, exports y flujos intactos (smoke manual)",
+        "Muertos removidos; ProductionManagerDashboard con ScreenBoundary; confirmFabricBatch usa modal",
+        "Deep-links de finishes y addOns funcionan (o se retiran de ENTITY_SECTIONS con justificación)",
+        "pnpm test + typecheck + ./init.sh verdes"
+      ],
+      "references": [
+        "docs/history/judgment-day-shell-2026-08-19.md",
+        "apps/web/src/App.tsx",
+        "apps/web/src/stores/",
+        "apps/web/src/routes.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "shell",
+        "refactor",
+        "clean-code",
+        "stores",
+        "exports"
+      ]
     }
   ]
 }
