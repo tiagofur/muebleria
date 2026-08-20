@@ -290,6 +290,9 @@ Al hacer click en un proyecto, se abre el workspace de documentación para ese p
 │  Optimización: Cocina López                             │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
+│  Tipo de corte: [Sierra] [CNC Nesting]                   │
+│  (sierra → kerf + refilados; nesting → espaciado fresa)  │
+│                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │ Optimizer (Excel)                               │    │
 │  │ Plantilla_Optimizer.xlsx                        │    │
@@ -314,22 +317,30 @@ Al hacer click en un proyecto, se abre el workspace de documentación para ese p
 │  │ Perforaciones (JSON) + CNC pilot (JSON)         │    │
 │  │ [▶ Descargar perforaciones] [▶ Descargar CNC]  │    │
 │  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ DXF Nesting (solo modo CNC, F124–F126)          │    │
+│  │ Tableros nesteados o piezas sueltas (DXF R12)   │    │
+│  │ [▶ Descargar DXF (tableros)] [▶ DXF (piezas)]   │    │
+│  └─────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────┘
 ```
 
 **Content:**
+- **Tipo de corte (F126)** — sierra guillotina o CNC nesting antes de generar; el área de export muestra solo las salidas del modo elegido (sierra → PDF + Optimizer XLSX; nesting → DXF).
 - **Optimizer export (Excel)** — el output principal. Define cuántas planchas de cada tablero se necesitan. Este número (en planchas) es lo que va al Resumen y a Compras/Almacén.
 - CSV export (configurable separator/preset) para sierra o CNC
 - Nesting import (nesting real desde software externo)
 - CNC exports (drilling JSON, CNC pilot JSON)
+- DXF nesting export (R12, tableros nesteados o piezas sueltas — exclusivo del modo CNC)
 
 **Flujo típico del ingeniero en este tab:**
-1. Generar Optimizer → ver cuántas planchas resultan
+1. Elegir tipo de corte (sierra o CNC nesting) y generar el plan 2D
 2. Verificar en Resumen que los totales cuadran
 3. Si hay correcciones, editar el diseño → volver a generar
-4. Cuando está correcto → ir a Documentos a descargar el pack
+4. Cuando está correcto → exportar lo pertinente al modo (XLSX/PDF o DXF) e ir a Documentos por el pack
 
-**Data source:** Reuses `onExportOptimizer`, `onExportCutListCsv`, `onImportNesting`, `onExportCncPilot`, `downloadDrillingJson`.
+**Data source:** Reuses `onExportOptimizer`, `onExportCutListCsv`, `onImportNesting`, `onExportCncPilot`, `downloadDrillingJson`, `onExportCutPlanDxf`.
 
 ---
 

@@ -1,10 +1,12 @@
 /**
  * Production hub — Plan de Corte 2D, Requisición de Almacén y Exportaciones de Taller (F115).
  *
- * - Plan de corte 2D guillotina nativo con refilado de 4 lados, veta, sobrecorte de cantos y retazos.
+ * - Plan de corte 2D con dos estrategias (F126): sierra guillotina o CNC nesting
+ *   (MaxRects, mezcla piezas grandes y chicas con espaciado de fresa).
  * - Requisición exacta de tableros completos para Almacén.
- * - Visor interactivo y secuencia de cortes paso a paso.
- * - Área de exportación para taller (PDF manual activo + seccionadoras/CNC futuro).
+ * - Visor interactivo; secuencia de cortes paso a paso solo en modo sierra.
+ * - Exportación exclusiva por estrategia: sierra → PDF + Optimizer XLSX;
+ *   nesting → DXF R12 (tableros nesteados o piezas sueltas).
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
@@ -14,12 +16,14 @@ import type {
   ProductionCutRow,
   CutPlan,
   CutPlanConfig,
+  CutStrategy,
 } from '@muebles/domain';
 import {
   estimateBoardSheets,
   generateProjectMaterialSummary,
   optimizeCutPlan,
   DEFAULT_CUT_PLAN_CONFIG,
+  DEFAULT_TOOL_SPACING_MM,
   type Catalog,
 } from '@muebles/domain';
 import { ProductionBoardView } from './ProductionBoardView';
@@ -30,6 +34,8 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly cutRows: readonly ProductionCutRow[] | null;
   readonly onSaveCutPlan?: (cutPlan: CutPlan) => void;
   readonly onExportCutPlanPdf?: (cutPlan: CutPlan) => void;
+  readonly onExportOptimizer?: () => void;
+  readonly onExportCutPlanDxf?: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => void;
   readonly exportBusy?: boolean;
 };
 
@@ -39,8 +45,18 @@ export function ProductionOrderOptimizationPanel({
   cutRows,
   onSaveCutPlan,
   onExportCutPlanPdf,
+  onExportOptimizer,
+  onExportCutPlanDxf,
   exportBusy = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
+  // Cut strategy dispatch (F126): saw guillotine vs CNC nesting
+  const [cutStrategy, setCutStrategy] = useState<CutStrategy>(
+    project.cutPlan?.config.cutStrategy ?? 'saw-guillotine',
+  );
+  const [toolSpacingMm, setToolSpacingMm] = useState<number>(
+    project.cutPlan?.config.toolSpacingMm ?? DEFAULT_TOOL_SPACING_MM,
+  );
+  const isNesting = cutStrategy === 'cnc-nesting';
   // Cut Configuration parameters
   const [sawKerfMm, setSawKerfMm] = useState<number>(
     project.cutPlan?.config.sawKerfMm ?? DEFAULT_CUT_PLAN_CONFIG.sawKerfMm,
@@ -105,6 +121,8 @@ export function ProductionOrderOptimizationPanel({
       minRemnantWidthMm: DEFAULT_CUT_PLAN_CONFIG.minRemnantWidthMm,
       preferLongitudinalRips: true,
       heuristic: 'guillotine-hybrid',
+      cutStrategy,
+      ...(cutStrategy === 'cnc-nesting' ? { toolSpacingMm: Math.max(0, toolSpacingMm) } : {}),
     };
 
     const newPlan = optimizeCutPlan(
@@ -132,7 +150,15 @@ export function ProductionOrderOptimizationPanel({
     onExportCutPlanPdf?.(currentCutPlan);
   };
 
+  const handleExportDxf = (variant: 'sheets' | 'pieces') => {
+    if (!currentCutPlan) return;
+    onExportCutPlanDxf?.(currentCutPlan, variant);
+  };
+
   const activeSheet = currentCutPlan?.sheets[activeSheetIndex] ?? null;
+  // Exports follow the GENERATED plan, not the live selector: the file must
+  // always match the strategy that produced the layout on screen.
+  const planStrategy = currentCutPlan?.config.cutStrategy ?? cutStrategy;
 
   return (
     <div className="prod-opt" data-testid="prod-hub-optimizacion">
@@ -152,7 +178,9 @@ export function ProductionOrderOptimizationPanel({
           <div>
             <h3 style={{ margin: 0, fontSize: '1.1em', fontWeight: 600 }}>Parámetros del Plan de Corte 2D</h3>
             <p style={{ margin: '2px 0 0', fontSize: '0.85em', color: 'var(--text-muted)' }}>
-              Ajustá el disco de corte, refilado de 4 lados y sobrecorte para optimizar el material.
+              {isNesting
+                ? 'El nesting CNC mezcla piezas grandes y chicas en el mismo tablero; ajustá el espaciado de fresa y el refilado.'
+                : 'Ajustá el disco de corte, refilado de 4 lados y sobrecorte para optimizar el material.'}
             </p>
           </div>
           {currentCutPlan && (
@@ -173,18 +201,58 @@ export function ProductionOrderOptimizationPanel({
             borderRadius: 'var(--radius-md)',
           }}
         >
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.85em' }}>
-            <span style={{ fontWeight: 500 }}>Disco / Kerf (mm)</span>
-            <input
-              type="number"
-              min={0}
-              max={15}
-              step={0.5}
-              value={sawKerfMm}
-              onChange={(e) => setSawKerfMm(Number(e.target.value))}
-              style={{ width: 75, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border-default)' }}
-            />
-          </label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} role="group" aria-label="Tipo de corte">
+            <span style={{ fontSize: '0.85em', fontWeight: 500 }}>Tipo de corte:</span>
+            <button
+              type="button"
+              className={`btn btn--small ${!isNesting ? 'btn--primary' : 'btn--ghost'}`}
+              aria-pressed={!isNesting}
+              data-testid="prod-opt-strategy-saw"
+              onClick={() => setCutStrategy('saw-guillotine')}
+            >
+              Sierra
+            </button>
+            <button
+              type="button"
+              className={`btn btn--small ${isNesting ? 'btn--primary' : 'btn--ghost'}`}
+              aria-pressed={isNesting}
+              data-testid="prod-opt-strategy-nesting"
+              onClick={() => setCutStrategy('cnc-nesting')}
+            >
+              CNC Nesting
+            </button>
+          </div>
+
+          {isNesting ? (
+            <label
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.85em' }}
+              title="Distancia mínima entre piezas: diámetro de fresa + margen de seguridad."
+            >
+              <span>Espaciado fresa (mm)</span>
+              <input
+                type="number"
+                min={0}
+                max={30}
+                step={0.5}
+                value={toolSpacingMm}
+                onChange={(e) => setToolSpacingMm(Number(e.target.value))}
+                style={{ width: 75, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border-default)' }}
+              />
+            </label>
+          ) : (
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.85em' }}>
+              <span>Disco / Kerf (mm)</span>
+              <input
+                type="number"
+                min={0}
+                max={15}
+                step={0.5}
+                value={sawKerfMm}
+                onChange={(e) => setSawKerfMm(Number(e.target.value))}
+                style={{ width: 75, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border-default)' }}
+              />
+            </label>
+          )}
 
           {/* 4-sided Trim Margins */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -380,13 +448,20 @@ export function ProductionOrderOptimizationPanel({
               ))}
             </div>
 
-            {/* Board Diagram + Step-by-Step Cuts Sidebar */}
+            {/* Board Diagram + Step-by-Step Cuts Sidebar (saw only: nesting has no cut sequence) */}
             {activeSheet && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: activeSheet.instructions.length > 0 ? '1fr 300px' : '1fr',
+                  gap: 16,
+                }}
+              >
                 <div>
                   <ProductionBoardView sheet={activeSheet} />
                 </div>
-                <div
+                {activeSheet.instructions.length > 0 && (
+                  <div
                   style={{
                     background: 'var(--surface-card)',
                     border: '1px solid var(--border-default)',
@@ -410,6 +485,7 @@ export function ProductionOrderOptimizationPanel({
                     ))}
                   </ol>
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -442,82 +518,142 @@ export function ProductionOrderOptimizationPanel({
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-          {/* Card 1: PDF Manual Cutting Plan (ACTIVE) */}
-          <div
-            style={{
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: '14px 16px',
-              background: 'var(--surface-card)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: '1.2em' }}>📄</span>
-                <strong style={{ fontSize: '0.95em' }}>PDF Plan de Corte Manual (F072)</strong>
-              </div>
-              <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-                Diagramas vectoriales acotados con cantos resaltados en color, marcas de veta, retazos útiles y carátula para Almacén.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="btn btn--primary btn--small"
-              onClick={handleExportPdf}
-              disabled={exportBusy || !currentCutPlan}
-              data-testid="prod-opt-export-pdf-manual"
-              style={{ alignSelf: 'flex-start' }}
+          {planStrategy === 'cnc-nesting' ? (
+            /* CNC Nesting: DXF exclusivo del modo (F125/F126) */
+            <div
+              style={{
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
+                padding: '14px 16px',
+                background: 'var(--surface-card)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
             >
-              Descargar PDF de Taller
-            </button>
-          </div>
-
-          {/* Card 2: Automatic Panel Saws (FUTURE ROADMAP) */}
-          <div
-            style={{
-              border: '1px dashed var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: '14px 16px',
-              background: 'var(--surface-muted)',
-              opacity: 0.85,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: '1.2em' }}>⚡</span>
-              <strong style={{ fontSize: '0.95em' }}>Seccionadoras Automáticas</strong>
-              <span style={{ fontSize: '0.72em', background: 'var(--surface-card)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-muted)' }}>
-                Próximamente
-              </span>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: '1.2em' }}>⚙</span>
+                  <strong style={{ fontSize: '0.95em' }}>DXF para CNC Nesting</strong>
+                </div>
+                <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                  Geometría DXF R12 del plan nesteadO: contornos, etiquetas con cantos y dirección de veta.
+                  «Tableros nesteados» reproduce el plan de esta pantalla; «Piezas sueltas» es para el
+                  software de tu CNC que prefiere anidar por su cuenta.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--small"
+                  onClick={() => handleExportDxf('sheets')}
+                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf}
+                  data-testid="prod-opt-export-dxf-sheets"
+                >
+                  Descargar DXF (tableros)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={() => handleExportDxf('pieces')}
+                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf}
+                  data-testid="prod-opt-export-dxf-pieces"
+                >
+                  Descargar DXF (piezas)
+                </button>
+              </div>
             </div>
-            <p style={{ margin: '4px 0 0', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-              Generación de archivos para máquinas Homag (Cut Rite), Biesse, Giben y SCM.
-            </p>
-          </div>
+          ) : (
+            /* Sierra: PDF de taller + Optimizer XLSX; el DXF no aplica */
+            <>
+              <div
+                style={{
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px 16px',
+                  background: 'var(--surface-card)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: '1.2em' }}>📄</span>
+                    <strong style={{ fontSize: '0.95em' }}>PDF Plan de Corte Manual</strong>
+                  </div>
+                  <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                    Diagramas vectoriales acotados con cantos resaltados en color, marcas de veta, retazos útiles y carátula para Almacén.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--small"
+                  onClick={handleExportPdf}
+                  disabled={exportBusy || !currentCutPlan}
+                  data-testid="prod-opt-export-pdf-manual"
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  Descargar PDF de Taller
+                </button>
+              </div>
 
-          {/* Card 3: CNC Nesting (FUTURE ROADMAP) */}
-          <div
-            style={{
-              border: '1px dashed var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: '14px 16px',
-              background: 'var(--surface-muted)',
-              opacity: 0.85,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: '1.2em' }}>⚙</span>
-              <strong style={{ fontSize: '0.95em' }}>CNC Nesting / G-Code</strong>
-              <span style={{ fontSize: '0.72em', background: 'var(--surface-card)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-muted)' }}>
-                Próximamente
-              </span>
-            </div>
-            <p style={{ margin: '4px 0 0', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-              Exportación de geometrías DXF y código de maquinado para centros de corte CNC.
-            </p>
-          </div>
+              <div
+                style={{
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px 16px',
+                  background: 'var(--surface-card)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: '1.2em' }}>📊</span>
+                    <strong style={{ fontSize: '0.95em' }}>Optimizer XLSX (sierra)</strong>
+                  </div>
+                  <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                    Planilla Optimizer con cantos y referencias — la fuente de verdad de corte para sierra
+                    y seccionadoras.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={() => onExportOptimizer?.()}
+                  disabled={exportBusy || !onExportOptimizer}
+                  data-testid="prod-opt-export-optimizer-xlsx"
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  Descargar Optimizer XLSX
+                </button>
+              </div>
+
+              {/* Automatic Panel Saws (FUTURE ROADMAP) */}
+              <div
+                style={{
+                  border: '1px dashed var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px 16px',
+                  background: 'var(--surface-muted)',
+                  opacity: 0.85,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: '1.2em' }}>⚡</span>
+                  <strong style={{ fontSize: '0.95em' }}>Seccionadoras Automáticas</strong>
+                  <span style={{ fontSize: '0.72em', background: 'var(--surface-card)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-muted)' }}>
+                    Próximamente
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                  Generación de archivos para máquinas Homag (Cut Rite), Biesse, Giben y SCM.
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </section>
     </div>

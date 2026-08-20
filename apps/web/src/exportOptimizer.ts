@@ -171,7 +171,9 @@ export function downloadOptimizerXlsx(
     ? 'application/pdf'
     : lower.endsWith('.zip')
       ? 'application/zip'
-      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      : lower.endsWith('.dxf')
+        ? 'application/dxf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const blob = new Blob([copy.buffer], {
     type: mime,
   });

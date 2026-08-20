@@ -42,6 +42,7 @@ import { buildCncPilotExport } from '../exportCncPilot';
 import { buildAssemblySheetsExport } from '../exportAssemblySheets';
 import { downloadDespiecePdf } from '../exportDespiecePdf';
 import { downloadCutPlanPdf } from '../exportCutPlanPdf';
+import { downloadCutPlanDxf } from '../exportCutPlanDxf';
 import { runExport, type ExportDelivery } from './runExport';
 
 export interface ExportHandlersDeps {
@@ -427,6 +428,32 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     [toast],
   );
 
+  const handleExportCutPlanDxf = useCallback(
+    async (cutPlan: import('@muebles/domain').CutPlan, variant: 'sheets' | 'pieces') => {
+      setExportBusy(true);
+      try {
+        const suffix = variant === 'sheets' ? 'tableros' : 'piezas';
+        const fileName = `${cutPlan.projectName || 'proyecto'}-nesting-${suffix}.dxf`;
+        await downloadCutPlanDxf(cutPlan, variant, fileName);
+        toast({
+          type: 'success',
+          message: `✓ ${fileName} descargado`,
+        });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Error al exportar plan de corte DXF',
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [toast],
+  );
+
   const handleReleaseToDelivery = useCallback(
     async (projectId: string) => {
       const project = projects.find((p) => p.id === projectId);
@@ -540,6 +567,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     handleExportCutListCsv,
     handleExportDespiecePdf,
     handleExportCutPlanPdf,
+    handleExportCutPlanDxf,
     handleReleaseToDelivery,
     handleExportProductionPack,
     handleExportCommercialQuote,

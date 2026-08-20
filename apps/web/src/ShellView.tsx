@@ -394,6 +394,7 @@ export interface ShellViewCtx {
   readonly handleExportCommercialQuotePdf: (variant: "detailed" | "summary") => Promise<void>;
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
+  readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
   readonly handleExportDespiecePdf: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportElevations: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportHardwareList: (projectId?: string | undefined) => Promise<void>;
@@ -626,6 +627,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleExportCommercialQuotePdf,
     handleExportCutListCsv,
     handleExportCutPlanPdf,
+    handleExportCutPlanDxf,
     handleExportDespiecePdf,
     handleExportElevations,
     handleExportHardwareList,
@@ -1069,6 +1071,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onExportDespiecePdf={() => { void handleExportDespiecePdf(engProject.id); }}
             onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
+            onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
             canImportNesting={canMarkProduced || roleCanExportProduction(actorRole)}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}
