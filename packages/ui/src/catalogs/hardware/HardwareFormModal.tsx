@@ -1,6 +1,7 @@
 /**
  * Create/edit hardware modal (SM) — Identidad / Compra / Vista 3D
- * disclosure (F069 shape + finish preset; F080 per-part finishes).
+ * disclosure (F069 shape + finish preset; F080 per-part finishes) / Maquinado
+ * CNC disclosure (F127 drilling footprint).
  * Owns the preview disclosure state; resets it every time the modal opens
  * (F117 fix: it used to stay open between edit sessions).
  */
@@ -21,6 +22,7 @@ import {
 } from '@muebles/domain';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { CatalogImage, Modal } from '../../common';
+import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
 
 export interface HardwareFormModalProps {
@@ -368,6 +370,13 @@ export function HardwareFormModal({
             </div>
           ) : null}
         </div>
+
+        {/* F127: CNC machining footprint (parts + drilling operations). */}
+        <HardwareMachiningSection
+          modalOpen={open}
+          draft={draft}
+          setDraft={setDraft}
+        />
       </form>
     </Modal>
   );

@@ -77,6 +77,121 @@ describe('HardwareCatalog — create flow', () => {
   });
 });
 
+describe('HardwareCatalog — Maquinado CNC (F127)', () => {
+  const machinedHardware: Hardware = {
+    ...sampleHardware,
+    id: 'hw-bis',
+    code: 'HER-BIS-CL',
+    name: 'Bisagra Cierre Lento',
+    machining: {
+      parts: [
+        {
+          id: 'cup',
+          role: 'cup',
+          operations: [
+            {
+              id: 'cup-35',
+              kind: 'blind_hole',
+              diameterMm: 35,
+              depthMm: 12.5,
+              xMm: 0,
+              yMm: 0,
+              face: 'anchor',
+              label: 'Taza 35 mm',
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  async function openEdit(
+    user: ReturnType<typeof userEvent.setup>,
+    item: Hardware,
+  ) {
+    await user.click(screen.getByText(item.code));
+    await user.click(screen.getByRole('button', { name: `Editar ${item.code}` }));
+  }
+
+  it('auto-abre el disclosure al editar un herraje con maquinado y muestra sus operaciones', async () => {
+    const user = userEvent.setup();
+    setup([machinedHardware]);
+    await openEdit(user, machinedHardware);
+
+    expect(screen.getByTestId('hardware-machining-body')).toBeTruthy();
+    expect(
+      (screen.getByTestId('hardware-machining-role-0') as HTMLInputElement).value,
+    ).toBe('cup');
+    expect(
+      (screen.getByTestId('hardware-machining-diameter-0-0') as HTMLInputElement)
+        .value,
+    ).toBe('35');
+  });
+
+  it('agregar una parte desde cero la incluye en el draft al guardar', async () => {
+    const user = userEvent.setup();
+    const { onCreate } = setup([sampleHardware]);
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.type(screen.getByLabelText('Código'), 'HER-NUEVA-2');
+    await user.type(screen.getByLabelText('Nombre'), 'Otra pieza');
+
+    await user.click(screen.getByTestId('hardware-machining-toggle'));
+    await user.click(screen.getByTestId('hardware-machining-add-part'));
+    await user.type(
+      screen.getByTestId('hardware-machining-role-0'),
+      'dowel',
+    );
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    const draft = onCreate.mock.calls[0]![0] as { machining?: unknown };
+    expect(draft.machining).toMatchObject({
+      parts: [
+        {
+          role: 'dowel',
+          operations: [
+            expect.objectContaining({ kind: 'blind_hole', diameterMm: 8 }),
+          ],
+        },
+      ],
+    });
+  });
+
+  it('bloquea el guardado con diámetro inválido y muestra el error del dominio', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup([machinedHardware]);
+    await openEdit(user, machinedHardware);
+
+    await user.clear(screen.getByTestId('hardware-machining-diameter-0-0'));
+    await user.type(screen.getByTestId('hardware-machining-diameter-0-0'), '0');
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByText(/diámetro mayor a 0/)).toBeTruthy();
+  });
+
+  it('quitar la última parte deja el herraje sin maquinado', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup([machinedHardware]);
+    await openEdit(user, machinedHardware);
+
+    await user.click(screen.getByRole('button', { name: /Quitar parte cup/i }));
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const draft = onUpdate.mock.calls[0]![1] as { machining?: unknown };
+    expect(draft.machining).toBeNull();
+  });
+
+  it('el detalle expandido muestra el resumen de maquinado', async () => {
+    const user = userEvent.setup();
+    setup([machinedHardware]);
+    await user.click(screen.getByText(machinedHardware.code));
+
+    expect(screen.getByText('1 parte · 1 perforación')).toBeTruthy();
+  });
+});
+
 describe('HardwareCatalog — Vista 3D (F069/F080)', () => {
   async function openEditWithShape(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByText(sampleHardware.code));

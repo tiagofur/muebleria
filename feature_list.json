@@ -1552,15 +1552,16 @@
       "id": "F081",
       "phase": 16,
       "name": "perforaciones_dinamicas_builder",
-      "title": "Perforaciones dinámicas tipo Promob Builder [CONGELADO]",
-      "description": "Roadmap Comercial v2 Fase Congelada. CSG visual (three-bvh-csg) para perforar la malla 3D en tiempo real según herrajes colocados + export a CNC/DXF. Lo más difícil técnicamente del roadmap. NO se empieza hasta cliente con CNC real pidiendo G-code.",
+      "title": "Perforaciones dinámicas tipo Promob Builder [RE-ESCOPEADO → F127–F132]",
+      "description": "Roadmap Comercial v2 Fase Congelada. CSG visual (three-bvh-csg) para perforar la malla 3D en tiempo real según herrajes colocados + export a CNC/DXF. Re-escpeado 2026-08-20 por decisión del dueño del producto: la CSG visual se descarta (las perforaciones viven como datos estructurados, no como mesh booleana) y la serie F127–F131 implementa perforaciones dinámicas driven-by-herraje con export DXF importable por SCM Maestro. El post-procesador nativo SCM queda como F132 postergado hasta confirmar máquina.",
       "acceptance": [
-        "[CONGELADO] No se implementa hasta disparador comercial"
+        "[RESUELTO 2026-08-20] Re-escpeado en la serie F127–F132; ver progress/history.md"
       ],
       "references": [
-        "docs/roadmap-comercial-v2.md Fase Congelada"
+        "docs/roadmap-comercial-v2.md Fase Congelada",
+        "progress/history.md (sesión re-scopeo perforaciones CNC 2026-08-20)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "F082",
@@ -2762,6 +2763,168 @@
         "export",
         "dxf",
         "nesting"
+      ]
+    },
+    {
+      "id": "F127",
+      "phase": 0,
+      "name": "hardware_machining_profiles",
+      "title": "Perfiles de maquinado en catálogo de herrajes (perforaciones CNC — 1/5)",
+      "description": "Primera feature de la serie de perforaciones CNC (re-escpeo de F081 decidido 2026-08-20 con el dueño del producto). Cada herraje del catálogo declara su huella de maquinado: partes con rol (cazuela/perno, taza/placa) y operaciones paramétricas (taladro ciego/pasante, escareado, piloto) en el marco local del anclaje, con cara anchor|opposite. Sin motor de resolución (F128) ni export (F130): esto es dato de catálogo + editor + persistencia. Filosofía sistema 32mm como defaults parametrizables.",
+      "acceptance": [
+        "MachiningOperation (kind blind_hole|through_hole|counterbore|screw_pilot; diameterMm, depthMm según kind, xMm/yMm offsets locales, face anchor|opposite) + HardwareMachiningPart (role + operations) + HardwareMachiningProfile en packages/domain, colgado de Hardware.machining? opcional (retrocompatible)",
+        "validateMachiningProfile lanza ValidationError accionable para: Ø≤0, profundidad faltante/negativa en kinds ciegos, innerDiameterMm faltante en counterbore, face inválida, ids/roles duplicados",
+        "Seeds demo en paridad TS/Go para los 4 básicos: taquete 8×30 (ciego Ø8×15 por lado), minifix (cazuela Ø15×13 + piloto perno), bisagra (taza Ø35×12.5 + 2 fijaciones) con placa base (2 perforaciones a 32mm), tornillo (piloto) — valores típicos sistema 32 como default parametrizable, no hardcodeados en lógica",
+        "Sección 'Maquinado' en el detalle de herraje del catálogo: ver/agregar/quitar partes y operaciones usando tokens de docs/design.md; la UI no calcula dominio",
+        "Persistencia completa: mapper API + struct Go + migración SQL aditiva (JSONB nullable) + round-trip localStorage",
+        "Tests: validación unit en domain, seeds golden TS/Go, round-trip mappers, render del editor",
+        "pnpm test + pnpm typecheck + go test del paquete tocado verdes"
+      ],
+      "references": [
+        "docs/prd.md §13 (herrajes)",
+        "packages/domain/src/types.ts (Hardware, HardwarePlacement)",
+        "packages/domain/src/partDrilling.ts (heurísticas que esta serie reemplaza)",
+        "docs/design.md"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "cnc",
+        "perforaciones",
+        "herrajes",
+        "catalog",
+        "domain",
+        "ui",
+        "backend"
+      ]
+    },
+    {
+      "id": "F128",
+      "phase": 0,
+      "name": "drilling_resolution_engine",
+      "title": "Motor de resolución: placements + perfiles → agujeros por pieza (perforaciones CNC — 2/5)",
+      "description": "Función pura del dominio que resuelve, para cada ResolvedBoardPart, los agujeros reales derivados de los HardwarePlacement del módulo y los perfiles de maquinado de los herrajes elegidos (optionChoices). Coordenadas borde-referenciadas por cara (mm; cara vista desde afuera, origen en esquina inferior-izquierda; el espejado de caras traseras lo resuelve el export, no el usuario). Deduplicación y validaciones (profundidad vs espesor, distancia a canto, colisiones). Reemplaza las heurísticas por nombre de partDrilling.ts (F074), que queda como fallback deprecado.",
+      "acceptance": [
+        "resolvePartDrilling(piece, placements, hardwareCatalog) → patrón con HoleDefinition reales por cara, en coords desde cantos",
+        "Validaciones estructuradas: profundidad > espesor, agujero fuera de la pieza, colisión entre agujeros → error accionable (DomainError con contexto de pieza/herraje)",
+        "Deduplicación de agujeros coincidentes generados desde placements distintos",
+        "Fallback a heurísticas F074 cuando el herraje no tiene perfil de maquinado (deprecación gradual sin romper exports existentes)",
+        "Cambiar la posición del placement mueve los agujeros; cambiar el herraje (distinto perfil) adapta diámetros/profundidades",
+        "Tests con fixture de módulo con bisagra y minifix colocados; golden del patrón resuelto",
+        "pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "packages/domain/src/hardwarePlacement.ts",
+        "packages/domain/src/partDrilling.ts",
+        "packages/domain/src/engine/bom.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "cnc",
+        "perforaciones",
+        "domain"
+      ]
+    },
+    {
+      "id": "F129",
+      "phase": 0,
+      "name": "joint_drilling_rules",
+      "title": "Reglas de unión paramétricas sistema 32 (perforaciones CNC — 3/5)",
+      "description": "Patrones automáticos de perforación por tipo de unión (costado-piso, costado-techo, respaldo, puerta-costado con bisagra+placa) alineados a grilla 32mm con línea de sistema configurable (default 37mm del canto frontal). Las reglas generan placements derivados que el motor F128 resuelve; la edición manual de excepciones llega en F131. Defaults correctos por defecto para evitar errores del usuario.",
+      "acceptance": [
+        "Reglas de unión declarativas (tipo de unión, hardware, offsets paramétricos: extremos, paso, grilla 32) definibles por estructura/módulo con defaults de taller",
+        "Generación de placements derivados para uniones costado-piso/techo y respaldo sin intervención del usuario",
+        "Sistema 32: línea de sistema configurable (default 37mm), posiciones snap a múltiplos de 32",
+        "La cantidad de minifix/bisagras sugerida reutiliza workshopRules.ts como default",
+        "Tests de patrones generados para un módulo gabete estándar (golden)",
+        "pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "packages/domain/src/workshopRules.ts",
+        "packages/domain/src/structures/",
+        "docs/prd.md §6.7 (CNC)"
+      ],
+      "status": "pending",
+      "tags": [
+        "cnc",
+        "perforaciones",
+        "uniones",
+        "domain"
+      ]
+    },
+    {
+      "id": "F130",
+      "phase": 0,
+      "name": "drilling_dxf_export",
+      "title": "Export DXF de perforaciones por cara + reporte (perforaciones CNC — 4/5)",
+      "description": "Convenciones de export para CNC: capas DXF por tipo de operación (PERF_8_CIEGO, PERF_35_TAZA, …) para que SCM Maestro asigne herramienta por capa, caras FRONT/BACK por pieza con espejado automático al voltear, integración con el writer DXF R12 existente (F125) y el pack de producción; upgrade del reporte de perforaciones existente (schema muebles.drilling-data.v1). Primer entregable importable directamente en la máquina.",
+      "acceptance": [
+        "DXF por pieza (o por tablero nested) con capas por tipo de operación y diámetro, convención documentada",
+        "Caras traseras espejadas automáticamente al voltear la pieza; el usuario nunca hace transformaciones",
+        "Reporte de perforaciones upgradeado con la fuente real (motor F128) manteniendo compatibilidad del schema",
+        "Integrado al pack de producción ZIP y al panel de export de Ingeniería",
+        "DXF validado contra el writer R12 existente (tests golden de capas)",
+        "pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "packages/excel/src/dxfCutPlanExport.ts",
+        "packages/excel/src/partDrillingExport.ts",
+        "apps/web/src/exportProductionPack.ts"
+      ],
+      "status": "pending",
+      "tags": [
+        "cnc",
+        "perforaciones",
+        "export",
+        "dxf",
+        "excel"
+      ]
+    },
+    {
+      "id": "F131",
+      "phase": 0,
+      "name": "drilling_visual_editor",
+      "title": "Editor visual 2D de perforaciones por cara + gizmo 3D (perforaciones CNC — 5/5)",
+      "description": "Vista 2D por cara de la pieza con herrajes y agujeros posicionables, snap a grilla 32mm, validaciones inline (las del motor F128) y montaje del HardwarePlacementGizmo huérfano (F070) en el viewport 3D. El usuario solo edita excepciones sobre las reglas F129.",
+      "acceptance": [
+        "Vista 2D por cara de la pieza (SVG/canvas) con herrajes colocados y sus agujeros derivados",
+        "Arrastre/edición de posición con snap a grilla 32mm y validaciones inline visibles",
+        "HardwarePlacementGizmo montado en el viewport 3D (deuda F070 saldada)",
+        "Editor usa tokens de docs/design.md; UI no calcula dominio",
+        "Tests de interacción del editor y del gizmo montado",
+        "pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "packages/ui/src/modules/components/HardwarePlacementsEditor.tsx",
+        "packages/ui/src/preview3d/",
+        "docs/design.md"
+      ],
+      "status": "pending",
+      "tags": [
+        "cnc",
+        "perforaciones",
+        "ui",
+        "editor"
+      ]
+    },
+    {
+      "id": "F132",
+      "phase": 0,
+      "name": "scm_postprocessor",
+      "title": "Post-procesador SCM nativo (.xcs/MSL) [POSTERGADO hasta confirmar máquina]",
+      "description": "Generador de script nativo para SCM Maestro (import .xcs o Maestro Scripting Language) sobre el núcleo agnóstico de perforaciones (capa fina de export, sin tocar el dominio). Se desbloquea cuando se confirme modelo de máquina y versión de software del taller. Mientras tanto el flujo oficial hacia SCM es el DXF por capas de F130, que Maestro importa con asignación capa→herramienta.",
+      "acceptance": [
+        "[POSTERGADO] Requiere modelo de máquina SCM y versión de software confirmados por el taller"
+      ],
+      "references": [
+        "SCM Group — Maestro Lab (import DXF por capas)",
+        "Maestro Scripting Language (MSL), formatos .xcs/.pnc/.snc"
+      ],
+      "status": "pending",
+      "tags": [
+        "cnc",
+        "scm",
+        "export",
+        "postprocesador"
       ]
     }
   ]

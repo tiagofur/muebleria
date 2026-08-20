@@ -172,9 +172,39 @@ type Hardware struct {
 	// PartFinishes maps a structural part role (body/base/grip) to a finish
 	// preset id (F080). Nil/empty = every part uses the global preview finish.
 	PartFinishes map[string]string `json:"part_finishes,omitempty"`
-	Active       bool              `json:"active"`
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
+	// Machining is the CNC drilling footprint (F127): operations per structural
+	// part, in the part-local frame of the placement anchor. Nil = cost-only.
+	Machining *HardwareMachiningProfile `json:"machining,omitempty"`
+	Active    bool                      `json:"active"`
+	CreatedAt time.Time                 `json:"created_at"`
+	UpdatedAt time.Time                 `json:"updated_at"`
+}
+
+// MachiningOperation is one drill entry a hardware part requires (F127).
+// JSON casing matches the TS domain shape so the JSONB column round-trips
+// through the API without key rewriting.
+type MachiningOperation struct {
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	DiameterMm      float64  `json:"diameterMm"`
+	DepthMm         *float64 `json:"depthMm,omitempty"`
+	InnerDiameterMm *float64 `json:"innerDiameterMm,omitempty"`
+	XMm             float64  `json:"xMm"`
+	YMm             float64  `json:"yMm"`
+	Face            string   `json:"face"`
+	Label           string   `json:"label,omitempty"`
+}
+
+// HardwareMachiningPart groups the operations of one structural part of a
+// hardware set (e.g. minifix = cam part + bolt part).
+type HardwareMachiningPart struct {
+	ID         string               `json:"id"`
+	Role       string               `json:"role"`
+	Operations []MachiningOperation `json:"operations"`
+}
+
+type HardwareMachiningProfile struct {
+	Parts []HardwareMachiningPart `json:"parts"`
 }
 
 type OptionGroup struct {

@@ -3,7 +3,7 @@
  * screen and its form modal.
  */
 
-import type { Hardware, HardwareUnit } from '@muebles/domain';
+import type { Hardware, HardwareMachiningProfile, HardwareUnit } from '@muebles/domain';
 
 export const UNIT_LABELS: Record<HardwareUnit, string> = {
   piece: 'Pieza',
@@ -37,6 +37,11 @@ export type HardwareDraft = {
    * F080: per-part finish preset ids ('' = inherit the global finish).
    */
   partFinishes: { body: string; base: string; grip: string };
+  /**
+   * F127: CNC machining footprint (structured — validated with
+   * validateMachiningProfile on submit). Null = cost-only hardware.
+   */
+  machining: HardwareMachiningProfile | null;
 };
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
@@ -62,6 +67,7 @@ export const emptyDraft = (): HardwareDraft => ({
   previewMetalness: '',
   previewClearcoat: '',
   partFinishes: emptyPartFinishes(),
+  machining: null,
 });
 
 export function toDraft(item: Hardware): HardwareDraft {
@@ -87,5 +93,6 @@ export function toDraft(item: Hardware): HardwareDraft {
       base: item.partFinishes?.base ?? '',
       grip: item.partFinishes?.grip ?? '',
     },
+    machining: item.machining ?? null,
   };
 }

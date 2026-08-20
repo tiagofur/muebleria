@@ -1421,6 +1421,118 @@ describe('hardwareToApi / hardwareFromApi — part finishes (F080)', () => {
   });
 });
 
+describe('hardwareToApi / hardwareFromApi — machining profile (F127)', () => {
+  const machinedHw: Hardware = {
+    id: 'hw-min',
+    code: 'HER-MIN-15',
+    name: 'Minifix 15 mm (juego)',
+    unit: 'set',
+    costPerUnit: 4.5,
+    active: true,
+    machining: {
+      parts: [
+        {
+          id: 'cam',
+          role: 'cam',
+          operations: [
+            {
+              id: 'cam-15',
+              kind: 'blind_hole',
+              diameterMm: 15,
+              depthMm: 13,
+              xMm: 0,
+              yMm: 0,
+              face: 'anchor',
+              label: 'Cazuela minifix',
+            },
+          ],
+        },
+        {
+          id: 'bolt',
+          role: 'bolt',
+          operations: [
+            {
+              id: 'bolt-pilot',
+              kind: 'screw_pilot',
+              diameterMm: 5,
+              depthMm: 12,
+              xMm: 0,
+              yMm: 0,
+              face: 'opposite',
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  it('round-trips the machining footprint through the API shape', () => {
+    const api = hardwareToApi(machinedHw);
+    expect(api.machining).toEqual(machinedHw.machining);
+
+    const round = hardwareFromApi(api as Record<string, unknown>);
+    expect(round.machining).toEqual(machinedHw.machining);
+  });
+
+  it('null/absent machining stays undefined (legacy rows)', () => {
+    const round = hardwareFromApi({
+      id: 'hw-legacy',
+      code: 'HW-L2',
+      name: 'Legacy',
+      unit: 'piece',
+      cost_per_unit: 1,
+      active: true,
+      machining: null,
+    });
+    expect(round.machining).toBeUndefined();
+
+    const costOnly = hardwareToApi({
+      id: 'hw-plain',
+      code: 'HW-P',
+      name: 'Plain',
+      unit: 'piece',
+      costPerUnit: 1,
+      active: true,
+    });
+    expect(costOnly.machining).toBeNull();
+  });
+
+  it('drops garbage operations from the API payload instead of failing', () => {
+    const round = hardwareFromApi({
+      id: 'hw-dirty-mach',
+      code: 'HW-DM',
+      name: 'Dirty machining',
+      unit: 'piece',
+      cost_per_unit: 1,
+      active: true,
+      machining: {
+        parts: [
+          {
+            id: 'cup',
+            role: 'cup',
+            operations: [
+              { id: 'ok', kind: 'blind_hole', diameterMm: 35, depthMm: 12.5, xMm: 0, yMm: 0, face: 'anchor' },
+              { id: 'bad', kind: 'no-existe', diameterMm: 35, depthMm: 12.5, xMm: 0, yMm: 0, face: 'anchor' },
+            ],
+          },
+          { id: 'empty', role: 'vacio', operations: [] },
+        ],
+      },
+    });
+    expect(round.machining).toEqual({
+      parts: [
+        {
+          id: 'cup',
+          role: 'cup',
+          operations: [
+            { id: 'ok', kind: 'blind_hole', diameterMm: 35, depthMm: 12.5, xMm: 0, yMm: 0, face: 'anchor' },
+          ],
+        },
+      ],
+    });
+  });
+});
+
 describe('apiMappers — engineering log round-trip (roadmap-screens 2a.4)', () => {
   const base = {
     id: 'p1',

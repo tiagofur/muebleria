@@ -3,8 +3,7 @@
  */
 
 import { normalizeHardwarePartFinishes } from '@muebles/domain';
-import type { Hardware } from '@muebles/domain';
-import type { HardwareDraft } from '@muebles/ui';
+import type { Hardware } from '@muebles/domain';import type { HardwareDraft } from '@muebles/ui';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes, parseDraftNum } from './shared';
@@ -55,6 +54,19 @@ type HardwareSlice = Pick<
   'createHardware' | 'updateHardware' | 'setHardwareActive'
 >;
 
+/**
+ * F127: machining footprint travels with the draft as structured data —
+ * the modal already validated it with validateMachiningProfile on submit.
+ * Empty/null profile keeps the hardware cost-only.
+ */
+function hardwareMachiningField(
+  draft: HardwareDraft,
+): Pick<Hardware, 'machining'> {
+  return draft.machining && draft.machining.parts.length > 0
+    ? { machining: draft.machining }
+    : {};
+}
+
 export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
   return {
     createHardware: (draft) => {
@@ -73,6 +85,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         notes: optionalNotes(draft.notes),
         active: true,
         ...hardwarePreviewFields(draft),
+        ...hardwareMachiningField(draft),
       };
       ctx.saveAndToast(
         (c) => ({ ...c, hardware: [...c.hardware, item] }),
@@ -100,6 +113,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               previewMetalness: _dm,
               previewClearcoat: _dcl,
               partFinishes: _dpf,
+              machining: _dma,
               ...rest
             } = h;
             return {
@@ -112,6 +126,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               imageUrl: draft.imageUrl?.trim() || undefined,
               notes: optionalNotes(draft.notes),
               ...hardwarePreviewFields(draft),
+              ...hardwareMachiningField(draft),
             };
           }),
         }),

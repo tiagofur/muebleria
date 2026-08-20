@@ -332,10 +332,68 @@ describe('catalogStore — hardware / optionGroups / components', () => {
       previewMetalness: '',
       previewClearcoat: '',
       partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
     });
     expect(
       store.getState().catalog!.hardware.some((h) => h.code === 'HW-1'),
     ).toBe(true);
+  });
+
+  it('createHardware preserva el perfil de maquinado del draft (F127)', () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    store.getState().createHardware({
+      code: 'HW-MIN',
+      name: 'Minifix demo',
+      unit: 'set',
+      costPerUnit: 4.5,
+      packageSize: '',
+      imageUrl: '',
+      notes: '',
+      previewShape: '',
+      previewColor: '',
+      previewSizeMm: '',
+      previewDiameterMm: '',
+      previewProjectionMm: '',
+      previewRoughness: '',
+      previewMetalness: '',
+      previewClearcoat: '',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: {
+        parts: [
+          {
+            id: 'cam',
+            role: 'cam',
+            operations: [
+              {
+                id: 'cam-15',
+                kind: 'blind_hole',
+                diameterMm: 15,
+                depthMm: 13,
+                xMm: 0,
+                yMm: 0,
+                face: 'anchor',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const created = store
+      .getState()
+      .catalog!.hardware.find((h) => h.code === 'HW-MIN');
+    expect(created?.machining).toEqual({
+      parts: [
+        {
+          id: 'cam',
+          role: 'cam',
+          operations: [
+            { id: 'cam-15', kind: 'blind_hole', diameterMm: 15, depthMm: 13, xMm: 0, yMm: 0, face: 'anchor' },
+          ],
+        },
+      ],
+    });
   });
 
   it('deleteOptionGroup removes by id (guest, no backend DELETE)', async () => {

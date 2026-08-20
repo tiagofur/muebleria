@@ -721,3 +721,72 @@
   }
 }
 
+
+/* F127: hardware machining editor inside the SM hardware modal. Tokens only
+   (docs/design.md §3): nested part blocks over the input surface, operations
+   back on card surface — one elevation step, never more. */
+.hardware-machining__parts {
+  display: grid;
+  gap: var(--density-form-gap, var(--space-3));
+}
+
+.hardware-machining__part {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.hardware-machining__part-header {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.hardware-machining__part-header .catalog-form__field {
+  flex: 1;
+}
+
+.hardware-machining__ops {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.hardware-machining__op {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  padding: var(--space-2);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.hardware-machining__op-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.hardware-machining__op-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.hardware-machining__op-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.hardware-machining__label-field {
+  grid-column: 1 / -1;
+}
+
+.hardware-machining__actions {
+  display: flex;
+  gap: var(--space-2);
+}

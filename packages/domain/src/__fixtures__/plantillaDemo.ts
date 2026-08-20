@@ -57,6 +57,10 @@ export const IDS = {
   hwTornillo: 'hw-tornillo-4x50',
   hwCorredera: 'hw-corredera-500',
   hwSoporte: 'hw-soporte-entrepano',
+  /** F127 CNC drilling seeds: taquete, minifix (set) y placa base de bisagra. */
+  hwTaquete: 'hw-taquete-8x30',
+  hwMinifix: 'hw-minifix-15',
+  hwPlacaBis: 'hw-placa-bisagra',
   /** Purchased plinth profile (plastic/aluminium look), unit meter. */
   hwZocloPerfil: 'hw-zoclo-perfil-alu',
   hwZocloPerfilBronce: 'hw-zoclo-perfil-bronce',
@@ -178,6 +182,46 @@ export const plantillaCatalog: Catalog = {
       previewRoughness: 0.3,
       previewSizeMm: 35,
       previewProjectionMm: 12,
+      machining: {
+        parts: [
+          {
+            id: 'cup',
+            role: 'cup',
+            operations: [
+              {
+                id: 'cup-35',
+                kind: 'blind_hole',
+                diameterMm: 35,
+                depthMm: 12.5,
+                xMm: 0,
+                yMm: 0,
+                face: 'anchor',
+                label: 'Taza 35 mm',
+              },
+              {
+                id: 'cup-fix-1',
+                kind: 'screw_pilot',
+                diameterMm: 5,
+                depthMm: 10,
+                xMm: 0,
+                yMm: -22.5,
+                face: 'anchor',
+                label: 'Fijación taza 1',
+              },
+              {
+                id: 'cup-fix-2',
+                kind: 'screw_pilot',
+                diameterMm: 5,
+                depthMm: 10,
+                xMm: 0,
+                yMm: 22.5,
+                face: 'anchor',
+                label: 'Fijación taza 2',
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       id: IDS.hwJaladera,
@@ -215,6 +259,26 @@ export const plantillaCatalog: Catalog = {
       unit: 'piece',
       costPerUnit: 0.5,
       active: true,
+      machining: {
+        parts: [
+          {
+            id: 'screw',
+            role: 'screw',
+            operations: [
+              {
+                id: 'pilot',
+                kind: 'screw_pilot',
+                diameterMm: 3,
+                depthMm: 35,
+                xMm: 0,
+                yMm: 0,
+                face: 'anchor',
+                label: 'Piloto tornillo',
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       id: IDS.hwCorredera,
@@ -237,6 +301,121 @@ export const plantillaCatalog: Catalog = {
       unit: 'piece',
       costPerUnit: 2,
       active: true,
+    },
+    {
+      id: IDS.hwTaquete,
+      code: 'HER-TAQ-8X30',
+      name: 'Taquete Madera 8x30 mm',
+      unit: 'piece',
+      costPerUnit: 0.8,
+      active: true,
+      notes:
+        'Perforación Ø8 × 15 mm por lado — el taquete de 30 mm se reparte entre ambas piezas.',
+      machining: {
+        parts: [
+          {
+            id: 'dowel',
+            role: 'dowel',
+            operations: [
+              {
+                id: 'dowel-8',
+                kind: 'blind_hole',
+                diameterMm: 8,
+                depthMm: 15,
+                xMm: 0,
+                yMm: 0,
+                face: 'anchor',
+                label: 'Perforación por lado',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: IDS.hwMinifix,
+      code: 'HER-MIN-15',
+      name: 'Minifix 15 mm (juego)',
+      unit: 'set',
+      costPerUnit: 4.5,
+      active: true,
+      notes:
+        'Juego = cazuela + perno. La cazuela va en una pieza y el perno en la otra (unión costado-piso).',
+      machining: {
+        parts: [
+          {
+            id: 'cam',
+            role: 'cam',
+            operations: [
+              {
+                id: 'cam-15',
+                kind: 'blind_hole',
+                diameterMm: 15,
+                depthMm: 13,
+                xMm: 0,
+                yMm: 0,
+                face: 'anchor',
+                label: 'Cazuela minifix',
+              },
+            ],
+          },
+          {
+            id: 'bolt',
+            role: 'bolt',
+            operations: [
+              {
+                id: 'bolt-pilot',
+                kind: 'screw_pilot',
+                diameterMm: 5,
+                depthMm: 12,
+                xMm: 0,
+                yMm: 0,
+                face: 'anchor',
+                label: 'Piloto perno',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      id: IDS.hwPlacaBis,
+      code: 'HER-PLACA-BIS',
+      name: 'Placa Base Bisagra',
+      unit: 'piece',
+      costPerUnit: 6,
+      active: true,
+      notes: 'Dos perforaciones a 32 mm (sistema 32) sobre el costado.',
+      machining: {
+        parts: [
+          {
+            id: 'plate',
+            role: 'plate',
+            operations: [
+              {
+                id: 'plate-fix-1',
+                kind: 'screw_pilot',
+                diameterMm: 5,
+                depthMm: 10,
+                xMm: 0,
+                yMm: -16,
+                face: 'anchor',
+                label: 'Fijación placa 1',
+              },
+              {
+                id: 'plate-fix-2',
+                kind: 'screw_pilot',
+                diameterMm: 5,
+                depthMm: 10,
+                xMm: 0,
+                yMm: 16,
+                face: 'anchor',
+                label: 'Fijación placa 2',
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       id: IDS.hwZocloPerfil,

@@ -56,7 +56,11 @@ import type {
 } from '@muebles/domain';
 
 
-import { normalizeHardwarePartFinishes, resolveWorkshopSettings } from '@muebles/domain';
+import {
+  normalizeHardwarePartFinishes,
+  normalizeMachiningProfile,
+  resolveWorkshopSettings,
+} from '@muebles/domain';
 
 
 
@@ -291,6 +295,9 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     preview_clearcoat: h.previewClearcoat ?? null,
     // Per-part finishes (F080); null keeps the column empty for legacy rows.
     part_finishes: h.partFinishes ? { ...h.partFinishes } : null,
+    // CNC machining footprint (F127); normalized so the payload always holds
+    // a clean profile (null = cost-only hardware / legacy row).
+    machining: normalizeMachiningProfile(h.machining) ?? null,
   };
 }
 
@@ -306,6 +313,7 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
   const partFinishes = normalizeHardwarePartFinishes(
     raw.part_finishes ?? raw.partFinishes,
   );
+  const machining = normalizeMachiningProfile(raw.machining);
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -329,6 +337,8 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     previewClearcoat: optionalNum(raw.preview_clearcoat ?? raw.previewClearcoat),
     // Per-part finishes (F080) — validated, garbage never enters the catalog.
     ...(partFinishes ? { partFinishes } : {}),
+    // CNC machining footprint (F127) — sanitized on ingest.
+    ...(machining ? { machining } : {}),
   };
 }
 

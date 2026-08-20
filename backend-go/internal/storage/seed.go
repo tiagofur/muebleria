@@ -32,6 +32,10 @@ var (
 	seedHwZocloPerfil = "a0000003-0000-0000-0000-000000000007"
 	seedHwZocloBronce = "a0000003-0000-0000-0000-000000000008"
 	seedHwZocloNegro  = "a0000003-0000-0000-0000-000000000009"
+	// F127 CNC drilling seeds
+	seedHwPlacaBis = "a0000003-0000-0000-0000-000000000010"
+	seedHwTaquete  = "a0000003-0000-0000-0000-000000000011"
+	seedHwMinifix  = "a0000003-0000-0000-0000-000000000012"
 	// Option groups
 	seedOGInterior  = "a0000004-0000-0000-0000-000000000001"
 	seedOGFrente    = "a0000004-0000-0000-0000-000000000002"
@@ -61,6 +65,65 @@ var (
 	// Project
 	seedProj     = "a0000009-0000-0000-0000-000000000001"
 	seedProjItem = "a0000009-0000-0000-0000-000000000002"
+)
+
+// F127 machining footprints — mirror plantillaDemo.ts values (parity golden:
+// the drilling pipeline must resolve the same holes in both stacks). Defaults
+// follow the 32mm system; the shop adjusts per real hardware in the catalog.
+func seedF64(v float64) *float64 { return &v }
+
+var (
+	seedMachiningBisagra = &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{{
+			ID: "cup", Role: "cup",
+			Operations: []domain.MachiningOperation{
+				{ID: "cup-35", Kind: "blind_hole", DiameterMm: 35, DepthMm: seedF64(12.5), XMm: 0, YMm: 0, Face: "anchor", Label: "Taza 35 mm"},
+				{ID: "cup-fix-1", Kind: "screw_pilot", DiameterMm: 5, DepthMm: seedF64(10), XMm: 0, YMm: -22.5, Face: "anchor", Label: "Fijación taza 1"},
+				{ID: "cup-fix-2", Kind: "screw_pilot", DiameterMm: 5, DepthMm: seedF64(10), XMm: 0, YMm: 22.5, Face: "anchor", Label: "Fijación taza 2"},
+			},
+		}},
+	}
+	seedMachiningTornillo = &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{{
+			ID: "screw", Role: "screw",
+			Operations: []domain.MachiningOperation{
+				{ID: "pilot", Kind: "screw_pilot", DiameterMm: 3, DepthMm: seedF64(35), XMm: 0, YMm: 0, Face: "anchor", Label: "Piloto tornillo"},
+			},
+		}},
+	}
+	seedMachiningTaquete = &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{{
+			ID: "dowel", Role: "dowel",
+			Operations: []domain.MachiningOperation{
+				{ID: "dowel-8", Kind: "blind_hole", DiameterMm: 8, DepthMm: seedF64(15), XMm: 0, YMm: 0, Face: "anchor", Label: "Perforación por lado"},
+			},
+		}},
+	}
+	seedMachiningMinifix = &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{
+			{
+				ID: "cam", Role: "cam",
+				Operations: []domain.MachiningOperation{
+					{ID: "cam-15", Kind: "blind_hole", DiameterMm: 15, DepthMm: seedF64(13), XMm: 0, YMm: 0, Face: "anchor", Label: "Cazuela minifix"},
+				},
+			},
+			{
+				ID: "bolt", Role: "bolt",
+				Operations: []domain.MachiningOperation{
+					{ID: "bolt-pilot", Kind: "screw_pilot", DiameterMm: 5, DepthMm: seedF64(12), XMm: 0, YMm: 0, Face: "anchor", Label: "Piloto perno"},
+				},
+			},
+		},
+	}
+	seedMachiningPlacaBis = &domain.HardwareMachiningProfile{
+		Parts: []domain.HardwareMachiningPart{{
+			ID: "plate", Role: "plate",
+			Operations: []domain.MachiningOperation{
+				{ID: "plate-fix-1", Kind: "screw_pilot", DiameterMm: 5, DepthMm: seedF64(10), XMm: 0, YMm: -16, Face: "anchor", Label: "Fijación placa 1"},
+				{ID: "plate-fix-2", Kind: "screw_pilot", DiameterMm: 5, DepthMm: seedF64(10), XMm: 0, YMm: 16, Face: "anchor", Label: "Fijación placa 2"},
+			},
+		}},
+	}
 )
 
 // SeedCatalog populates the database with plantilla seed data.
@@ -131,26 +194,32 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// F116 A4: preview_* fields mirror the TS seed (plantillaDemo.ts) so demo
 	// herrajes render in 3D in backend mode too — without them they are
 	// cost-only and invisible in the scene (VH-09).
+	// F127: machining footprints mirror plantillaDemo.ts (parity golden) so
+	// the drilling pipeline resolves the same holes in both stacks.
 	for _, h := range []struct {
 		id, code, name, unit, previewShape, previewColor string
 		costPerUnit                                      float64
 		sizeMm, diameterMm, projectionMm                 float64
 		roughness, metalness                             float64
+		machining                                        *domain.HardwareMachiningProfile
 	}{
-		{seedHwBisagra, "HER-BIS-CL", "Bisagra Cierre Lento", "piece", "hinge", "#9aa0a6", 35, 35, 0, 12, 0.3, 0.85},
-		{seedHwJaladera, "HER-JAL-INOX", "Jaladera Acero Inox", "piece", "bar-pull", "#c8ccd0", 45, 128, 12, 28, 0.18, 0.9},
-		{seedHwPata, "HER-PATA-REG", "Pata Regulable Plastica", "piece", "leg", "#1a1a1a", 15, 120, 30, 0, 0.6, 0.3},
-		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", "", "", 0.5, 0, 0, 0, 0, 0},
-		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", "slide", "#6a7080", 120, 500, 18, 0, 0.35, 0.7},
-		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", "", "", 2, 0, 0, 0, 0, 0},
-		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil aluminio natural", "meter", "", "#c0c5cb", 18, 0, 0, 0, 0, 0},
-		{seedHwZocloBronce, "HER-ZOC-BRO", "Zoclo perfil bronce", "meter", "", "#8d6e42", 22, 0, 0, 0, 0, 0},
-		{seedHwZocloNegro, "HER-ZOC-NEG", "Zoclo perfil negro", "meter", "", "#2c2f34", 22, 0, 0, 0, 0, 0},
+		{seedHwBisagra, "HER-BIS-CL", "Bisagra Cierre Lento", "piece", "hinge", "#9aa0a6", 35, 35, 0, 12, 0.3, 0.85, seedMachiningBisagra},
+		{seedHwJaladera, "HER-JAL-INOX", "Jaladera Acero Inox", "piece", "bar-pull", "#c8ccd0", 45, 128, 12, 28, 0.18, 0.9, nil},
+		{seedHwPata, "HER-PATA-REG", "Pata Regulable Plastica", "piece", "leg", "#1a1a1a", 15, 120, 30, 0, 0.6, 0.3, nil},
+		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", "", "", 0.5, 0, 0, 0, 0, 0, seedMachiningTornillo},
+		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", "slide", "#6a7080", 120, 500, 18, 0, 0.35, 0.7, nil},
+		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", "", "", 2, 0, 0, 0, 0, 0, nil},
+		{seedHwTaquete, "HER-TAQ-8X30", "Taquete Madera 8x30 mm", "piece", "", "", 0.8, 0, 0, 0, 0, 0, seedMachiningTaquete},
+		{seedHwMinifix, "HER-MIN-15", "Minifix 15 mm (juego)", "set", "", "", 4.5, 0, 0, 0, 0, 0, seedMachiningMinifix},
+		{seedHwPlacaBis, "HER-PLACA-BIS", "Placa Base Bisagra", "piece", "", "", 6, 0, 0, 0, 0, 0, seedMachiningPlacaBis},
+		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil aluminio natural", "meter", "", "#c0c5cb", 18, 0, 0, 0, 0, 0, nil},
+		{seedHwZocloBronce, "HER-ZOC-BRO", "Zoclo perfil bronce", "meter", "", "#8d6e42", 22, 0, 0, 0, 0, 0, nil},
+		{seedHwZocloNegro, "HER-ZOC-NEG", "Zoclo perfil negro", "meter", "", "#2c2f34", 22, 0, 0, 0, 0, 0, nil},
 	} {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, preview_shape, preview_size_mm, preview_diameter_mm, preview_projection_mm, preview_color, preview_roughness, preview_metalness, active, created_at, updated_at)
-			VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,0),NULLIF($8,0),NULLIF($9,0),NULLIF($10,''),NULLIF($11,0),NULLIF($12,0),true,$13,$14)`,
-			h.id, h.code, h.name, h.unit, h.costPerUnit, h.previewShape, h.sizeMm, h.diameterMm, h.projectionMm, h.previewColor, h.roughness, h.metalness, now, now)
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, preview_shape, preview_size_mm, preview_diameter_mm, preview_projection_mm, preview_color, preview_roughness, preview_metalness, machining, active, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,0),NULLIF($8,0),NULLIF($9,0),NULLIF($10,''),NULLIF($11,0),NULLIF($12,0),$13,true,$14,$15)`,
+			h.id, h.code, h.name, h.unit, h.costPerUnit, h.previewShape, h.sizeMm, h.diameterMm, h.projectionMm, h.previewColor, h.roughness, h.metalness, hardwareMachiningArg(h.machining), now, now)
 		if err != nil {
 			return fmt.Errorf("seed hardware %s: %w", h.code, err)
 		}

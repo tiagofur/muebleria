@@ -11,6 +11,11 @@ import {
   type ReactNode,
 } from 'react';
 import type { Hardware } from '@muebles/domain';
+import {
+  ValidationError,
+  countMachiningOperations,
+  validateMachiningProfile,
+} from '@muebles/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,
@@ -127,7 +132,17 @@ export function HardwareCatalog({
     if (codeErr) return codeErr;
     const nameErr = validateRequiredName(draft.name);
     if (nameErr) return nameErr;
-    return validateNonNegativeNumber(draft.costPerUnit, 'Costo unitario');
+    const costErr = validateNonNegativeNumber(draft.costPerUnit, 'Costo unitario');
+    if (costErr) return costErr;
+    if (draft.machining && draft.machining.parts.length > 0) {
+      try {
+        validateMachiningProfile(draft.machining);
+      } catch (err) {
+        if (err instanceof ValidationError) return err.message;
+        throw err;
+      }
+    }
+    return null;
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -303,6 +318,19 @@ export function HardwareCatalog({
                     <ActiveBadge active={row.active} />
                   </span>
                 </div>
+                {row.machining ? (
+                  <div className="catalog-row-detail__field">
+                    <span className="catalog-row-detail__label">Maquinado CNC</span>
+                    <span className="catalog-row-detail__value">
+                      {row.machining.parts.length}{' '}
+                      {row.machining.parts.length === 1 ? 'parte' : 'partes'} ·{' '}
+                      {countMachiningOperations(row.machining)}{' '}
+                      {countMachiningOperations(row.machining) === 1
+                        ? 'perforación'
+                        : 'perforaciones'}
+                    </span>
+                  </div>
+                ) : null}
                 {row.notes ? (
                   <div className="catalog-row-detail__field">
                     <span className="catalog-row-detail__label">Notas</span>

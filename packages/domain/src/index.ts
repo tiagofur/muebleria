@@ -37,6 +37,11 @@ export type {
   ComponentPlacement,
   ComponentGeometry,
   Perforation,
+  MachiningOperationKind,
+  MachiningEntryFace,
+  MachiningOperation,
+  HardwareMachiningPart,
+  HardwareMachiningProfile,
   Component,
   ModuleComponentInstance,
   Agregado,
@@ -688,6 +693,15 @@ export {
   type PartDrillingPattern,
   type ProjectDrillingData,
 } from './partDrilling';
+
+// --- Hardware Machining Profiles (F127) ---
+export {
+  MACHINING_OPERATION_KINDS,
+  MACHINING_ENTRY_FACES,
+  countMachiningOperations,
+  normalizeMachiningProfile,
+  validateMachiningProfile,
+} from './hardwareMachining';
 
 // --- Agregados helpers ---
 export {

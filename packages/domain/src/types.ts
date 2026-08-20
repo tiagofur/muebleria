@@ -176,6 +176,57 @@ export interface Hardware {
   readonly partFinishes?: Readonly<
     Partial<Record<HardwarePartRole, HardwareFinishId>>
   >;
+  /**
+   * CNC machining footprint (F127): the drilling operations this hardware
+   * requires, per structural part, in the part-local frame of its placement
+   * anchor. Omitted = cost-only hardware (no drilling derived from it).
+   * Resolution to concrete per-piece holes is the drilling engine (F128).
+   */
+  readonly machining?: HardwareMachiningProfile;
+}
+
+/**
+ * CNC machining operation a hardware part requires on its host board (F127).
+ * Kinds: blind hole (fixed depth), through hole, counterbore (escareado),
+ * screw pilot (piloto para tornillo/perno).
+ */
+export type MachiningOperationKind =
+  | 'blind_hole'
+  | 'through_hole'
+  | 'counterbore'
+  | 'screw_pilot';
+
+/** Face the tool enters from, relative to the part's anchor face. */
+export type MachiningEntryFace = 'anchor' | 'opposite';
+
+export interface MachiningOperation {
+  readonly id: string;
+  readonly kind: MachiningOperationKind;
+  /** Hole (or counterbore outer) diameter, mm. */
+  readonly diameterMm: number;
+  /** Depth from the entry face, mm. Required for blind kinds. */
+  readonly depthMm?: number;
+  /** Shank diameter, mm — counterbore kind only. */
+  readonly innerDiameterMm?: number;
+  /** Offset from the part anchor in the part-local plane, mm. */
+  readonly xMm: number;
+  readonly yMm: number;
+  readonly face: MachiningEntryFace;
+  readonly label?: string;
+}
+
+/**
+ * Structural part of a hardware set that carries its own drilling (F127):
+ * e.g. a minifix set has a `cam` part (Ø15 hole) and a `bolt` part (pilot).
+ */
+export interface HardwareMachiningPart {
+  readonly id: string;
+  readonly role: string;
+  readonly operations: readonly MachiningOperation[];
+}
+
+export interface HardwareMachiningProfile {
+  readonly parts: readonly HardwareMachiningPart[];
 }
 
 /**
