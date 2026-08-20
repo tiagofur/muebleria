@@ -185,6 +185,7 @@ import {
   createSeedWorkspace,
 } from '@muebles/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
+import { runExport, type ExportDelivery } from './exports/runExport';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import {
@@ -2037,82 +2038,44 @@ function AppContent({
     [projectActions, authUser?.id, selectedProject?.id],
   );
 
-  // F118 A1: builders/delivery may THROW (not just return {ok:false}) —
-  // wrap every export so exceptions surface as a toast instead of an
-  // unhandled rejection with busy already cleared.
-  const guardExport = useCallback(
-    <A extends unknown[]>(handler: (...args: A) => Promise<void>) =>
-      async (...args: A): Promise<void> => {
-        try {
-          await handler(...args);
-        } catch (err) {
-          console.error('Export failed:', err);
-          getUiStoreState().toast({
-            type: 'error',
-            message: 'No se pudo generar el archivo. Revisá la consola para detalle.',
-          });
-        }
-      },
-    [],
+
+  const handleExportOptimizer = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () => buildOptimizerExport(project, catalog),
+        onIssues:
+          projectId != null
+            ? () =>
+                toast({
+                  type: 'error',
+                  message:
+                    'No se pudo exportar el corte: revisá las opciones del pedido',
+                })
+            : undefined,
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
+    },
+    [selectedProject, projects, catalog, toast, session, actorRole],
   );
 
-  const handleExportOptimizer = guardExport(useCallback(
-    async (projectId?: string) => {
-      const project =
-        projectId != null
-          ? projects.find((p) => p.id === projectId)
-          : selectedProject;
-      if (!project || !catalog) return;
-      // F041: production cut-list only for roles+statuses allowed.
-      if (
-        session === 'auth' &&
-        !canExportProductionForProject(actorRole, project.status)
-      ) {
-        toast({
-          type: 'error',
-          message:
-            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
-        });
-        return;
-      }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildOptimizerExport(project, catalog);
-        if (!result.ok) {
-          // Validation issues stay inline (ExportIssueList) — not as toasts.
-          setExportErrors(result.issues);
-          if (projectId != null) {
-            toast({
-              type: 'error',
-              message: 'No se pudo exportar el corte: revisá las opciones del pedido',
-            });
-          }
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
-    },
-    [selectedProject, projects, catalog, toast, session, actorRole],
-  ));
-
-  const handleExportHardwareList = guardExport(useCallback(
+  const handleExportHardwareList = useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2130,53 +2093,34 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildHardwareListExport(project, catalog);
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          if (projectId != null) {
-            toast({
-              type: 'error',
-              message: 'No se pudo exportar herrajes: revisá el pedido',
-            });
-          }
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () => buildHardwareListExport(project, catalog),
+        onIssues:
+          projectId != null
+            ? () =>
+                toast({
+                  type: 'error',
+                  message: 'No se pudo exportar herrajes: revisá el pedido',
+                })
+            : undefined,
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportPieceLabels = guardExport(useCallback(
+  const handleExportPieceLabels = useCallback(
     async (
       projectId?: string,
       labelOptions?: PieceLabelsExportOptions,
     ) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2187,58 +2131,35 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildPieceLabelsExport(
-          project,
-          catalog,
-          customers,
-          labelOptions ?? {},
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          if (projectId != null) {
-            toast({
-              type: 'error',
-              message: 'No se pudo exportar etiquetas: revisá el pedido',
-            });
-          }
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () =>
+          buildPieceLabelsExport(project, catalog, customers, labelOptions ?? {}),
+        onIssues:
+          projectId != null
+            ? () =>
+                toast({
+                  type: 'error',
+                  message: 'No se pudo exportar etiquetas: revisá el pedido',
+                })
+            : undefined,
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportModuleLabels = guardExport(useCallback(
+  const handleExportModuleLabels = useCallback(
     async (
       projectId?: string,
       labelOptions?: ModuleLabelsExportOptions,
     ) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2249,55 +2170,32 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildModuleLabelsExport(
-          project,
-          catalog,
-          customers,
-          labelOptions ?? {},
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          if (projectId != null) {
-            toast({
-              type: 'error',
-              message: 'No se pudo exportar etiquetas de muebles: revisá el pedido',
-            });
-          }
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () =>
+          buildModuleLabelsExport(project, catalog, customers, labelOptions ?? {}),
+        onIssues:
+          projectId != null
+            ? () =>
+                toast({
+                  type: 'error',
+                  message: 'No se pudo exportar etiquetas de módulo: revisá el pedido',
+                })
+            : undefined,
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportElevations = guardExport(useCallback(
+  const handleExportElevations = useCallback(
     async (projectId?: string) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2308,65 +2206,34 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildWallElevationsExport(
-          project,
-          catalog,
-          resolveCustomerName(project.customerId, customers),
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
+      await runExport({
+        build: () =>
+          buildWallElevationsExport(
+            project,
+            catalog,
+            resolveCustomerName(project.customerId, customers),
+          ),
+        onIssues: (issues) =>
           toast({
             type: 'error',
             message:
-              result.issues[0]?.message ??
+              issues[0]?.message ??
               'No se pudo exportar elevaciones (¿hay muros en el layout?)',
-          });
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        if (projectId != null) {
-          recordProductionExport(projectId);
-        } else if (project) {
-          recordProductionExport(project.id);
-        }
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+          }),
+        stamp: () => recordProductionExport(project.id),
+      });
     },
-    [
-      selectedProject,
-      projects,
-      catalog,
-      customers,
-      toast,
-      session,
-      actorRole,
-      recordProductionExport,
-    ],
-  ));
+    [selectedProject, projects, catalog, customers, toast, session, actorRole, recordProductionExport],
+  );
 
-  const handleExportCncPilot = guardExport(useCallback(
+  const handleExportCncPilot = useCallback(
     async (projectId?: string) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2377,48 +2244,25 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildCncPilotExport(project, catalog);
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          toast({
-            type: 'error',
-            message: 'No se pudo generar CNC pilot JSON',
-          });
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () => buildCncPilotExport(project, catalog),
+        onIssues: () =>
+          toast({ type: 'error', message: 'No se pudo generar CNC pilot JSON' }),
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportAssemblySheets = guardExport(useCallback(
+  const handleExportAssemblySheets = useCallback(
     async (projectId?: string) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2429,52 +2273,30 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildAssemblySheetsExport(
-          project,
-          catalog,
-          resolveCustomerName(project.customerId, customers),
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          toast({
-            type: 'error',
-            message: 'No se pudo generar hojas de armado',
-          });
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () =>
+          buildAssemblySheetsExport(
+            project,
+            catalog,
+            resolveCustomerName(project.customerId, customers),
+          ),
+        onIssues: () =>
+          toast({ type: 'error', message: 'No se pudo generar hojas de armado' }),
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportCutListCsv = guardExport(useCallback(
+  const handleExportCutListCsv = useCallback(
     async (projectId?: string) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2485,48 +2307,25 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildCutListCsvExport(project, catalog);
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          toast({
-            type: 'error',
-            message: 'No se pudo exportar cut-list CSV',
-          });
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      await runExport({
+        build: () => buildCutListCsvExport(project, catalog),
+        onIssues: () =>
+          toast({ type: 'error', message: 'No se pudo exportar cut-list CSV' }),
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportDespiecePdf = guardExport(useCallback(
+  const handleExportDespiecePdf = useCallback(
     async (projectId?: string) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2537,40 +2336,30 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await downloadDespiecePdf(
-          project,
-          catalog,
-          resolveCustomerName(project.customerId, customers),
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          toast({
-            type: 'error',
-            message: 'No se pudo exportar despiece PDF',
-          });
-          return;
-        }
-        const stampProjectId =
-          projectId ?? project?.id ?? selectedProject?.id;
-        if (stampProjectId) stampEngineeringGeneration(stampProjectId);
-        toast({
-          type: 'success',
-          message:
-            result.delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      const stampId = projectId ?? project.id;
+      // downloadDespiecePdf performs its own delivery and reports the mode.
+      let performed: ExportDelivery = 'cancelled';
+      await runExport({
+        build: async () => {
+          const result = await downloadDespiecePdf(
+            project,
+            catalog,
+            resolveCustomerName(project.customerId, customers),
+          );
+          if (!result.ok) return result;
+          performed = result.delivery === 'saved' ? 'saved' : 'downloaded';
+          return { ok: true, bytes: result.fileName, fileName: result.fileName };
+        },
+        deliver: async () => performed,
+        onIssues: () =>
+          toast({ type: 'error', message: 'No se pudo exportar despiece PDF' }),
+        stamp: () => stampEngineeringGeneration(stampId),
+      });
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  ));
+  );
 
-  const handleExportCutPlanPdf = guardExport(useCallback(
+  const handleExportCutPlanPdf = useCallback(
     async (cutPlan: import('@muebles/domain').CutPlan) => {
       setExportBusy(true);
       try {
@@ -2593,9 +2382,9 @@ function AppContent({
       }
     },
     [toast],
-  ));
+  );
 
-  const handleReleaseToDelivery = guardExport(useCallback(
+  const handleReleaseToDelivery = useCallback(
     async (projectId: string) => {
       const project = projects.find((p) => p.id === projectId);
       if (!project) return;
@@ -2619,16 +2408,16 @@ function AppContent({
       }
     },
     [projects, projectActions, toast],
-  ));
+  );
 
-  const handleExportProductionPack = guardExport(useCallback(
+  const handleExportProductionPack = useCallback(
     async (projectId?: string) => {
-      const project =
+            const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-      if (
+            if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -2639,125 +2428,63 @@ function AppContent({
         });
         return;
       }
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildProductionPackExport(
-          project,
-          catalog!,
-          resolveCustomerName(project.customerId, customers),
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
+      // Optional annexes that failed are listed — never silently missing.
+      let omissionNote = '';
+      await runExport({
+        build: async () => {
+          const result = await buildProductionPackExport(
+            project,
+            catalog,
+            resolveCustomerName(project.customerId, customers),
+          );
+          if (result.ok && result.omissions.length > 0) {
+            omissionNote = ` (sin: ${result.omissions.join(', ')})`;
+          }
+          return result;
+        },
+        onIssues: () =>
           toast({
             type: 'error',
             message:
               'No se pudo armar el pack: revisá el pedido (falta el corte Optimizer)',
-          });
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
+          }),
         // PROD-3.2 — stamp OP export revision so stale detection works.
-        recordProductionExport(project.id);
-        stampEngineeringGeneration(project.id);
-        // Optional annexes that failed are listed — never silently missing.
-        const omissionNote =
-          result.omissions.length > 0
-            ? ` (sin: ${result.omissions.join(', ')})`
-            : '';
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado${omissionNote}`
-              : `✓ ${result.fileName} descargado${omissionNote}`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
-    },
-    [
-      selectedProject,
-      projects,
-      catalog,
-      customers,
-      toast,
-      session,
-      actorRole,
-      recordProductionExport,
-    ],
-  ));
-
-  const handleExportCommercialQuote = guardExport(useCallback(async () => {
-    if (!selectedProject || !catalog) return;
-    setExportBusy(true);
-    setExportErrors([]);
-    try {
-      const result = await buildCommercialQuoteExport(
-        selectedProject,
-        catalog,
-        customers,
-      );
-      if (!result.ok) {
-        setExportErrors(result.issues);
-        return;
-      }
-      const delivery = await deliverExcelFile(result.bytes, result.fileName);
-      if (delivery === 'cancelled') {
-        toast({ type: 'info', message: 'Export cancelado' });
-        return;
-      }
-      toast({
-        type: 'success',
-        message:
+        stamp: () => {
+          recordProductionExport(project.id);
+          stampEngineeringGeneration(project.id);
+        },
+        successMessage: (fileName, delivery) =>
           delivery === 'saved'
-            ? `✓ ${result.fileName} guardado`
-            : `✓ ${result.fileName} descargado`,
+            ? `✓ ${fileName} guardado${omissionNote}`
+            : `✓ ${fileName} descargado${omissionNote}`,
       });
-    } finally {
-      setExportBusy(false);
-    }
-}, [selectedProject, catalog, customers, toast]));
+    },
+    [selectedProject, projects, catalog, customers, toast, session, actorRole, recordProductionExport],
+  );
 
-  const handleExportCommercialQuotePdf = guardExport(useCallback(
+  const handleExportCommercialQuote = useCallback(async () => {
+    if (!selectedProject || !catalog) return;
+    await runExport({
+      build: () => buildCommercialQuoteExport(selectedProject, catalog, customers),
+    });
+  }, [selectedProject, catalog, customers]);
+
+  const handleExportCommercialQuotePdf = useCallback(
     async (variant: 'detailed' | 'summary') => {
       if (!selectedProject || !catalog) return;
-      setExportBusy(true);
-      setExportErrors([]);
-      try {
-        const result = await buildCommercialQuotePdfExport(
-          selectedProject,
-          catalog,
-          customers,
-          variant,
-          workspace?.settings,
-        );
-        if (!result.ok) {
-          setExportErrors(result.issues);
-          return;
-        }
-        const delivery = await deliverExcelFile(result.bytes, result.fileName);
-        if (delivery === 'cancelled') {
-          toast({ type: 'info', message: 'Export cancelado' });
-          return;
-        }
-        toast({
-          type: 'success',
-          message:
-            delivery === 'saved'
-              ? `✓ ${result.fileName} guardado`
-              : `✓ ${result.fileName} descargado`,
-        });
-      } finally {
-        setExportBusy(false);
-      }
+      await runExport({
+        build: () =>
+          buildCommercialQuotePdfExport(
+            selectedProject,
+            catalog,
+            customers,
+            variant,
+            workspace?.settings,
+          ),
+      });
     },
-    [selectedProject, catalog, customers, toast],
-  ));
+    [selectedProject, catalog, customers, workspace],
+  );
 
   const onEntitySelectionChange = useCallback(
     (section: EntitySection, id: string | null) => {

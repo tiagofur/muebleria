@@ -236,11 +236,16 @@ describe('web shell Toast wiring (F019)', () => {
     // design.md §4.4: create material → success with code; in catalogStore now.
     expect(catalogStoreSrc).toMatch(/type:\s*'success',\s*message:\s*`✓ "\$\{code\}" creado`/);
     expect(catalogStoreSrc).toContain("message: '✓ Cambios guardados'");
-    // Export success toast (browser download or Electron save) still in App.tsx.
-    expect(app).toContain('deliverExcelFile');
-    expect(app).toMatch(/\$\{result\.fileName\} descargado/);
-    expect(app).toMatch(/\$\{result\.fileName\} guardado/);
-    expect(app).toContain('setExportErrors(result.issues)');
-    expect(app).toContain('// Validation issues stay inline');
+    // Export success toast + inline issues live in runExport since F119;
+    // App keeps the RBAC gate copy and the inline-issues comment.
+    const runExportSrc = readFileSync(
+      join(here, 'exports/runExport.ts'),
+      'utf8',
+    );
+    expect(runExportSrc).toContain('deliverExcelFile');
+    expect(runExportSrc).toMatch(/\$\{result\.fileName\} descargado/);
+    expect(runExportSrc).toMatch(/\$\{result\.fileName\} guardado/);
+    expect(runExportSrc).toContain('ui.setExportErrors(result.issues)');
+    expect(runExportSrc).toContain('// Validation issues stay inline');
   });
 });
