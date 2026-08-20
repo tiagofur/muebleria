@@ -3,7 +3,8 @@
  */
 
 import { normalizeHardwarePartFinishes } from '@muebles/domain';
-import type { Hardware } from '@muebles/domain';import type { HardwareDraft } from '@muebles/ui';
+import type { Hardware } from '@muebles/domain';
+import type { HardwareDraft } from '@muebles/ui';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes, parseDraftNum } from './shared';
