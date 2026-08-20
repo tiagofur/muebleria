@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import type { MaterialBoard } from '@muebles/domain';
-import { MaterialsCatalog } from './MaterialsCatalog';
+import { MaterialsCatalog } from './materials/MaterialsCatalog';
 import { EdgesCatalog } from './EdgesCatalog';
 import { HardwareCatalog } from './HardwareCatalog';
 import { AmbientMaterialsCatalog } from './AmbientMaterialsCatalog';

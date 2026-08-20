@@ -35,7 +35,7 @@ export {
   MaterialsCatalog,
   type MaterialDraft,
   type MaterialsCatalogProps,
-} from './MaterialsCatalog';
+} from './materials/MaterialsCatalog';
 
 export {
   extractDominantColorFromImageFile,

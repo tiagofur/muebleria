@@ -231,21 +231,25 @@ describe('catalog list CSS guards (F020)', () => {
   });
 
   it('materials catalog uses Modal MD form + StatusChips (Fase 3 UI)', () => {
-    const src = read('../catalogs/MaterialsCatalog.tsx');
-    expect(src).toMatch(/size="md"/);
-    expect(src).toMatch(/material-form-modal/);
-    expect(src).toMatch(/StatusChips/);
-    expect(src).toMatch(/EmptyState/);
-    expect(src).toMatch(/useDebouncedValue/);
-    expect(src).not.toMatch(/Mostrar inactivos/);
+    // F117: screen + form modal live under catalogs/materials/.
+    const screenSrc = read('../catalogs/materials/MaterialsCatalog.tsx');
+    const modalSrc = read('../catalogs/materials/MaterialFormModal.tsx');
+    expect(modalSrc).toMatch(/size="md"/);
+    expect(modalSrc).toMatch(/material-form-modal/);
+    expect(screenSrc).toMatch(/StatusChips/);
+    expect(screenSrc).toMatch(/EmptyState/);
+    expect(screenSrc).toMatch(/useDebouncedValue/);
+    expect(screenSrc).not.toMatch(/Mostrar inactivos/);
   });
 
   it('#14: materials catalog does not import domain cost formula', () => {
-    const src = read('../catalogs/MaterialsCatalog.tsx');
-    expect(src).not.toMatch(/calcMaterialCostPerM2/);
-    expect(src).toMatch(/getCostPerM2/);
-    expect(src).toMatch(/catalog-form__calculated-value/);
-    expect(src).not.toMatch(/style=\{\{/);
+    // F117: split across screen + form modal — neither may import the formula.
+    const screenSrc = read('../catalogs/materials/MaterialsCatalog.tsx');
+    const modalSrc = read('../catalogs/materials/MaterialFormModal.tsx');
+    expect(`${screenSrc}${modalSrc}`).not.toMatch(/calcMaterialCostPerM2/);
+    expect(screenSrc).toMatch(/getCostPerM2/);
+    expect(modalSrc).toMatch(/catalog-form__calculated-value/);
+    expect(`${screenSrc}${modalSrc}`).not.toMatch(/style=\{\{/);
   });
 });
 

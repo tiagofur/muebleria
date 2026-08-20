@@ -11,7 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import type { MaterialBoard } from '@muebles/domain';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
-import { MaterialsCatalog } from './MaterialsCatalog';
+import { MaterialsCatalog } from './materials/MaterialsCatalog';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -125,7 +125,7 @@ describe('MaterialsCatalog empty states (#32)', () => {
 
 describe('MaterialsCatalog image upload (F042)', () => {
   it('exposes image field and CatalogImage for materials', () => {
-    const src = readFileSync(join(here, 'MaterialsCatalog.tsx'), 'utf8');
+    const src = readFileSync(join(here, 'materials/MaterialFormModal.tsx'), 'utf8');
     expect(src).toContain('material-image-field');
     expect(src).toContain('onUploadImage');
     expect(src).toContain('imageUrl');
@@ -183,7 +183,7 @@ describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
     );
 
     await user.click(screen.getByText('MAT-01'));
-    await user.click(screen.getByRole('button', { name: /^Editar$/i }));
+    await user.click(screen.getByRole('button', { name: 'Editar MAT-01' }));
     expect(screen.getByTestId('material-preview-3d-body')).toBeTruthy();
     expect(screen.getByTestId('material-preview-color-input')).toBeTruthy();
   });
@@ -205,7 +205,7 @@ describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
     );
 
     await user.click(screen.getByText('MAT-01'));
-    await user.click(screen.getByRole('button', { name: /^Editar$/i }));
+    await user.click(screen.getByRole('button', { name: 'Editar MAT-01' }));
     await user.click(screen.getByTestId('material-preview-3d-toggle'));
     expect(screen.getByTestId('material-pbr-section')).toBeTruthy();
 
