@@ -13,24 +13,10 @@ import type {
   ProductionCutRow,
   ProductionStaleInfo,
   Project,
+  ProductionSpaceOption,
 } from '@muebles/domain';
-import {
-  generatePartDrillingData,
-  summarizeProductionTotals,
-} from '@muebles/domain';
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Circle,
-  ExternalLink,
-  Factory,
-  FileSpreadsheet,
-  Layers,
-  LayoutGrid,
-  Package,
-  Ruler,
-  AlertTriangle,
-} from 'lucide-react';
+import { PRODUCTION_SCOPE_ALL } from '@muebles/domain';
+import { ArrowLeft, ExternalLink, Factory } from 'lucide-react';
 import {
   formatIsoDate,
   projectStatusBadgeClass,
@@ -45,15 +31,12 @@ import {
   type ProductionOrderTab,
 } from './productionOrderModel';
 import { ProductionOrderHardwarePanel } from './ProductionOrderHardwarePanel';
-import {
-  ProductionOrderDocumentsPanel,
-  type ProductionDocumentItem,
-} from './ProductionOrderDocumentsPanel';
+import { ProductionOrderDocumentsPanel } from './ProductionOrderDocumentsPanel';
 import { ProductionOrderPaperlessPanel } from './ProductionOrderPaperlessPanel';
 import { ProductionOrderLabelsPanel } from './ProductionOrderLabelsPanel';
 import { CsvExportConfigModal } from './CsvExportConfigModal';
-import type { ProductionSpaceOption } from '@muebles/domain';
-import { PRODUCTION_SCOPE_ALL } from '@muebles/domain';
+import { ProductionHubResumenTab } from './hub/ProductionHubResumenTab';
+import { useProductionOrderDocuments } from './hub/useProductionOrderDocuments';
 import './production.css';
 
 export type ProductionOrderHubProps = {
@@ -108,7 +91,11 @@ export type ProductionOrderHubProps = {
   readonly onProductionScopeChange?: (scopeId: string) => void;
 };
 
-function StatusBadge({ status }: { readonly status: Project['status'] }): ReactNode {
+function StatusBadge({
+  status,
+}: {
+  readonly status: Project['status'];
+}): ReactNode {
   return (
     <span className={`status-badge ${projectStatusBadgeClass(status)}`}>
       <span className="status-badge__dot" aria-hidden>
@@ -116,88 +103,6 @@ function StatusBadge({ status }: { readonly status: Project['status'] }): ReactN
       </span>
       {projectStatusLabel(status)}
     </span>
-  );
-}
-
-function CheckRow({
-  ok,
-  label,
-  detail,
-  warn,
-}: {
-  readonly ok: boolean;
-  readonly label: string;
-  readonly detail?: string;
-  readonly warn?: boolean;
-}): ReactNode {
-  const Icon = warn ? AlertTriangle : ok ? CheckCircle2 : Circle;
-  const stateClass = warn
-    ? 'prod-hub__check prod-hub__check--warn'
-    : ok
-      ? 'prod-hub__check prod-hub__check--ok'
-      : 'prod-hub__check prod-hub__check--fail';
-  return (
-    <li className={stateClass}>
-      <Icon size={18} strokeWidth={1.5} aria-hidden />
-      <div>
-        <p className="prod-hub__check-label">{label}</p>
-        {detail ? <p className="prod-hub__check-detail">{detail}</p> : null}
-      </div>
-    </li>
-  );
-}
-
-/** Factory purchase/load totals from the resolved cut rows (domain math). */
-function FactoryTotalsBlock({
-  rows,
-}: {
-  readonly rows: readonly ProductionCutRow[];
-}): ReactNode {
-  const totals = summarizeProductionTotals(rows);
-  if (totals.materials.length === 0) return null;
-  return (
-    <div
-      className="prod-hub__factory-totals"
-      data-testid="prod-hub-factory-totals"
-    >
-      <h3 className="prod-hub__section-title">Comprar / cargar</h3>
-      <div className="prod-hub__totals-grid">
-        <div className="prod-hub__totals-col">
-          <p className="prod-hub__totals-col-title">Tablero</p>
-          <ul className="prod-hub__totals-list">
-            {totals.materials.map((m) => (
-              <li key={m.key}>
-                <span>
-                  {m.name}
-                  {m.thicknessMm ? ` · ${m.thicknessMm} mm` : ''}
-                </span>
-                <span className="prod-hub__totals-num">
-                  {m.areaM2.toLocaleString('es-MX')} m²
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        {totals.edges.length > 0 ? (
-          <div className="prod-hub__totals-col">
-            <p className="prod-hub__totals-col-title">Canto</p>
-            <ul className="prod-hub__totals-list">
-              {totals.edges.map((e) => (
-                <li key={e.key}>
-                  <span>
-                    {e.name}
-                    {e.thicknessMm ? ` · ${e.thicknessMm} mm` : ''}
-                  </span>
-                  <span className="prod-hub__totals-num">
-                    {e.ml.toLocaleString('es-MX')} ML
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -216,11 +121,11 @@ export function ProductionOrderHub({
   onExportProductionPack,
   onExportElevations,
   onExportCutListCsv,
-  onMarkProduced,
+  onMarkProduced: _onMarkProduced,
   exportBusy = false,
   modules = [],
   cutRows = null,
-  cutListError = null,
+  cutListError: _cutListError = null,
   pieceLabels = null,
   pieceLabelsError = null,
   moduleLabels = null,
@@ -241,116 +146,23 @@ export function ProductionOrderHub({
 }: ProductionOrderHubProps): ReactNode {
   const [isCsvConfigOpen, setIsCsvConfigOpen] = useState(false);
 
-  const downloadDrillingJson = () => {
-    if (!cutRows || cutRows.length === 0) return;
-    const data = generatePartDrillingData({ project, cutRows });
-    const content = JSON.stringify(data, null, 2);
-    const safeName = project.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '_');
-    const blob = new Blob([content], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `perforaciones_${safeName}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const documents: readonly ProductionDocumentItem[] = [
-    {
-      id: 'pack',
-      label: 'Pack de producción (ZIP)',
-      hint: 'Optimizer + herrajes + etiquetas PDF y ZPL + resumen + elevaciones + despiece',
-      available: readiness.packGenerable && Boolean(onExportProductionPack),
-      reason: 'Requiere despiece de corte válido',
-      onDownload: onExportProductionPack,
-    },
-    {
-      id: 'optimizer',
-      label: 'Optimizer (Excel)',
-      hint: 'Plan de corte Plantilla_Optimizer.xlsx',
-      available: readiness.optimizerGenerable,
-      reason: 'Requiere despiece válido',
-      onDownload: onExportOptimizer,
-    },
-    {
-      id: 'cutlist-csv',
-      label: 'Cut-list CSV',
-      hint: 'CSV genérico (separador ;) para sierra/CNC/terceros',
-      available: readiness.materialsResolved && Boolean(onExportCutListCsv),
-      reason: 'Requiere piezas de tablero',
-      onDownload: onExportCutListCsv,
-    },
-    {
-      id: 'cutlist-csv-config',
-      label: 'CSV configurable (terceros)',
-      hint: 'Elegí preset de optimizador, separador y material antes de bajar',
-      available: readiness.materialsResolved && (cutRows?.length ?? 0) > 0,
-      reason: 'Requiere piezas de tablero',
-      actionLabel: 'Configurar',
-      onDownload: () => setIsCsvConfigOpen(true),
-    },
-    {
-      id: 'hardware',
-      label: 'Lista de herrajes',
-      hint: 'Picking / compras (.xlsx)',
-      available: Boolean(onExportHardware),
-      onDownload: onExportHardware,
-    },
-    {
-      id: 'labels',
-      label: 'Etiquetas de pieza (PDF)',
-      hint: 'A4 con encintado y QR — imprimir y cortar en oficina',
-      available:
-        Boolean(onExportPieceLabels) && (pieceLabels?.length ?? 0) > 0,
-      reason: 'Requiere piezas de tablero',
-      onDownload: onExportPieceLabels
-        ? () => onExportPieceLabels(pieceLabels ?? [], { perUnit: false })
-        : undefined,
-    },
-    {
-      id: 'labels-zpl',
-      label: 'Etiquetas térmicas (ZPL)',
-      hint: 'Impresora Zebra — configurar tamaño/DPI y descargar .zpl',
-      available: (pieceLabels?.length ?? 0) > 0,
-      reason: 'Requiere piezas de tablero',
-      actionLabel: 'Configurar',
-      onDownload: () => onTabChange('etiquetas'),
-    },
-    {
-      id: 'elevations',
-      label: 'Elevaciones por muro (PDF)',
-      hint: 'Alzados con códigos y medidas',
-      available: elevationsAvailable && Boolean(onExportElevations),
-      reason: 'Sin muros en el layout de cocina',
-      onDownload: onExportElevations,
-    },
-    {
-      id: 'drilling',
-      label: 'Perforaciones (JSON)',
-      hint: 'Metadatos de taladros por pieza para mecanizado',
-      available: readiness.materialsResolved && (cutRows?.length ?? 0) > 0,
-      reason: 'Requiere piezas de tablero',
-      onDownload: downloadDrillingJson,
-    },
-    {
-      id: 'cnc-pilot',
-      label: 'CNC pilot (JSON)',
-      hint: 'Metadatos rectangulares por pieza — no reemplaza al Optimizer',
-      available: readiness.materialsResolved && Boolean(onExportCncPilot),
-      reason: 'Requiere piezas de tablero',
-      onDownload: onExportCncPilot,
-    },
-    {
-      id: 'assembly',
-      label: 'Hojas de armado (PDF)',
-      hint: 'Una página por módulo: medidas + herrajes + estado piso',
-      available: project.items.length > 0 && Boolean(onExportAssemblySheets),
-      reason: 'Sin módulos en el alcance',
-      onDownload: onExportAssemblySheets,
-    },
-  ];
+  const documents = useProductionOrderDocuments({
+    project,
+    readiness,
+    cutRows,
+    pieceLabels,
+    elevationsAvailable,
+    onExportProductionPack,
+    onExportOptimizer,
+    onExportCutListCsv,
+    onExportHardware,
+    onExportPieceLabels,
+    onExportElevations,
+    onExportCncPilot,
+    onExportAssemblySheets,
+    onOpenCsvConfig: () => setIsCsvConfigOpen(true),
+    onNavigateToTab: (t) => onTabChange(t as ProductionOrderTab),
+  });
 
   return (
     <section
@@ -399,270 +211,111 @@ export function ProductionOrderHub({
                   </span>
                 </>
               ) : null}
-              {salePrice != null ? (
-                <>
-                  <span className="prod-hub__dot" aria-hidden>
-                    ·
-                  </span>
-                  {formatMoneyDisplay(salePrice, { currency: project.currency })}
-                </>
-              ) : null}
             </p>
           </div>
         </div>
 
-        {staleInfo?.stale && staleInfo.messageEs ? (
-          <p
-            className="prod-hub__ready-banner prod-hub__ready-banner--blocked"
-            data-testid="prod-hub-stale-warning"
+        {staleInfo?.stale ? (
+          <aside
+            className="prod-hub__stale-warning"
             role="status"
+            aria-live="polite"
+            data-testid="prod-hub-stale-warning"
           >
-            {staleInfo.messageEs}
-          </p>
+            <strong>Aviso de versión:</strong>{' '}
+            {staleInfo.messageEs ||
+              'La orden de producción se generó a partir de una versión anterior.'}
+          </aside>
         ) : null}
 
-        {spaceOptions.length >= 2 && onProductionScopeChange ? (
-          <div
-            className="prod-hub__scope"
-            data-testid="prod-hub-space-scope"
-          >
-            <label className="prod-hub__scope-label" htmlFor="prod-scope-select">
-              Ambiente
-            </label>
-            <select
-              id="prod-scope-select"
-              className="prod-modulos__floor-select"
-              value={productionScopeId}
-              onChange={(e) => onProductionScopeChange(e.target.value)}
-              data-testid="prod-scope-select"
-            >
-              <option value={PRODUCTION_SCOPE_ALL}>Toda la obra</option>
-              {spaceOptions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.itemCount})
-                </option>
-              ))}
-            </select>
-            <span className="prod-modulos__muted">
-              Filtra vistas de fábrica · export Optimizer sigue siendo obra completa
-            </span>
-          </div>
-        ) : null}
-
-        <div className="prod-hub__chrome-actions">
-          {onExportProductionPack ? (
-            <button
-              type="button"
-              className="btn btn--primary prod-hub__chrome-primary"
-              disabled={exportBusy || !readiness.packGenerable}
-              onClick={() => {
-                void onExportProductionPack();
-              }}
-              data-testid="prod-hub-export-pack"
-              title={
-                readiness.packGenerable
-                  ? 'ZIP: Optimizer, herrajes, etiquetas, elevaciones, armado…'
-                  : 'Pack no disponible: falta despiece de corte válido'
-              }
-            >
-              <Package size={16} strokeWidth={1.5} aria-hidden />
-              {exportBusy ? 'Generando…' : 'Pack de producción'}
-            </button>
+        <div className="prod-hub__header-actions">
+          {salePrice !== null ? (
+            <div className="prod-hub__price">
+              <span className="prod-hub__price-label">Cotizado</span>
+              <span className="prod-hub__price-value">
+                {formatMoneyDisplay(salePrice)}
+              </span>
+            </div>
           ) : null}
-          <div className="prod-hub__chrome-secondary">
-            <button
-              type="button"
-              className="btn"
-              onClick={onOpenDesign}
-              data-testid="prod-hub-open-design"
-              title="Abre la cotización/diseño (sale del workspace de fábrica)"
-            >
-              <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
-              Ver cotización
-            </button>
-            {project.status === 'accepted' && onMarkProduced ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={onMarkProduced}
-                data-testid="prod-hub-mark-produced"
-              >
-                <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden />
-                Marcar en producción
-              </button>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            className="btn btn--ghost prod-hub__btn-design"
+            onClick={onOpenDesign}
+            data-testid="prod-hub-open-design"
+          >
+            <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
+            Ver en cotización
+          </button>
         </div>
       </header>
 
+      {/* PROD-4.4 Ambient Scope Filter */}
+      {spaceOptions.length > 0 && onProductionScopeChange ? (
+        <div
+          className="prod-hub__scope-filter"
+          data-testid="prod-hub-scope-filter"
+        >
+          <span className="prod-hub__scope-label">Alcance de planta:</span>
+          <select
+            className="select select--small"
+            value={productionScopeId}
+            onChange={(e) => onProductionScopeChange(e.target.value)}
+            aria-label="Filtrar por ambiente"
+          >
+            <option value={PRODUCTION_SCOPE_ALL}>
+              Toda la obra ({project.items.length} módulos)
+            </option>
+            {spaceOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.name} ({opt.itemCount}{' '}
+                {opt.itemCount === 1 ? 'módulo' : 'módulos'})
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {/* Tabs */}
       <WorkspaceTabs
         tabs={HUB_TABS.map((tab) => ({
           id: tab,
           label: PRODUCTION_ORDER_TAB_LABELS[tab],
         }))}
         activeTab={activeTab}
-        onTabChange={onTabChange}
-        ariaLabel="Secciones de la orden de producción"
+        onTabChange={(tab) => onTabChange(tab as ProductionOrderTab)}
+        ariaLabel="Vistas de la orden de producción"
         idPrefix="prod-hub"
         testIdPrefix="prod-hub"
       />
 
+      {/* Active Tab Panel */}
       <div
         className="prod-hub__body"
         role="tabpanel"
         id={`prod-hub-panel-${activeTab}`}
         aria-labelledby={`prod-hub-tab-${activeTab}`}
       >
-        {activeTab === 'resumen' ? (
-          <div className="prod-hub__resumen" data-testid="prod-hub-resumen">
-            <div className="prod-hub__totals" aria-label="Totales de fábrica">
-              <div className="stat-card stat-card--work">
-                <span className="stat-card__icon" aria-hidden>
-                  <LayoutGrid size={18} strokeWidth={1.5} />
-                </span>
-                <div className="stat-card__body">
-                  <p className="stat-card__value" data-testid="prod-hub-modules">
-                    {readiness.moduleUnitCount}
-                  </p>
-                  <p className="stat-card__label">
-                    {readiness.moduleUnitCount === 1 ? 'módulo' : 'módulos'} (
-                    {readiness.moduleLineCount}{' '}
-                    {readiness.moduleLineCount === 1 ? 'línea' : 'líneas'})
-                  </p>
-                </div>
-              </div>
-              <div className="stat-card stat-card--work">
-                <span className="stat-card__icon" aria-hidden>
-                  <FileSpreadsheet size={18} strokeWidth={1.5} />
-                </span>
-                <div className="stat-card__body">
-                  <p className="stat-card__value" data-testid="prod-hub-pieces">
-                    {readiness.cutListOk ? readiness.cutRowCount : '—'}
-                  </p>
-                  <p className="stat-card__label">piezas de tablero</p>
-                </div>
-              </div>
-              <div className="stat-card stat-card--work">
-                <span className="stat-card__icon" aria-hidden>
-                  <Layers size={18} strokeWidth={1.5} />
-                </span>
-                <div className="stat-card__body">
-                  <p className="stat-card__value" data-testid="prod-hub-board-m2">
-                    {cutRows && cutRows.length > 0
-                      ? summarizeProductionTotals(cutRows).totalAreaM2.toLocaleString('es-MX')
-                      : '—'}
-                  </p>
-                  <p className="stat-card__label">m² de tablero</p>
-                </div>
-              </div>
-              <div className="stat-card stat-card--work">
-                <span className="stat-card__icon" aria-hidden>
-                  <Ruler size={18} strokeWidth={1.5} />
-                </span>
-                <div className="stat-card__body">
-                  <p className="stat-card__value" data-testid="prod-hub-edge-ml">
-                    {cutRows && cutRows.length > 0
-                      ? summarizeProductionTotals(cutRows).totalEdgeMl.toLocaleString('es-MX')
-                      : '—'}
-                  </p>
-                  <p className="stat-card__label">ML de canto</p>
-                </div>
-              </div>
-            </div>
+        {activeTab === 'resumen' && (
+          <ProductionHubResumenTab
+            project={project}
+            readiness={readiness}
+            cutRows={cutRows}
+            exportBusy={exportBusy}
+            onExportProductionPack={onExportProductionPack}
+            onOpenDesign={onOpenDesign}
+          />
+        )}
 
-            {cutRows && cutRows.length > 0 ? (
-              <FactoryTotalsBlock rows={cutRows} />
-            ) : null}
-
-            <div className="prod-hub__checklist-block">
-              <h3 className="prod-hub__section-title">Listo para cortar</h3>
-              <ul
-                className="prod-hub__checklist"
-                data-testid="prod-hub-checklist"
-              >
-                <CheckRow
-                  ok={readiness.cutListOk}
-                  label="BOM / cut-list válido"
-                  detail={
-                    readiness.cutListOk
-                      ? undefined
-                      : (readiness.cutListError ?? undefined)
-                  }
-                />
-                <CheckRow
-                  ok={readiness.materialsResolved}
-                  label="Materiales resueltos"
-                  detail={
-                    readiness.materialsResolved
-                      ? `${readiness.cutRowCount} piezas de tablero`
-                      : 'Sin piezas de tablero para exportar'
-                  }
-                />
-                <CheckRow
-                  ok={readiness.hasKitchenLayout ? readiness.hasPlacements : true}
-                  warn={readiness.hasUnplacedItems}
-                  label={
-                    readiness.hasKitchenLayout
-                      ? 'Layout de cocina'
-                      : 'Layout de cocina (opcional)'
-                  }
-                  detail={
-                    !readiness.hasKitchenLayout
-                      ? 'Sin muros — obra lineal o solo despiece'
-                      : readiness.hasUnplacedItems
-                        ? 'Hay muebles sin colocar en el layout'
-                        : `${readiness.hasPlacements ? 'Con placements' : 'Sin placements'}`
-                  }
-                />
-                <CheckRow
-                  ok={readiness.optimizerGenerable}
-                  label="Optimizer generable"
-                  detail={
-                    readiness.optimizerGenerable
-                      ? 'Plantilla_Optimizer.xlsx listo'
-                      : 'Bloqueado hasta tener despiece válido'
-                  }
-                />
-                <CheckRow
-                  ok={readiness.packGenerable}
-                  label="Pack descargable"
-                  detail={
-                    readiness.packGenerable
-                      ? 'Núcleo Optimizer disponible'
-                      : 'Requiere despiece de corte'
-                  }
-                />
-              </ul>
-              {readiness.readyToCut ? (
-                <p
-                  className="prod-hub__ready-banner prod-hub__ready-banner--ok"
-                  data-testid="prod-hub-ready"
-                >
-                  Listo para generar pack y mandar a corte.
-                </p>
-              ) : (
-                <p
-                  className="prod-hub__ready-banner prod-hub__ready-banner--blocked"
-                  data-testid="prod-hub-not-ready"
-                >
-                  Falta resolver el despiece antes de cortar. Revisá módulos y
-                  catálogo en cotización/diseño.
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === 'piso' ? (
+        {activeTab === 'piso' && (
           <ProductionOrderPaperlessPanel
             project={project}
             modules={modules}
             onSetFloorStatus={onSetFloorStatus}
             canSetFloorStatus={canSetFloorStatus}
           />
-        ) : null}
+        )}
 
-        {activeTab === 'etiquetas' ? (
+        {activeTab === 'etiquetas' && (
           <ProductionOrderLabelsPanel
             project={project}
             labels={pieceLabels}
@@ -671,43 +324,32 @@ export function ProductionOrderHub({
             moduleLabelsError={moduleLabelsError}
             onExportPdf={
               onExportPieceLabels
-                ? (labels, perUnit) =>
-                    onExportPieceLabels(labels, { perUnit })
+                ? (lbls, perUnit) => onExportPieceLabels(lbls, { perUnit })
                 : undefined
             }
             onExportModulePdf={onExportModuleLabels}
             exportBusy={exportBusy}
           />
-        ) : null}
+        )}
 
-        {activeTab === 'herrajes' ? (
+        {activeTab === 'herrajes' && (
           <ProductionOrderHardwarePanel
             rows={hardwareRows}
             error={hardwareError}
             onExportHardware={onExportHardware}
             exportBusy={exportBusy}
             hideCosts={hideHardwareCosts}
-            currency={project.currency}
-            exportAsPrimary={!onExportProductionPack}
           />
-        ) : null}
+        )}
 
-        {activeTab === 'documentos' ? (
+        {activeTab === 'documentos' && (
           <ProductionOrderDocumentsPanel
             documents={documents}
             exportBusy={exportBusy}
-            packAsPrimary={!onExportProductionPack}
           />
-        ) : null}
-
+        )}
       </div>
 
-      <CsvExportConfigModal
-        isOpen={isCsvConfigOpen}
-        onClose={() => setIsCsvConfigOpen(false)}
-        cutRows={cutRows ?? []}
-        projectName={project.name}
-      />
       {HUB_TABS.filter((tab) => tab !== activeTab).map((tab) => (
         <div
           key={tab}
@@ -717,6 +359,15 @@ export function ProductionOrderHub({
           hidden
         />
       ))}
+
+      {isCsvConfigOpen && cutRows && (
+        <CsvExportConfigModal
+          isOpen={isCsvConfigOpen}
+          projectName={project.name}
+          cutRows={cutRows}
+          onClose={() => setIsCsvConfigOpen(false)}
+        />
+      )}
     </section>
   );
 }
