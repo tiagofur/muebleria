@@ -442,6 +442,10 @@ func (s *stubStore) UpdateAgregado(context.Context, string, *domain.Agregado) er
 	s.stubNotUsed("UpdateAgregado")
 	return nil
 }
+func (s *stubStore) DeleteAgregado(context.Context, string) error {
+	return nil
+}
+
 func (s *stubStore) DeactivateAgregado(context.Context, string) error {
 	s.stubNotUsed("DeactivateAgregado")
 	return nil

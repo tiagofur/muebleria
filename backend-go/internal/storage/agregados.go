@@ -134,6 +134,36 @@ func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string) error
 	return nil
 }
 
+// DeleteAgregado hard-deletes the row (F116 C4): the previous deactivate-only
+// endpoint made every FE delete reappear on refresh, because saveCatalog is
+// upsert-only and never issues DELETEs. Agregados are referenced by id inside
+// modules.agregados / structures.agregados JSONB arrays — refuse while any
+// instance still points at the row so BOM resolution stays sound.
+func (s *PostgresStore) DeleteAgregado(ctx context.Context, id string) error {
+	probe := fmt.Sprintf(`[{"agregado_id":%q}]`, id)
+	const inUseQuery = `
+		SELECT
+			(SELECT count(*) FROM modules WHERE agregados @> $1::jsonb)
+			+ (SELECT count(*) FROM structures WHERE agregados @> $1::jsonb);
+	`
+	var inUse int
+	if err := s.Pool.QueryRow(ctx, inUseQuery, probe).Scan(&inUse); err != nil {
+		return err
+	}
+	if inUse > 0 {
+		return fmt.Errorf("agregado in use by %d módulo(s)/estructura(s)", inUse)
+	}
+
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1;`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("agregado not found")
+	}
+	return nil
+}
+
 func scanAgregado(r rowScanner) (domain.Agregado, error) {
 	var a domain.Agregado
 	var desc *string

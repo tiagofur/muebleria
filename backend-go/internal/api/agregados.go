@@ -85,11 +85,19 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		if err := s.Store.DeactivateAgregado(r.Context(), id); err != nil {
-			respondWithInternalError(w, err, "agregado deactivate")
+		if err := s.Store.DeleteAgregado(r.Context(), id); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if strings.Contains(err.Error(), "in use") {
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			respondWithInternalError(w, err, "agregado delete")
 			return
 		}
-		respondWithJSON(w, http.StatusOK, map[string]string{"message": "agregado deactivated"})
+		respondWithJSON(w, http.StatusOK, map[string]string{"message": "agregado deleted"})
 
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")

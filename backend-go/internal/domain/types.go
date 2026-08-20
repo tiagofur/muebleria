@@ -133,7 +133,9 @@ type EdgeBand struct {
 	ID          string  `json:"id"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
-	ThicknessMm int     `json:"thickness_mm"`
+	// ThicknessMm float64 (F116 C3): real edge bands are 0.4/0.5/0.8 mm —
+	// decoding into int rejected the TS default 0.5 with an opaque 400.
+	ThicknessMm float64 `json:"thickness_mm"`
 	CostPerMl   float64 `json:"cost_per_ml"`
 	Notes       string  `json:"notes,omitempty"`
 	Active      bool    `json:"active"`

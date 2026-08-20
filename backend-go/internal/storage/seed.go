@@ -86,19 +86,20 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	now := time.Now().UTC()
 
 	// --- EDGE BANDS ---
+	// F116 C3/A4: fractional thickness matching the TS seed (0.5 / 2 / 0).
 	for _, e := range []struct {
 		id, code, name string
-		thickness      int
+		thickness      float64
 		costPerMl      float64
 	}{
-		{seedEdgeArauco, "CAN-ARA-BLA", "ARAUCO BLANCO", 1, 12},
+		{seedEdgeArauco, "CAN-ARA-BLA", "ARAUCO BLANCO", 0.5, 12},
 		{seedEdgeMaderado, "CAN-MAD-FRE", "MADERADO FRENTE", 2, 25},
-		{seedEdgeMdf, "CAN-MDF-3", "MDF 3MM", 1, 0},
+		{seedEdgeMdf, "CAN-MDF-3", "MDF 3MM", 0, 0},
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO edge_bands (id, code, name, thickness_mm, cost_per_ml, active, created_at, updated_at)
 			VALUES ($1,$2,$3,$4,$5,true,$6,$7)
-			ON CONFLICT (code) DO UPDATE SET id = EXCLUDED.id`,
+			ON CONFLICT (code) DO NOTHING`,
 			e.id, e.code, e.name, e.thickness, e.costPerMl, now, now)
 		if err != nil {
 			return fmt.Errorf("seed edge %s: %w", e.code, err)
@@ -107,44 +108,49 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 
 	// --- MATERIAL BOARDS ---
 	for _, m := range []struct {
-		id, code, name       string
-		w, l, t              int
-		grain                 bool
-		boardPrice            float64
-		defaultEdgeID         string
+		id, code, name, previewColor string
+		w, l, t                       int
+		grain                         bool
+		boardPrice                    float64
+		defaultEdgeID                 string
 	}{
-		{seedMatArauco, "TAB-ARA-BLA", "ARAUCO BLANCO", 1830, 2440, 15, false, 714.43, seedEdgeArauco},
-		{seedMatMaderado, "TAB-MAD-FRE", "MADERADO FRENTE", 1830, 2440, 18, true, 1294.91, seedEdgeMaderado},
-		{seedMatMdf, "TAB-MDF-3", "MDF 3MM", 1830, 2440, 3, false, 334.89, seedEdgeMdf},
+		{seedMatArauco, "TAB-ARA-BLA", "ARAUCO BLANCO", "#F5F5F0", 1830, 2440, 15, false, 714.43, seedEdgeArauco},
+		{seedMatMaderado, "TAB-MAD-FRE", "MADERADO FRENTE", "#C4A574", 1830, 2440, 18, true, 1294.91, seedEdgeMaderado},
+		{seedMatMdf, "TAB-MDF-3", "MDF 3MM", "#8B7355", 1830, 2440, 3, false, 334.89, seedEdgeMdf},
 	} {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, active, created_at, updated_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,true,$10,$11)`,
-			m.id, m.code, m.name, m.w, m.l, m.t, m.grain, m.boardPrice, m.defaultEdgeID, now, now)
+			INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, preview_color, active, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,NULLIF($10,''),true,$11,$12)`,
+			m.id, m.code, m.name, m.w, m.l, m.t, m.grain, m.boardPrice, m.defaultEdgeID, m.previewColor, now, now)
 		if err != nil {
 			return fmt.Errorf("seed material %s: %w", m.code, err)
 		}
 	}
 
 	// --- HARDWARE ---
+	// F116 A4: preview_* fields mirror the TS seed (plantillaDemo.ts) so demo
+	// herrajes render in 3D in backend mode too — without them they are
+	// cost-only and invisible in the scene (VH-09).
 	for _, h := range []struct {
-		id, code, name, unit, previewColor string
-		costPerUnit                        float64
+		id, code, name, unit, previewShape, previewColor string
+		costPerUnit                                      float64
+		sizeMm, diameterMm, projectionMm                 float64
+		roughness, metalness                             float64
 	}{
-		{seedHwBisagra, "HER-BIS-CL", "Bisagra Cierre Lento", "piece", "", 35},
-		{seedHwJaladera, "HER-JAL-INOX", "Jaladera Acero Inox", "piece", "", 45},
-		{seedHwPata, "HER-PATA-REG", "Pata Regulable Plastica", "piece", "", 15},
-		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", "", 0.5},
-		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", "", 120},
-		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", "", 2},
-		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil aluminio natural", "meter", "#c0c5cb", 18},
-		{seedHwZocloBronce, "HER-ZOC-BRO", "Zoclo perfil bronce", "meter", "#8d6e42", 22},
-		{seedHwZocloNegro, "HER-ZOC-NEG", "Zoclo perfil negro", "meter", "#2c2f34", 22},
+		{seedHwBisagra, "HER-BIS-CL", "Bisagra Cierre Lento", "piece", "hinge", "#9aa0a6", 35, 35, 0, 12, 0.3, 0.85},
+		{seedHwJaladera, "HER-JAL-INOX", "Jaladera Acero Inox", "piece", "bar-pull", "#c8ccd0", 45, 128, 12, 28, 0.18, 0.9},
+		{seedHwPata, "HER-PATA-REG", "Pata Regulable Plastica", "piece", "leg", "#1a1a1a", 15, 120, 30, 0, 0.6, 0.3},
+		{seedHwTornillo, "HER-TOR-4X50", "Tornillo 4x50 mm", "piece", "", "", 0.5, 0, 0, 0, 0, 0},
+		{seedHwCorredera, "HER-CORR-500", "Corredera Telescópica 500mm", "set", "slide", "#6a7080", 120, 500, 18, 0, 0.35, 0.7},
+		{seedHwSoporte, "HER-SOP-ENT", "Soporte de Entrepaño", "piece", "", "", 2, 0, 0, 0, 0, 0},
+		{seedHwZocloPerfil, "HER-ZOC-ALU", "Zoclo perfil aluminio natural", "meter", "", "#c0c5cb", 18, 0, 0, 0, 0, 0},
+		{seedHwZocloBronce, "HER-ZOC-BRO", "Zoclo perfil bronce", "meter", "", "#8d6e42", 22, 0, 0, 0, 0, 0},
+		{seedHwZocloNegro, "HER-ZOC-NEG", "Zoclo perfil negro", "meter", "", "#2c2f34", 22, 0, 0, 0, 0, 0},
 	} {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, preview_color, active, created_at, updated_at)
-			VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),true,$7,$8)`,
-			h.id, h.code, h.name, h.unit, h.costPerUnit, h.previewColor, now, now)
+			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, preview_shape, preview_size_mm, preview_diameter_mm, preview_projection_mm, preview_color, preview_roughness, preview_metalness, active, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,0),NULLIF($8,0),NULLIF($9,0),NULLIF($10,''),NULLIF($11,0),NULLIF($12,0),true,$13,$14)`,
+			h.id, h.code, h.name, h.unit, h.costPerUnit, h.previewShape, h.sizeMm, h.diameterMm, h.projectionMm, h.previewColor, h.roughness, h.metalness, now, now)
 		if err != nil {
 			return fmt.Errorf("seed hardware %s: %w", h.code, err)
 		}
@@ -485,14 +491,7 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, preview_color, notes, active, created_at, updated_at)
 			VALUES ($1,$2,$3,'meter',$4,4.0,NULLIF($5,''),$6,true,$7,$8)
-			ON CONFLICT (code) DO UPDATE SET
-				name = EXCLUDED.name,
-				unit = EXCLUDED.unit,
-				cost_per_unit = EXCLUDED.cost_per_unit,
-				package_size = EXCLUDED.package_size,
-				preview_color = EXCLUDED.preview_color,
-				notes = EXCLUDED.notes,
-				updated_at = EXCLUDED.updated_at`,
+			ON CONFLICT (code) DO NOTHING`,
 			hw.id, hw.code, hw.name, hw.cost, hw.previewColor,
 			"Barra comercial 4 m — lista de compra redondea a barras.",
 			now, now)

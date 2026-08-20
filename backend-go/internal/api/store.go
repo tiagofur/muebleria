@@ -81,6 +81,8 @@ type Store interface {
 	CreateAgregado(ctx context.Context, a *domain.Agregado) error
 	UpdateAgregado(ctx context.Context, id string, a *domain.Agregado) error
 	DeactivateAgregado(ctx context.Context, id string) error
+	// DeleteAgregado hard-deletes with an in-use guard (F116 C4).
+	DeleteAgregado(ctx context.Context, id string) error
 
 	// Catalog: categories
 	ListCategories(ctx context.Context) ([]domain.ModuleCategory, error)

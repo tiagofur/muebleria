@@ -1437,6 +1437,19 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 }
 
 func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
+	// F116 A2: project_items.module_id has no ON DELETE rule (RESTRICT), so a
+	// referenced module turned the physical DELETE into an opaque 500 after
+	// the FE had already removed it locally. Refuse up-front with a clear
+	// error instead.
+	var inUse int
+	if err := s.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM project_items WHERE module_id = $1;`, id,
+	).Scan(&inUse); err != nil {
+		return err
+	}
+	if inUse > 0 {
+		return fmt.Errorf("module in use by %d cotización(es)", inUse)
+	}
 	query := `DELETE FROM modules WHERE id = $1;`
 	tag, err := s.Pool.Exec(ctx, query, id)
 	if err != nil {

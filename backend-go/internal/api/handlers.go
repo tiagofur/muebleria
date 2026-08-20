@@ -452,6 +452,12 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
+			// F116 A1: renaming to an existing code must surface as 409, not 500
+			// (edges and hardware already map this).
+			if isDuplicateKey(err) {
+				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -1138,6 +1144,14 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.DeleteModule(r.Context(), id)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if strings.Contains(err.Error(), "in use") {
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
