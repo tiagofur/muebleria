@@ -107,6 +107,11 @@ export {
 } from './cutListConfigurableCsvExport';
 
 export {
+  dxfCutPlanExport,
+  type DxfCutPlanExportInput,
+} from './dxfCutPlanExport';
+
+export {
   drillingDataExportJson,
   drillingDataExportCsv,
   DRILLING_CSV_HEADERS,
