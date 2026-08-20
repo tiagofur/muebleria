@@ -537,7 +537,7 @@ export function ProductionOrderOptimizationPanel({
                   <strong style={{ fontSize: '0.95em' }}>DXF para CNC Nesting</strong>
                 </div>
                 <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-                  Geometría DXF R12 del plan nesteadO: contornos, etiquetas con cantos y dirección de veta.
+                  Geometría DXF R12 del plan nesteado: contornos, etiquetas con cantos y dirección de veta.
                   «Tableros nesteados» reproduce el plan de esta pantalla; «Piezas sueltas» es para el
                   software de tu CNC que prefiere anidar por su cuenta.
                 </p>

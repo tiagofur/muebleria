@@ -523,3 +523,12 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Veta con flecha (VETA); perforaciones opcionales en PERF solo en caras front/back y piezas no rotadas (espejo/canto indefinido sin convención de máquina).
 - Tests: golden ×2 + estructura R12 + conteos por capa + ASCII + ValidationError (79/79 excel; 2333 total).
 - Review: código aprobado con validación DXF por parser propio del reviewer; fix de proceso (push + bitácora) y filtro de caras adoptados.
+
+## F126 — UI: selector de tipo de corte y export exclusivo (2026-08-20)
+
+- `ProductionOrderOptimizationPanel`: «Tipo de corte: Sierra | CNC Nesting» (toggles `aria-pressed`); config adaptativa (kerf+refilados ↔ espaciado de fresa); secuencia de cortes solo en sierra.
+- Export exclusivo según la estrategia del plan generado: sierra → PDF taller + Optimizer XLSX (card nueva) + placeholder seccionadoras; nesting → DXF (tableros nesteados / piezas sueltas) reemplazando el placeholder «Próximamente».
+- Wiring completo: EngineeringWorkspace → ShellView → useExportHandlers (toast+busy) → exportCutPlanDxf.ts → dxfCutPlanExport (@muebles/excel); MIME .dxf.
+- Tests: 6 en el panel (swap de inputs, exclusividad por modo, variantes DXF, secuencia condicional). Suite total 2338 verde; typecheck 7 workspaces.
+- Review: APPROVED con fix de typo de copy («nesteado») aplicado; emojis→Lucide y btn--secondary listados como polish futuro (no mezclados).
+- Spec del tab actualizada: docs/roadmap-screens/02-ingenieria.md.
