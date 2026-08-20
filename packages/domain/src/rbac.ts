@@ -494,7 +494,9 @@ export function roleLabelEs(role: string | null | undefined): string {
 /** Nav section ids that a role may open (guest = all). */
 export function navIdsForRole(role: string | null | undefined): ReadonlySet<string> {
   if (role == null) {
-    // guest / local mode — full tool (no `orders` nav, no RBAC to plant queue)
+    // guest / local mode — full tool (no `orders` nav, no RBAC to plant queue).
+    // F118 S5: NO 'users' — the screen requires an authenticated admin, so
+    // the nav item was dead (click did nothing).
     return new Set([
       'home',
       'quotes',
@@ -511,7 +513,6 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'finishes',
       'optionGroups',
       'settings',
-      'users',
     ]);
   }
   const ids = new Set<string>(['home']);

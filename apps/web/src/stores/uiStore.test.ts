@@ -196,3 +196,29 @@ describe('uiStore — disposeUi', () => {
     expect(useUiStore.getState().projectsCreateKey).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// F118 A1 — counter-backed exportBusy
+// ---------------------------------------------------------------------------
+
+describe('uiStore — exportBusy counter (F118 A1)', () => {
+  it('stays busy until the LAST concurrent export finishes', () => {
+    useUiStore.getState().setExportBusy(true); // export A starts
+    useUiStore.getState().setExportBusy(true); // export B starts
+    expect(useUiStore.getState().exportBusy).toBe(true);
+    expect(useUiStore.getState().exportBusyCount).toBe(2);
+
+    useUiStore.getState().setExportBusy(false); // A finishes — B running
+    expect(useUiStore.getState().exportBusy).toBe(true);
+
+    useUiStore.getState().setExportBusy(false); // B finishes
+    expect(useUiStore.getState().exportBusy).toBe(false);
+    expect(useUiStore.getState().exportBusyCount).toBe(0);
+  });
+
+  it('never goes below zero on unbalanced clears', () => {
+    useUiStore.getState().setExportBusy(false);
+    expect(useUiStore.getState().exportBusyCount).toBe(0);
+    expect(useUiStore.getState().exportBusy).toBe(false);
+  });
+});

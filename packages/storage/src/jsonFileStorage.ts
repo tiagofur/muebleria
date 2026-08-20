@@ -5,7 +5,13 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import type { Catalog, Project, ProjectTemplate, Workspace } from '@muebles/domain';
+import type {
+  Catalog,
+  Project,
+  ProjectTemplate,
+  Workspace,
+  WorkshopSettings,
+} from '@muebles/domain';
 
 import { createSeedWorkspace } from './seed';
 import { migrateWorkspace } from './migrateWorkspace';
@@ -57,6 +63,11 @@ export class JSONFileStorage implements WorkspaceRepository {
   async saveCatalog(catalog: Catalog): Promise<void> {
     const workspace = await this.load();
     await this.save({ ...workspace, catalog });
+  }
+
+  async saveWorkshopSettings(settings: WorkshopSettings): Promise<void> {
+    const workspace = await this.load();
+    await this.save({ ...workspace, settings });
   }
 
   async getProjects(): Promise<readonly Project[]> {

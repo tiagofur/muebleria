@@ -172,5 +172,22 @@ describe('computeEngineeringDashboardStats', () => {
     expect(pendingAlert?.isStagnant).toBe(true);
     expect(pendingAlert?.stagnantReason).toContain('días en cola');
   });
+
+  it('attributes workload to assignedEngineerId on pending projects', () => {
+    const projectsWithAssigned: any[] = [
+      {
+        id: 'p_assigned',
+        name: 'Obra Asignada',
+        status: 'accepted',
+        createdAt: '2026-08-10T10:00:00Z',
+        assignedEngineerId: 'eng_lead',
+        items: [{ quantity: 3 }],
+      },
+    ];
+    const stats = computeEngineeringDashboardStats(projectsWithAssigned, '2026-08-14T10:00:00Z');
+    const workload = stats.engineerWorkload.find((e) => e.engineerId === 'eng_lead');
+    expect(workload).toBeDefined();
+    expect(workload?.activeCount).toBe(1);
+  });
 });
 

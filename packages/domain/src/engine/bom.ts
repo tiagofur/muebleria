@@ -219,7 +219,8 @@ function requireHardwareId(
   catalog: Catalog,
   moduleCode: string,
 ): string {
-  const hardwareId = line.hardwareId ?? optionChoices[line.optionRole];
+  const rawHwId = line.hardwareId?.trim();
+  const hardwareId = rawHwId || optionChoices[line.optionRole];
   if (!hardwareId) {
     const group = findOptionGroup(catalog, line.optionRole);
     if (group?.required !== false) {

@@ -138,6 +138,7 @@ import {
   RegisterScreen,
   SettingsScreen,
   UsersScreen,
+  Modal,
   OnboardingTourModal,
   getHasSeenOnboardingTour,
   canShowPricePreview,
@@ -216,6 +217,7 @@ import {
   isEntitySection,
   moduleEditIdFromPath,
   moduleEditPath,
+  NAV_PATHS,
   navBlockedForSession,
   navFromPath,
   pathForNav,
@@ -246,11 +248,14 @@ import {
   useWorkspaceStore,
   ensureCatalogStore,
   getCatalogStoreState,
+  resetCatalogStore,
   useProjectStore,
   ensureProjectStore,
   getProjectStoreState,
+  resetProjectStore,
   useBackendBreakdownEffect,
   useUiStore,
+  getUiStoreState,
 } from './stores';
 import { ToastViewport } from './components/ToastViewport';
 import { BoardEditor } from './components/BoardEditor';
@@ -434,6 +439,18 @@ function computeSelectedProjectBreakdown(
 export function App(): ReactNode {
   // F064: ToastViewport reads from uiStore and portals toasts to document.body.
   // No ToastProvider wrapper — uiStore is the single source of truth.
+
+  // F118 S2: feature stores are module singletons that outlive SessionGate —
+  // clear them when the session ends so the previous user's catalog/projects
+  // never sit in memory behind the login screen.
+  const appSession = useWorkspaceStore((s) => s.session);
+  useEffect(() => {
+    if (appSession === null) {
+      resetCatalogStore();
+      resetProjectStore();
+    }
+  }, [appSession]);
+
   return (
     <>
       <SessionGate />
@@ -579,14 +596,19 @@ function AppContent({
   });
   const catalog = useCatalogStore((s) => s.catalog);
   const catalogActions = useCatalogStore();
-  // Keep catalogStore in sync with workspace load (one-way: workspace → catalog).
+  // Keep catalogStore in sync with workspace LOADS (one-way: workspace →
+  // catalog). F118 S1: keyed on workspaceSeq (bumped only on wholesale
+  // replacements), so a settings-only save can never re-inject the stale
+  // load-time catalog into the store.
+  const workspaceSeq = useWorkspaceStore((s) => s.workspaceSeq);
   useEffect(() => {
-    if (workspace?.catalog) {
-      getCatalogStoreState().setCatalog(workspace.catalog);
+    const ws = useWorkspaceStore.getState().workspace;
+    if (ws?.catalog) {
+      getCatalogStoreState().setCatalog(ws.catalog);
     } else {
       getCatalogStoreState().setCatalog(null);
     }
-  }, [workspace]);
+  }, [workspaceSeq]);
 
   // --- F063: projectStore init + sync ---
   // projectStore owns projects + projectTemplates + backend breakdown.
@@ -686,16 +708,18 @@ function AppContent({
   // Project mutations go through projectStore only; workspace.projects becomes
   // stale after first mutation (intentional — F064 will fully decouple workspace).
   useEffect(() => {
-    if (workspace?.projects) {
-      getProjectStoreState().setProjects(workspace.projects);
+    // F118 S1: same seq-keying as the catalog sync above.
+    const ws = useWorkspaceStore.getState().workspace;
+    if (ws?.projects) {
+      getProjectStoreState().setProjects(ws.projects);
       getProjectStoreState().setProjectTemplates(
-        workspace.projectTemplates ?? [],
+        ws.projectTemplates ?? [],
       );
     } else {
       getProjectStoreState().setProjects([]);
       getProjectStoreState().setProjectTemplates([]);
     }
-  }, [workspace]);
+  }, [workspaceSeq]);
 
   const authUser = useMemo(
     () => (session === 'auth' ? getAuthUser() : null),
@@ -1128,6 +1152,14 @@ function AppContent({
     setWorkspaceLoadError(null);
     void loadWorkspace();
   }, [session, loadWorkspace, setWorkspace, setWorkspaceLoadError]);
+  const loadDemoWorkspace = useWorkspaceStore((s) => s.loadDemoWorkspace);
+  const pendingGuestImport = useWorkspaceStore((s) => s.pendingGuestImport);
+  const guestImportLoading = useWorkspaceStore((s) => s.guestImportLoading);
+  const guestImportError = useWorkspaceStore((s) => s.guestImportError);
+  const dismissGuestImport = useWorkspaceStore((s) => s.dismissGuestImport);
+  const importGuestWorkspace = useWorkspaceStore(
+    (s) => s.importGuestWorkspace,
+  );
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -1140,6 +1172,14 @@ function AppContent({
     return params.get('present') ?? null;
   }, [location.search]);
   const navId: AppNavId = navFromPath(location.pathname) ?? 'home';
+
+  // F118 A1: export error lists are context-bound — never let them follow
+  // the user to another screen.
+  useEffect(() => {
+    if (useUiStore.getState().exportErrors.length > 0) {
+      useUiStore.getState().setExportErrors([]);
+    }
+  }, [navId]);
 
   // Fase 4.1 — Fábrica metrics for supervisors (admin / gerente_produccion):
   // fetched only when they open the screen; sector-scoped operators never do
@@ -1264,7 +1304,18 @@ function AppContent({
 
 
   const handleLoadCocinaLopezDemo = useCallback(() => {
-    const targetPath = projectPath('proj-cocina-lopez-demo');
+    // F118 S6: the hardcoded seed id only exists in guest/demo workspaces —
+    // resolve the real project (or fall back to the quotes list) so auth
+    // users don't land on a dead end.
+    const allProjects = getProjectStoreState().projects;
+    const demo =
+      allProjects.find((p) => p.id === 'proj-cocina-lopez-demo') ??
+      allProjects.find((p) => /cocina\s*lopez/i.test(p.name));
+    if (!demo) {
+      navigate(NAV_PATHS.quotes);
+      return;
+    }
+    const targetPath = projectPath(demo.id);
     if (location.pathname !== targetPath) {
       navigate(targetPath);
     }
@@ -2270,7 +2321,26 @@ function AppContent({
     [projectActions, authUser?.id, selectedProject?.id],
   );
 
-  const handleExportOptimizer = useCallback(
+  // F118 A1: builders/delivery may THROW (not just return {ok:false}) —
+  // wrap every export so exceptions surface as a toast instead of an
+  // unhandled rejection with busy already cleared.
+  const guardExport = useCallback(
+    <A extends unknown[]>(handler: (...args: A) => Promise<void>) =>
+      async (...args: A): Promise<void> => {
+        try {
+          await handler(...args);
+        } catch (err) {
+          console.error('Export failed:', err);
+          getUiStoreState().toast({
+            type: 'error',
+            message: 'No se pudo generar el archivo. Revisá la consola para detalle.',
+          });
+        }
+      },
+    [],
+  );
+
+  const handleExportOptimizer = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2324,9 +2394,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportHardwareList = useCallback(
+  const handleExportHardwareList = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2378,9 +2448,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportPieceLabels = useCallback(
+  const handleExportPieceLabels = guardExport(useCallback(
     async (
       projectId?: string,
       labelOptions?: PieceLabelsExportOptions,
@@ -2440,9 +2510,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportModuleLabels = useCallback(
+  const handleExportModuleLabels = guardExport(useCallback(
     async (
       projectId?: string,
       labelOptions?: ModuleLabelsExportOptions,
@@ -2502,9 +2572,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportElevations = useCallback(
+  const handleExportElevations = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2571,9 +2641,9 @@ function AppContent({
       actorRole,
       recordProductionExport,
     ],
-  );
+  ));
 
-  const handleExportCncPilot = useCallback(
+  const handleExportCncPilot = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2623,9 +2693,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportAssemblySheets = useCallback(
+  const handleExportAssemblySheets = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2679,9 +2749,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportCutListCsv = useCallback(
+  const handleExportCutListCsv = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2731,9 +2801,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportDespiecePdf = useCallback(
+  const handleExportDespiecePdf = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2782,9 +2852,9 @@ function AppContent({
       }
     },
     [selectedProject, projects, catalog, customers, toast, session, actorRole],
-  );
+  ));
 
-  const handleExportCutPlanPdf = useCallback(
+  const handleExportCutPlanPdf = guardExport(useCallback(
     async (cutPlan: import('@muebles/domain').CutPlan) => {
       setExportBusy(true);
       try {
@@ -2807,9 +2877,9 @@ function AppContent({
       }
     },
     [toast],
-  );
+  ));
 
-  const handleReleaseToDelivery = useCallback(
+  const handleReleaseToDelivery = guardExport(useCallback(
     async (projectId: string) => {
       const project = projects.find((p) => p.id === projectId);
       if (!project) return;
@@ -2833,9 +2903,9 @@ function AppContent({
       }
     },
     [projects, projectActions, toast],
-  );
+  ));
 
-  const handleExportProductionPack = useCallback(
+  const handleExportProductionPack = guardExport(useCallback(
     async (projectId?: string) => {
       const project =
         projectId != null
@@ -2904,9 +2974,9 @@ function AppContent({
       actorRole,
       recordProductionExport,
     ],
-  );
+  ));
 
-  const handleExportCommercialQuote = useCallback(async () => {
+  const handleExportCommercialQuote = guardExport(useCallback(async () => {
     if (!selectedProject || !catalog) return;
     setExportBusy(true);
     setExportErrors([]);
@@ -2935,9 +3005,9 @@ function AppContent({
     } finally {
       setExportBusy(false);
     }
-  }, [selectedProject, catalog, customers, toast]);
+}, [selectedProject, catalog, customers, toast]));
 
-  const handleExportCommercialQuotePdf = useCallback(
+  const handleExportCommercialQuotePdf = guardExport(useCallback(
     async (variant: 'detailed' | 'summary') => {
       if (!selectedProject || !catalog) return;
       setExportBusy(true);
@@ -2971,7 +3041,7 @@ function AppContent({
       }
     },
     [selectedProject, catalog, customers, toast],
-  );
+  ));
 
   const onEntitySelectionChange = useCallback(
     (section: EntitySection, id: string | null) => {
@@ -3085,8 +3155,9 @@ function AppContent({
               type="button"
               className="btn btn--secondary"
               onClick={() => {
-                setWorkspace(createSeedWorkspace());
-                setWorkspaceLoadError(null);
+                // F118 S6: consistent demo recovery — clears error/loading
+                // state and persists the seed in guest mode.
+                void loadDemoWorkspace();
               }}
             >
               Usar datos demo
@@ -3787,7 +3858,9 @@ function AppContent({
           customers={customers}
           projects={projectsForRole}
           onOpenProject={(projectId) => {
-            navigate(`/cotizaciones/${projectId}`);
+            // F118 S4: '/cotizaciones' does not exist in NAV_PATHS — the
+            // guard bounced this to Home. Use the route helper.
+            navigate(projectPath(projectId));
           }}
           workshopName={workshopSettings?.workshopName}
           onCreate={createCustomer}
@@ -4090,6 +4163,53 @@ function AppContent({
 
 
       ) : null}
+
+      {/* F118 S3: guest → auth handoff — offer to bring guest work in
+          instead of discarding it silently. */}
+      <Modal
+        open={pendingGuestImport}
+        onClose={dismissGuestImport}
+        title="Tenés trabajo como invitado"
+        size="sm"
+        dataTestId="guest-import-modal"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={dismissGuestImport}
+              disabled={guestImportLoading}
+            >
+              Dejarlo local
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                void importGuestWorkspace();
+              }}
+              disabled={guestImportLoading}
+              data-testid="guest-import-confirm"
+            >
+              {guestImportLoading ? 'Importando…' : 'Traer a mi cuenta'}
+            </button>
+          </>
+        }
+      >
+        <div className="catalog-form">
+          <p>
+            Encontramos cotizaciones hechas en modo invitado en este
+            navegador. Podés importarlas a tu cuenta (catálogo, proyectos y
+            plantillas) o dejarlas guardadas localmente para volver al modo
+            invitado.
+          </p>
+          {guestImportError ? (
+            <p className="catalog-form__error" data-testid="guest-import-error">
+              {guestImportError}
+            </p>
+          ) : null}
+        </div>
+      </Modal>
 
       <OnboardingTourModal
         isOpen={showOnboardingTour}

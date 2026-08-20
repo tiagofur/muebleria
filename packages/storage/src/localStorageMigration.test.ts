@@ -22,7 +22,9 @@ function createStorage(): Storage {
   } as Storage;
 }
 
-const GUEST_KEY = 'muebles_guest_workspace';
+import { GUEST_WORKSPACE_STORAGE_KEY } from './localStorageWorkspaceRepository';
+
+const GUEST_KEY = GUEST_WORKSPACE_STORAGE_KEY;
 
 describe('migrateWorkspace (F116 C6)', () => {
   it('drops stale per-part grain from a v1 workspace', () => {
@@ -121,5 +123,40 @@ describe('LocalStorageWorkspaceRepository — guest migration (F116 C6)', () => 
         expect('grain' in part).toBe(false);
       }
     }
+  });
+});
+
+describe('LocalStorageWorkspaceRepository — saveWorkshopSettings (F118 S1)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', createStorage());
+  });
+
+  it('patches ONLY settings in the stored workspace (no full-save clobber)', async () => {
+    const seed = createSeedWorkspace();
+    const stored = {
+      ...seed,
+      catalog: {
+        ...seed.catalog,
+        materials: [
+          { ...(seed.catalog.materials[0] as object), code: 'EDITED-ON-SERVER' },
+          ...(seed.catalog.materials.slice(1) ?? []),
+        ],
+      },
+    };
+    globalThis.localStorage.setItem(GUEST_KEY, JSON.stringify(stored));
+
+    const repo = new LocalStorageWorkspaceRepository();
+    await repo.saveWorkshopSettings({
+      ...(stored.settings ?? {}),
+      defaultMarginFactor: 3.25,
+    } as never);
+
+    const raw = JSON.parse(
+      globalThis.localStorage.getItem(GUEST_KEY)!,
+    ) as ReturnType<typeof createSeedWorkspace>;
+    expect(raw.settings?.defaultMarginFactor).toBe(3.25);
+    // The stored catalog must be untouched — the old full-save path used to
+    // overwrite it with a possibly-stale in-memory snapshot.
+    expect(raw.catalog.materials[0]!.code).toBe('EDITED-ON-SERVER');
   });
 });

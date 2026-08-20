@@ -16,6 +16,8 @@ import type { Workspace, WorkshopSettings } from '@muebles/domain';
 import {
   APIWorkspaceRepository,
   LocalStorageWorkspaceRepository,
+  GUEST_WORKSPACE_STORAGE_KEY,
+  createSeedWorkspace,
   type WorkspaceRepository,
 } from '@muebles/storage';
 import { resolveWorkshopSettings } from '@muebles/domain';
@@ -92,6 +94,19 @@ export interface WorkspaceState {
   readonly workspace: Workspace | null;
   readonly workspaceLoading: boolean;
   readonly workspaceLoadError: string | null;
+  /**
+   * Monotonic counter bumped on every WHOLESALE workspace replacement
+   * (load / setWorkspace / session reset) — NOT on settings-only saves.
+   * App sync effects key on this so saving settings can never re-inject a
+   * stale catalog/projects snapshot into the feature stores (F118 S1).
+   */
+  readonly workspaceSeq: number;
+
+  // --- Guest → auth import (F118 S3) ---
+  /** True right after login when meaningful guest work exists locally. */
+  readonly pendingGuestImport: boolean;
+  readonly guestImportLoading: boolean;
+  readonly guestImportError: string | null;
 
   // --- RBAC ---
   readonly assignableOwners: readonly AssignableOwner[];
@@ -117,6 +132,18 @@ export interface WorkspaceState {
   readonly saveWorkshopSettings: (
     settings: WorkshopSettings,
   ) => Promise<void>;
+  /**
+   * F118 S6: explicit demo recovery — clears the error state consistently and
+   * persists the seed in guest mode (auth keeps it session-local so a demo
+   * view can never overwrite real server data).
+   */
+  readonly loadDemoWorkspace: () => Promise<void>;
+
+  // --- Guest → auth import (F118 S3) ---
+  readonly dismissGuestImport: () => void;
+  /** Pushes the local guest workspace (catalog + projects + templates) to the
+   * authenticated account, then reloads. Errors surface via guestImportError. */
+  readonly importGuestWorkspace: () => Promise<void>;
 
   // --- Actions: RBAC ---
   readonly loadAssignableOwners: () => Promise<void>;
@@ -176,6 +203,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
         workspace: null,
         workspaceLoading: false,
         workspaceLoadError: null,
+        workspaceSeq: 0,
+
+        // --- Guest → auth import (F118 S3) ---
+        pendingGuestImport: false,
+        guestImportLoading: false,
+        guestImportError: null,
 
         // --- RBAC ---
         assignableOwners: [],
@@ -194,8 +227,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
             registerError: null,
             sessionEndReason: null,
             workspace: null,
+            workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
             assignableOwners: [],
+            pendingGuestImport: false,
+            guestImportLoading: false,
+            guestImportError: null,
           });
         },
 
@@ -216,9 +253,15 @@ export function createWorkspaceStore(options?: InternalOptions) {
               sessionEndReason: null,
               // Reset workspace so AppContent reloads for the new session.
               workspace: null,
+              workspaceSeq: get().workspaceSeq + 1,
               workspaceLoadError: null,
               assignableOwners: [],
             });
+            // F118 S3: if the guest session produced real work, offer to
+            // bring it into the account instead of discarding it silently.
+            if (guestWorkspaceHasProjects()) {
+              set({ pendingGuestImport: true });
+            }
           } catch (err) {
             const message =
               err instanceof Error ? err.message : 'No se pudo iniciar sesión';
@@ -253,8 +296,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
             loginLoading: false,
             registerLoading: false,
             workspace: null,
+            workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
             assignableOwners: [],
+            pendingGuestImport: false,
+            guestImportLoading: false,
+            guestImportError: null,
           });
         },
 
@@ -271,7 +318,14 @@ export function createWorkspaceStore(options?: InternalOptions) {
           set({ workspaceLoading: true, workspaceLoadError: null });
           try {
             const ws = await repository.load();
-            set({ workspace: ws, workspaceLoading: false });
+            // F118 S2: the session may have ended while loading — a late
+            // resolve must not repopulate the workspace after logout.
+            if (get().session !== session) return;
+            set({
+              workspace: ws,
+              workspaceLoading: false,
+              workspaceSeq: get().workspaceSeq + 1,
+            });
           } catch (err) {
             // Do not silently seed — surface failure (#13).
             console.error('Failed to load workspace:', err);
@@ -287,7 +341,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
         },
 
-        setWorkspace: (ws) => set({ workspace: ws }),
+        setWorkspace: (ws) =>
+          set({ workspace: ws, workspaceSeq: get().workspaceSeq + 1 }),
 
         setWorkspaceLoadError: (error) => set({ workspaceLoadError: error }),
 
@@ -295,16 +350,73 @@ export function createWorkspaceStore(options?: InternalOptions) {
           const prev = get().workspace;
           if (!prev) return;
           const resolved = resolveWorkshopSettings(settings);
-          const next: Workspace = { ...prev, settings: resolved };
-          set({ workspace: next });
+          // F118 S1: settings-only persistence. The previous version called
+          // repository.save(next) with a workspace built from the load-time
+          // snapshot — since F062/F063 the feature stores own mutations, so
+          // that re-PUTed stale catalog/projects to the server and the sync
+          // effects reverted every edit since load. workspaceSeq is NOT
+          // bumped here, so stores keep their live data.
+          set({ workspace: { ...prev, settings: resolved } });
           const repository = get().getRepository();
           try {
-            await repository.save(next);
+            await repository.saveWorkshopSettings(resolved);
           } catch (err) {
             console.error('Error al guardar ajustes:', err);
             // Revert on failure so UI doesn't lie about saved state.
             set({ workspace: prev });
             throw err;
+          }
+        },
+
+        loadDemoWorkspace: async () => {
+          const seed = createSeedWorkspace();
+          // Guest: persist so the demo survives reloads. Auth: keep it
+          // session-local — a demo must never overwrite real account data.
+          if (get().session === 'guest') {
+            try {
+              await get().getRepository().save(seed);
+            } catch (err) {
+              console.error('Error al persistir datos demo:', err);
+            }
+          }
+          set({
+            workspace: seed,
+            workspaceLoading: false,
+            workspaceLoadError: null,
+            workspaceSeq: get().workspaceSeq + 1,
+          });
+        },
+
+        // --- Guest → auth import (F118 S3) ---
+        dismissGuestImport: () =>
+          set({ pendingGuestImport: false, guestImportError: null }),
+
+        importGuestWorkspace: async () => {
+          if (get().session !== 'auth') return;
+          set({ guestImportLoading: true, guestImportError: null });
+          try {
+            const guestRepo = new LocalStorageWorkspaceRepository();
+            const guestWs = await guestRepo.load();
+            const repository = get().getRepository();
+            await repository.saveCatalog(guestWs.catalog);
+            for (const project of guestWs.projects) {
+              await repository.saveProject(project);
+            }
+            for (const template of guestWs.projectTemplates ?? []) {
+              await repository.saveProjectTemplate(template);
+            }
+            await get().loadWorkspace();
+            set({
+              pendingGuestImport: false,
+              guestImportLoading: false,
+            });
+          } catch (err) {
+            console.error('Error al importar workspace invitado:', err);
+            const message =
+              err instanceof Error
+                ? err.message
+                : 'No se pudo importar el trabajo invitado';
+            set({ guestImportLoading: false, guestImportError: message });
           }
         },
 
@@ -432,6 +544,25 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
 /** Default singleton — production wiring. */
 export const useWorkspaceStore = createWorkspaceStore();
+
+/**
+ * F118 S3: cheap probe for meaningful guest work. Reads the raw guest
+ * localStorage key (absent key = the guest never persisted anything — no
+ * import offer) and checks for at least one project.
+ */
+function guestWorkspaceHasProjects(): boolean {
+  try {
+    if (typeof globalThis === 'undefined' || !('localStorage' in globalThis)) {
+      return false;
+    }
+    const raw = globalThis.localStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
+    if (!raw) return false;
+    const ws = JSON.parse(raw) as { projects?: readonly unknown[] };
+    return (ws.projects?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Read initial session mode from `session.ts` (validates token presence for

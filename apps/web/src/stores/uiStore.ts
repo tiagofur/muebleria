@@ -88,7 +88,10 @@ export interface UiState {
 
   // --- Export UI ---
   readonly exportErrors: readonly ExportIssue[];
+  /** True while at least one export runs (counter-backed, F118 A1). */
   readonly exportBusy: boolean;
+  /** In-flight export count — setExportBusy(true/false) inc/dec this. */
+  readonly exportBusyCount: number;
 
   // --- Create keys (force remount of "New" forms) ---
   readonly projectsCreateKey: number;
@@ -180,6 +183,7 @@ export const useUiStore = create<UiState>()((set, get) => {
 
     exportErrors: [],
     exportBusy: false,
+    exportBusyCount: 0,
 
     projectsCreateKey: 0,
     modulesCreateKey: 0,
@@ -242,6 +246,7 @@ export const useUiStore = create<UiState>()((set, get) => {
         items: [],
         exportErrors: [],
         exportBusy: false,
+        exportBusyCount: 0,
         projectsCreateKey: 0,
         modulesCreateKey: 0,
         materialsCreateKey: 0,
@@ -249,7 +254,15 @@ export const useUiStore = create<UiState>()((set, get) => {
     },
 
     setExportErrors: (errors) => set({ exportErrors: errors }),
-    setExportBusy: (busy) => set({ exportBusy: busy }),
+    // F118 A1: counter semantics — two concurrent exports keep busy=true
+    // until the last one finishes (the old boolean cleared early).
+    setExportBusy: (busy) =>
+      set((state) => {
+        const count = busy
+          ? state.exportBusyCount + 1
+          : Math.max(0, state.exportBusyCount - 1);
+        return { exportBusyCount: count, exportBusy: count > 0 };
+      }),
 
     bumpProjectsCreateKey: () =>
       set((state) => ({ projectsCreateKey: state.projectsCreateKey + 1 })),

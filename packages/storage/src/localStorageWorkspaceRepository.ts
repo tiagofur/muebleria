@@ -5,6 +5,7 @@
 import type {
   Catalog,
   Project,
+  WorkshopSettings,
   ProjectTemplate,
   Workspace,
   ItemFloorStatus,
@@ -35,7 +36,9 @@ import type { WorkspaceRepository } from './workspaceRepository';
 import { createSeedWorkspace } from './seed';
 import { migrateWorkspace } from './migrateWorkspace';
 
-const LOCAL_STORAGE_KEY = 'muebles_guest_workspace';
+/** Exported so the shell can probe for meaningful guest data (F118 S3). */
+export const GUEST_WORKSPACE_STORAGE_KEY = 'muebles_guest_workspace';
+const LOCAL_STORAGE_KEY = GUEST_WORKSPACE_STORAGE_KEY;
 const PICKING_LOCAL_STORAGE_KEY = 'muebles_guest_picking';
 const STOCK_LOCAL_STORAGE_KEY = 'muebles_guest_stock';
 const STOCK_MOVEMENTS_LOCAL_STORAGE_KEY = 'muebles_guest_stock_movements';
@@ -87,6 +90,13 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
       ...ws,
       catalog,
     });
+  }
+
+  async saveWorkshopSettings(settings: WorkshopSettings): Promise<void> {
+    // F118 S1: patch settings in the STORED workspace — never re-save an
+    // in-memory snapshot (it may hold stale catalog/projects).
+    const ws = this.getWorkspace();
+    this.saveWorkspace({ ...ws, settings });
   }
 
   async getProjects(): Promise<readonly Project[]> {

@@ -5,18 +5,8 @@
  * the 2-column body (main with options/measure defaults/panels/items + aside
  * with totals + material summary).
  *
- * All state lives in the parent (ProjectsScreen) and is passed down as
- * controlled props: navigation handlers reset most of it and several pieces
- * (3D viewer, add-item) are consumed by sibling modals in the parent.
- *
  * #193 — Props are forwarded into a React Context so child components
  * (items, panels, totals) can pull what they need without prop threading.
- *
- * #refactor — Sub-sections extracted to reduce file size:
- *   - ProjectItemsSection  → items list with 3D, quantity, measure, choices
- *   - ProjectOptionsSection → project-level option defaults
- *   - ProjectMeasureDefaults → depth/height defaults by furniture type
- *   - ProjectTotalsAside   → breakdown, material summary, nesting, issues
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
@@ -40,52 +30,36 @@ import type {
   QuoteBreakdown,
   Structure,
   WarrantyPhotoKind,
-  WarrantyRefabricationPiece,
   WarrantyTicket,
 } from '@muebles/domain';
-import { TECHNICAL_STATUS_METADATA } from '@muebles/domain';
-
 
 import {
-  Camera,
   Check,
-  ChevronLeft,
   Copy,
-  Factory,
-  HardHat,
   LayoutTemplate,
-  MessageSquare,
-  MoreHorizontal,
-  Pencil,
   RotateCcw,
-  Send,
   Trash2,
-  Wrench,
 } from 'lucide-react';
 import {
   ConfirmDialog,
-  DropdownMenu,
   type DropdownMenuItem,
   type DropdownMenuSection,
 } from '../../common';
-import { KitchenPlanPanel } from './KitchenPlanPanel';
-import { QuoteScenarioCompare } from './QuoteScenarioCompare';
-import { InstallationChecklistPanel } from './InstallationChecklistPanel';
-import { ProjectPhotosGallery } from './ProjectPhotosGallery';
-import { InternalCommsPanel } from './InternalCommsPanel';
-import { WarrantyTicketsPanel } from './WarrantyTicketsPanel';
-import { WhatsAppButton } from '../../crm/WhatsAppButton';
 import { ProjectFloorProgressStrip } from '../../production/ProjectFloorProgressStrip';
-import { StatusBadge } from './StatusBadge';
 import { ProjectItemsSection } from './ProjectItemsSection';
 import { ProjectOptionsSection } from './ProjectOptionsSection';
 import { ProjectMeasureDefaults } from './ProjectMeasureDefaults';
 import { ProjectTotalsAside } from './ProjectTotalsAside';
 import { allFootprints } from '../kitchenPlanHelpers';
 import {
-  formatProjectMoney,
-  resolveCustomerName,
-} from '../projectHelpers';
+  ProjectDetailHeader,
+  type ChromePrimary,
+} from './detail/ProjectDetailHeader';
+import {
+  ProjectDetailToolsNav,
+  type QuoteToolsPanel,
+} from './detail/ProjectDetailToolsNav';
+import { ProjectDetailToolsContent } from './detail/ProjectDetailToolsContent';
 import {
   ProjectDetailProvider,
   useProjectDetail,
@@ -93,26 +67,8 @@ import {
   type ProjectDetailItemHandlers,
   type ProjectDetailRemoveConfirm,
   type ProjectDetail3DHandlers,
+  type ProjectDetailContextValue,
 } from './projectDetailContext';
-
-/** Advanced quote tools — collapsed by default (progressive disclosure). */
-type QuoteToolsPanel = 'kitchen' | 'scenarios' | 'checklist' | 'photos' | 'internal_comms' | 'warranties' | null;
-
-
-
-
-/**
- * Exactly one lifecycle/production primary per status (buttons.css rule).
- * PROD-0.2: when factory workspace is wired (`onOpenInProduction`), plant-ready
- * primary is open-production — not Optimizer / mark-produced in quote chrome.
- */
-type ChromePrimary =
-  | 'send'
-  | 'accept'
-  | 'open-production'
-  | 'mark-produced'
-  | 'export'
-  | null;
 
 // ─── Re-export context types for external consumers ──────────────────
 export type { ProjectDetailCatalogs, ProjectDetailItemHandlers, ProjectDetailRemoveConfirm, ProjectDetail3DHandlers };
@@ -311,9 +267,6 @@ export interface ProjectDetailViewProps {
   ) => void;
 }
 
-
-
-
 // ─── Inner component (consumes context) ─────────────────────────────
 
 function resolveChromePrimary(args: {
@@ -323,7 +276,6 @@ function resolveChromePrimary(args: {
   hasChangeStatus: boolean;
   hasMarkProduced: boolean;
   hasExport: boolean;
-  /** PROD-0.2: factory hub available — prefers open-production over plant chrome CTAs. */
   hasOpenInProduction: boolean;
 }): ChromePrimary {
   const {
@@ -335,8 +287,6 @@ function resolveChromePrimary(args: {
     hasExport,
     hasOpenInProduction,
   } = args;
-  // #257: mark-produced never primary on quote when factory hub exists.
-  // Prefer open-production; produced only from Producción for plant roles.
   if (status === 'draft' && canMutate && hasChangeStatus) return 'send';
   if (status === 'quoted' && canMutate && hasChangeStatus) return 'accept';
   if (
@@ -345,8 +295,6 @@ function resolveChromePrimary(args: {
   ) {
     return 'open-production';
   }
-  // Legacy: only when Producción nav is not wired — and never for vendedor
-  // (canMarkProduced already false for vendedor).
   if (
     status === 'accepted' &&
     canMarkProduced &&
@@ -378,33 +326,18 @@ function ProjectDetailViewInner(): ReactNode {
   const {
     project,
     modules,
-    optionGroups,
-    catalogs,
-    customers,
     ownerLabels,
     breakdown,
     exportMenu,
-    exportBusy,
-    productionExportDisabled,
     productionExportOk,
     onOpenInProduction,
-    onExport,
-    onBackToList,
     onOpenPresentation,
-    onOpenSpatialStudio,
-    onOpenSpatialStudioUnplaced,
-    onEditMeta,
     onDuplicate,
     onSaveAsTemplate,
     onMarkProduced,
     onChangeStatus,
     onRequestReopen,
     onRequestDelete,
-    onUpdateKitchenLayout,
-    onApplyScenarioB,
-    onDuplicateWithScenarioB,
-    onExportScenarioPdf,
-    onUpdateInstallationChecklist,
     canMutate,
     canDelete,
     canReopen,
@@ -435,7 +368,6 @@ function ProjectDetailViewInner(): ReactNode {
   }, [project, modules]);
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
-  /** #257: design/meta/items only while draft. */
   const canEditContent = canMutate && project.status === 'draft';
   const primary = resolveChromePrimary({
     status: project.status,
@@ -443,29 +375,9 @@ function ProjectDetailViewInner(): ReactNode {
     canMarkProduced,
     hasChangeStatus: Boolean(onChangeStatus),
     hasMarkProduced: Boolean(onMarkProduced),
-    hasExport: Boolean(onExport),
+    hasExport: Boolean(ctx.onExport),
     hasOpenInProduction,
   });
-
-  const exportTitle = !productionExportOk
-    ? 'Export de producción solo en Aceptado o En producción'
-    : 'Exportar cut-list Optimizer (.xlsx)';
-
-  /**
-   * PROD-0.2: Optimizer leaves quote chrome when factory workspace is wired.
-   * Without `onOpenInProduction`, keep prior plant-ready chrome export.
-   */
-  const showExportInChrome =
-    Boolean(onExport) && productionExportOk && !hasOpenInProduction;
-  /**
-   * #257: never mark produced from quote when Producción hub is available.
-   * Vendedor never has canMarkProduced.
-   */
-  const showMarkProducedInChrome =
-    primary === 'mark-produced' &&
-    Boolean(onMarkProduced) &&
-    canMarkProduced &&
-    !hasOpenInProduction;
 
   const requestStatus = (next: ProjectStatus, message: string) => {
     if (!onChangeStatus) return;
@@ -480,8 +392,6 @@ function ProjectDetailViewInner(): ReactNode {
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
 
-    // Only navigation into the factory workspace — no factory file exports here.
-    // Optimizer / herrajes / etiquetas / pack live exclusively in Producción.
     if (hasOpenInProduction && productionExportOk && onOpenInProduction) {
       sections.push({
         id: 'production-hub',
@@ -500,7 +410,6 @@ function ProjectDetailViewInner(): ReactNode {
     sections.push(...exportMenu.sections);
 
     const metaItems: DropdownMenuItem[] = [];
-    // Presentar moved from chrome to Más to reduce button clutter.
     if (onOpenPresentation) {
       metaItems.push({
         id: 'present',
@@ -508,7 +417,6 @@ function ProjectDetailViewInner(): ReactNode {
         onSelect: onOpenPresentation,
       });
     }
-    // Duplicate / template allowed for closed quotes (copy, not edit source).
     if (canMutate && onDuplicate) {
       metaItems.push({
         id: 'duplicate',
@@ -537,7 +445,6 @@ function ProjectDetailViewInner(): ReactNode {
         onSelect: () => requestStatus('accepted', CONFIRM_ACCEPT),
       });
     }
-    // #257: quoted → any canReopen (vendedor+); accepted/produced → admin/gerente only.
     const reopenQuoted = canReopen && project.status === 'quoted';
     const reopenClosed =
       canForceReopenClosed &&
@@ -558,8 +465,6 @@ function ProjectDetailViewInner(): ReactNode {
         },
       });
     }
-    // Destructive action lives in Más (wave 4 chrome density) — not a permanent
-    // danger button that steals visual weight from the stage primary.
     if (canDelete) {
       metaItems.push({
         id: 'delete',
@@ -597,190 +502,16 @@ function ProjectDetailViewInner(): ReactNode {
   };
 
   return (
-    <>
-      {/* Sticky tool chrome — at most ONE .btn--primary in the action group */}
-      <header className="workspace-chrome" data-testid="project-detail-chrome">
-        <div className="workspace-chrome__lead">
-          <button
-            type="button"
-            className="btn btn--ghost btn--small"
-            onClick={onBackToList}
-            aria-label="Volver a la lista"
-          >
-            <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
-            Lista
-          </button>
-          <div className="workspace-chrome__identity">
-            <div className="workspace-chrome__title-row">
-              <h2 className="workspace-chrome__title">{project.name}</h2>
-              <StatusBadge status={project.status} />
-              {project.technicalStatus && project.technicalStatus !== 'pending_assignment' ? (
-                <span
-                  className={`status-badge status-badge--${
-                    TECHNICAL_STATUS_METADATA[project.technicalStatus].color === 'neutral'
-                      ? 'cancelled'
-                      : TECHNICAL_STATUS_METADATA[project.technicalStatus].color === 'info'
-                        ? 'open'
-                        : TECHNICAL_STATUS_METADATA[project.technicalStatus].color === 'success'
-                          ? 'done'
-                          : TECHNICAL_STATUS_METADATA[project.technicalStatus].color
-                  }`}
-                  style={{ marginLeft: '0.25rem', fontSize: '0.75rem' }}
-                  title={TECHNICAL_STATUS_METADATA[project.technicalStatus].description}
-                >
-                  <HardHat size={12} />
-                  {TECHNICAL_STATUS_METADATA[project.technicalStatus].shortLabel}
-                </span>
-              ) : null}
-            </div>
-
-            <p className="workspace-chrome__subtitle">
-              {resolveCustomerName(project.customerId, customers)}
-              {(() => {
-                const cust = customers.find((c) => c.id === project.customerId);
-                return cust?.phone ? (
-                  <>
-                    <span className="workspace-chrome__dot" aria-hidden>·</span>
-                    <WhatsAppButton
-                      customerName={cust.name}
-                      phone={cust.phone}
-                      projectName={project.name}
-                      quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, project.currency) : undefined}
-                      workshopName={ctx.workshopName}
-                      compact
-                      label="WhatsApp"
-                    />
-                  </>
-                ) : null;
-              })()}
-              <span className="workspace-chrome__dot" aria-hidden>·</span>
-              {project.items.length} mueble{project.items.length === 1 ? '' : 's'}
-              <span className="workspace-chrome__dot" aria-hidden>·</span>
-              {project.currency}
-              {ctx.showCosts ? (
-                <>
-                  <span className="workspace-chrome__dot" aria-hidden>·</span>
-                  Margen ×{project.marginFactor.toFixed(2)}
-                </>
-              ) : null}
-            </p>
-
-          </div>
-        </div>
-        <div className="workspace-chrome__total" data-testid="project-detail-total">
-          <span className="workspace-chrome__total-label">Precio de venta</span>
-          <span className={chromeSale == null ? 'workspace-chrome__total-value workspace-chrome__total-value--muted' : 'workspace-chrome__total-value'}>
-            {chromeSale == null ? '—' : formatProjectMoney(chromeSale, project.currency)}
-          </span>
-        </div>
-        <div
-          className="workspace-chrome__actions project-detail__chrome-actions"
-          data-testid="project-chrome-actions"
-        >
-          {primary === 'send' && onChangeStatus ? (
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => requestStatus('quoted', CONFIRM_SEND)}
-              data-testid="project-send-quote"
-              title="Envía al cliente y congela precios (confirmación)"
-            >
-              <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
-            </button>
-          ) : null}
-          {primary === 'accept' && onChangeStatus ? (
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => requestStatus('accepted', CONFIRM_ACCEPT)}
-              data-testid="project-accept-quote"
-              title="Acepta y congela diseño y precios (confirmación)"
-            >
-              <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar cotización
-            </button>
-          ) : null}
-          {primary === 'open-production' && onOpenInProduction ? (
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => onOpenInProduction(project.id)}
-              data-testid="project-open-in-production"
-              title="Abre la orden en el workspace de Producción (solo fábrica)"
-            >
-              <Factory size={16} strokeWidth={1.5} aria-hidden /> Abrir en
-              Producción
-            </button>
-          ) : null}
-
-          {showMarkProducedInChrome && onMarkProduced ? (
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => onMarkProduced(project.id)}
-              data-testid="project-mark-produced"
-            >
-              <Factory size={16} strokeWidth={1.5} aria-hidden /> Marcar en
-              producción
-            </button>
-          ) : null}
-
-          {showExportInChrome && onExport ? (
-            <button
-              type="button"
-              className={primary === 'export' ? 'btn btn--primary' : 'btn'}
-              disabled={productionExportDisabled}
-              title={exportTitle}
-              onClick={() => {
-                void onExport?.();
-              }}
-              data-testid="project-chrome-export"
-            >
-              {exportBusy ? 'Exportando…' : 'Exportar Optimizer'}
-            </button>
-          ) : null}
-
-          {onOpenSpatialStudio ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={onOpenSpatialStudio}
-              data-testid="project-chrome-projectar"
-              title="Estudio 3D: colocar y mover muebles en el ambiente"
-            >
-              Proyectar
-            </button>
-          ) : null}
-
-          {canEditContent ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => onEditMeta(project)}
-              data-testid="project-chrome-edit"
-              title="Editar nombre, cliente y datos comerciales (solo borrador)"
-            >
-              <Pencil size={16} strokeWidth={1.5} aria-hidden /> Editar
-            </button>
-          ) : null}
-
-          {moreSections.length > 0 ? (
-            <DropdownMenu
-              ariaLabel="Más acciones de la cotización"
-              triggerLabel={exportBusy ? 'Trabajando…' : 'Más'}
-              triggerIcon={
-                <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden />
-              }
-              triggerClassName="btn"
-              disabled={
-                exportBusy &&
-                moreSections.every((s) => s.items.every((i) => i.disabled))
-              }
-              sections={moreSections}
-              onClose={exportMenu.onClose}
-            />
-          ) : null}
-        </div>
-      </header>
+    <div className="project-detail" data-testid="project-detail">
+      <ProjectDetailHeader
+        primary={primary}
+        chromeSale={chromeSale}
+        moreSections={moreSections}
+        exportMenuClose={exportMenu.onClose}
+        onRequestStatus={requestStatus}
+        confirmSendText={CONFIRM_SEND}
+        confirmAcceptText={CONFIRM_ACCEPT}
+      />
 
       {project.status === 'accepted' || project.status === 'produced' ? (
         <ProjectFloorProgressStrip project={project} />
@@ -797,301 +528,26 @@ function ProjectDetailViewInner(): ReactNode {
 
       <div className="project-detail__body">
         <div className="project-detail__main">
-          {/* Core quote path first: options → measures → items */}
           <ProjectOptionsSection />
           <ProjectMeasureDefaults />
           <ProjectItemsSection />
 
-          {/* Advanced tools — toggle group (not ARIA tabs: zero-selected is valid) */}
           <section
             className="project-detail__tools"
             data-testid="project-quote-tools"
             aria-label="Herramientas de cotización"
           >
-            <div className="project-detail__tools-header">
-              <h3 className="project-detail__section-title">Herramientas</h3>
-              <div
-                className="project-detail__tools-tabs"
-                role="group"
-                aria-label="Paneles avanzados"
-              >
-                <button
-                  type="button"
-                  aria-pressed={toolsPanel === 'kitchen'}
-                  className={
-                    toolsPanel === 'kitchen'
-                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
-                      : 'project-detail__tools-tab'
-                  }
-                  data-testid="project-tools-kitchen"
-                  onClick={() => toggleTools('kitchen')}
-                >
-                  Plano / ambiente
-                  {kitchenUnplacedCount > 0 ? (
-                    <span
-                      className="project-detail__tools-badge"
-                      data-testid="project-tools-kitchen-unplaced"
-                      title={`${kitchenUnplacedCount} sin colocar en el plano`}
-                    >
-                      {kitchenUnplacedCount}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={toolsPanel === 'scenarios'}
-                  className={
-                    toolsPanel === 'scenarios'
-                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
-                      : 'project-detail__tools-tab'
-                  }
-                  data-testid="project-tools-scenarios"
-                  onClick={() => toggleTools('scenarios')}
-                >
-                  Escenarios A/B
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={toolsPanel === 'checklist'}
+            <ProjectDetailToolsNav
+              toolsPanel={toolsPanel}
+              onToggleTools={toggleTools}
+              kitchenUnplacedCount={kitchenUnplacedCount}
+            />
 
-                  className={
-                    toolsPanel === 'checklist'
-                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
-                      : 'project-detail__tools-tab'
-                  }
-                  data-testid="project-tools-checklist"
-                  onClick={() => toggleTools('checklist')}
-                >
-                  Checklist instalación
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={toolsPanel === 'photos'}
-
-                  className={
-                    toolsPanel === 'photos'
-                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
-                      : 'project-detail__tools-tab'
-                  }
-                  data-testid="project-tools-photos"
-                  onClick={() => toggleTools('photos')}
-                >
-                  <Camera size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
-                  Fotos / Galería
-                  {ctx.photos && ctx.photos.length > 0 ? (
-                    <span
-                      className="project-detail__tools-badge"
-                      title={`${ctx.photos.length} fotos`}
-                    >
-                      {ctx.photos.length}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={toolsPanel === 'internal_comms'}
-                  className={
-                    toolsPanel === 'internal_comms'
-                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
-                      : 'project-detail__tools-tab'
-                  }
-                  data-testid="project-tools-internal-comms"
-                  onClick={() => toggleTools('internal_comms')}
-                >
-                  <MessageSquare size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
-                  Handoff & Chat
-                  {ctx.internalMessages && ctx.internalMessages.length > 0 ? (
-                    <span
-                      className="project-detail__tools-badge"
-                      title={`${ctx.internalMessages.length} mensajes`}
-                    >
-                      {ctx.internalMessages.length}
-                    </span>
-                  ) : null}
-                </button>
-
-                <button
-                  type="button"
-                  aria-pressed={toolsPanel === 'warranties'}
-                  className={
-                    toolsPanel === 'warranties'
-                      ? 'project-detail__tools-tab project-detail__tools-tab--active'
-                      : 'project-detail__tools-tab'
-                  }
-                  data-testid="project-tools-warranties"
-                  onClick={() => toggleTools('warranties')}
-                >
-                  <Wrench size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
-                  Garantías & Re-corte
-                  {ctx.warranties && ctx.warranties.length > 0 ? (
-                    <span
-                      className="project-detail__tools-badge"
-                      title={`${ctx.warranties.length} tickets de garantía`}
-                    >
-                      {ctx.warranties.length}
-                    </span>
-                  ) : null}
-                </button>
-              </div>
-            </div>
-
-
-            {toolsPanel === null ? (
-              <p className="project-detail__tools-hint">
-                Abrí un panel solo si lo necesitás. La cotización del día son los
-                muebles y el precio a la derecha.
-              </p>
-            ) : null}
-
-            {toolsPanel === 'kitchen' ? (
-              <div
-                className="project-detail__tools-panel"
-                data-testid="project-tools-panel-kitchen"
-              >
-                <p className="project-detail__tools-hint">
-                  El diseño del ambiente vive en Proyectar (3D + planta).
-                </p>
-                {onOpenSpatialStudio || onOpenSpatialStudioUnplaced ? (
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--small"
-                    data-testid="project-tools-open-projectar"
-                    onClick={() => {
-                      if (
-                        kitchenUnplacedCount > 0 &&
-                        onOpenSpatialStudioUnplaced
-                      ) {
-                        onOpenSpatialStudioUnplaced();
-                        return;
-                      }
-                      onOpenSpatialStudio?.();
-                    }}
-                  >
-                    Abrir Proyectar
-                  </button>
-                ) : null}
-                <details
-                  className="project-detail__kitchen-advanced"
-                  data-testid="project-tools-kitchen-advanced"
-                >
-                  <summary>Edición 2D rápida (avanzado)</summary>
-                  <KitchenPlanPanel
-                    project={project}
-                    modules={modules}
-                    canEdit={Boolean(canEditContent && onUpdateKitchenLayout)}
-                    onChange={(layout) => {
-                      onUpdateKitchenLayout?.(project.id, layout);
-                    }}
-                  />
-                </details>
-              </div>
-            ) : null}
-
-            {toolsPanel === 'scenarios' ? (
-              <div
-                className="project-detail__tools-panel"
-                data-testid="project-tools-panel-scenarios"
-              >
-                <QuoteScenarioCompare
-                  project={project}
-                  catalog={{
-                    materials: catalogs.materials,
-                    edges: catalogs.edges,
-                    hardware: catalogs.hardware,
-                    optionGroups,
-                    modules,
-                  }}
-                  optionGroups={optionGroups}
-                  canApply={Boolean(
-                    canEditContent && onApplyScenarioB,
-                  )}
-                  canDuplicate={Boolean(canMutate && onDuplicateWithScenarioB)}
-                  currency={project.currency}
-                  onApplyB={(role, choiceId) => {
-                    onApplyScenarioB?.(project.id, role, choiceId);
-                  }}
-                  onDuplicateWithB={(role, choiceId) => {
-                    onDuplicateWithScenarioB?.(project.id, role, choiceId);
-                  }}
-                  onExportScenarioPdf={(role, choiceId) => {
-                    onExportScenarioPdf?.(project.id, role, choiceId);
-                  }}
-                />
-              </div>
-            ) : null}
-
-            {toolsPanel === 'checklist' ? (
-              <div
-                className="project-detail__tools-panel"
-                data-testid="project-tools-panel-checklist"
-              >
-                <InstallationChecklistPanel
-                  project={project}
-                  canEdit={Boolean(
-                    canEditContent && onUpdateInstallationChecklist,
-                  )}
-                  onChange={(items) => {
-                    onUpdateInstallationChecklist?.(project.id, items);
-                  }}
-                />
-              </div>
-            ) : null}
-
-            {toolsPanel === 'photos' ? (
-              <div
-                className="project-detail__tools-panel"
-                data-testid="project-tools-panel-photos"
-              >
-                <ProjectPhotosGallery
-                  projectId={project.id}
-                  photos={ctx.photos ?? []}
-                  onUploadPhotos={ctx.onUploadPhotos ?? (async () => {})}
-                  onUpdatePhoto={ctx.onUpdatePhoto ?? (async () => {})}
-                  onDeletePhoto={ctx.onDeletePhoto ?? (async () => {})}
-                  readOnly={!canMutate}
-                />
-              </div>
-            ) : null}
-
-            {toolsPanel === 'internal_comms' ? (
-              <div
-                className="project-detail__tools-panel"
-                data-testid="project-tools-panel-internal-comms"
-              >
-                <InternalCommsPanel
-                  project={project}
-                  messages={ctx.internalMessages ?? []}
-                  assignableOwners={ctx.assignableOwners?.map((o) => ({ id: o.id, label: o.name })) ?? []}
-                  currentUserId={ctx.currentUserId}
-                  onSendMessage={ctx.onSendInternalMessage ?? (() => {})}
-                  onUpdateTechnicalWorkflow={ctx.onUpdateTechnicalWorkflow ?? (() => {})}
-                />
-              </div>
-            ) : null}
-
-            {toolsPanel === 'warranties' ? (
-              <div
-                className="project-detail__tools-panel"
-                data-testid="project-tools-panel-warranties"
-              >
-                <WarrantyTicketsPanel
-                  projectId={project.id}
-                  projectName={project.name}
-                  customerId={project.customerId}
-                  tickets={ctx.warranties ?? []}
-                  availableCutRows={ctx.availableCutRows ?? []}
-                  technicians={ctx.assignableOwners?.map((o) => ({ id: o.id, name: o.name })) ?? []}
-                  onCreateTicket={ctx.onCreateWarrantyTicket ?? (async () => {})}
-                  onUpdateTicket={ctx.onUpdateWarrantyTicket ?? (async () => {})}
-                  onDeleteTicket={ctx.onDeleteWarrantyTicket}
-                  onUploadPhoto={ctx.onUploadWarrantyPhoto}
-                  onExportRefabricationOptimizer={ctx.onExportWarrantyRefabricationOptimizer}
-                />
-              </div>
-            ) : null}
+            <ProjectDetailToolsContent
+              toolsPanel={toolsPanel}
+              canEditContent={canEditContent}
+            />
           </section>
-
-
         </div>
 
         <ProjectTotalsAside />
@@ -1099,112 +555,277 @@ function ProjectDetailViewInner(): ReactNode {
 
       <ConfirmDialog
         open={pendingConfirm !== null}
-        onClose={() => setPendingConfirm(null)}
         title={pendingConfirm?.title ?? ''}
         message={pendingConfirm?.message ?? ''}
-        confirmLabel={pendingConfirm?.confirmLabel}
+        confirmLabel={pendingConfirm?.confirmLabel ?? 'Confirmar'}
         tone="primary"
-        onConfirm={() => pendingConfirm?.onConfirm()}
-        dataTestId="project-status-confirm"
+        onConfirm={() => {
+          pendingConfirm?.onConfirm();
+          setPendingConfirm(null);
+        }}
+        onClose={() => setPendingConfirm(null)}
       />
-    </>
-  );
-}
-
-// ─── Public entry point (wraps inner with provider) ──────────────────
-
-export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
-  const contextValue = {
-    project: props.project,
-    projectEstimates: props.projectEstimates,
-    modules: props.modules,
-    optionGroups: props.optionGroups,
-    catalogs: props.catalogs,
-    catalogComponents: props.catalogComponents ?? [],
-    catalogStructures: props.catalogStructures ?? [],
-    customers: props.customers,
-    ownerLabels: props.ownerLabels,
-    breakdown: props.breakdown ?? null,
-    materialSummary: props.materialSummary ?? null,
-    breakdownLoading: props.breakdownLoading ?? false,
-    breakdownError: props.breakdownError ?? null,
-    previewBlocked: props.previewBlocked ?? false,
-    missingGroups: props.missingGroups ?? [],
-    groupLabels: props.groupLabels ?? {},
-    showCosts: props.showCosts,
-    exportMenu: props.exportMenu,
-    exportBlockMessage: props.exportBlockMessage,
-    exportErrors: props.exportErrors,
-    exportBusy: props.exportBusy,
-    exportBlocked: props.exportBlocked,
-    productionExportDisabled: props.productionExportDisabled,
-    productionExportOk: props.productionExportOk,
-    onExport: props.onExport,
-    onExportProductionPack: props.onExportProductionPack,
-    onOpenInProduction: props.onOpenInProduction,
-    itemHandlers: props.itemHandlers,
-    removeConfirm: props.removeConfirm,
-    updateProjectLevelChoice: props.updateProjectLevelChoice,
-    onUpdateMeasureDefaults: props.onUpdateMeasureDefaults,
-    viewer3D: props.viewer3D,
-    itemError: props.itemError,
-    addItemModalOpen: props.addItemModalOpen,
-    onOpenAddItemModal: props.onOpenAddItemModal,
-    onBackToList: props.onBackToList,
-    onOpenPresentation: props.onOpenPresentation,
-    onOpenSpatialStudio: props.onOpenSpatialStudio,
-    postAddPlaceCue: props.postAddPlaceCue ?? false,
-    onDismissPostAddPlaceCue: props.onDismissPostAddPlaceCue,
-    onOpenSpatialStudioUnplaced: props.onOpenSpatialStudioUnplaced,
-    onEditMeta: props.onEditMeta,
-    onDuplicate: props.onDuplicate,
-    onSaveAsTemplate: props.onSaveAsTemplate,
-    onMarkProduced: props.onMarkProduced,
-    onChangeStatus: props.onChangeStatus,
-    onRequestReopen: props.onRequestReopen,
-    onRequestDelete: props.onRequestDelete,
-    onUpdateKitchenLayout: props.onUpdateKitchenLayout,
-    onApplyScenarioB: props.onApplyScenarioB,
-    onDuplicateWithScenarioB: props.onDuplicateWithScenarioB,
-    onExportScenarioPdf: props.onExportScenarioPdf,
-    onUpdateInstallationChecklist: props.onUpdateInstallationChecklist,
-    onImportNesting: props.onImportNesting,
-    onUpdateProjectLevelChoices: props.onUpdateProjectLevelChoices,
-    canMutate: props.canMutate,
-    canEditContent:
-      props.canMutate && props.project.status === 'draft',
-    canDelete: props.canDelete,
-    canReopen: props.canReopen,
-    canForceReopenClosed: Boolean(props.canForceReopenClosed),
-    canMarkProduced: props.canMarkProduced,
-    onRestoreVersion: props.onRestoreVersion,
-    projectTemplates: props.projectTemplates,
-    photos: props.photos,
-    onUploadPhotos: props.onUploadPhotos,
-    onUpdatePhoto: props.onUpdatePhoto,
-    onDeletePhoto: props.onDeletePhoto,
-    workshopName: props.workshopName,
-    internalMessages: props.internalMessages,
-    onSendInternalMessage: props.onSendInternalMessage,
-    onUpdateTechnicalWorkflow: props.onUpdateTechnicalWorkflow,
-    assignableOwners: props.assignableOwners,
-    currentUserId: props.currentUserId,
-    warranties: props.warranties,
-    availableCutRows: props.availableCutRows,
-    onCreateWarrantyTicket: props.onCreateWarrantyTicket,
-    onUpdateWarrantyTicket: props.onUpdateWarrantyTicket,
-    onDeleteWarrantyTicket: props.onDeleteWarrantyTicket,
-    onUploadWarrantyPhoto: props.onUploadWarrantyPhoto,
-    onExportWarrantyRefabricationOptimizer: props.onExportWarrantyRefabricationOptimizer,
-  };
-
-
-  return (
-    <div className="project-detail" data-testid="project-detail">
-      <ProjectDetailProvider value={contextValue}>
-        <ProjectDetailViewInner />
-      </ProjectDetailProvider>
     </div>
   );
 }
 
+// ─── Outer wrapper (provides context) ───────────────────────────────
+
+export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
+  const {
+    project,
+    projectEstimates,
+    modules,
+    optionGroups,
+    catalogs,
+    catalogComponents = [],
+    catalogStructures = [],
+    customers,
+    ownerLabels,
+    breakdown = null,
+    materialSummary = null,
+    breakdownLoading = false,
+    breakdownError = null,
+    previewBlocked = false,
+    missingGroups = [],
+    groupLabels = {},
+    showCosts,
+    exportMenu,
+    exportBlockMessage,
+    exportErrors,
+    exportBusy,
+    exportBlocked,
+    productionExportDisabled,
+    productionExportOk,
+    onExport,
+    onExportProductionPack,
+    onOpenInProduction,
+    itemHandlers,
+    removeConfirm,
+    updateProjectLevelChoice,
+    onUpdateMeasureDefaults,
+    viewer3D,
+    itemError,
+    addItemModalOpen,
+    onOpenAddItemModal,
+    onBackToList,
+    onOpenPresentation,
+    onOpenSpatialStudio,
+    postAddPlaceCue = false,
+    onDismissPostAddPlaceCue,
+    onOpenSpatialStudioUnplaced,
+    onEditMeta,
+    onDuplicate,
+    onSaveAsTemplate,
+    onMarkProduced,
+    onChangeStatus,
+    onRequestReopen,
+    onRequestDelete,
+    onUpdateKitchenLayout,
+    onApplyScenarioB,
+    onDuplicateWithScenarioB,
+    onExportScenarioPdf,
+    onUpdateInstallationChecklist,
+    onImportNesting,
+    onUpdateProjectLevelChoices,
+    onRestoreVersion,
+    canMutate,
+    canDelete,
+    canReopen,
+    canForceReopenClosed = false,
+    canMarkProduced,
+    projectTemplates,
+    photos,
+    onUploadPhotos,
+    onUpdatePhoto,
+    onDeletePhoto,
+    workshopName,
+    internalMessages,
+    onSendInternalMessage,
+    onUpdateTechnicalWorkflow,
+    assignableOwners,
+    currentUserId,
+    warranties,
+    availableCutRows,
+    onCreateWarrantyTicket,
+    onUpdateWarrantyTicket,
+    onDeleteWarrantyTicket,
+    onUploadWarrantyPhoto,
+    onExportWarrantyRefabricationOptimizer,
+  } = props;
+
+  const canEditContent = canMutate && project.status === 'draft';
+
+  const contextValue = useMemo(
+    (): ProjectDetailContextValue => ({
+      project,
+      projectEstimates,
+      modules,
+      optionGroups,
+      catalogs,
+      catalogComponents,
+      catalogStructures,
+      customers,
+      ownerLabels,
+      breakdown,
+      materialSummary,
+      breakdownLoading,
+      breakdownError,
+      previewBlocked,
+      missingGroups,
+      groupLabels,
+      showCosts,
+      exportMenu,
+      exportBlockMessage,
+      exportErrors,
+      exportBusy,
+      exportBlocked,
+      productionExportDisabled,
+      productionExportOk,
+      onExport,
+      onExportProductionPack,
+      onOpenInProduction,
+      itemHandlers,
+      removeConfirm,
+      updateProjectLevelChoice,
+      onUpdateMeasureDefaults,
+      viewer3D,
+      itemError,
+      addItemModalOpen,
+      onOpenAddItemModal,
+      onBackToList,
+      onOpenPresentation,
+      onOpenSpatialStudio,
+      postAddPlaceCue,
+      onDismissPostAddPlaceCue,
+      onOpenSpatialStudioUnplaced,
+      onEditMeta,
+      onDuplicate,
+      onSaveAsTemplate,
+      onMarkProduced,
+      onChangeStatus,
+      onRequestReopen,
+      onRequestDelete,
+      onUpdateKitchenLayout,
+      onApplyScenarioB,
+      onDuplicateWithScenarioB,
+      onExportScenarioPdf,
+      onUpdateInstallationChecklist,
+      onImportNesting,
+      onUpdateProjectLevelChoices,
+      onRestoreVersion,
+      canMutate,
+      canEditContent,
+      canDelete,
+      canReopen,
+      canForceReopenClosed,
+      canMarkProduced,
+      projectTemplates,
+      photos,
+      onUploadPhotos,
+      onUpdatePhoto,
+      onDeletePhoto,
+      workshopName,
+      internalMessages,
+      onSendInternalMessage,
+      onUpdateTechnicalWorkflow,
+      assignableOwners,
+      currentUserId,
+      warranties,
+      availableCutRows,
+      onCreateWarrantyTicket,
+      onUpdateWarrantyTicket,
+      onDeleteWarrantyTicket,
+      onUploadWarrantyPhoto,
+      onExportWarrantyRefabricationOptimizer,
+    }),
+    [
+      project,
+      projectEstimates,
+      modules,
+      optionGroups,
+      catalogs,
+      catalogComponents,
+      catalogStructures,
+      customers,
+      ownerLabels,
+      breakdown,
+      materialSummary,
+      breakdownLoading,
+      breakdownError,
+      previewBlocked,
+      missingGroups,
+      groupLabels,
+      showCosts,
+      exportMenu,
+      exportBlockMessage,
+      exportErrors,
+      exportBusy,
+      exportBlocked,
+      productionExportDisabled,
+      productionExportOk,
+      onExport,
+      onExportProductionPack,
+      onOpenInProduction,
+      itemHandlers,
+      removeConfirm,
+      updateProjectLevelChoice,
+      onUpdateMeasureDefaults,
+      viewer3D,
+      itemError,
+      addItemModalOpen,
+      onOpenAddItemModal,
+      onBackToList,
+      onOpenPresentation,
+      onOpenSpatialStudio,
+      postAddPlaceCue,
+      onDismissPostAddPlaceCue,
+      onOpenSpatialStudioUnplaced,
+      onEditMeta,
+      onDuplicate,
+      onSaveAsTemplate,
+      onMarkProduced,
+      onChangeStatus,
+      onRequestReopen,
+      onRequestDelete,
+      onUpdateKitchenLayout,
+      onApplyScenarioB,
+      onDuplicateWithScenarioB,
+      onExportScenarioPdf,
+      onUpdateInstallationChecklist,
+      onImportNesting,
+      onUpdateProjectLevelChoices,
+      onRestoreVersion,
+      canMutate,
+      canEditContent,
+      canDelete,
+      canReopen,
+      canForceReopenClosed,
+      canMarkProduced,
+      projectTemplates,
+      photos,
+      onUploadPhotos,
+      onUpdatePhoto,
+      onDeletePhoto,
+      workshopName,
+      internalMessages,
+      onSendInternalMessage,
+      onUpdateTechnicalWorkflow,
+      assignableOwners,
+      currentUserId,
+      warranties,
+      availableCutRows,
+      onCreateWarrantyTicket,
+      onUpdateWarrantyTicket,
+      onDeleteWarrantyTicket,
+      onUploadWarrantyPhoto,
+      onExportWarrantyRefabricationOptimizer,
+    ],
+  );
+
+  return (
+    <ProjectDetailProvider value={contextValue}>
+      <ProjectDetailViewInner />
+    </ProjectDetailProvider>
+  );
+}

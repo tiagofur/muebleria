@@ -120,3 +120,13 @@ export function getCatalogStoreState(): CatalogState {
   }
   return _singleton.getState();
 }
+
+/**
+ * F118 S2: clear catalog data when the session ends — the module singleton
+ * would otherwise keep the previous user's catalog behind the login screen.
+ * No-op when not initialized yet.
+ */
+export function resetCatalogStore(): void {
+  if (!_singleton) return;
+  _singleton.getState().setCatalog(null);
+}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Workspace } from '@muebles/domain';
+import type { Workspace, WorkshopSettings } from '@muebles/domain';
 import type { WorkspaceRepository } from '@muebles/storage';
 import { createSeedWorkspace } from '@muebles/storage';
 
@@ -72,13 +72,16 @@ function jsonError(status: number, body: unknown): Response {
  */
 function makeStubRepo(initial: Workspace): WorkspaceRepository & {
   saved: Workspace[];
+  savedSettings: WorkshopSettings[];
   setNext(next: Workspace | Error): void;
 } {
   let current = initial;
   let nextLoad: Workspace | Error | null = null;
   const saved: Workspace[] = [];
+  const savedSettings: WorkshopSettings[] = [];
   return {
     saved,
+    savedSettings,
     setNext(next: Workspace | Error) {
       nextLoad = next;
     },
@@ -94,14 +97,20 @@ function makeStubRepo(initial: Workspace): WorkspaceRepository & {
       current = ws;
       saved.push(ws);
     },
+    async saveWorkshopSettings(settings: WorkshopSettings) {
+      current = { ...current, settings };
+      savedSettings.push(settings);
+    },
     async saveCatalog() {},
     async saveProject() {},
+    async saveProjectTemplate() {},
     async createProject() {},
     async deleteProject() {},
     async createProjectTemplate() {},
     async deleteProjectTemplate() {},
   } as unknown as WorkspaceRepository & {
     saved: Workspace[];
+    savedSettings: WorkshopSettings[];
     setNext(next: Workspace | Error): void;
   };
 }
@@ -409,7 +418,7 @@ describe('workspaceStore — loadWorkspace', () => {
 });
 
 describe('workspaceStore — saveWorkshopSettings', () => {
-  it('persists resolved settings via repository.save', async () => {
+  it('F118 S1: persists ONLY settings via saveWorkshopSettings (no full-save clobber)', async () => {
     const seed = createSeedWorkspace();
     const repo = makeStubRepo(seed);
     const store = createWorkspaceStore({
@@ -425,18 +434,26 @@ describe('workspaceStore — saveWorkshopSettings', () => {
       vendedorCanViewCosts: true,
     });
 
-    expect(repo.saved).toHaveLength(1);
-    expect(repo.saved[0]!.settings).toMatchObject({
+    // Settings persisted settings-only…
+    expect(repo.savedSettings).toHaveLength(1);
+    expect(repo.savedSettings[0]).toMatchObject({
       defaultMarginFactor: 1.5,
       defaultLaborFixedCost: 2000,
     });
+    // …and the whole-workspace save was NEVER issued (it carried stale
+    // catalog/projects that used to clobber the server).
+    expect(repo.saved).toHaveLength(0);
     expect(store.getState().workspace?.settings?.defaultMarginFactor).toBe(1.5);
+    // Settings-only saves must not bump workspaceSeq (no store re-sync).
+    expect(store.getState().workspaceSeq).toBe(2); // guest enter + load
   });
 
   it('reverts workspace on save failure', async () => {
     const seed = createSeedWorkspace();
     const repo = makeStubRepo(seed);
-    vi.spyOn(repo, 'save').mockRejectedValueOnce(new Error('disk full'));
+    vi.spyOn(repo, 'saveWorkshopSettings').mockRejectedValueOnce(
+      new Error('disk full'),
+    );
     const store = createWorkspaceStore({
       deps: { repositoryFactory: stubFactory(repo) },
     });
@@ -659,5 +676,164 @@ describe('workspaceStore — selectors', () => {
 
     expect(store.getState().getAuthToken()).toBe('jwt');
     expect(store.getState().getAuthUser()?.id).toBe(AUTH_USER.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F118 — session guards + guest import
+// ---------------------------------------------------------------------------
+
+describe('workspaceStore — F118 session guards', () => {
+  it('S2: loadWorkspace resolving after logout does NOT repopulate workspace', async () => {
+    let resolveLoad: (ws: Workspace) => void = () => {};
+    const slowRepo = {
+      load: () =>
+        new Promise<Workspace>((resolve) => {
+          resolveLoad = resolve;
+        }),
+      save: async () => {},
+      saveWorkshopSettings: async () => {},
+    } as unknown as WorkspaceRepository;
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: () => slowRepo },
+    });
+    store.getState().enterAsGuest();
+    const promise = store.getState().loadWorkspace();
+    store.getState().logout();
+    resolveLoad(createSeedWorkspace());
+    await promise;
+
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().workspace).toBeNull();
+  });
+
+  it('S1: settings save does not bump workspaceSeq (no store re-sync)', async () => {
+    const repo = makeStubRepo(createSeedWorkspace());
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.getState().enterAsGuest();
+    await store.getState().loadWorkspace();
+    const seqAfterLoad = store.getState().workspaceSeq;
+
+    await store.getState().saveWorkshopSettings({
+      defaultMarginFactor: 2,
+      defaultLaborFixedCost: 0,
+      defaultCurrency: 'MXN',
+      vendedorCanViewCosts: false,
+    });
+
+    expect(store.getState().workspaceSeq).toBe(seqAfterLoad);
+  });
+});
+
+describe('workspaceStore — F118 guest import (S3)', () => {
+  it('login offers import when the guest workspace has projects', async () => {
+    const guest = createSeedWorkspace();
+    globalThis.localStorage.setItem(
+      'muebles_guest_workspace',
+      JSON.stringify({
+        ...guest,
+        projects: [{ ...guest.projects[0]!, id: 'guest-proj-1' }],
+      }),
+    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk({ token: 'jwt-2', user: AUTH_USER }));
+    const repo = makeStubRepo(createSeedWorkspace());
+    const store = createWorkspaceStore({
+      deps: {
+        baseUrl: 'http://test/api',
+        fetchImpl,
+        repositoryFactory: stubFactory(repo),
+      },
+    });
+
+    await store.getState().login('admin@test', 'pw');
+
+    expect(store.getState().pendingGuestImport).toBe(true);
+  });
+
+  it('login does NOT offer import when no guest work exists', async () => {
+    globalThis.localStorage.removeItem('muebles_guest_workspace');
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk({ token: 'jwt-3', user: AUTH_USER }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+
+    await store.getState().login('admin@test', 'pw');
+
+    expect(store.getState().pendingGuestImport).toBe(false);
+  });
+
+  it('importGuestWorkspace pushes guest catalog+projects and reloads', async () => {
+    const guestWs = createSeedWorkspace();
+    globalThis.localStorage.setItem(
+      'muebles_guest_workspace',
+      JSON.stringify({
+        ...guestWs,
+        projects: [{ ...guestWs.projects[0]!, id: 'guest-proj-1' }],
+      }),
+    );
+    const repo = makeStubRepo(createSeedWorkspace());
+    const saveCatalog = vi.spyOn(repo, 'saveCatalog');
+    const saveProject = vi.spyOn(repo, 'saveProject');
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    // auth session without going through login (direct state for isolation)
+    store.setState({ session: 'auth' });
+
+    await store.getState().importGuestWorkspace();
+
+    expect(saveCatalog).toHaveBeenCalledTimes(1);
+    expect(saveProject).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'guest-proj-1' }),
+    );
+    expect(store.getState().pendingGuestImport).toBe(false);
+    // Reloaded from the (patched) repository.
+    expect(store.getState().workspace).not.toBeNull();
+  });
+
+  it('dismissGuestImport clears the offer', () => {
+    const store = createWorkspaceStore();
+    store.setState({ pendingGuestImport: true });
+    store.getState().dismissGuestImport();
+    expect(store.getState().pendingGuestImport).toBe(false);
+  });
+});
+
+describe('workspaceStore — loadDemoWorkspace (F118 S6)', () => {
+  it('clears the error state, persists the seed in guest mode and bumps seq', async () => {
+    const repo = makeStubRepo(createSeedWorkspace());
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.getState().enterAsGuest();
+    store.setState({ workspaceLoadError: 'backend down', workspace: null });
+    const seqBefore = store.getState().workspaceSeq;
+
+    await store.getState().loadDemoWorkspace();
+
+    expect(store.getState().workspaceLoadError).toBeNull();
+    expect(store.getState().workspace).not.toBeNull();
+    expect(store.getState().workspaceSeq).toBe(seqBefore + 1);
+    // Guest mode persists the demo so it survives reloads.
+    expect(repo.saved.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('auth mode keeps the demo session-local (no server write)', async () => {
+    const repo = makeStubRepo(createSeedWorkspace());
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.setState({ session: 'auth' });
+
+    await store.getState().loadDemoWorkspace();
+
+    expect(store.getState().workspace).not.toBeNull();
+    expect(repo.saved).toHaveLength(0);
   });
 });

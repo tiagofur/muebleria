@@ -266,7 +266,11 @@ export function computeEngineeringDashboardStats(
     totalModulesCalculated += moduleCount;
     totalCutPiecesCalculated += cutPieceCount;
 
-    const engineerId = log?.startedBy || log?.generatedBy || log?.sentToProductionBy;
+    const engineerId =
+      p.assignedEngineerId ||
+      log?.startedBy ||
+      log?.generatedBy ||
+      log?.sentToProductionBy;
     if (engineerId) {
       let rec = engineerWorkloadMap.get(engineerId);
       if (!rec) {

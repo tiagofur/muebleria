@@ -4,10 +4,7 @@
  */
 
 import {
-  useCallback,
-  useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react';
 import type {
@@ -41,46 +38,26 @@ import type {
   Agregado,
   ProductionCutRow,
   WarrantyPhotoKind,
-  WarrantyRefabricationPiece,
   WarrantyTicket,
   WarrantyTicketCategory,
   WarrantyTicketPriority,
 } from '@muebles/domain';
 
-
-
 import {
   type DropdownMenuSection,
   PageLoading,
-  useDebouncedValue,
 } from '../common';
-import { consumeRequestCreateKey } from '../common/consumeRequestCreateKey';
 import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
-import { Project3DModal } from './components/Project3DModal';
-import { ProjectPresentationMode } from './components/ProjectPresentationMode';
-import { ProjectSpatialStudio } from './components/ProjectSpatialStudio';
 import { ProjectDetailView } from './components/ProjectDetailView';
-import { ProjectAddItemModal } from './components/ProjectAddItemModal';
-import { ProjectConfirmDeleteModal } from './components/ProjectConfirmDeleteModal';
-import { ProjectConfirmReopenModal } from './components/ProjectConfirmReopenModal';
-import { ProjectMetaModal } from './components/ProjectMetaModal';
-import { ProjectSaveAsTemplateModal } from './components/ProjectSaveAsTemplateModal';
-import { ProjectTemplatePickerModal } from './components/ProjectTemplatePickerModal';
-import { ProjectTemplatesManagementModal } from './components/ProjectTemplatesManagementModal';
 import { ProjectsListView } from './components/ProjectsListView';
+import { ProjectModalsContainer } from './components/ProjectModalsContainer';
 import {
-  emptyProjectDraft,
-  filterProjectsList,
-  type ProjectStatusFilter,
   formatProjectMoney,
-  projectToDraft,
-  setItemOptionChoice,
-  setProjectLevelChoice,
-  validateItemQuantity,
   type AddItemDraft,
   type ProjectDraft,
 } from './projectHelpers';
+import { useProjectsScreenState } from './helpers/useProjectsScreenState';
 import './projects.css';
 
 export type { ProjectDraft, AddItemDraft };
@@ -369,8 +346,6 @@ export interface ProjectsScreenProps {
   ) => void;
 }
 
-
-
 export function ProjectsScreen({
   projects,
   modules,
@@ -462,334 +437,39 @@ export function ProjectsScreen({
   onUploadWarrantyPhoto,
   onExportWarrantyRefabricationOptimizer,
 }: ProjectsScreenProps): ReactNode {
-
-
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search);
-  const [statusFilter, setStatusFilter] =
-    useState<ProjectStatusFilter>('all');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [metaModalOpen, setMetaModalOpen] = useState(false);
-  const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
-  /** Seed draft for the meta modal — computed by startCreate/startEditMeta and
-   * consumed by ProjectMetaModal on its closed→open transition (F058a). */
-  const [metaDraft, setMetaDraft] = useState<ProjectDraft>(() =>
-    emptyProjectDraft(workshopSettings),
-  );
-  const [addItemModalOpen, setAddItemModalOpen] = useState(false);
-  // itemError now only surfaces detail-side quantity/measure errors (the
-  // add-item modal owns its own internal error state — F058a).
-  const [itemError, setItemError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmReopen, setConfirmReopen] = useState(false);
-  const [showPresentation, setShowPresentation] = useState(false);
-  const [showSpatialStudio, setShowSpatialStudio] = useState(false);
-  const [spatialBootstrap, setSpatialBootstrap] = useState<{
-    listFilter?: 'all' | 'unplaced' | 'placed';
-    selectKey?: string | null;
-  } | null>(null);
-  /** Cue on quote detail after add — never auto-open Proyectar. */
-  const [postAddPlaceCue, setPostAddPlaceCue] = useState(false);
-
-  // Fase 3 slice 3.5: auto-open presentation when autoPresentId matches.
-  useEffect(() => {
-    if (autoPresentId && selectedId === autoPresentId && !showPresentation) {
-      setShowPresentation(true);
-    }
-  }, [autoPresentId, selectedId, showPresentation]);
-  const [show3DModal, setShow3DModal] = useState(false);
-  const [viewerItem, setViewerItem] = useState<{
-    item: ProjectItem;
-    mod: Module;
-  } | null>(null);
-  /** When true, 3D modal shows full quote run (not a single line). */
-  const [viewerQuoteRun, setViewerQuoteRun] = useState(false);
-  const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(
-    null,
-  );
-  // --- Project templates (#110 / H15) ---
-  // F058a: picker draft state (selected template / name / customer / error)
-  // now lives inside ProjectTemplatePickerModal.
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
-  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
-  // F058a: saveAsTemplateName moved into ProjectSaveAsTemplateModal component.
-  const [templatesManagementOpen, setTemplatesManagementOpen] = useState(false);
-
-  const catalogs = useMemo(
-    () => ({ materials, edges, hardware }),
-    [materials, edges, hardware],
-  );
-
-  const project3dCatalog = useMemo(
-    () => ({
-      modules,
-      structures: catalogStructures,
-      components: catalogComponents,
-      materials,
-      edges,
-      hardware,
-      optionGroups,
-      ambientMaterials,
-      ambientCategories,
-      // Thread agregados so resolveProject3DPreview → resolveBom can expand
-      // module.agregados / structure.agregados into board parts.
-      agregados: catalogAgregados,
-    }),
-    [
-      modules,
-      catalogStructures,
-      catalogComponents,
-      materials,
-      edges,
-      hardware,
-      optionGroups,
-      ambientMaterials,
-      ambientCategories,
-      catalogAgregados,
-    ],
-  );
-
-  const filtered = useMemo(
-    () =>
-      filterProjectsList(projects, debouncedSearch, statusFilter, customers),
-    [projects, debouncedSearch, statusFilter, customers],
-  );
-
-  const selectedProject =
-    selectedId !== null
-      ? (projects.find((p) => p.id === selectedId) ?? null)
-      : null;
-
-  const selectedProjectId = selectedProject?.id;
-  const handleAcquirePlanEdit = useCallback((): boolean => {
-    if (!selectedProjectId || !onAcquirePlanEdit) return false;
-    return onAcquirePlanEdit(selectedProjectId);
-  }, [selectedProjectId, onAcquirePlanEdit]);
-  const handleRenewPlanEdit = useCallback((): boolean => {
-    if (!selectedProjectId || !onRenewPlanEdit) return false;
-    return onRenewPlanEdit(selectedProjectId);
-  }, [selectedProjectId, onRenewPlanEdit]);
-  const handleReleasePlanEdit = useCallback((): void => {
-    if (!selectedProjectId || !onReleasePlanEdit) return;
-    onReleasePlanEdit(selectedProjectId);
-  }, [selectedProjectId, onReleasePlanEdit]);
-
-  // Domain breakdown target: selected detail project
-  useEffect(() => {
-    onSelectionChange?.(selectedId);
-  }, [selectedId, onSelectionChange]);
-
-  // Sync detail selection from shell URL / dashboard handoff.
-  // null = list view (e.g. `/projects`); id = detail (`/projects/:id`).
-  useEffect(() => {
-    if (openProjectId == null || openProjectId === '') {
-      setSelectedId(null);
-      setConfirmDelete(false);
-      setConfirmRemoveItemId(null);
-      setItemError(null);
-      setAddItemModalOpen(false);
-      setMetaModalOpen(false);
-      return;
-    }
-    if (!projects.some((p) => p.id === openProjectId)) return;
-    setSelectedId(openProjectId);
-    setConfirmDelete(false);
-    setConfirmRemoveItemId(null);
-    setItemError(null);
-    setAddItemModalOpen(false);
-    setMetaModalOpen(false);
-  }, [openProjectId, projects]);
-
-  // Open create once per requestCreateKey bump (Dashboard handoff).
-  // Module-scoped consume survives remount (JD R4-W sticky create key).
-  useEffect(() => {
-    if (!consumeRequestCreateKey('projects', requestCreateKey)) return;
-    setMetaEditingId(null);
-    setMetaDraft(emptyProjectDraft(workshopSettings));
-    setMetaModalOpen(true);
-  }, [requestCreateKey, workshopSettings]);
-
-  // If selected project disappears (delete), return to list
-  useEffect(() => {
-    if (selectedId && !projects.some((p) => p.id === selectedId)) {
-      setSelectedId(null);
-      onSelectionChange?.(null);
-      setConfirmDelete(false);
-    }
-  }, [projects, selectedId, onSelectionChange]);
-
-  const closeMetaModal = () => {
-    setMetaModalOpen(false);
-    setMetaEditingId(null);
-  };
-
-  // closeAddItemModal just toggles open=false; ProjectAddItemModal resets its
-  // own draft/error/cascade on the next closed→open transition (F058a).
-  const closeAddItemModal = () => {
-    setAddItemModalOpen(false);
-  };
-
-  const startCreate = () => {
-    setMetaEditingId(null);
-    setMetaDraft(emptyProjectDraft(workshopSettings));
-    setMetaModalOpen(true);
-  };
-
-  // --- Project templates (#110 / H15) ---
-  // F058a: the picker owns the template/name/customer draft + validation.
-  // startFromTemplate just opens it; confirmFromTemplate routes the validated
-  // payload to onCreateFromTemplate and closes.
-
-  const startFromTemplate = () => {
-    if (!projectTemplates || projectTemplates.length === 0) return;
-    setTemplatePickerOpen(true);
-  };
-
-  const confirmFromTemplate = (payload: {
-    templateId: string;
-    draft: ProjectDraft;
-  }) => {
-    if (!onCreateFromTemplate) return;
-    onCreateFromTemplate(payload.templateId, payload.draft);
-    setTemplatePickerOpen(false);
-  };
-
-  const startSaveAsTemplate = () => {
-    if (!selectedProject) return;
-    setSaveAsTemplateOpen(true);
-  };
-
-  const requestDeleteTemplate = (templateId: string) => {
-    if (!onDeleteTemplate) return;
-    onDeleteTemplate(templateId);
-  };
-
-  const startEditMeta = (project: Project) => {
-    setMetaEditingId(project.id);
-    setMetaDraft(projectToDraft(project, customers));
-    setMetaModalOpen(true);
-  };
-
-  const openDetail = (project: Project) => {
-    setSelectedId(project.id);
-    setConfirmDelete(false);
-    setConfirmRemoveItemId(null);
-    setItemError(null);
-  };
-
-  const backToList = () => {
-    setPostAddPlaceCue(false);
-    setSelectedId(null);
-    setConfirmDelete(false);
-    setConfirmRemoveItemId(null);
-    setItemError(null);
-    setAddItemModalOpen(false);
-    setMetaModalOpen(false);
-  };
-
-  // F058a: validation + new-customer normalization now live inside
-  // ProjectMetaModal. We only route the validated payload to the right shell
-  // callback and close.
-  const handleSubmitMeta = (payload: ProjectDraft) => {
-    if (metaEditingId) {
-      onUpdate(metaEditingId, payload);
-    } else {
-      onCreate(payload);
-    }
-    closeMetaModal();
-  };
-
-  const openAddItemModal = () => {
-    setItemError(null);
-    setAddItemModalOpen(true);
-  };
-
-  // F058a: draft/validation/preset-preselect now live inside
-  // ProjectAddItemModal. We only route the validated payload to onAddItem and
-  // close. selectedId is guaranteed set (modal opens from the detail view).
-  const handleAddItemSubmit = (payload: {
-    moduleId: string;
-    quantity: number;
-    optionChoices: OptionChoices;
-    measurePresetId?: string;
-    baseMode?: ModuleBaseMode;
-  }) => {
-    if (!selectedId) return;
-    onAddItem(selectedId, payload);
-    closeAddItemModal();
-    // Cotizar ≠ Proyectar: never force-open studio after add.
-    // If studio is already open, refresh unplaced focus; else show quote cue.
-    if (onUpdateKitchenLayout && canMutate) {
-      if (showSpatialStudio) {
-        setSpatialBootstrap({ listFilter: 'unplaced', selectKey: null });
-      } else {
-        setPostAddPlaceCue(true);
-      }
-    }
-  };
-
-  const openSpatialStudioUnplaced = () => {
-    setPostAddPlaceCue(false);
-    setSpatialBootstrap({ listFilter: 'unplaced', selectKey: null });
-    setShowSpatialStudio(true);
-  };
-
-  const updateItemMeasurePreset = (item: ProjectItem, measurePresetId: string) => {
-    if (!selectedId) return;
-    setItemError(null);
-    onUpdateItem(selectedId, {
-      ...item,
-      measurePresetId: measurePresetId || undefined,
-    });
-  };
-
-  const updateItemQuantity = (item: ProjectItem, quantity: number) => {
-    if (!selectedId) return;
-    const qtyErr = validateItemQuantity(quantity);
-    if (qtyErr) {
-      setItemError(qtyErr);
-      return;
-    }
-    setItemError(null);
-    onUpdateItem(selectedId, { ...item, quantity });
-  };
-
-  const updateItemChoice = (
-    item: ProjectItem,
-    groupCode: string,
-    optionId: string,
-  ) => {
-    if (!selectedId) return;
-    // PRJ-09: only ProjectItem.optionChoices changes — never Module.
-    // Empty value = inherit project default (F029).
-    const optionChoices = setItemOptionChoice(
-      item.optionChoices,
-      groupCode,
-      optionId,
-    );
-    onUpdateItem(selectedId, { ...item, optionChoices });
-  };
-
-  const updateProjectLevelChoice = (groupCode: string, optionId: string) => {
-    if (!selectedId || !selectedProject || !onUpdateProjectLevelChoices) return;
-    const choices = setProjectLevelChoice(
-      selectedProject.projectLevelChoices,
-      groupCode,
-      optionId,
-    );
-    onUpdateProjectLevelChoices(selectedId, choices);
-  };
-
-  const handleDelete = (id: string) => {
-    onDelete(id);
-    if (selectedId === id) {
-      setSelectedId(null);
-    }
-    setConfirmDelete(false);
-  };
-
-  const isTrulyEmpty = projects.length === 0;
-  const isFilterEmpty = !isTrulyEmpty && filtered.length === 0;
+  const state = useProjectsScreenState({
+    projects,
+    modules,
+    materials,
+    edges,
+    hardware,
+    ambientMaterials,
+    ambientCategories,
+    catalogComponents,
+    catalogStructures,
+    catalogAgregados,
+    customers,
+    optionGroups,
+    workshopSettings,
+    requestCreateKey,
+    openProjectId,
+    autoPresentId,
+    projectTemplates,
+    canMutate,
+    onCreate,
+    onUpdate,
+    onDelete,
+    onCreateFromTemplate,
+    onDeleteTemplate,
+    onAddItem,
+    onUpdateItem,
+    onUpdateKitchenLayout,
+    onAcquirePlanEdit,
+    onRenewPlanEdit,
+    onReleasePlanEdit,
+    onUpdateProjectLevelChoices,
+    onSelectionChange,
+  });
 
   const estimateLabel = (projectId: string): ReactNode => {
     if (!(projectId in projectEstimates)) {
@@ -816,25 +496,20 @@ export function ProjectsScreen({
 
   /** Block export when shell says so or options incomplete; still allow retry after listed issues. */
   const exportDisabled =
-    exportBusy || exportBlocked || previewBlocked || !selectedProject;
+    exportBusy || exportBlocked || previewBlocked || !state.selectedProject;
   /** F041: Optimizer/herrajes only for accepted/produced (plant-ready). */
   const productionExportOk =
-    selectedProject != null &&
-    (selectedProject.status === 'accepted' ||
-      selectedProject.status === 'produced');
+    state.selectedProject != null &&
+    (state.selectedProject.status === 'accepted' ||
+      state.selectedProject.status === 'produced');
   const productionExportDisabled = exportDisabled || !productionExportOk;
 
-  /**
-   * Quote "Más" commercial exports only.
-   * Factory exports (Optimizer, herrajes, etiquetas, pack) live exclusively
-   * in the Producción workspace (PROD-0.2 strengthened).
-   */
   const exportMenu = useMemo<{
     readonly sections: readonly DropdownMenuSection[];
     readonly onClose?: () => void;
   }>(() => {
-    if (!selectedProject) return { sections: [] };
-    const itemsEmpty = selectedProject.items.length === 0;
+    if (!state.selectedProject) return { sections: [] };
+    const itemsEmpty = state.selectedProject.items.length === 0;
 
     const commercialItems = [
       onExportCommercialQuote
@@ -877,7 +552,7 @@ export function ProjectsScreen({
       ],
     };
   }, [
-    selectedProject,
+    state.selectedProject,
     onExportCommercialQuote,
     onExportCommercialQuotePdf,
     exportBusy,
@@ -892,33 +567,6 @@ export function ProjectsScreen({
         ? 'Hay errores de validación en el último intento. Corregí los ítems e intentá de nuevo.'
         : null;
 
-  const renderList = (): ReactNode => (
-    <ProjectsListView
-      projects={projects}
-      filtered={filtered}
-      customers={customers}
-      projectTemplates={projectTemplates}
-      search={search}
-      statusFilter={statusFilter}
-      isTrulyEmpty={isTrulyEmpty}
-      isFilterEmpty={isFilterEmpty}
-      canMutate={canMutate}
-      hasCreateFromTemplate={!!onCreateFromTemplate}
-      hasDeleteTemplate={!!onDeleteTemplate}
-      estimateLabel={estimateLabel}
-      onSearchChange={setSearch}
-      onStatusFilterChange={setStatusFilter}
-      onClearFilters={() => {
-        setSearch('');
-        setStatusFilter('all');
-      }}
-      onNewProject={startCreate}
-      onFromTemplate={startFromTemplate}
-      onManageTemplates={() => setTemplatesManagementOpen(true)}
-      onOpenProject={openDetail}
-    />
-  );
-
   if (loading) {
     return (
       <section className="catalog-page" aria-label="Cotizaciones">
@@ -929,13 +577,13 @@ export function ProjectsScreen({
 
   return (
     <section className="catalog-page" aria-label="Cotizaciones">
-      {selectedProject ? (
+      {state.selectedProject ? (
         <ProjectDetailView
-          project={selectedProject}
+          project={state.selectedProject}
           projectEstimates={projectEstimates}
           modules={modules}
           optionGroups={optionGroups}
-          catalogs={catalogs}
+          catalogs={state.catalogs}
           catalogComponents={catalogComponents}
           catalogStructures={catalogStructures}
           customers={customers}
@@ -959,70 +607,70 @@ export function ProjectsScreen({
           onExportProductionPack={onExportProductionPack}
           onOpenInProduction={onOpenInProduction}
           itemHandlers={{
-            onUpdateItemQuantity: updateItemQuantity,
-            onUpdateItemMeasurePreset: updateItemMeasurePreset,
-            onUpdateItemChoice: updateItemChoice,
+            onUpdateItemQuantity: state.updateItemQuantity,
+            onUpdateItemMeasurePreset: state.updateItemMeasurePreset,
+            onUpdateItemChoice: state.updateItemChoice,
             onRemoveItem,
             onReorderItems: onReorderItems
               ? (fromIndex, toIndex) => {
-                  if (!selectedId) return;
-                  onReorderItems(selectedId, fromIndex, toIndex);
+                  if (!state.selectedId) return;
+                  onReorderItems(state.selectedId, fromIndex, toIndex);
                 }
               : undefined,
           }}
           removeConfirm={{
-            confirmRemoveItemId,
-            onRequestRemoveItem: (itemId) => setConfirmRemoveItemId(itemId),
-            onCancelRemoveItem: () => setConfirmRemoveItemId(null),
+            confirmRemoveItemId: state.confirmRemoveItemId,
+            onRequestRemoveItem: (itemId) => state.setConfirmRemoveItemId(itemId),
+            onCancelRemoveItem: () => state.setConfirmRemoveItemId(null),
             onConfirmRemoveItem: (projectId, itemId) => {
               onRemoveItem(projectId, itemId);
-              setConfirmRemoveItemId(null);
+              state.setConfirmRemoveItemId(null);
             },
           }}
-          updateProjectLevelChoice={updateProjectLevelChoice}
+          updateProjectLevelChoice={state.updateProjectLevelChoice}
           onUpdateMeasureDefaults={onUpdateMeasureDefaults}
           viewer3D={{
             onOpenQuote3D: () => {
-              setViewerItem(null);
-              setViewerQuoteRun(true);
-              setShow3DModal(true);
+              state.setViewerItem(null);
+              state.setViewerQuoteRun(true);
+              state.setShow3DModal(true);
             },
             onOpenItem3D: (item, mod) => {
-              setViewerQuoteRun(false);
-              setViewerItem({ item, mod });
-              setShow3DModal(true);
+              state.setViewerQuoteRun(false);
+              state.setViewerItem({ item, mod });
+              state.setShow3DModal(true);
             },
           }}
-          itemError={itemError}
-          addItemModalOpen={addItemModalOpen}
-          onOpenAddItemModal={openAddItemModal}
-          onBackToList={backToList}
-          onOpenPresentation={() => setShowPresentation(true)}
+          itemError={state.itemError}
+          addItemModalOpen={state.addItemModalOpen}
+          onOpenAddItemModal={state.openAddItemModal}
+          onBackToList={state.backToList}
+          onOpenPresentation={() => state.setShowPresentation(true)}
           onOpenSpatialStudio={
             onUpdateKitchenLayout
               ? () => {
-                  setPostAddPlaceCue(false);
-                  setSpatialBootstrap(null);
-                  setShowSpatialStudio(true);
+                  state.setPostAddPlaceCue(false);
+                  state.setSpatialBootstrap(null);
+                  state.setShowSpatialStudio(true);
                 }
               : undefined
           }
-          postAddPlaceCue={postAddPlaceCue}
-          onDismissPostAddPlaceCue={() => setPostAddPlaceCue(false)}
+          postAddPlaceCue={state.postAddPlaceCue}
+          onDismissPostAddPlaceCue={() => state.setPostAddPlaceCue(false)}
           onOpenSpatialStudioUnplaced={
-            onUpdateKitchenLayout ? openSpatialStudioUnplaced : undefined
+            onUpdateKitchenLayout ? state.openSpatialStudioUnplaced : undefined
           }
-          onEditMeta={startEditMeta}
+          onEditMeta={state.startEditMeta}
           onDuplicate={onDuplicate}
           onSaveAsTemplate={
             canMutate && onSaveAsTemplate
-              ? (projectId) => startSaveAsTemplate()
+              ? () => state.startSaveAsTemplate()
               : undefined
           }
           onMarkProduced={onMarkProduced}
           onChangeStatus={onChangeStatus}
-          onRequestReopen={() => setConfirmReopen(true)}
-          onRequestDelete={() => setConfirmDelete(true)}
+          onRequestReopen={() => state.setConfirmReopen(true)}
+          onRequestDelete={() => state.setConfirmDelete(true)}
           onUpdateKitchenLayout={onUpdateKitchenLayout}
           onApplyScenarioB={onApplyScenarioB}
           onDuplicateWithScenarioB={onDuplicateWithScenarioB}
@@ -1032,7 +680,7 @@ export function ProjectsScreen({
           onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
           canMutate={canMutate}
           canDelete={canDelete}
-          onRestoreVersion={onRestoreVersion ? (version) => onRestoreVersion(selectedProject.id, version) : undefined}
+          onRestoreVersion={onRestoreVersion ? (version) => onRestoreVersion(state.selectedProject!.id, version) : undefined}
           canReopen={canReopen}
           canForceReopenClosed={canForceReopenClosed}
           canMarkProduced={canMarkProduced}
@@ -1040,29 +688,29 @@ export function ProjectsScreen({
           photos={photos}
           onUploadPhotos={
             onUploadPhotos
-              ? (files, stage, caption) => onUploadPhotos(selectedProject.id, files, stage, caption)
+              ? (files, stage, caption) => onUploadPhotos(state.selectedProject!.id, files, stage, caption)
               : undefined
           }
           onUpdatePhoto={
             onUpdatePhoto
-              ? (photoId, updates) => onUpdatePhoto(selectedProject.id, photoId, updates)
+              ? (photoId, updates) => onUpdatePhoto(state.selectedProject!.id, photoId, updates)
               : undefined
           }
           onDeletePhoto={
             onDeletePhoto
-              ? (photoId) => onDeletePhoto(selectedProject.id, photoId)
+              ? (photoId) => onDeletePhoto(state.selectedProject!.id, photoId)
               : undefined
           }
           workshopName={workshopName}
           internalMessages={internalMessages}
           onSendInternalMessage={
             onSendInternalMessage
-              ? (msg) => onSendInternalMessage({ projectId: selectedProject.id, ...msg })
+              ? (msg) => onSendInternalMessage({ projectId: state.selectedProject!.id, ...msg })
               : undefined
           }
           onUpdateTechnicalWorkflow={
             onUpdateTechnicalWorkflow
-              ? (updates) => onUpdateTechnicalWorkflow(selectedProject.id, updates)
+              ? (updates) => onUpdateTechnicalWorkflow(state.selectedProject!.id, updates)
               : undefined
           }
           assignableOwners={assignableOwners}
@@ -1075,189 +723,115 @@ export function ProjectsScreen({
           onUploadWarrantyPhoto={onUploadWarrantyPhoto}
           onExportWarrantyRefabricationOptimizer={onExportWarrantyRefabricationOptimizer}
         />
-
-
-
       ) : (
-        renderList()
+        <ProjectsListView
+          projects={projects}
+          filtered={state.filtered}
+          customers={customers}
+          projectTemplates={projectTemplates}
+          search={state.search}
+          statusFilter={state.statusFilter}
+          isTrulyEmpty={state.isTrulyEmpty}
+          isFilterEmpty={state.isFilterEmpty}
+          canMutate={canMutate}
+          hasCreateFromTemplate={!!onCreateFromTemplate}
+          hasDeleteTemplate={!!onDeleteTemplate}
+          estimateLabel={estimateLabel}
+          onSearchChange={state.setSearch}
+          onStatusFilterChange={state.setStatusFilter}
+          onClearFilters={() => {
+            state.setSearch('');
+            state.setStatusFilter('all');
+          }}
+          onNewProject={state.startCreate}
+          onFromTemplate={state.startFromTemplate}
+          onManageTemplates={() => state.setTemplatesManagementOpen(true)}
+          onOpenProject={state.openDetail}
+        />
       )}
 
-      <ProjectMetaModal
-        open={metaModalOpen}
-        editingId={metaEditingId}
-        initialDraft={metaDraft}
-        onClose={closeMetaModal}
-        onSubmit={handleSubmitMeta}
+      <ProjectModalsContainer
+        selectedProject={state.selectedProject}
+        modules={modules}
+        categories={categories}
+        optionGroups={optionGroups}
+        materials={materials}
+        edges={edges}
+        hardware={hardware}
+        catalogComponents={catalogComponents}
+        catalogStructures={catalogStructures}
+        catalogAgregados={catalogAgregados}
         customers={customers}
+        workshopSettings={workshopSettings}
         canAssignOwner={canAssignOwner}
         assignableOwners={assignableOwners}
         showCosts={showCosts}
         canMutate={canMutate}
         canReopen={canReopen}
         canMarkProduced={canMarkProduced}
-      />
-
-      <ProjectAddItemModal
-        open={addItemModalOpen}
-        onClose={closeAddItemModal}
-        onSubmit={handleAddItemSubmit}
-        modules={modules}
-        categories={categories}
-        optionGroups={optionGroups}
-        catalogs={catalogs}
-        catalogComponents={catalogComponents}
-        catalogStructures={catalogStructures}
-        catalogAgregados={catalogAgregados}
-        projectLevelChoices={selectedProject?.projectLevelChoices ?? {}}
-        measureDefaults={selectedProject?.measureDefaults}
-      />
-
-      <ProjectConfirmDeleteModal
-        open={confirmDelete && selectedProject != null}
-        projectName={selectedProject?.name ?? ''}
-        onCancel={() => setConfirmDelete(false)}
-        onConfirm={() => {
-          if (selectedProject) handleDelete(selectedProject.id);
+        metaModalOpen={state.metaModalOpen}
+        metaEditingId={state.metaEditingId}
+        metaDraft={state.metaDraft}
+        addItemModalOpen={state.addItemModalOpen}
+        confirmDelete={state.confirmDelete}
+        confirmReopen={state.confirmReopen}
+        showPresentation={state.showPresentation}
+        showSpatialStudio={state.showSpatialStudio}
+        show3DModal={state.show3DModal}
+        viewerItem={state.viewerItem}
+        viewerQuoteRun={state.viewerQuoteRun}
+        templatePickerOpen={state.templatePickerOpen}
+        saveAsTemplateOpen={state.saveAsTemplateOpen}
+        templatesManagementOpen={state.templatesManagementOpen}
+        projectTemplates={projectTemplates}
+        catalogs={state.catalogs}
+        project3dCatalog={state.project3dCatalog}
+        breakdown={breakdown}
+        projectEstimates={projectEstimates}
+        spatialBootstrap={state.spatialBootstrap}
+        planActor={planActor}
+        resolveImageUrl={resolveImageUrl}
+        onCloseMetaModal={state.closeMetaModal}
+        onSubmitMeta={state.handleSubmitMeta}
+        onCloseAddItemModal={state.closeAddItemModal}
+        onAddItemSubmit={state.handleAddItemSubmit}
+        onCancelDelete={() => state.setConfirmDelete(false)}
+        onConfirmDelete={(id) => state.handleDelete(id)}
+        onCancelReopen={() => state.setConfirmReopen(false)}
+        onConfirmReopen={(id) => {
+          onReopen?.(id);
+          state.setConfirmReopen(false);
         }}
-      />
-
-      <ProjectConfirmReopenModal
-        open={confirmReopen && selectedProject != null}
-        projectName={selectedProject?.name ?? ''}
-        onCancel={() => setConfirmReopen(false)}
-        onConfirm={() => {
-          if (selectedProject && onReopen) {
-            onReopen(selectedProject.id);
-            setConfirmReopen(false);
-          }
-        }}
-      />
-
-      {selectedProject ? (
-        <ProjectPresentationMode
-          open={showPresentation}
-          project={selectedProject}
-          modules={modules}
-          customers={customers}
-          optionGroups={optionGroups}
-          catalog={{
-            modules,
-            structures: catalogStructures,
-            components: catalogComponents,
-            materials,
-            edges,
-            hardware,
-            optionGroups,
-          }}
-          salePrice={
-            breakdown?.salePrice ??
-            (typeof projectEstimates[selectedProject.id] === 'number'
-              ? (projectEstimates[selectedProject.id] as number)
-              : null)
-          }
-          workshopName={workshopSettings?.workshopName}
-          resolveMediaUrl={resolveImageUrl}
-          onClose={() => setShowPresentation(false)}
-          onGoToProyectar={
-            onUpdateKitchenLayout
-              ? () => {
-                  setShowPresentation(false);
-                  setShowSpatialStudio(true);
-                }
-              : undefined
-          }
-        />
-      ) : null}
-
-      {selectedProject && onUpdateKitchenLayout ? (
-        <ProjectSpatialStudio
-          open={showSpatialStudio}
-          project={selectedProject}
-          modules={modules}
-          catalog={project3dCatalog}
-          canEdit={canMutate && selectedProject.status === 'draft'}
-          resolveMediaUrl={resolveImageUrl}
-          quoteSalePrice={
-            breakdown?.salePrice ??
-            (typeof projectEstimates[selectedProject.id] === 'number'
-              ? (projectEstimates[selectedProject.id] as number)
-              : null)
-          }
-          bootstrap={spatialBootstrap}
-          onRequestAddItem={
-            canMutate && selectedProject.status === 'draft'
-              ? openAddItemModal
-              : undefined
-          }
-          planActor={planActor}
-          onAcquirePlanEdit={
-            planActor && onAcquirePlanEdit ? handleAcquirePlanEdit : undefined
-          }
-          onRenewPlanEdit={
-            planActor && onRenewPlanEdit ? handleRenewPlanEdit : undefined
-          }
-          onReleasePlanEdit={
-            planActor && onReleasePlanEdit ? handleReleasePlanEdit : undefined
-          }
-          onClose={() => {
-            setShowSpatialStudio(false);
-            setSpatialBootstrap(null);
-          }}
-          onChangeLayout={(layout) =>
-            onUpdateKitchenLayout(selectedProject.id, layout)
-          }
-          onUpdateItem={
-            canMutate && selectedProject.status === 'draft'
-              ? (item) => onUpdateItem(selectedProject.id, item)
-              : undefined
-          }
-        />
-      ) : null}
-
-      <Project3DModal
-        open={show3DModal}
-        project={selectedProject}
-        catalog={project3dCatalog}
-        resolveMediaUrl={resolveImageUrl}
-        focus={
-          viewerQuoteRun || !viewerItem
-            ? null
-            : { item: viewerItem.item, module: viewerItem.mod }
+        onClosePresentation={() => state.setShowPresentation(false)}
+        onGoToProyectar={
+          onUpdateKitchenLayout
+            ? () => {
+                state.setShowPresentation(false);
+                state.setShowSpatialStudio(true);
+              }
+            : undefined
         }
-        onClose={() => {
-          setShow3DModal(false);
-          setViewerItem(null);
-          setViewerQuoteRun(false);
+        onOpenAddItemModal={state.openAddItemModal}
+        onAcquirePlanEdit={planActor && onAcquirePlanEdit ? state.handleAcquirePlanEdit : undefined}
+        onRenewPlanEdit={planActor && onRenewPlanEdit ? state.handleRenewPlanEdit : undefined}
+        onReleasePlanEdit={planActor && onReleasePlanEdit ? state.handleReleasePlanEdit : undefined}
+        onCloseSpatialStudio={() => {
+          state.setShowSpatialStudio(false);
+          state.setSpatialBootstrap(null);
         }}
-      />
-
-      {/* Project templates (#110 / H15) */}
-      <ProjectTemplatePickerModal
-        open={templatePickerOpen}
-        templates={projectTemplates ?? []}
-        customers={customers}
-        workshopSettings={workshopSettings}
-        onClose={() => setTemplatePickerOpen(false)}
-        onConfirm={confirmFromTemplate}
-      />
-
-      <ProjectSaveAsTemplateModal
-        open={saveAsTemplateOpen}
-        initialName={selectedProject?.name ?? ''}
-        onClose={() => setSaveAsTemplateOpen(false)}
-        onConfirm={(name) => {
-          if (selectedProject) {
-            onSaveAsTemplate?.(selectedProject.id, name);
-            setSaveAsTemplateOpen(false);
-          }
+        onUpdateKitchenLayout={onUpdateKitchenLayout}
+        onUpdateItem={onUpdateItem}
+        onClose3DModal={() => {
+          state.setShow3DModal(false);
+          state.setViewerItem(null);
+          state.setViewerQuoteRun(false);
         }}
-      />
-
-      <ProjectTemplatesManagementModal
-        open={templatesManagementOpen}
-        templates={projectTemplates ?? []}
-        onClose={() => setTemplatesManagementOpen(false)}
-        onDeleteTemplate={requestDeleteTemplate}
+        onCloseTemplatePicker={() => state.setTemplatePickerOpen(false)}
+        onConfirmFromTemplate={state.confirmFromTemplate}
+        onCloseSaveAsTemplate={() => state.setSaveAsTemplateOpen(false)}
+        onSaveAsTemplate={onSaveAsTemplate}
+        onCloseTemplatesManagement={() => state.setTemplatesManagementOpen(false)}
+        onDeleteTemplate={state.requestDeleteTemplate}
       />
     </section>
   );

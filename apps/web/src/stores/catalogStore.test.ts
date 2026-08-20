@@ -5,9 +5,12 @@ import type { Catalog } from '@muebles/domain';
 
 import { createCatalogStore, type CatalogStoreDeps } from './catalogStore';
 import { useUiStore } from './uiStore';
+import { useWorkspaceStore } from './workspaceStore';
 
 afterEach(() => {
   useUiStore.getState().disposeUi();
+  // F118 S2 tests: restore the no-session default.
+  useWorkspaceStore.setState({ session: null });
 });
 
 // ---------------------------------------------------------------------------
@@ -29,6 +32,9 @@ function makeDeps(overrides: Partial<CatalogStoreDeps> = {}): {
       toasts.push(input);
     },
   });
+  // F118 S2: the patch error-toast guard silences saves that raced a logout
+  // (session === null). Simulate an active session for these tests.
+  useWorkspaceStore.setState({ session: 'guest' });
   const deps: CatalogStoreDeps = {
     newId: () => `id-${Math.random().toString(36).slice(2, 8)}`,
     saveCatalog: async (c) => {

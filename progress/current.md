@@ -1,30 +1,55 @@
 # Sesión activa
 
-**Feature:** Judgment Day SHELL (auditoría, sin feature in_progress)
-**Estado:** Exploración/auditoría completada — reporte entregado
+**Feature:** F118 — shell_critical_bugfixes
+**Estado:** Done
 **Fecha:** 2026-08-19
 
 ## Objetivo
 
-Judgment day del shell: App.tsx (4101 L) + wiring (routes, AppShell, stores de sesión/ui/proyectos). Funciones, bugs, fallos de lógica y persistencia — no solo estructura.
+Corregir los bugs críticos del shell detectados por el Judgment Day del Shell (docs/history/judgment-day-shell-2026-08-19.md): clobber de workspace al guardar ajustes, carreras de sesión, descarte silencioso del trabajo guest, navegación rota y exports frágiles.
 
 ## Qué se hizo
 
-- 2 exploraciones exhaustivas en paralelo: App.tsx profundo + wiring del shell.
-- Verificación manual de los 4 hallazgos más graves contra el código.
-- Reporte canónico: `docs/history/judgment-day-shell-2026-08-19.md`.
-- Features registradas: **F118** `shell_critical_bugfixes` (pending, prioridad alta), **F119** `shell_refactor_slim` (pending, después de F118).
+### S1 — Clobber de workspace (el bug más grave)
+- `WorkspaceRepository.saveWorkshopSettings(settings)` agregado a la interfaz con contrato explícito: los adaptadores parchean SOLO settings en el workspace persistido (`localStorageWorkspaceRepository.ts`, `jsonFileStorage.ts`; API ya lo tenía).
+- `workspaceStore.saveWorkshopSettings` persiste settings-only (nunca `repository.save()` completo con snapshot stale) con revert solo de settings.
+- Nuevo `workspaceSeq` en workspaceStore: contador que se bumpea SOLO en reemplazos totales (load/setWorkspace/login/logout/enterAsGuest/loadDemoWorkspace). Los effects de sync de App.tsx pasaron de deps `[workspace]` a `[workspaceSeq]` — guardar ajustes ya no puede re-inyectar el catálogo/proyectos viejos en los stores.
 
-## Hallazgos clave (resumen)
+### S2 — Guardas de sesión
+- `loadWorkspace` re-valida la sesión tras el await (resolve tardío post-logout ya no repuebla workspace).
+- `projectStore.patch`: 401 en save → `markSessionExpired`; errores de saves que carrerean un logout no toastean en la pantalla de login (guarda de sesión en projectStore y catalog/shared).
+- `logout` limpia los singletons: `resetCatalogStore()` / `resetProjectStore()` (exportados, no-op si sin inicializar), invocados desde un effect en `App()` cuando la sesión pasa a null.
 
-- **S1 (peor bug de los 3 JD hasta ahora)**: `saveWorkshopSettings` construye el workspace desde el snapshot de carga y `repository.save()` re-PUTea catálogo+proyectos+plantillas VIEJOS al server — guardar un ajuste después de editar revierte UI y servidor. Verificado en workspaceStore.ts:294-309 + apiWorkspaceRepository.ts:254-265 + effects App.tsx:583/688.
-- S2: carreras de sesión sin guardas (loadWorkspace post-logout repuebla workspace; saves 401 sobre el login; singletons sin limpiar).
-- S3: guest→login descarta trabajo guest sin aviso.
-- S4: `/cotizaciones/` hardcodeado → cliente→cotización aterriza en Inicio.
-- S5: "Usuarios" muerto en sidebar guest.
-- A1: 13 handlers de export copy-paste con un solo busy global y errores stale.
-- Deuda: bloque compras/stock (~450 L) nunca migrado a store; AppContent ~2600 L.
+### S3 — Guest → login sin descarte silencioso
+- `workspaceStore` detecta trabajo guest real (key cruda de localStorage + projects > 0) al loguear → `pendingGuestImport`.
+- Modal en App: "Traer a mi cuenta" (`importGuestWorkspace`: push de catálogo+proyectos+plantillas vía repo auth + reload) o "Dejarlo local" (dismiss). Errores inline vía `guestImportError`.
 
-## Próximo paso
+### S4/S5/S6 — Navegación y demo
+- `CustomersScreen.onOpenProject` usa `projectPath()` (antes `/cotizaciones/` hardcodeado → aterrizaba en Inicio).
+- `rbac.ts`: `'users'` fuera del set nav guest (ítem muerto).
+- `loadDemoWorkspace()`: recuperación demo consistente (limpia error/loading, bumpea seq; persiste el seed SOLO en guest — en auth queda session-local para no pisar datos reales).
+- `handleLoadCocinaLopezDemo` resuelve el proyecto demo real por id/nombre; fallback a lista de cotizaciones.
 
-Tomar F118 (bugfixes críticos del shell) y luego F119 (refactor). Siguientes JD sugeridos: Cotizaciones/Proyectos, Producción/Fábrica, Proyectar 3D.
+### A1 — Exports robustos
+- `exportBusy` ahora está respaldado por contador (`exportBusyCount`) — dos exports concurrentes ya no se desbloquean entre sí.
+- `exportErrors` se limpian al cambiar de pantalla (effect en navId).
+- `guardExport(handler)` envuelve los 14 handlers de export — las excepciones de builders/delivery llegan a toast en vez de unhandled rejection.
+
+## Resultados de Verificación
+
+- `pnpm test`: domain 660 · storage 125 · excel 72 · ui 1124 · web 285 · mobile 36 · desktop 17 — **todos verdes**.
+- `pnpm typecheck`: 0 errores.
+- `./init.sh`: **100% verde**.
+
+## Tests nuevos
+
+- `workspaceStore.test.ts`: S1 settings-only + seq no-bump; S2 load post-logout; S3 probe/import/dismiss; S6 demo guest/auth.
+- `localStorageMigration.test.ts` (storage): patch settings-only no toca el catálogo persistido.
+- `uiStore.test.ts`: contador de exportBusy (concurrencia + no negativo).
+- Actualizados: settings persist vía saveWorkshopSettings (antes repository.save), tests de toast de error con sesión activa simulada.
+
+## Notas para el reviewer
+
+- La interfaz `WorkspaceRepository` ganó un método requerido — los tres adaptadores lo implementan; los stubs de test también.
+- El modal guest-import es SM con dos acciones; texto en español de taller.
+- `guardExport` es un wrapper mínimo — F119 lo reemplaza por el helper `runExport` completo.

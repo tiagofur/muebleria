@@ -1,7 +1,7 @@
 /**
  * Component editor — Geometry tab.
  *
- * Critique layout: form column + sticky 3D viewport (desktop). Formula guide
+ * Layout: form column + sticky 3D viewport (desktop). Formula guide
  * collapsed by default; opens on demand or when focusing a formula field.
  */
 
@@ -15,7 +15,6 @@ import {
 import {
   ChevronDown,
   ChevronRight,
-  Lightbulb,
   RotateCcw,
 } from 'lucide-react';
 import type { PlacementDims, ResolvedBoardPart } from '@muebles/domain';
@@ -23,8 +22,9 @@ import type {
   MaterialColorLookup,
   MaterialTextureLookup,
 } from '../../preview3d';
-import { FurnitureScene3D } from '../../preview3d';
 import type { ComponentDraft } from '../componentDraft';
+import { ComponentGeometry3DViewport } from './ComponentGeometry3DViewport';
+import { ComponentFormulaGuide } from './ComponentFormulaGuide';
 
 export type ComponentEditorGeometryPanelProps = {
   readonly formId: string;
@@ -93,7 +93,6 @@ export function ComponentEditorGeometryPanel({
 }: ComponentEditorGeometryPanelProps): ReactNode {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [showOutlines, setShowOutlines] = useState(true);
 
   type DimErrors = { length?: string; width?: string; thickness?: string };
   const [dimErrors, setDimErrors] = useState<DimErrors>({});
@@ -125,114 +124,6 @@ export function ComponentEditorGeometryPanel({
     setGuideOpen(true);
   };
 
-  const preview = (
-    <div
-      className="component-geometry__viewport"
-      data-testid="component-geometry-viewport"
-    >
-      <div className="component-geometry__preview-bar">
-        <div className="component-geometry__container-fields">
-          <span className="component-geometry__container-label">
-            Mueble de referencia:
-          </span>
-          <label className="component-geometry__container-field">
-            <span>Ancho</span>
-            <input
-              type="number"
-              min={1}
-              value={Math.round(containerDims.PW)}
-              onChange={(e) =>
-                onContainerDimsChange({
-                  ...containerDims,
-                  PW: Math.max(1, Number(e.target.value)),
-                })
-              }
-              data-testid="container-pw"
-            />
-          </label>
-          <label className="component-geometry__container-field">
-            <span>Alto</span>
-            <input
-              type="number"
-              min={1}
-              value={Math.round(containerDims.PH)}
-              onChange={(e) =>
-                onContainerDimsChange({
-                  ...containerDims,
-                  PH: Math.max(1, Number(e.target.value)),
-                })
-              }
-              data-testid="container-ph"
-            />
-          </label>
-          <label className="component-geometry__container-field">
-            <span>Prof.</span>
-            <input
-              type="number"
-              min={1}
-              value={Math.round(containerDims.PD)}
-              onChange={(e) =>
-                onContainerDimsChange({
-                  ...containerDims,
-                  PD: Math.max(1, Number(e.target.value)),
-                })
-              }
-              data-testid="container-pd"
-            />
-          </label>
-        </div>
-        <label className="component-geometry__toggle">
-          <input
-            type="checkbox"
-            checked={showInContext}
-            onChange={(e) => onShowInContextChange(e.target.checked)}
-            data-testid="show-in-context-toggle"
-          />
-          <span>Mostrar en el mueble</span>
-        </label>
-        <label className="component-geometry__toggle">
-          <input
-            type="checkbox"
-            checked={showOutlines}
-            onChange={(e) => setShowOutlines(e.target.checked)}
-            data-testid="component-geometry-outlines-toggle"
-          />
-          <span>Contornos</span>
-        </label>
-      </div>
-      <p className="component-geometry__viewport-hint">
-        Referencia solo para el preview (no se guarda en el componente).
-      </p>
-      {/* Unmount WebGL when the geometry tab is hidden (C6). */}
-      {!hidden ? (
-        <FurnitureScene3D
-          modules={[
-            {
-              key: 'component-preview',
-              parts: previewParts,
-              width: containerDims.PW,
-              height: containerDims.PH,
-              depth: containerDims.PD,
-              originX: 0,
-              originY: 0,
-              originZ: 0,
-              showOuterGhost: showInContext,
-            },
-          ]}
-          totalWidth={containerDims.PW}
-          totalHeight={containerDims.PH}
-          totalDepth={containerDims.PD}
-          showFloor={false}
-          colorMode="material"
-          materialColors={materialColors}
-          materialTextures={materialTextures}
-          showOutlines={showOutlines}
-          testId="component-geometry-3d"
-        />
-      ) : null}
-    </div>
-  );
-
   return (
     <div
       role="tabpanel"
@@ -243,58 +134,10 @@ export function ComponentEditorGeometryPanel({
     >
       <div className="component-geometry__workspace">
         <div className="component-geometry__form">
-          <div
-            className="component-geometry__formula-guide"
-            data-testid="formula-vars-guide"
-          >
-            <button
-              type="button"
-              className="component-geometry__formula-guide-toggle"
-              aria-expanded={guideOpen}
-              data-testid="formula-guide-toggle"
-              onClick={() => setGuideOpen((v) => !v)}
-            >
-              {guideOpen ? (
-                <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
-              ) : (
-                <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
-              )}
-              <Lightbulb size={14} strokeWidth={1.5} aria-hidden />
-              <span className="component-geometry__formula-guide-title">
-                Variables de fórmulas
-              </span>
-              <span className="component-geometry__formula-guide-summary">
-                PW · PH · PD · T · i
-              </span>
-            </button>
-            {guideOpen ? (
-              <div
-                className="component-geometry__formula-guide-body"
-                data-testid="formula-guide-body"
-              >
-                <p className="component-geometry__formula-guide-lead">
-                  Matemática estándar: +, −, *, /, ().
-                </p>
-                <div className="component-geometry__formula-vars">
-                  <span title="Ancho total del contenedor/mueble">
-                    <code>PW</code>: Ancho Mueble
-                  </span>
-                  <span title="Alto total del contenedor/mueble">
-                    <code>PH</code>: Alto Mueble
-                  </span>
-                  <span title="Profundidad del contenedor/mueble">
-                    <code>PD</code>: Profundidad
-                  </span>
-                  <span title="Espesor del tablero">
-                    <code>T</code>: Espesor
-                  </span>
-                  <span title="Índice de la copia (0, 1, 2...)">
-                    <code>i</code>: Índice Copia
-                  </span>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <ComponentFormulaGuide
+            guideOpen={guideOpen}
+            onToggle={() => setGuideOpen((v) => !v)}
+          />
 
           <FieldGroup
             title="Dimensiones base"
@@ -638,7 +481,16 @@ export function ComponentEditorGeometryPanel({
           </div>
         </div>
 
-        {preview}
+        <ComponentGeometry3DViewport
+          previewParts={previewParts}
+          materialColors={materialColors}
+          materialTextures={materialTextures}
+          containerDims={containerDims}
+          onContainerDimsChange={onContainerDimsChange}
+          showInContext={showInContext}
+          onShowInContextChange={onShowInContextChange}
+          hidden={hidden}
+        />
       </div>
     </div>
   );

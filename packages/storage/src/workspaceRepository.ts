@@ -1,6 +1,7 @@
 import type {
   Catalog,
   Project,
+  WorkshopSettings,
   ProjectInternalMessage,
   ProjectInternalMessageType,
   ProjectPhoto,
@@ -33,6 +34,13 @@ export interface WorkspaceRepository {
 
   getCatalog(): Promise<Catalog>;
   saveCatalog(catalog: Catalog): Promise<void>;
+
+  /**
+   * Persist ONLY workshop settings. F118 S1: adapters must patch the stored
+   * settings in place — never re-save a whole workspace snapshot built from
+   * possibly-stale in-memory catalog/projects (that clobbered server data).
+   */
+  saveWorkshopSettings(settings: WorkshopSettings): Promise<void>;
 
   getProjects(): Promise<readonly Project[]>;
   /** Create a new project (POST). Prefer this over saveProject for first write. */

@@ -2522,7 +2522,7 @@
         "apps/web/src/App.tsx",
         "packages/storage/src/apiWorkspaceRepository.ts"
       ],
-      "status": "pending",
+      "status": "done",
       "tags": [
         "shell",
         "bugfix",

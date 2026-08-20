@@ -7,6 +7,8 @@
  * unchanged — see catalogStore.ts (combinator + singleton).
  */
 
+import { useWorkspaceStore } from '../workspaceStore';
+
 import type {
   Agregado,
   AmbientCategory,
@@ -266,6 +268,11 @@ export function makeCatalogStoreCtx(
       () => undefined,
       (err: unknown) => {
         console.error('Error al guardar catálogo:', err);
+        // F118 S2: no error toasts from saves that raced a logout — the
+        // login screen must stay clean.
+        if (useWorkspaceStore.getState().session === null) {
+          return Promise.reject(err);
+        }
         toast({
           type: 'error',
           message: 'Error de conexión al sincronizar cambios',

@@ -85,6 +85,7 @@ import type { ProjectDraft } from '@muebles/ui';
 import type { ToastFn } from './catalogStore';
 import { getCatalogStoreState } from './catalogStore';
 import { getUiStoreState } from './uiStore';
+import { useWorkspaceStore } from './workspaceStore';
 
 // ---------------------------------------------------------------------------
 // Helpers (migrated from App.tsx)
@@ -513,8 +514,17 @@ export function createProjectStore(options: InternalOptions) {
     const prevById = new Map(prev.map((p) => [p.id, p]));
     for (const p of nextProjects) {
       if (prevById.get(p.id) !== p) {
-        persistSaveProject(p).catch((err) => {
+        persistSaveProject(p).catch((err: unknown) => {
           console.error('Error al guardar proyecto:', err);
+          // F118 S2: a save that fails because the session ended must expire
+          // the session, and must not toast on the login screen after logout.
+          const message = err instanceof Error ? err.message : String(err);
+          const workspaceState = useWorkspaceStore.getState();
+          if (workspaceState.session === null) return;
+          if (/401|unauthorized/i.test(message) && workspaceState.session === 'auth') {
+            workspaceState.markSessionExpired();
+            return;
+          }
           toast({
             type: 'error',
             message: 'No se pudieron guardar los cambios en el servidor.',
@@ -1644,6 +1654,22 @@ export function getProjectStoreState(): ProjectState {
     );
   }
   return _singleton.getState();
+}
+
+/**
+ * F118 S2: clear project data when the session ends. The store is a module
+ * singleton that would otherwise keep the previous user's projects in
+ * memory behind the login screen. No-op when not initialized yet.
+ */
+export function resetProjectStore(): void {
+  if (!_singleton) return;
+  _singleton.getState().setProjects([]);
+  _singleton.getState().setProjectTemplates([]);
+  _singleton.setState({
+    backendBreakdown: null,
+    breakdownLoading: false,
+    breakdownError: null,
+  });
 }
 
 // ---------------------------------------------------------------------------
