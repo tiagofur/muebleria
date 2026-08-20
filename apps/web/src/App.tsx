@@ -256,6 +256,11 @@ import {
   useBackendBreakdownEffect,
   useUiStore,
   getUiStoreState,
+  usePurchasingStore,
+  ensurePurchasingStore,
+  getPurchasingStoreState,
+  resetPurchasingStore,
+  type PurchasingState,
 } from './stores';
 import { ToastViewport } from './components/ToastViewport';
 import { BoardEditor } from './components/BoardEditor';
@@ -448,6 +453,7 @@ export function App(): ReactNode {
     if (appSession === null) {
       resetCatalogStore();
       resetProjectStore();
+      resetPurchasingStore();
     }
   }, [appSession]);
 
@@ -766,276 +772,93 @@ function AppContent({
     };
   }, [session, isSectorScoped]);
 
-  // Fase 3 + 3b — Compras/Almacén: picking + stock persistence. Loads the
-  // persisted despachos and the stock balances/ledger once per workspace
-  // session; toggles and movements are reported back through the callbacks
-  // below (handleTogglePick lives after `purchasingProjects`, which it needs).
+  // ─── F119: Compras/Almacén lives in purchasingStore ─────────────────────
   const canAccessPurchasing =
     session === 'guest' || roleCanAccessPurchasingNav(actorRole);
-  const [pickingStates, setPickingStates] = useState<ProjectPickingState[] | null>(null);
-  const [stockRows, setStockRows] = useState<MaterialStock[] | null>(null);
-  const [stockMovements, setStockMovements] = useState<StockMovement[] | null>(null);
-  const [suppliers, setSuppliers] = useState<Supplier[] | null>(null);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
+  ensurePurchasingStore({ deps: { getRepository } });
+  const pickingStates = usePurchasingStore((s) => s.pickingStates);
+  const stockRows = usePurchasingStore((s) => s.stockRows);
+  const stockMovements = usePurchasingStore((s) => s.stockMovements);
+  const suppliers = usePurchasingStore((s) => s.suppliers);
+  const purchaseOrders = usePurchasingStore((s) => s.purchaseOrders);
 
-  const reloadPicking = useCallback(async (): Promise<void> => {
-    const repo = getRepository();
-    if (!repo.listPickingStates) return;
-    try {
-      setPickingStates([...await repo.listPickingStates()]);
-    } catch {
-      // keep previous state
-    }
-  }, [getRepository]);
-
-  const refreshStock = useCallback(async (): Promise<void> => {
-    const repo = getRepository();
-    if (!repo.getStock) return;
-    try {
-      const [rows, moves] = await Promise.all([
-        repo.getStock(),
-        repo.listStockMovements
-          ? repo.listStockMovements({ limit: 50 })
-          : Promise.resolve([]),
-      ]);
-      setStockRows([...rows]);
-      setStockMovements([...moves]);
-    } catch {
-      // keep previous state
-    }
-  }, [getRepository]);
-
-  /** Reloads suppliers + purchase orders (Fase 3c). */
-  const refreshPurchasing = useCallback(async (): Promise<void> => {
-    const repo = getRepository();
-    try {
-      const [sps, pos] = await Promise.all([
-        repo.listSuppliers
-          ? repo.listSuppliers()
-          : Promise.resolve([] as readonly Supplier[]),
-        repo.listPurchaseOrders
-          ? repo.listPurchaseOrders()
-          : Promise.resolve([] as readonly PurchaseOrder[]),
-      ]);
-      setSuppliers([...sps]);
-      setPurchaseOrders([...pos]);
-    } catch {
-      // keep previous state
-    }
-  }, [getRepository]);
-
+  // Bulk load per workspace/session (seq bumps on login/logout/reload).
   useEffect(() => {
     if (!canAccessPurchasing) {
-      setPickingStates(null);
-      setStockRows(null);
-      setStockMovements(null);
-      setSuppliers(null);
-      setPurchaseOrders(null);
+      resetPurchasingStore();
       return;
     }
-    const repo = getRepository();
-    if (!repo.listPickingStates && !repo.getStock && !repo.listSuppliers) {
-      setPickingStates(null);
-      setStockRows(null);
-      setSuppliers(null);
-      return;
-    }
-    let cancelled = false;
-    const load = async (): Promise<void> => {
-      const [states, rows, moves, sps, pos] = await Promise.all([
-        repo.listPickingStates
-          ? repo.listPickingStates()
-          : Promise.resolve([] as readonly ProjectPickingState[]),
-        repo.getStock ? repo.getStock() : Promise.resolve([] as readonly MaterialStock[]),
-        repo.listStockMovements
-          ? repo.listStockMovements({ limit: 50 })
-          : Promise.resolve([] as readonly StockMovement[]),
-        repo.listSuppliers
-          ? repo.listSuppliers()
-          : Promise.resolve([] as readonly Supplier[]),
-        repo.listPurchaseOrders
-          ? repo.listPurchaseOrders()
-          : Promise.resolve([] as readonly PurchaseOrder[]),
-      ]);
-      if (cancelled) return;
-      setPickingStates([...states]);
-      setStockRows([...rows]);
-      setStockMovements([...moves]);
-      setSuppliers([...sps]);
-      setPurchaseOrders([...pos]);
-    };
-    load().catch(() => {
-      // Read failure → treat as empty so the screens still work.
-      if (!cancelled) {
-        setPickingStates((prev) => prev ?? []);
-        setStockRows((prev) => prev ?? []);
-        setStockMovements((prev) => prev ?? []);
-        setSuppliers((prev) => prev ?? []);
-        setPurchaseOrders((prev) => prev ?? []);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [canAccessPurchasing, getRepository]);
+    void getPurchasingStoreState().loadAll();
+  }, [canAccessPurchasing, workspaceSeq]);
+
+  const canManagePurchasing = session === 'guest' || roleCanManagePurchasing(actorRole);
 
   const handleRecordStockMovement = useCallback(
-    async (payload: {
+    (payload: {
       kind: StockMaterialKind;
       materialId: string;
       type: StockMovementType;
       quantity: number;
       note?: string;
-    }): Promise<void> => {
-      const repo = getRepository();
-      if (!repo.recordStockMovement) return;
-      try {
-        await repo.recordStockMovement(payload);
-        await refreshStock();
-      } catch (err) {
-        // Rethrow so the modal keeps the form open and shows the message.
-        throw err instanceof Error ? err : new Error('No se pudo registrar el movimiento');
-      }
-    },
-    [getRepository, refreshStock],
+    }) => getPurchasingStoreState().recordStockMovement(payload),
+    [],
   );
 
   const handleUpsertStockMin = useCallback(
-    async (payload: {
+    (payload: {
       kind: StockMaterialKind;
       materialId: string;
       minStock: number;
-    }): Promise<void> => {
-      const repo = getRepository();
-      if (!repo.upsertStockMin) return;
-      try {
-        await repo.upsertStockMin(payload);
-        await refreshStock();
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo guardar el mínimo');
-      }
-    },
-    [getRepository, refreshStock],
+    }) => getPurchasingStoreState().upsertStockMin(payload),
+    [],
   );
 
-  const canManagePurchasing = session === 'guest' || roleCanManagePurchasing(actorRole);
-
-  /** Client-minted id for suppliers/POs (matches the storage port contract). */
-  const newEntityId = (prefix: string): string =>
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? `${prefix}-${crypto.randomUUID().slice(0, 8)}`
-      : `${prefix}-${Date.now().toString(36)}`;
-
-  // ─── Fase 3c — proveedores + órdenes de compra ───────────────────────────
-
   const handleSaveSupplier = useCallback(
-    async (data: {
-      id?: string;
-      name: string;
-      contactName?: string;
-      email?: string;
-      phone?: string;
-      notes?: string;
-      active?: boolean;
-    }): Promise<void> => {
+    async (data: Parameters<PurchasingState['saveSupplier']>[0]) => {
       if (!canManagePurchasing) return;
-      const repo = getRepository();
-      try {
-        if (data.id && repo.updateSupplier) {
-          await repo.updateSupplier({ id: data.id, ...data });
-        } else if (repo.createSupplier) {
-          await repo.createSupplier({ id: data.id ?? newEntityId('sp'), ...data });
-        }
-        await refreshPurchasing();
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo guardar el proveedor');
-      }
+      await getPurchasingStoreState().saveSupplier(data);
     },
-    [canManagePurchasing, getRepository, refreshPurchasing],
+    [canManagePurchasing],
   );
 
   const handleDeactivateSupplier = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string) => {
       if (!canManagePurchasing) return;
-      const repo = getRepository();
-      if (!repo.deactivateSupplier) return;
-      try {
-        await repo.deactivateSupplier(id);
-        await refreshPurchasing();
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo desactivar el proveedor');
-      }
+      await getPurchasingStoreState().deactivateSupplier(id);
     },
-    [canManagePurchasing, getRepository, refreshPurchasing],
+    [canManagePurchasing],
   );
 
   const handleSavePurchaseOrder = useCallback(
-    async (data: {
-      id?: string;
-      supplierId: string;
-      notes?: string;
-      items: readonly PoLineInput[];
-    }): Promise<void> => {
+    async (data: Parameters<PurchasingState['savePurchaseOrder']>[0]) => {
       if (!canManagePurchasing) return;
-      const repo = getRepository();
-      try {
-        if (data.id && repo.updatePurchaseOrder) {
-          await repo.updatePurchaseOrder({ id: data.id, ...data });
-        } else if (repo.createPurchaseOrder) {
-          await repo.createPurchaseOrder({ id: data.id ?? newEntityId('po'), ...data });
-        }
-        await refreshPurchasing();
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo guardar la orden de compra');
-      }
+      await getPurchasingStoreState().savePurchaseOrder(data);
     },
-    [canManagePurchasing, getRepository, refreshPurchasing],
+    [canManagePurchasing],
   );
 
   const handleEmitPurchaseOrder = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string) => {
       if (!canManagePurchasing) return;
-      const repo = getRepository();
-      if (!repo.emitPurchaseOrder) return;
-      try {
-        await repo.emitPurchaseOrder(id);
-        await refreshPurchasing();
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo emitir la orden');
-      }
+      await getPurchasingStoreState().emitPurchaseOrder(id);
     },
-    [canManagePurchasing, getRepository, refreshPurchasing],
+    [canManagePurchasing],
   );
 
   const handleCancelPurchaseOrder = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string) => {
       if (!canManagePurchasing) return;
-      const repo = getRepository();
-      if (!repo.cancelPurchaseOrder) return;
-      try {
-        await repo.cancelPurchaseOrder(id);
-        await refreshPurchasing();
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo cancelar la orden');
-      }
+      await getPurchasingStoreState().cancelPurchaseOrder(id);
     },
-    [canManagePurchasing, getRepository, refreshPurchasing],
+    [canManagePurchasing],
   );
 
   const handleReceivePurchaseOrder = useCallback(
-    async (id: string, lines: readonly PoLineInput[]): Promise<void> => {
+    async (id: string, lines: readonly PoLineInput[]) => {
       if (!canManagePurchasing) return;
-      const repo = getRepository();
-      if (!repo.receivePurchaseOrder) return;
-      try {
-        await repo.receivePurchaseOrder(id, lines);
-        // La recepción registra entradas de stock → refrescar ambos.
-        await Promise.all([refreshPurchasing(), refreshStock()]);
-      } catch (err) {
-        throw err instanceof Error ? err : new Error('No se pudo registrar la recepción');
-      }
+      await getPurchasingStoreState().receivePurchaseOrder(id, lines);
     },
-    [canManagePurchasing, getRepository, refreshPurchasing, refreshStock],
+    [canManagePurchasing],
   );
 
   /** Catálogo para el panel de stock: labels, opciones del modal y códigos→ids. */
@@ -1539,124 +1362,17 @@ function AppContent({
     [purchasingProjects, stockRows, stockCatalog],
   );
 
-  /**
-   * Toggle de picking (Fase 3 + 3b): persiste el estado y, cuando el material
-   * tiene stock, el despacho descuenta por línea (despacho) y el desmarcado
-   * revierte (reverts_id). Si el stock no alcanza, el despacho se revierte y
-   * se muestra el faltante — el picking queda pendiente (server truth).
-   */
   const handleTogglePick = useCallback(
-    ({
-      projectId,
-      material,
-      status,
-    }: {
+    (input: {
       projectId: string;
       material: PickingMaterial;
       status: PickingStatus;
     }) => {
-      const repo = getRepository();
-
-      const persistPicking = async (nextStatus: PickingStatus): Promise<void> => {
-        if (repo.setProjectPickingState) {
-          await repo.setProjectPickingState({ projectId, material, status: nextStatus });
-        }
-        setPickingStates((prev) => {
-          const next = (prev ?? []).filter(
-            (p) => !(p.projectId === projectId && p.material === material),
-          );
-          next.push({ projectId, material, status: nextStatus });
-          return next;
-        });
-      };
-
-      const fail = (err: unknown): void => {
-        // Revierte el estado optimista y refresca stock: la pantalla re-hidrata
-        // desde pickingStates (pendiente) y los chips muestran el saldo real.
-        void reloadPicking();
-        void refreshStock();
-        const msg =
-          err instanceof Error ? err.message : 'No se pudo completar el despacho';
-        toast({ type: 'error', message: msg });
-      };
-
-      void (async () => {
-        try {
-          if (status === 'despachado') {
-            const lines = stockDebitLinesFor(projectId, material);
-            if (lines.length > 0 && repo.recordStockMovement) {
-              // 1) Descuenta stock (todos los materiales con fila). Si uno
-              // falla, acredita los ya debitados y aborta antes de persistir.
-              const created: StockMovement[] = [];
-              try {
-                for (const line of lines) {
-                  created.push(
-                    await repo.recordStockMovement!({
-                      ...line,
-                      type: 'despacho',
-                      projectId,
-                    }),
-                  );
-                }
-              } catch (err) {
-                for (const c of created) {
-                  try {
-                    await repo.recordStockMovement!({
-                      kind: c.kind,
-                      materialId: c.materialId,
-                      type: 'despacho',
-                      quantity: Math.abs(c.delta),
-                      projectId,
-                      revertsId: c.id,
-                    });
-                  } catch {
-                    // best effort
-                  }
-                }
-                fail(err);
-                return;
-              }
-            }
-            // 2) Recién ahora persiste el picking despachado.
-            await persistPicking('despachado');
-            await refreshStock();
-          } else {
-            // Desmarcar: revierte los despachos activos de esta obra/tipo
-            // (ledger, sobrevive a recargas) y persiste pendiente.
-            if (repo.listStockMovements && repo.recordStockMovement) {
-              const moves = await repo.listStockMovements({ kind: material, limit: 200 });
-              const actives = moves.filter(
-                (m) =>
-                  m.type === 'despacho' &&
-                  m.projectId === projectId &&
-                  !m.revertsId,
-              );
-              for (const m of actives) {
-                await repo.recordStockMovement({
-                  kind: m.kind,
-                  materialId: m.materialId,
-                  type: 'despacho',
-                  quantity: Math.abs(m.delta),
-                  projectId,
-                  revertsId: m.id,
-                });
-              }
-            }
-            await persistPicking('pendiente');
-            await refreshStock();
-          }
-        } catch (err) {
-          fail(err);
-        }
-      })();
+      // F119: persistence + ledger revert live in purchasingStore; the debit
+      // lines derive from live projects/catalog so they're computed here.
+      getPurchasingStoreState().togglePick(input, stockDebitLinesFor);
     },
-    [
-      getRepository,
-      reloadPicking,
-      refreshStock,
-      stockDebitLinesFor,
-      toast,
-    ],
+    [stockDebitLinesFor],
   );
   const workshopSettings = resolveWorkshopSettings(workspace?.settings);
   /** Guest/local: full costs; auth uses COST-01 + COST-02 flag (F039/F044). */

@@ -2552,7 +2552,7 @@
         "apps/web/src/stores/",
         "apps/web/src/routes.ts"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "shell",
         "refactor",

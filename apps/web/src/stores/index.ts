@@ -61,3 +61,15 @@ export {
   type PartPose,
   type PartDimensions,
 } from './editorStore';
+
+export {
+  usePurchasingStore,
+  createPurchasingStore,
+  ensurePurchasingStore,
+  getPurchasingStoreState,
+  resetPurchasingStore,
+  type PurchasingState,
+  type PurchasingStoreDeps,
+  type StockDebitLine,
+  type TogglePickInput,
+} from './purchasingStore';
