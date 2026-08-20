@@ -2579,7 +2579,7 @@
         "apps/web/src/derivations/stockCatalog.ts",
         "packages/ui/src/production/FabricScreen.tsx"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "shell",
         "refactor",

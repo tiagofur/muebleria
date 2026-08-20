@@ -37,7 +37,7 @@ import {
   hardwareListFileName,
 } from './exportHardwareList';
 import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
-import { resolveDisplayBreakdown } from './App';
+import { resolveDisplayBreakdown } from './derivations/breakdown';
 import type { QuoteBreakdown } from '@muebles/domain';
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { computeModuleCostPreview } from './App';
+import { computeModuleCostPreview } from './derivations/breakdown';
 import type {
   Catalog,
   Component,
