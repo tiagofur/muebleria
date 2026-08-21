@@ -456,21 +456,27 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
   );
 
   const handleExportCutPlanPtx = useCallback(
-    async (cutPlan: import('@muebles/domain').CutPlan) => {
+    async (
+      cutPlan: import('@muebles/domain').CutPlan,
+      mode?: 'unified' | 'by-material',
+    ) => {
       setExportBusy(true);
       try {
-        const fileName = ptxFileName(cutPlan.projectName || cutPlan.projectId);
+        const selectedMode = mode ?? workspaceSettings?.ptxExportMode ?? 'unified';
         await downloadCutPlanPtx(
           cutPlan,
           {
             projectName: cutPlan.projectName,
             projectCode: cutPlan.projectId,
+            mode: selectedMode,
           },
-          fileName,
         );
         toast({
           type: 'success',
-          message: `✓ ${fileName} descargado`,
+          message:
+            selectedMode === 'by-material'
+              ? '✓ Archivos PTX por material descargados'
+              : '✓ Plan de corte PTX descargado',
         });
       } catch (err) {
         toast({
@@ -484,7 +490,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         setExportBusy(false);
       }
     },
-    [toast],
+    [toast, workspaceSettings?.ptxExportMode],
   );
 
   const handleReleaseToDelivery = useCallback(

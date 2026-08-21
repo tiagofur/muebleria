@@ -7,14 +7,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsScreen } from './SettingsScreen';
+import type { WorkshopSettings } from '@muebles/domain';
 
 afterEach(() => cleanup());
 
-const base = {
+const base: WorkshopSettings = {
   defaultMarginFactor: 1.35,
   defaultLaborFixedCost: 0,
   defaultCurrency: 'MXN',
   vendedorCanViewCosts: false,
+  ptxExportMode: 'unified',
+  defaultSawKerfMm: 4.4,
+  defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+  defaultDeductEdgeBand: true,
 };
 
 describe('SettingsScreen (#37 / F044)', () => {
@@ -39,6 +44,51 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultLaborFixedCost: 200,
       defaultCurrency: 'MXN',
       vendedorCanViewCosts: true,
+      workshopName: undefined,
+      ptxExportMode: 'unified',
+      defaultSawKerfMm: 4.4,
+      defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+      defaultDeductEdgeBand: true,
+    });
+  });
+
+  it('switches to engineering tab and saves engineering defaults', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<SettingsScreen settings={base} onSave={onSave} />);
+
+    // Click engineering tab
+    await user.click(screen.getByTestId('settings-tab-tab-ingenieria'));
+
+    expect(screen.getByTestId('settings-section-ingenieria')).toBeTruthy();
+    const kerfInput = screen.getByTestId('settings-saw-kerf') as HTMLInputElement;
+    expect(kerfInput.value).toBe('4.4');
+
+    // Switch PTX mode to by-material
+    await user.click(screen.getByTestId('settings-ptx-mode-by-material'));
+    await user.clear(kerfInput);
+    await user.type(kerfInput, '4.0');
+
+    // Change trim top
+    const trimTopInput = screen.getByTestId('settings-trim-top');
+    await user.clear(trimTopInput);
+    await user.type(trimTopInput, '15');
+
+    // Toggle deduct edgeband
+    await user.click(screen.getByTestId('settings-deduct-edgeband'));
+
+    await user.click(screen.getByTestId('settings-save'));
+
+    expect(onSave).toHaveBeenCalledWith({
+      defaultMarginFactor: 1.35,
+      defaultLaborFixedCost: 0,
+      defaultCurrency: 'MXN',
+      vendedorCanViewCosts: false,
+      workshopName: undefined,
+      ptxExportMode: 'by-material',
+      defaultSawKerfMm: 4.0,
+      defaultTrimMargins: { topMm: 15, bottomMm: 10, leftMm: 10, rightMm: 10 },
+      defaultDeductEdgeBand: false,
     });
   });
 

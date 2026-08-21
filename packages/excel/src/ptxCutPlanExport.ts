@@ -399,3 +399,90 @@ export function ptxCutPlanExport(input: PtxCutPlanExportInput): Uint8Array {
   const content = generatePtxString(input);
   return new TextEncoder().encode(content);
 }
+
+export interface PtxMaterialCutFile {
+  readonly materialCode: string;
+  readonly materialName: string;
+  readonly fileName: string;
+  readonly ptxContent: string;
+  readonly bytes: Uint8Array;
+  readonly sheetsCount: number;
+  readonly piecesCount: number;
+}
+
+function sanitizeFileNameToken(text: string): string {
+  return (
+    text
+      .replace(/[^\p{L}\p{N}\-_ ]+/gu, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'material'
+  );
+}
+
+/**
+ * Splits a CutPlan by material and generates a distinct PTX file for each finish/thickness.
+ * Ideal for beam saws where cutting is queued per material batch.
+ */
+export function generatePtxByMaterial(
+  input: PtxCutPlanExportInput,
+): readonly PtxMaterialCutFile[] {
+  const { cutPlan, projectName } = input;
+  if (!cutPlan.sheets || cutPlan.sheets.length === 0) {
+    return [];
+  }
+
+  // Group sheets by materialCode (or materialName)
+  const map = new Map<string, { materialName: string; sheets: (typeof cutPlan.sheets)[number][] }>();
+  for (const sheet of cutPlan.sheets) {
+    const code = sheet.materialCode || sheet.materialName || 'DEFAULT';
+    const existing = map.get(code);
+    if (existing) {
+      existing.sheets.push(sheet);
+    } else {
+      map.set(code, {
+        materialName: sheet.materialName || code,
+        sheets: [sheet],
+      });
+    }
+  }
+
+  const baseProject = sanitizeFileNameToken(
+    projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
+  );
+  const results: PtxMaterialCutFile[] = [];
+
+  for (const [matCode, entry] of map.entries()) {
+    const safeMat = sanitizeFileNameToken(matCode !== 'DEFAULT' ? matCode : entry.materialName);
+    const fileName = `${baseProject}_${safeMat}.ptx`;
+
+    const totalPieces = entry.sheets.reduce((sum, s) => sum + s.pieces.length, 0);
+    const subPlan: CutPlan = {
+      ...cutPlan,
+      sheets: entry.sheets,
+      stats: {
+        ...cutPlan.stats,
+        totalSheets: entry.sheets.length,
+        totalPieces,
+      },
+    };
+
+    const ptxContent = generatePtxString({
+      ...input,
+      cutPlan: subPlan,
+    });
+    const bytes = new TextEncoder().encode(ptxContent);
+
+    results.push({
+      materialCode: matCode,
+      materialName: entry.materialName,
+      fileName,
+      ptxContent,
+      bytes,
+      sheetsCount: entry.sheets.length,
+      piecesCount: totalPieces,
+    });
+  }
+
+  return results;
+}

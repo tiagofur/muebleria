@@ -126,7 +126,9 @@ export {
 export {
   ptxCutPlanExport,
   generatePtxString,
+  generatePtxByMaterial,
   type PtxCutPlanExportInput,
+  type PtxMaterialCutFile,
 } from './ptxCutPlanExport';
 
 

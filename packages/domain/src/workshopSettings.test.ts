@@ -23,10 +23,10 @@ describe('workshopSettings (F031 / #37)', () => {
         defaultCurrency: ' mxn ',
       }),
     ).toEqual({
+      ...DEFAULT_WORKSHOP_SETTINGS,
       defaultMarginFactor: 1.5,
       defaultLaborFixedCost: 100,
       defaultCurrency: 'MXN',
-      vendedorCanViewCosts: false,
     });
   });
 
@@ -47,6 +47,34 @@ describe('workshopSettings (F031 / #37)', () => {
         defaultMarginFactor: 0,
         defaultLaborFixedCost: -1,
         defaultCurrency: '',
+      }),
+    ).toEqual(DEFAULT_WORKSHOP_SETTINGS);
+  });
+
+  it('merges engineering settings and normalizes PTX mode, kerf and trim', () => {
+    expect(
+      resolveWorkshopSettings({
+        ptxExportMode: 'by-material',
+        defaultSawKerfMm: 4.0,
+        defaultTrimMargins: { topMm: 15, bottomMm: 15, leftMm: 8, rightMm: 8 },
+        defaultDeductEdgeBand: false,
+      }),
+    ).toEqual({
+      ...DEFAULT_WORKSHOP_SETTINGS,
+      ptxExportMode: 'by-material',
+      defaultSawKerfMm: 4.0,
+      defaultTrimMargins: { topMm: 15, bottomMm: 15, leftMm: 8, rightMm: 8 },
+      defaultDeductEdgeBand: false,
+    });
+  });
+
+  it('falls back invalid engineering values to defaults', () => {
+    expect(
+      resolveWorkshopSettings({
+        // @ts-expect-error test invalid enum
+        ptxExportMode: 'invalid-mode',
+        defaultSawKerfMm: -5,
+        defaultTrimMargins: { topMm: -1, bottomMm: 10, leftMm: 10, rightMm: 10 },
       }),
     ).toEqual(DEFAULT_WORKSHOP_SETTINGS);
   });

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { downloadCutPlanPtx, ptxFileName } from './exportCutPlanPtx';
+import {
+  downloadCutPlanPtx,
+  ptxFileName,
+  ptxZipFileName,
+} from './exportCutPlanPtx';
 import type { CutPlan } from '@muebles/domain';
 import type { DownloadDeps } from './exportOptimizer';
 
@@ -87,7 +91,11 @@ describe('exportCutPlanPtx', () => {
     expect(ptxFileName('')).toBe('plan-de-corte.ptx');
   });
 
-  it('downloadCutPlanPtx triggers download using injected deps', async () => {
+  it('ptxZipFileName formats zip file name', () => {
+    expect(ptxZipFileName('Cocina Moderna')).toBe('seccionadora-materiales-Cocina-Moderna.zip');
+  });
+
+  it('downloadCutPlanPtx triggers download using injected deps (unified mode)', async () => {
     const plan = buildCutPlanFixture();
     const createdAnchors: any[] = [];
     const appendedNodes: any[] = [];
@@ -113,7 +121,7 @@ describe('exportCutPlanPtx', () => {
 
     await downloadCutPlanPtx(
       plan,
-      { projectName: 'Cocina Prueba', customerName: 'Cliente A' },
+      { projectName: 'Cocina Prueba', customerName: 'Cliente A', mode: 'unified' },
       'seccionadora.ptx',
       deps,
     );
@@ -122,5 +130,89 @@ describe('exportCutPlanPtx', () => {
     expect(fakeAnchor.download).toBe('seccionadora.ptx');
     expect(fakeAnchor.click).toHaveBeenCalled();
     expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+  });
+
+  it('downloadCutPlanPtx bundles multiple materials into a ZIP in by-material mode', async () => {
+    const basePlan = buildCutPlanFixture();
+    const multiMatPlan: CutPlan = {
+      ...basePlan,
+      sheets: [
+        ...basePlan.sheets,
+        {
+          sheetIndex: 1,
+          strategy: 'saw-guillotine',
+          materialCode: 'FONDO_3',
+          materialName: 'MDF Fondo Blanco 3mm',
+          sheetLengthMm: 2440,
+          sheetWidthMm: 1220,
+          thicknessMm: 3,
+          netPiecesAreaM2: 0.5,
+          grossSheetAreaM2: 2.9768,
+          usableRemnantAreaM2: 0,
+          wasteAreaM2: 2.4768,
+          wastePercent: 83.2,
+          yieldPercent: 16.8,
+          instructions: [],
+          remnants: [],
+          pieces: [
+            {
+              id: 'p-02',
+              partCode: 'FONDO',
+              partName: 'Fondo',
+              moduleCode: 'BAJO_60',
+              labelRef: 'BAR-FONDO-01',
+              materialName: 'MDF Fondo Blanco 3mm',
+              materialCode: 'FONDO_3',
+              xMm: 10,
+              yMm: 10,
+              lengthMm: 680,
+              widthMm: 560,
+              originalLengthMm: 680,
+              originalWidthMm: 560,
+              grain: 0,
+              rotated: false,
+              L1: 0,
+              L2: 0,
+              W1: 0,
+              W2: 0,
+              sheetIndex: 1,
+              stripIndex: 0,
+              cutSequenceNumber: 1,
+            },
+          ],
+        },
+      ],
+      stats: {
+        ...basePlan.stats,
+        totalSheets: 2,
+        totalPieces: 2,
+      },
+    };
+
+    const fakeAnchor: any = {
+      href: '',
+      download: '',
+      rel: '',
+      click: vi.fn(),
+    };
+
+    const deps: DownloadDeps = {
+      createObjectURL: vi.fn(() => 'blob:mock-zip-url'),
+      revokeObjectURL: vi.fn(),
+      createElement: vi.fn(() => fakeAnchor),
+      appendChild: vi.fn(),
+      removeChild: vi.fn(),
+    };
+
+    await downloadCutPlanPtx(
+      multiMatPlan,
+      { projectName: 'Cocina Integral', mode: 'by-material' },
+      undefined,
+      deps,
+    );
+
+    expect(deps.createObjectURL).toHaveBeenCalled();
+    expect(fakeAnchor.download).toBe('seccionadora-materiales-Cocina-Integral.zip');
+    expect(fakeAnchor.click).toHaveBeenCalled();
   });
 });

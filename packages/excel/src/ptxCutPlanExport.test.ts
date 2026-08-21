@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { ptxCutPlanExport, generatePtxString } from './ptxCutPlanExport';
+import {
+  ptxCutPlanExport,
+  generatePtxString,
+  generatePtxByMaterial,
+} from './ptxCutPlanExport';
 import { ValidationError, type CutPlan } from '@muebles/domain';
 
 function buildCutPlanFixture(): CutPlan {
@@ -196,6 +200,93 @@ describe('ptxCutPlanExport', () => {
     expect(decoded).toContain('[PATTERNS]');
   });
 
+  it('generates separate PTX files per material with generatePtxByMaterial', () => {
+    const basePlan = buildCutPlanFixture();
+    // Add a second sheet with a different material (FONDO_3)
+    const multiMatPlan: CutPlan = {
+      ...basePlan,
+      sheets: [
+        ...basePlan.sheets,
+        {
+          sheetIndex: 1,
+          strategy: 'saw-guillotine',
+          materialCode: 'FONDO_3',
+          materialName: 'MDF Fondo Blanco 3mm',
+          sheetLengthMm: 2440,
+          sheetWidthMm: 1220,
+          thicknessMm: 3,
+          netPiecesAreaM2: 1.0,
+          grossSheetAreaM2: 2.9768,
+          usableRemnantAreaM2: 0,
+          wasteAreaM2: 1.9768,
+          wastePercent: 66.4,
+          yieldPercent: 33.6,
+          instructions: [],
+          remnants: [],
+          pieces: [
+            {
+              id: 'p-03',
+              partCode: 'FONDO_BAJO',
+              partName: 'Fondo Bajo 60',
+              moduleCode: 'BAJO_60',
+              labelRef: 'BAR-FONDO-01',
+              materialName: 'MDF Fondo Blanco 3mm',
+              materialCode: 'FONDO_3',
+              xMm: 10,
+              yMm: 10,
+              lengthMm: 680,
+              widthMm: 560,
+              originalLengthMm: 680,
+              originalWidthMm: 560,
+              grain: 0,
+              rotated: false,
+              L1: 0,
+              L2: 0,
+              W1: 0,
+              W2: 0,
+              edgeBandThicknessMm: 0,
+              sheetIndex: 1,
+              stripIndex: 0,
+              cutSequenceNumber: 1,
+            },
+          ],
+        },
+      ],
+      stats: {
+        ...basePlan.stats,
+        totalSheets: 2,
+        totalPieces: 3,
+      },
+    };
+
+    const files = generatePtxByMaterial({
+      cutPlan: multiMatPlan,
+      projectName: 'Proyecto Integral',
+    });
+
+    expect(files).toHaveLength(2);
+
+    // First file: MEL_BLANCO_18
+    const f1 = files.find((f) => f.materialCode === 'MEL_BLANCO_18');
+    expect(f1).toBeDefined();
+    expect(f1!.fileName).toBe('Proyecto-Integral_MEL_BLANCO_18.ptx');
+    expect(f1!.sheetsCount).toBe(1);
+    expect(f1!.piecesCount).toBe(2);
+    expect(f1!.ptxContent).toContain('TOTAL_PIECES=2');
+    expect(f1!.ptxContent).toContain('MEL_BLANCO_18');
+    expect(f1!.ptxContent).not.toContain('FONDO_3');
+
+    // Second file: FONDO_3
+    const f2 = files.find((f) => f.materialCode === 'FONDO_3');
+    expect(f2).toBeDefined();
+    expect(f2!.fileName).toBe('Proyecto-Integral_FONDO_3.ptx');
+    expect(f2!.sheetsCount).toBe(1);
+    expect(f2!.piecesCount).toBe(1);
+    expect(f2!.ptxContent).toContain('TOTAL_PIECES=1');
+    expect(f2!.ptxContent).toContain('FONDO_3');
+    expect(f2!.ptxContent).not.toContain('MEL_BLANCO_18');
+  });
+
   it('throws ValidationError when cutPlan has no sheets', () => {
     const plan = { ...buildCutPlanFixture(), sheets: [] };
     expect(() => ptxCutPlanExport({ cutPlan: plan })).toThrow(ValidationError);
@@ -209,3 +300,4 @@ describe('ptxCutPlanExport', () => {
     expect(() => ptxCutPlanExport({ cutPlan: plan })).toThrow(ValidationError);
   });
 });
+

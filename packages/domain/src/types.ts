@@ -1188,6 +1188,13 @@ export interface Catalog {
  * Global workshop defaults for new quotations (F031 / #37).
  * Does not mutate existing projects when changed.
  */
+export interface WorkshopTrimMargins {
+  readonly topMm: number;
+  readonly bottomMm: number;
+  readonly leftMm: number;
+  readonly rightMm: number;
+}
+
 export interface WorkshopSettings {
   readonly defaultMarginFactor: number;
   readonly defaultLaborFixedCost: number;
@@ -1199,6 +1206,22 @@ export interface WorkshopSettings {
   readonly vendedorCanViewCosts: boolean;
   /** Workshop / business name shown in PDF exports branding. */
   readonly workshopName?: string;
+  /**
+   * Default PTX packaging mode for beam saws:
+   * - 'unified': single .ptx file containing all materials.
+   * - 'by-material': separate .ptx files per finish/thickness, bundled in .zip.
+   */
+  readonly ptxExportMode?: 'unified' | 'by-material';
+  /** Default saw blade kerf thickness (mm) for 2D guillotine optimization (e.g. 4.4 mm). */
+  readonly defaultSawKerfMm?: number;
+  /** Default perimetral trim margins (mm) around raw boards. */
+  readonly defaultTrimMargins?: WorkshopTrimMargins;
+  /**
+   * Default edgeband deduction policy:
+   * - true: deduct edgeband thickness from raw piece cut dimensions (manual edgebander).
+   * - false: cut to finished dimension (edgebander with pre-milling / tupí).
+   */
+  readonly defaultDeductEdgeBand?: boolean;
 }
 
 export interface Workspace {

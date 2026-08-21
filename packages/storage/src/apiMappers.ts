@@ -1893,6 +1893,13 @@ export function projectTemplateFromApi(
 export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
   const row =
     raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const rawTrim =
+    row.default_trim_margins && typeof row.default_trim_margins === 'object'
+      ? (row.default_trim_margins as Record<string, unknown>)
+      : row.defaultTrimMargins && typeof row.defaultTrimMargins === 'object'
+        ? (row.defaultTrimMargins as Record<string, unknown>)
+        : undefined;
+
   return resolveWorkshopSettings({
     defaultMarginFactor: num(
       row.default_margin_factor ?? row.defaultMarginFactor,
@@ -1908,6 +1915,26 @@ export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
     vendedorCanViewCosts: bool(
       row.vendedor_can_view_costs ?? row.vendedorCanViewCosts,
     ),
+    workshopName: str(
+      row.workshop_name ?? row.workshopName,
+    ),
+    ptxExportMode: (row.ptx_export_mode ?? row.ptxExportMode) as 'unified' | 'by-material' | undefined,
+    defaultSawKerfMm: num(
+      row.default_saw_kerf_mm ?? row.defaultSawKerfMm,
+      4.4,
+    ),
+    defaultTrimMargins: rawTrim
+      ? {
+          topMm: num(rawTrim.top_mm ?? rawTrim.topMm, 10),
+          bottomMm: num(rawTrim.bottom_mm ?? rawTrim.bottomMm, 10),
+          leftMm: num(rawTrim.left_mm ?? rawTrim.leftMm, 10),
+          rightMm: num(rawTrim.right_mm ?? rawTrim.rightMm, 10),
+        }
+      : undefined,
+    defaultDeductEdgeBand: bool(
+      row.default_deduct_edge_band ?? row.defaultDeductEdgeBand,
+      true,
+    ),
   });
 }
 
@@ -1920,6 +1947,18 @@ export function workshopSettingsToApi(
     default_labor_fixed_cost: s.defaultLaborFixedCost,
     default_currency: s.defaultCurrency,
     vendedor_can_view_costs: s.vendedorCanViewCosts,
+    workshop_name: s.workshopName,
+    ptx_export_mode: s.ptxExportMode,
+    default_saw_kerf_mm: s.defaultSawKerfMm,
+    default_trim_margins: s.defaultTrimMargins
+      ? {
+          top_mm: s.defaultTrimMargins.topMm,
+          bottom_mm: s.defaultTrimMargins.bottomMm,
+          left_mm: s.defaultTrimMargins.leftMm,
+          right_mm: s.defaultTrimMargins.rightMm,
+        }
+      : undefined,
+    default_deduct_edge_band: s.defaultDeductEdgeBand,
   };
 }
 
