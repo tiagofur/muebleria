@@ -1,123 +1,299 @@
 # Verificación — Cómo demostrar que el trabajo funciona
 
-> Regla de oro: **el agente no dice "funciona", lo demuestra**.
-> Toda feature termina con evidencia ejecutable, no con afirmaciones.
+> Regla de oro: **el agente no dice “funciona”, lo demuestra**.
+> Toda feature termina con evidencia ejecutable y, cuando aplique, remota.
 
-## Niveles de verificación
+---
 
-### Nivel 1 — Tests unitarios del dominio (obligatorio siempre)
+## 1. Principios
+
+1. Un test verde local es evidencia, no permiso para ignorar CI.
+2. `./init.sh` debe fallar de verdad si el entorno o los tests obligatorios fallan.
+3. Si una métrica, workflow o permiso cambió, probar el comportamiento, no sólo tipos.
+4. Exports físicos requieren fixture/golden/round-trip apropiado.
+5. TS↔Go duplicado requiere fixtures de contrato, no fe manual.
+6. Ninguna feature se marca `done` si falta evidencia exigida por su aceptación.
+
+---
+
+## 2. Gate local base
+
+```bash
+./init.sh
+```
+
+**Contrato objetivo:**
+
+- Node/pnpm requeridos presentes;
+- instalación de dependencias exitosa;
+- tests obligatorios verdes;
+- ningún `|| true` puede convertir un fallo en éxito;
+- monorepo existente no puede “saltar” tests por ausencia de tooling y devolver verde.
+
+> **Deuda conocida al 2026-08-21:** el script actual contiene un fallback `|| true`
+> alrededor del install y debe corregirse mediante Operational Core OC-001. Hasta ese
+> fix, no interpretar `./init.sh` verde como prueba absoluta del install.
+
+---
+
+## 3. Tests por capa
+
+### Domain
 
 ```bash
 pnpm --filter @muebles/domain test
 ```
 
-Cubre: tipos, resolución de BOM, cálculos de costo, validaciones.
-Sin DOM, sin React, sin Electron.
+Cubre BOM, cálculos, routing, lifecycle puro, validaciones, optimizer/machining y helpers
+sin DOM.
 
-### Nivel 2 — Tests de paquetes específicos (obligatorio según feature)
-
-```bash
-pnpm --filter @muebles/excel test    # export Optimizer
-pnpm --filter @muebles/storage test  # persistencia JSON
-pnpm --filter @muebles/ui test       # componentes (si hay tests de componente)
-```
-
-### Nivel 3 — Test de todos los paquetes (obligatorio antes de `done`)
+### UI
 
 ```bash
-pnpm test     # corre Vitest en todos los workspaces
+pnpm --filter @muebles/ui test
 ```
 
-Equivale a `./init.sh` cuando el monorepo existe.
+Probar comportamiento, accesibilidad y wiring; no usar grep de source como sustituto de
+interacción cuando el feature sea interactivo.
 
-### Nivel 4 — Golden test del export (obligatorio para F003, F004, F011)
-
-Cargar fixture de `MOD-GAB-01` + `MOD-CAJ-01` con opciones de la plantilla
-Excel y comparar los totales contra los valores de referencia:
-
-```typescript
-import { describe, it, expect } from "vitest";
-import { GOLDEN_FIXTURE } from "./__fixtures__/plantillaDemo";
-import { calcProjectBreakdown } from "../engine";
-
-it("golden: proyecto demo iguala totales de Plantilla_Muebles.xlsx", () => {
-  const breakdown = calcProjectBreakdown(GOLDEN_FIXTURE.project, ...);
-  expect(breakdown.directCost).toBeCloseTo(GOLDEN_FIXTURE.expected.directCost, 2);
-  // Verificación de mano de obra mixta (modular + fija por proyecto)
-  expect(breakdown.laborModular).toBe(GOLDEN_FIXTURE.expected.laborModular);
-  expect(breakdown.salePrice).toBeCloseTo(GOLDEN_FIXTURE.expected.salePrice, 2);
-});
-```
-
-Cualquier divergencia intencional (ej. merma) debe documentarse en el test.
-
-### Nivel 4b — Pruebas de almacenamiento e integridad (obligatorio para F002, F005)
-
-- **UUIDs e Integridad:** Los tests de `storage` y `engine` deben validar que la carga y guardado de proyectos preserva las relaciones lógicas mediante UUIDs válidos (e.g. que `ProjectItem.moduleId` apunte al `Module.id` del catálogo).
-- **Mano de obra modular:** Validar unitariamente que si un `Module` tiene `baseLaborCost` indefinido o nulo, el motor asume `0` y no lanza excepciones.
-
-### Nivel 5 — Smoke test del export (obligatorio para F004, F010)
+### Storage
 
 ```bash
-node packages/excel/src/__fixtures__/smokeExport.mjs
-# → genera /tmp/optimizer_smoke.xlsx
-# → abre en LibreOffice/Excel y verifica visualmente columnas A-J
+pnpm --filter @muebles/storage test
 ```
 
-### Nivel 6 — Desktop Electron en dev (F032 / #38)
+Round-trip, migrations/adapters, compatibilidad legacy y errores.
 
-Shell delgado: misma UI que web (Vite) + diálogo nativo de guardar para Excel.
+### Excel/exports
 
 ```bash
-# Terminal 1 — UI compartida
-pnpm --filter @muebles/web dev
-
-# Terminal 2 — host Electron (espera a :5173 y abre ventana)
-pnpm --filter @muebles/desktop dev:app
+pnpm --filter @muebles/excel test
 ```
 
-Smoke manual:
+Golden/estructura de XLSX/PDF/DXF/ZPL/CSV según output.
 
-1. La ventana carga la misma app que el browser en `http://localhost:5173`.
-2. Abrí una cotización y **Exportar Optimizer** → diálogo nativo Guardar → archivo `.xlsx` en disco.
-3. Cancelar el diálogo no escribe archivo y muestra toast de cancelación.
-4. El shell **no** calcula costos: solo IPC `excel:showSaveDialog` / `excel:writeExcelFile`.
+### Todo TS
 
-Tests unitarios del package (sin abrir GUI):
+```bash
+pnpm test
+pnpm typecheck
+```
+
+### Backend Go
+
+Ejecutar `go test` sobre el paquete afectado y, antes de cierre de feature server-side,
+la suite backend razonablemente completa definida por el repo.
+
+---
+
+## 4. CI remoto
+
+Operational Core OC-002 debe convertir en required checks, como mínimo:
+
+```text
+feature-list/schema validation
+pnpm test
+pnpm typecheck
+go test
+```
+
+Y checks específicos cuando corresponda.
+
+Una feature que altera workflow/seguridad/persistencia no se considera `verified` si
+sólo existe una afirmación en commit message y no hay evidencia ejecutable.
+
+---
+
+## 5. Contract fixtures TS ↔ Go
+
+Cuando una regla exista en TypeScript y Go:
+
+1. fixture JSON canónico;
+2. ejecutar ambas implementaciones;
+3. comparar resultado normalizado;
+4. divergencia falla CI.
+
+Candidatos prioritarios:
+
+- settings compartidos;
+- roles/status si ambos lados los duplican;
+- pricing cuando siga duplicado;
+- stock/workflow transitions compartidas;
+- mappers de nuevos Operational Core entities.
+
+---
+
+## 6. Golden tests de dominio/export
+
+Mantener los fixtures históricos de `Plantilla_Muebles.xlsx` y
+`Plantilla_Optimizer.xlsx` mientras sigan siendo contratos válidos.
+
+Para nuevas features físicas añadir goldens apropiados:
+
+- cut plan;
+- DXF layers;
+- drilling;
+- piece labels/QR;
+- production pack revision consistency.
+
+### Regla de revisión
+
+Un golden no debe congelar un bug conocido. Si cambia intencionalmente, documentar el
+motivo y actualizar fixture + criterio.
+
+---
+
+## 7. Verificación del lifecycle
+
+Features de `ProjectEvent`, Approval, ProductionRelease o ChangeOrder deben probar:
+
+- actor/timestamp;
+- append-only;
+- idempotencia donde corresponda;
+- transición permitida y rechazada;
+- stale detection;
+- backfill no inventa timestamps;
+- unauthorized bypass falla.
+
+---
+
+## 8. Verificación producción pieza→mueble
+
+### Corte/CNC/Enchape
+
+Tests deben demostrar:
+
+- una pieza puede avanzar sin mover todas las piezas del mueble;
+- routing omite estaciones no requeridas;
+- QR/scan resuelve pieza y revisión correcta;
+- stale revision bloquea o advierte según regla;
+- rework/scrap no destruye historial.
+
+### Armado+
+
+- cantidad de línea produce unidades físicas distinguibles;
+- armado conoce piezas faltantes;
+- QC puede bloquear packaging;
+- load completeness funciona por unidad/bulto;
+- installed no cierra punch automáticamente.
+
+---
+
+## 9. Data Truth tests
+
+Dashboards/KPIs deben probar la semántica:
+
+```text
+actual
+estimated
+forecast
+proxy
+missing
+```
+
+Prohibido testear como correcto un número fabricado por fallback sin etiqueta visible.
+
+Ejemplos a migrar:
+
+- piezas `moduleCount * 8`;
+- m² `moduleCount * 2.8`;
+- canto `moduleCount * 14`;
+- hardware `moduleCount * 4`;
+- fecha depósito/almacén basada sólo en `createdAt`.
+
+---
+
+## 10. Seguridad
+
+Para auth/RBAC:
+
+- respuestas login/refresh no contienen hash/password/secret;
+- role changes se aplican con autoridad server;
+- unauthorized station advance devuelve error;
+- CORS allowlist tiene tests;
+- query-token/media strategy se revisa cuando cambie;
+- logs no exponen secretos.
+
+---
+
+## 11. Persistencia y migraciones
+
+- migraciones aditivas y backward-compatible cuando sea posible;
+- no SQL destructivo sin aprobación explícita del usuario;
+- round-trip legacy → nuevo schema;
+- backfill conservador;
+- ningún default inventa hechos históricos;
+- rollback/compat strategy documentada para entidades críticas.
+
+---
+
+## 12. UI/UX operacional
+
+Además de `docs/design.md`, revisar `docs/operational-ux.md`.
+
+Smoke por screen operativa:
+
+- unidad de trabajo correcta;
+- gate explica blocker;
+- revisión visible cuando importa;
+- acción física deja feedback persistente;
+- estimate vs actual distinguible;
+- responsive/touch según contexto;
+- a11y básica.
+
+---
+
+## 13. Desktop/Mobile
+
+### Electron
 
 ```bash
 pnpm --filter @muebles/desktop test
+pnpm --filter @muebles/desktop dev:app
 ```
 
-## Anti-patrones (no hacer)
+Smoke de dialogs/exports/update según feature.
 
-- ❌ "He implementado la función, debería funcionar." → falta evidencia ejecutable.
-- ❌ Test que solo verifica que no lanza excepción → debe comprobar el valor concreto.
-- ❌ Mock del filesystem → usa `fs.mkdtempSync` real.
-- ❌ Marcar feature `done` sin `pnpm test` verde.
-- ❌ Golden test que ignora divergencias → documenta o corrige.
-- ❌ Cerrar sesión con trabajo **no pushed** → `git push` antes. Si lo
-  perdiste, no hay evidencia que valga. Ver `docs/git-workflow.md`.
-- ❌ Usar `git stash` para guardar trabajo entre sesiones → commitealo en
-  rama `wip/` y pusheala. Los stashes se rompen al aplicar si tienen
-  archivos nuevos (incidente 3D de 2026-07).
-- ❌ Mezclar archivos de features distintas en un mismo commit/stash →
-  reportá al líder y separá en commit/rama atómica.
+### Mobile
 
-## Verificación final antes de cerrar
+Cuando una feature móvil cambia ejecución física/offline:
 
-```bash
-./init.sh
-git push                          # OBLIGATORIO. HEAD local == origin.
-```
+- test queue offline;
+- reconexión;
+- conflicto de revisión;
+- scan;
+- no mostrar “sincronizado” si no llegó al server.
 
-Salida esperada: `[OK] Entorno listo. Puedes empezar a trabajar.`
+---
 
-Si `./init.sh` está rojo, **no** marques nada como `done`.
-Anota el bloqueo en `progress/current.md` y cambia el estado a `blocked` en
-`feature_list.json`.
+## 14. Anti-patrones
 
-Si el `git push` falla o dejás trabajo no pushed, **no cierres la
-sesión**. El trabajo solo en tu disco está a un cierre malo de perderse
-(ver `docs/git-workflow.md`). Hacé commit en rama `wip/` y empuja aunque
-el código esté incompleto.
+- ❌ “debería funcionar”.
+- ❌ test que sólo comprueba que no lanza.
+- ❌ grep del source como único test de UI.
+- ❌ `|| true` alrededor de un gate obligatorio.
+- ❌ métrica proxy presentada como actual.
+- ❌ marcar `done` con tests locales rojos/omitidos.
+- ❌ duplicar regla TS/Go sin contract fixture cuando la divergencia es peligrosa.
+- ❌ cerrar sesión con trabajo no pushed.
+- ❌ `git stash` como almacenamiento de trabajo.
+- ❌ mezclar features no relacionadas en el mismo commit.
+
+---
+
+## 15. Definition of Verified
+
+Antes de declarar una feature verificada:
+
+1. acceptance criteria revisados uno por uno;
+2. tests de capa correspondientes verdes;
+3. typecheck si cambió TS;
+4. Go tests si cambió backend;
+5. migrations probadas si cambió storage;
+6. smoke visual/operacional cuando aplique;
+7. CI remoto verde cuando exista el check;
+8. documentación canónica actualizada si cambió contrato;
+9. commit/push en rama correcta.
+
+Si un check está bloqueado por entorno, se registra como **blocked/environment**; nunca se
+inventa aprobación.
