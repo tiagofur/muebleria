@@ -603,3 +603,31 @@ mezcla trabajo paralelo; agregar por lista explícita de archivos o `git add -p`
 - Notas para backlog (no bloqueantes): defaults de espesor divergentes (resolver
   `?? 15` vs heurística `?? 18`); `resolvePartForPlacement` cae a `parts[0]` sin
   match de rol; wiring productivo resolver→export (prop `drilling`) es F130.
+
+## F129 — Reglas de unión paramétricas sistema 32 (2026-08-21)
+
+- El mueble estándar se perfora solo: `deriveJointHardwarePlacements` (dominio puro)
+  genera placements derivados que el motor F128 resuelve. Defaults de taller:
+  minifix+taquetes (extremos 50, intermedios cada 512, taquetes a ±32 exacto),
+  fondo tornillos perímetro (inset 16, máx 400), bisagra cup 22.5 / placa a
+  línea de sistema D−37 / extremos 100, grilla 32 con snap en intermedios.
+  Cantidad de bisagras via `suggestHingeCount` (workshopRules).
+- Reglas declarativas referencian herrajes por CÓDIGO (portables entre
+  workspaces); overrides parciales se mergean con defaults (effectiveRules).
+  `Structure.jointDrillingRules?` (JSONB aditivo 000065, paridad Go camelCase,
+  drilling-only: NO bump de revisión BOM ni viaja en structureRevision).
+- `BoardPart/ResolvedBoardPart.componentPlacement?` — el BOM expone el
+  placement del componente (bom.ts expansión+resolución) para clasificar piezas.
+- `HardwarePlacement.derivedMachining?`: maquinado de aplicación que reemplaza
+  el perfil de catálogo por placement — el fondo usa piloto PASANTE Ø3 (el
+  tornillo catálogo es ciego 35mm; contrafactual del reviewer: 6 errores
+  DEPTH_EXCEEDS_MATERIAL sin el override). Resolver: derivedMachining ?? catálogo.
+- Corrección física fina: cazuela a T_piso/2 EXACTO del extremo (floor() la
+  sacaba 0.5mm del canto con el Arauco 15mm del demo); espesores siempre del
+  material resuelto, nunca 18 fijo (literal unificado a DEFAULT_BOARD_THICKNESS_MM).
+- Golden del gabete demo (300×720×590) contra BOM real + integración F129→F128
+  pieza por pieza sin issues; round-trip mappers (+2). Suite 2439, typecheck 7/7,
+  go test verde. Review APPROVED (`progress/review_F129.md`).
+- Notas para F131: override «por módulo» aún solo vía parámetro del generador
+  (sin campo en Module); `horizontal[0]!.thicknessMm` asume espesor uniforme
+  por unión; handing/espejo de puerta sigue siendo concern del export (F130).

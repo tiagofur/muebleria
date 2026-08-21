@@ -18,6 +18,7 @@
  */
 
 import { snapValue } from './hardwarePlacement';
+import { DEFAULT_BOARD_THICKNESS_MM } from './partDrilling';
 import { suggestHingeCount } from './workshopRules';
 import type {
   ComponentPlacement,
@@ -191,7 +192,7 @@ function panelJointPlacements(
     if (positions.length === 0) continue;
 
     const minifixId = resolveHardwareId(hardware, rule.minifixCode);
-    const edgeY = (panel.thicknessMm || 18) / 2;
+    const edgeY = (panel.thicknessMm ?? DEFAULT_BOARD_THICKNESS_MM) / 2;
     for (const pos of positions) {
       for (const face of ['bottom', 'top'] as const) {
         if (minifixId) {

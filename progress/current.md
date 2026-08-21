@@ -1,7 +1,7 @@
 # Sesión activa
 
 **Feature:** F129 — Reglas de unión paramétricas sistema 32 (perforaciones CNC — 3/5)
-**Estado:** implementada, esperando review
+**Estado:** done (sesión cerrada, review APPROVED, pushed)
 **Inicio:** 2026-08-21
 
 ## Plan
@@ -47,3 +47,11 @@
 - Persistencia: apiMappers to/from (joint_drilling_rules, revisiones NO), Go
   JointDrillingRules structs (camelCase JSONB), structures.go SELECT/INSERT/UPDATE con
   nullableJSON, migración aditiva 000065 (JSONB).
+
+
+## Cierre (2026-08-21)
+
+- Review APPROVED (`progress/review_F129.md`); fix menor post-review: literal
+  `|| 18` -> `DEFAULT_BOARD_THICKNESS_MM`. F129 done.
+- Serie: F127 OK, F128 OK, F129 OK -> F130 (export DXF por caras + reporte, ya
+  hay wiring adelantado de cb21e4a) -> F131 (editor visual + gizmo) -> F132 (SCM, postergada).
