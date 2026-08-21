@@ -153,9 +153,10 @@ const drillingFixture: PartDrillingPattern[] = [
     widthMm: 500,
     materialName: 'MDF Blanco 18mm',
     holes: [
-      { face: 'front', xMm: 50, yMm: 100, diameterMm: 10, depthMm: 12, type: 'dowel' },
-      { face: 'front', xMm: 750, yMm: 400, diameterMm: 35, depthMm: 12, type: 'minifix' },
-      { face: 'left', xMm: 400, yMm: 250, diameterMm: 8, depthMm: 30, type: 'screw' },
+      // Face-plane convention: front x along width (≤500), y along length (≤800).
+      { face: 'front', xMm: 100, yMm: 50, diameterMm: 10, depthMm: 12, type: 'dowel' },
+      { face: 'front', xMm: 400, yMm: 750, diameterMm: 35, depthMm: 12, type: 'minifix' },
+      { face: 'left', xMm: 9, yMm: 250, diameterMm: 8, depthMm: 30, type: 'screw' },
     ],
   },
   {

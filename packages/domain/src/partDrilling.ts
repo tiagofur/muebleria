@@ -49,15 +49,22 @@ function pieceCode(row: ProductionCutRow, index: number): string {
   return `P${index + 1}`;
 }
 
+/**
+ * F074 name-based heuristic drilling. Coordinates follow the canonical
+ * face-plane convention (see partDrillingResolver / hardwarePlacement):
+ * front/back → x along width, y along length; left/right → x along thickness,
+ * y along length; top/bottom → x along width, y along thickness.
+ */
 export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefinition[] {
   const name = (row.partName || row.description || '').toLowerCase();
   const holes: HoleDefinition[] = [];
   const L = row.lengthMm;
   const W = row.widthMm;
+  const T = row.thicknessMm ?? 18;
 
   if (name.includes('puerta') || name.includes('door')) {
-    // Hinge cup holes 35mm
-    const marginY = Math.min(96, Math.floor(W / 4));
+    // Hinge cup holes 35mm on the inner face, C-distance from the hinge edge.
+    const marginY = Math.min(96, Math.floor(L / 4));
     holes.push(
       {
         face: 'back',
@@ -71,7 +78,7 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
       {
         face: 'back',
         xMm: 22.5,
-        yMm: Math.max(marginY, W - marginY),
+        yMm: Math.max(marginY, L - marginY),
         diameterMm: 35,
         depthMm: 12.5,
         type: 'hinge',
@@ -79,13 +86,14 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
       },
     );
   } else if (name.includes('estante') || name.includes('shelf')) {
-    // Shelf pin holes 5mm on 32mm grid
-    const marginX = Math.min(37, Math.floor(L / 4));
+    // Shelf pin holes 5mm, centered on both board edges.
+    const pinY = Math.floor(L / 2);
+    const pinX = Math.floor(T / 2);
     holes.push(
       {
         face: 'left',
-        xMm: marginX,
-        yMm: Math.floor(W / 2),
+        xMm: pinX,
+        yMm: pinY,
         diameterMm: 5,
         depthMm: 10,
         type: 'shelf',
@@ -93,8 +101,8 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
       },
       {
         face: 'right',
-        xMm: L - marginX,
-        yMm: Math.floor(W / 2),
+        xMm: pinX,
+        yMm: pinY,
         diameterMm: 5,
         depthMm: 10,
         type: 'shelf',
@@ -102,14 +110,15 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
       },
     );
   } else if (name.includes('lateral') || name.includes('side')) {
-    // Minifix (15mm) & Dowels (8mm)
-    const marginX = Math.min(32, Math.floor(L / 4));
-    const marginY = Math.min(32, Math.floor(W / 4));
+    // Minifix (15mm) & dowels (8mm) drilled from the board edge, centered on
+    // the thickness axis.
+    const marginX = Math.min(32, Math.floor(W / 4));
+    const edgeY = Math.floor(T / 2);
     holes.push(
       {
         face: 'top',
         xMm: marginX,
-        yMm: marginY,
+        yMm: edgeY,
         diameterMm: 15,
         depthMm: 12,
         type: 'minifix',
@@ -118,16 +127,16 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
       {
         face: 'top',
         xMm: marginX + 32,
-        yMm: marginY,
+        yMm: edgeY,
         diameterMm: 8,
-        depthMm: 28,
+        depthMm: 15,
         type: 'dowel',
         description: 'Perforación tarugo 8mm frontal',
       },
       {
         face: 'top',
-        xMm: L - marginX,
-        yMm: marginY,
+        xMm: W - marginX,
+        yMm: edgeY,
         diameterMm: 15,
         depthMm: 12,
         type: 'minifix',
@@ -135,54 +144,35 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
       },
       {
         face: 'top',
-        xMm: L - marginX - 32,
-        yMm: marginY,
+        xMm: W - marginX - 32,
+        yMm: edgeY,
         diameterMm: 8,
-        depthMm: 28,
+        depthMm: 15,
         type: 'dowel',
         description: 'Perforación tarugo 8mm posterior',
       },
     );
   } else if (name.includes('fondo') || name.includes('back')) {
-    // Screw pilot holes 3mm along perimeter
-    holes.push(
-      {
+    // Screw pilot holes 3mm inset from each corner of the inner face.
+    const insetX = Math.min(16, Math.floor(W / 4));
+    const insetY = Math.min(16, Math.floor(L / 4));
+    const corners: ReadonlyArray<readonly [number, number]> = [
+      [insetX, insetY],
+      [W - insetX, insetY],
+      [W - insetX, L - insetY],
+      [insetX, L - insetY],
+    ];
+    corners.forEach(([cx, cy], i) => {
+      holes.push({
         face: 'front',
-        xMm: 16,
-        yMm: 16,
+        xMm: cx,
+        yMm: cy,
         diameterMm: 3,
         depthMm: 10,
         type: 'screw',
-        description: 'Pase de tornillo fondo esquina 1',
-      },
-      {
-        face: 'front',
-        xMm: L - 16,
-        yMm: 16,
-        diameterMm: 3,
-        depthMm: 10,
-        type: 'screw',
-        description: 'Pase de tornillo fondo esquina 2',
-      },
-      {
-        face: 'front',
-        xMm: L - 16,
-        yMm: W - 16,
-        diameterMm: 3,
-        depthMm: 10,
-        type: 'screw',
-        description: 'Pase de tornillo fondo esquina 3',
-      },
-      {
-        face: 'front',
-        xMm: 16,
-        yMm: W - 16,
-        diameterMm: 3,
-        depthMm: 10,
-        type: 'screw',
-        description: 'Pase de tornillo fondo esquina 4',
-      },
-    );
+        description: `Pase de tornillo fondo esquina ${i + 1}`,
+      });
+    });
   }
 
   return holes;

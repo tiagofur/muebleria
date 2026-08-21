@@ -590,4 +590,34 @@ describe('resolvePartDrilling — Fallback F074', () => {
     expect(result.holes).toHaveLength(1);
     expect(result.holes[0]!.xMm).toBe(100);
   });
+
+  // Review F128: la heurística F074 respeta la convención de face-planes, así
+  // que el fallback no debe emitir HOLE_OUT_OF_BOUNDS falsos en lateral/fondo.
+  it('fallback lateral: agujeros de canto dentro de la pieza, sin issues', () => {
+    const result = resolvePartDrilling({
+      piece: { ...testDoor, description: 'Lateral izquierdo', lengthMm: 700, widthMm: 500 },
+    });
+
+    expect(result.fallbackUsed).toBe(true);
+    expect(result.holes).toHaveLength(4);
+    expect(result.holes.every((h) => h.face === 'top')).toBe(true);
+    // Cara top: x a lo ancho (≤ 500), y a lo largo del espesor (≤ 18).
+    expect(result.holes.every((h) => h.xMm >= 0 && h.xMm <= 500)).toBe(true);
+    expect(result.holes.every((h) => h.yMm >= 0 && h.yMm <= 18)).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+
+  it('fallback fondo: pilotos de esquina dentro de la pieza, sin issues', () => {
+    const result = resolvePartDrilling({
+      piece: { ...testDoor, description: 'Fondo', lengthMm: 720, widthMm: 500, thicknessMm: 15 },
+    });
+
+    expect(result.fallbackUsed).toBe(true);
+    expect(result.holes).toHaveLength(4);
+    expect(result.holes.every((h) => h.face === 'front')).toBe(true);
+    // Cara front: x a lo ancho (≤ 500), y a lo largo (≤ 720).
+    expect(result.holes.every((h) => h.xMm >= 0 && h.xMm <= 500)).toBe(true);
+    expect(result.holes.every((h) => h.yMm >= 0 && h.yMm <= 720)).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
 });

@@ -208,7 +208,11 @@ function drawPiece(
     if (pattern) {
       for (const hole of pattern.holes) {
         if (!PROJECTED_DRILLING_FACES.has(hole.face)) continue;
-        entities.push(circle('PERF', x + hole.xMm, y + hole.yMm, hole.diameterMm / 2));
+        // Face-plane convention (partDrillingResolver, mirrors hardwarePlacement):
+        // front/back holes carry xMm along the piece WIDTH and yMm along the
+        // LENGTH. The piece rect is drawn with X = length, so the front/back
+        // projection swaps axes. F130's resolver→export adapter relies on this.
+        entities.push(circle('PERF', x + hole.yMm, y + hole.xMm, hole.diameterMm / 2));
       }
     }
   }
