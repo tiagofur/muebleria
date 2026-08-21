@@ -2926,7 +2926,7 @@
         "packages/ui/src/settings/SettingsScreen.tsx",
         "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "production",
         "optimizer",

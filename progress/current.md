@@ -1,7 +1,7 @@
 # Sesión activa
 
 **Feature:** F133 — Tipo de corte por defecto del taller (sierra | nesting)
-**Estado:** in_progress
+**Estado:** done (sesión cerrada, revisada y pusheada)
 **Inicio:** 2026-08-20
 
 ## Plan
@@ -38,3 +38,16 @@
   - Tests: domain +4, storage +3, ui +5 (settings + panel), web +2 (payloads
     actualizados con el campo nuevo). Suite 2391, typecheck 7/7,
     `go test` storage/domain/api verdes (normalize table-driven).
+
+## Incidente y split de commits
+
+El primer commit de F133 (`4fbfe80`) mezcló trabajo PTX/settings que apareció en
+el working tree en paralelo (del taller). Se partió en `abbcb10` (trabajo del
+taller, verde standalone) + `997bf3b` (F133 pura); reviewer verificó split exacto
+(diff vacío vs 4fbfe80) y se force-pusheeó. Detalle en history.md (F133).
+
+## Siguiente
+
+F128 — Motor de resolución de perforaciones (placements + perfiles F127 →
+agujeros por pieza). Follow-ups anotados: paridad Go de settings PTX,
+`btn--secondary` del panel.

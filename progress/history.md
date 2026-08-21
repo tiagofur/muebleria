@@ -543,3 +543,37 @@ Aprobada la migración de Producción de cola plana a cards por obra/estación, 
 - Persistencia completa: apiMappers TS (normaliza en ingest, null legacy), store web (create/update/drop), Go struct + scan/insert/update JSONB, migración aditiva `000063_hardware_machining` (embed automático).
 - Tests: domain +22 (validación/normalize/golden seeds), storage +3 (round-trip API), ui +5 (editor), web +2 (store preserva perfil), Go `TestHardware_PersistsMachiningProfile` integración real Postgres (nil preservado, clear on update, dos partes con profundidades). Suite 2376 + typecheck 7/7 + go test verdes.
 - Review: APPROVED tras fixes (push + imports fusionados en catalog/hardware.ts); evidencia en `progress/review_F127.md`.
+
+## F133 — Tipo de corte por defecto del taller (2026-08-20)
+
+- Surge de uso real: el usuario no encontraba el cambio sierra→nesting (vive en
+  Ingeniería → tab Optimización, por obra, F126) y el fallback para obras sin plan
+  estaba hardcodeado a Sierra. F133 agrega el default de taller con precedencia
+  **plan de la obra → default del taller → sierra**.
+- `CutStrategy` movida a `types.ts` (re-export en `optimizer/types.ts`, sin ciclo);
+  `WorkshopSettings.defaultCutStrategy?` + validación del union en `resolveWorkshopSettings`
+  (basura → saw-guillotine). Mappers API snake_case (`default_cut_strategy`).
+- Ajustes → Ingeniería y Producción: fieldset «Tipo de corte» con radios Sierra
+  (guillotina) | CNC nesting + hint de precedencia; panel de Optimización inicializa
+  con `plan ?? defaultCutStrategy ?? sierra`; wiring ShellView → EngineeringWorkspace → panel.
+- Paridad Go: `WorkshopSettings.DefaultCutStrategy`, SELECT/UPSERT + normalize,
+  migración aditiva `000064` (TEXT nullable). Tests: domain +4, storage +3, ui +5,
+  SettingsScreen payloads; suite 2391, typecheck 7/7, go test verde. Review APPROVED
+  (`progress/review_F133.md`).
+
+### Incidente de proceso (resuelto)
+
+El primer commit de F133 (`4fbfe80`) mezcló por accidente trabajo PTX/settings del
+taller que apareció en el working tree **en paralelo** durante la sesión (PTX por
+material + tab Ajustes de Ingeniería). Se partió la historia: `abbcb10` = trabajo
+del taller verificado verde standalone (domain 690, excel 85, web 290), `997bf3b` =
+F133 pura; el reviewer verificó `git diff 4fbfe80 997bf3b` vacío (split exacto) y
+se reemplazó el commit mixto por force-with-lease. Lección: `git add -A` ciega
+mezcla trabajo paralelo; agregar por lista explícita de archivos o `git add -p`.
+
+### Deuda anotada (follow-ups)
+
+- Settings PTX (`ptxExportMode`, `defaultSawKerfMm`, trims, `deductEdgeBand`) sin
+  paridad Go — en modo server se pierden al recargar (falta de la sesión PTX, no de F133).
+- Botón «Por Material (ZIP)» del panel usa `btn--secondary` (clase inexistente) —
+  fix del lado PTX. Estilos inline px en Settings (deuda heredada del patrón PTX).
