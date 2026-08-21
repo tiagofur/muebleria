@@ -148,11 +148,24 @@ export function InstallationJobPanel({
 
       {/* ── Visitas (OC-071) ─────────────────────────────────────────── */}
       <div className="ship-board__section">
-        <h4 className="ship-board__section-title">
-          <CalendarDays size={14} strokeWidth={1.5} aria-hidden />
-          Visitas de campo
-          <span className="ship-board__section-count">{job?.visits.length ?? 0}</span>
-        </h4>
+        <div className="ship-board__section-header">
+          <h4 className="ship-board__section-title">
+            <CalendarDays size={14} strokeWidth={1.5} aria-hidden />
+            Visitas de campo
+            <span className="ship-board__section-count">{job?.visits.length ?? 0}</span>
+          </h4>
+          {canManage && !visitFormOpen ? (
+            <button
+              type="button"
+              className="btn btn--small"
+              onClick={() => setVisitFormOpen(true)}
+              data-testid={`installation-new-visit-${projectId}`}
+            >
+              <CalendarDays size={16} strokeWidth={1.5} aria-hidden />
+              Programar visita
+            </button>
+          ) : null}
+        </div>
         <ul className="ship-board__list">
           {(job?.visits ?? []).map((visit) => (
             <li
@@ -250,9 +263,8 @@ export function InstallationJobPanel({
             </li>
           ))}
         </ul>
-        {canManage ? (
-          visitFormOpen ? (
-            <div className="ship-board__inline-form">
+        {canManage && visitFormOpen ? (
+          <div className="ship-board__inline-form">
               <input
                 aria-label="Fecha de la visita"
                 type="date"
@@ -290,18 +302,7 @@ export function InstallationJobPanel({
               <button type="button" className="btn btn--small" onClick={() => setVisitFormOpen(false)}>
                 Volver
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--small"
-              onClick={() => setVisitFormOpen(true)}
-              data-testid={`installation-new-visit-${projectId}`}
-            >
-              <CalendarDays size={16} strokeWidth={1.5} aria-hidden />
-              Programar visita
-            </button>
-          )
+          </div>
         ) : null}
       </div>
 
@@ -375,13 +376,26 @@ export function InstallationJobPanel({
 
       {/* ── Punch list (OC-073) ──────────────────────────────────────── */}
       <div className="ship-board__section">
-        <h4 className="ship-board__section-title">
-          <ListChecks size={14} strokeWidth={1.5} aria-hidden />
-          Pendientes (Punch list)
-          {view.openPunchCount > 0 ? (
-            <span className="ship-board__section-count">{view.openPunchCount}</span>
+        <div className="ship-board__section-header">
+          <h4 className="ship-board__section-title">
+            <ListChecks size={14} strokeWidth={1.5} aria-hidden />
+            Pendientes (Punch list)
+            {view.openPunchCount > 0 ? (
+              <span className="ship-board__section-count">{view.openPunchCount}</span>
+            ) : null}
+          </h4>
+          {canManage && !punchFormOpen ? (
+            <button
+              type="button"
+              className="btn btn--small"
+              onClick={() => setPunchFormOpen(true)}
+              data-testid={`installation-new-punch-${projectId}`}
+            >
+              <ListChecks size={16} strokeWidth={1.5} aria-hidden />
+              Abrir pendiente
+            </button>
           ) : null}
-        </h4>
+        </div>
         <ul className="ship-board__list">
           {(job?.punchItems ?? []).map((punch) => (
             <li
@@ -453,9 +467,8 @@ export function InstallationJobPanel({
             </li>
           ))}
         </ul>
-        {canManage ? (
-          punchFormOpen ? (
-            <div className="ship-board__inline-form ship-board__inline-form--wide">
+        {canManage && punchFormOpen ? (
+          <div className="ship-board__inline-form ship-board__inline-form--wide">
               <input
                 type="text"
                 placeholder="Pendiente detectado…"
@@ -521,18 +534,7 @@ export function InstallationJobPanel({
               <button type="button" className="btn btn--small" onClick={() => setPunchFormOpen(false)}>
                 Volver
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--small"
-              onClick={() => setPunchFormOpen(true)}
-              data-testid={`installation-new-punch-${projectId}`}
-            >
-              <ListChecks size={16} strokeWidth={1.5} aria-hidden />
-              Abrir pendiente
-            </button>
-          )
+          </div>
         ) : null}
       </div>
 

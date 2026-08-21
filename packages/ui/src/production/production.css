@@ -2883,3 +2883,16 @@
     align-items: flex-start;
   }
 }
+
+/* Título de sección + acción alineada a la derecha (no estirada en columna). */
+.ship-board__section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ship-board__section-header .ship-board__section-title {
+  flex: 1 1 auto;
+}
