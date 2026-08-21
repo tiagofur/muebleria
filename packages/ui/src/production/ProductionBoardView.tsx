@@ -22,6 +22,7 @@ import {
   computeBoardCutLayout,
   DEFAULT_SHEET_L,
   DEFAULT_SHEET_W,
+  EMPTY_BOARD_CUT_LAYOUT,
   simplePack,
 } from './board/productionBoardLayout';
 import { ProductionBoardSvg } from './board/ProductionBoardSvg';
@@ -55,6 +56,9 @@ export function ProductionBoardView({
     : (sheetWidthMm ?? DEFAULT_SHEET_W);
 
   const isExactPlan = Boolean(sheet && sheet.pieces);
+  // Nesting sheets (F124) have no guillotine structure: strip rip lines, cross
+  // cuts and the 1st-cut marker are saw-only decorations.
+  const isNestingSheet = isExactPlan && sheet?.strategy === 'cnc-nesting';
 
   const legacyPlaced = useMemo(() => {
     if (isExactPlan || !rows) return [];
@@ -65,10 +69,13 @@ export function ProductionBoardView({
   const svgW = lengthMm * scale;
   const svgH = widthMm * scale;
 
-  // Analysis of Guillotine cuts, strips, and waste gaps
+  // Analysis of Guillotine cuts, strips, and waste gaps (saw sheets only)
   const layout = useMemo(
-    () => computeBoardCutLayout(sheet, lengthMm, widthMm),
-    [sheet, lengthMm, widthMm],
+    () =>
+      isNestingSheet
+        ? EMPTY_BOARD_CUT_LAYOUT
+        : computeBoardCutLayout(sheet, lengthMm, widthMm),
+    [sheet, lengthMm, widthMm, isNestingSheet],
   );
 
   const fillPct = useMemo(() => {
@@ -92,7 +99,9 @@ export function ProductionBoardView({
             : ''}
           {lengthMm} × {widthMm} mm
           {isExactPlan
-            ? ` · Guillotina 2D (${layout.layoutDirection === 'horizontal' ? 'Franjas Horizontales' : 'Columnas Verticales'})`
+            ? isNestingSheet
+              ? ' · CNC Nesting'
+              : ` · Guillotina 2D (${layout.layoutDirection === 'horizontal' ? 'Franjas Horizontales' : 'Columnas Verticales'})`
             : showEstimateMetrics
               ? ' · preview estimada'
               : ''}

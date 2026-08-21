@@ -99,6 +99,19 @@ export interface BoardCutLayout {
   readonly primaryCut: PrimaryCutInfo | null;
 }
 
+/**
+ * CNC nesting sheets carry no guillotine decoration: no strip rip lines, no
+ * cross cuts, no 1st-cut marker. The router/fresa follows piece contours, so
+ * the only meaningful geometry is the pieces and the sheet remnants.
+ */
+export const EMPTY_BOARD_CUT_LAYOUT: BoardCutLayout = {
+  layoutDirection: 'horizontal',
+  strips: [],
+  crossCuts: [],
+  wasteBlocks: [],
+  primaryCut: null,
+};
+
 export function computeBoardCutLayout(
   sheet: CutPlanSheet | undefined,
   lengthMm: number,

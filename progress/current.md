@@ -48,6 +48,13 @@
   la barra de parámetros. Tests migrados de aria-pressed a checked (mismos testids).
   Suite ui 1139, typecheck verde.
 
+- 2026-08-20 (post-cierre, 2): feedback del dueño — el visor de tableros dibujaba
+  líneas auxiliares de corte guillotina (franjas, cross cuts, marcador de 1er corte)
+  también en sheets de nesting, y el título decía «Guillotina 2D» para cualquier plan.
+  Ahora `ProductionBoardView` es strategy-aware: sheets `cnc-nesting` renderizan solo
+  piezas + retazos/descartes (EMPTY_BOARD_CUT_LAYOUT) y el header dice «CNC Nesting»;
+  legacy sin strategy sigue viéndose como sierra. Tests nuevos del visor (3).
+
 ## Incidente y split de commits
 
 El primer commit de F133 (`4fbfe80`) mezcló trabajo PTX/settings que apareció en
