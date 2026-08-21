@@ -1,7 +1,8 @@
-# Sesión activa: Issue #303 — Operational Core O4: Instalación profesional (OC-070..OC-074)
+# Sesión cerrada: Issue #303 — Operational Core O4: Instalación profesional (OC-070..OC-074)
 
 **Fecha:** 2026-08-21
-**Feature:** F137 — `operational_core_o4`
+**Feature:** F137 — `operational_core_o4` — **done**
+**Rama:** `feat/f137-installation-closeout` (pusheada, PR abierto)
 
 ## Objetivo
 
@@ -24,7 +25,9 @@ cierre y closeout/conformidad auditado (OC-070..OC-074).
       que explican cómo resolverse) incrustado en `InstalacionesScreen` + wiring
       AppContent/ShellView/store
 - [x] Verificación completa
-- [ ] Reviewer
+- [x] Reviewer: CHANGES_REQUESTED con 3 defects menores de copy/formato (+2
+      recomendaciones) — todos aplicados y suites re-verificadas en verde
+      (ver `progress/review_F137.md` y `progress/history.md`)
 
 ## Qué se implementó
 

@@ -1691,7 +1691,15 @@ export function AppContent({
           });
       } else {
         projectActions.applyInstallationProject(projectId, local.project);
-        toast({ type: 'success', message: '✓ Registrado' });
+        toast({
+          type: 'success',
+          message:
+            payload.action === 'complete_installation'
+              ? '✓ Instalación completada'
+              : payload.action === 'sign_off'
+                ? '✓ Conformidad registrada'
+                : '✓ Proyecto cerrado',
+        });
       }
     },
     [getRepository, projectActions, toast],
@@ -1745,7 +1753,8 @@ export function AppContent({
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
     const repo = getRepository();
     if (!repo.claimProductionActivity) return;
-    try {      const activity = await repo.claimProductionActivity({ projectId, sector });
+    try {
+      const activity = await repo.claimProductionActivity({ projectId, sector });
       setFabricActiveClaims((previous) => [...previous, {
         activityId: activity.id,
         projectId: activity.projectId,

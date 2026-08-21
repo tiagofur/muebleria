@@ -39,6 +39,17 @@ const ISSUE_STATUS_BADGE: Record<string, string> = {
   verified: 'status-badge status-badge--accepted',
 };
 
+/** Calendar dates (YYYY-MM-DD) rendered in the workshop's locale, TZ-safe. */
+function formatDayDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 const SEVERITY_BADGE: Record<PunchSeverity, string> = {
   minor: 'status-badge status-badge--cancelled',
   major: 'status-badge status-badge--progress',
@@ -116,7 +127,15 @@ export function InstallationJobPanel({
   return (
     <div className="ship-board__job" data-testid={testId ?? `installation-job-${projectId}`}>
       <div className="ship-board__job-status">
-        <span className="status-badge status-badge--open">
+        <span
+          className={
+            view.jobStatus === 'completed'
+              ? 'status-badge status-badge--done'
+              : view.jobStatus === 'in_progress'
+                ? 'status-badge status-badge--progress'
+                : 'status-badge status-badge--open'
+          }
+        >
           Instalación: {view.jobStatusLabel}
         </span>
         <span className="ship-board__job-meta">
@@ -143,7 +162,7 @@ export function InstallationJobPanel({
             >
               <div className="ship-board__row-main">
                 <span className="ship-board__row-module">
-                  {visit.date} · {visit.crew.join(', ')}
+                  {formatDayDate(visit.date)} · {visit.crew.join(', ')}
                 </span>
                 <span className="ship-board__row-meta">
                   <span className={VISIT_STATUS_BADGE[visit.status]}>
@@ -213,7 +232,7 @@ export function InstallationJobPanel({
                       Guardar
                     </button>
                     <button type="button" className="btn btn--small" onClick={() => setCompletingVisitId(null)}>
-                      volver
+                      Volver
                     </button>
                   </div>
                 ) : (
@@ -269,7 +288,7 @@ export function InstallationJobPanel({
                 Programar
               </button>
               <button type="button" className="btn btn--small" onClick={() => setVisitFormOpen(false)}>
-                volver
+                Volver
               </button>
             </div>
           ) : (
@@ -373,7 +392,7 @@ export function InstallationJobPanel({
               <div className="ship-board__row-main">
                 <span className="ship-board__row-module">
                   {punch.description} — {punch.owner}
-                  {punch.dueDate ? ` · límite ${punch.dueDate}` : ''}
+                  {punch.dueDate ? ` · límite ${formatDayDate(punch.dueDate)}` : ''}
                 </span>
                 <span className="ship-board__row-meta">
                   <span className={SEVERITY_BADGE[punch.severity]}>
@@ -415,7 +434,7 @@ export function InstallationJobPanel({
                       className="btn btn--small"
                       onClick={() => setClosingPunchId(null)}
                     >
-                      volver
+                      Volver
                     </button>
                   </div>
                 ) : (
@@ -500,7 +519,7 @@ export function InstallationJobPanel({
                 Abrir pendiente
               </button>
               <button type="button" className="btn btn--small" onClick={() => setPunchFormOpen(false)}>
-                volver
+                Volver
               </button>
             </div>
           ) : (

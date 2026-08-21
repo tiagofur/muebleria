@@ -3119,7 +3119,7 @@
         "backend-go/internal/api/installation.go",
         "packages/ui/src/production/InstalacionesScreen.tsx"
       ],
-      "status": "in_progress",
+      "status": "done",
       "createdAt": "2026-08-21"
     }
   ]

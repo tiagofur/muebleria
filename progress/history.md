@@ -746,3 +746,45 @@ service).
 Deuda anotada: `daysInWarehouse` seguirá siendo proxy hasta que exista un
 evento real de depósito; media access (URLs firmadas) sigue pendiente de
 docs/architecture.md §11.
+
+## Issue #303 / F137 — Operational Core O4: instalación profesional, Field Issues, Punch y Closeout (2026-08-21)
+
+La instalación pasó de un botón `loaded → installed` a un subproceso real por obra:
+`InstallationJob` con múltiples `InstallationVisit` (fecha, crew, arrival/start/end,
+notas, fotos, unidades trabajadas, resultado), `FieldIssue` con estados
+open/action_required/blocked/resolved/verified (reapertura por verificación fallida)
+y vínculo a mueble/pieza, `PunchItem` con owner/due/severidad/flag bloqueante y
+cierre con evidencia obligatoria, y closeout/conformidad auditado tras gates
+server-authoritative (OC-070..OC-074).
+
+Decisiones clave:
+
+- OC-074 con triple defensa: el PUT agregado del proyecto no puede escribir
+  `installation` (columna sólo escrita por los endpoints dedicados, dentro de
+  `MutateProjectInstallation` con SELECT FOR UPDATE); `POST /events` y el dual-write
+  del agregado rechazan `client_signed_off`/`project_closed` cuando fallan gates;
+  el endpoint de closeout evalúa gates contra estado lockeado. `installed` en todo
+  NO cierra el proyecto solo.
+- Status del job derivado del trabajo real (visitas + evento
+  `installation_completed`), nunca almacenado. `complete_installation` es hito de
+  planta auditable (alimenta KPI installationHours) con RBAC propio (produccion
+  puede); sign-off/cierre son de gerentes.
+- Punch balance (abierto/cerrado) en `deriveProjectStage`: múltiples punch items
+  coexisten sin hacks; `punch_opened/closed` se auditan por ítem.
+- Paridad TS↔Go vía `contracts/installationStatuses.json` + tests espejo de
+  gates/transiciones/summary en ambos lados.
+- Web: `InstallationJobPanel` dentro de `InstalacionesScreen` (board `.ship-board`
+  existente): visitas, incidencias con transiciones legales, punch con evidencia y
+  panel de cierre con gates que explican cómo resolverse; preserva el avance físico
+  por unidad de F136. Store con espejo server (`setInstallationJob`) y camino local
+  puro (`applyInstallationProject`).
+
+Review (progress/review_F137.md): CHANGES_REQUESTED con 3 defects menores de
+copy/formato (botones «volver», fechas ISO crudas, un accidente de formato en
+AppContent) + 2 recomendaciones (badge del job por status, toast local con
+sujeto). Todos aplicados; suites re-verificadas en verde. El revisor validó
+además arquitectura, paridad, RBAC, la triple defensa OC-074 y la migración
+000070 (aditiva, reversible).
+
+Verificación final: domain 836 · storage 143 · excel 89 · ui 1169 · mobile 45 ·
+desktop 17 · web 301 · `pnpm typecheck` OK · `go test ./...` OK.
