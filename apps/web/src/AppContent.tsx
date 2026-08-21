@@ -107,6 +107,21 @@ import {
   transitionProjectStatus,
   type WarehouseProjectInput,
   deriveProjectPartExecutions,
+  scheduleInstallationVisit,
+  startInstallationVisit,
+  completeInstallationVisit,
+  cancelInstallationVisit,
+  reportFieldIssue,
+  transitionFieldIssue,
+  openPunchItem,
+  closePunchItem,
+  completeInstallation,
+  recordClientSignOff,
+  closeProjectCloseout,
+  type FieldIssueStatus,
+  type InstallationJob,
+  type InstallationVisitResult,
+  type PunchSeverity,
 } from '@muebles/domain';
 
 
@@ -242,6 +257,8 @@ import {
   productionOrderFromPath,
   productionOrderPath,
   shipmentDetailFromPath,
+  installationDetailPath,
+  installationDetailFromPath,
   shipmentDetailPath,
   projectPath,
   structureEditIdFromPath,
@@ -830,6 +847,8 @@ export function AppContent({
   );
   const routeShipmentProjectId =
     navId === 'shipments' ? shipmentDetailFromPath(location.pathname) : null;
+  const routeInstallationProjectId =
+    navId === 'installations' ? installationDetailFromPath(location.pathname) : null;
   const routeEngineeringProjectId =
     navId === 'engineering' ? engineeringProjectFromPath(location.pathname) : null;
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
@@ -1569,6 +1588,172 @@ export function AppContent({
     [catalog, getRepository, projectActions, toast],
   );
 
+  /**
+   * #303 (OC-070..OC-074) — installation job actions. The pure domain action
+   * validates client-side and computes the next job; API mode PUTs it to the
+   * installation endpoint (server re-validates transitions and appends the
+   * audit lifecycle events) and mirrors the server-persisted job; the
+   * local/offline workspace applies the pure result (job + events) directly.
+   */
+  const runInstallationJobAction = useCallback(
+    (
+      projectId: string,
+      action: (project: Project) => { project: Project; job: InstallationJob },
+    ) => {
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      let result: { project: Project; job: InstallationJob };
+      try {
+        result = action(project);
+      } catch (err) {
+        toast({
+          type: 'error',
+          message:
+            err instanceof Error && err.message
+              ? err.message
+              : 'Acción de instalación inválida',
+        });
+        return;
+      }
+      const repo = getRepository();
+      if (repo.saveInstallation) {
+        void repo
+          .saveInstallation(projectId, result.job)
+          .then(() => {
+            projectActions.setInstallationJob(projectId, result.job);
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'No se pudo guardar la instalación',
+            });
+          });
+      } else {
+        projectActions.applyInstallationProject(projectId, result.project);
+      }
+    },
+    [getRepository, projectActions, toast],
+  );
+
+  /**
+   * #303 — server-authoritative closeout milestones: completar instalación,
+   * conformidad del cliente y cierre del proyecto (OC-074 gates). The pure
+   * action gives the same validation offline; the endpoint enforces it for
+   * every client.
+   */
+  const runInstallationCloseout = useCallback(
+    (
+      projectId: string,
+      payload: {
+        action: 'complete_installation' | 'sign_off' | 'close';
+        signedOffBy?: string;
+      },
+      action: (project: Project) => { project: Project },
+    ) => {
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      let local: { project: Project };
+      try {
+        local = action(project);
+      } catch (err) {
+        toast({
+          type: 'error',
+          message:
+            err instanceof Error && err.message
+              ? err.message
+              : 'Acción de cierre inválida',
+        });
+        return;
+      }
+      const repo = getRepository();
+      if (repo.installationCloseout) {
+        void repo
+          .installationCloseout(projectId, payload)
+          .then((res) => {
+            projectActions.setInstallationJob(projectId, res.installation);
+            toast({
+              type: 'success',
+              message:
+                payload.action === 'complete_installation'
+                  ? '✓ Instalación completada'
+                  : payload.action === 'sign_off'
+                    ? '✓ Conformidad registrada'
+                    : '✓ Proyecto cerrado',
+            });
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'No se pudo completar la acción de cierre',
+            });
+          });
+      } else {
+        projectActions.applyInstallationProject(projectId, local.project);
+        toast({
+          type: 'success',
+          message:
+            payload.action === 'complete_installation'
+              ? '✓ Instalación completada'
+              : payload.action === 'sign_off'
+                ? '✓ Conformidad registrada'
+                : '✓ Proyecto cerrado',
+        });
+      }
+    },
+    [getRepository, projectActions, toast],
+  );
+
+  const installationJobHandlers = useMemo(
+    () => ({
+      onScheduleVisit: (projectId: string, params: { date: string; crew: readonly string[]; notes?: string }) =>
+        runInstallationJobAction(projectId, (p) => scheduleInstallationVisit(p, params)),
+      onStartVisit: (projectId: string, visitId: string) =>
+        runInstallationJobAction(projectId, (p) => startInstallationVisit(p, visitId, {})),
+      onCompleteVisit: (
+        projectId: string,
+        visitId: string,
+        params: { result: InstallationVisitResult; resultNotes?: string },
+      ) => runInstallationJobAction(projectId, (p) => completeInstallationVisit(p, visitId, params)),
+      onCancelVisit: (projectId: string, visitId: string) =>
+        runInstallationJobAction(projectId, (p) => cancelInstallationVisit(p, visitId, {})),
+      onReportIssue: (projectId: string, params: { description: string }) =>
+        runInstallationJobAction(projectId, (p) => reportFieldIssue(p, params)),
+      onTransitionIssue: (projectId: string, issueId: string, to: FieldIssueStatus) =>
+        runInstallationJobAction(projectId, (p) => transitionFieldIssue(p, issueId, to, {})),
+      onOpenPunch: (
+        projectId: string,
+        params: {
+          description: string;
+          owner: string;
+          dueDate?: string;
+          severity: PunchSeverity;
+          isBlocker: boolean;
+        },
+      ) => runInstallationJobAction(projectId, (p) => openPunchItem(p, params)),
+      onClosePunch: (projectId: string, punchItemId: string, params: { resolutionNotes: string }) =>
+        runInstallationJobAction(projectId, (p) => closePunchItem(p, punchItemId, params)),
+      onCompleteInstallation: (projectId: string) =>
+        runInstallationCloseout(projectId, { action: 'complete_installation' }, (p) =>
+          completeInstallation(p, {}),
+        ),
+      onSignOff: (projectId: string, params: { signedOffBy: string }) =>
+        runInstallationCloseout(
+          projectId,
+          { action: 'sign_off', signedOffBy: params.signedOffBy },
+          (p) => recordClientSignOff(p, { signedOffBy: params.signedOffBy }),
+        ),
+      onCloseProject: (projectId: string) =>
+        runInstallationCloseout(projectId, { action: 'close' }, (p) => closeProjectCloseout(p, {})),
+    }),
+    [runInstallationJobAction, runInstallationCloseout],
+  );
+
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
     const repo = getRepository();
     if (!repo.claimProductionActivity) return;
@@ -1968,6 +2153,7 @@ export function AppContent({
     handleAdvancePart,
     handleAdvanceUnit,
     handleGeneratePartExecutions,
+    installationJobHandlers,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,
@@ -2047,6 +2233,7 @@ export function AppContent({
     routeProductionOrderTab,
     routeProjectId,
     routeShipmentProjectId,
+    routeInstallationProjectId,
     routeStructureEditId,
     routeStructureId,
     saveAsTemplate,

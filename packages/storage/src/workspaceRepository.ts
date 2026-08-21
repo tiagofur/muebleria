@@ -27,7 +27,38 @@ import type {
   PartOperationType,
   ModuleUnitExecution,
   ModuleUnitStatus,
+  InstallationJob,
+  InstallationJobStatus,
+  ClientCloseout,
 } from '@muebles/domain';
+
+/** Derived closeout gate check as returned by the installation endpoints. */
+export interface InstallationCloseoutCheck {
+  readonly code: string;
+  readonly label: string;
+  readonly passed: boolean;
+  readonly required: boolean;
+  readonly details: string;
+}
+
+/** Derived view of an installation job (OC-070..OC-074). */
+export interface InstallationView {
+  readonly installation: InstallationJob | null;
+  readonly jobStatus: InstallationJobStatus;
+  readonly units: { readonly mode: string; readonly installed: number; readonly total: number };
+  readonly closeoutChecks: readonly InstallationCloseoutCheck[];
+  readonly closeoutReady: boolean;
+}
+
+/** Error thrown when the OC-074 closeout gates block sign-off/close. */
+export class CloseoutGateError extends Error {
+  readonly checks: readonly InstallationCloseoutCheck[];
+  constructor(checks: readonly InstallationCloseoutCheck[], message: string) {
+    super(message);
+    this.name = 'CloseoutGateError';
+    this.checks = checks;
+  }
+}
 
 export interface WorkspaceRepository {
   /** Load full workspace; missing file → seed workspace. */
@@ -194,6 +225,34 @@ export interface WorkspaceRepository {
     nextStatus: string;
     assemblyReadiness?: Record<string, unknown>;
   }>;
+
+  // --- Installation job (OC-070..OC-074) ---
+
+  /** Read the installation job + derived closeout view. */
+  getInstallation?(projectId: string): Promise<InstallationView>;
+
+  /**
+   * Replace the installation job (server validates transitions and derives
+   * the audit lifecycle events; closeout facts are rejected here).
+   */
+  saveInstallation?(
+    projectId: string,
+    job: InstallationJob,
+  ): Promise<InstallationView & { eventsAppended: number }>;
+
+  /**
+   * Server-authoritative client sign-off / project close behind the OC-074
+   * gates. Throws CloseoutGateError (with the failing checks) on 409.
+   */
+  installationCloseout?(
+    projectId: string,
+    payload: {
+      action: 'complete_installation' | 'sign_off' | 'close';
+      signedOffBy?: string;
+      notes?: string;
+      photoIds?: readonly string[];
+    },
+  ): Promise<{ installation: InstallationJob; closeout?: ClientCloseout } & InstallationView>;
 
   // --- Production Activity Tracking (gerente_produccion) ---
 

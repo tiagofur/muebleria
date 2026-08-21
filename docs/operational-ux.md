@@ -137,6 +137,21 @@ UI centrada en **visita + unidad + ambiente** con planos, fotos, issues y punch.
 
 El proyecto/job es el contexto transversal.
 
+### Regla dura: home de proceso = lista de obras; el trabajo vive en el detalle
+
+> La pantalla principal (home) de un proceso operativo — Producción, Órdenes,
+> Embarques, Instalación — es una **lista/board de obras**: una fila o card por
+> obra con resumen (estado del proceso, avance, alertas) y UNA acción para
+> abrir el detalle. Todo el trabajo del proceso — acciones por unidad, visitas,
+> incidencias, punch, cierre, checklists, escáner — vive en la **pantalla de
+> detalle de esa obra** (`/production/:id`, `/orders/:id`, `/shipments/:id`,
+> `/installations/:id`), con navegación de vuelta.
+
+Inline-ear el trabajo completo de TODAS las obras en la home es información
+demasiada y ambigua (¿de qué obra es esto?): prohibido. La home responde "¿qué
+obras necesitan este proceso y qué les falta?"; el detalle responde "¿qué hago
+con ESTA obra ahora?".
+
 Vista objetivo:
 
 ```text

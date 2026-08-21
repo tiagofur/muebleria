@@ -383,3 +383,27 @@ export function shipmentDetailFromPath(pathname: string): string | null {
   if (!projectId || projectId.includes('/')) return null;
   return projectId;
 }
+
+/**
+ * Instalaciones detail deep link: `/installations/:projectId`.
+ */
+export function installationDetailPath(projectId: string): string {
+  return `${NAV_PATHS.installations}/${encodeURIComponent(projectId)}`;
+}
+
+export function installationDetailFromPath(pathname: string): string | null {
+  const base = NAV_PATHS.installations;
+  const normalized = normalizePathname(pathname);
+  if (normalized === base) return null;
+  if (!normalized.startsWith(`${base}/`)) return null;
+  const rest = normalized.slice(base.length + 1);
+  if (!rest) return null;
+  let projectId: string;
+  try {
+    projectId = decodeURIComponent(rest);
+  } catch {
+    projectId = rest;
+  }
+  if (!projectId || projectId.includes('/')) return null;
+  return projectId;
+}

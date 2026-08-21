@@ -107,6 +107,7 @@ import {
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
+  roleCanAppendProjectEvent,
 } from '@muebles/domain';
 
 
@@ -127,6 +128,7 @@ import {
   EmbarquesScreen,
   EmbarquesProjectDetail,
   InstalacionesScreen,
+  InstalacionesProjectDetail,
   type DashboardMetrics,
   type FabricActiveClaim,
   type FabricProjectMetrics,
@@ -185,6 +187,7 @@ import {
   PageLoading,
   buildProductionOrderReadiness,
   type CommandPaletteItem,
+  type InstallationJobPanelHandlers,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -242,6 +245,7 @@ import {
   productionOrderFromPath,
   productionOrderPath,
   shipmentDetailFromPath,
+  installationDetailPath,
   shipmentDetailPath,
   projectPath,
   structureEditIdFromPath,
@@ -413,6 +417,8 @@ export interface ShellViewCtx {
   readonly handleAdvanceUnit: (projectId: string, unitId: string) => void;
   /** #301 — generate physical executions after a production release. */
   readonly handleGeneratePartExecutions: (projectId: string) => void;
+  /** #303 — installation job mutations (visits, issues, punch, closeout). */
+  readonly installationJobHandlers: InstallationJobPanelHandlers;
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -492,6 +498,8 @@ export interface ShellViewCtx {
   readonly routeProductionOrderTab: "herrajes" | "resumen" | "modulos" | "piso" | "despiece" | "etiquetas" | "vistas" | "optimizacion" | "documentos";
   readonly routeProjectId: string | null;
   readonly routeShipmentProjectId: string | null;
+  /** #303 — selected project in /installations/:projectId (detail screen). */
+  readonly routeInstallationProjectId: string | null;
   readonly routeStructureEditId: string | null;
   readonly routeStructureId: string | null;
   readonly saveAsTemplate: (projectId: string, name: string) => void;
@@ -650,6 +658,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleAdvancePart,
     handleAdvanceUnit,
     handleGeneratePartExecutions,
+    installationJobHandlers,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,
@@ -729,6 +738,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     routeProductionOrderTab,
     routeProjectId,
     routeShipmentProjectId,
+    routeInstallationProjectId,
     routeStructureEditId,
     routeStructureId,
     saveAsTemplate,
@@ -925,17 +935,59 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'installations' && roleCanAccessShippingNav(actorRole) ? (
         <ScreenBoundary screenLabel="Instalaciones" onGoHome={goHomeFromScreen}>
-        <InstalacionesScreen
-          projects={projectsForRole}
-          canAdvance={
-            session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
+        {routeInstallationProjectId ? (() => {
+          const installationProject = projectsForRole.find(
+            (p) => p.id === routeInstallationProjectId,
+          );
+          if (!installationProject) {
+            return (
+              <EmptyState
+                title="Obra no encontrada"
+                description="Esa obra no está en instalaciones o no tenés acceso."
+                actionLabel="Volver a Instalaciones"
+                onAction={() => navigate(pathForNav('installations'))}
+              />
+            );
           }
-          onAdvance={handleFloorAdvance}
-          customerFor={(customerId) =>
-            customers.find((customer) => customer.id === customerId)
-          }
-        />
+          const installationCustomer = customers.find(
+            (customer) => customer.id === installationProject.customerId,
+          );
+          return (
+            <InstalacionesProjectDetail
+              project={installationProject}
+              customerName={installationCustomer?.name}
+              customerAddress={installationCustomer?.address}
+              customerPhone={installationCustomer?.phone}
+              customerEmail={installationCustomer?.email}
+              canAdvance={
+                session === 'auth' &&
+                (canMarkProduced || roleCanExportProduction(actorRole))
+              }
+              onAdvance={handleFloorAdvance}
+              canManageJob={
+                session === 'auth' &&
+                roleCanAppendProjectEvent(actorRole, 'installation_started')
+              }
+              canCloseout={
+                session === 'auth' &&
+                roleCanAppendProjectEvent(actorRole, 'client_signed_off')
+              }
+              jobHandlers={installationJobHandlers}
+              onBack={() => navigate(pathForNav('installations'))}
+            />
+          );
+        })() : (
+          <InstalacionesScreen
+            projects={projectsForRole}
+            onOpenProject={(id) => {
+              const target = installationDetailPath(id);
+              if (location.pathname !== target) navigate(target);
+            }}
+            customerFor={(customerId) =>
+              customers.find((customer) => customer.id === customerId)
+            }
+          />
+        )}
         </ScreenBoundary>
       ) : null}
       {navId === 'engineeringDashboard' ? (

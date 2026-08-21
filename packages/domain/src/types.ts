@@ -1162,6 +1162,10 @@ export interface Project {
    * Module unit execution states tracked across assembly, QC and dispatch (OC-033).
    */
   readonly moduleUnits?: readonly import('./partExecution').ModuleUnitExecution[];
+  /**
+   * Installation job: visits, field issues, punch items and client closeout (OC-070).
+   */
+  readonly installation?: import('./installation').InstallationJob;
 }
 
 /** Lifecycle stage for a project photo. */

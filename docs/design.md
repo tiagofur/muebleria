@@ -429,6 +429,10 @@ pnpm add lucide-react --filter @muebles/ui
 | Atrás | `ChevronLeft` |
 | Precio / Costo | `DollarSign` |
 | Dimensiones | `Ruler` |
+| Instalación — visita de campo | `CalendarDays` |
+| Instalación — incidencia de campo | `TriangleAlert` |
+| Instalación — punch list | `ListChecks` |
+| Instalación — cierre/conformidad | `ClipboardCheck` |
 | Status activo | `CheckCircle2` |
 | Status inactivo | `MinusCircle` |
 | Email (login) | `Mail` |
@@ -1040,11 +1044,12 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 ### 6.7d Instalaciones (instalación en obra)
 
-- **Ruta nav:** `installations` (sección PRODUCCIÓN) · **Path:** `/installations`
-- **Path código:** `packages/ui/src/production/InstalacionesScreen.tsx` (mismo `.ship-board__*`)
-- **Patrón:** board por obra — sección "En camino" (ítems `loaded` → "Marcar Instalado") + chip "N instalados" por obra
-- **Pendiente aprobado (JD 2026-08-18, Fase 5.5):** mostrar **dirección + contacto del cliente** en la card (dato ya existe en `Customer`; hoy solo llega el nombre) — JTBD del instalador
-- **RBAC nav:** `roleCanAccessShippingNav` (admin, gerente_produccion, produccion — no almacen)
+- **Ruta nav:** `installations` (sección PRODUCCIÓN) · **Path:** `/installations` (lista) · `/installations/:projectId` (detalle)
+- **Path código:** `packages/ui/src/production/InstalacionesScreen.tsx` (lista) + `InstalacionesProjectDetail.tsx` (detalle, mismo `.ship-board__*` + `.instalaciones-detail__*`)
+- **Patrón (regla §4 operational-ux):**
+  - **Home = lista de obras**: card por obra con cliente + dirección/teléfono, badge de estado del job de instalación, resumen `X/Y unidades instaladas · N en camino · visitas/incidencias/punch bloqueantes` y UNA primaria **Abrir instalación** (deep link `/installations/:projectId`). Sin acciones de proceso inline.
+  - **Detalle por obra**: back a la lista, contexto de obra + contacto del cliente, sección "En camino" (ítems `loaded` → "Marcar Instalado") y el panel del subproceso OC-070..OC-074: visitas de campo (programar/iniciar/completar/cancelar), incidencias de campo con transiciones, punch list con evidencia de cierre, y cierre/conformidad con gates que explican cómo resolverse (installed ≠ proyecto cerrado).
+- **RBAC nav:** `roleCanAccessShippingNav` (admin, gerente_produccion, produccion — no almacen). Gestión del job: roles de eventos `installation_*`; cierre/conformidad: gerentes (`client_signed_off`/`project_closed`)
 - **Icono:** `Hammer`
 
 ### 6.8 Estructuras

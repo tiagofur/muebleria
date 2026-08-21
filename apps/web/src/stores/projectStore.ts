@@ -98,6 +98,7 @@ import {
   deriveLegacyItemFloorStatus,
   nextModuleUnitStatus,
   type ModuleUnitExecution,
+  type InstallationJob,
   type PartInstance,
 } from '@muebles/domain';
 import { breakdownFromApi } from '@muebles/storage';
@@ -431,6 +432,12 @@ export interface ProjectState {
     parts: readonly PartInstance[],
     units: readonly ModuleUnitExecution[],
   ) => void;
+  // --- Installation job (#303 / OC-070..OC-074) ---
+  /** Mirror the server-persisted installation job (events stay server-side). */
+  readonly setInstallationJob: (projectId: string, job: InstallationJob) => void;
+  /** Apply a locally-computed installation action (offline/local workspace):
+   * job plus the pure-action lifecycle events, persisted by the normal channel. */
+  readonly applyInstallationProject: (projectId: string, project: Project) => void;
   /** PROD-3.2 — stamp export revision after factory pack/export. */
   readonly recordProductionExport: (projectId: string) => void;
   /** PROD-3.2 — ensure OP revision when opening plant-ready order. */
@@ -1409,6 +1416,23 @@ export function createProjectStore(options: InternalOptions) {
 
     setPartExecutions: (projectId, parts, units) => {
       patchPartExecutions(set, get, projectId, parts, units);
+    },
+
+    // --- Installation job (#303) — mirrors of the server endpoints; the API
+    // path calls the installation endpoints and then these setters with the
+    // server-returned job (audit events are server-authoritative).
+    setInstallationJob: (projectId, job) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project || project.installation === job) return;
+      patch(set, get, (ps) =>
+        ps.map((p) => (p.id === projectId ? { ...p, installation: job } : p)),
+      );
+    },
+
+    applyInstallationProject: (projectId, updated) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project || updated === project) return;
+      patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));
     },
 
     recordProductionExport: (projectId) => {

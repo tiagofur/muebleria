@@ -61,6 +61,16 @@ import type {
   ModuleUnitExecution,
   ModuleUnitStatus,
   SupervisorAssemblyOverride,
+  InstallationJob,
+  InstallationVisit,
+  InstallationVisitStatus,
+  InstallationVisitResult,
+  FieldIssue,
+  FieldIssueStatus,
+  PunchItem,
+  PunchItemStatus,
+  PunchSeverity,
+  ClientCloseout,
   ProjectTechnicalStatus,
   ProjectTemplate,
   QuoteBreakdown,
@@ -1595,6 +1605,9 @@ export function projectToApi(p: Project): Record<string, unknown> {
     part_instances: p.partInstances ? p.partInstances.map(partInstanceToApi) : null,
     // OC-033 — physical module units
     module_units: p.moduleUnits ? p.moduleUnits.map(moduleUnitToApi) : null,
+    // OC-070 — installation job (server ignores it on the aggregate PUT;
+    // included so a GET roundtrip is lossless).
+    installation: p.installation ? installationJobToApi(p.installation) : null,
     // OC-010 — lifecycle append-only event stream
     events: (p.events ?? []).map((e) => projectEventToApi(e)),
   };
@@ -1792,6 +1805,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     partInstances: partInstancesFromApi(raw.part_instances ?? raw.partInstances),
     // OC-033 — physical module units
     moduleUnits: moduleUnitsFromApi(raw.module_units ?? raw.moduleUnits),
+    // OC-070 — installation job (visits, field issues, punch, closeout)
+    installation: installationJobFromApi(raw.installation),
     // OC-011 — commercial status outcome
     commercialStatus: commercialStatusFromApi(
       raw.commercial_status ?? raw.commercialStatus,
@@ -2149,6 +2164,213 @@ export function moduleUnitsFromApi(raw: unknown): readonly ModuleUnitExecution[]
   return raw
     .filter((r) => r && typeof r === 'object')
     .map((r) => moduleUnitFromApi(r as Record<string, unknown>));
+}
+
+// ─── InstallationJob (OC-070..OC-074) ───────────────────────────────────────
+
+export function installationVisitToApi(v: InstallationVisit): Record<string, unknown> {
+  return {
+    id: v.id,
+    date: v.date,
+    crew: v.crew,
+    arrival_at: v.arrivalAt ?? null,
+    start_at: v.startAt ?? null,
+    end_at: v.endAt ?? null,
+    notes: v.notes ?? null,
+    photo_ids: v.photoIds ?? null,
+    unit_ids: v.unitIds ?? null,
+    status: v.status,
+    result: v.result ?? null,
+    result_notes: v.resultNotes ?? null,
+    created_at: v.createdAt,
+  };
+}
+
+export function installationVisitFromApi(raw: Record<string, unknown>): InstallationVisit {
+  const crewRaw = Array.isArray(raw.crew) ? raw.crew : [];
+  const photoIds = raw.photo_ids ?? raw.photoIds;
+  const unitIds = raw.unit_ids ?? raw.unitIds;
+  return {
+    id: str(raw.id),
+    date: str(raw.date),
+    crew: crewRaw.map((c) => str(c)).filter(Boolean),
+    arrivalAt: str(raw.arrival_at ?? raw.arrivalAt) || undefined,
+    startAt: str(raw.start_at ?? raw.startAt) || undefined,
+    endAt: str(raw.end_at ?? raw.endAt) || undefined,
+    notes: str(raw.notes) || undefined,
+    photoIds: Array.isArray(photoIds) ? photoIds.map((p) => str(p)) : undefined,
+    unitIds: Array.isArray(unitIds) ? unitIds.map((u) => str(u)) : undefined,
+    status: str(raw.status, 'scheduled') as InstallationVisitStatus,
+    result: (str(raw.result) || undefined) as InstallationVisitResult | undefined,
+    resultNotes: str(raw.result_notes ?? raw.resultNotes) || undefined,
+    createdAt: str(raw.created_at ?? raw.createdAt),
+  };
+}
+
+export function fieldIssueToApi(i: FieldIssue): Record<string, unknown> {
+  return {
+    id: i.id,
+    description: i.description,
+    status: i.status,
+    project_item_id: i.projectItemId ?? null,
+    part_instance_id: i.partInstanceId ?? null,
+    photo_ids: i.photoIds ?? null,
+    notes: i.notes ?? null,
+    reported_by: i.reportedBy ?? null,
+    reported_at: i.reportedAt,
+    resolved_at: i.resolvedAt ?? null,
+    resolved_by: i.resolvedBy ?? null,
+    resolution_notes: i.resolutionNotes ?? null,
+    verified_at: i.verifiedAt ?? null,
+    verified_by: i.verifiedBy ?? null,
+  };
+}
+
+export function fieldIssueFromApi(raw: Record<string, unknown>): FieldIssue {
+  const photoIds = raw.photo_ids ?? raw.photoIds;
+  return {
+    id: str(raw.id),
+    description: str(raw.description),
+    status: str(raw.status, 'open') as FieldIssueStatus,
+    projectItemId: str(raw.project_item_id ?? raw.projectItemId) || undefined,
+    partInstanceId: str(raw.part_instance_id ?? raw.partInstanceId) || undefined,
+    photoIds: Array.isArray(photoIds) ? photoIds.map((p) => str(p)) : undefined,
+    notes: str(raw.notes) || undefined,
+    reportedBy: str(raw.reported_by ?? raw.reportedBy) || undefined,
+    reportedAt: str(raw.reported_at ?? raw.reportedAt),
+    resolvedAt: str(raw.resolved_at ?? raw.resolvedAt) || undefined,
+    resolvedBy: str(raw.resolved_by ?? raw.resolvedBy) || undefined,
+    resolutionNotes: str(raw.resolution_notes ?? raw.resolutionNotes) || undefined,
+    verifiedAt: str(raw.verified_at ?? raw.verifiedAt) || undefined,
+    verifiedBy: str(raw.verified_by ?? raw.verifiedBy) || undefined,
+  };
+}
+
+export function punchItemToApi(p: PunchItem): Record<string, unknown> {
+  return {
+    id: p.id,
+    description: p.description,
+    owner: p.owner,
+    due_date: p.dueDate ?? null,
+    severity: p.severity,
+    is_blocker: p.isBlocker,
+    status: p.status,
+    photo_ids: p.photoIds ?? null,
+    opened_by: p.openedBy ?? null,
+    opened_at: p.openedAt,
+    closed_at: p.closedAt ?? null,
+    closed_by: p.closedBy ?? null,
+    resolution_notes: p.resolutionNotes ?? null,
+    resolution_photo_ids: p.resolutionPhotoIds ?? null,
+  };
+}
+
+export function punchItemFromApi(raw: Record<string, unknown>): PunchItem {
+  const photoIds = raw.photo_ids ?? raw.photoIds;
+  const resolutionPhotoIds = raw.resolution_photo_ids ?? raw.resolutionPhotoIds;
+  return {
+    id: str(raw.id),
+    description: str(raw.description),
+    owner: str(raw.owner),
+    dueDate: str(raw.due_date ?? raw.dueDate) || undefined,
+    severity: str(raw.severity, 'minor') as PunchSeverity,
+    isBlocker: Boolean(raw.is_blocker ?? raw.isBlocker),
+    status: str(raw.status, 'open') as PunchItemStatus,
+    photoIds: Array.isArray(photoIds) ? photoIds.map((p) => str(p)) : undefined,
+    openedBy: str(raw.opened_by ?? raw.openedBy) || undefined,
+    openedAt: str(raw.opened_at ?? raw.openedAt),
+    closedAt: str(raw.closed_at ?? raw.closedAt) || undefined,
+    closedBy: str(raw.closed_by ?? raw.closedBy) || undefined,
+    resolutionNotes: str(raw.resolution_notes ?? raw.resolutionNotes) || undefined,
+    resolutionPhotoIds: Array.isArray(resolutionPhotoIds)
+      ? resolutionPhotoIds.map((p) => str(p))
+      : undefined,
+  };
+}
+
+export function clientCloseoutToApi(c: ClientCloseout): Record<string, unknown> {
+  return {
+    signed_off_by: c.signedOffBy,
+    signed_off_at: c.signedOffAt,
+    signed_off_by_user_id: c.signedOffByUserId ?? null,
+    signed_off_notes: c.signedOffNotes ?? null,
+    signed_off_photo_ids: c.signedOffPhotoIds ?? null,
+    closed_at: c.closedAt ?? null,
+    closed_by_user_id: c.closedByUserId ?? null,
+  };
+}
+
+export function clientCloseoutFromApi(raw: Record<string, unknown> | null | undefined): ClientCloseout | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const photoIds = raw.signed_off_photo_ids ?? raw.signedOffPhotoIds;
+  return {
+    signedOffBy: str(raw.signed_off_by ?? raw.signedOffBy),
+    signedOffAt: str(raw.signed_off_at ?? raw.signedOffAt),
+    signedOffByUserId: str(raw.signed_off_by_user_id ?? raw.signedOffByUserId) || undefined,
+    signedOffNotes: str(raw.signed_off_notes ?? raw.signedOffNotes) || undefined,
+    signedOffPhotoIds: Array.isArray(photoIds) ? photoIds.map((p) => str(p)) : undefined,
+    closedAt: str(raw.closed_at ?? raw.closedAt) || undefined,
+    closedByUserId: str(raw.closed_by_user_id ?? raw.closedByUserId) || undefined,
+  };
+}
+
+export function installationJobToApi(j: InstallationJob): Record<string, unknown> {
+  return {
+    id: j.id,
+    project_id: j.projectId,
+    visits: j.visits.map(installationVisitToApi),
+    field_issues: j.fieldIssues.map(fieldIssueToApi),
+    punch_items: j.punchItems.map(punchItemToApi),
+    closeout: j.closeout ? clientCloseoutToApi(j.closeout) : null,
+    created_at: j.createdAt,
+  };
+}
+
+export function installationJobFromApi(raw: unknown): InstallationJob | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  const visits: readonly unknown[] = Array.isArray(rec.visits) ? rec.visits : [];
+  const issues: readonly unknown[] = Array.isArray(rec.field_issues ?? rec.fieldIssues)
+    ? ((rec.field_issues ?? rec.fieldIssues) as readonly unknown[])
+    : [];
+  const punches: readonly unknown[] = Array.isArray(rec.punch_items ?? rec.punchItems)
+    ? ((rec.punch_items ?? rec.punchItems) as readonly unknown[])
+    : [];
+  return {
+    id: str(rec.id),
+    projectId: str(rec.project_id ?? rec.projectId),
+    visits: visits.map((v) => installationVisitFromApi(v as Record<string, unknown>)),
+    fieldIssues: issues.map((i) => fieldIssueFromApi(i as Record<string, unknown>)),
+    punchItems: punches.map((p) => punchItemFromApi(p as Record<string, unknown>)),
+    closeout: clientCloseoutFromApi(rec.closeout as Record<string, unknown> | null | undefined),
+    createdAt: str(rec.created_at ?? rec.createdAt),
+  };
+}
+
+// ─── Closeout view (derived, read-only over the wire) ──────────────────────
+
+export interface InstallationCloseoutCheckApi {
+  readonly code: string;
+  readonly label: string;
+  readonly passed: boolean;
+  readonly required: boolean;
+  readonly details: string;
+}
+
+export function closeoutChecksFromApi(raw: unknown): readonly InstallationCloseoutCheckApi[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => {
+      const rec = r as Record<string, unknown>;
+      return {
+        code: str(rec.code),
+        label: str(rec.label),
+        passed: Boolean(rec.passed),
+        required: Boolean(rec.required),
+        details: str(rec.details),
+      };
+    });
 }
 
 export function projectEventToApi(e: ProjectEvent): Record<string, unknown> {

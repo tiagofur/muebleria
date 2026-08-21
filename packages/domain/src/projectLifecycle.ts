@@ -482,8 +482,14 @@ export function deriveProjectStage(project: Project): ProjectStage {
     return 'completed';
   }
 
-  // 3. Punch List
-  if (eventTypes.has('punch_opened') && !eventTypes.has('punch_closed')) {
+  // 3. Punch List — open while the punch_opened/punch_closed event balance
+  // leaves items pending (OC-073: each punch item appends its own event pair).
+  let punchBalance = 0;
+  for (const evt of events) {
+    if (evt.type === 'punch_opened') punchBalance++;
+    else if (evt.type === 'punch_closed') punchBalance--;
+  }
+  if (punchBalance > 0) {
     return 'punch';
   }
 

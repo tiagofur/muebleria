@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -45,6 +46,30 @@ func authorizeProjectEventAppends(w http.ResponseWriter, role domain.UserRole, e
 		}
 		if !domain.RoleCanAppendProjectEvent(role, ev.Type) {
 			respondWithError(w, http.StatusForbidden, "no tenés permiso para registrar este evento del ciclo de vida: "+ev.Type)
+			return false
+		}
+	}
+	return true
+}
+
+// authorizeCloseoutEventAppends enforces OC-074 on closeout events arriving
+// through the project aggregate dual-write path (PUT /api/projects/{id}): a
+// NEW client_signed_off/project_closed event must pass the closeout gates
+// evaluated against the stored project state.
+func authorizeCloseoutEventAppends(w http.ResponseWriter, existing *domain.Project, incoming []domain.ProjectEvent) bool {
+	known := make(map[string]struct{}, len(existing.Events))
+	for _, ev := range existing.Events {
+		known[ev.ID] = struct{}{}
+	}
+	for _, ev := range incoming {
+		if ev.ID == "" || (ev.Type != "client_signed_off" && ev.Type != "project_closed") {
+			continue
+		}
+		if _, ok := known[ev.ID]; ok {
+			continue
+		}
+		if failing := domain.ValidateCloseoutEventAppend(existing.ModuleUnits, existing.Items, existing.Installation, ev.Type); len(failing) > 0 {
+			respondWithError(w, http.StatusConflict, "gates de cierre pendientes: "+strings.Join(failing, ", "))
 			return false
 		}
 	}
@@ -108,6 +133,19 @@ func (s *Server) HandleProjectEvents(w http.ResponseWriter, r *http.Request) {
 			domain.RoleCanAppendProjectEvent(actorRole(claims), req.Type),
 			"no tenés permiso para registrar este evento del ciclo de vida") {
 			return
+		}
+		// OC-074: closeout events are gated by the real project state —
+		// installed units alone never close a project.
+		if req.Type == "client_signed_off" || req.Type == "project_closed" {
+			project, perr := s.Store.GetProjectByID(r.Context(), projectID)
+			if perr != nil || project == nil {
+				respondWithError(w, http.StatusNotFound, "obra no encontrada")
+				return
+			}
+			if failing := domain.ValidateCloseoutEventAppend(project.ModuleUnits, project.Items, project.Installation, req.Type); len(failing) > 0 {
+				respondWithError(w, http.StatusConflict, "gates de cierre pendientes: "+strings.Join(failing, ", "))
+				return
+			}
 		}
 
 		id := req.ID

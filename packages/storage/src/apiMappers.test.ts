@@ -7,6 +7,7 @@ import {
   edgeFromApi,
   edgeToApi,
   catalogFromApi,
+  installationJobFromApi,
   hardwareToApi,
   hardwareFromApi,
   materialToApi,
@@ -55,6 +56,7 @@ import type {
   ChangeOrder,
   PartInstance,
   ModuleUnitExecution,
+  InstallationJob,
   ProjectTemplate,
   Structure,
 } from '@muebles/domain';
@@ -2015,3 +2017,108 @@ describe('projectToApi / projectFromApi — commercialStatus and events (OC-010.
   });
 });
 
+
+describe('installation job roundtrip (OC-070..OC-074)', () => {
+  it('project ↔ API survives visits, field issues, punch items and closeout', () => {
+    const job: InstallationJob = {
+      id: 'ijob-1',
+      projectId: 'p-prod-phase2',
+      visits: [
+        {
+          id: 'ivis-1',
+          date: '2026-09-02',
+          crew: ['Juan', 'Pedro'],
+          arrivalAt: '2026-09-02T08:10:00.000Z',
+          startAt: '2026-09-02T08:30:00.000Z',
+          endAt: '2026-09-02T14:00:00.000Z',
+          notes: 'Tercer piso, ascensor ocupado',
+          photoIds: ['photo-1'],
+          unitIds: ['p-prod-phase2_item-1_u1'],
+          status: 'completed',
+          result: 'partial',
+          resultNotes: 'Falta ajustar bisagra superior',
+          createdAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+      fieldIssues: [
+        {
+          id: 'fiss-1',
+          description: 'Puerta rayada en traslado',
+          status: 'action_required',
+          projectItemId: 'item-1',
+          partInstanceId: 'p1_i1_u1_LAT_1',
+          photoIds: ['photo-2'],
+          reportedBy: 'user-1',
+          reportedAt: '2026-09-02T12:00:00.000Z',
+          notes: 'Cliente lo notó en el momento',
+        },
+      ],
+      punchItems: [
+        {
+          id: 'pnch-1',
+          description: 'Cambiar manija del cajón 3',
+          owner: 'Instalación — Carlos',
+          dueDate: '2026-09-10',
+          severity: 'major',
+          isBlocker: true,
+          status: 'closed',
+          openedBy: 'user-1',
+          openedAt: '2026-09-02T15:00:00.000Z',
+          closedAt: '2026-09-05T11:00:00.000Z',
+          closedBy: 'user-2',
+          resolutionNotes: 'Manija reemplazada y verificada',
+          resolutionPhotoIds: ['photo-3'],
+        },
+      ],
+      closeout: {
+        signedOffBy: 'María González',
+        signedOffAt: '2026-09-05T12:00:00.000Z',
+        signedOffByUserId: 'user-2',
+        closedAt: '2026-09-05T12:30:00.000Z',
+      },
+      createdAt: '2026-09-01T10:00:00.000Z',
+    };
+
+    const p: Project = {
+      id: 'p-prod-phase2',
+      name: 'Cocina Integral O2',
+      customerId: 'cust-20',
+      status: 'produced',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 500,
+      installation: job,
+      items: [],
+      createdAt: '2026-08-21T10:00:00.000Z',
+      updatedAt: '2026-08-21T11:00:00.000Z',
+    };
+
+    const api = projectToApi(p);
+    const apiJob = api.installation as Record<string, unknown>;
+    expect(apiJob).toBeTruthy();
+    expect(apiJob.field_issues).toHaveLength(1);
+    expect(apiJob.punch_items).toHaveLength(1);
+    expect((apiJob.closeout as Record<string, unknown>).signed_off_by).toBe('María González');
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.installation?.id).toBe('ijob-1');
+    
+    expect(round.installation?.visits[0]?.status).toBe('completed');
+    expect(round.installation?.visits[0]?.crew).toEqual(['Juan', 'Pedro']);
+    expect(round.installation?.visits[0]?.result).toBe('partial');
+    expect(round.installation?.fieldIssues[0]?.status).toBe('action_required');
+    expect(round.installation?.fieldIssues[0]?.partInstanceId).toBe('p1_i1_u1_LAT_1');
+    // OC-073: la evidencia de resolución no puede perderse en el roundtrip.
+    expect(round.installation?.punchItems[0]?.isBlocker).toBe(true);
+    expect(round.installation?.punchItems[0]?.resolutionNotes).toBe('Manija reemplazada y verificada');
+    expect(round.installation?.punchItems[0]?.resolutionPhotoIds).toEqual(['photo-3']);
+    // OC-074: los hechos de closeout auditados sobreviven el roundtrip.
+    expect(round.installation?.closeout?.signedOffBy).toBe('María González');
+    expect(round.installation?.closeout?.closedAt).toBe('2026-09-05T12:30:00.000Z');
+  });
+
+  it('installationJobFromApi tolera ausencia y null (obras sin job)', () => {
+    expect(installationJobFromApi(undefined)).toBeUndefined();
+    expect(installationJobFromApi(null)).toBeUndefined();
+  });
+});

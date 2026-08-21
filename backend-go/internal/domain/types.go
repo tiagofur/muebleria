@@ -594,6 +594,10 @@ type Project struct {
 	ChangeOrders      []ChangeOrder       `json:"change_orders,omitempty"`
 	PartInstances     []PartInstance      `json:"part_instances,omitempty"`
 	ModuleUnits       []ModuleUnitExecution `json:"module_units,omitempty"`
+	// Installation is the installation job (visits, field issues, punch,
+	// closeout — OC-070..OC-074). Server-authoritative: only mutated through
+	// the dedicated installation endpoints, never through the project PUT.
+	Installation     *InstallationJob   `json:"installation,omitempty"`
 	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
 	Events            []ProjectEvent      `json:"events,omitempty"`
 	Notes             string              `json:"notes,omitempty"`

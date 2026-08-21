@@ -23,6 +23,15 @@ export {
   InstalacionesScreen,
   instalacionesProjects,
 } from './InstalacionesScreen';
+export { InstalacionesProjectDetail } from './InstalacionesProjectDetail';
+export type { InstalacionesProjectDetailProps } from './InstalacionesProjectDetail';
+export { InstallationJobPanel } from './InstallationJobPanel';
+export type { InstallationJobPanelHandlers } from './InstallationJobPanel';
+export {
+  installationJobCardView,
+  canCompleteInstallationNow,
+  type InstallationJobCardView,
+} from './installationJobView';
 export type {
   DashboardMetrics,
   SectorDashboard,

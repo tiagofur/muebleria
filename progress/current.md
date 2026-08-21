@@ -1,91 +1,113 @@
-# Sesión activa: Issue #301 — Operational Core O2: Producción física (OC-030..OC-034)
+# Sesión cerrada: Issue #303 — Operational Core O4: Instalación profesional (OC-070..OC-074)
 
 **Fecha:** 2026-08-21
-**Objetivo:** Migrar el seguimiento físico a la granularidad real del taller según `docs/production-flow-v2.md` y `docs/operational-core-v1.md`.
+**Feature:** F137 — `operational_core_o4` — **done**
+**Rama:** `feat/f137-installation-closeout` (pusheada, PR abierto)
 
-## Estado
+## Objetivo
 
-F136 completa en tres pasadas: (1) implementación inicial de fases, (2) revisión
-con correcciones duras (concurrencia, RBAC/audit, revisión stale, transiciones,
-split-brain), (3) **esta sesión**: deuda documentada.
+La instalación deja de ser un botón `loaded → installed` y pasa a ser un subproceso:
+InstallationJob con múltiples visitas, FieldIssues trazables, PunchItems que bloquean
+cierre y closeout/conformidad auditado (OC-070..OC-074).
 
-## Esta sesión — deuda resuelta (#301)
+## Plan (ejecutado)
 
-1. **Generación server-side (`PUT /api/projects/{id}/part-executions`):**
-   persiste las instancias derivadas del BOM (resolución en TS) tras validar
-   server-side: líneas existentes, una unidad por unidad de cantidad, rutas que
-   empiezan en cut, revisión = liberada. Regenerar sobre avance existente exige
-   `force` supervisor y audita el reset con floor events. Snapshot de storage
-   extendido con cantidades de línea.
-2. **Escáner móvil migrado a los endpoints físicos:** QR de pieza (`pId`)
-   completa la operación actual (server resuelve `currentOperationIndex`; gate
-   RBAC por "alguna estación de piezas asignada"); QR de unidad/bulto (`uId`)
-   avanza la unidad por el gate de armado server-side; fallback legacy para
-   etiquetas v1/v2 sin pId/uId; cola offline re-enrutada en sync. ScannerScreen
-   muestra la resolución física con botón Avanzar.
-3. **Dashboards por pieza:** `buildProjectFloorSummary` entra en modo físico
-   cuando hay ejecución generada — Corte/Enchape cuentan piezas (piezas en CNC
-   = cola de Enchape, en tránsito), Armado+ cuenta unidades. PlantBoard,
-   ProgressStrip y ManagerDashboard heredan el conteo honesto sin cambios.
-   `countMode`/`totalParts`/`totalUnits` expuestos.
-4. **Pantalla de armado por unidad:** `physicalStationQueue` (dominio) +
-   FabricScreen renderiza en modo físico filas por pieza (código, U#, dims,
-   operación, retrabajo) y por unidad ("Unidad 2 de 3", readiness, faltantes
-   con su estación vía `describeMissingPieces`, bultos). Callbacks opcionales
-   `onAdvancePart`/`onAdvanceUnit`; sin ellos no se muestra botón (el legacy
-   daría 409). Batch legacy deshabilitado sobre filas físicas.
-5. **Identidad de bulto:** clasificación honesta en el parser QR (target
-   `package` por multiplicidad bulto/tot>1); `package_count` se registra en la
-   unidad al entrar a `packaged` (endpoint + cliente + escáner envía
-   totalPackages).
-6. **Costing de rework (OC-061):** `material_cost`/`labor_minutes` validados y
-   registrados en el payload de `quality_issue_reported`/`rework_started`
-   (consultables para job costing); cliente `reworkPart` extendido.
+- [x] F137 registrada en `feature_list.json` (in_progress)
+- [x] Dominio puro `packages/domain/src/installation.ts` + tests (26)
+- [x] Contract fixture `contracts/installationStatuses.json` + espejo Go + parity tests
+- [x] Backend: migración 000070 (`projects.installation` JSONB),
+      `MutateProjectInstallation` (SELECT FOR UPDATE), handlers
+      GET/PUT `/api/projects/{id}/installation` +
+      POST `.../installation/closeout` (complete_installation | sign_off | close)
+- [x] Storage TS: mappers snake_case + `getInstallation`/`saveInstallation`/
+      `installationCloseout` (+ `CloseoutGateError` con checks)
+- [x] Web UI: `InstallationJobPanel` (visitas, incidencias, punch, cierre con gates
+      que explican cómo resolverse) incrustado en `InstalacionesScreen` + wiring
+      AppContent/ShellView/store
+- [x] Verificación completa
+- [x] Reviewer: CHANGES_REQUESTED con 3 defects menores de copy/formato (+2
+      recomendaciones) — todos aplicados y suites re-verificadas en verde
+      (ver `progress/review_F137.md` y `progress/history.md`)
 
-## Cuarta pasada — deuda viva resuelta
+## Qué se implementó
 
-- **Wiring del shell web completo:** `handleAdvancePart`/`handleAdvanceUnit`
-  en AppContent (modo API: endpoints físicos server-authoritative + mirror
-  local con las mismas funciones puras; modo local/ofline: espejo directo),
-  cableados vía ShellView a FabricScreen (`onAdvancePart`/`onAdvanceUnit`) —
-  las filas físicas web ya avanzan por pieza/unidad.
-- **Generación disparada por el release:** al liberar producción
-  (`onReleaseToProduction` → `handleGeneratePartExecutions`) el shell deriva
-  las piezas desde el BOM del catálogo (`deriveProjectPartExecutions`, nueva:
-  resolveBom por línea + ruta CNC sólo cuando el drilling resolver da
-  taladros reales) y las persiste vía `PUT part-executions` (validación
-  server-side) con mirror local. Guard: no regenera automáticamente si ya hay
-  avance físico (eso queda como acción supervisada).
-- **Store local:** `advancePartInstanceLocal`/`advanceModuleUnitLocal` (gate
-  de armado con blockers)/`setPartExecutions` con re-derivación OC-034 del
-  estado del ítem en cada avance, persistiendo por el canal normal de
-  guardado.
+1. **Dominio (OC-070/071):** `InstallationJob` por obra con múltiples
+   `InstallationVisit` (fecha, crew, arrival/start/end, notas, fotos, unidades
+   trabajadas, resultado finished|partial|blocked). Transiciones validadas
+   (scheduled→in_progress→completed/cancelled). `installation_started` se audita
+   una sola vez (primera visita con trabajo real). Status del job **derivado**,
+   nunca almacenado.
+2. **FieldIssue (OC-072):** estados open→action_required/blocked→resolved→verified
+   con reapertura por verificación fallida; fotos y vínculo a mueble (`projectItemId`)
+   y pieza (`partInstanceId`). Entidad trazable, no nota.
+3. **PunchItem (OC-073):** owner, dueDate, severidad (minor/major/critical), flag
+   `isBlocker`, cierre **con evidencia obligatoria** (notas o fotos);
+   `punch_opened`/`punch_closed` auditados por ítem. `deriveProjectStage` ahora
+   usa el balance abierto/cerrado (múltiples punch coexisten sin hacks).
+4. **Cierre (OC-074):** gates evaluables (unidades instaladas — físicas o legacy —,
+   field issues resueltos, punch bloqueantes cerrados, visitas cerradas) +
+   conformidad. `installed` en todas las unidades NO cierra el proyecto: el
+   sign-off y el cierre corren por endpoint server-authoritative que evalúa los
+   gates contra el estado lockeado. Guard también sobre eventos crudos
+   `client_signed_off`/`project_closed` (POST events y dual-write del agregado).
+   `complete_installation` es hito de planta auditable (KPI installationHours).
+5. **Paridad:** `contracts/installationStatuses.json` (vocabularios + transiciones
+   + códigos de gates) verificado desde TS (domain test) y Go (parity test);
+   lógica de gates/transiciones espejada con tests equivalentes.
+6. **Backend:** columna JSONB `installation` (migración 000070), sólo escribible
+   por los endpoints dedicados (el PUT agregado del proyecto la ignora —
+   anti-smuggling); `MutateProjectInstallation` transaccional (SELECT FOR UPDATE)
+   + eventos de auditoría en la misma tx; RBAC por acción vía la matriz de
+   eventos (`installation_*` incluye produccion; punch/closeout, gerentes).
+7. **Web:** `InstalacionesScreen` en modo job — panel por obra con visitas
+   (programar/iniciar/completar/cancelar), incidencias (reportar + transiciones
+   legales), punch (abrir con severidad/bloqueante, resolver con evidencia) y
+   cierre (checklist de gates con detalles accionables, completar instalación,
+   conformidad, cerrar). Preserva "En camino → Marcar Instalado" (avance físico
+   por unidad de F136). Store: `setInstallationJob` (espejo server) /
+   `applyInstallationProject` (modo local con eventos); AppContent: acción pura
+   client-side + persistencia por endpoint (API) o canal local (guest).
 
-Verificación de la pasada: domain 810 · ui 1158 · web 301 · mobile 42 ·
-storage 141 · excel 89 · desktop 17 · `pnpm typecheck` OK.
+## Verificación (evidencia)
 
-## Quinta pasada — mejora de visibilidad móvil
+- `pnpm --filter @muebles/domain test`: **836 tests** OK (+installation 26;
+  projectLifecycle 43 OK con balance punch).
+- `pnpm --filter @muebles/storage test`: **143 tests** OK (+2 roundtrip
+  instalación: evidencia de punch y hechos de closeout sobreviven).
+- `pnpm --filter @muebles/ui test`: **1169 tests** OK (+InstallationJobPanel 11).
+- `pnpm test` monorepo completo OK (mobile 45 · desktop 17 · web 301 · excel 89).
+- `go test ./...`: OK — parity fixture, validación de transiciones del job,
+  gates OC-074 (punch bloqueante bloquea sign-off), RBAC por acción, smuggling
+  de closeout por PUT rechazado, hito complete_installation.
+- `pnpm typecheck` monorepo: OK.
 
-- **ProductionQueueScreen** (cola de producción móvil): cada obra ahora
-  muestra su progreso físico real — `X/Y piezas listas · A/B unidades
-  instaladas` — traído de `GET part-executions` (best effort por obra; un
-  fetch fallido no bloquea la cola y la tarjeta queda en el conteo legacy
-  de módulos). Helper puro `physicalProgress` extraído a módulo propio
-  (sin imports de react-native) con tests.
+## Notas de diseño
 
-Con esto el flujo físico de #301/F136 está completo en los tres clientes
-(web, móvil, backend). Sin deuda abierta.
+- `installation` viaja en el agregado GET (lectura lossless) pero el PUT agregado
+  preserva la copia del servidor: el job es server-authoritative.
+- Los eventos de lifecycle los appendea el server (ids propios); el espejo local
+  aplica sólo el job. En modo local/offline la acción pura appendea eventos.
+- UI: una primaria por contexto (Iniciar/Completar visita, Registrar conformidad);
+  gates deshabilitados explican cómo resolverse (UX operacional §2.4).
 
-## Verificación (evidencia de esta sesión)
+## Sexta pasada — feedback de producto: home de proceso = lista de obras
 
-- `pnpm --filter @muebles/domain test`: **807 tests** OK (colas físicas,
-  summary físico, clasificación bulto).
-- `pnpm --filter @muebles/ui test`: **1158 tests** OK (filas por pieza/unidad,
-  callbacks físicos, faltantes con estación).
-- `pnpm --filter mobile test`: **42 tests** OK (routing físico pId/uId/bulto,
-  gate 409, offline queue, fallback legacy).
-- `pnpm --filter @muebles/storage test`: **141 tests** OK; roundtrip
-  supervisorOverride cubierto.
-- `go test ./...`: OK — generación (validación/force/audit), scanner mode,
-  package_count, costing.
-- `pnpm typecheck`: monorepo completo OK.
+El panel de job incrustado por obra en la home de Instalaciones concentraba el
+trabajo de TODAS las obras en una sola pantalla (demasiada información, ambigüedad
+de a qué obra pertenece cada dato). Refactor al patrón canónico que ya usan
+Embarques/Órdenes:
+
+- **Home (`/installations`)**: lista de obras — card con cliente + dirección/teléfono,
+  badge de estado del job, resumen `X/Y unidades · N en camino · visitas/incidencias/
+  punch bloqueantes` y UNA primaria "Abrir instalación". Sin acciones de proceso inline.
+- **Detalle (`/installations/:projectId`, nuevo `InstalacionesProjectDetail`)**: back a
+  la lista, contexto de obra + contacto, "En camino → Marcar Instalado" y el panel
+  completo OC-070..OC-074 (visitas, incidencias, punch, cierre con gates).
+- **Docs**: regla dura codificada en `docs/operational-ux.md` §4 ("home de proceso =
+  lista de obras; el trabajo vive en el detalle por obra") y `docs/design.md` §6.7d
+  actualizado con la spec lista → detalle — para que ninguna feature vuelva a
+  inline-ar el trabajo de todas las obras en una home.
+
+Verificación de la pasada: ui **1173** (screen lista 8 + detalle 5) · resto de
+paquetes sin cambios y en verde (domain 836 · storage 143 · web 301 · mobile 45 ·
+desktop 17 · excel 89) · `pnpm typecheck` monorepo OK.

@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
- * Instalaciones — installation board (loaded → installed).
+ * Instalaciones — home: LISTA de obras con trabajo de instalación (el
+ * trabajo del proceso vive en el detalle por obra, no acá).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -45,7 +46,7 @@ function makeCustomer(overrides: Partial<Customer> = {}): Customer {
 }
 
 describe('instalacionesProjects (pure derivation)', () => {
-  it('keeps loaded items and counts installed; other statuses are out', () => {
+  it('keeps works with loaded items, job work, or both; counts the summary', () => {
     const projects = [
       makeProject('p1', [
         makeItem('a', 'loaded'),
@@ -54,17 +55,46 @@ describe('instalacionesProjects (pure derivation)', () => {
         makeItem('d'),
       ]),
       makeProject('p2', [makeItem('e', 'loaded')]),
-      makeProject('p3', [makeItem('f', 'installed')]), // nothing pending → out
+      makeProject('p3', [makeItem('f', 'installed')]), // nothing pending, no job → out
       makeProject('p4', [makeItem('g', 'loaded')], 'draft'),
     ];
     const cards = instalacionesProjects(projects, () => makeCustomer());
     expect(cards.map((c) => c.projectId)).toEqual(['p1', 'p2']);
-    expect(cards[0]!.toInstall.map((r) => r.itemId)).toEqual(['a']);
+    expect(cards[0]!.toInstallCount).toBe(1);
     expect(cards[0]!.installedCount).toBe(1);
     expect(cards[0]!.customerLabel).toBe('Cliente X');
+    expect(cards[0]!.job.units).toEqual({ mode: 'legacy', installed: 1, total: 4 });
   });
 
-  it('only derives contact fields present in the existing customer', () => {
+  it('keeps a work with everything installed but open punch blockers', () => {
+    const project: Project = {
+      ...makeProject('p1', [makeItem('a', 'installed')]),
+      installation: {
+        id: 'ijob-1',
+        projectId: 'p1',
+        visits: [],
+        fieldIssues: [],
+        punchItems: [
+          {
+            id: 'pnch-1',
+            description: 'Falta zócalo',
+            owner: 'Taller',
+            severity: 'critical',
+            isBlocker: true,
+            status: 'open',
+            openedAt: '2026-09-02T15:00:00.000Z',
+          },
+        ],
+        createdAt: '2026-09-01T10:00:00.000Z',
+      },
+    };
+    const cards = instalacionesProjects([project]);
+    expect(cards.map((c) => c.projectId)).toEqual(['p1']);
+    expect(cards[0]!.job.blockingPunchCount).toBe(1);
+    expect(cards[0]!.toInstallCount).toBe(0);
+  });
+
+  it('derives only the contact fields present in the customer', () => {
     const [card] = instalacionesProjects(
       [makeProject('p1', [makeItem('a', 'loaded')])],
       () => makeCustomer({ address: 'Av. Reforma 120', phone: '+52 55 1234 5678' }),
@@ -74,126 +104,84 @@ describe('instalacionesProjects (pure derivation)', () => {
       customerAddress: 'Av. Reforma 120',
       customerPhone: '+52 55 1234 5678',
     });
-    expect(card?.customerEmail).toBeUndefined();
   });
 });
 
-describe('InstalacionesScreen', () => {
+describe('InstalacionesScreen (lista de obras)', () => {
   const projects = [
-    makeProject('p1', [
-      makeItem('a', 'loaded'),
-      makeItem('b', 'installed'),
-    ]),
+    makeProject('p1', [makeItem('a', 'loaded'), makeItem('b', 'installed')]),
     makeProject('p2', [makeItem('c', 'loaded')]),
   ];
 
-  it('groups loaded items by project with install totals', () => {
+  it('renders one card per project with the work summary, not the process work', () => {
     render(
       <InstalacionesScreen
         projects={projects}
-        canAdvance
-        onAdvance={() => undefined}
+        onOpenProject={() => undefined}
+        customerFor={() => makeCustomer()}
       />,
     );
     expect(screen.getByTestId('instalaciones-card-p1')).not.toBeNull();
     expect(screen.getByTestId('instalaciones-card-p2')).not.toBeNull();
-    expect(screen.getByTestId('instalaciones-install-a')).not.toBeNull();
     expect(screen.getByTestId('instalaciones-to-install').textContent).toBe(
       '2 para instalar',
     );
-    expect(screen.getByTestId('instalaciones-installed').textContent).toBe(
-      '1 instalados',
+    // Resumen por obra, no detalle del proceso:
+    expect(screen.getByTestId('instalaciones-card-p1').textContent).toContain(
+      '1/2 unidades instaladas',
     );
+    expect(screen.getByTestId('instalaciones-card-p1').textContent).toContain(
+      '1 en camino',
+    );
+    // La home no expone acciones del proceso (visitas/punch/cierre):
+    expect(screen.queryByTestId('installation-new-visit-p1')).toBeNull();
+    expect(screen.queryByTestId('instalaciones-advance-a')).toBeNull();
   });
 
-  it('advances loaded → installed via the callback', () => {
-    const onAdvance = vi.fn();
+  it('opens the per-project detail screen via the callback', () => {
+    const onOpenProject = vi.fn();
     render(
       <InstalacionesScreen
         projects={projects}
-        canAdvance
-        onAdvance={onAdvance}
+        onOpenProject={onOpenProject}
       />,
     );
-    fireEvent.click(screen.getByTestId('instalaciones-advance-a'));
-    expect(onAdvance).toHaveBeenCalledWith('p1', 'a', 'installed');
+    fireEvent.click(screen.getByTestId('instalaciones-open-p1'));
+    expect(onOpenProject).toHaveBeenCalledWith('p1');
   });
 
-  it('shows the available destination and contact details as actionable links', () => {
+  it('renders the destination address and phone as actionable links', () => {
     render(
       <InstalacionesScreen
         projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
-        canAdvance
-        onAdvance={() => undefined}
+        onOpenProject={() => undefined}
         customerFor={() =>
-          makeCustomer({
-            address: 'Av. Reforma 120, CDMX',
-            phone: '+52 55 1234 5678',
-            email: 'obra@example.com',
-          })
+          makeCustomer({ address: 'Av. Reforma 120, CDMX', phone: '+52 55 1234 5678' })
         }
       />,
     );
     expect(screen.getByText('Av. Reforma 120, CDMX')).not.toBeNull();
-    expect(screen.getByLabelText('Datos de contacto de Cliente X')).not.toBeNull();
     expect(
       screen.getByRole('link', { name: '+52 55 1234 5678' }).getAttribute('href'),
     ).toBe('tel:+52 55 1234 5678');
-    expect(
-      screen.getByRole('link', { name: 'obra@example.com' }).getAttribute('href'),
-    ).toBe('mailto:obra@example.com');
   });
 
   it('does not render contact details when the customer is unavailable', () => {
     render(
       <InstalacionesScreen
         projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
-        canAdvance
-        onAdvance={() => undefined}
+        onOpenProject={() => undefined}
         customerFor={() => undefined}
       />,
     );
-    expect(screen.queryByLabelText('Datos de contacto')).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
-  });
-
-  it('keeps partial contact details semantic for a long email address', () => {
-    const email = 'instalaciones-con-un-contacto-muy-largo@cliente-ejemplo.com';
-    render(
-      <InstalacionesScreen
-        projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
-        canAdvance
-        onAdvance={() => undefined}
-        customerFor={() => makeCustomer({ email })}
-      />,
-    );
-    const emailLink = screen.getByRole('link', { name: email });
-    expect(emailLink.getAttribute('href')).toBe(`mailto:${email}`);
-    expect(emailLink.className).toContain('ship-board__customer-detail');
-    expect(emailLink.closest('address')?.getAttribute('aria-label')).toBe(
-      'Datos de contacto de Cliente X',
-    );
-    expect(screen.getAllByRole('link')).toHaveLength(1);
-  });
-
-  it('hides advance buttons read-only and shows the target label', () => {
-    render(
-      <InstalacionesScreen
-        projects={projects}
-        canAdvance={false}
-        onAdvance={() => undefined}
-      />,
-    );
-    expect(screen.queryByTestId('instalaciones-advance-a')).toBeNull();
-    expect(screen.getAllByText('Instalado').length).toBe(2);
   });
 
   it('renders the empty state when nothing is loaded', () => {
     render(
       <InstalacionesScreen
         projects={[makeProject('p1', [makeItem('a', 'packaged')])]}
-        canAdvance
-        onAdvance={() => undefined}
+        onOpenProject={() => undefined}
       />,
     );
     expect(screen.getByText('Nada para instalar')).not.toBeNull();
