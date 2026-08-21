@@ -43,6 +43,7 @@ import { buildAssemblySheetsExport } from '../exportAssemblySheets';
 import { downloadDespiecePdf } from '../exportDespiecePdf';
 import { downloadCutPlanPdf } from '../exportCutPlanPdf';
 import { downloadCutPlanDxf } from '../exportCutPlanDxf';
+import { resolveProjectDrilling } from '@muebles/domain';
 import { downloadCutPlanPtx, ptxFileName } from '../exportCutPlanPtx';
 import { runExport, type ExportDelivery } from './runExport';
 
@@ -434,7 +435,19 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
       setExportBusy(true);
       try {
         const suffix = variant === 'sheets' ? 'tableros' : 'piezas';
-        await downloadCutPlanDxf(cutPlan, variant);
+        // F130: real drilling (manual + derived joints + engine). Best effort —
+        // an unresolvable project must still export the nesting geometry.
+        let drilling;
+        try {
+          const project =
+            projects.find((p) => p.id === cutPlan.projectId) ?? selectedProject;
+          if (project && catalog) {
+            drilling = resolveProjectDrilling({ project, catalog }).data.patterns;
+          }
+        } catch {
+          drilling = undefined;
+        }
+        await downloadCutPlanDxf(cutPlan, variant, undefined, undefined, { drilling });
         toast({
           type: 'success',
           message: `✓ Exportación DXF (${suffix}) descargada`,

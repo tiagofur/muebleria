@@ -7,7 +7,7 @@ import JSZip from 'jszip';
 import {
   buildProductionElevations,
   collectExportIssues,
-  generateCutRows,
+  generateCutRows, resolveProjectDrilling,
   generateHardwareList,
   generatePieceLabels,
   generateModuleLabels,
@@ -155,6 +155,17 @@ export async function buildProductionPackExport(
     zip.file(`etiquetas_${baseName}.pdf`, toUint8Array(labelsBuffer));
     zip.file(`resumen_materiales_${baseName}.pdf`, toUint8Array(summaryBuffer));
     zip.file(`despiece_${baseName}.pdf`, toUint8Array(despieceBuffer));
+    // F130: perforaciones por pieza desde la fuente real (motor F128 + reglas
+    // F129); mismo schema muebles.drilling-data.v1 que el reporte individual.
+    try {
+      const drilling = resolveProjectDrilling({ project, catalog }).data;
+      zip.file(
+        `perforaciones_${baseName}.json`,
+        JSON.stringify(drilling, null, 2),
+      );
+    } catch {
+      // unresolvable project keeps the rest of the pack intact
+    }
     if (elevationsBuffer) {
       zip.file(
         `elevaciones_${baseName}.pdf`,

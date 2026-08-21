@@ -269,6 +269,7 @@ export {
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,
+  generateCutRowsWithLinks,
   formatOptimizerPartDescription,
   generatePieceLabels,
   formatEdgeBandingInstruction,
@@ -716,6 +717,13 @@ export {
   type HardwareCatalogLookup,
   type PieceDescriptor,
 } from './partDrillingResolver';
+
+// --- Project Drilling Assembler (F130) ---
+export {
+  resolveProjectDrilling,
+  type ResolveProjectDrillingParams,
+  type ProjectDrillingResult,
+} from './projectDrilling';
 
 // --- Joint Drilling Rules (F129) ---
 export {

@@ -3,13 +3,15 @@
  */
 
 import { useMemo } from 'react';
-import type { PieceLabel, ProductionCutRow, Project } from '@muebles/domain';
-import { generatePartDrillingData } from '@muebles/domain';
+import type { Catalog, PieceLabel, ProductionCutRow, Project } from '@muebles/domain';
+import { generatePartDrillingData, resolveProjectDrilling } from '@muebles/domain';
 import type { ProductionOrderReadiness } from '../productionOrderModel';
 import type { ProductionDocumentItem } from '../ProductionOrderDocumentsPanel';
 
 export interface UseProductionOrderDocumentsOptions {
   readonly project: Project;
+  /** F130: full catalog enables the REAL drilling source (F128 engine + F129 joints). */
+  readonly catalog?: Catalog | null;
   readonly readiness: ProductionOrderReadiness;
   readonly cutRows?: readonly ProductionCutRow[] | null;
   readonly pieceLabels?: readonly PieceLabel[] | null;
@@ -45,10 +47,20 @@ export function useProductionOrderDocuments({
   onExportAssemblySheets,
   onOpenCsvConfig,
   onNavigateToTab,
+  catalog,
 }: UseProductionOrderDocumentsOptions): readonly ProductionDocumentItem[] {
   const downloadDrillingJson = () => {
     if (!cutRows || cutRows.length === 0) return;
-    const data = generatePartDrillingData({ project, cutRows });
+    // F130: real source first (manual placements + derived joints + engine);
+    // heuristics stay as fallback for callers without catalog access.
+    let data;
+    try {
+      data = catalog
+        ? resolveProjectDrilling({ project, catalog }).data
+        : generatePartDrillingData({ project, cutRows });
+    } catch {
+      data = generatePartDrillingData({ project, cutRows });
+    }
     const content = JSON.stringify(data, null, 2);
     const safeName = project.name
       .toLowerCase()

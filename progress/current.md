@@ -1,57 +1,41 @@
 # Sesión activa
 
-**Feature:** F129 — Reglas de unión paramétricas sistema 32 (perforaciones CNC — 3/5)
-**Estado:** done (sesión cerrada, review APPROVED, pushed)
-**Inicio:** 2026-08-21
+**Feature:** F130 — Export DXF de perforaciones por cara + reporte (perforaciones CNC — 4/5)
+**Estado:** implementada, esperando review
+**Inicio:** 2026-08-21 (tarde)
 
 ## Plan
 
-1. Estudiar: resolver F128 (partRole/placements derivados), workshopRules,
-   Structure/instancias, persistencia de structures (mappers/Go), fixture gabete demo.
-2. Tipos declarativos `JointDrillingRuleSet` (unión, herraje, offsets paramétricos,
-   grilla 32) + `DEFAULT_JOINT_DRILLING_RULES` del taller; override opcional por
-   estructura.
-3. Generador `deriveJointHardwarePlacements(...)`: costado-piso/techo (minifix),
-   respaldo (tornillo), puerta-costado (bisagra+placa, cantidad vía workshopRules).
-   Emite placements derivados que F128 resuelve; snap 32 y línea de sistema 37mm
-   configurable.
-4. Golden del gabete demo + tests unitarios.
-5. Suite + typecheck + go test + commit + reviewer + cierre.
+1. Leer wiring existente: dxfCutPlanExport (drillingByPiece de cb21e4a), useExportHandlers:437
+   (no pasa drilling), exportProductionPack, useProductionOrderDocuments (reporte), partDrillingExport.
+2. Dominio: ensamblador real — BOM parts + join instancias→partId + placements manuales +
+   derived joints (F129) → resolvePartDrilling por pieza → patrones (schema v1 compatible).
+3. DXF: capas por cara+tipo+Ø (PERF_F_/PERF_B_ espejada/CANTO), convención documentada.
+4. Reporte: fuente real del motor, schema muebles.drilling-data.v1 intacto.
+5. Wiring: panel Ingeniería pasa drilling al DXF; pack ZIP incluye datos reales.
+6. Goldens + suite + reviewer + cierre.
 
 ## Bitácora
 
-- 2026-08-21: F128 cerrada (3 rondas review, APPROVED). Deuda saldada:
-  DEFAULT_BOARD_THICKNESS_MM unificado (6689a4a). F129 in_progress.
-
-## Bitácora (implementación)
-
-- Tipos declarativos JointKind/PanelJointRule/BackPanelRule/DoorHingeRule/JointDrillingRules
-  en types.ts + `Structure.jointDrillingRules?` (drilling-only: NO bump de revisión BOM,
-  NO viaja en structureRevision). `BoardPart/ResolvedBoardPart.componentPlacement?` — el BOM
-  expone el placement del componente para clasificar piezas (bom.ts expansión+resolución).
-- `jointDrillingRules.ts`: DEFAULT_JOINT_DRILLING_RULES (taller: minifix+taquetes 50/512,
-  fondo tornillos 16/400, bisagra 22.5/37/100, grilla 32) + `deriveJointHardwarePlacements`
-  (puro). Reglas referencian herrajes por CÓDIGO (portables); merge parcial con defaults
-  via effectiveRules. Uniones: costado↔piso/techo (cazuela en cara del costado a T_piso/2
-  exacto — floor() sacaba la Ø15 0.5mm del canto con Arauco 15mm; perno en canto top/bottom
-  del piso), respaldo (perímetro), puerta (tazas + placas a D−37, cantidad via
-  suggestHingeCount). Snap 32 en intermedios; taquetes a ±32 exacto del minifix.
-- `HardwarePlacement.derivedMachining?` (F129): maquinado de aplicación que reemplaza el
-  perfil de catálogo para ese placement — el fondo usa piloto PASANTE Ø3 (el tornillo del
-  catálogo es piloto ciego 35mm para miembros gruesos; profundidad > fondo = error real
-  de aplicación). Resolver: `placement.derivedMachining ?? hardware?.machining`.
-- Tests domain 10 (unit posiciones/hinge, override parcial, golden gabete 300×720×590
-  con BOM real resuelto — piso 269×590×15, costados ×2, puerta 717, fondo 6 pasantes —
-  e integración F129→F128: cada pieza resuelve sin issues). Storage +2 round-trip del
-  override. Suite 2439, typecheck 7/7, go test verde.
-- Persistencia: apiMappers to/from (joint_drilling_rules, revisiones NO), Go
-  JointDrillingRules structs (camelCase JSONB), structures.go SELECT/INSERT/UPDATE con
-  nullableJSON, migración aditiva 000065 (JSONB).
+- 2026-08-21: F129 cerrada (APPROVED). Serie: F127-F129 done. F130 in_progress.
 
 
-## Cierre (2026-08-21)
+## Bitácora (implementación F130)
 
-- Review APPROVED (`progress/review_F129.md`); fix menor post-review: literal
-  `|| 18` -> `DEFAULT_BOARD_THICKNESS_MM`. F129 done.
-- Serie: F127 OK, F128 OK, F129 OK -> F130 (export DXF por caras + reporte, ya
-  hay wiring adelantado de cb21e4a) -> F131 (editor visual + gizmo) -> F132 (SCM, postergada).
+- **Dominio**: `generateCutRowsWithLinks` (cut.ts refactor — rows + links con
+  partId/labelRef/part por línea; generateCutRows delega) y `resolveProjectDrilling`
+  (projectDrilling.ts): por pieza une placements manuales (instancias estructura+
+  módulo vía convención `-copy-N`) + derived joints (F129, con reglas del structure
+  si las tiene) y resuelve con el motor F128. Patterns keyeados por labelRef
+  (único por línea); data en schema muebles.drilling-data.v1 intacto. Piezas sin
+  herraje caen al fallback F074 marcado. Tests 5/5 (gabete real: minifix+pernos,
+  bisagras Ø35×2 en puerta, pasantes en fondo, sin issues; quantity no duplica).
+- **DXF**: capas dinámicas por cara+Ø — PERF_F<Ø> / PERF_B<Ø> (back ESPEJADO en
+  eje ancho: el operador voltea y corre las coordenadas tal cual) /
+  PERF_CANTO<Ø> (proyectado al canto); profundidad vive en el reporte (capa=tool).
+  Join por labelRef con fallback partCode. Layer table dinámico (colores 4/1/6).
+  Goldens regenerados por UPDATE_GOLDEN (delta = capas nuevas + círculos en ellas).
+- **Wiring**: handleExportCutPlanDxf pasa drilling real (best-effort);
+  reporte del hub con fuente real + fallback heurístico (catalog enhebrado
+  Workspace→Hub→hook); pack ZIP incluye `perforaciones_<obra>.json` real.
+- Suite 2444, typecheck 7/7. Deuda no mezclada: agregado-scoped manual placements (F131).

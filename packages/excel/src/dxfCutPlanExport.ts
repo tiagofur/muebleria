@@ -72,6 +72,38 @@ const DXF_LAYERS: ReadonlyArray<{ name: string; color: number }> = [
   { name: 'RETAZO', color: 8 },
 ];
 
+/**
+ * Drilling layer convention (F130) — one layer per FACE + DIAMETER so CAM
+ * software (SCM Maestro) maps layer → tool once and every program follows:
+ *   PERF_F<Ø>   front-face holes (viewed from the front, as drawn)
+ *   PERF_B<Ø>   back-face holes, ALREADY MIRRORED (width axis) so the
+ *               operator flips the piece and runs the same coordinates
+ *   PERF_CANTO<Ø> edge-face holes, projected onto the piece outline at the
+ *               point where the edge sits (horizontal-aggregate drilling)
+ * Depth is NOT part of the layer: same Ø drills at the depth each tool is
+ * set to; per-hole depths live in the drilling report.
+ */
+const DRILLING_FACE_COLORS: Readonly<Record<string, number>> = {
+  F: 4,
+  B: 1,
+  CANTO: 6,
+};
+
+function drillingLayerName(face: string, diameterMm: number): string {
+  const group = face === 'front' ? 'F' : face === 'back' ? 'B' : 'CANTO';
+  return `PERF_${group}${Math.round(diameterMm)}`;
+}
+
+function drillingLayersFor(patterns: Iterable<PartDrillingPattern>): string[] {
+  const names = new Set<string>();
+  for (const pattern of patterns) {
+    for (const hole of pattern.holes) {
+      names.add(drillingLayerName(hole.face, hole.diameterMm));
+    }
+  }
+  return [...names].sort();
+}
+
 const SHEET_GAP_MM = 200;
 const PIECES_ROW_MAX_MM = 6000;
 const PIECES_GAP_MM = 100;
@@ -204,15 +236,29 @@ function drawPiece(
   }
 
   if (drillingByPiece && !p.rotated) {
-    const pattern = drillingByPiece.get(p.partCode);
+    const pattern = drillingByPiece.get(p.labelRef ?? p.partCode) ?? drillingByPiece.get(p.partCode);
     if (pattern) {
       for (const hole of pattern.holes) {
-        if (!PROJECTED_DRILLING_FACES.has(hole.face)) continue;
+        const layer = drillingLayerName(hole.face, hole.diameterMm);
         // Face-plane convention (partDrillingResolver, mirrors hardwarePlacement):
         // front/back holes carry xMm along the piece WIDTH and yMm along the
-        // LENGTH. The piece rect is drawn with X = length, so the front/back
-        // projection swaps axes. F130's resolver→export adapter relies on this.
-        entities.push(circle('PERF', x + hole.yMm, y + hole.xMm, hole.diameterMm / 2));
+        // LENGTH. The piece rect is drawn with X = length / Y = width.
+        if (hole.face === 'front') {
+          entities.push(circle(layer, x + hole.yMm, y + hole.xMm, hole.diameterMm / 2));
+        } else if (hole.face === 'back') {
+          // Back face: MIRRORED on the width axis — the operator flips the
+          // piece around its length axis and runs these coordinates as drawn.
+          entities.push(circle(layer, x + hole.yMm, y + (p.widthMm - hole.xMm), hole.diameterMm / 2));
+        } else if (hole.face === 'left' || hole.face === 'right') {
+          // Edge normal to width: projected at the piece side, positioned
+          // along the length by the hole's y.
+          const edgeY = hole.face === 'left' ? 0 : p.widthMm;
+          entities.push(circle(layer, x + hole.yMm, y + edgeY, hole.diameterMm / 2));
+        } else {
+          // top/bottom: edge normal to length, positioned along the width.
+          const edgeX = hole.face === 'top' ? p.lengthMm : 0;
+          entities.push(circle(layer, x + edgeX, y + hole.xMm, hole.diameterMm / 2));
+        }
       }
     }
   }
@@ -229,10 +275,15 @@ function buildHeader(maxX: number, maxY: number): string {
   return s;
 }
 
-function buildLayerTable(): string {
+function buildLayerTable(extraLayerNames: readonly string[] = []): string {
+  const extra = extraLayerNames.map((name) => ({
+    name,
+    color: DRILLING_FACE_COLORS[name.startsWith('PERF_CANTO') ? 'CANTO' : name.startsWith('PERF_B') ? 'B' : 'F'] ?? 4,
+  }));
+  const layers = [...DXF_LAYERS, ...extra];
   let s = pair(0, 'SECTION') + pair(2, 'TABLES');
-  s += pair(0, 'TABLE') + pair(2, 'LAYER') + pair(70, DXF_LAYERS.length);
-  for (const layer of DXF_LAYERS) {
+  s += pair(0, 'TABLE') + pair(2, 'LAYER') + pair(70, layers.length);
+  for (const layer of layers) {
     s += pair(0, 'LAYER') + pair(2, layer.name) + pair(70, 0) + pair(62, layer.color) + pair(6, 'CONTINUOUS');
   }
   s += pair(0, 'ENDTAB') + pair(0, 'ENDSEC');
@@ -275,7 +326,11 @@ function buildSingleSheetDxf(
 
   const maxX = sheet.sheetLengthMm;
   const maxY = sheet.sheetWidthMm + 120;
-  return buildHeader(maxX, maxY) + buildLayerTable() + wrapEntities(entities);
+  return (
+    buildHeader(maxX, maxY) +
+    buildLayerTable(drillingByPiece ? drillingLayersFor(drillingByPiece.values()) : []) +
+    wrapEntities(entities)
+  );
 }
 
 function buildSinglePieceDxf(
@@ -286,7 +341,11 @@ function buildSinglePieceDxf(
   drawPiece(entities, piece, 0, 0, true, drillingByPiece);
   const maxX = piece.lengthMm;
   const maxY = piece.widthMm + 60;
-  return buildHeader(maxX, maxY) + buildLayerTable() + wrapEntities(entities);
+  return (
+    buildHeader(maxX, maxY) +
+    buildLayerTable(drillingByPiece ? drillingLayersFor(drillingByPiece.values()) : []) +
+    wrapEntities(entities)
+  );
 }
 
 function buildSheetsVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDrillingPattern>): string {
@@ -330,7 +389,11 @@ function buildSheetsVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDri
     offsetX += sheet.sheetLengthMm + SHEET_GAP_MM;
   }
 
-  return buildHeader(maxX, maxY) + buildLayerTable() + wrapEntities(entities);
+  return (
+    buildHeader(maxX, maxY) +
+    buildLayerTable(drillingByPiece ? drillingLayersFor(drillingByPiece.values()) : []) +
+    wrapEntities(entities)
+  );
 }
 
 function buildPiecesVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDrillingPattern>): string {
@@ -355,7 +418,11 @@ function buildPiecesVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDri
     maxX = Math.max(maxX, x);
   }
 
-  return buildHeader(maxX, y + rowHeight + labelsReservedMm + PIECES_GAP_MM) + buildLayerTable() + wrapEntities(entities);
+  return (
+    buildHeader(maxX, y + rowHeight + labelsReservedMm + PIECES_GAP_MM) +
+    buildLayerTable(drillingByPiece ? drillingLayersFor(drillingByPiece.values()) : []) +
+    wrapEntities(entities)
+  );
 }
 
 function wrapEntities(entities: string[]): string {

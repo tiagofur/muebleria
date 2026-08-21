@@ -265,6 +265,7 @@ export function ProductionWorkspace({
     return (
       <ProductionOrderHub
         project={projectForHub}
+        catalog={catalog}
         customerLabel={customerLabelFor(orderProject.customerId)}
         salePrice={salePriceFor(orderProject.id)}
         readiness={readiness}

@@ -41,6 +41,7 @@ interface SortableCutRow {
   readonly partCode: string;
   readonly partId: string;
   readonly description: string;
+  readonly part: import('../types').ResolvedBoardPart;
   readonly row: ProductionCutRow;
 }
 
@@ -104,10 +105,23 @@ export function resolveCleanPieceCode(
  * Sorted by module code, then part code (EXP-04). Never includes hardware.
  * Description includes part/module codes for workshop ID (F048) without new columns.
  */
-export function generateCutRows(
+/**
+ * One drilling link per cut row line (F130): the resolved part behind the row
+ * plus the workshop-unique labelRef that DXF drilling patterns key on.
+ * Quantity-collapsed like the row itself (holes are identical across copies).
+ */
+export interface CutRowPieceLink {
+  readonly partId: string;
+  readonly labelRef: string;
+  readonly partCode: string;
+  readonly moduleCode: string;
+  readonly part: import('../types').ResolvedBoardPart;
+}
+
+export function generateCutRowsWithLinks(
   project: Project,
   catalog: Catalog,
-): ProductionCutRow[] {
+): { rows: ProductionCutRow[]; links: CutRowPieceLink[] } {
   const sortable: SortableCutRow[] = [];
   const moduleCounts = new Map<string, number>();
 
@@ -185,6 +199,7 @@ export function generateCutRows(
         partCode: part.code ?? '',
         partId: part.id,
         description: part.description,
+        part,
         row: {
           quantity: part.quantity * item.quantity,
           lengthMm: part.lengthMm,
@@ -225,7 +240,23 @@ export function generateCutRows(
     return a.partId.localeCompare(b.partId);
   });
 
-  return sortable.map((entry) => entry.row);
+  return {
+    rows: sortable.map((entry) => entry.row),
+    links: sortable.map((entry) => ({
+      partId: entry.partId,
+      labelRef: entry.row.labelRef ?? entry.row.partCode ?? entry.partId,
+      partCode: entry.row.partCode ?? '',
+      moduleCode: entry.moduleCode,
+      part: entry.part,
+    })),
+  };
+}
+
+export function generateCutRows(
+  project: Project,
+  catalog: Catalog,
+): ProductionCutRow[] {
+  return generateCutRowsWithLinks(project, catalog).rows;
 }
 
 const EDGE_SIDE_ORDER = ['L1', 'L2', 'W1', 'W2'] as const;

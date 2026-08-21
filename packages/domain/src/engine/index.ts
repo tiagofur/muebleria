@@ -47,6 +47,7 @@ export {
   formatEdgeBandingInstruction,
   formatOptimizerPartDescription,
   generateCutRows,
+  generateCutRowsWithLinks,
   generatePieceLabels,
 } from './cut';
 export {

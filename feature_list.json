@@ -2870,7 +2870,7 @@
         "packages/excel/src/partDrillingExport.ts",
         "apps/web/src/exportProductionPack.ts"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "cnc",
         "perforaciones",
@@ -2907,6 +2907,27 @@
       ]
     },
     {
+      "id": "F132",
+      "phase": 0,
+      "name": "scm_postprocessor",
+      "title": "Post-procesador SCM nativo (.xcs/MSL) [POSTERGADO hasta confirmar máquina]",
+      "description": "Generador de script nativo para SCM Maestro (import .xcs o Maestro Scripting Language) sobre el núcleo agnóstico de perforaciones (capa fina de export, sin tocar el dominio). Se desbloquea cuando se confirme modelo de máquina y versión de software del taller. Mientras tanto el flujo oficial hacia SCM es el DXF por capas de F130, que Maestro importa con asignación capa→herramienta.",
+      "acceptance": [
+        "[POSTERGADO] Requiere modelo de máquina SCM y versión de software confirmados por el taller"
+      ],
+      "references": [
+        "SCM Group — Maestro Lab (import DXF por capas)",
+        "Maestro Scripting Language (MSL), formatos .xcs/.pnc/.snc"
+      ],
+      "status": "pending",
+      "tags": [
+        "cnc",
+        "scm",
+        "export",
+        "postprocesador"
+      ]
+    },
+    {
       "id": "F133",
       "phase": 0,
       "name": "default_cut_strategy_setting",
@@ -2933,27 +2954,6 @@
         "settings",
         "ui",
         "domain"
-      ]
-    },
-    {
-      "id": "F132",
-      "phase": 0,
-      "name": "scm_postprocessor",
-      "title": "Post-procesador SCM nativo (.xcs/MSL) [POSTERGADO hasta confirmar máquina]",
-      "description": "Generador de script nativo para SCM Maestro (import .xcs o Maestro Scripting Language) sobre el núcleo agnóstico de perforaciones (capa fina de export, sin tocar el dominio). Se desbloquea cuando se confirme modelo de máquina y versión de software del taller. Mientras tanto el flujo oficial hacia SCM es el DXF por capas de F130, que Maestro importa con asignación capa→herramienta.",
-      "acceptance": [
-        "[POSTERGADO] Requiere modelo de máquina SCM y versión de software confirmados por el taller"
-      ],
-      "references": [
-        "SCM Group — Maestro Lab (import DXF por capas)",
-        "Maestro Scripting Language (MSL), formatos .xcs/.pnc/.snc"
-      ],
-      "status": "pending",
-      "tags": [
-        "cnc",
-        "scm",
-        "export",
-        "postprocesador"
       ]
     }
   ]

@@ -223,7 +223,11 @@ describe('dxfCutPlanExport', () => {
     expect(countLayerEntities(dxf, 'POLYLINE', 'PIEZA')).toBe(2);
     expect(countLayerEntities(dxf, 'POLYLINE', 'RETAZO')).toBe(1);
     // perforaciones solo en la pieza no rotada (LAT-01: 2 agujeros)
-    expect(countLayerEntities(dxf, 'CIRCLE', 'PERF')).toBe(2);
+    // F130: agujeros por cara+Ø — LAT-01 tiene 2 front (Ø10 y Ø35); el left (Ø8)
+    // proyecta al canto. Espejo: no hay back en este fixture.
+    expect(countLayerEntities(dxf, 'CIRCLE', 'PERF_F10')).toBe(1);
+    expect(countLayerEntities(dxf, 'CIRCLE', 'PERF_F35')).toBe(1);
+    expect(countLayerEntities(dxf, 'CIRCLE', 'PERF_CANTO8')).toBe(1);
     // encabezado del tablero con material y espesor
     expect(dxf).toContain('TABLERO #1 - MDF Blanco 18mm 18mm');
     // etiqueta de retazo con medidas redondeadas
@@ -278,7 +282,8 @@ describe('dxfCutPlanExport', () => {
       // Contornos
       expect(countLayerEntities(dxf, 'POLYLINE', 'TABLERO')).toBe(1);
       expect(countLayerEntities(dxf, 'POLYLINE', 'PIEZA')).toBe(2);
-      expect(countLayerEntities(dxf, 'CIRCLE', 'PERF')).toBe(2);
+      expect(countLayerEntities(dxf, 'CIRCLE', 'PERF_F10')).toBe(1);
+      expect(countLayerEntities(dxf, 'CIRCLE', 'PERF_F35')).toBe(1);
     });
 
     it('retorna array vacío si el plan no tiene tableros', () => {
@@ -306,7 +311,8 @@ describe('dxfCutPlanExport', () => {
       expect(dxf1.trimEnd().endsWith('0\nEOF')).toBe(true);
       expect(countLayerEntities(dxf1, 'POLYLINE', 'TABLERO')).toBe(0);
       expect(countLayerEntities(dxf1, 'POLYLINE', 'PIEZA')).toBe(1);
-      expect(countLayerEntities(dxf1, 'CIRCLE', 'PERF')).toBe(2); // LAT-01 has 2 holes
+      expect(countLayerEntities(dxf1, 'CIRCLE', 'PERF_F10')).toBe(1); // LAT-01 holes por capa
+      expect(countLayerEntities(dxf1, 'CIRCLE', 'PERF_F35')).toBe(1);
 
       expect(p2!.partCode).toBe('SEP-01');
       expect(p2!.fileName).toBe('Cocina-Especial_SEP-01_M01_A2.dxf');

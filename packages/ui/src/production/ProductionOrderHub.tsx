@@ -4,7 +4,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import type {
+import type { Catalog,
   HardwarePurchaseRow,
   ItemFloorStatus,
   Module,
@@ -58,6 +58,8 @@ export type ProductionOrderHubProps = {
   readonly exportBusy?: boolean;
   /** PROD-0.4: catalog modules for inventory + 3D. */
   readonly modules?: readonly Module[];
+  /** F130: full catalog for the real drilling report source. */
+  readonly catalog?: Catalog | null;
   readonly cutRows?: readonly ProductionCutRow[] | null;
   readonly cutListError?: string | null;
   /** Resolved piece labels for the Etiquetas tab (domain). */
@@ -107,6 +109,7 @@ function StatusBadge({
 }
 
 export function ProductionOrderHub({
+  catalog = null,
   project,
   customerLabel,
   salePrice,
@@ -148,6 +151,7 @@ export function ProductionOrderHub({
 
   const documents = useProductionOrderDocuments({
     project,
+    catalog,
     readiness,
     cutRows,
     pieceLabels,
