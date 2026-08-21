@@ -33,6 +33,11 @@
 .zcode/
 apps/desktop/dist-electron/
 build/
+# apps/desktop/build/icon.png es asset fuente de electron-builder (F075), no
+# artefacto: sin esto el test de icono pasa local pero falla en checkout limpio (CI).
+!apps/desktop/build/
+apps/desktop/build/*
+!apps/desktop/build/icon.png
 coverage/
 data/media/
 dist/
