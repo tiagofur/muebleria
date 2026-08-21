@@ -66,6 +66,7 @@ function cloneHardwarePlacement(p: HardwarePlacement): HardwarePlacement {
     relativePosition: { ...p.relativePosition },
     rotationDeg: p.rotationDeg ? { ...p.rotationDeg } : undefined,
     scale: p.scale,
+    partRole: p.partRole,
   };
 }
 

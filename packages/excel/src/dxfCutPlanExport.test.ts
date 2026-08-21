@@ -4,7 +4,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CutPlan, PartDrillingPattern } from '@muebles/domain';
 import { ValidationError } from '@muebles/domain';
-import { dxfCutPlanExport } from './dxfCutPlanExport';
+import {
+  dxfCutPlanExport,
+  generateDxfBySheet,
+  generateDxfByPiece,
+} from './dxfCutPlanExport';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 
@@ -251,5 +255,77 @@ describe('dxfCutPlanExport', () => {
         variant: 'pieces',
       }),
     ).toThrow(/no tiene piezas/);
+  });
+
+  describe('generateDxfBySheet', () => {
+    it('genera un archivo DXF individual para cada tablero con origen (0,0)', () => {
+      const plan = buildCutPlanFixture();
+      const files = generateDxfBySheet({ cutPlan: plan, projectName: 'Cocina Especial', drilling: drillingFixture });
+
+      expect(files).toHaveLength(1);
+      const sheetFile = files[0]!;
+      expect(sheetFile.sheetIndex).toBe(0);
+      expect(sheetFile.fileName).toBe('Cocina-Especial_Tablero-01_MDF18_2440x1830.dxf');
+      expect(sheetFile.sheetLengthMm).toBe(2440);
+      expect(sheetFile.sheetWidthMm).toBe(1830);
+
+      const dxf = decode(sheetFile.bytes);
+      expect(dxf.startsWith('0\nSECTION\n2\nHEADER')).toBe(true);
+      expect(dxf.trimEnd().endsWith('0\nEOF')).toBe(true);
+      // Header EXTMAX adaptado al tablero individual
+      expect(dxf).toContain('9\n$EXTMAX\n10\n2440.00\n20\n1950.00\n30\n0.0');
+      // Contornos
+      expect(countLayerEntities(dxf, 'POLYLINE', 'TABLERO')).toBe(1);
+      expect(countLayerEntities(dxf, 'POLYLINE', 'PIEZA')).toBe(2);
+      expect(countLayerEntities(dxf, 'CIRCLE', 'PERF')).toBe(2);
+    });
+
+    it('retorna array vacío si el plan no tiene tableros', () => {
+      const plan = buildCutPlanFixture();
+      const files = generateDxfBySheet({ cutPlan: { ...plan, sheets: [] } });
+      expect(files).toEqual([]);
+    });
+  });
+
+  describe('generateDxfByPiece', () => {
+    it('genera un archivo DXF individual para cada pieza con origen (0,0)', () => {
+      const plan = buildCutPlanFixture();
+      const files = generateDxfByPiece({ cutPlan: plan, projectName: 'Cocina Especial', drilling: drillingFixture });
+
+      expect(files).toHaveLength(2);
+
+      const [p1, p2] = files;
+      expect(p1!.partCode).toBe('LAT-01');
+      expect(p1!.fileName).toBe('Cocina-Especial_LAT-01_M01_A1.dxf');
+      expect(p1!.lengthMm).toBe(800);
+      expect(p1!.widthMm).toBe(500);
+
+      const dxf1 = decode(p1!.bytes);
+      expect(dxf1.startsWith('0\nSECTION\n2\nHEADER')).toBe(true);
+      expect(dxf1.trimEnd().endsWith('0\nEOF')).toBe(true);
+      expect(countLayerEntities(dxf1, 'POLYLINE', 'TABLERO')).toBe(0);
+      expect(countLayerEntities(dxf1, 'POLYLINE', 'PIEZA')).toBe(1);
+      expect(countLayerEntities(dxf1, 'CIRCLE', 'PERF')).toBe(2); // LAT-01 has 2 holes
+
+      expect(p2!.partCode).toBe('SEP-01');
+      expect(p2!.fileName).toBe('Cocina-Especial_SEP-01_M01_A2.dxf');
+      const dxf2 = decode(p2!.bytes);
+      expect(countLayerEntities(dxf2, 'POLYLINE', 'PIEZA')).toBe(1);
+    });
+
+    it('desambigua nombres si varias piezas tienen el mismo código', () => {
+      const plan = buildCutPlanFixture();
+      const sheet = plan.sheets[0]!;
+      const duplicatePiece = { ...sheet.pieces[0]!, id: 'LAT-01-dup' };
+      const planWithDups: CutPlan = {
+        ...plan,
+        sheets: [{ ...sheet, pieces: [sheet.pieces[0]!, duplicatePiece] }],
+      };
+
+      const files = generateDxfByPiece({ cutPlan: planWithDups, projectName: 'Cocina' });
+      expect(files).toHaveLength(2);
+      expect(files[0]!.fileName).toBe('Cocina_LAT-01_M01_A1.dxf');
+      expect(files[1]!.fileName).toBe('Cocina_LAT-01_M01_A1_2.dxf');
+    });
   });
 });

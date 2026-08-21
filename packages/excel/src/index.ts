@@ -108,7 +108,12 @@ export {
 
 export {
   dxfCutPlanExport,
+  generateDxfBySheet,
+  generateDxfByPiece,
   type DxfCutPlanExportInput,
+  type DxfSheetCutFile,
+  type DxfPieceCutFile,
+  type GenerateDxfOptions,
 } from './dxfCutPlanExport';
 
 export {

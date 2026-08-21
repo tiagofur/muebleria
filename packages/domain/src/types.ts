@@ -526,6 +526,8 @@ export interface HardwarePlacement {
   };
   readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
   readonly scale?: number;
+  /** Optional role within a multi-part hardware profile (F128): e.g. 'cam' vs 'bolt' for minifix. */
+  readonly partRole?: string;
 }
 
 export interface Component {

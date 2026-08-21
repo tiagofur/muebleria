@@ -26,7 +26,40 @@ import { ValidationError } from '@muebles/domain';
 export interface DxfCutPlanExportInput {
   readonly cutPlan: CutPlan;
   readonly variant: 'sheets' | 'pieces';
+  readonly projectName?: string;
   /** Optional drilling patterns keyed by pieceCode — drawn as PERF circles. */
+  readonly drilling?: readonly PartDrillingPattern[];
+}
+
+export interface DxfSheetCutFile {
+  readonly sheetIndex: number;
+  readonly materialCode?: string;
+  readonly materialName: string;
+  readonly fileName: string;
+  readonly dxfContent: string;
+  readonly bytes: Uint8Array;
+  readonly piecesCount: number;
+  readonly sheetLengthMm: number;
+  readonly sheetWidthMm: number;
+}
+
+export interface DxfPieceCutFile {
+  readonly pieceId: string;
+  readonly partCode: string;
+  readonly partName: string;
+  readonly moduleCode: string;
+  readonly labelRef: string;
+  readonly materialName: string;
+  readonly fileName: string;
+  readonly dxfContent: string;
+  readonly bytes: Uint8Array;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+}
+
+export interface GenerateDxfOptions {
+  readonly cutPlan: CutPlan;
+  readonly projectName?: string;
   readonly drilling?: readonly PartDrillingPattern[];
 }
 
@@ -60,6 +93,16 @@ function dxfText(value: string): string {
     out += mapped.charCodeAt(0) >= 32 && mapped.charCodeAt(0) <= 126 ? mapped : '';
   }
   return out.slice(0, 250);
+}
+
+export function sanitizeFileNameToken(raw: string): string {
+  const mapped = dxfText(raw);
+  return (
+    mapped
+      .replace(/[^\w\d-_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'item'
+  );
 }
 
 function fmt(value: number): string {
@@ -192,6 +235,56 @@ function buildLayerTable(): string {
   return s;
 }
 
+function buildSingleSheetDxf(
+  sheet: CutPlan['sheets'][number],
+  drillingByPiece?: Map<string, PartDrillingPattern>,
+): string {
+  const entities: string[] = [];
+  entities.push(polyline('TABLERO', 0, 0, sheet.sheetLengthMm, sheet.sheetWidthMm));
+  entities.push(
+    text(
+      'ETIQUETA',
+      0,
+      sheet.sheetWidthMm + 60,
+      LABEL_HEIGHT_MM * 1.5,
+      `TABLERO #${sheet.sheetIndex + 1} - ${sheet.materialName}` +
+        (sheet.thicknessMm ? ` ${sheet.thicknessMm}mm` : ''),
+    ),
+  );
+
+  for (const piece of sheet.pieces) {
+    drawPiece(entities, piece, piece.xMm, piece.yMm, false, drillingByPiece);
+  }
+
+  for (const remnant of sheet.remnants.filter((r) => r.isUseful)) {
+    entities.push(polyline('RETAZO', remnant.xMm, remnant.yMm, remnant.lengthMm, remnant.widthMm));
+    entities.push(
+      text(
+        'ETIQUETA',
+        remnant.xMm + 10,
+        remnant.yMm + 10,
+        LABEL_HEIGHT_MM,
+        `RETAZO ${Math.round(remnant.lengthMm)}x${Math.round(remnant.widthMm)}`,
+      ),
+    );
+  }
+
+  const maxX = sheet.sheetLengthMm;
+  const maxY = sheet.sheetWidthMm + 120;
+  return buildHeader(maxX, maxY) + buildLayerTable() + wrapEntities(entities);
+}
+
+function buildSinglePieceDxf(
+  piece: CutPlanPlacedPiece,
+  drillingByPiece?: Map<string, PartDrillingPattern>,
+): string {
+  const entities: string[] = [];
+  drawPiece(entities, piece, 0, 0, true, drillingByPiece);
+  const maxX = piece.lengthMm;
+  const maxY = piece.widthMm + 60;
+  return buildHeader(maxX, maxY) + buildLayerTable() + wrapEntities(entities);
+}
+
 function buildSheetsVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDrillingPattern>): string {
   const entities: string[] = [];
   let offsetX = 0;
@@ -266,6 +359,109 @@ function wrapEntities(entities: string[]): string {
 }
 
 /**
+ * Generates an array of standalone DXF R12 files, one for each nested board (sheet).
+ * Coordinated at local (0,0) machine origin with its pieces, labels, and remnants.
+ */
+export function generateDxfBySheet(options: GenerateDxfOptions): DxfSheetCutFile[] {
+  const { cutPlan, projectName, drilling } = options;
+  if (!cutPlan.sheets || cutPlan.sheets.length === 0) {
+    return [];
+  }
+
+  const drillingByPiece = drilling
+    ? new Map(drilling.map((pattern) => [pattern.pieceCode, pattern] as const))
+    : undefined;
+
+  const baseProject = sanitizeFileNameToken(
+    projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
+  );
+
+  const results: DxfSheetCutFile[] = [];
+
+  for (const sheet of cutPlan.sheets) {
+    const sheetNum = String(sheet.sheetIndex + 1).padStart(2, '0');
+    const safeMat = sanitizeFileNameToken(sheet.materialCode || sheet.materialName || 'material');
+    const fileName = `${baseProject}_Tablero-${sheetNum}_${safeMat}_${Math.round(sheet.sheetLengthMm)}x${Math.round(sheet.sheetWidthMm)}.dxf`;
+
+    const dxfContent = buildSingleSheetDxf(sheet, drillingByPiece);
+    const bytes = new TextEncoder().encode(dxfContent);
+
+    results.push({
+      sheetIndex: sheet.sheetIndex,
+      materialCode: sheet.materialCode,
+      materialName: sheet.materialName,
+      fileName,
+      dxfContent,
+      bytes,
+      piecesCount: sheet.pieces.length,
+      sheetLengthMm: sheet.sheetLengthMm,
+      sheetWidthMm: sheet.sheetWidthMm,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Generates an array of standalone DXF R12 files, one for each individual piece.
+ * Coordinated at local (0,0) origin with piece contours, labels, grain, and drilling.
+ */
+export function generateDxfByPiece(options: GenerateDxfOptions): DxfPieceCutFile[] {
+  const { cutPlan, projectName, drilling } = options;
+  if (!cutPlan.sheets || cutPlan.sheets.length === 0) {
+    return [];
+  }
+
+  const pieces = cutPlan.sheets.flatMap((s) => s.pieces);
+  if (pieces.length === 0) {
+    return [];
+  }
+
+  const drillingByPiece = drilling
+    ? new Map(drilling.map((pattern) => [pattern.pieceCode, pattern] as const))
+    : undefined;
+
+  const baseProject = sanitizeFileNameToken(
+    projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
+  );
+
+  const nameCounts = new Map<string, number>();
+  const results: DxfPieceCutFile[] = [];
+
+  for (const piece of pieces) {
+    const safePart = sanitizeFileNameToken(piece.partCode || 'pieza');
+    const modToken = piece.moduleCode ? `_${sanitizeFileNameToken(piece.moduleCode)}` : '';
+    const labelToken = piece.labelRef ? `_${sanitizeFileNameToken(piece.labelRef)}` : '';
+
+    const baseName = `${baseProject}_${safePart}${modToken}${labelToken}`;
+    const count = (nameCounts.get(baseName) ?? 0) + 1;
+    nameCounts.set(baseName, count);
+
+    const suffix = count > 1 ? `_${count}` : '';
+    const fileName = `${baseName}${suffix}.dxf`;
+
+    const dxfContent = buildSinglePieceDxf(piece, drillingByPiece);
+    const bytes = new TextEncoder().encode(dxfContent);
+
+    results.push({
+      pieceId: piece.id,
+      partCode: piece.partCode,
+      partName: piece.partName,
+      moduleCode: piece.moduleCode,
+      labelRef: piece.labelRef,
+      materialName: piece.materialName,
+      fileName,
+      dxfContent,
+      bytes,
+      lengthMm: piece.lengthMm,
+      widthMm: piece.widthMm,
+    });
+  }
+
+  return results;
+}
+
+/**
  * Serializes a Cut Plan as an ASCII DXF R12 drawing (millimeters).
  */
 export function dxfCutPlanExport(input: DxfCutPlanExportInput): Uint8Array {
@@ -296,3 +492,4 @@ export function dxfCutPlanExport(input: DxfCutPlanExportInput): Uint8Array {
 
   return new TextEncoder().encode(body);
 }
+

@@ -434,11 +434,10 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
       setExportBusy(true);
       try {
         const suffix = variant === 'sheets' ? 'tableros' : 'piezas';
-        const fileName = `${cutPlan.projectName || 'proyecto'}-nesting-${suffix}.dxf`;
-        await downloadCutPlanDxf(cutPlan, variant, fileName);
+        await downloadCutPlanDxf(cutPlan, variant);
         toast({
           type: 'success',
-          message: `✓ ${fileName} descargado`,
+          message: `✓ Exportación DXF (${suffix}) descargada`,
         });
       } catch (err) {
         toast({

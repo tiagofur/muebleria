@@ -1,69 +1,42 @@
 # Sesión activa
 
-**Feature:** F133 — Tipo de corte por defecto del taller (sierra | nesting)
-**Estado:** done (sesión cerrada, revisada y pusheada)
-**Inicio:** 2026-08-20
+**Feature:** F128 — Motor de resolución: placements + perfiles → agujeros por pieza (perforaciones CNC — 2/5)
+**Estado:** in_progress
+**Inicio:** 2026-08-20 (noche)
 
 ## Plan
 
-1. `defaultCutStrategy?: CutStrategy` en `WorkshopSettings` (domain) + paridad Go + mappers.
-2. Selector «Tipo de corte por defecto» en Ajustes → Ingeniería y Producción (patrón modo PTX).
-3. Panel de Optimización: inicial `project.cutPlan?.config.cutStrategy ?? settings.defaultCutStrategy ?? 'saw-guillotine'`.
-4. Selector por obra (F126) intacto; el plan generado persiste su estrategia.
-5. Tests: domain, panel, settings screen.
+1. Estudiar flujo: `ResolvedBoardPart` (campos, link a componentInstanceId),
+   `HardwarePlacement` (frame por cara), consumidores de `HoleDefinition`.
+2. Motor puro en `packages/domain` (`partDrillingResolver.ts`):
+   `resolvePartDrilling({ piece, placements, hardware })` → holes reales por cara
+   (coords desde cantos, mismo face-plane que placements) + issues estructuradas
+   (profundidad vs dimensión de entrada, fuera de pieza, colisiones) + dedupe.
+3. `assertDrillingValid` que lanza `ValidationError` accionable con contexto.
+4. Fallback a heurísticas F074 cuando no salen holes de placements/perfiles
+   (deprecación gradual, exports intactos — el rewiring es F130).
+5. Tests: golden bisagra sobre puerta, minifix cazuela+perno en dos piezas,
+   mover placement mueve holes, cambiar herraje adapta Ø/prof, validaciones,
+   dedupe, fallback.
 
 ## Bitácora
 
-- 2026-08-20: F127 cerrada (done, review APPROVED, pushed `a163de7`). Usuario reporta
-  que no encontraba el cambio sierra→nesting y pide default de taller. Diagnóstico:
-  selector F126 vive en Ingeniería → tab Optimización y es por obra; el fallback para
-  obras sin plan está hardcodeado a Sierra (`ProductionOrderOptimizationPanel.tsx`).
-  F133 dada de alta e in_progress.
-- 2026-08-20: implementación F133 completa:
-  - `CutStrategy` movida a `types.ts` (re-exportada desde `optimizer/types.ts` para
-    no romper imports) + `WorkshopSettings.defaultCutStrategy?` con default
-    explícito `saw-guillotine` en `DEFAULT_WORKSHOP_SETTINGS` y validación en
-    `resolveWorkshopSettings`.
-  - Ajustes → Ingeniería y Producción: fieldset «Tipo de corte» con radios
-    Sierra (guillotina) | CNC nesting + hint de precedencia; guarda en el payload.
-  - Panel de Optimización: inicial `plan de la obra → defaultCutStrategy → sierra`;
-    wiring ShellView (`workshopSettings.defaultCutStrategy`) → EngineeringWorkspace → panel.
-  - Paridad Go: `WorkshopSettings.DefaultCutStrategy` (json `default_cut_strategy`),
-    SELECT/UPSERT en `workshop_settings.go` + normalize (basura → sierra),
-    migración aditiva `000064_workshop_settings_cut_strategy` (TEXT nullable).
-    El handler PUT/GET decoda el struct directo — sin cambios de API.
-  - Deuda detectada (fuera de scope): `ptxExportMode`/`defaultSawKerfMm`/trims/deduct
-    NO tienen paridad Go (la sesión PTX no la hizo) — en modo server se pierden al
-    recargar. Anotado para follow-up; no mezclado acá.
-  - Tests: domain +4, storage +3, ui +5 (settings + panel), web +2 (payloads
-    actualizados con el campo nuevo). Suite 2391, typecheck 7/7,
-    `go test` storage/domain/api verdes (normalize table-driven).
+- 2026-08-20: F127 done + review APPROVED. Post-cierre por feedback del taller:
+  F133 (default de corte del taller) done; selector unificado con Ajustes (`19f467a`);
+  visor strategy-aware sin líneas guillotina en nesting (`1dbccd1`).
+- 2026-08-20 (noche): F128 implementada y verificada:
+  - `packages/domain/src/partDrillingResolver.ts`: motor puro de resolución de perforaciones CNC a partir de `HardwarePlacement` y `HardwareMachiningProfile`. Coordenadas por cara referenciadas a cantos, evaluación de fórmulas paramétricas (`W`, `L`, `T`, `HW`, etc.), rotación en plano (`rotationDeg.z`), cara opuesta (`face: 'opposite'`), profundidad de pasantes (`through_hole`).
+  - Deduplicación de agujeros coincidentes generados desde distintos placements (`deduplicateHoles`).
+  - Validaciones geométricas estructuradas (`validateDrillingHoles`): `DEPTH_EXCEEDS_MATERIAL`, `HOLE_OUT_OF_BOUNDS`, `HOLE_COLLISION` (en la misma cara y por penetración interna en caras opuestas) + `assertDrillingValid` que lanza `ValidationError`.
+  - Fallback a heurísticas F074 (`inferHolesForPiece`) cuando no existen perfiles de maquinado o placements (`fallbackUsed: true`).
+  - `partRole` opcional en `HardwarePlacement` y `cloneHardwarePlacement` para herrajes multipartes (ej. `cam` vs `bolt` en minifix).
+  - 18 tests en `partDrillingResolver.test.ts` (golden bisagra 35mm, golden minifix 15mm en unión costado-piso, reactividad al mover placement o cambiar herraje, rotación 90°, fórmulas paramétricas, deduplicación, validaciones y fallback).
+  - `pnpm test` (710 tests en domain, todos verdes), `pnpm typecheck` verde y `./init.sh` verde.
 
-## Bitácora
+## Contexto previo (sesiones de hoy)
 
-- 2026-08-20 (post-cierre): feedback del dueño — el selector sierra/nesting del panel
-  de Optimización no era claro (botones chicos) y no coincidía con el patrón de
-  Ajustes. Unificado: radiogroup con radios + descripciones idénticas al fieldset
-  «Tipo de corte» de Ajustes → Ingeniería y Producción, como bloque propio arriba de
-  la barra de parámetros. Tests migrados de aria-pressed a checked (mismos testids).
-  Suite ui 1139, typecheck verde.
-
-- 2026-08-20 (post-cierre, 2): feedback del dueño — el visor de tableros dibujaba
-  líneas auxiliares de corte guillotina (franjas, cross cuts, marcador de 1er corte)
-  también en sheets de nesting, y el título decía «Guillotina 2D» para cualquier plan.
-  Ahora `ProductionBoardView` es strategy-aware: sheets `cnc-nesting` renderizan solo
-  piezas + retazos/descartes (EMPTY_BOARD_CUT_LAYOUT) y el header dice «CNC Nesting»;
-  legacy sin strategy sigue viéndose como sierra. Tests nuevos del visor (3).
-
-## Incidente y split de commits
-
-El primer commit de F133 (`4fbfe80`) mezcló trabajo PTX/settings que apareció en
-el working tree en paralelo (del taller). Se partió en `abbcb10` (trabajo del
-taller, verde standalone) + `997bf3b` (F133 pura); reviewer verificó split exacto
-(diff vacío vs 4fbfe80) y se force-pusheeó. Detalle en history.md (F133).
-
-## Siguiente
-
-F128 — Motor de resolución de perforaciones (placements + perfiles F127 →
-agujeros por pieza). Follow-ups anotados: paridad Go de settings PTX,
-`btn--secondary` del panel.
+- F127 cerrada: herrajes con perfil de maquinado en catálogo (TS/Go paridad,
+  seeds 4 básicos, migración 000063). Review APPROVED (`progress/review_F127.md`).
+- F133 cerrada: defaultCutStrategy (precedencia plan obra → taller → sierra).
+  Incidente de split de commits documentado en history.md (F133).
+- Deuda anotada: paridad Go de settings PTX; `btn--secondary` del panel.

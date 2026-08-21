@@ -687,12 +687,29 @@ export {
 // --- Part Drilling Data (F074) ---
 export {
   generatePartDrillingData,
+  inferHolesForPiece,
   type HoleFace,
   type HoleType,
   type HoleDefinition,
   type PartDrillingPattern,
   type ProjectDrillingData,
 } from './partDrilling';
+
+// --- Part Drilling Resolution Engine (F128) ---
+export {
+  resolvePartDrilling,
+  assertDrillingValid,
+  validateDrillingHoles,
+  deduplicateHoles,
+  getFaceDimensions,
+  OPPOSITE_FACE,
+  type DrillingIssue,
+  type DrillingIssueCode,
+  type ResolvedPartDrilling,
+  type ResolvePartDrillingParams,
+  type HardwareCatalogLookup,
+  type PieceDescriptor,
+} from './partDrillingResolver';
 
 // --- Hardware Machining Profiles (F127) ---
 export {

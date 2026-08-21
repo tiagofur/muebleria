@@ -49,7 +49,7 @@ function pieceCode(row: ProductionCutRow, index: number): string {
   return `P${index + 1}`;
 }
 
-function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefinition[] {
+export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefinition[] {
   const name = (row.partName || row.description || '').toLowerCase();
   const holes: HoleDefinition[] = [];
   const L = row.lengthMm;

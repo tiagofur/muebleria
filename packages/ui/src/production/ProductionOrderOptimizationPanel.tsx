@@ -557,8 +557,8 @@ export function ProductionOrderOptimizationPanel({
                 </div>
                 <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
                   Geometría DXF R12 del plan nesteado: contornos, etiquetas con cantos y dirección de veta.
-                  «Tableros nesteados» reproduce el plan de esta pantalla; «Piezas sueltas» es para el
-                  software de tu CNC que prefiere anidar por su cuenta.
+                  «Tableros nesteados» genera 1 DXF por tablero (o ZIP si son varios) en coordenadas locales $(0,0)$;
+                  «Piezas sueltas» genera un ZIP con 1 DXF por cada pieza para software CAM/nesting externo.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
