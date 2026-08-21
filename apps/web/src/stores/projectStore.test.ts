@@ -1074,3 +1074,118 @@ describe('projectStore — lifecycle & operational core (OC-010..OC-024)', () =>
     expect(savedProjects).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Physical part/unit execution (#301 / OC-030..OC-034)
+// ---------------------------------------------------------------------------
+
+function makePartExecProject(): Project {
+  return makeProject({
+    id: 'proj-phys',
+    status: 'produced',
+    items: [{ id: 'i1', moduleId: 'mod-1', quantity: 1, optionChoices: {} }],
+    productionRelease: {
+      id: 'rel-1',
+      projectId: 'proj-phys',
+      projectVersion: 1,
+      designRevisionId: 'dr-1',
+      bomFingerprint: 'fp-1',
+      releasedBy: 'sup-1',
+      releasedAt: '2026-08-21T10:00:00.000Z',
+      checks: [],
+    },
+    partInstances: [
+      {
+        id: 'proj-phys_i1_u1_LAT_1',
+        projectId: 'proj-phys',
+        productionRevision: 'rel-1',
+        projectItemId: 'i1',
+        unitIndex: 1,
+        partCode: 'LAT',
+        description: 'Lateral',
+        materialId: 'm1',
+        lengthMm: 700,
+        widthMm: 500,
+        thicknessMm: 18,
+        grain: 0,
+        edges: [],
+        requiredOperations: [
+          { id: 'op-cut', type: 'cut', sequence: 1, status: 'queued' },
+        ],
+        currentOperationIndex: 0,
+        status: 'pending',
+      },
+    ],
+    moduleUnits: [
+      {
+        id: 'proj-phys_i1_u1',
+        projectId: 'proj-phys',
+        projectItemId: 'i1',
+        unitIndex: 1,
+        productionRevision: 'rel-1',
+        status: 'awaiting_parts',
+      },
+    ],
+  });
+}
+
+describe('projectStore — ejecución física (#301)', () => {
+  it('advancePartInstanceLocal completa la operación actual y deriva el estado legacy', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makePartExecProject()]);
+
+    store.getState().advancePartInstanceLocal('proj-phys', 'proj-phys_i1_u1_LAT_1');
+
+    const project = store.getState().projects[0]!;
+    const part = project.partInstances?.[0]!;
+    expect(part.requiredOperations[0]?.status).toBe('completed');
+    expect(part.status).toBe('ready_for_assembly');
+    // OC-034: item derivado de la verdad física (pending → edged)
+    expect(project.items[0]?.floorStatus).toBe('edged');
+  });
+
+  it('advanceModuleUnitLocal respeta el gate de armado', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makePartExecProject()]);
+
+    // pieza sin terminar → el gate bloquea con blockers
+    const blocked = store.getState().advanceModuleUnitLocal('proj-phys', 'proj-phys_i1_u1');
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.blockers.length).toBeGreaterThan(0);
+    expect(store.getState().projects[0]!.moduleUnits?.[0]?.status).toBe('awaiting_parts');
+
+    // pieza lista → el armado avanza
+    const base = makePartExecProject();
+    const ready: Project = {
+      ...base,
+      partInstances: base.partInstances!.map((p) => ({
+        ...p,
+        requiredOperations: p.requiredOperations.map((op) => ({ ...op, status: 'completed' as const })),
+        status: 'ready_for_assembly' as const,
+      })),
+    };
+    store.getState().setProjects([ready]);
+    const advanced = store.getState().advanceModuleUnitLocal('proj-phys', 'proj-phys_i1_u1');
+    expect(advanced.ok).toBe(true);
+    const project = store.getState().projects[0]!;
+    expect(project.moduleUnits?.[0]?.status).toBe('assembly');
+    expect(project.items[0]?.floorStatus).toBe('assembled');
+  });
+
+  it('setPartExecutions reemplaza y re-deriva los estados de los ítems', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makePartExecProject()]);
+
+    const project = makePartExecProject();
+    const doneParts = project.partInstances!.map((p) => ({
+      ...p,
+      requiredOperations: p.requiredOperations.map((op) => ({ ...op, status: 'completed' as const })),
+      status: 'ready_for_assembly' as const,
+    }));
+    store.getState().setPartExecutions('proj-phys', doneParts, project.moduleUnits!);
+    expect(store.getState().projects[0]!.items[0]?.floorStatus).toBe('edged');
+  });
+});

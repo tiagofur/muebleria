@@ -98,13 +98,15 @@ import {
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleIsScopedBySector,
-  roleCanAccessFabricNav,   roleCanAccessShippingNav,
-   roleCanAccessEmbarquesNav,
+  roleCanAccessFabricNav,
+  roleCanAccessShippingNav,
+  roleCanAccessEmbarquesNav,
   filterProjectsByProcessStage,
   isProductionReady,
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
+  deriveProjectPartExecutions,
 } from '@muebles/domain';
 
 
@@ -1460,6 +1462,113 @@ export function AppContent({
     [getRepository, setItemFloorStatus, toast, actorRole],
   );
 
+  // #301 — physical advances: piece operations and unit transitions go
+  // through the part-executions endpoints (server gate + audit); the local
+  // mirror applies the same pure domain logic to keep lists in sync. The
+  // offline/local workspace uses the pure path directly.
+  const handleAdvancePart = useCallback(
+    (projectId: string, partId: string) => {
+      const repo = getRepository();
+      if (repo.advancePartOperation) {
+        void repo
+          .advancePartOperation(projectId, partId, { advance: true, source: 'manual' })
+          .then(() => {
+            projectActions.advancePartInstanceLocal(projectId, partId);
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'No se pudo avanzar la pieza',
+            });
+          });
+      } else {
+        projectActions.advancePartInstanceLocal(projectId, partId);
+      }
+    },
+    [getRepository, projectActions, toast],
+  );
+
+  const handleAdvanceUnit = useCallback(
+    (projectId: string, unitId: string) => {
+      const repo = getRepository();
+      if (repo.advanceModuleUnit) {
+        void repo
+          .advanceModuleUnit(projectId, unitId, { advance: true, source: 'manual' })
+          .then(() => {
+            projectActions.advanceModuleUnitLocal(projectId, unitId);
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'No se pudo avanzar la unidad',
+            });
+          });
+      } else {
+        const result = projectActions.advanceModuleUnitLocal(projectId, unitId);
+        if (!result.ok) {
+          toast({ type: 'error', message: result.blockers.join(' · ') });
+        }
+      }
+    },
+    [getRepository, projectActions, toast],
+  );
+
+  /**
+   * #301 — generate the physical executions of a released project from its
+   * catalog BOM. API mode validates server-side (lines/quantities/released
+   * revision, progress guard); local mode sets them directly. No-op when the
+   * project already progressed physically (regeneration needs supervision).
+   */
+  const handleGeneratePartExecutions = useCallback(
+    (projectId: string) => {
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project || !project.productionRelease || !catalog) return;
+      if (project.partInstances?.length) {
+        const hasProgress =
+          project.partInstances.some((p) =>
+            p.requiredOperations.some((op) => op.status === 'completed' || op.status === 'rework'),
+          ) ||
+          project.moduleUnits?.some((u) => u.status !== 'awaiting_parts');
+        if (hasProgress) return; // regeneration is a supervised action, never automatic
+      }
+      const derived = deriveProjectPartExecutions(project, catalog);
+      if (!derived.ok) {
+        toast({
+          type: 'error',
+          message: `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`,
+        });
+        return;
+      }
+      const { parts, units } = derived.executions;
+      const repo = getRepository();
+      if (repo.generatePartExecutions) {
+        void repo
+          .generatePartExecutions(projectId, { partInstances: parts, moduleUnits: units })
+          .then(() => {
+            projectActions.setPartExecutions(projectId, parts, units);
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'No se pudo generar la ejecución física',
+            });
+          });
+      } else {
+        projectActions.setPartExecutions(projectId, parts, units);
+      }
+    },
+    [catalog, getRepository, projectActions, toast],
+  );
+
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
     const repo = getRepository();
     if (!repo.claimProductionActivity) return;
@@ -1856,6 +1965,9 @@ export function AppContent({
     handleFabricClaim,
     handleFabricFinish,
     handleFloorAdvance,
+    handleAdvancePart,
+    handleAdvanceUnit,
+    handleGeneratePartExecutions,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,

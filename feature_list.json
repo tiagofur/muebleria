@@ -3056,7 +3056,8 @@
         "Colas de estación físicas: physicalStationQueue + FabricScreen renderiza filas por pieza (código/dims/operación) y por unidad (Unidad X de N, faltantes con estación) con callbacks onAdvancePart/onAdvanceUnit",
         "Métodos cliente en apiWorkspaceRepository (getPartExecutions, generatePartExecutions, advancePartOperation, advanceModuleUnit, assemblyOverride, reworkPart)",
         "Serialización completa de supervisorOverride en apiMappers (antes se perdía en roundtrip)",
-        "Pruebas: dominio TS, storage, UI, móvil (routing físico) y Go (domain+api: gate/override/rework/RBAC/409 legacy/generación/bulto/costing) con typecheck al 100%"
+        "Pruebas: dominio TS, storage, UI, móvil (routing físico) y Go (domain+api: gate/override/rework/RBAC/409 legacy/generación/bulto/costing) con typecheck al 100%",
+        "Wiring web completo: FabricScreen avanza por pieza/unidad vía AppContent→ShellView (endpoints físicos en modo API, espejo puro en modo local); la generación se dispara al liberar producción (deriveProjectPartExecutions: BOM del catálogo + ruta CNC según drilling real)"
       ],
       "references": [
         "docs/operational-core-v1.md",
