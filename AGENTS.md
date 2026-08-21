@@ -12,6 +12,14 @@ muebles pequeños/medianos. Conecta venta, diseño/ingeniería, BOM, materiales,
 producción, logística, instalación, postventa y, como objetivo del Operational Core,
 la rentabilidad real por obra.
 
+### Posicionamiento de Proyectar
+
+> **Mueblería no es “Promob barato”.** Proyectar debe ser una experiencia 3D de nivel
+> profesional para nuestro nicho modular y diferenciarse por facilidad + continuidad
+> diseño→producción→operación, no por copiar toda la amplitud de un CAD histórico.
+
+Antes de tocar Proyectar, lee `docs/proyectar-3d-north-star.md`.
+
 ### Regla física cerrada
 
 > **Corte, CNC y Enchape trabajan piezas. Armado es el punto de convergencia y desde
@@ -26,6 +34,9 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Concern | Autoridad |
 |---|---|
 | Producto actual | `docs/prd-v2.md` |
+| Posicionamiento competitivo Proyectar | `docs/proyectar-3d-competitive-position.md` |
+| UX/North Star Proyectar 3D | `docs/proyectar-3d-north-star.md` |
+| Roadmap Proyectar 3D | `docs/proyectar-3d-roadmap-vnext.md` |
 | Baseline MVP histórico | `docs/history/prd.md` |
 | Plan de consolidación | `docs/operational-core-v1.md` |
 | Producción pieza→mueble | `docs/production-flow-v2.md` |
@@ -51,6 +62,9 @@ Si un documento histórico contradice una fuente v2 y el código moderno:
 2. distingue **implemented today** de **target**;
 3. no reviertas código moderno sólo para coincidir con un texto viejo;
 4. registra/corrige la discrepancia.
+
+Para Proyectar, si una spec vieja contradice el North Star, el North Star define la
+intención futura y el código/tests siguen definiendo lo implementado hoy.
 
 ---
 
@@ -141,11 +155,37 @@ Antes de tocar UI:
 
 1. lee `docs/design.md`;
 2. si es screen operativa, lee también `docs/operational-ux.md`;
-3. identifica la unidad de trabajo correcta: proyecto, pieza, mueble, bulto o visita;
-4. usa tokens; no hex/spacing/patterns inventados;
-5. una primary action por contexto;
-6. blockers deben explicar cómo resolverse;
-7. acciones físicas deben dejar feedback persistente/auditable.
+3. si toca Proyectar/3D/editor, lee **obligatoriamente** `docs/proyectar-3d-north-star.md`;
+4. identifica la unidad de trabajo correcta: proyecto, pieza, mueble, bulto o visita;
+5. usa tokens; no hex/spacing/patterns inventados;
+6. una primary action por contexto;
+7. blockers deben explicar cómo resolverse;
+8. acciones físicas deben dejar feedback persistente/auditable.
+
+### Proyectar 3D
+
+El modelo mental canónico es:
+
+```text
+Biblioteca persistente → Canvas 3D → Inspector contextual
+```
+
+Reglas:
+
+- buscar/insertar materiales y muebles sin saltos innecesarios fuera del editor;
+- lenguaje de usuario/taller sobre nombres internos de geometría/domain;
+- selección principal por mueble; drill-down a agregado/pieza/herraje cuando la intención lo pide;
+- drag/placement con preview/snap/feedback y alternativa precisa por mm;
+- toda interacción relevante undoable;
+- no clonar skin/layout de Promob;
+- sí reutilizar patrones de interacción universales que hagan el job más fácil;
+- no exponer world coordinates/quaternions como flujo normal;
+- no sacrificar performance del canvas por chrome o rerenders evitables;
+- design→BOM/precio/release debe permanecer conectado.
+
+Quality targets y benchmark: `docs/proyectar-3d-north-star.md`.
+Roadmap implementable: `docs/proyectar-3d-roadmap-vnext.md`.
+Meta GitHub: #308.
 
 ### Producción
 
@@ -162,12 +202,13 @@ Antes de tocar UI:
 
 - prioridad/narrativa: `docs/roadmap-comercial-v2.md`;
 - detalle operativo: `docs/operational-core-v1.md`;
+- Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
 - trabajo futuro: GitHub issues;
 - ledger de implementación: `feature_list.json`.
 
 ### Después de F128
 
-La prioridad por defecto es Operational Core:
+La prioridad por defecto sigue protegiendo Operational Core:
 
 1. guardrails/data truth;
 2. lifecycle/release;
@@ -176,6 +217,9 @@ La prioridad por defecto es Operational Core:
 5. instalación/closeout;
 6. job costing;
 7. UX transversal/pilotos.
+
+Pero Proyectar puede avanzar por slices de alto impacto en paralelo cuando no rompe esos
+cimientos. Meta #308 y roadmap vNext definen el orden específico del editor.
 
 F129–F131 no desplazan automáticamente este orden salvo decisión explícita o necesidad
 de taller piloto.
@@ -190,9 +234,9 @@ cuando fueron superseded.
 Ejemplos:
 
 - `docs/history/prd.md` — baseline MVP;
-- `docs/history/production-module.md` — baseline del workspace producción previo al nesting/CNC
-  moderno;
+- `docs/history/production-module.md` — baseline del workspace producción previo al nesting/CNC moderno;
 - `docs/history/app-excellence.md`;
+- specs/planes históricos de Proyectar que contradigan el North Star actual;
 - `docs/history/*`;
 - `progress/archive/*`.
 
@@ -216,7 +260,8 @@ CI remoto debe convertirse en autoridad adicional mediante OC-002.
 Para exports físicos: golden/fixture.  
 Para workflow: transición permitida + rechazada + auth + audit.  
 Para dashboards: probar semántica de verdad de datos.  
-Para UI: comportamiento y a11y, no sólo source grep.
+Para UI: comportamiento y a11y, no sólo source grep.  
+Para Proyectar: smoke real WebGL/drag cuando toca interacción 3D; profiling cuando toca hot path.
 
 ---
 
