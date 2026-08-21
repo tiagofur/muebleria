@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { ArrowLeft, Factory, QrCode } from 'lucide-react-native';
 import { apiClient } from '../services/apiClient';
+import { physicalProgress, type PartExecutionsPayload } from './productionQueueProgress';
 import { useFloorScannerStore } from '../stores/floorScannerStore';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -44,6 +45,9 @@ export function ProductionQueueScreen({
   onScanProject,
 }: ProductionQueueScreenProps) {
   const [projects, setProjects] = useState<QueueProject[]>([]);
+  const [executionsByProject, setExecutionsByProject] = useState<
+    Record<string, PartExecutionsPayload | null>
+  >({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const setActiveProjectId = useFloorScannerStore((s) => s.setActiveProjectId);
@@ -55,6 +59,22 @@ export function ProductionQueueScreen({
         .filter((p) => p.status === 'accepted' || p.status === 'produced')
         .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
       setProjects(queue);
+
+      // #301 — physical progress per obra (best effort: a failed fetch keeps
+      // the card on the legacy module count, never blocks the queue).
+      const results = await Promise.allSettled(
+        queue.map((p) =>
+          apiClient.get<PartExecutionsPayload>(
+            `/projects/${encodeURIComponent(p.id)}/part-executions`,
+          ),
+        ),
+      );
+      const byProject: Record<string, PartExecutionsPayload | null> = {};
+      queue.forEach((p, i) => {
+        const result = results[i];
+        byProject[p.id] = result.status === 'fulfilled' ? result.value : null;
+      });
+      setExecutionsByProject(byProject);
     } catch (err) {
       Alert.alert(
         'Sin conexión',
@@ -131,6 +151,16 @@ export function ProductionQueueScreen({
                   {itemCount(item)} módulos ·{' '}
                   {new Date(item.updated_at).toLocaleDateString('es-MX')}
                 </Text>
+                {(() => {
+                  const progress = physicalProgress(executionsByProject[item.id]);
+                  if (!progress) return null;
+                  return (
+                    <Text style={styles.cardPhysical}>
+                      {progress.partsReady}/{progress.partsTotal} piezas listas ·{' '}
+                      {progress.unitsInstalled}/{progress.unitsTotal} unidades instaladas
+                    </Text>
+                  );
+                })()}
               </View>
               <Badge
                 label={STATUS_LABELS[item.status] ?? item.status}
@@ -165,6 +195,7 @@ const styles = StyleSheet.create({
   cardTitleCol: { flex: 1 },
   cardTitle: { ...typography.h3, color: colors.textPrimary },
   cardMeta: { ...typography.body, color: colors.textMuted },
+  cardPhysical: { ...typography.bodyBold, color: colors.primary },
   empty: {
     alignItems: 'center',
     padding: spacing.xl,

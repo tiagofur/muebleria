@@ -64,10 +64,17 @@ split-brain), (3) **esta sesión**: deuda documentada.
 Verificación de la pasada: domain 810 · ui 1158 · web 301 · mobile 42 ·
 storage 141 · excel 89 · desktop 17 · `pnpm typecheck` OK.
 
-## Deuda restante (menor)
+## Quinta pasada — mejora de visibilidad móvil
 
-- ProductionQueueScreen móvil sigue listando proyectos; puede sumar conteos
-  físicos vía `part-executions` (mejora de visibilidad, no bloqueante).
+- **ProductionQueueScreen** (cola de producción móvil): cada obra ahora
+  muestra su progreso físico real — `X/Y piezas listas · A/B unidades
+  instaladas` — traído de `GET part-executions` (best effort por obra; un
+  fetch fallido no bloquea la cola y la tarjeta queda en el conteo legacy
+  de módulos). Helper puro `physicalProgress` extraído a módulo propio
+  (sin imports de react-native) con tests.
+
+Con esto el flujo físico de #301/F136 está completo en los tres clientes
+(web, móvil, backend). Sin deuda abierta.
 
 ## Verificación (evidencia de esta sesión)
 
