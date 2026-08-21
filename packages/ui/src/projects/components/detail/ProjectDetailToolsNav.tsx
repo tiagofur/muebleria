@@ -1,12 +1,9 @@
-/**
- * Navigation tabs for secondary quote tools in ProjectDetailView.
- */
-
 import type { ReactNode } from 'react';
-import { Camera, MessageSquare, Wrench } from 'lucide-react';
+import { Activity, Camera, MessageSquare, Wrench } from 'lucide-react';
 import { useProjectDetail } from '../projectDetailContext';
 
 export type QuoteToolsPanel =
+  | 'lifecycle'
   | 'kitchen'
   | 'scenarios'
   | 'checklist'
@@ -36,6 +33,20 @@ export function ProjectDetailToolsNav({
         role="group"
         aria-label="Paneles avanzados"
       >
+        <button
+          type="button"
+          aria-pressed={toolsPanel === 'lifecycle'}
+          className={
+            toolsPanel === 'lifecycle'
+              ? 'project-detail__tools-tab project-detail__tools-tab--active'
+              : 'project-detail__tools-tab'
+          }
+          data-testid="project-tools-lifecycle"
+          onClick={() => onToggleTools('lifecycle')}
+        >
+          <Activity size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+          Lifecycle / Entregas
+        </button>
         <button
           type="button"
           aria-pressed={toolsPanel === 'kitchen'}

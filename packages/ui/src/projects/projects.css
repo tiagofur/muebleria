@@ -2049,3 +2049,491 @@
     display: none;
   }
 }
+
+/* ==========================================================================
+   Project Lifecycle & Operational Core Styles (OC-010..OC-024)
+   ========================================================================== */
+
+/* Staleness Warning Banner (OC-023) */
+.project-staleness-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--warning-50);
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.project-staleness-banner__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.project-staleness-banner__icon {
+  color: var(--warning-700);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.project-staleness-banner__title {
+  color: var(--warning-800);
+  font-size: var(--text-sm);
+  display: block;
+}
+
+.project-staleness-banner__description {
+  color: var(--warning-800);
+  font-size: var(--text-xs);
+  margin: var(--space-1) 0 0 0;
+}
+
+.project-staleness-banner__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Production Release Modal & Gates (OC-022) */
+.modal-content--wide {
+  max-width: 720px;
+}
+
+.release-current-badge {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.release-current-badge__header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.release-current-badge__title {
+  font-size: var(--text-base);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.release-current-badge__meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.release-gates-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.release-gate-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+}
+
+.release-gate-item--passed {
+  border-color: var(--success-200);
+  background: var(--success-50);
+}
+
+.release-gate-item--failed {
+  border-color: var(--border-default);
+  background: var(--danger-50);
+}
+
+.release-gate-item--warning {
+  border-color: var(--warning-100);
+  background: var(--warning-50);
+}
+
+.release-gate-item__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.release-gate-item__name {
+  font-size: var(--text-sm);
+}
+
+.release-gate-item__details {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin: var(--space-1) 0 0 0;
+}
+
+.release-options-row {
+  margin: var(--space-3) 0;
+  font-size: var(--text-sm);
+}
+
+.release-notes-field {
+  margin-top: var(--space-3);
+}
+
+/* Change Orders (OC-024) */
+.change-orders-list-view__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.change-orders-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.change-order-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  background: var(--surface-card);
+}
+
+.change-order-card--approved {
+  border-left: 4px solid var(--success-500);
+}
+
+.change-order-card--submitted {
+  border-left: 4px solid var(--info-500);
+}
+
+.change-order-card--rejected {
+  border-left: 4px solid var(--danger-500);
+}
+
+.change-order-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.change-order-card__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.change-order-card__number {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.change-order-card__impact-grid {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  flex-wrap: wrap;
+}
+
+.impact-pill {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.change-order-card__meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin: var(--space-2) 0;
+}
+
+.change-order-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* Lifecycle Panel */
+.lifecycle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.lifecycle-overview-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.lifecycle-overview-card__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.lifecycle-overview-card__label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lifecycle-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.lifecycle-stage-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand-500);
+}
+
+.lifecycle-release-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.lifecycle-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.lifecycle-alert--warning {
+  background: var(--warning-50);
+  border: 1px solid var(--warning-100);
+}
+
+.lifecycle-alert__content {
+  flex: 1;
+  font-size: var(--text-sm);
+}
+
+.lifecycle-alert__content p {
+  margin: var(--space-1) 0 0 0;
+  font-size: var(--text-xs);
+  color: var(--warning-800);
+}
+
+.lifecycle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .lifecycle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Formularios inline dentro de tarjetas lifecycle (revisión / anticipo). */
+.lifecycle-revision-form {
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lifecycle-deposit-summary {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.lifecycle-deposit-summary--empty {
+  font-style: italic;
+}
+
+.lifecycle-deposit-form__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr auto 1fr;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .lifecycle-deposit-form__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.lifecycle-section-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.lifecycle-section-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lifecycle-section-card__title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.lifecycle-section-card__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 0;
+}
+
+.lifecycle-revisions-list,
+.lifecycle-approvals-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.revision-item {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.revision-item__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.revision-item__badge {
+  background: var(--surface-hover);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.revision-item__meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.approval-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.approval-card--approved {
+  border-left: 3px solid var(--success-500);
+}
+
+.approval-card--pending {
+  border-left: 3px solid var(--warning-500);
+}
+
+.approval-card--rejected {
+  border-left: 3px solid var(--danger-500);
+}
+
+.approval-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.approval-card__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.approval-card__meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin: var(--space-1) 0 0 0;
+}
+
+.approval-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  justify-content: flex-end;
+}
+
+.timeline-event {
+  display: flex;
+  gap: var(--space-3);
+  position: relative;
+  padding-bottom: var(--space-3);
+}
+
+.timeline-event:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 12px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-default);
+}
+
+.timeline-event__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.timeline-event__content {
+  flex: 1;
+}
+
+.timeline-event__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+}
+
+.timeline-event__user {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+}
+
+.timeline-event__note {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin: 2px 0 0 0;
+}
+

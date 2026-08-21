@@ -41,6 +41,10 @@ import type {
   WarrantyTicket,
   WarrantyTicketCategory,
   WarrantyTicketPriority,
+  ProductionReleaseOptions,
+  ChangeOrderImpact,
+  ApprovalType,
+  CommercialStatus,
 } from '@muebles/domain';
 
 import {
@@ -344,6 +348,63 @@ export interface ProjectsScreenProps {
   readonly onExportWarrantyRefabricationOptimizer?: (
     ticket: WarrantyTicket,
   ) => void;
+
+  // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
+  readonly onReleaseToProduction?: (
+    projectId: string,
+    note?: string,
+    options?: ProductionReleaseOptions,
+  ) => void | Promise<void>;
+  readonly onRevokeProductionRelease?: (
+    projectId: string,
+    reason: string,
+  ) => void | Promise<void>;
+  readonly onCreateChangeOrder?: (
+    projectId: string,
+    params: {
+      reason: string;
+      description?: string;
+      impact?: ChangeOrderImpact;
+    },
+  ) => void | Promise<void>;
+  readonly onSubmitChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+  ) => void | Promise<void>;
+  readonly onApproveChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+    decisionNotes?: string,
+  ) => void | Promise<void>;
+  readonly onRejectChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+    reason: string,
+  ) => void | Promise<void>;
+  readonly onCreateDesignRevision?: (
+    projectId: string,
+    name?: string,
+    description?: string,
+  ) => void | Promise<void>;
+  readonly onDecideApproval?: (
+    projectId: string,
+    approvalId: string,
+    decision: 'approved' | 'rejected',
+    notes?: string,
+  ) => void | Promise<void>;
+  readonly onRequestApproval?: (
+    projectId: string,
+    type: ApprovalType,
+    notes?: string,
+  ) => void | Promise<void>;
+  readonly onChangeCommercialStatus?: (
+    projectId: string,
+    status: CommercialStatus,
+  ) => void | Promise<void>;
+  readonly onRecordDeposit?: (
+    projectId: string,
+    params: import('@muebles/domain').DepositReceivedPayload & { note?: string },
+  ) => void | Promise<void>;
 }
 
 export function ProjectsScreen({
@@ -436,6 +497,17 @@ export function ProjectsScreen({
   onDeleteWarrantyTicket,
   onUploadWarrantyPhoto,
   onExportWarrantyRefabricationOptimizer,
+  onReleaseToProduction,
+  onRevokeProductionRelease,
+  onCreateChangeOrder,
+  onSubmitChangeOrder,
+  onApproveChangeOrder,
+  onRejectChangeOrder,
+  onCreateDesignRevision,
+  onDecideApproval,
+  onRequestApproval,
+  onChangeCommercialStatus,
+  onRecordDeposit,
 }: ProjectsScreenProps): ReactNode {
   const state = useProjectsScreenState({
     projects,
@@ -722,6 +794,17 @@ export function ProjectsScreen({
           onDeleteWarrantyTicket={onDeleteWarrantyTicket}
           onUploadWarrantyPhoto={onUploadWarrantyPhoto}
           onExportWarrantyRefabricationOptimizer={onExportWarrantyRefabricationOptimizer}
+          onReleaseToProduction={onReleaseToProduction}
+          onRevokeProductionRelease={onRevokeProductionRelease}
+          onCreateChangeOrder={onCreateChangeOrder}
+          onSubmitChangeOrder={onSubmitChangeOrder}
+          onApproveChangeOrder={onApproveChangeOrder}
+          onRejectChangeOrder={onRejectChangeOrder}
+          onCreateDesignRevision={onCreateDesignRevision}
+          onDecideApproval={onDecideApproval}
+          onRequestApproval={onRequestApproval}
+          onChangeCommercialStatus={onChangeCommercialStatus}
+          onRecordDeposit={onRecordDeposit}
         />
       ) : (
         <ProjectsListView

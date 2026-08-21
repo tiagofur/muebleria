@@ -37,6 +37,7 @@ import {
   roleCanAccessWarehouseDashboard,
   roleCanMarkPicking,
   roleCanManagePurchasing,
+  roleCanAppendProjectEvent,
 } from './rbac';
 
 describe('rbac (F035 / OC-004)', () => {
@@ -435,5 +436,42 @@ describe('rbac (F035 / OC-004)', () => {
     expect(navIdsForRole('admin').has('warehouseDashboard')).toBe(true);
     expect(navIdsForRole('gerente_produccion').has('warehouseDashboard')).toBe(true);
     expect(navIdsForRole('vendedor').has('warehouseDashboard')).toBe(false);
+  });
+
+  // Mirror de backend-go/internal/domain/rbac_test.go
+  // (TestRoleCanAppendProjectEvent): cualquier divergencia rompe CI en algún lado.
+  it('roleCanAppendProjectEvent gates the lifecycle audit log by role and event type (OC-010..OC-024)', () => {
+    // Comercial posee su pipeline + anticipo real.
+    expect(roleCanAppendProjectEvent('vendedor', 'quote_won')).toBe(true);
+    expect(roleCanAppendProjectEvent('vendedor', 'deposit_received')).toBe(true);
+    expect(roleCanAppendProjectEvent('vendedor', 'customer_approved')).toBe(true);
+    // Pero NO los gates técnicos ni decisiones con impacto de precio/plazo.
+    expect(roleCanAppendProjectEvent('vendedor', 'production_released')).toBe(false);
+    expect(roleCanAppendProjectEvent('vendedor', 'change_order_approved')).toBe(false);
+
+    // El gate de liberación es de ingeniería/supervisión de planta.
+    expect(roleCanAppendProjectEvent('ingeniero', 'production_released')).toBe(true);
+    expect(roleCanAppendProjectEvent('gerente_produccion', 'production_released')).toBe(true);
+    expect(roleCanAppendProjectEvent('produccion', 'production_released')).toBe(false);
+
+    // Cada carril decide su aprobación (OC-021).
+    expect(roleCanAppendProjectEvent('ingeniero', 'engineering_approved')).toBe(true);
+    expect(roleCanAppendProjectEvent('gerente_produccion', 'engineering_approved')).toBe(true);
+    expect(roleCanAppendProjectEvent('vendedor', 'engineering_approved')).toBe(false);
+
+    // Hitos físicos por dueño operativo.
+    expect(roleCanAppendProjectEvent('produccion', 'production_started')).toBe(true);
+    expect(roleCanAppendProjectEvent('almacen', 'materials_ready')).toBe(true);
+    expect(roleCanAppendProjectEvent('almacen', 'project_closed')).toBe(false);
+
+    // Decisiones de CO: gerentes/admin.
+    expect(roleCanAppendProjectEvent('gerente_ventas', 'change_order_approved')).toBe(true);
+    expect(roleCanAppendProjectEvent('gerente_produccion', 'change_order_approved')).toBe(true);
+
+    // Admin todo; user nada; tipos inventados jamás.
+    expect(roleCanAppendProjectEvent('admin', 'project_closed')).toBe(true);
+    expect(roleCanAppendProjectEvent('user', 'quote_won')).toBe(false);
+    expect(roleCanAppendProjectEvent('admin', 'pizza_delivered')).toBe(false);
+    expect(roleCanAppendProjectEvent(null, 'quote_won')).toBe(false);
   });
 });

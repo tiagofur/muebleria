@@ -1759,6 +1759,39 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             return Promise.resolve();
           }}
           onExportWarrantyRefabricationOptimizer={projectActions.exportWarrantyRefabricationOptimizer}
+          onReleaseToProduction={(projectId, note, options) =>
+            projectActions.releaseToProduction(projectId, note, options, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onRevokeProductionRelease={(projectId, reason) =>
+            projectActions.revokeProductionRelease(projectId, reason, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onCreateChangeOrder={(projectId, params) =>
+            projectActions.createChangeOrder(projectId, params, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onSubmitChangeOrder={(projectId, changeOrderId) =>
+            projectActions.submitChangeOrder(projectId, changeOrderId, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onApproveChangeOrder={(projectId, changeOrderId, notes) =>
+            projectActions.approveChangeOrder(projectId, changeOrderId, notes, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onRejectChangeOrder={(projectId, changeOrderId, reason) =>
+            projectActions.rejectChangeOrder(projectId, changeOrderId, reason, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onCreateDesignRevision={(projectId, name, desc) =>
+            projectActions.createDesignRevision(projectId, name, desc, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onDecideApproval={(projectId, approvalId, dec, notes) =>
+            projectActions.decideApproval(projectId, approvalId, dec, notes, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onRequestApproval={(projectId, type, notes) =>
+            projectActions.requestApproval(projectId, type, notes, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onChangeCommercialStatus={(projectId, status) =>
+            projectActions.changeCommercialStatus(projectId, status, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
+          onRecordDeposit={(projectId, params) =>
+            projectActions.recordDeposit(projectId, params, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+          }
         />
 
 

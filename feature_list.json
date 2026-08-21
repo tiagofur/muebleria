@@ -2988,6 +2988,48 @@
         "security",
         "data-truth"
       ]
+    },
+    {
+      "id": "F135",
+      "phase": 0,
+      "name": "operational_core_o1",
+      "title": "Issue #300 — Operational Core O1: Lifecycle, Approvals, Production Release y Change Orders (OC-010..OC-024)",
+      "description": "Implementación del ciclo de vida formal, eventos auditables append-only (OC-010), estados comerciales y derivación de ProjectStage (OC-011..OC-013), revisiones de diseño (OC-020), aprobaciones multi-rol (OC-021), Production Release formal con 6 gates auditables (OC-022), detección de desactualización/staleness determinística (OC-023), y órdenes de cambio formales post-aprobación con versionado automático (OC-024). Incluye persistencia en Postgres (migraciones 000066, 000067, 000068), backend Go, mappers TS, modales/banners/paneles en UI y bindings en el store de proyectos.",
+      "acceptance": [
+        "Eventos auditables append-only en Project.events (Postgres JSONB migration 000066)",
+        "CommercialStatus con soporte para draft, sent, won, lost, expired, cancelled",
+        "ProjectStage derivado determinísticamente y KPIs de ciclo de vida (lead times de cotización, levantamiento, ingeniería, producción, instalación)",
+        "DesignRevision con fingerprint BOM y snapshot de layout (migration 000067)",
+        "Approval multi-rol (customer, technical, supervisor) con registro de decisiones y eventos",
+        "ProductionRelease con evaluación en tiempo real de 6 gates obligatorios/opcionales (OC-022)",
+        "Detección de staleness uniforme con cálculo determinístico de fingerprint y banner de advertencia (OC-023)",
+        "Change Orders formales con impacto de costo/precio/plazo, estados draft/submitted/approved/rejected y bumping de versión (migration 000068 / OC-024)",
+        "Componentes UI: ProjectStalenessBanner, ProductionReleaseModal, ChangeOrderModal, LifecyclePanel y pestañas en ProjectDetailView",
+        "pnpm test + pnpm typecheck pasando al 100% en todos los paquetes; go test ./... pasando"
+      ],
+      "references": [
+        "docs/operational-core-v1.md",
+        "docs/project-lifecycle.md",
+        "packages/domain/src/projectLifecycle.ts",
+        "backend-go/internal/domain/projectEvents.go",
+        "packages/storage/src/apiMappers.ts",
+        "packages/ui/src/projects/components/LifecyclePanel.tsx",
+        "packages/ui/src/projects/components/ProductionReleaseModal.tsx",
+        "packages/ui/src/projects/components/ChangeOrderModal.tsx",
+        "packages/ui/src/projects/components/ProjectStalenessBanner.tsx"
+      ],
+      "status": "done",
+      "tags": [
+        "operational-core",
+        "lifecycle",
+        "approvals",
+        "production-release",
+        "change-orders",
+        "domain",
+        "storage",
+        "ui",
+        "go"
+      ]
     }
   ]
 }

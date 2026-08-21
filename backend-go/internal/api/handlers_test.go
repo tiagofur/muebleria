@@ -115,6 +115,10 @@ type stubStore struct {
 	activitiesByID         []domain.ProductionActivity
 	insertedActivities     []domain.ProductionActivity
 	floorStatusErr         error
+	projectEventsList      []domain.ProjectEvent
+	projectEventWrites     []domain.ProjectEvent
+	insertProjectEventErr  error
+	listProjectEventsErr   error
 	updateModuleCalled     bool
 	updateModuleReceived   *domain.Module
 	deleteModuleCalled     bool
@@ -393,6 +397,21 @@ func (s *stubStore) InsertFloorEvent(_ context.Context, ev domain.FloorStatusEve
 
 func (s *stubStore) ListFloorEvents(_ context.Context, _ string) ([]domain.FloorStatusEvent, error) {
 	return s.floorEventsList, nil
+}
+
+func (s *stubStore) InsertProjectEvent(_ context.Context, ev domain.ProjectEvent) error {
+	if s.insertProjectEventErr != nil {
+		return s.insertProjectEventErr
+	}
+	s.projectEventWrites = append(s.projectEventWrites, ev)
+	return nil
+}
+
+func (s *stubStore) ListProjectEvents(_ context.Context, _ string) ([]domain.ProjectEvent, error) {
+	if s.listProjectEventsErr != nil {
+		return nil, s.listProjectEventsErr
+	}
+	return s.projectEventsList, nil
 }
 func (s *stubStore) CreateModule(context.Context, *domain.Module) error {
 	s.stubNotUsed("CreateModule")

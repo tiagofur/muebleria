@@ -1040,6 +1040,10 @@ export interface Project {
   readonly marginFactor: number;
   readonly laborFixedCost: number;
   readonly status: ProjectStatus;
+  /**
+   * Commercial outcome status separating commercial pipeline from physical manufacturing (OC-011).
+   */
+  readonly commercialStatus?: import('./projectLifecycle').CommercialStatus;
   readonly items: readonly ProjectItem[];
   /**
    * Optional volume discount tiers (#202). Sorted descending by minQuantity.
@@ -1130,6 +1134,26 @@ export interface Project {
    * `history[0]` is always the most recently superseded version.
    */
   readonly history?: readonly ProjectVersion[];
+  /**
+   * Append-only lifecycle event log (OC-010 / docs/project-lifecycle.md).
+   */
+  readonly events?: readonly import('./projectLifecycle').ProjectEvent[];
+  /**
+   * Formal design revisions (OC-020).
+   */
+  readonly designRevisions?: readonly import('./projectLifecycle').DesignRevision[];
+  /**
+   * Multi-role approvals (OC-021: customer, technical, supervisor).
+   */
+  readonly approvals?: readonly import('./projectLifecycle').Approval[];
+  /**
+   * Auditable production release gate (OC-022).
+   */
+  readonly productionRelease?: import('./projectLifecycle').ProductionRelease;
+  /**
+   * Formal change orders for post-approval/post-release scope modifications (OC-024).
+   */
+  readonly changeOrders?: readonly import('./projectLifecycle').ChangeOrder[];
 }
 
 /** Lifecycle stage for a project photo. */

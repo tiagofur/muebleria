@@ -554,10 +554,11 @@ type Project struct {
 	InstallationScheduledDate *string `json:"installation_scheduled_date,omitempty"`
 	Currency                  string  `json:"currency"`
 
-	MarginFactor   float64       `json:"margin_factor"`
-	LaborFixedCost float64       `json:"labor_fixed_cost"`
-	Status         ProjectStatus `json:"status"`
-	Items          []ProjectItem `json:"items"`
+	MarginFactor     float64           `json:"margin_factor"`
+	LaborFixedCost   float64           `json:"labor_fixed_cost"`
+	Status           ProjectStatus     `json:"status"`
+	CommercialStatus *CommercialStatus `json:"commercial_status,omitempty"`
+	Items            []ProjectItem     `json:"items"`
 	// ProjectLevelChoices are defaults for all line items (F029 / #35).
 	// Effective: item.OptionChoices[role] if set, else ProjectLevelChoices[role].
 	ProjectLevelChoices map[string]string `json:"project_level_choices,omitempty"`
@@ -586,12 +587,17 @@ type Project struct {
 	// MaterialsRelease is Almacén's "materials complete" stamp (process stage
 	// gating). Opaque JSON blob: { released_by, released_at }. NULL = the
 	// project is still in the warehouse queue.
-	MaterialsRelease json.RawMessage     `json:"materials_release,omitempty"`
-	FloorEvents      []FloorStatusEvent  `json:"floor_events,omitempty"`
-	Notes            string              `json:"notes,omitempty"`
-	PriceSnapshot    *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt        time.Time           `json:"created_at"`
-	UpdatedAt        time.Time           `json:"updated_at"`
+	MaterialsRelease  json.RawMessage     `json:"materials_release,omitempty"`
+	DesignRevisions   []DesignRevision    `json:"design_revisions,omitempty"`
+	Approvals         []Approval          `json:"approvals,omitempty"`
+	ProductionRelease *ProductionRelease  `json:"production_release,omitempty"`
+	ChangeOrders      []ChangeOrder       `json:"change_orders,omitempty"`
+	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
+	Events            []ProjectEvent      `json:"events,omitempty"`
+	Notes             string              `json:"notes,omitempty"`
+	PriceSnapshot     *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
+	CreatedAt         time.Time           `json:"created_at"`
+	UpdatedAt         time.Time           `json:"updated_at"`
 }
 
 // ProjectTemplate is a reusable project recipe (#110 / H15). Slimmed Project:

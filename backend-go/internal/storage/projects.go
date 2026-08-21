@@ -355,7 +355,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, created_at, updated_at
 		FROM projects
 		ORDER BY updated_at DESC;
 	`
@@ -374,6 +374,7 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var techStatus *string
 		var surveyCompletedAt *time.Time
 		var installDate *string
+		var commercialStatus *string
 		var notes *string
 		var kitchenLayout []byte
 		var planEditSession []byte
@@ -383,7 +384,11 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var engineeringLog []byte
 		var materialsRelease []byte
 		var cutPlan []byte
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &p.CreatedAt, &p.UpdatedAt)
+		var designRevisions []byte
+		var approvals []byte
+		var productionRelease []byte
+		var changeOrders []byte
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -400,6 +405,10 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 			p.TechnicalStatus = *techStatus
 		} else {
 			p.TechnicalStatus = "pending_assignment"
+		}
+		if commercialStatus != nil && *commercialStatus != "" {
+			cs := domain.CommercialStatus(*commercialStatus)
+			p.CommercialStatus = &cs
 		}
 		p.SurveyCompletedAt = surveyCompletedAt
 		p.InstallationScheduledDate = installDate
@@ -430,6 +439,21 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		}
 		if len(cutPlan) > 0 && string(cutPlan) != "null" {
 			p.CutPlan = cutPlan
+		}
+		if len(designRevisions) > 0 && string(designRevisions) != "null" {
+			_ = json.Unmarshal(designRevisions, &p.DesignRevisions)
+		}
+		if len(approvals) > 0 && string(approvals) != "null" {
+			_ = json.Unmarshal(approvals, &p.Approvals)
+		}
+		if len(productionRelease) > 0 && string(productionRelease) != "null" {
+			var pr domain.ProductionRelease
+			if err := json.Unmarshal(productionRelease, &pr); err == nil {
+				p.ProductionRelease = &pr
+			}
+		}
+		if len(changeOrders) > 0 && string(changeOrders) != "null" {
+			_ = json.Unmarshal(changeOrders, &p.ChangeOrders)
 		}
 
 		// Load items so FE reload keeps line items (calculate + UI depend on them).
@@ -651,7 +675,7 @@ func structurePinArg(pin *int) interface{} {
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, created_at, updated_at
 		FROM projects
 		WHERE id = $1;
 	`
@@ -663,6 +687,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var techStatus *string
 	var surveyCompletedAt *time.Time
 	var installDate *string
+	var commercialStatus *string
 	var notes *string
 	var kitchenLayout []byte
 	var planEditSession []byte
@@ -672,7 +697,11 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var engineeringLog []byte
 	var materialsRelease []byte
 	var cutPlan []byte
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &p.CreatedAt, &p.UpdatedAt)
+	var designRevisions []byte
+	var approvals []byte
+	var productionRelease []byte
+	var changeOrders []byte
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -689,6 +718,10 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		p.TechnicalStatus = *techStatus
 	} else {
 		p.TechnicalStatus = "pending_assignment"
+	}
+	if commercialStatus != nil && *commercialStatus != "" {
+		cs := domain.CommercialStatus(*commercialStatus)
+		p.CommercialStatus = &cs
 	}
 	p.SurveyCompletedAt = surveyCompletedAt
 	p.InstallationScheduledDate = installDate
@@ -720,6 +753,21 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	if len(cutPlan) > 0 && string(cutPlan) != "null" {
 		p.CutPlan = cutPlan
 	}
+	if len(designRevisions) > 0 && string(designRevisions) != "null" {
+		_ = json.Unmarshal(designRevisions, &p.DesignRevisions)
+	}
+	if len(approvals) > 0 && string(approvals) != "null" {
+		_ = json.Unmarshal(approvals, &p.Approvals)
+	}
+	if len(productionRelease) > 0 && string(productionRelease) != "null" {
+		var pr domain.ProductionRelease
+		if err := json.Unmarshal(productionRelease, &pr); err == nil {
+			p.ProductionRelease = &pr
+		}
+	}
+	if len(changeOrders) > 0 && string(changeOrders) != "null" {
+		_ = json.Unmarshal(changeOrders, &p.ChangeOrders)
+	}
 
 	items, err := s.loadProjectItems(ctx, p.ID)
 	if err != nil {
@@ -733,6 +781,13 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		return nil, err
 	}
 	p.FloorEvents = events
+
+	// OC-010 — lifecycle event log travels with project detail.
+	projEvents, err := s.ListProjectEvents(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	p.Events = projEvents
 
 	level, err := s.loadProjectLevelChoices(ctx, p.ID)
 	if err != nil {
@@ -827,19 +882,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan)).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders)).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan)).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders)).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -850,6 +905,12 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 		return err
 	}
 	if err := replaceProjectLevelChoicesTx(ctx, tx, p.ID, p.ProjectLevelChoices); err != nil {
+		return err
+	}
+	if err := upsertFloorEventsTx(ctx, tx, p.ID, p.FloorEvents); err != nil {
+		return err
+	}
+	if err := upsertProjectEventsTx(ctx, tx, p.ID, p.Events); err != nil {
 		return err
 	}
 
@@ -935,12 +996,13 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	}
 	query := `
 		UPDATE projects
-		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, notes = $7,
-		    owner_user_id = $8, assigned_engineer_id = $9, technical_status = $10, survey_completed_at = $11, installation_scheduled_date = $12,
-		    kitchen_layout = $13, plan_edit_session = $14, installation_checklist = $15, nesting_import = $16, measure_defaults = $17, engineering_log = $18, materials_release = $19, cut_plan = $20, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $21;
+		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, commercial_status = $7, notes = $8,
+		    owner_user_id = $9, assigned_engineer_id = $10, technical_status = $11, survey_completed_at = $12, installation_scheduled_date = $13,
+		    kitchen_layout = $14, plan_edit_session = $15, installation_checklist = $16, nesting_import = $17, measure_defaults = $18, engineering_log = $19, materials_release = $20, cut_plan = $21,
+		    design_revisions = $22, approvals = $23, production_release = $24, change_orders = $25, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $26;
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), id)
 	if err != nil {
 		return err
 	}
@@ -956,6 +1018,9 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		return err
 	}
 	if err := upsertFloorEventsTx(ctx, tx, id, p.FloorEvents); err != nil {
+		return err
+	}
+	if err := upsertProjectEventsTx(ctx, tx, id, p.Events); err != nil {
 		return err
 	}
 	if err := replaceProjectLevelChoicesTx(ctx, tx, id, p.ProjectLevelChoices); err != nil {
@@ -1596,3 +1661,112 @@ func upsertFloorEventsTx(ctx context.Context, tx pgx.Tx, projectID string, event
 	}
 	return nil
 }
+
+func commercialStatusArg(cs *domain.CommercialStatus) interface{} {
+	if cs == nil || *cs == "" {
+		return nil
+	}
+	return string(*cs)
+}
+
+func jsonbSliceArg(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil || len(b) == 0 || string(b) == "null" || string(b) == "[]" {
+		return nil
+	}
+	return b
+}
+
+func jsonbStructArg(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil || len(b) == 0 || string(b) == "null" {
+		return nil
+	}
+	return b
+}
+
+// ListProjectEvents returns the lifecycle event log of a project, oldest first (OC-010).
+func (s *PostgresStore) ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, project_id, type, at, by_user_id, source, note, payload, created_at
+		FROM project_events
+		WHERE project_id = $1
+		ORDER BY at ASC, id ASC;
+	`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("error listing project events: %w", err)
+	}
+	defer rows.Close()
+
+	events := []domain.ProjectEvent{}
+	for rows.Next() {
+		var ev domain.ProjectEvent
+		var byUser, note *string
+		var source string
+		var payload []byte
+		if err := rows.Scan(&ev.ID, &ev.ProjectID, &ev.Type, &ev.At, &byUser, &source, &note, &payload, &ev.CreatedAt); err != nil {
+			return nil, fmt.Errorf("error scanning project event: %w", err)
+		}
+		if byUser != nil {
+			ev.ByUserID = byUser
+		}
+		ev.Source = domain.NormalizeProjectEventSource(source)
+		if note != nil {
+			ev.Note = *note
+		}
+		if len(payload) > 0 && string(payload) != "null" {
+			ev.Payload = payload
+		}
+		events = append(events, ev)
+	}
+	return events, rows.Err()
+}
+
+// InsertProjectEvent writes one immutable lifecycle event to the audit log (OC-010).
+func (s *PostgresStore) InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error {
+	var at interface{} = ev.At
+	if ev.At.IsZero() {
+		at = time.Now()
+	}
+	source := domain.NormalizeProjectEventSource(string(ev.Source))
+	_, err := s.Pool.Exec(ctx, `
+		INSERT INTO project_events
+			(id, project_id, type, at, by_user_id, source, note, payload)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
+		ON CONFLICT (id) DO NOTHING;
+	`, ev.ID, ev.ProjectID, ev.Type, at, ev.ByUserID, string(source), ev.Note, nullKitchenLayout(ev.Payload))
+	if err != nil {
+		return fmt.Errorf("error inserting project event: %w", err)
+	}
+	return nil
+}
+
+// upsertProjectEventsTx merges client-supplied events into the audit log inside a project transaction.
+func upsertProjectEventsTx(ctx context.Context, tx pgx.Tx, projectID string, events []domain.ProjectEvent) error {
+	for _, ev := range events {
+		if ev.ID == "" || ev.Type == "" {
+			continue
+		}
+		var at interface{} = ev.At
+		if ev.At.IsZero() {
+			at = time.Now()
+		}
+		source := domain.NormalizeProjectEventSource(string(ev.Source))
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO project_events
+				(id, project_id, type, at, by_user_id, source, note, payload)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
+			ON CONFLICT (id) DO NOTHING;
+		`, ev.ID, projectID, ev.Type, at, ev.ByUserID, string(source), ev.Note, nullKitchenLayout(ev.Payload)); err != nil {
+			return fmt.Errorf("error upserting project event: %w", err)
+		}
+	}
+	return nil
+}
+

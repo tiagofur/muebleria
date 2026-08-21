@@ -4,6 +4,7 @@
 
 import { type ReactNode } from 'react';
 import {
+  AlertTriangle,
   Check,
   ChevronLeft,
   Factory,
@@ -12,7 +13,14 @@ import {
   Pencil,
   Send,
 } from 'lucide-react';
-import { TECHNICAL_STATUS_METADATA, type ProjectStatus } from '@muebles/domain';
+import {
+  TECHNICAL_STATUS_METADATA,
+  COMMERCIAL_STATUS_LABELS_ES,
+  PROJECT_STAGE_LABELS_ES,
+  deriveProjectStage,
+  isProjectStaleForProduction,
+  type ProjectStatus,
+} from '@muebles/domain';
 import { DropdownMenu, type DropdownMenuSection } from '../../../common';
 import { WhatsAppButton } from '../../../crm/WhatsAppButton';
 import { StatusBadge } from '../StatusBadge';
@@ -96,6 +104,38 @@ export function ProjectDetailHeader({
           <div className="workspace-chrome__title-row">
             <h2 className="workspace-chrome__title">{project.name}</h2>
             <StatusBadge status={project.status} />
+            <span
+              className="badge badge--neutral-subtle"
+              title="Etapa Operativa del Proyecto"
+              style={{ fontSize: '0.75rem' }}
+            >
+              {PROJECT_STAGE_LABELS_ES[deriveProjectStage(project)]}
+            </span>
+            {project.commercialStatus && (
+              <span
+                className={`badge badge--${
+                  project.commercialStatus === 'won'
+                    ? 'success-subtle'
+                    : project.commercialStatus === 'lost' || project.commercialStatus === 'cancelled'
+                      ? 'danger-subtle'
+                      : 'info-subtle'
+                }`}
+                title="Estado Comercial"
+                style={{ fontSize: '0.75rem' }}
+              >
+                {COMMERCIAL_STATUS_LABELS_ES[project.commercialStatus]}
+              </span>
+            )}
+            {isProjectStaleForProduction(project) && (
+              <span
+                className="badge badge--danger-subtle"
+                title="Cambios posteriores a la liberación detectados (Stale)"
+                style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+              >
+                <AlertTriangle size={11} aria-hidden="true" />
+                Stale
+              </span>
+            )}
             {project.technicalStatus && project.technicalStatus !== 'pending_assignment' ? (
               <span
                 className={`status-badge status-badge--${
