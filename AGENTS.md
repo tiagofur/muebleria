@@ -1,173 +1,244 @@
 # AGENTS.md — Mapa de navegación
 
-> Este archivo es el **punto de entrada** para cualquier agente que trabaje
-> en este repositorio. Es un **mapa**, no un manual. Lee solo lo que necesites
-> cuando lo necesites. El detalle vive en `docs/`.
+> Punto de entrada para cualquier agente. Es un mapa, no un manual. Lee sólo lo
+> necesario y respeta las fuentes canónicas actuales.
 
 ---
 
 ## 0. Proyecto en una mirada
 
-**Muebles** es un sistema de cotización y producción para talleres de
-carpintería: catálogos (materiales, cantos, herrajes), módulos reutilizables,
-cotizaciones con grupos de opciones, y export al optimizador de corte
-(`Plantilla_Optimizer.xlsx`).
+**Muebles** es una plataforma operativa vertical para carpinterías y fabricantes de
+muebles pequeños/medianos. Conecta venta, diseño/ingeniería, BOM, materiales,
+producción, logística, instalación, postventa y, como objetivo del Operational Core,
+la rentabilidad real por obra.
 
-| Capa | Dónde | Notas |
-|------|--------|--------|
-| Dominio puro TS | `packages/domain` | Fórmulas, BOM, validaciones — sin React/fs |
-| UI compartida | `packages/ui` | React; **no calcula** dominio |
-| Excel / storage | `packages/excel`, `packages/storage` | Export Optimizer; repos JSON |
-| Shells | `apps/web`, `apps/desktop` | Vite+React; Electron (delgado) |
-| Backend Etapa 2 | `backend-go/` | Go + Postgres; API HTTP |
+### Regla física cerrada
 
-**Producto y requisitos** → `docs/prd.md` (dominio completo).  
-**Contexto UI Impeccable** → `docs/PRODUCT.md` (register `product`; no copiar marca ajena).  
-**UI/UX tokens y patrones** → `docs/design.md` (el loader de Impeccable lo usa como DESIGN).
+> **Corte, CNC y Enchape trabajan piezas. Armado es el punto de convergencia y desde
+> su salida se siguen muebles/unidades/bultos.**
+
+No profundices features de producción sin leer `docs/production-flow-v2.md`.
 
 ---
 
-## 1. Antes de empezar (siempre)
+## 1. Fuentes canónicas
+
+| Concern | Autoridad |
+|---|---|
+| Producto actual | `docs/prd-v2.md` |
+| Baseline MVP histórico | `docs/prd.md` |
+| Plan de consolidación | `docs/operational-core-v1.md` |
+| Producción pieza→mueble | `docs/production-flow-v2.md` |
+| Lifecycle/eventos | `docs/project-lifecycle.md` |
+| Arquitectura/boundaries | `docs/architecture.md` |
+| UX visual | `docs/design.md` |
+| UX operacional | `docs/operational-ux.md` |
+| Roadmap comercial | `docs/roadmap-comercial-v2.md` |
+| Reconciliación docs↔código | `docs/documentation-sync-2026-08-21.md` |
+| Convenciones | `docs/conventions.md` |
+| Verificación | `docs/verification.md` |
+| Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
+| Permisos | `packages/domain/src/rbac.ts` + enforcement backend |
+| Implementación actual | código + tests |
+| Ledger/historia | `feature_list.json` |
+| Backlog operativo | GitHub issues |
+
+### Regla de conflicto
+
+Si un documento histórico contradice una fuente v2 y el código moderno:
+
+1. verifica la fuente ejecutable;
+2. distingue **implemented today** de **target**;
+3. no reviertas código moderno sólo para coincidir con un texto viejo;
+4. registra/corrige la discrepancia.
+
+---
+
+## 2. Antes de empezar
 
 ```bash
 ./init.sh
 ```
 
-Si falla → **para**. Resuelve el entorno antes de tocar código.
-
 Luego:
-1. Lee `progress/current.md` — ¿hay una sesión activa?
-2. Lee `feature_list.json` — toma la tarea `pending` de menor id.
 
-### Comandos del día a día
+1. lee `progress/current.md`;
+2. identifica la feature activa;
+3. lee docs canónicos del área;
+4. revisa GitHub issue si existe;
+5. no tomes automáticamente el `pending` de menor id si contradice la prioridad
+   vigente del roadmap/Operational Core o existe una sesión activa.
 
-| Acción | Comando |
-|--------|---------|
-| Gate local / bootstrap | `./init.sh` |
-| Tests (todos los workspaces) | `pnpm test` |
-| Typecheck monorepo | `pnpm typecheck` |
-| Build monorepo | `pnpm build` |
-| Tests de un paquete | `pnpm --filter @muebles/<pkg> test` |
-| Backend Go (dev) | `cd backend-go && ./dev.sh` (carga `../.env.local`) |
-| Postgres local | `docker compose up -d` (puerto **5445**) |
-
-Detalle de niveles de verificación → `docs/verification.md`.
+> **Deuda conocida:** `init.sh` tiene un fallo de guardrail documentado en
+> `docs/verification.md` / OC-001. Hasta corregirlo, revisa también la salida real de
+> install/tests y no asumas que exit 0 prueba todo.
 
 ---
 
-## 2. Mapa del repositorio
+## 3. Mapa del repositorio
 
-| Recurso | Qué contiene | Cuándo leerlo |
-|---------|-------------|---------------|
-| `feature_list.json` | Tareas con estado (pending / in_progress / done / blocked) | Al empezar |
-| `progress/current.md` | Estado de la sesión activa | Al empezar |
-| `progress/history.md` | Bitácora de sesiones anteriores | Si necesitas contexto histórico |
-| `progress/archive/` | Artefactos de sesiones cerradas (impl/review/explore/close de features done) | Solo si un reviewer pide evidencia histórica |
-| `docs/prd.md` | Producto, usuarios del taller, dominio, fórmulas, anti-scope | Antes de dominio o producto |
-| `docs/project-lifecycle.md` | **Ciclo de vida del proyecto**: event log (`ProjectEvent`), timestamps con hora, gate "Enviar a producción", tiempos medibles por fase | Antes de tocar estados de proyecto, timestamps, reportes o flujo entre pantallas |
-| `docs/guia-de-uso.md` | **Guía de uso de la app para el usuario final** (roles, catálogo, cotizar, Proyectar, zócalos, producción) | Onboarding / capacitación / demo |
-| `docs/roadmap-comercial-v2.md` | **Roadmap comercial canónico** (reemplaza a app-excellence §roadmap y prd §17 como backlog vivo) | Planeación de producto / issues |
-| `docs/app-excellence.md` | Capítulos de excelencia producción/ventas (histórico — el backlog vivo es roadmap-comercial-v2) | Referencia de detalle producción |
-| `docs/production-module.md` | **Módulo Producción:** separación diseño vs fábrica, pantallas, pack, optimización, roadmap e issues | Antes de tocar nav/UI Producción, elevaciones PDF, pack ampliado o nesting visual |
-| `docs/roadmap-screens/` | Specs de pantallas aprobadas (fabrica v2, overview M2) | Antes de implementar Producción/Fábrica v2 |
-| `docs/history/` | Documentos archivados (judgment days, diagnóstico UI pre-rediseño, planes viejos) | Referencia histórica, no activo |
-| `docs/PRODUCT.md` | Contexto Impeccable (register, personality, anti-refs) | Setup del skill UI; no reemplaza el PRD |
-| `docs/architecture.md` | Paquetes, boundaries, flujo de datos | Antes de crear archivos |
-| `docs/conventions.md` | Estilo, nombres, tests, errores, tipos | Antes de escribir código |
-| `docs/design.md` | **Sistema de diseño UI/UX**: tokens CSS, tipografía, colores HSL, iconos (Lucide), patrones (modal, sidebar, toast, lista→detalle) | **OBLIGATORIO** antes de tocar UI (también es el DESIGN de Impeccable) |
-| `.agents/skills/impeccable/` | Skill de craft UI (audit, polish, critique, live, …) | Solo trabajo frontend / UX |
-| `.impeccable/live/config.json` | Live mode: shell Vite `apps/web/index.html` | Antes de `$impeccable live` |
-| `docs/verification.md` | Cómo demostrar que funciona | Antes de declarar `done` |
-| `docs/git-workflow.md` | **Preservación de trabajo**: cómo guardar/cerrar sesión, por qué NO usar `git stash` como depósito, recuperación de commits perdidos | **OBLIGATORIO** antes de cerrar sesión o tocar `git stash` |
-| `docs/roadmap_RN.md` | **Roadmap React Native:** Estrategia, fases 0-5 y valor de la app móvil de taller/campo | Antes de trabajar en `apps/mobile` |
-| `docs/mobile-architecture.md` | **Arquitectura React Native:** Monorepo Expo, offline-first SQLite, hardware nativo y Go API | Antes de tocar código de `apps/mobile` |
-| `docs/mobile-ui-ux.md` | **Diseño UI/UX Móvil:** Ergonomía táctil de taller, touch targets ≥48px, tokens | Antes de diseñar pantallas móviles |
-| `CHECKPOINTS.md` | Criterios del revisor | Para auto-evaluarte |
-| `.agents/skills/` | Cómo actuar según tu rol (leader / implementer / reviewer) | Lee tu rol |
-| `README.md` | Stack, env vars, arranque backend | Setup / ops |
-| `Plantilla_Muebles.xlsx` | Fuente de dominio: fórmulas, datos de referencia | Golden test |
-| `Plantilla_Optimizer.xlsx` | Contrato de salida del export | Tests de fixture |
-
-### Layout del monorepo (fuente de trabajo)
-
-```
-muebles/
-├── apps/web/          # shell React + Vite
-├── apps/desktop/      # shell Electron
-├── apps/mobile/       # shell React Native + Expo (iOS & Android)
-├── packages/domain/   # lógica de negocio pura
-├── packages/ui/       # componentes React compartidos
-├── packages/excel/    # export Optimizer
-├── packages/storage/  # persistencia (puertos + JSON local)
-├── backend-go/        # API Go + Postgres (Etapa 2)
-├── docs/              # prd, architecture, conventions, design, verification
-├── progress/          # sesión activa + bitácora (cerrados en progress/archive/)
-├── feature_list.json  # backlog con estados
-└── init.sh            # gate de entorno + tests
+```text
+apps/
+  web/          shell React/Vite
+  desktop/      Electron
+  mobile/       React Native/Expo
+packages/
+  domain/       lógica pura, BOM, optimizer, workflows puros
+  ui/           React compartido
+  excel/        XLSX/PDF/DXF/labels
+  storage/      repositories/mappers
+backend-go/     API + Postgres + auth + enforcement servidor
+docs/           contratos de producto/arquitectura/UX
+progress/       sesión/evidencia histórica
+feature_list.json  ledger de implementación
 ```
 
----
+### Bounded contexts conceptuales
 
-## 3. Reglas duras
+```text
+Sales
+Projects
+Survey
+Engineering
+Procurement
+Inventory
+Production
+Logistics
+Installation
+Costing
+After Sales
+```
 
-- **Una sola feature a la vez.** `init.sh` rechaza más de un `in_progress`.
-- **No `done` sin tests verdes.** Ejecuta `./init.sh` o `pnpm test` (y `pnpm typecheck` si tocaste tipos) antes de cerrar.
-- **Tests van con la feature.** No dejes “tests después” ni PRs solo de tests para comportamiento nuevo.
-- **Documenta en `progress/current.md`** mientras trabajas, no al final.
-- **Si no sabes algo**, busca en `docs/` antes de inventarlo.
-- **Deja el repo limpio** al cerrar (ver `docs/verification.md §Verificación final`).
-- **Antes de tocar UI/UX** (componentes `.tsx`, archivos `.css`, layouts, estilos inline), lee `docs/design.md` completo. No inventes colores, espaciados, sombras ni patrones de interacción — todos están definidos ahí.
-- **Archivos grandes:** soft budget en `docs/conventions.md` (screens ~400–600 líneas). Preferí extraer paneles/tabs a `components/` o `editor/` antes de seguir hinchando un `*Screen.tsx`.
-- **UI no calcula dominio.** Fórmulas y validaciones de negocio viven en `packages/domain` (o backend Go cuando aplique), no en React.
-- **pnpm only** en el monorepo JS. No npm/yarn.
-- **Nunca commits de `.env` / `.env.local`.** Solo `.env.example`.
-- **Código e identificadores en inglés; copy de UI en español** (salvo que el archivo ya use otro idioma de forma consistente).
-- **No copies sistemas de diseño ajenos al root** (`PRODUCT.md` / `DESIGN.md` de Impeccable u otros). El producto del taller es `docs/prd.md`; la UI del taller es `docs/design.md`.
-- **Nunca ejecutes SQL destructivo** (`DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`, `DELETE` sin `WHERE`) sobre Postgres, ni siquiera "para resetear y aplicar migraciones". Eso borra datos reales del usuario de forma irreversible. Las migraciones nuevas son aditivas (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`) y se aplican al arrancar el server sin tocar datos existentes. Si un reset es estrictamente necesario, **para y pedí confirmación explícita al usuario primero**, y ofrecé hacer un `pg_dump` de respaldo antes.
-- **`git stash` NO es depósito.** Stashes no se sincronizan con GitHub y se rompen al aplicar si contienen archivos nuevos (ver `docs/git-workflow.md`). Si vas a cerrar sesión o cambiar de contexto, **commit en rama `wip/` + push a origin**. Lo que no está pushed no existe.
-- **Antes de cerrar sesión: `git push`.** HEAD local debe ser igual a origin. Nunca te vayas con trabajo no pushed.
-- **No mezcles features distintas** en un mismo commit/stash. Si tu feature toca archivos "ajenos" a otra, abrí rama separada o commitealo en commit atómico con mensaje claro. Ver `docs/git-workflow.md §2`.
-- **`git stash apply --include-untracked`** SIEMPRE que apliques un stash heredado (porque sino perdés los archivos nuevos y rompe la compilación).
-
-### Calidad al cerrar (mínimo)
-
-1. `pnpm test` (o `./init.sh`) verde  
-2. Si cambió TS: `pnpm typecheck` verde  
-3. Si cambió Go: tests/`go test` del paquete tocado + server arranca con env válido  
-4. Evidencia en `progress/` según el skill del rol  
-5. **`git push`** — HEAD local == origin. Ver `docs/git-workflow.md`.
+Lee `docs/architecture.md` antes de inventar ownership nuevo.
 
 ---
 
-## 4. Tu rol en esta sesión
+## 4. Reglas duras
 
-Lee el skill de tu rol antes de hacer cualquier otra cosa:
-
-| Rol | Archivo | Cuándo |
-|-----|---------|--------|
-| Orquestador / líder | `.agents/skills/leader/SKILL.md` | Eres el agente principal coordinando trabajo |
-| Implementador | `.agents/skills/implementer/SKILL.md` | Te pidieron implementar una feature concreta |
-| Revisor | `.agents/skills/reviewer/SKILL.md` | Te pidieron revisar trabajo del implementador |
-| UI craft (Impeccable) | `.agents/skills/impeccable/SKILL.md` | Rediseño, audit, polish, critique, live de frontend |
-
-Si no te indicaron un rol, actúa como **implementador**.
-
-### Impeccable (solo UI)
-
-1. Arranque de sesión UI: `node .agents/skills/impeccable/scripts/context.mjs`  
-   Debe imprimir `docs/PRODUCT.md` + `docs/design.md`. Si dice `NO_PRODUCT_MD`, no inventes marca: arreglá el contexto.
-2. Register por defecto: **product** (app de taller, no landing).
-3. **No** regeneres paleta con `palette.mjs` mientras existan tokens en `docs/design.md` / CSS del repo.
-4. **No** toques dominio, export Optimizer ni `backend-go` con este skill.
-5. Live: config en `.impeccable/live/config.json` → shell `apps/web/index.html`. Dev server Vite en `apps/web`.
+- **Una feature activa a la vez** salvo coordinación explícita.
+- **No `done` sin evidencia.** Ver `docs/verification.md`.
+- **No inventar métricas.** `actual | estimated | forecast | proxy | missing`.
+- **No usar `createdAt` como sustituto silencioso de un evento real.**
+- **No mezclar estados comerciales, stage y execution física.**
+- **No producción física contra revisión stale** sin override auditado.
+- **UI no calcula dominio.**
+- **Server authority para seguridad/concurrencia/stock/workflow persistente** cuando
+  aplique; TS para dominio interactivo/puro según `docs/architecture.md`.
+- **Si una regla vive en TS y Go**, planear contract fixture de paridad.
+- **Código/identificadores en inglés; copy UI en español**.
+- **pnpm only** para monorepo JS.
+- **No `.env` en git.**
+- **No SQL destructivo** sin confirmación explícita y backup apropiado.
+- **No `git stash` como depósito.** Commit/push en rama.
+- **No mezclar trabajo no relacionado en commits.**
+- **Antes de cerrar: push.**
 
 ---
 
-## 5. Cómo evoluciona este mapa
+## 5. Reglas UI/UX
 
-Si encontrás una contradicción entre este archivo y el código, una regla
-insuficiente, o un workaround repetido:
+Antes de tocar UI:
 
-1. Preferí corregir la **fuente de verdad** (`docs/*`, skills, scripts).
-2. Actualizá este mapa solo si el cambio es de **navegación** (dónde mirar, qué es obligatorio).
-3. No conviertas este archivo en un manual largo: el costo de leerlo en cada sesión debe seguir bajo.
+1. lee `docs/design.md`;
+2. si es screen operativa, lee también `docs/operational-ux.md`;
+3. identifica la unidad de trabajo correcta: proyecto, pieza, mueble, bulto o visita;
+4. usa tokens; no hex/spacing/patterns inventados;
+5. una primary action por contexto;
+6. blockers deben explicar cómo resolverse;
+7. acciones físicas deben dejar feedback persistente/auditable.
+
+### Producción
+
+- Cut/CNC/Edge → pieza/lote.
+- Assembly/QC → mueble/unidad.
+- Packaging/Shipping → unidad/bulto.
+- Installation → visita + unidad + ambiente.
+
+---
+
+## 6. Roadmap y feature governance
+
+### Fuentes
+
+- prioridad/narrativa: `docs/roadmap-comercial-v2.md`;
+- detalle operativo: `docs/operational-core-v1.md`;
+- trabajo futuro: GitHub issues;
+- ledger de implementación: `feature_list.json`.
+
+### Después de F128
+
+La prioridad por defecto es Operational Core:
+
+1. guardrails/data truth;
+2. lifecycle/release;
+3. producción pieza→mueble;
+4. MRP/QC;
+5. instalación/closeout;
+6. job costing;
+7. UX transversal/pilotos.
+
+F129–F131 no desplazan automáticamente este orden salvo decisión explícita o necesidad
+de taller piloto.
+
+---
+
+## 7. Documentos históricos
+
+No borrar por “estar viejos”; conservar reasoning, pero no usarlos como autoridad actual
+cuando fueron superseded.
+
+Ejemplos:
+
+- `docs/prd.md` — baseline MVP;
+- `docs/production-module.md` — baseline del workspace producción previo al nesting/CNC
+  moderno;
+- `docs/app-excellence.md`;
+- `docs/history/*`;
+- `progress/archive/*`.
+
+Consulta `docs/documentation-sync-2026-08-21.md` para divergencias conocidas.
+
+---
+
+## 8. Verificación mínima
+
+Según feature:
+
+```bash
+pnpm test
+pnpm typecheck
+# + go test si backend
+# + smoke/golden específico
+```
+
+CI remoto debe convertirse en autoridad adicional mediante OC-002.
+
+Para exports físicos: golden/fixture.  
+Para workflow: transición permitida + rechazada + auth + audit.  
+Para dashboards: probar semántica de verdad de datos.  
+Para UI: comportamiento y a11y, no sólo source grep.
+
+---
+
+## 9. Roles de agente
+
+| Rol | Archivo |
+|---|---|
+| Orquestador | `.agents/skills/leader/SKILL.md` |
+| Implementador | `.agents/skills/implementer/SKILL.md` |
+| Revisor | `.agents/skills/reviewer/SKILL.md` |
+| UI craft | `.agents/skills/impeccable/SKILL.md` |
+
+Si no se indica rol, actúa como implementador.
+
+---
+
+## 10. Cómo evoluciona este mapa
+
+Si detectas contradicción:
+
+1. corrige la fuente de verdad apropiada;
+2. actualiza este mapa sólo si cambia qué debe leer un agente;
+3. agrega la discrepancia a la auditoría/documentación canónica si afecta futuras
+   sesiones;
+4. no conviertas AGENTS.md en el PRD: debe seguir siendo corto y navegable.
