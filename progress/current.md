@@ -1,7 +1,7 @@
 # Sesión activa
 
 **Feature:** F128 — Motor de resolución: placements + perfiles → agujeros por pieza (perforaciones CNC — 2/5)
-**Estado:** in_progress
+**Estado:** done (sesión cerrada, revisada y pusheada — 3 rondas de review)
 **Inicio:** 2026-08-20 (noche)
 
 ## Plan
@@ -40,3 +40,16 @@
 - F133 cerrada: defaultCutStrategy (precedencia plan obra → taller → sierra).
   Incidente de split de commits documentado en history.md (F133).
 - Deuda anotada: paridad Go de settings PTX; `btn--secondary` del panel.
+
+
+## Cierre (2026-08-21)
+
+- F128 implementada por sesión paralela (`cb21e4a`); esta sesión hizo la revisión
+  (RECHAZADA→APPROVED en 3 rondas) y los fixes: `4dd56ab` (heurística face-planes,
+  contrato ejes DXF, copy) y `7fed3e9` (colisión caras opuestas con separación real).
+- Suite 2422, typecheck 7/7, domain 716 (24 en el resolver), HEAD == origin `7fed3e9`.
+
+## Siguiente
+
+F129 — reglas de unión paramétricas sistema 32 (minifix/taquetes/bisagras como
+placements derivados que F128 resuelve). F130 tomará el wiring DXF ya adelantado.

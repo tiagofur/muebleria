@@ -577,3 +577,29 @@ mezcla trabajo paralelo; agregar por lista explícita de archivos o `git add -p`
   paridad Go — en modo server se pierden al recargar (falta de la sesión PTX, no de F133).
 - Botón «Por Material (ZIP)» del panel usa `btn--secondary` (clase inexistente) —
   fix del lado PTX. Estilos inline px en Settings (deuda heredada del patrón PTX).
+
+## F128 — Motor de resolución: placements + perfiles → agujeros por pieza (2026-08-21)
+
+- Implementada originalmente en `cb21e4a` por sesión paralela (junto con wiring
+  adelantado del DXF de corte, parte del scope F130 aceptado por el dueño).
+- Motor puro `partDrillingResolver.ts`: `resolvePartDrilling(piece, placements?, catalog?)`
+  → `ResolvedPartDrilling` con `HoleDefinition` reales por cara en coords desde
+  cantos (convención face-planes: front/back x=ancho y=largo; left/right x=espesor
+  y=largo; top/bottom x=ancho y=espesor — misma que hardwarePlacement), issues
+  estructuradas (DEPTH_EXCEEDS_MATERIAL, HOLE_OUT_OF_BOUNDS, HOLE_COLLISION en
+  cara y entre caras opuestas), dedupe 0.1mm, modo `strict` con ValidationError,
+  fórmulas paramétricas con el boardEnv de placements, fallback a heurísticas F074
+  marcado con `fallbackUsed`. Reactividad testeada: mover placement mueve agujeros,
+  cambiar herraje adapta Ø/profundidad.
+- Review en 3 rondas (veredicto final APPROVED):
+  1. `cb21a4a` rechazada: fallback F074 con HOLE_OUT_OF_BOUNDS falsos (convención
+     de ejes vieja), contrato resolver↔DXF inconsistente, copy LaTeX `$(0,0)$`.
+  2. `4dd56ab`: heurística F074 realineada a face-planes (+tests lateral/fondo),
+     proyección PERF del DXF con swap documentado (goldens byte-idénticos), copy.
+  3. `7fed3e9`: colisión entre caras opuestas comparaba siempre contra el espesor;
+     ahora usa la dimensión del eje normal del par (left/right→ancho, top/bottom→largo)
+     — crítico para las filas sistema 32 de F129. +4 tests (24 en el resolver).
+- Suite final: 2422 monorepo (domain 716), typecheck 7/7, HEAD == origin.
+- Notas para backlog (no bloqueantes): defaults de espesor divergentes (resolver
+  `?? 15` vs heurística `?? 18`); `resolvePartForPlacement` cae a `parts[0]` sin
+  match de rol; wiring productivo resolver→export (prop `drilling`) es F130.

@@ -2817,7 +2817,7 @@
         "packages/domain/src/partDrilling.ts",
         "packages/domain/src/engine/bom.ts"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "cnc",
         "perforaciones",
