@@ -26,7 +26,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Concern | Autoridad |
 |---|---|
 | Producto actual | `docs/prd-v2.md` |
-| Baseline MVP histórico | `docs/prd.md` |
+| Baseline MVP histórico | `docs/history/prd.md` |
 | Plan de consolidación | `docs/operational-core-v1.md` |
 | Producción pieza→mueble | `docs/production-flow-v2.md` |
 | Lifecycle/eventos | `docs/project-lifecycle.md` |
@@ -189,10 +189,10 @@ cuando fueron superseded.
 
 Ejemplos:
 
-- `docs/prd.md` — baseline MVP;
-- `docs/production-module.md` — baseline del workspace producción previo al nesting/CNC
+- `docs/history/prd.md` — baseline MVP;
+- `docs/history/production-module.md` — baseline del workspace producción previo al nesting/CNC
   moderno;
-- `docs/app-excellence.md`;
+- `docs/history/app-excellence.md`;
 - `docs/history/*`;
 - `progress/archive/*`.
 

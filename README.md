@@ -4,7 +4,7 @@ Aplicación de escritorio (Electron) y web (React) para talleres de carpintería
 gestión de catálogos de materiales, definición de módulos reutilizables,
 cotización con grupos de opciones y export directo al optimizador de corte.
 
-> Ver `docs/prd.md` para el detalle completo del producto.
+> Ver `docs/prd-v2.md` para el detalle completo del producto (baseline histórico en `docs/history/prd.md`).
 > Ver `docs/guia-de-uso.md` para el manual de uso de la app (roles, catálogo,
 > cotizar, Proyectar, zócalos, producción).
 

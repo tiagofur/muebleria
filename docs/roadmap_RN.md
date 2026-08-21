@@ -4,7 +4,7 @@
 > **Fecha:** 2026-08-15  
 > **Área:** Aplicación Móvil Nativa (iOS / Android)  
 > **Monorepo Target:** `apps/mobile` en pnpm monorepo  
-> **Relación con otros docs:** Complementa `docs/prd.md`, `docs/architecture.md` y `docs/production-module.md`.
+> **Relación con otros docs:** Complementa `docs/prd-v2.md`, `docs/architecture.md` y `docs/production-flow-v2.md`.
 
 ---
 

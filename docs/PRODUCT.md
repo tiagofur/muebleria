@@ -1,7 +1,7 @@
 # Product
 
 > Impeccable product context for UI work. Current product source of truth is
-> `docs/prd-v2.md`. Historical MVP detail remains in `docs/prd.md`.
+> `docs/prd-v2.md`. Historical MVP detail remains in `docs/history/prd.md`.
 
 ## Register
 
@@ -129,7 +129,7 @@ requirements where the environment demands larger targets and reduced precision.
 | Concern | File |
 |---|---|
 | Current product / domain PRD | `docs/prd-v2.md` |
-| Historical MVP PRD | `docs/prd.md` |
+| Historical MVP PRD | `docs/history/prd.md` |
 | Operational consolidation plan | `docs/operational-core-v1.md` |
 | Physical piece→furniture flow | `docs/production-flow-v2.md` |
 | Lifecycle/events | `docs/project-lifecycle.md` |

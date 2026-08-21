@@ -2,7 +2,7 @@
 
 > Manual para el usuario final del taller: vendedores, ingeniería, producción
 > y administración. Paso a paso, sin jerga de código. Para setup técnico ver
-> `README.md`; para reglas de producto ver `docs/prd.md`.
+> `README.md`; para reglas de producto ver `docs/prd-v2.md`.
 
 ---
 

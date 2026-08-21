@@ -21,11 +21,11 @@ La solución adoptada es:
 
 ### DS-01 — PRD original: “no CAD / no nesting / no ERP”
 
-**Documento histórico:** `docs/prd.md`.
+**Documento histórico:** `docs/history/prd.md`.
 
 **Estado real:** la app ya tiene Proyectar 2D/3D, ambientes, CRM/RBAC, ingeniería, almacén, compras, producción por estaciones, mobile companion, nesting nativo, DXF y CNC en evolución.
 
-**Resolución:** `docs/prd-v2.md` pasa a ser contrato narrativo actual. `docs/prd.md` queda como baseline MVP/histórico.
+**Resolución:** `docs/prd-v2.md` pasa a ser contrato narrativo actual. `docs/history/prd.md` queda como baseline MVP/histórico.
 
 ---
 
@@ -246,10 +246,9 @@ La solución adoptada es:
 ---
 
 ## 3. Documentos históricos que NO deben borrarse
-
-- `docs/prd.md` — decisiones y baseline MVP;
-- `docs/production-module.md` — historia y reasoning del workspace;
-- `docs/app-excellence.md` — referencia histórica;
+- `docs/history/prd.md` — decisiones y baseline MVP;
+- `docs/history/production-module.md` — historia y reasoning del workspace;
+- `docs/history/app-excellence.md` — referencia histórica;
 - `docs/history/*` — judgment days y auditorías;
 - roadmap comercial v2 — conservar decisiones comerciales anteriores, pero actualizar prioridad vigente.
 

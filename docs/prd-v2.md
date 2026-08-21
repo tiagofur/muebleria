@@ -5,8 +5,8 @@
 **Producto:** Muebles / Mueblería (nombre de trabajo)  
 **Audiencia:** producto, agentes, implementación, QA y talleres piloto
 
-> Este documento reemplaza a `docs/prd.md` como **contrato narrativo actual de producto**.
-> `docs/prd.md` se conserva como baseline histórico del MVP original y como referencia
+> Este documento reemplaza a `docs/history/prd.md` como **contrato narrativo actual de producto**.
+> `docs/history/prd.md` se conserva como baseline histórico del MVP original y como referencia
 > de fórmulas, decisiones y requisitos que sigan siendo compatibles. Ante conflicto,
 > gana este PRD v2 + las fuentes ejecutables indicadas en §15.
 
@@ -513,7 +513,7 @@ Integrar herramientas externas es preferible a recrearlas cuando no sea parte de
 | Permisos ejecutables | `packages/domain/src/rbac.ts` / backend correspondiente |
 | Estado de implementación | código + tests + `feature_list.json` como ledger |
 | Trabajo futuro | GitHub issues + roadmap canónico |
-| Baseline MVP histórico | `docs/prd.md` |
+| Baseline MVP histórico | `docs/history/prd.md` |
 
 Ante conflicto entre documentación y código:
 
