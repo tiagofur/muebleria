@@ -23,6 +23,10 @@ import type {
   StockMovementType,
   PurchaseOrder,
   Supplier,
+  PartInstance,
+  PartOperationType,
+  ModuleUnitExecution,
+  ModuleUnitStatus,
 } from '@muebles/domain';
 
 export interface WorkspaceRepository {
@@ -151,6 +155,45 @@ export interface WorkspaceRepository {
 
   /** Shop-floor transition log of a project, oldest first (F092). */
   listFloorEvents?(projectId: string): Promise<readonly FloorStatusEvent[]>;
+
+  // --- Physical part/unit execution (#301 / OC-030..OC-034) ---
+
+  /** Read the physical executions + per-unit assembly readiness. */
+  getPartExecutions?(projectId: string): Promise<{
+    partInstances: readonly PartInstance[];
+    moduleUnits: readonly ModuleUnitExecution[];
+    assemblyReadiness: readonly Record<string, unknown>[];
+  }>;
+
+  /** Generate/replace physical executions (server validates + guards). */
+  generatePartExecutions?(projectId: string, payload: {
+    partInstances: readonly PartInstance[];
+    moduleUnits: readonly ModuleUnitExecution[];
+    force?: boolean;
+  }): Promise<{ partInstances: number; moduleUnits: number; forced: boolean }>;
+
+  /** Complete one operation of a piece (current op when operationType omitted). */
+  advancePartOperation?(projectId: string, partId: string, payload: {
+    operationType?: PartOperationType;
+    advance?: boolean;
+    operatorName?: string;
+    machineId?: string;
+    notes?: string;
+    source?: string;
+  }): Promise<{ part: PartInstance; assemblyReadiness?: Record<string, unknown> }>;
+
+  /** Advance one module unit through the server-side assembly gate. */
+  advanceModuleUnit?(projectId: string, unitId: string, payload: {
+    targetStatus?: ModuleUnitStatus;
+    advance?: boolean;
+    notes?: string;
+    source?: string;
+    packageCount?: number;
+  }): Promise<{
+    unit: ModuleUnitExecution;
+    nextStatus: string;
+    assemblyReadiness?: Record<string, unknown>;
+  }>;
 
   // --- Production Activity Tracking (gerente_produccion) ---
 

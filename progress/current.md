@@ -42,15 +42,32 @@ split-brain), (3) **esta sesión**: deuda documentada.
    registrados en el payload de `quality_issue_reported`/`rework_started`
    (consultables para job costing); cliente `reworkPart` extendido.
 
-## Deuda restante (siguiente sesión)
+## Cuarta pasada — deuda viva resuelta
 
-- **Wiring del shell web:** cablear `onAdvancePart`/`onAdvanceUnit` desde
-  AppContent → ShellView → FabricScreen a `apiWorkspaceRepository` (hoy las
-  filas físicas se muestran sin botón de avance en web; móvil sí avanza).
-- **Disparar la generación:** invocar `generatePartExecutions` al liberar
-  producción (o al abrir la estación) desde el flujo de release web.
-- **Dashboard de WC vs physical:** ProductionQueueScreen móvil sigue
-  listando proyectos; puede sumar conteos físicos vía `part-executions`.
+- **Wiring del shell web completo:** `handleAdvancePart`/`handleAdvanceUnit`
+  en AppContent (modo API: endpoints físicos server-authoritative + mirror
+  local con las mismas funciones puras; modo local/ofline: espejo directo),
+  cableados vía ShellView a FabricScreen (`onAdvancePart`/`onAdvanceUnit`) —
+  las filas físicas web ya avanzan por pieza/unidad.
+- **Generación disparada por el release:** al liberar producción
+  (`onReleaseToProduction` → `handleGeneratePartExecutions`) el shell deriva
+  las piezas desde el BOM del catálogo (`deriveProjectPartExecutions`, nueva:
+  resolveBom por línea + ruta CNC sólo cuando el drilling resolver da
+  taladros reales) y las persiste vía `PUT part-executions` (validación
+  server-side) con mirror local. Guard: no regenera automáticamente si ya hay
+  avance físico (eso queda como acción supervisada).
+- **Store local:** `advancePartInstanceLocal`/`advanceModuleUnitLocal` (gate
+  de armado con blockers)/`setPartExecutions` con re-derivación OC-034 del
+  estado del ítem en cada avance, persistiendo por el canal normal de
+  guardado.
+
+Verificación de la pasada: domain 810 · ui 1158 · web 301 · mobile 42 ·
+storage 141 · excel 89 · desktop 17 · `pnpm typecheck` OK.
+
+## Deuda restante (menor)
+
+- ProductionQueueScreen móvil sigue listando proyectos; puede sumar conteos
+  físicos vía `part-executions` (mejora de visibilidad, no bloqueante).
 
 ## Verificación (evidencia de esta sesión)
 

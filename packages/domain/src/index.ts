@@ -902,6 +902,13 @@ export {
   type DerivePartInstancesOptions,
 } from './partExecution';
 
+export {
+  deriveProjectPartExecutions,
+  type ProjectPartExecutions,
+  type DeriveProjectPartExecutionsResult,
+  type DeriveProjectPartExecutionsError,
+} from './partExecutionDerivation';
+
 
 
 

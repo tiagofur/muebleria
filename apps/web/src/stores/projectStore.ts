@@ -92,6 +92,13 @@ import {
   createApproval,
   setProjectCommercialStatus,
   recordDepositReceived,
+  advancePartOperation as advancePartOperationDomain,
+  advanceModuleUnitStatus as advanceModuleUnitStatusDomain,
+  checkAssemblyReadiness,
+  deriveLegacyItemFloorStatus,
+  nextModuleUnitStatus,
+  type ModuleUnitExecution,
+  type PartInstance,
 } from '@muebles/domain';
 import { breakdownFromApi } from '@muebles/storage';
 import type { ProjectDraft } from '@muebles/ui';
@@ -409,6 +416,21 @@ export interface ProjectState {
     itemId: string,
     status: ItemFloorStatus,
   ) => void;
+  // --- Physical part/unit execution (#301 / OC-030..OC-034) ---
+  /** Complete the current operation of one piece (local/offline mirror). */
+  readonly advancePartInstanceLocal: (projectId: string, partId: string) => void;
+  /** Advance one unit through the assembly gate (local/offline mirror).
+   * Returns the gate blockers when the transition is not allowed. */
+  readonly advanceModuleUnitLocal: (
+    projectId: string,
+    unitId: string,
+  ) => { ok: true } | { ok: false; blockers: readonly string[] };
+  /** Replace the physical executions of a project (generation mirror). */
+  readonly setPartExecutions: (
+    projectId: string,
+    parts: readonly PartInstance[],
+    units: readonly ModuleUnitExecution[],
+  ) => void;
   /** PROD-3.2 — stamp export revision after factory pack/export. */
   readonly recordProductionExport: (projectId: string) => void;
   /** PROD-3.2 — ensure OP revision when opening plant-ready order. */
@@ -584,6 +606,37 @@ export function createProjectStore(options: InternalOptions) {
   // F064: toast comes from uiStore (single source of truth). Reading fresh
   // each call avoids stale closures across re-renders.
   const toast: ToastFn = (input) => getUiStoreState().toast(input);
+
+  /**
+   * Replace the physical executions of a project and re-derive the legacy
+   * item floor statuses from the physical truth (OC-034 bridge — same
+   * derivation the server persists on every advance). Persists through the
+   * regular project save channel.
+   */
+  function patchPartExecutions(
+    set: (partial: Partial<ProjectState>) => void,
+    get: () => ProjectState,
+    projectId: string,
+    parts: readonly PartInstance[],
+    units: readonly ModuleUnitExecution[],
+  ): void {
+    const project = get().projects.find((p) => p.id === projectId);
+    if (!project) return;
+    let updated: Project = { ...project, partInstances: parts, moduleUnits: units };
+    const itemIds = new Set<string>([
+      ...parts.map((p) => p.projectItemId),
+      ...units.map((u) => u.projectItemId),
+    ]);
+    for (const itemId of itemIds) {
+      const derived = deriveLegacyItemFloorStatus(
+        units.filter((u) => u.projectItemId === itemId),
+        parts.filter((p) => p.projectItemId === itemId),
+      );
+      updated = setProjectItemFloorStatus(updated, itemId, derived, new Date().toISOString());
+    }
+    if (updated === project) return;
+    patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));
+  }
 
   /**
    * Projects updater (reducer style). Saves only projects whose reference
@@ -1308,6 +1361,54 @@ export function createProjectStore(options: InternalOptions) {
       patch(set, get, (ps) =>
         ps.map((p) => (p.id === projectId ? updated : p)),
       );
+    },
+
+    // --- Physical part/unit execution (#301) — local mirrors of the
+    // server endpoints; the API path calls the endpoints and then these
+    // setters with the server-returned entities (single source of truth).
+    advancePartInstanceLocal: (projectId, partId) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project?.partInstances) return;
+      const idx = project.partInstances.findIndex((p) => p.id === partId);
+      if (idx === -1) return;
+      const part = project.partInstances[idx];
+      if (!part) return;
+      const currentOp = part.requiredOperations[part.currentOperationIndex];
+      if (!currentOp) return;
+      const advanced = advancePartOperationDomain(part, currentOp.type, {
+        at: new Date().toISOString(),
+      });
+      if (advanced === part) return;
+      const parts = project.partInstances.map((p) => (p.id === partId ? advanced : p));
+      patchPartExecutions(set, get, projectId, parts, project.moduleUnits ?? []);
+    },
+
+    advanceModuleUnitLocal: (projectId, unitId) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project?.moduleUnits) return { ok: false, blockers: ['sin unidades físicas'] };
+      const idx = project.moduleUnits.findIndex((u) => u.id === unitId);
+      if (idx === -1) return { ok: false, blockers: ['unidad no encontrada'] };
+      const unit = project.moduleUnits[idx];
+      if (!unit) return { ok: false, blockers: ['unidad no encontrada'] };
+      const next = nextModuleUnitStatus(unit.status);
+      if (!next) return { ok: false, blockers: ['la unidad ya está instalada'] };
+      if (next === 'assembly' && unit.status === 'awaiting_parts') {
+        const readiness = checkAssemblyReadiness(unit, project.partInstances ?? [], {
+          currentProductionRevision: project.productionRelease?.id,
+        });
+        if (!readiness.isReady) {
+          return { ok: false, blockers: readiness.blockers };
+        }
+      }
+      const advanced = advanceModuleUnitStatusDomain(unit, next, { at: new Date().toISOString() });
+      if (advanced === unit) return { ok: false, blockers: ['transición inválida'] };
+      const units = project.moduleUnits.map((u) => (u.id === unitId ? advanced : u));
+      patchPartExecutions(set, get, projectId, project.partInstances ?? [], units);
+      return { ok: true };
+    },
+
+    setPartExecutions: (projectId, parts, units) => {
+      patchPartExecutions(set, get, projectId, parts, units);
     },
 
     recordProductionExport: (projectId) => {

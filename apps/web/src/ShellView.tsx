@@ -407,6 +407,12 @@ export interface ShellViewCtx {
   readonly handleFabricClaim: (projectId: string, sector: FabricStation) => Promise<void>;
   readonly handleFabricFinish: (activityId: string, piecesCount: number) => Promise<void>;
   readonly handleFloorAdvance: (projectId: string, itemId: string, target: ItemFloorStatus) => void;
+  /** #301 — advance one PIECE's current operation (physical stations). */
+  readonly handleAdvancePart: (projectId: string, partId: string) => void;
+  /** #301 — advance one UNIT through the server-side assembly gate. */
+  readonly handleAdvanceUnit: (projectId: string, unitId: string) => void;
+  /** #301 — generate physical executions after a production release. */
+  readonly handleGeneratePartExecutions: (projectId: string) => void;
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -641,6 +647,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleFabricClaim,
     handleFabricFinish,
     handleFloorAdvance,
+    handleAdvancePart,
+    handleAdvanceUnit,
+    handleGeneratePartExecutions,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,
@@ -839,6 +848,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             (canMarkProduced || roleCanExportProduction(actorRole))
           }
           onAdvance={handleFloorAdvance}
+          onAdvancePart={handleAdvancePart}
+          onAdvanceUnit={handleAdvanceUnit}
           customerLabelFor={(customerId) =>
             resolveCustomerName(customerId, customers)
           }
@@ -1760,7 +1771,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }}
           onExportWarrantyRefabricationOptimizer={projectActions.exportWarrantyRefabricationOptimizer}
           onReleaseToProduction={(projectId, note, options) =>
-            projectActions.releaseToProduction(projectId, note, options, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+            projectActions
+              .releaseToProduction(projectId, note, options, authUser ? { id: authUser.id, role: authUser.role } : undefined)
+              .then(() => handleGeneratePartExecutions(projectId))
           }
           onRevokeProductionRelease={(projectId, reason) =>
             projectActions.revokeProductionRelease(projectId, reason, authUser ? { id: authUser.id, role: authUser.role } : undefined)
