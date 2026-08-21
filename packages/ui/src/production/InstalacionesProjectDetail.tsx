@@ -73,6 +73,7 @@ export function InstalacionesProjectDetail({
             <ArrowLeft size={18} strokeWidth={1.5} aria-hidden /> Instalaciones
           </button>
         ) : null}
+        <div className="instalaciones-detail__bar">
         <div className="instalaciones-detail__project-info">
           <h2 className="instalaciones-detail__title">{project.name}</h2>
           {customerName ? (
@@ -125,6 +126,7 @@ export function InstalacionesProjectDetail({
           <span className="instalaciones-detail__units">
             {view.units.installed}/{view.units.total} unidades instaladas
           </span>
+        </div>
         </div>
       </header>
 

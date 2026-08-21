@@ -2833,16 +2833,22 @@
 
 .instalaciones-detail__header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-2);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .instalaciones-detail__back {
-  flex: 1 0 100%;
+  align-self: flex-start;
+}
+
+.instalaciones-detail__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .instalaciones-detail__project-info {
