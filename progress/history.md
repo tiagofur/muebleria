@@ -659,3 +659,32 @@ mezcla trabajo paralelo; agregar por lista explícita de archivos o `git add -p`
   de agregados (prefijo `agr-`); first-wins partId→módulo cuando dos módulos
   comparten estructura con dims distintas; colisión de nombre de capa con Ø
   no enteros (7.5→8).
+
+## F131 — Editor visual 2D de perforaciones por cara + gizmo 3D (2026-08-21)
+
+- `PieceFaceDrillingEditor` (preview3d, SVG): una cara por vez con las dimensiones
+  del face-plane del dominio, grilla 32, agujeros REALES del motor F128 (manual +
+  derivado), anclas arrastrables con snap 32 (helper puro `snappedPlacementPatch`
+  con `snapValue` del dominio — drag explícito limpia fórmulas) y validaciones
+  inline del motor con hole ofensivo resaltado. Sin catálogo degrada a grilla+anclas.
+- Integrado en la sección Herrajes del PartInspector (prop opcional hardwareCatalog).
+- **Deuda F070 saldada**: HardwarePlacementGizmo montado en el viewport — BoardMesh
+  lo renderiza para la pieza seleccionada con placements, posicionado en
+  localPosition del resolved, snap 32, editable vía props opcionales
+  `rawHardwarePlacements`/`onUpdateHardwarePlacement` (thread
+  FurnitureScene3D→SceneContent→ModuleGroup→BoardMesh); read-only sin ellos.
+- Gates: radiogroup (no tablist local), tokens only. Review en 2 rondas (fixes:
+  snapValue del dominio en vez de snap duplicado en UI, tokens de fuente/padding,
+  plural, docs). Suite 2453, typecheck 7/7. APPROVED (`progress/review_F131.md`).
+- Follow-up anotado: ningún shell cablea aún hardwareCatalog/rawHardwarePlacements
+  al inspector/escena — el camino editable full se ejercita hoy vía tests; conectar
+  en la próxima iteración de Proyectar/Ingeniería.
+
+## Cierre de la serie de perforaciones CNC (F127–F131, 2026-08-20/21)
+
+F081 re-escpeada en 5 features, todas done y revisadas:
+catálogo de maquinado (F127) → motor de resolución (F128) → reglas de unión
+sistema 32 (F129) → export DXF por caras + reporte (F130) → editor visual +
+gizmo (F131). F132 (post-procesador SCM nativo) queda postergada hasta
+confirmar máquina/software del taller — el flujo oficial hacia SCM es el DXF
+por capas de F130, importable en Maestro con asignación capa→herramienta.

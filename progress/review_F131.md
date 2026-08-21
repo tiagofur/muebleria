@@ -1,5 +1,31 @@
 # Review — feature F131
 
+**Veredicto:** APPROVED (re-review 2026-08-21, fixes en `7634f35`)
+
+Re-review del commit de fixes `7634f35` (HEAD == origin/main, árbol limpio):
+
+1. **Fix 1 verificado** — `PieceFaceDrillingEditor.tsx` importa y usa `snapValue`
+   de `@muebles/domain` en `snappedPlacementPatch`; snap local eliminado (con los
+   guards NaN/step<=0 del dominio). C3 pasa.
+2. **Fix 2 verificado** — `pieceFaceDrillingEditor.css`: `font-size: var(--text-sm)`
+   y `padding: calc(var(--space-1) / 2) var(--space-2)`. Quedan sólo `1px` de
+   border-width (norma del repo, sin token existente — igual que partInspector.css /
+   moduleScene3d.css). D1/D7 pasan.
+3. **Fix 3 verificado** — doc de `pickGizmoPlacement` dice "Returns false".
+4. **Fix 4 verificado** — plural ternario «perforación/perforaciones»; test
+   actualizado a «1 perforación». D8 pasa.
+
+Evidencia re-ejecutada: `pnpm test` 2453/2453 verde (ui 1151), `pnpm typecheck`
+7/7, gates `designSystem` (9) + `tabsRollout` (2) + tests F131 (22) verdes.
+Observación del shell sin cablear (hardwareCatalog/rawHardwarePlacements) queda
+como follow-up anotado — no bloquea el cierre.
+
+Estado inicial del review (CHANGES_REQUESTED contra `0fa3076`) preservado abajo.
+
+---
+
+# Review inicial — contra `0fa3076`
+
 **Veredicto:** CHANGES_REQUESTED
 
 Commit revisado: `0fa3076` (HEAD de main, pusheado — `origin/main` coincide, árbol limpio).

@@ -1,7 +1,7 @@
 # Sesión activa
 
 **Feature:** F131 — Editor visual 2D de perforaciones por cara + gizmo 3D (perforaciones CNC — 5/5)
-**Estado:** implementada, esperando review
+**Estado:** done (review APPROVED, pushed) — SERIE COMPLETA
 **Inicio:** 2026-08-21 (noche)
 
 ## Plan
@@ -38,3 +38,13 @@
 - Tests: editor 7 (caras, holes del motor, redibujo por face-plane, helper snap,
   wiring pointerDown, issues inline, sin catálogo), gizmo +1, inspector +1.
   Suite 2453, typecheck 7/7.
+
+
+## Cierre de serie (2026-08-21)
+
+- F131 APPROVED (`progress/review_F131.md`) tras fixes (snapValue dominio, tokens).
+- **Serie F127-F131 completa**: perforaciones CNC de punta a punta — catálogo →
+  motor → reglas → DXF/reportes → editor visual. F132 (SCM nativo) postergada.
+- Follow-ups abiertos: shell que cablee hardwareCatalog/rawHardwarePlacements;
+  placements manuales de agregados; test persistido del espejo back del DXF;
+  paridad Go de settings PTX; btn--secondary del panel.
