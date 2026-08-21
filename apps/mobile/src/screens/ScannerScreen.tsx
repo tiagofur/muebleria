@@ -104,6 +104,31 @@ export function ScannerScreen({ onBack }: ScannerScreenProps) {
               )}
             </View>
           ) : null}
+          {activeScan.physical ? (
+            <View style={styles.resolutionBox}>
+              <Text style={styles.resolutionProject}>
+                {activeScan.physical.kind === 'part' ? 'Pieza' : 'Unidad'} ·{' '}
+                {activeScan.physical.partCode ?? activeScan.physical.id}
+                {activeScan.physical.unitIndex ? ` (U${activeScan.physical.unitIndex})` : ''}
+              </Text>
+              <Text style={styles.resolutionStatus}>
+                {activeScan.physical.status.replace(/_/g, ' ')}
+              </Text>
+              {activeScan.physical.nextStatus || activeScan.physical.status !== 'installed' ? (
+                <Button
+                  title="Avanzar"
+                  variant="primary"
+                  size="sm"
+                  onPress={() => {
+                    Vibration.vibrate([0, 80]);
+                    advanceScan(activeScan);
+                  }}
+                />
+              ) : (
+                <Text style={styles.resolutionDone}>Instalada ✓</Text>
+              )}
+            </View>
+          ) : null}
           {activeScan.error ? (
             <Text style={styles.scanError}>{activeScan.error}</Text>
           ) : null}

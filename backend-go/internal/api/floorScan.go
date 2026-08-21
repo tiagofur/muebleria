@@ -143,6 +143,16 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// OC-033/034 split-brain guard: lines with physical module units advance
+	// through the part/unit endpoints; the item status is derived from them.
+	for _, u := range project.ModuleUnits {
+		if u.ProjectItemID == match.item.ID {
+			respondWithError(w, http.StatusConflict,
+				"esta línea se controla por unidades físicas: escaneá el QR de la unidad o pieza")
+			return
+		}
+	}
+
 	before := domain.NormalizeItemFloorStatus(match.item.FloorStatus)
 	after := before
 
@@ -368,6 +378,17 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 	if currentItem == nil {
 		respondWithError(w, http.StatusNotFound, "item no encontrado en esta obra")
 		return
+	}
+	// OC-033/034 split-brain guard: once a line has physical module units,
+	// the item-level status is DERIVED from the units/pieces truth. Direct
+	// legacy writes would let the item contradict the physical state — the
+	// unit endpoints own the transitions from that point on.
+	for _, u := range project.ModuleUnits {
+		if u.ProjectItemID == itemID {
+			respondWithError(w, http.StatusConflict,
+				"esta línea se controla por unidades físicas: avanzala por /units/"+u.ID+"/advance")
+			return
+		}
 	}
 	before := domain.NormalizeItemFloorStatus(currentItem.FloorStatus)
 

@@ -53,6 +53,14 @@ import type {
   ChangeOrder,
   ChangeOrderStatus,
   ChangeOrderImpact,
+  PartInstance,
+  PartOperation,
+  PartOperationType,
+  PartOperationStatus,
+  PartInstanceStatus,
+  ModuleUnitExecution,
+  ModuleUnitStatus,
+  SupervisorAssemblyOverride,
   ProjectTechnicalStatus,
   ProjectTemplate,
   QuoteBreakdown,
@@ -1583,6 +1591,10 @@ export function projectToApi(p: Project): Record<string, unknown> {
     production_release: p.productionRelease ? productionReleaseToApi(p.productionRelease) : null,
     // OC-024 — change orders
     change_orders: p.changeOrders ? p.changeOrders.map(changeOrderToApi) : null,
+    // OC-030 — physical part instances
+    part_instances: p.partInstances ? p.partInstances.map(partInstanceToApi) : null,
+    // OC-033 — physical module units
+    module_units: p.moduleUnits ? p.moduleUnits.map(moduleUnitToApi) : null,
     // OC-010 — lifecycle append-only event stream
     events: (p.events ?? []).map((e) => projectEventToApi(e)),
   };
@@ -1776,6 +1788,10 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     productionRelease: productionReleaseFromApi(raw.production_release ?? raw.productionRelease),
     // OC-024 — change orders
     changeOrders: changeOrdersFromApi(raw.change_orders ?? raw.changeOrders),
+    // OC-030 — physical part instances
+    partInstances: partInstancesFromApi(raw.part_instances ?? raw.partInstances),
+    // OC-033 — physical module units
+    moduleUnits: moduleUnitsFromApi(raw.module_units ?? raw.moduleUnits),
     // OC-011 — commercial status outcome
     commercialStatus: commercialStatusFromApi(
       raw.commercial_status ?? raw.commercialStatus,
@@ -1980,6 +1996,159 @@ export function changeOrdersFromApi(raw: unknown): readonly ChangeOrder[] | unde
   return raw
     .filter((r) => r && typeof r === 'object')
     .map((r) => changeOrderFromApi(r as Record<string, unknown>));
+}
+
+// ─── PartInstance & PartOperation (OC-030..OC-031) ──────────────────────────
+
+export function partOperationToApi(op: PartOperation): Record<string, unknown> {
+  return {
+    id: op.id,
+    type: op.type,
+    sequence: op.sequence,
+    status: op.status,
+    started_at: op.startedAt ?? null,
+    completed_at: op.completedAt ?? null,
+    operator_id: op.operatorId ?? null,
+    operator_name: op.operatorName ?? null,
+    machine_id: op.machineId ?? null,
+    notes: op.notes ?? null,
+  };
+}
+
+export function partOperationFromApi(raw: Record<string, unknown>): PartOperation {
+  return {
+    id: str(raw.id),
+    type: str(raw.type, 'cut') as PartOperationType,
+    sequence: Math.max(1, Math.floor(num(raw.sequence, 1))),
+    status: str(raw.status, 'queued') as PartOperationStatus,
+    startedAt: str(raw.started_at ?? raw.startedAt) || undefined,
+    completedAt: str(raw.completed_at ?? raw.completedAt) || undefined,
+    operatorId: str(raw.operator_id ?? raw.operatorId) || undefined,
+    operatorName: str(raw.operator_name ?? raw.operatorName) || undefined,
+    machineId: str(raw.machine_id ?? raw.machineId) || undefined,
+    notes: str(raw.notes) || undefined,
+  };
+}
+
+export function partInstanceToApi(p: PartInstance): Record<string, unknown> {
+  return {
+    id: p.id,
+    project_id: p.projectId,
+    production_revision: p.productionRevision,
+    project_item_id: p.projectItemId,
+    unit_index: p.unitIndex,
+    part_code: p.partCode,
+    part_definition_id: p.partDefinitionId ?? null,
+    description: p.description,
+    material_id: p.materialId,
+    length_mm: p.lengthMm,
+    width_mm: p.widthMm,
+    thickness_mm: p.thicknessMm,
+    grain: p.grain,
+    edges: p.edges.map((e) => ({ side: e.side, enabled: e.enabled })),
+    required_operations: p.requiredOperations.map(partOperationToApi),
+    current_operation_index: p.currentOperationIndex,
+    status: p.status,
+  };
+}
+
+export function partInstanceFromApi(raw: Record<string, unknown>): PartInstance {
+  const edgesRaw = Array.isArray(raw.edges) ? raw.edges : [];
+  const opsRaw = Array.isArray(raw.required_operations ?? raw.requiredOperations)
+    ? (raw.required_operations ?? raw.requiredOperations)
+    : [];
+
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    productionRevision: str(raw.production_revision ?? raw.productionRevision, 'rev-1'),
+    projectItemId: str(raw.project_item_id ?? raw.projectItemId),
+    unitIndex: Math.max(1, Math.floor(num(raw.unit_index ?? raw.unitIndex, 1))),
+    partCode: str(raw.part_code ?? raw.partCode),
+    partDefinitionId: str(raw.part_definition_id ?? raw.partDefinitionId) || undefined,
+    description: str(raw.description),
+    materialId: str(raw.material_id ?? raw.materialId),
+    lengthMm: num(raw.length_mm ?? raw.lengthMm),
+    widthMm: num(raw.width_mm ?? raw.widthMm),
+    thicknessMm: num(raw.thickness_mm ?? raw.thicknessMm, 18),
+    grain: (num(raw.grain) === 1 ? 1 : 0) as 0 | 1,
+    edges: edgesRaw.map((e: any) => ({ side: str(e.side, 'L1') as any, enabled: bool(e.enabled) })),
+    requiredOperations: (opsRaw as Record<string, unknown>[]).map(partOperationFromApi),
+    currentOperationIndex: Math.max(0, Math.floor(num(raw.current_operation_index ?? raw.currentOperationIndex))),
+    status: str(raw.status, 'pending') as PartInstanceStatus,
+  };
+}
+
+export function partInstancesFromApi(raw: unknown): readonly PartInstance[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => partInstanceFromApi(r as Record<string, unknown>));
+}
+
+// ─── ModuleUnitExecution (OC-033) ───────────────────────────────────────────
+
+export function moduleUnitToApi(u: ModuleUnitExecution): Record<string, unknown> {
+  return {
+    id: u.id,
+    project_id: u.projectId,
+    project_item_id: u.projectItemId,
+    unit_index: u.unitIndex,
+    production_revision: u.productionRevision,
+    status: u.status,
+    package_count: u.packageCount ?? null,
+    supervisor_override: u.supervisorOverride
+      ? {
+          overridden_by: u.supervisorOverride.overriddenBy,
+          overridden_at: u.supervisorOverride.overriddenAt,
+          reason: u.supervisorOverride.reason,
+          missing_parts_count: u.supervisorOverride.missingPartsCount,
+        }
+      : null,
+    assembled_at: u.assembledAt ?? null,
+    qc_passed_at: u.qcPassedAt ?? null,
+    packaged_at: u.packagedAt ?? null,
+    loaded_at: u.loadedAt ?? null,
+    installed_at: u.installedAt ?? null,
+    notes: u.notes ?? null,
+  };
+}
+
+export function moduleUnitFromApi(raw: Record<string, unknown>): ModuleUnitExecution {
+  const pkgCount = raw.package_count ?? raw.packageCount;
+  const overrideRaw =
+    (raw.supervisor_override ?? raw.supervisorOverride) as Record<string, unknown> | null | undefined;
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    projectItemId: str(raw.project_item_id ?? raw.projectItemId),
+    unitIndex: Math.max(1, Math.floor(num(raw.unit_index ?? raw.unitIndex, 1))),
+    productionRevision: str(raw.production_revision ?? raw.productionRevision, 'rev-1'),
+    status: str(raw.status, 'awaiting_parts') as ModuleUnitStatus,
+    packageCount: pkgCount === null || pkgCount === undefined || pkgCount === '' ? undefined : num(pkgCount),
+    supervisorOverride:
+      overrideRaw && typeof overrideRaw === 'object'
+        ? {
+            overriddenBy: str(overrideRaw.overridden_by ?? overrideRaw.overriddenBy),
+            overriddenAt: str(overrideRaw.overridden_at ?? overrideRaw.overriddenAt),
+            reason: str(overrideRaw.reason),
+            missingPartsCount: Math.max(0, Math.floor(num(overrideRaw.missing_parts_count ?? overrideRaw.missingPartsCount, 0))),
+          }
+        : undefined,
+    assembledAt: str(raw.assembled_at ?? raw.assembledAt) || undefined,
+    qcPassedAt: str(raw.qc_passed_at ?? raw.qcPassedAt) || undefined,
+    packagedAt: str(raw.packaged_at ?? raw.packagedAt) || undefined,
+    loadedAt: str(raw.loaded_at ?? raw.loadedAt) || undefined,
+    installedAt: str(raw.installed_at ?? raw.installedAt) || undefined,
+    notes: str(raw.notes) || undefined,
+  };
+}
+
+export function moduleUnitsFromApi(raw: unknown): readonly ModuleUnitExecution[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => moduleUnitFromApi(r as Record<string, unknown>));
 }
 
 export function projectEventToApi(e: ProjectEvent): Record<string, unknown> {

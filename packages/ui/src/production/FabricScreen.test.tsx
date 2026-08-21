@@ -497,4 +497,168 @@ describe('FabricScreen — project board actions (F096)', () => {
     await waitFor(() => expect(onFinish).toHaveBeenCalledWith('claim-1', 1));
     expect(onBatch).not.toHaveBeenCalled();
   });
+
+  it('displays assembly piece readiness indicator in assembly station', () => {
+    const projectWithPieces = {
+      ...makeProject('p1', [makeItem('item-1', 'edged')]),
+      partInstances: [
+        {
+          id: 'p1_item-1_u1_LAT_1',
+          projectId: 'p1',
+          productionRevision: 'rev-1',
+          projectItemId: 'item-1',
+          unitIndex: 1,
+          partCode: 'LAT',
+          description: 'Lateral',
+          materialId: 'm1',
+          lengthMm: 700,
+          widthMm: 500,
+          thicknessMm: 18,
+          grain: 1 as const,
+          edges: [],
+          requiredOperations: [],
+          currentOperationIndex: 0,
+          status: 'ready_for_assembly' as const,
+        },
+      ],
+      moduleUnits: [
+        {
+          id: 'p1_item-1_u1',
+          projectId: 'p1',
+          projectItemId: 'item-1',
+          unitIndex: 1,
+          productionRevision: 'rev-1',
+          status: 'awaiting_parts' as const,
+        },
+      ],
+    } as unknown as Project;
+
+    render(
+      <FabricScreen
+        projects={[projectWithPieces]}
+        assignedSectors={['assembly']}
+        canAdvance
+        onAdvance={() => undefined}
+      />,
+    );
+
+    const readiness = screen.getByTestId('assembly-readiness-p1_item-1_u1');
+    expect(readiness).not.toBeNull();
+    expect(readiness.textContent).toContain('✓ Piezas listas (1/1)');
+  });
+
+  it('renderiza una fila por unidad física con sus piezas faltantes y estación (#301)', () => {
+    const mkPart = (unitIndex: number, status: string) => ({
+      id: `p1_item-1_u${unitIndex}_LAT_1`,
+      projectId: 'p1',
+      productionRevision: 'rev-1',
+      projectItemId: 'item-1',
+      unitIndex,
+      partCode: 'LAT',
+      description: 'Lateral',
+      materialId: 'm1',
+      lengthMm: 700,
+      widthMm: 500,
+      thicknessMm: 18,
+      grain: 1 as const,
+      edges: [],
+      requiredOperations: [
+        {
+          id: 'op-cut',
+          type: 'cut' as const,
+          sequence: 1,
+          status: status === 'ready_for_assembly' ? ('completed' as const) : ('queued' as const),
+        },
+      ],
+      currentOperationIndex: 0,
+      status,
+    });
+    const multiUnitProject = {
+      ...makeProject('p1', [{ ...makeItem('item-1', 'edged'), quantity: 2 }]),
+      partInstances: [mkPart(1, 'ready_for_assembly'), mkPart(2, 'pending')],
+      moduleUnits: [1, 2].map((u) => ({
+        id: `p1_item-1_u${u}`,
+        projectId: 'p1',
+        projectItemId: 'item-1',
+        unitIndex: u,
+        productionRevision: 'rev-1',
+        status: 'awaiting_parts' as const,
+      })),
+    } as unknown as Project;
+
+    render(
+      <FabricScreen
+        projects={[multiUnitProject]}
+        assignedSectors={['assembly']}
+        canAdvance
+        onAdvance={() => undefined}
+      />,
+    );
+
+    // Una unidad lista, la otra con su pieza faltante y EN QUÉ estación está
+    const ready = screen.getByTestId('assembly-readiness-p1_item-1_u1');
+    expect(ready.textContent).toContain('✓ Piezas listas (1/1)');
+    const missing = screen.getByTestId('assembly-readiness-p1_item-1_u2');
+    expect(missing.textContent).toContain('⏳ Faltan piezas (0/1 listas)');
+    const missingInfo = screen.getByTestId('unit-missing-p1_item-1_u2');
+    expect(missingInfo.textContent).toContain('falta LAT en Corte');
+
+    // Sin callbacks físicos no hay botón de avance (el legacy daría 409)
+    expect(screen.queryByTestId('fabric-advance-unit-p1_item-1_u1')).toBeNull();
+  });
+
+  it('usa los callbacks físicos por pieza cuando están cableados (#301)', () => {
+    const onAdvancePart = vi.fn();
+    const project = {
+      ...makeProject('p1', [makeItem('item-1', 'pending')]),
+      partInstances: [
+        {
+          id: 'p1_item-1_u1_LAT_1',
+          projectId: 'p1',
+          productionRevision: 'rev-1',
+          projectItemId: 'item-1',
+          unitIndex: 1,
+          partCode: 'LAT',
+          description: 'Lateral',
+          materialId: 'm1',
+          lengthMm: 700,
+          widthMm: 500,
+          thicknessMm: 18,
+          grain: 1 as const,
+          edges: [],
+          requiredOperations: [
+            { id: 'op-cut', type: 'cut' as const, sequence: 1, status: 'queued' as const },
+          ],
+          currentOperationIndex: 0,
+          status: 'pending' as const,
+        },
+      ],
+      moduleUnits: [
+        {
+          id: 'p1_item-1_u1',
+          projectId: 'p1',
+          projectItemId: 'item-1',
+          unitIndex: 1,
+          productionRevision: 'rev-1',
+          status: 'awaiting_parts' as const,
+        },
+      ],
+    } as unknown as Project;
+
+    // Corte: fila por pieza con su operación
+    render(
+      <FabricScreen
+        projects={[project]}
+        assignedSectors={['cutting']}
+        canAdvance
+        onAdvance={() => undefined}
+        onAdvancePart={onAdvancePart}
+      />,
+    );
+    const partRow = screen.getByTestId('fabric-row-p1_item-1_u1_LAT_1');
+    expect(partRow.textContent).toContain('LAT · U1');
+    expect(partRow.textContent).toContain('700×500×18');
+    fireEvent.click(screen.getByTestId('fabric-advance-part-p1_item-1_u1_LAT_1'));
+    expect(onAdvancePart).toHaveBeenCalledWith('p1', 'p1_item-1_u1_LAT_1');
+  });
 });

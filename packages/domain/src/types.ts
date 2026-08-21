@@ -1154,6 +1154,14 @@ export interface Project {
    * Formal change orders for post-approval/post-release scope modifications (OC-024).
    */
   readonly changeOrders?: readonly import('./projectLifecycle').ChangeOrder[];
+  /**
+   * Physical piece instances tracked across cutting, CNC and edge banding (OC-030).
+   */
+  readonly partInstances?: readonly import('./partExecution').PartInstance[];
+  /**
+   * Module unit execution states tracked across assembly, QC and dispatch (OC-033).
+   */
+  readonly moduleUnits?: readonly import('./partExecution').ModuleUnitExecution[];
 }
 
 /** Lifecycle stage for a project photo. */

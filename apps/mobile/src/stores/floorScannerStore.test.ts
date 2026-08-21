@@ -271,3 +271,136 @@ describe('floorScannerStore offline persistence (F091 item 2)', () => {
     expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
   });
 });
+
+// --- #301: physical routing (pieza → part endpoint, unidad/bulto → unit endpoint) ---
+
+import { moduleLabelQrPayload } from '@muebles/domain';
+
+const partQr = pieceLabelQrPayload({
+  projectId: 'p1',
+  moduleCode: 'GAB-01',
+  partCode: 'LAT-IZQ',
+  description: 'Lateral',
+  materialCode: 'TAB-1',
+  lengthMm: 720,
+  widthMm: 560,
+  partInstanceId: 'p1_i1_u1_LAT_1',
+  unitIndex: 1,
+});
+
+const unitQr = moduleLabelQrPayload({
+  projectId: 'p1',
+  itemId: 'i1',
+  factoryCode: 'GAB-01',
+  moduleCode: 'GAB-01',
+  moduleName: 'Gabinete base',
+  moduleUnitId: 'p1_i1_u1',
+});
+
+const bultoQr = moduleLabelQrPayload({
+  projectId: 'p1',
+  itemId: 'i1',
+  factoryCode: 'GAB-01',
+  moduleCode: 'GAB-01',
+  moduleName: 'Gabinete base',
+  moduleUnitId: 'p1_i1_u1',
+  packageIndex: 2,
+  totalPackages: 3,
+});
+
+describe('floorScannerStore physical routing (#301)', () => {
+  beforeEach(() => {
+    useFloorScannerStore.setState({
+      history: [],
+      activeScan: null,
+      itemStatuses: {},
+      pendingScans: [],
+      activeProjectId: null,
+      autoAdvance: true,
+      syncing: false,
+      lastScanTime: 0,
+      lastScannedText: null,
+    });
+    postMock.mockReset();
+  });
+
+  it('QR de pieza (pId) avanza la operación actual por el endpoint físico', async () => {
+    postMock.mockResolvedValueOnce({
+      part: { id: 'p1_i1_u1_LAT_1', part_code: 'LAT-IZQ', unit_index: 1, status: 'ready_for_assembly' },
+    });
+    const record = await useFloorScannerStore.getState().processScan(partQr);
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/projects/p1/parts/p1_i1_u1_LAT_1/advance',
+      { advance: true, source: 'scan' },
+    );
+    expect(record?.physical).toMatchObject({
+      kind: 'part',
+      id: 'p1_i1_u1_LAT_1',
+      partCode: 'LAT-IZQ',
+      status: 'ready_for_assembly',
+    });
+  });
+
+  it('QR de unidad (uId) avanza la unidad por el endpoint físico', async () => {
+    postMock.mockResolvedValueOnce({
+      unit: { id: 'p1_i1_u1', unit_index: 1, status: 'assembly' },
+      next_status: 'module_qc',
+    });
+    const record = await useFloorScannerStore.getState().processScan(unitQr);
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/projects/p1/units/p1_i1_u1/advance',
+      { advance: true, source: 'scan' },
+    );
+    expect(record?.physical).toMatchObject({ kind: 'unit', status: 'assembly' });
+  });
+
+  it('QR de bulto avanza su unidad enviando package_count', async () => {
+    postMock.mockResolvedValueOnce({
+      unit: { id: 'p1_i1_u1', unit_index: 1, status: 'packaged' },
+    });
+    await useFloorScannerStore.getState().processScan(bultoQr);
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/projects/p1/units/p1_i1_u1/advance',
+      { advance: true, source: 'scan', package_count: 3 },
+    );
+  });
+
+  it('gate de armado bloqueado (409) muestra el error del servidor sin encolar', async () => {
+    postMock.mockRejectedValueOnce(
+      new Error('Part execution failed: 409 {"error":"el gate de armado bloquea el avance","assembly_readiness":{"ready_pieces":2,"total_pieces":3}}'),
+    );
+    const record = await useFloorScannerStore.getState().processScan(unitQr);
+
+    expect(record?.error).toContain('gate de armado');
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+  });
+
+  it('scan físico offline se encola y sincroniza por el endpoint físico', async () => {
+    postMock.mockRejectedValueOnce(new Error('Error de red al conectar con el servidor: sin señal'));
+    await useFloorScannerStore.getState().processScan(partQr);
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(1);
+
+    postMock.mockResolvedValueOnce({
+      part: { id: 'p1_i1_u1_LAT_1', status: 'in_progress' },
+    });
+    await useFloorScannerStore.getState().syncPending();
+    expect(postMock).toHaveBeenCalledWith(
+      '/projects/p1/parts/p1_i1_u1_LAT_1/advance',
+      { advance: true, source: 'scan' },
+    );
+    expect(useFloorScannerStore.getState().pendingScans).toHaveLength(0);
+  });
+
+  it('etiqueta legacy sin pId/uId sigue yendo al floor-scan', async () => {
+    postMock.mockResolvedValueOnce(apiResponse());
+    const legacyQr = qrFor(); // pieza QR v2 sin partInstanceId
+    await useFloorScannerStore.getState().processScan(legacyQr);
+    expect(postMock).toHaveBeenCalledWith('/projects/p1/floor-scan', {
+      module: 'GAB-01',
+      advance: true,
+    });
+  });
+});

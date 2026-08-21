@@ -7,7 +7,9 @@ import { Check, Factory, Play } from 'lucide-react';
 import {
   ITEM_FLOOR_STATUS_LABELS_ES,
   PICKING_STATUS_LABELS_ES,
+  PRODUCTION_SECTOR_LABELS_ES,
   type ItemFloorStatus,
+  type PartOperationType,
   type Project,
   type ProjectPickingState,
 } from '@muebles/domain';
@@ -43,6 +45,13 @@ const TAB_LABELS: Readonly<Record<FabricStation, string>> = {
   edge_banding: 'Encintado',
   assembly: 'Armado',
   packaging: 'Embalaje',
+};
+
+const PART_OPERATION_LABELS_ES: Readonly<Record<PartOperationType, string>> = {
+  cut: 'Corte',
+  cnc: 'CNC',
+  edge_banding: 'Enchape',
+  inspection: 'Inspección',
 };
 
 function formatAvgMinutes(minutes: number): string {
@@ -205,6 +214,8 @@ function ProjectCard({
   station,
   canAdvance,
   onAdvance,
+  onAdvancePart,
+  onAdvanceUnit,
   onAdvanceBatch,
   confirmBatchMessage,
   onClaim,
@@ -218,6 +229,8 @@ function ProjectCard({
     itemId: string,
     target: ItemFloorStatus,
   ) => void;
+  readonly onAdvancePart?: (projectId: string, partId: string) => void;
+  readonly onAdvanceUnit?: (projectId: string, unitId: string) => void;
   readonly onAdvanceBatch?: (
     projectId: string,
     itemIds: readonly string[],
@@ -241,6 +254,9 @@ function ProjectCard({
   const stationLabel = TAB_LABELS[station].toLowerCase();
   const hasClaims = card.activeClaims.length > 0;
   const itemIds = card.items.map((item) => item.itemId);
+  // #301: physical rows advance per piece/unit — the legacy batch marks
+  // item-level statuses that unit-tracked lines would reject (409).
+  const hasPhysicalRows = card.items.some((item) => item.part !== undefined || item.unit !== undefined);
   // F120: batch confirmation is a design-system modal (window.confirm before).
   const [pendingAction, setPendingAction] = useState<
     | { readonly kind: 'batch' }
@@ -341,34 +357,129 @@ function ProjectCard({
           <span className="fabric-card__count">{card.items.length}</span>
         </h4>
         <ul className="fabric-card__item-list">
-          {card.items.map((item) => (
-            <li
-              key={item.itemId}
-              className="fabric-card__item"
-              data-testid={`fabric-row-${item.itemId}`}
-            >
-              <div>
-                <span className="fabric-card__item-name">
-                  {item.moduleName} ×{item.quantity}
-                </span>
-                <span className="fabric-card__item-meta">
-                  Está en {ITEM_FLOOR_STATUS_LABELS_ES[item.currentStatus]}
-                </span>
-              </div>
-              {canAdvance ? (
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  onClick={() => onAdvance(card.projectId, item.itemId, target)}
-                  data-testid={`fabric-advance-${item.itemId}`}
-                >
-                  Marcar {ITEM_FLOOR_STATUS_LABELS_ES[target]}
-                </button>
-              ) : null}
-            </li>
-          ))}
+          {card.items.map((item) => {
+            const rowKey = item.part?.id ?? item.unit?.id ?? item.itemId;
+            return (
+              <li
+                key={rowKey}
+                className="fabric-card__item"
+                data-testid={`fabric-row-${rowKey}`}
+              >
+                <div>
+                  {item.part ? (
+                    <>
+                      <span className="fabric-card__item-name">
+                        {item.part.partCode} · U{item.part.unitIndex}
+                      </span>
+                      <span className="fabric-card__item-meta">
+                        {item.part.lengthMm}×{item.part.widthMm}×{item.part.thicknessMm} mm ·{' '}
+                        {PART_OPERATION_LABELS_ES[item.part.operationType]}
+                        {item.part.operationStatus === 'rework' ? ' (retrabajo)' : ''}
+                      </span>
+                    </>
+                  ) : item.unit ? (
+                    <>
+                      <span className="fabric-card__item-name">
+                        {item.moduleName} — Unidad {item.unit.unitIndex} de {item.unit.unitTotal}
+                      </span>
+                      <span className="fabric-card__item-meta">
+                        {item.assemblyReadiness ? (
+                          <span
+                            className={`fabric-card__assembly-readiness${
+                              item.assemblyReadiness.isReady ? '--ready' : '--missing'
+                            }`}
+                            data-testid={`assembly-readiness-${rowKey}`}
+                          >
+                            {item.assemblyReadiness.isReady
+                              ? `✓ Piezas listas (${item.assemblyReadiness.readyPieces}/${item.assemblyReadiness.totalPieces})`
+                              : `⏳ Faltan piezas (${item.assemblyReadiness.readyPieces}/${item.assemblyReadiness.totalPieces} listas)`}
+                            {item.assemblyReadiness.hasOverride ? ' · Override Supervisor' : ''}
+                          </span>
+                        ) : null}
+                        {item.unit.missing.length > 0 ? (
+                          <span
+                            className="fabric-card__item-meta"
+                            data-testid={`unit-missing-${rowKey}`}
+                          >
+                            {item.unit.missing
+                              .slice(0, 3)
+                              .map(
+                                (m) =>
+                                  `falta ${m.partCode}${
+                                    m.sector ? ` en ${PRODUCTION_SECTOR_LABELS_ES[m.sector]}` : ''
+                                  }`,
+                              )
+                              .join(' · ')}
+                            {item.unit.missing.length > 3
+                              ? ` +${item.unit.missing.length - 3} más`
+                              : ''}
+                          </span>
+                        ) : null}
+                        {item.unit.unitStatus === 'packaged' && item.unit.packageCount ? (
+                          <span className="fabric-card__item-meta">
+                            {item.unit.packageCount} bulto
+                            {item.unit.packageCount === 1 ? '' : 's'}
+                          </span>
+                        ) : null}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="fabric-card__item-name">
+                        {item.moduleName} ×{item.quantity}
+                      </span>
+                      <span className="fabric-card__item-meta">
+                        Está en {ITEM_FLOOR_STATUS_LABELS_ES[item.currentStatus]}
+                        {item.assemblyReadiness ? (
+                          <span
+                            className={`fabric-card__assembly-readiness${
+                              item.assemblyReadiness.isReady ? '--ready' : '--missing'
+                            }`}
+                            data-testid={`assembly-readiness-${item.itemId}`}
+                          >
+                            {item.assemblyReadiness.isReady
+                              ? `✓ Piezas listas (${item.assemblyReadiness.readyPieces}/${item.assemblyReadiness.totalPieces})`
+                              : `⏳ Faltan piezas (${item.assemblyReadiness.readyPieces}/${item.assemblyReadiness.totalPieces} listas)`}
+                            {item.assemblyReadiness.hasOverride ? ' · Override Supervisor' : ''}
+                          </span>
+                        ) : null}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {canAdvance && item.part && onAdvancePart ? (
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={() => onAdvancePart(card.projectId, item.part!.id)}
+                    data-testid={`fabric-advance-part-${rowKey}`}
+                  >
+                    Completar {PART_OPERATION_LABELS_ES[item.part.operationType]}
+                  </button>
+                ) : canAdvance && item.unit && onAdvanceUnit ? (
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={() => onAdvanceUnit(card.projectId, item.unit!.id)}
+                    data-testid={`fabric-advance-unit-${rowKey}`}
+                  >
+                    Avanzar unidad
+                  </button>
+                ) : canAdvance && !item.part && !item.unit ? (
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={() => onAdvance(card.projectId, item.itemId, target)}
+                    data-testid={`fabric-advance-${item.itemId}`}
+                  >
+                    Marcar {ITEM_FLOOR_STATUS_LABELS_ES[target]}
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
-        {canAdvance && onAdvanceBatch ? (
+        {canAdvance && onAdvanceBatch && !hasPhysicalRows ? (
           <button
             type="button"
             className="btn btn--primary fabric-card__batch"
@@ -423,6 +534,8 @@ export function FabricScreen({
   assignedSectors,
   canAdvance,
   onAdvance,
+  onAdvancePart,
+  onAdvanceUnit,
   customerLabelFor,
   moduleLabelFor,
   metricsByProject = {},
@@ -443,6 +556,12 @@ export function FabricScreen({
     itemId: string,
     target: ItemFloorStatus,
   ) => void;
+  /** Physical mode (#301): advance one PIECE's current operation. When
+   * absent, physical rows render without an advance action (the legacy
+   * item-level advance would 409 on unit-tracked lines). */
+  readonly onAdvancePart?: (projectId: string, partId: string) => void;
+  /** Physical mode (#301): advance one UNIT to its next status. */
+  readonly onAdvanceUnit?: (projectId: string, unitId: string) => void;
   readonly customerLabelFor?: (customerId: string) => string;
   readonly moduleLabelFor?: (moduleId: string) => string;
   readonly metricsByProject?: Readonly<
@@ -662,6 +781,8 @@ export function FabricScreen({
                     station={effectiveTab}
                     canAdvance={canAdvance}
                     onAdvance={onAdvance}
+                    onAdvancePart={onAdvancePart}
+                    onAdvanceUnit={onAdvanceUnit}
                     onAdvanceBatch={onAdvanceBatch}
                     confirmBatchMessage={confirmBatchMessage}
                     onClaim={onClaim}

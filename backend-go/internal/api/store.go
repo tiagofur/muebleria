@@ -123,6 +123,13 @@ type Store interface {
 	// Floor event log (F092): immutable who/when/how audit trail.
 	InsertFloorEvent(ctx context.Context, ev domain.FloorStatusEvent) error
 	ListFloorEvents(ctx context.Context, projectID string) ([]domain.FloorStatusEvent, error)
+	// Physical part/unit execution (OC-030..034): locked read-modify-write of
+	// part_instances/module_units with derived legacy statuses + audit events.
+	MutateProjectPartExecutions(
+		ctx context.Context,
+		projectID string,
+		mutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
+	) (*domain.PartExecutionsMutation, error)
 	// Project lifecycle events log (OC-010): immutable append-only events.
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)

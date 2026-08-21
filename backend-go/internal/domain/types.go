@@ -592,6 +592,8 @@ type Project struct {
 	Approvals         []Approval          `json:"approvals,omitempty"`
 	ProductionRelease *ProductionRelease  `json:"production_release,omitempty"`
 	ChangeOrders      []ChangeOrder       `json:"change_orders,omitempty"`
+	PartInstances     []PartInstance      `json:"part_instances,omitempty"`
+	ModuleUnits       []ModuleUnitExecution `json:"module_units,omitempty"`
 	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
 	Events            []ProjectEvent      `json:"events,omitempty"`
 	Notes             string              `json:"notes,omitempty"`

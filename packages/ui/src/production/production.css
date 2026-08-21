@@ -2491,6 +2491,21 @@
   font-size: var(--text-sm);
 }
 
+.fabric-card__assembly-readiness {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.fabric-card__assembly-readiness--ready {
+  color: var(--success-700);
+}
+
+.fabric-card__assembly-readiness--missing {
+  color: var(--color-warning-500, var(--brand-500));
+}
+
 .fabric-card__active-copy {
   margin: calc(var(--space-2) * -1) 0 0;
   font-weight: var(--weight-medium);
