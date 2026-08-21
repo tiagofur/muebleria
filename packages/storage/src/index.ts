@@ -11,4 +11,11 @@ export {
   GUEST_WORKSPACE_STORAGE_KEY,
 } from './localStorageWorkspaceRepository';
 export { SCHEMA_VERSION, createSeedWorkspace } from './seed';
-export { breakdownFromApi, catalogFromApi } from './apiMappers';
+export {
+  breakdownFromApi,
+  catalogFromApi,
+  projectToApi,
+  projectFromApi,
+  projectEventToApi,
+  projectEventFromApi,
+} from './apiMappers';

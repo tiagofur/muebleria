@@ -17,6 +17,16 @@ import {
   sortCategoriesForSave,
   projectToApi,
   projectFromApi,
+  projectEventToApi,
+  projectEventFromApi,
+  designRevisionToApi,
+  designRevisionFromApi,
+  approvalToApi,
+  approvalFromApi,
+  productionReleaseToApi,
+  productionReleaseFromApi,
+  changeOrderToApi,
+  changeOrderFromApi,
   projectTemplateToApi,
   projectTemplateFromApi,
   breakdownFromApi,
@@ -30,6 +40,7 @@ import {
 import type {
   AmbientCategory,
   AmbientMaterial,
+  CommercialStatus,
   EdgeBand,
   Component,
   Hardware,
@@ -37,6 +48,11 @@ import type {
   Module,
   ModuleCategory,
   Project,
+  ProjectEvent,
+  DesignRevision,
+  Approval,
+  ProductionRelease,
+  ChangeOrder,
   ProjectTemplate,
   Structure,
 } from '@muebles/domain';
@@ -1671,3 +1687,228 @@ describe('structureToApi / structureFromApi — joint drilling rules (F129)', ()
     expect(round.jointDrillingRules).toBeUndefined();
   });
 });
+
+describe('projectEventToApi / projectEventFromApi (OC-010)', () => {
+  it('round-trips full project event', () => {
+    const ev: ProjectEvent = {
+      id: 'evt-1',
+      projectId: 'p-1',
+      type: 'deposit_received',
+      at: '2026-08-20T10:00:00.000Z',
+      byUserId: 'u-1',
+      source: 'web',
+      note: 'Anticipo 50%',
+      payload: { amount: 1500, currency: 'USD', reference: 'REC-001' },
+    };
+
+    const api = projectEventToApi(ev);
+    expect(api.id).toBe('evt-1');
+    expect(api.project_id).toBe('p-1');
+    expect(api.type).toBe('deposit_received');
+    expect(api.by_user_id).toBe('u-1');
+    expect(api.payload).toEqual({ amount: 1500, currency: 'USD', reference: 'REC-001' });
+
+    const round = projectEventFromApi(api);
+    expect(round).toEqual(ev);
+  });
+
+  it('handles optional fields gracefully', () => {
+    const raw = {
+      id: 'evt-2',
+      project_id: 'p-1',
+      type: 'quote_created',
+      at: '2026-08-20T11:00:00.000Z',
+    };
+    const ev = projectEventFromApi(raw);
+    expect(ev.id).toBe('evt-2');
+    expect(ev.projectId).toBe('p-1');
+    expect(ev.type).toBe('quote_created');
+    expect(ev.source).toBe('web');
+    expect(ev.byUserId).toBeUndefined();
+    expect(ev.note).toBeUndefined();
+    expect(ev.payload).toBeUndefined();
+  });
+});
+
+describe('projectToApi / projectFromApi — commercialStatus and events (OC-010..OC-011)', () => {
+  it('round-trips project with commercialStatus and events stream', () => {
+    const p: Project = {
+      id: 'p-test',
+      name: 'Cocina Integral',
+      customerId: 'cust-1',
+      currency: 'USD',
+      marginFactor: 1.4,
+      laborFixedCost: 500,
+      status: 'accepted',
+      commercialStatus: 'won',
+      events: [
+        {
+          id: 'evt-1',
+          projectId: 'p-test',
+          type: 'quote_created',
+          at: '2026-08-19T09:00:00.000Z',
+          source: 'web',
+        },
+        {
+          id: 'evt-2',
+          projectId: 'p-test',
+          type: 'deposit_received',
+          at: '2026-08-20T14:30:00.000Z',
+          source: 'web',
+          payload: { amount: 2000, currency: 'USD' },
+        },
+      ],
+      items: [],
+      createdAt: '2026-08-19T09:00:00.000Z',
+      updatedAt: '2026-08-20T14:30:00.000Z',
+    };
+
+    const api = projectToApi(p);
+    expect(api.commercial_status).toBe('won');
+    expect(api.events).toHaveLength(2);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.commercialStatus).toBe('won');
+    expect(round.events).toHaveLength(2);
+    expect(round.events?.[0]?.type).toBe('quote_created');
+    expect(round.events?.[1]?.type).toBe('deposit_received');
+    expect(round.events?.[1]?.payload).toEqual({ amount: 2000, currency: 'USD' });
+  });
+
+  it('handles null / undefined commercialStatus and empty events', () => {
+    const raw = {
+      id: 'p-simple',
+      name: 'Mueble Simple',
+      customer_id: 'cust-2',
+      status: 'draft',
+      commercial_status: null,
+      events: [],
+    };
+    const p = projectFromApi(raw);
+    expect(p.commercialStatus).toBeUndefined();
+    expect(p.events).toBeUndefined();
+  });
+
+  it('round-trips design revisions, approvals, and production release (OC-020..022)', () => {
+    const p: Project = {
+      id: 'p-full-phase3',
+      name: 'Cocina Integral Release',
+      customerId: 'cust-99',
+      status: 'accepted',
+      commercialStatus: 'won',
+      currency: 'MXN',
+      marginFactor: 1.4,
+      laborFixedCost: 800,
+      designRevisions: [
+        {
+          id: 'drev-1',
+          projectId: 'p-full-phase3',
+          revision: 1,
+          name: 'Diseño Inicial',
+          bomFingerprint: 'fp_abc123',
+          createdBy: 'user-1',
+          createdAt: '2026-08-20T10:00:00.000Z',
+        },
+      ],
+      approvals: [
+        {
+          id: 'appr-1',
+          projectId: 'p-full-phase3',
+          designRevisionId: 'drev-1',
+          type: 'customer',
+          status: 'approved',
+          notes: 'Firma recibida',
+          decidedBy: 'user-1',
+          decidedAt: '2026-08-20T11:00:00.000Z',
+          createdAt: '2026-08-20T11:00:00.000Z',
+        },
+      ],
+      productionRelease: {
+        id: 'rel-1',
+        projectId: 'p-full-phase3',
+        projectVersion: 2,
+        designRevisionId: 'drev-1',
+        bomFingerprint: 'fp_abc123',
+        releasedBy: 'user-supervisor',
+        releasedAt: '2026-08-20T12:00:00.000Z',
+        checks: [
+          { code: 'commercial_won', label: 'Cotización ganada', passed: true, required: true },
+          { code: 'deposit_received', label: 'Anticipo', passed: true, required: true },
+        ],
+        note: 'Liberado a taller',
+      },
+      items: [],
+      createdAt: '2026-08-19T09:00:00.000Z',
+      updatedAt: '2026-08-20T12:00:00.000Z',
+    };
+
+    const api = projectToApi(p);
+    expect(api.design_revisions).toHaveLength(1);
+    expect(api.approvals).toHaveLength(1);
+    expect(api.production_release).toBeDefined();
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.designRevisions).toHaveLength(1);
+    expect(round.designRevisions?.[0]?.name).toBe('Diseño Inicial');
+    expect(round.designRevisions?.[0]?.bomFingerprint).toBe('fp_abc123');
+
+    expect(round.approvals).toHaveLength(1);
+    expect(round.approvals?.[0]?.status).toBe('approved');
+    expect(round.approvals?.[0]?.type).toBe('customer');
+
+    expect(round.productionRelease?.id).toBe('rel-1');
+    expect(round.productionRelease?.releasedBy).toBe('user-supervisor');
+    expect(round.productionRelease?.checks).toHaveLength(2);
+    expect(round.productionRelease?.checks[0]?.passed).toBe(true);
+  });
+
+  it('round-trips change orders (OC-024)', () => {
+    const co: ChangeOrder = {
+      id: 'co-101',
+      projectId: 'p-full-phase4',
+      number: 1,
+      status: 'submitted',
+      reason: 'Agregar cajón oculto',
+      description: 'Cliente solicitó cajón interior en mueble bajo',
+      impact: {
+        costDelta: 450,
+        priceDelta: 750,
+        leadTimeDaysDelta: 2,
+        scopeDescription: '1 cajón Blum Legrabox extra',
+      },
+      previousBomFingerprint: 'fp_prev_123',
+      newBomFingerprint: 'fp_new_456',
+      requestedBy: 'user-designer',
+      requestedAt: '2026-08-20T15:00:00.000Z',
+      createdAt: '2026-08-20T15:00:00.000Z',
+    };
+
+    const p: Project = {
+      id: 'p-full-phase4',
+      name: 'Cocina OC',
+      customerId: 'cust-10',
+      status: 'accepted',
+      currency: 'USD',
+      marginFactor: 1.35,
+      laborFixedCost: 600,
+      changeOrders: [co],
+      items: [],
+      createdAt: '2026-08-19T09:00:00.000Z',
+      updatedAt: '2026-08-20T15:00:00.000Z',
+    };
+
+    const api = projectToApi(p);
+    expect(api.change_orders).toHaveLength(1);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.changeOrders).toHaveLength(1);
+    const roundCo = round.changeOrders?.[0];
+    expect(roundCo?.id).toBe('co-101');
+    expect(roundCo?.number).toBe(1);
+    expect(roundCo?.status).toBe('submitted');
+    expect(roundCo?.impact?.costDelta).toBe(450);
+    expect(roundCo?.impact?.priceDelta).toBe(750);
+    expect(roundCo?.impact?.scopeDescription).toBe('1 cajón Blum Legrabox extra');
+  });
+});
+

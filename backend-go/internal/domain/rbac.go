@@ -271,3 +271,78 @@ func containsSector(sectors []string, sector string) bool {
 	}
 	return false
 }
+
+// projectEventAppendRoles mirrors TS rbac.ts PROJECT_EVENT_APPEND_ROLES
+// (OC-010..OC-024): who may append which lifecycle event to the audit log.
+var projectEventAppendRoles = map[string][]UserRole{
+	// Commercial pipeline + real deposit (OC-011/OC-013).
+	"quote_created":   {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_sent":      {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_won":       {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_lost":      {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_expired":   {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_cancelled": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"deposit_received": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	// Survey: ventas or ingeniería can be on site.
+	"survey_started":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"survey_completed": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	// Design authoring/iteration.
+	"design_revision_created":  {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"design_submitted":         {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"design_approved":          {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"design_changes_requested": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	// Multi-role sign-offs (OC-021): each lane decides its own.
+	"customer_approved":    {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"customer_rejected":    {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"engineering_approved": {RoleAdmin, RoleGerenteProduccion, RoleIngeniero},
+	"engineering_rejected": {RoleAdmin, RoleGerenteProduccion, RoleIngeniero},
+	"project_approved":     {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	// Engineering execution + formal release gate (OC-022).
+	"engineering_started":        {RoleAdmin, RoleGerenteProduccion, RoleIngeniero},
+	"engineering_documented":     {RoleAdmin, RoleGerenteProduccion, RoleIngeniero},
+	"production_released":        {RoleAdmin, RoleGerenteProduccion, RoleIngeniero},
+	"production_release_revoked": {RoleAdmin, RoleGerenteProduccion, RoleIngeniero},
+	// Materials / warehouse.
+	"materials_required":           {RoleAdmin, RoleGerenteProduccion, RoleAlmacen, RoleIngeniero},
+	"materials_reserved":           {RoleAdmin, RoleGerenteProduccion, RoleAlmacen, RoleIngeniero},
+	"materials_shortage_detected":  {RoleAdmin, RoleGerenteProduccion, RoleAlmacen, RoleIngeniero},
+	"materials_ready":              {RoleAdmin, RoleGerenteProduccion, RoleAlmacen, RoleIngeniero},
+	"materials_release_overridden": {RoleAdmin, RoleGerenteProduccion, RoleAlmacen},
+	// Physical milestones.
+	"production_started":    {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"production_completed":  {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"shipment_loaded":       {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
+	"shipment_departed":     {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
+	"installation_started":  {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},
+	"installation_completed": {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},
+	// Closeout.
+	"punch_opened":      {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	"punch_closed":      {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	"client_signed_off": {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	"project_closed":    {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	"warranty_opened":   {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleVendedor},
+	// Change orders (OC-024): anyone in the deal can request; decisions are
+	// gerente/admin because they carry price/schedule impact.
+	"change_order_created":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"change_order_submitted": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"change_order_cancelled": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"change_order_approved":  {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	"change_order_rejected":  {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+}
+
+// RoleCanAppendProjectEvent — server-side gate for the append-only lifecycle
+// log (OC-010). Mirrors TS roleCanAppendProjectEvent; enforced on
+// POST /api/projects/{id}/events and on new events arriving via
+// PUT /api/projects/{id}.
+func RoleCanAppendProjectEvent(role UserRole, eventType string) bool {
+	allowed, ok := projectEventAppendRoles[eventType]
+	if !ok {
+		return false
+	}
+	for _, r := range allowed {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}

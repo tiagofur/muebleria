@@ -29,6 +29,26 @@ export {
 
 
 export {
+  ProjectStalenessBanner,
+  type ProjectStalenessBannerProps,
+} from './components/ProjectStalenessBanner';
+
+export {
+  ProductionReleaseModal,
+  type ProductionReleaseModalProps,
+} from './components/ProductionReleaseModal';
+
+export {
+  ChangeOrderModal,
+  type ChangeOrderModalProps,
+} from './components/ChangeOrderModal';
+
+export {
+  LifecyclePanel,
+  type LifecyclePanelProps,
+} from './components/LifecyclePanel';
+
+export {
   PROJECT_STATUSES,
   statusOptionsForRole,
   canEditQuoteContent,

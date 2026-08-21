@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react';
 import type { QuoteToolsPanel } from './ProjectDetailToolsNav';
+import { LifecyclePanel } from '../LifecyclePanel';
 import { KitchenPlanPanel } from '../KitchenPlanPanel';
 import { QuoteScenarioCompare } from '../QuoteScenarioCompare';
 import { InstallationChecklistPanel } from '../InstallationChecklistPanel';
@@ -55,6 +56,27 @@ export function ProjectDetailToolsContent({
       className="project-detail__tools-body"
       data-testid={`project-tools-panel-${toolsPanel}`}
     >
+      {toolsPanel === 'lifecycle' ? (
+        <LifecyclePanel
+          project={project}
+          onOpenReleaseModal={ctx.onOpenReleaseModal ?? (() => {})}
+          onOpenChangeOrderModal={ctx.onOpenChangeOrderModal ?? (() => {})}
+          onCreateRevision={ctx.onCreateRevision}
+          onDecideApproval={ctx.onDecideApproval}
+          onRequestApproval={ctx.onRequestApproval}
+          onChangeCommercialStatus={
+            ctx.onChangeCommercialStatus
+              ? (status) => ctx.onChangeCommercialStatus?.(status)
+              : undefined
+          }
+          onRecordDeposit={
+            ctx.onRecordDeposit
+              ? (params) => ctx.onRecordDeposit?.(params)
+              : undefined
+          }
+        />
+      ) : null}
+
       {toolsPanel === 'kitchen' ? (
         <KitchenPlanPanel
           project={project}

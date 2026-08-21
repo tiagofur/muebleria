@@ -42,6 +42,10 @@ import type {
   WarrantyTicketPriority,
   WarrantyTicketStatus,
   ShowcasePhotoItem,
+  ApprovalType,
+  CommercialStatus,
+  ProductionReleaseOptions,
+  ChangeOrderImpact,
 } from '@muebles/domain';
 
 import {
@@ -78,6 +82,16 @@ import {
   canReleaseMaterials,
   canSendToProduction,
   restoreProjectVersion,
+  createProductionRelease,
+  revokeProductionRelease,
+  createChangeOrder,
+  submitChangeOrder,
+  approveChangeOrder,
+  rejectChangeOrder,
+  createDesignRevision,
+  createApproval,
+  setProjectCommercialStatus,
+  recordDepositReceived,
 } from '@muebles/domain';
 import { breakdownFromApi } from '@muebles/storage';
 import type { ProjectDraft } from '@muebles/ui';
@@ -469,6 +483,80 @@ export interface ProjectState {
   readonly showcasePhotos: readonly ShowcasePhotoItem[];
   readonly isLoadingShowcase: boolean;
   readonly loadShowcasePhotos: (onlyShowcase?: boolean) => Promise<void>;
+
+  // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
+  readonly releaseToProduction: (
+    projectId: string,
+    note?: string,
+    options?: ProductionReleaseOptions,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly revokeProductionRelease: (
+    projectId: string,
+    reason: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly createChangeOrder: (
+    projectId: string,
+    params: {
+      reason: string;
+      description?: string;
+      impact?: ChangeOrderImpact;
+    },
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly submitChangeOrder: (
+    projectId: string,
+    changeOrderId: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly approveChangeOrder: (
+    projectId: string,
+    changeOrderId: string,
+    decisionNotes?: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly rejectChangeOrder: (
+    projectId: string,
+    changeOrderId: string,
+    reason: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly createDesignRevision: (
+    projectId: string,
+    name?: string,
+    description?: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly decideApproval: (
+    projectId: string,
+    approvalId: string,
+    decision: 'approved' | 'rejected',
+    notes?: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly requestApproval: (
+    projectId: string,
+    type: ApprovalType,
+    notes?: string,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly changeCommercialStatus: (
+    projectId: string,
+    status: CommercialStatus,
+    actor?: ProjectActor,
+  ) => Promise<void>;
+  readonly recordDeposit: (
+    projectId: string,
+    params: {
+      amount: number;
+      currency: string;
+      paymentMethod?: string;
+      reference?: string;
+      note?: string;
+    },
+    actor?: ProjectActor,
+  ) => Promise<void>;
 }
 
 
@@ -1588,6 +1676,138 @@ export function createProjectStore(options: InternalOptions) {
         console.error('Error loading showcase photos:', err);
         set({ isLoadingShowcase: false });
       }
+    },
+
+    // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
+
+    releaseToProduction: async (projectId, note, releaseOptions, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const releasedBy = actor?.id ?? 'usuario';
+      const result = createProductionRelease(p, releasedBy, note, releaseOptions);
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'success', message: 'Proyecto liberado a producción exitosamente.' });
+    },
+
+    revokeProductionRelease: async (projectId, reason, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const revokedBy = actor?.id ?? 'usuario';
+      const result = revokeProductionRelease(p, { revokedBy, reason });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'info', message: 'Liberación a producción revocada.' });
+    },
+
+    createChangeOrder: async (projectId, params, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const requestedBy = actor?.id ?? 'usuario';
+      const result = createChangeOrder(p, {
+        reason: params.reason,
+        description: params.description,
+        impact: params.impact,
+        requestedBy,
+      });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'success', message: `Orden de cambio #${result.changeOrder.number} creada.` });
+    },
+
+    submitChangeOrder: async (projectId, changeOrderId, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const submittedBy = actor?.id ?? 'usuario';
+      const result = submitChangeOrder(p, changeOrderId, { submittedBy });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'info', message: 'Orden de cambio enviada para aprobación.' });
+    },
+
+    approveChangeOrder: async (projectId, changeOrderId, decisionNotes, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const approvedBy = actor?.id ?? 'usuario';
+      const result = approveChangeOrder(p, changeOrderId, { approvedBy, notes: decisionNotes });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'success', message: `Orden de cambio aprobada y versionada a v${result.project.version ?? 1}.` });
+    },
+
+    rejectChangeOrder: async (projectId, changeOrderId, reason, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const rejectedBy = actor?.id ?? 'usuario';
+      const result = rejectChangeOrder(p, changeOrderId, { rejectedBy, reason });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'info', message: 'Orden de cambio rechazada.' });
+    },
+
+    createDesignRevision: async (projectId, name, description, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const createdBy = actor?.id ?? 'usuario';
+      const result = createDesignRevision(p, createdBy, { name, description });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'success', message: `Revisión ${result.revision.revision} creada.` });
+    },
+
+    decideApproval: async (projectId, approvalId, decision, notes, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const decidedBy = actor?.id ?? 'usuario';
+      const targetApproval = p.approvals?.find((a) => a.id === approvalId);
+      const result = createApproval(p, {
+        type: targetApproval?.type ?? 'customer',
+        status: decision === 'approved' ? 'approved' : 'rejected',
+        decidedBy,
+        notes,
+      });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'success', message: `Aprobación ${decision === 'approved' ? 'registrada' : 'rechazada'}.` });
+    },
+
+    requestApproval: async (projectId, type, notes, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const requestedBy = actor?.id ?? 'usuario';
+      const result = createApproval(p, {
+        type,
+        status: 'pending',
+        decidedBy: requestedBy,
+        notes,
+      });
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'info', message: `Aprobación solicitada (${type}).` });
+    },
+
+    changeCommercialStatus: async (projectId, status, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      const byUserId = actor?.id ?? 'usuario';
+      const result = setProjectCommercialStatus(p, status, byUserId);
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? result.project : pr)));
+      toast({ type: 'info', message: `Estado comercial actualizado: ${status}` });
+    },
+
+    recordDeposit: async (projectId, params, actor) => {
+      const p = get().projects.find((pr) => pr.id === projectId);
+      if (!p) return;
+      if (!Number.isFinite(params.amount) || params.amount <= 0) {
+        toast({ type: 'error', message: 'El monto del anticipo debe ser mayor a cero.' });
+        return;
+      }
+      const updated = recordDepositReceived(
+        p,
+        {
+          amount: params.amount,
+          currency: params.currency || p.currency,
+          paymentMethod: params.paymentMethod,
+          reference: params.reference,
+        },
+        actor?.id,
+        undefined,
+        'web',
+        params.note,
+      );
+      patch(set, get, (list) => list.map((pr) => (pr.id === projectId ? updated : pr)));
+      toast({ type: 'success', message: 'Anticipo registrado en el historial del proyecto.' });
     },
   }));
 }

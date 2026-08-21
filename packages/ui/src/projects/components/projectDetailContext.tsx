@@ -278,6 +278,57 @@ export interface ProjectDetailContextValue {
   readonly onExportWarrantyRefabricationOptimizer?: (
     ticket: import('@muebles/domain').WarrantyTicket,
   ) => void;
+
+  // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
+  readonly onOpenReleaseModal?: () => void;
+  readonly onOpenChangeOrderModal?: () => void;
+  readonly onReleaseToProduction?: (
+    projectId: string,
+    note?: string,
+    options?: import('@muebles/domain').ProductionReleaseOptions,
+  ) => void | Promise<void>;
+  readonly onRevokeProductionRelease?: (
+    projectId: string,
+    reason: string,
+  ) => void | Promise<void>;
+  readonly onCreateChangeOrder?: (
+    projectId: string,
+    params: {
+      reason: string;
+      description?: string;
+      impact?: import('@muebles/domain').ChangeOrderImpact;
+    },
+  ) => void | Promise<void>;
+  readonly onSubmitChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+  ) => void | Promise<void>;
+  readonly onApproveChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+    decisionNotes?: string,
+  ) => void | Promise<void>;
+  readonly onRejectChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+    reason: string,
+  ) => void | Promise<void>;
+  readonly onCreateRevision?: (name?: string, description?: string) => void | Promise<void>;
+  readonly onDecideApproval?: (
+    approvalId: string,
+    decision: 'approved' | 'rejected',
+    notes?: string,
+  ) => void | Promise<void>;
+  readonly onRequestApproval?: (
+    type: import('@muebles/domain').ApprovalType,
+    notes?: string,
+  ) => void | Promise<void>;
+  readonly onChangeCommercialStatus?: (
+    status: import('@muebles/domain').CommercialStatus,
+  ) => void | Promise<void>;
+  readonly onRecordDeposit?: (
+    params: import('@muebles/domain').DepositReceivedPayload & { note?: string },
+  ) => void | Promise<void>;
 }
 
 

@@ -686,6 +686,13 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			}
 			p.Items = engine.CaptureProjectItemStructurePins(p.Items, catalog)
 		}
+		// OC-010 server authority: lifecycle events also arrive via the project
+		// aggregate (dual-write). New event ids must pass the same vocabulary +
+		// RBAC gates as POST /api/projects/{id}/events; resending the existing
+		// log is always allowed.
+		if !authorizeProjectEventAppends(w, role, existing.Events, p.Events) {
+			return
+		}
 		err = s.Store.UpdateProject(r.Context(), id, &p)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {

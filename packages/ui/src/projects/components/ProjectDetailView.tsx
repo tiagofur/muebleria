@@ -46,6 +46,9 @@ import {
   type DropdownMenuSection,
 } from '../../common';
 import { ProjectFloorProgressStrip } from '../../production/ProjectFloorProgressStrip';
+import { ProjectStalenessBanner } from './ProjectStalenessBanner';
+import { ProductionReleaseModal } from './ProductionReleaseModal';
+import { ChangeOrderModal } from './ChangeOrderModal';
 import { ProjectItemsSection } from './ProjectItemsSection';
 import { ProjectOptionsSection } from './ProjectOptionsSection';
 import { ProjectMeasureDefaults } from './ProjectMeasureDefaults';
@@ -265,6 +268,63 @@ export interface ProjectDetailViewProps {
   readonly onExportWarrantyRefabricationOptimizer?: (
     ticket: WarrantyTicket,
   ) => void;
+
+  // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
+  readonly onReleaseToProduction?: (
+    projectId: string,
+    note?: string,
+    options?: import('@muebles/domain').ProductionReleaseOptions,
+  ) => void | Promise<void>;
+  readonly onRevokeProductionRelease?: (
+    projectId: string,
+    reason: string,
+  ) => void | Promise<void>;
+  readonly onCreateChangeOrder?: (
+    projectId: string,
+    params: {
+      reason: string;
+      description?: string;
+      impact?: import('@muebles/domain').ChangeOrderImpact;
+    },
+  ) => void | Promise<void>;
+  readonly onSubmitChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+  ) => void | Promise<void>;
+  readonly onApproveChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+    decisionNotes?: string,
+  ) => void | Promise<void>;
+  readonly onRejectChangeOrder?: (
+    projectId: string,
+    changeOrderId: string,
+    reason: string,
+  ) => void | Promise<void>;
+  readonly onCreateDesignRevision?: (
+    projectId: string,
+    name?: string,
+    description?: string,
+  ) => void | Promise<void>;
+  readonly onDecideApproval?: (
+    projectId: string,
+    approvalId: string,
+    decision: 'approved' | 'rejected',
+    notes?: string,
+  ) => void | Promise<void>;
+  readonly onRequestApproval?: (
+    projectId: string,
+    type: import('@muebles/domain').ApprovalType,
+    notes?: string,
+  ) => void | Promise<void>;
+  readonly onChangeCommercialStatus?: (
+    projectId: string,
+    status: import('@muebles/domain').CommercialStatus,
+  ) => void | Promise<void>;
+  readonly onRecordDeposit?: (
+    projectId: string,
+    params: import('@muebles/domain').DepositReceivedPayload & { note?: string },
+  ) => void | Promise<void>;
 }
 
 // ─── Inner component (consumes context) ─────────────────────────────
@@ -347,6 +407,8 @@ function ProjectDetailViewInner(): ReactNode {
 
   const chromeSale = breakdown?.salePrice ?? null;
   const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false);
+  const [changeOrderModalOpen, setChangeOrderModalOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;
     message: string;
@@ -526,6 +588,12 @@ function ProjectDetailViewInner(): ReactNode {
         <p className="project-detail__notes">{project.notes}</p>
       ) : null}
 
+      <ProjectStalenessBanner
+        project={project}
+        onOpenReleaseModal={() => setReleaseModalOpen(true)}
+        onOpenChangeOrderModal={() => setChangeOrderModalOpen(true)}
+      />
+
       <div className="project-detail__body">
         <div className="project-detail__main">
           <ProjectOptionsSection />
@@ -552,6 +620,48 @@ function ProjectDetailViewInner(): ReactNode {
 
         <ProjectTotalsAside />
       </div>
+
+      <ProductionReleaseModal
+        project={project}
+        isOpen={releaseModalOpen}
+        onClose={() => setReleaseModalOpen(false)}
+        onRelease={async (note, options) => {
+          if (ctx.onReleaseToProduction) {
+            await ctx.onReleaseToProduction(project.id, note, options);
+          }
+        }}
+        onRevoke={async (reason) => {
+          if (ctx.onRevokeProductionRelease) {
+            await ctx.onRevokeProductionRelease(project.id, reason);
+          }
+        }}
+      />
+
+      <ChangeOrderModal
+        project={project}
+        isOpen={changeOrderModalOpen}
+        onClose={() => setChangeOrderModalOpen(false)}
+        onCreateChangeOrder={async (params) => {
+          if (ctx.onCreateChangeOrder) {
+            await ctx.onCreateChangeOrder(project.id, params);
+          }
+        }}
+        onSubmitChangeOrder={async (coId) => {
+          if (ctx.onSubmitChangeOrder) {
+            await ctx.onSubmitChangeOrder(project.id, coId);
+          }
+        }}
+        onApproveChangeOrder={async (coId, notes) => {
+          if (ctx.onApproveChangeOrder) {
+            await ctx.onApproveChangeOrder(project.id, coId, notes);
+          }
+        }}
+        onRejectChangeOrder={async (coId, reason) => {
+          if (ctx.onRejectChangeOrder) {
+            await ctx.onRejectChangeOrder(project.id, coId, reason);
+          }
+        }}
+      />
 
       <ConfirmDialog
         open={pendingConfirm !== null}
@@ -652,6 +762,17 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onDeleteWarrantyTicket,
     onUploadWarrantyPhoto,
     onExportWarrantyRefabricationOptimizer,
+    onReleaseToProduction,
+    onRevokeProductionRelease,
+    onCreateChangeOrder,
+    onSubmitChangeOrder,
+    onApproveChangeOrder,
+    onRejectChangeOrder,
+    onCreateDesignRevision,
+    onDecideApproval,
+    onRequestApproval,
+    onChangeCommercialStatus,
+    onRecordDeposit,
   } = props;
 
   const canEditContent = canMutate && project.status === 'draft';
@@ -738,6 +859,21 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onDeleteWarrantyTicket,
       onUploadWarrantyPhoto,
       onExportWarrantyRefabricationOptimizer,
+      onCreateRevision: onCreateDesignRevision
+        ? (name, desc) => onCreateDesignRevision(project.id, name, desc)
+        : undefined,
+      onDecideApproval: onDecideApproval
+        ? (appId, dec, notes) => onDecideApproval(project.id, appId, dec, notes)
+        : undefined,
+      onRequestApproval: onRequestApproval
+        ? (type, notes) => onRequestApproval(project.id, type, notes)
+        : undefined,
+      onChangeCommercialStatus: onChangeCommercialStatus
+        ? (status) => onChangeCommercialStatus(project.id, status)
+        : undefined,
+      onRecordDeposit: onRecordDeposit
+        ? (params) => onRecordDeposit(project.id, params)
+        : undefined,
     }),
     [
       project,
@@ -820,6 +956,11 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onDeleteWarrantyTicket,
       onUploadWarrantyPhoto,
       onExportWarrantyRefabricationOptimizer,
+      onCreateDesignRevision,
+      onDecideApproval,
+      onRequestApproval,
+      onChangeCommercialStatus,
+      onRecordDeposit,
     ],
   );
 

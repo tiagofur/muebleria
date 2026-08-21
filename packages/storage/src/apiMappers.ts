@@ -39,6 +39,20 @@ import type {
   PurchaseOrderStatus,
   Supplier,
   ProjectStatus,
+  CommercialStatus,
+  ProjectEvent,
+  ProjectEventSource,
+  ProjectEventType,
+  DesignRevision,
+  Approval,
+  ApprovalStatus,
+  ApprovalType,
+  ProductionRelease,
+  ProductionReleaseCheck,
+  ProductionReleaseCheckCode,
+  ChangeOrder,
+  ChangeOrderStatus,
+  ChangeOrderImpact,
   ProjectTechnicalStatus,
   ProjectTemplate,
   QuoteBreakdown,
@@ -52,7 +66,6 @@ import type {
   WarrantyTicketStatus,
   ShowcasePhotoItem,
   WorkshopSettings,
-
 } from '@muebles/domain';
 
 
@@ -1471,7 +1484,9 @@ export function projectToApi(p: Project): Record<string, unknown> {
     margin_factor: p.marginFactor,
     labor_fixed_cost: p.laborFixedCost,
     status: p.status,
-    notes: p.notes ?? '',
+    // OC-011 — commercial status outcome
+    commercial_status: p.commercialStatus ?? null,
+    notes: p.notes ?? null,
     project_level_choices: { ...(p.projectLevelChoices ?? {}) },
     measure_defaults: measureDefaultsToApi(p.measureDefaults),
     kitchen_layout: kitchenLayoutToApi(p.kitchenLayout),
@@ -1560,6 +1575,16 @@ export function projectToApi(p: Project): Record<string, unknown> {
           released_at: p.materialsRelease.releasedAt,
         }
       : null,
+    // OC-020 — design revisions
+    design_revisions: p.designRevisions ? p.designRevisions.map(designRevisionToApi) : null,
+    // OC-021 — multi-role approvals
+    approvals: p.approvals ? p.approvals.map(approvalToApi) : null,
+    // OC-022 — explicit production release record
+    production_release: p.productionRelease ? productionReleaseToApi(p.productionRelease) : null,
+    // OC-024 — change orders
+    change_orders: p.changeOrders ? p.changeOrders.map(changeOrderToApi) : null,
+    // OC-010 — lifecycle append-only event stream
+    events: (p.events ?? []).map((e) => projectEventToApi(e)),
   };
 }
 
@@ -1743,7 +1768,265 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     materialsRelease: materialsReleaseFromApi(
       raw.materials_release ?? raw.materialsRelease,
     ),
+    // OC-020 — design revisions
+    designRevisions: designRevisionsFromApi(raw.design_revisions ?? raw.designRevisions),
+    // OC-021 — multi-role approvals
+    approvals: approvalsFromApi(raw.approvals),
+    // OC-022 — explicit production release record
+    productionRelease: productionReleaseFromApi(raw.production_release ?? raw.productionRelease),
+    // OC-024 — change orders
+    changeOrders: changeOrdersFromApi(raw.change_orders ?? raw.changeOrders),
+    // OC-011 — commercial status outcome
+    commercialStatus: commercialStatusFromApi(
+      raw.commercial_status ?? raw.commercialStatus,
+    ),
+    // OC-010 — lifecycle append-only event stream
+    events: projectEventsFromApi(raw.events),
   };
+}
+
+export function designRevisionToApi(r: DesignRevision): Record<string, unknown> {
+  return {
+    id: r.id,
+    project_id: r.projectId,
+    revision: r.revision,
+    name: r.name ?? null,
+    description: r.description ?? null,
+    bom_fingerprint: r.bomFingerprint,
+    layout_snapshot: r.layoutSnapshot ?? null,
+    created_by: r.createdBy,
+    created_at: r.createdAt,
+  };
+}
+
+export function designRevisionFromApi(raw: Record<string, unknown>): DesignRevision {
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    revision: Math.max(1, Math.floor(num(raw.revision, 1))),
+    name: str(raw.name) || undefined,
+    description: str(raw.description) || undefined,
+    bomFingerprint: str(raw.bom_fingerprint ?? raw.bomFingerprint),
+    layoutSnapshot: (raw.layout_snapshot ?? raw.layoutSnapshot) as DesignRevision['layoutSnapshot'],
+    createdBy: str(raw.created_by ?? raw.createdBy),
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+  };
+}
+
+export function designRevisionsFromApi(raw: unknown): readonly DesignRevision[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => designRevisionFromApi(r as Record<string, unknown>));
+}
+
+export function approvalToApi(a: Approval): Record<string, unknown> {
+  return {
+    id: a.id,
+    project_id: a.projectId,
+    design_revision_id: a.designRevisionId ?? null,
+    type: a.type,
+    status: a.status,
+    notes: a.notes ?? null,
+    decided_by: a.decidedBy ?? null,
+    decided_at: a.decidedAt ?? null,
+    created_at: a.createdAt,
+  };
+}
+
+export function approvalFromApi(raw: Record<string, unknown>): Approval {
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    designRevisionId: str(raw.design_revision_id ?? raw.designRevisionId) || undefined,
+    type: str(raw.type, 'customer') as ApprovalType,
+    status: str(raw.status, 'pending') as ApprovalStatus,
+    notes: str(raw.notes) || undefined,
+    decidedBy: str(raw.decided_by ?? raw.decidedBy) || undefined,
+    decidedAt: str(raw.decided_at ?? raw.decidedAt) || undefined,
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+  };
+}
+
+export function approvalsFromApi(raw: unknown): readonly Approval[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw
+    .filter((a) => a && typeof a === 'object')
+    .map((a) => approvalFromApi(a as Record<string, unknown>));
+}
+
+export function productionReleaseToApi(pr: ProductionRelease): Record<string, unknown> {
+  return {
+    id: pr.id,
+    project_id: pr.projectId,
+    project_version: pr.projectVersion,
+    design_revision_id: pr.designRevisionId,
+    bom_fingerprint: pr.bomFingerprint,
+    released_by: pr.releasedBy,
+    released_at: pr.releasedAt,
+    checks: pr.checks.map((c) => ({
+      code: c.code,
+      label: c.label,
+      passed: c.passed,
+      required: c.required,
+      details: c.details ?? null,
+    })),
+    note: pr.note ?? null,
+  };
+}
+
+export function productionReleaseFromApi(raw: unknown): ProductionRelease | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const id = str(r.id);
+  if (!id) return undefined;
+  const checksRaw = Array.isArray(r.checks) ? r.checks : [];
+  const checks: ProductionReleaseCheck[] = checksRaw.map((check) => {
+    const c = (check && typeof check === 'object' ? check : {}) as Record<string, unknown>;
+    return {
+      code: str(c.code) as ProductionReleaseCheckCode,
+      label: str(c.label),
+      passed: Boolean(c.passed),
+      required: Boolean(c.required),
+      details: str(c.details) || undefined,
+    };
+  });
+  return {
+    id,
+    projectId: str(r.project_id ?? r.projectId),
+    projectVersion: Math.max(1, Math.floor(num(r.project_version ?? r.projectVersion, 1))),
+    designRevisionId: str(r.design_revision_id ?? r.designRevisionId),
+    bomFingerprint: str(r.bom_fingerprint ?? r.bomFingerprint),
+    releasedBy: str(r.released_by ?? r.releasedBy),
+    releasedAt: str(r.released_at ?? r.releasedAt, new Date().toISOString()),
+    checks,
+    note: str(r.note) || undefined,
+  };
+}
+
+export function changeOrderToApi(co: ChangeOrder): Record<string, unknown> {
+  return {
+    id: co.id,
+    project_id: co.projectId,
+    number: co.number,
+    status: co.status,
+    reason: co.reason,
+    description: co.description ?? null,
+    impact: co.impact
+      ? {
+          cost_delta: co.impact.costDelta ?? null,
+          price_delta: co.impact.priceDelta ?? null,
+          lead_time_days_delta: co.impact.leadTimeDaysDelta ?? null,
+          scope_description: co.impact.scopeDescription ?? null,
+        }
+      : null,
+    previous_bom_fingerprint: co.previousBomFingerprint,
+    new_bom_fingerprint: co.newBomFingerprint ?? null,
+    previous_design_revision_id: co.previousDesignRevisionId ?? null,
+    new_design_revision_id: co.newDesignRevisionId ?? null,
+    requested_by: co.requestedBy,
+    requested_at: co.requestedAt,
+    decided_by: co.decidedBy ?? null,
+    decided_at: co.decidedAt ?? null,
+    decision_notes: co.decisionNotes ?? null,
+    created_at: co.createdAt,
+  };
+}
+
+export function changeOrderFromApi(raw: Record<string, unknown>): ChangeOrder {
+  const impactRaw = raw.impact as Record<string, unknown> | undefined;
+  const costDelta = impactRaw?.cost_delta ?? impactRaw?.costDelta;
+  const priceDelta = impactRaw?.price_delta ?? impactRaw?.priceDelta;
+  const leadTimeDelta = impactRaw?.lead_time_days_delta ?? impactRaw?.leadTimeDaysDelta;
+  const scopeDesc = str(impactRaw?.scope_description ?? impactRaw?.scopeDescription);
+
+  const impact: ChangeOrderImpact | undefined =
+    impactRaw && typeof impactRaw === 'object'
+      ? {
+          costDelta: costDelta === null || costDelta === undefined || costDelta === '' ? undefined : num(costDelta),
+          priceDelta: priceDelta === null || priceDelta === undefined || priceDelta === '' ? undefined : num(priceDelta),
+          leadTimeDaysDelta:
+            leadTimeDelta === null || leadTimeDelta === undefined || leadTimeDelta === ''
+              ? undefined
+              : Math.floor(num(leadTimeDelta)),
+          scopeDescription: scopeDesc || undefined,
+        }
+      : undefined;
+
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    number: Math.max(1, Math.floor(num(raw.number, 1))),
+    status: str(raw.status, 'draft') as ChangeOrderStatus,
+    reason: str(raw.reason),
+    description: str(raw.description) || undefined,
+    impact,
+    previousBomFingerprint: str(raw.previous_bom_fingerprint ?? raw.previousBomFingerprint),
+    newBomFingerprint: str(raw.new_bom_fingerprint ?? raw.newBomFingerprint) || undefined,
+    previousDesignRevisionId:
+      str(raw.previous_design_revision_id ?? raw.previousDesignRevisionId) || undefined,
+    newDesignRevisionId: str(raw.new_design_revision_id ?? raw.newDesignRevisionId) || undefined,
+    requestedBy: str(raw.requested_by ?? raw.requestedBy),
+    requestedAt: str(raw.requested_at ?? raw.requestedAt, new Date().toISOString()),
+    decidedBy: str(raw.decided_by ?? raw.decidedBy) || undefined,
+    decidedAt: str(raw.decided_at ?? raw.decidedAt) || undefined,
+    decisionNotes: str(raw.decision_notes ?? raw.decisionNotes) || undefined,
+    createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
+  };
+}
+
+export function changeOrdersFromApi(raw: unknown): readonly ChangeOrder[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => changeOrderFromApi(r as Record<string, unknown>));
+}
+
+export function projectEventToApi(e: ProjectEvent): Record<string, unknown> {
+  return {
+    id: e.id,
+    project_id: e.projectId,
+    type: e.type,
+    at: e.at,
+    by_user_id: e.byUserId ?? null,
+    source: e.source ?? 'web',
+    note: e.note ?? null,
+    payload: e.payload ?? null,
+  };
+}
+
+export function projectEventFromApi(raw: Record<string, unknown>): ProjectEvent {
+  return {
+    id: str(raw.id),
+    projectId: str(raw.project_id ?? raw.projectId),
+    type: str(raw.type) as ProjectEventType,
+    at: str(raw.at),
+    byUserId: str(raw.by_user_id ?? raw.byUserId) || undefined,
+    source: (str(raw.source) || 'web') as ProjectEventSource,
+    note: str(raw.note) || undefined,
+    payload:
+      raw.payload && typeof raw.payload === 'object' && !Array.isArray(raw.payload)
+        ? (raw.payload as Record<string, unknown>)
+        : undefined,
+  };
+}
+
+function projectEventsFromApi(raw: unknown): ProjectEvent[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const events: ProjectEvent[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    events.push(projectEventFromApi(entry as Record<string, unknown>));
+  }
+  return events.length > 0 ? events : undefined;
+}
+
+function commercialStatusFromApi(raw: unknown): CommercialStatus | undefined {
+  const s = str(raw);
+  if (['draft', 'sent', 'won', 'lost', 'expired', 'cancelled'].includes(s)) {
+    return s as CommercialStatus;
+  }
+  return undefined;
 }
 
 function materialsReleaseFromApi(raw: unknown): MaterialsRelease | undefined {

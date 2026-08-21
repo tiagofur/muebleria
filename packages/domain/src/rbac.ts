@@ -565,3 +565,82 @@ export function roleCanAccessNav(
 ): boolean {
   return navIdsForRole(role).has(navId);
 }
+
+/**
+ * OC-010..OC-024 — who may append which lifecycle event to the audit log.
+ * Server authority: mirrored in backend-go/internal/domain/rbac.go
+ * (RoleCanAppendProjectEvent) and enforced on POST /api/projects/{id}/events
+ * and on new events arriving via PUT /api/projects/{id}.
+ *
+ * Policy follows the same ownership split as the rest of the matrix:
+ * - commercial staff (vendedor/gerente_ventas) own quote, deposit and
+ *   customer-facing approval events;
+ * - ingeniero owns technical/engineering gates and co-signs production release;
+ * - plant roles (produccion/almacen/gerente_produccion) own physical
+ *   milestones (materials, floor, shipping, installation);
+ * - closeout and change-order decisions are gerente/admin calls.
+ */
+const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> = {
+  // Commercial pipeline + real deposit (OC-011/OC-013).
+  quote_created: ['admin', 'gerente_ventas', 'vendedor'],
+  quote_sent: ['admin', 'gerente_ventas', 'vendedor'],
+  quote_won: ['admin', 'gerente_ventas', 'vendedor'],
+  quote_lost: ['admin', 'gerente_ventas', 'vendedor'],
+  quote_expired: ['admin', 'gerente_ventas', 'vendedor'],
+  quote_cancelled: ['admin', 'gerente_ventas', 'vendedor'],
+  deposit_received: ['admin', 'gerente_ventas', 'vendedor'],
+  // Survey: ventas or ingeniería can be on site.
+  survey_started: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  survey_completed: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  // Design authoring/iteration.
+  design_revision_created: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  design_submitted: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  design_approved: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  design_changes_requested: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  // Multi-role sign-offs (OC-021): each lane decides its own.
+  customer_approved: ['admin', 'gerente_ventas', 'vendedor'],
+  customer_rejected: ['admin', 'gerente_ventas', 'vendedor'],
+  engineering_approved: ['admin', 'gerente_produccion', 'ingeniero'],
+  engineering_rejected: ['admin', 'gerente_produccion', 'ingeniero'],
+  project_approved: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  // Engineering execution + formal release gate (OC-022).
+  engineering_started: ['admin', 'gerente_produccion', 'ingeniero'],
+  engineering_documented: ['admin', 'gerente_produccion', 'ingeniero'],
+  production_released: ['admin', 'gerente_produccion', 'ingeniero'],
+  production_release_revoked: ['admin', 'gerente_produccion', 'ingeniero'],
+  // Materials / warehouse (OC-010 materials events).
+  materials_required: ['admin', 'gerente_produccion', 'almacen', 'ingeniero'],
+  materials_reserved: ['admin', 'gerente_produccion', 'almacen', 'ingeniero'],
+  materials_shortage_detected: ['admin', 'gerente_produccion', 'almacen', 'ingeniero'],
+  materials_ready: ['admin', 'gerente_produccion', 'almacen', 'ingeniero'],
+  materials_release_overridden: ['admin', 'gerente_produccion', 'almacen'],
+  // Physical milestones.
+  production_started: ['admin', 'gerente_produccion', 'produccion'],
+  production_completed: ['admin', 'gerente_produccion', 'produccion'],
+  shipment_loaded: ['admin', 'gerente_produccion', 'produccion', 'almacen'],
+  shipment_departed: ['admin', 'gerente_produccion', 'produccion', 'almacen'],
+  installation_started: ['admin', 'gerente_ventas', 'gerente_produccion', 'produccion'],
+  installation_completed: ['admin', 'gerente_ventas', 'gerente_produccion', 'produccion'],
+  // Closeout.
+  punch_opened: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  punch_closed: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  client_signed_off: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  project_closed: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  warranty_opened: ['admin', 'gerente_ventas', 'gerente_produccion', 'vendedor'],
+  // Change orders (OC-024): anyone in the deal can request; decisions are
+  // gerente/admin because they carry price/schedule impact.
+  change_order_created: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  change_order_submitted: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  change_order_cancelled: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  change_order_approved: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  change_order_rejected: ['admin', 'gerente_ventas', 'gerente_produccion'],
+};
+
+export function roleCanAppendProjectEvent(
+  role: string | null | undefined,
+  type: string,
+): boolean {
+  const allowed = PROJECT_EVENT_APPEND_ROLES[type];
+  if (!allowed) return false;
+  return allowed.includes(role as UserRole);
+}

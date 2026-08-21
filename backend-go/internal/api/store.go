@@ -123,6 +123,9 @@ type Store interface {
 	// Floor event log (F092): immutable who/when/how audit trail.
 	InsertFloorEvent(ctx context.Context, ev domain.FloorStatusEvent) error
 	ListFloorEvents(ctx context.Context, projectID string) ([]domain.FloorStatusEvent, error)
+	// Project lifecycle events log (OC-010): immutable append-only events.
+	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
+	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)

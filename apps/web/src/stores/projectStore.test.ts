@@ -988,3 +988,89 @@ describe('projectStore — engineering lifecycle (roadmap-screens 2a)', () => {
     expect(savedProjects).toHaveLength(0);
   });
 });
+
+describe('projectStore — lifecycle & operational core (OC-010..OC-024)', () => {
+  const readyProject = (): Project =>
+    makeProject({
+      status: 'accepted',
+      commercialStatus: 'won',
+      items: [
+        {
+          id: 'item-1',
+          moduleId: 'mod-1',
+          quantity: 1,
+          optionChoices: {},
+        },
+      ],
+    });
+
+  it('recordDeposit appends a real deposit_received event and persists it (OC-013)', async () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([readyProject()]);
+
+    await store.getState().recordDeposit(
+      'proj-1',
+      { amount: 5000, currency: 'MXN', reference: 'TRANSF-0042', note: 'Anticipo 50%' },
+      { id: 'u1', role: 'vendedor' },
+    );
+
+    const updated = store.getState().projects[0]!;
+    const deposit = updated.events?.find((e) => e.type === 'deposit_received');
+    expect(deposit).toBeDefined();
+    expect(deposit?.byUserId).toBe('u1');
+    expect((deposit?.payload as { amount: number }).amount).toBe(5000);
+    expect(savedProjects.some((p) => p.events?.some((e) => e.type === 'deposit_received'))).toBe(true);
+  });
+
+  it('recordDeposit rejects non-positive amounts without touching the project', async () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([readyProject()]);
+
+    await store.getState().recordDeposit('proj-1', { amount: 0, currency: 'MXN' });
+
+    expect(store.getState().projects[0]!.events?.some((e) => e.type === 'deposit_received')).toBeFalsy();
+    expect(savedProjects).toHaveLength(0);
+  });
+
+  it('releaseToProduction runs the 6 gates end-to-end after deposit + approvals (OC-022)', async () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([readyProject()]);
+
+    await store.getState().recordDeposit('proj-1', { amount: 5000, currency: 'MXN' }, { id: 'u1', role: 'vendedor' });
+    await store.getState().requestApproval('proj-1', 'customer', 'Aprobado por correo', { id: 'u1', role: 'vendedor' });
+    // El cliente aprueba: la aprobación pendiente pasa a approved.
+    const pendingApproval = store.getState().projects[0]!.approvals?.[0];
+    expect(pendingApproval?.status).toBe('pending');
+    await store.getState().decideApproval(
+      'proj-1',
+      pendingApproval!.id,
+      'approved',
+      undefined,
+      { id: 'u1', role: 'vendedor' },
+    );
+    await store.getState().requestApproval('proj-1', 'technical', 'Validar ingeniería', { id: 'u2', role: 'ingeniero' });
+    const pendingTech = store.getState().projects[0]!.approvals?.find((a) => a.type === 'technical');
+    await store.getState().decideApproval('proj-1', pendingTech!.id, 'approved', undefined, { id: 'u2', role: 'ingeniero' });
+
+    await store.getState().releaseToProduction('proj-1', 'Liberación OK', { requireSurvey: false }, { id: 'u3', role: 'gerente_produccion' });
+
+    const updated = store.getState().projects[0]!;
+    expect(updated.productionRelease).toBeDefined();
+    expect(updated.events?.some((e) => e.type === 'production_released')).toBe(true);
+    expect(savedProjects.some((p) => p.productionRelease != null)).toBe(true);
+  });
+
+  it('releaseToProduction stays blocked while the deposit gate is missing', async () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([readyProject()]);
+
+    await expect(
+      store.getState().releaseToProduction('proj-1', undefined, { requireSurvey: false }, { id: 'u3', role: 'gerente_produccion' }),
+    ).rejects.toThrow(/No se puede liberar a producción/);
+    expect(savedProjects).toHaveLength(0);
+  });
+});
