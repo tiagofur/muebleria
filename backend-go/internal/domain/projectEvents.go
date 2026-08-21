@@ -83,6 +83,8 @@ var projectEventTypes = map[string]struct{}{
 	"materials_release_overridden": {},
 	"production_started":           {},
 	"production_completed":         {},
+	"quality_issue_reported":       {},
+	"rework_started":               {},
 	"shipment_loaded":              {},
 	"shipment_departed":            {},
 	"installation_started":         {},

@@ -120,6 +120,15 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PATCH /api/projects/{id}/items/{itemId}/floor-status", authMW(http.HandlerFunc(server.HandleProjectItemFloorStatus)))
 	mux.Handle("GET /api/projects/{id}/floor-events", authMW(http.HandlerFunc(server.HandleProjectFloorEvents)))
 
+	// Physical production execution (OC-030..OC-034, #301): piece operations
+	// and module unit transitions with server-side gates, RBAC and audit.
+	mux.Handle("GET /api/projects/{id}/part-executions", authMW(http.HandlerFunc(server.HandleProjectPartExecutions)))
+	mux.Handle("PUT /api/projects/{id}/part-executions", authMW(http.HandlerFunc(server.HandleGeneratePartExecutions)))
+	mux.Handle("POST /api/projects/{id}/parts/{partId}/advance", authMW(http.HandlerFunc(server.HandleAdvancePartOperation)))
+	mux.Handle("POST /api/projects/{id}/parts/{partId}/rework", authMW(http.HandlerFunc(server.HandlePartRework)))
+	mux.Handle("POST /api/projects/{id}/units/{unitId}/advance", authMW(http.HandlerFunc(server.HandleAdvanceModuleUnit)))
+	mux.Handle("POST /api/projects/{id}/units/{unitId}/assembly-override", authMW(http.HandlerFunc(server.HandleAssemblyOverride)))
+
 	// Lifecycle events (OC-010): append-only audit trail.
 	mux.Handle("GET /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))
 	mux.Handle("POST /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))
@@ -171,7 +180,6 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PATCH /api/projects/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleProjectPhotoByID)))
 	mux.Handle("DELETE /api/projects/{id}/photos/{photoId}", authMW(http.HandlerFunc(server.HandleProjectPhotoByID)))
 	mux.Handle("GET /api/showcase/photos", authMW(http.HandlerFunc(server.HandleShowcasePhotos)))
-
 
 	// Project internal messages & technical workflow (CRM Phase 2)
 	mux.Handle("GET /api/projects/{id}/messages", authMW(http.HandlerFunc(server.HandleProjectInternalMessages)))

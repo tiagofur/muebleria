@@ -45,10 +45,64 @@ export interface ScannedPieceRecord {
   scannedAt: string;
   /** Last known floor status (server truth when online, optimistic offline). */
   currentStatus: ItemFloorStatus;
-  /** Server resolution when the scan reached the API. */
+  /** Server resolution when the scan reached the legacy item API. */
   resolution?: FloorScanResolution;
+  /** Physical resolution (#301): the scan hit a PIECE or UNIT endpoint. */
+  physical?: PhysicalScanResolution;
   /** Last error for this scan (offline, unknown module, forbidden…). */
   error?: string;
+}
+
+/**
+ * Physical scan outcome (#301): the QR identified a piece instance
+ * (pId — station advance of its current operation) or a module unit / bulto
+ * (uId — unit advance through the assembly gate, server-side).
+ */
+export interface PhysicalScanResolution {
+  kind: 'part' | 'unit';
+  projectId: string;
+  id: string;
+  partCode?: string;
+  unitIndex?: number;
+  status: string;
+  nextStatus?: string;
+}
+
+/** Where a parsed QR should be sent: the physical endpoints or legacy scan. */
+type ScanTarget =
+  | { kind: 'part'; projectId: string; partId: string }
+  | { kind: 'unit'; projectId: string; unitId: string; packageCount?: number }
+  | { kind: 'legacy'; projectId: string; moduleCode: string };
+
+function scanTargetFor(parsed: ParsedPieceLabelScan, fallbackProjectId: string | null): ScanTarget | null {
+  if (parsed.kind === 'payload' && parsed.fields.partInstanceId) {
+    if (!parsed.fields.projectId) return null;
+    return { kind: 'part', projectId: parsed.fields.projectId, partId: parsed.fields.partInstanceId };
+  }
+  if (parsed.kind === 'modulePayload' && parsed.fields.moduleUnitId) {
+    if (!parsed.fields.projectId) return null;
+    // A bulto QR (packageIndex) advances ITS unit; totalPackages rides along
+    // so the server can stamp package_count when entering `packaged`.
+    return {
+      kind: 'unit',
+      projectId: parsed.fields.projectId,
+      unitId: parsed.fields.moduleUnitId,
+      packageCount:
+        parsed.target === 'package' ? parsed.fields.totalPackages : undefined,
+    };
+  }
+  const projectId =
+    parsed.kind === 'payload' || parsed.kind === 'modulePayload'
+      ? parsed.fields.projectId
+      : fallbackProjectId;
+  const moduleCode =
+    parsed.kind === 'payload'
+      ? parsed.fields.moduleCode
+      : parsed.kind === 'modulePayload'
+        ? parsed.fields.factoryCode || parsed.fields.moduleCode
+        : parsed.code;
+  if (!projectId) return null;
+  return { kind: 'legacy', projectId, moduleCode };
 }
 
 export interface PendingScan {
@@ -182,16 +236,7 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
     if (!parsed) return null;
 
     const advance = get().autoAdvance;
-    const projectId =
-      parsed.kind === 'payload' || parsed.kind === 'modulePayload'
-        ? parsed.fields.projectId
-        : get().activeProjectId;
-    const moduleCode =
-      parsed.kind === 'payload'
-        ? parsed.fields.moduleCode
-        : parsed.kind === 'modulePayload'
-          ? parsed.fields.factoryCode || parsed.fields.moduleCode
-          : parsed.code;
+    const target = scanTargetFor(parsed, get().activeProjectId);
 
     const record: ScannedPieceRecord = {
       id: recordId(),
@@ -205,7 +250,7 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
       activeScan: record,
     }));
 
-    if (!projectId) {
+    if (!target) {
       record.error =
         'Código sin obra: escaneá la etiqueta QR de una pieza (o fijá una obra activa desde la cola).';
       set((s) => ({
@@ -215,6 +260,75 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
       await haptic('warning');
       return record;
     }
+
+    // Physical routing (#301): piece QRs advance the piece's current
+    // operation; unit/bulto QRs advance the unit through the server-side
+    // assembly gate.
+    if (target.kind === 'part' || target.kind === 'unit') {
+      try {
+        const raw = target.kind === 'part'
+          ? await apiClient.post<Record<string, unknown>>(
+              `/projects/${encodeURIComponent(target.projectId)}/parts/${encodeURIComponent(target.partId)}/advance`,
+              { advance: true, source: 'scan' },
+            )
+          : await apiClient.post<Record<string, unknown>>(
+              `/projects/${encodeURIComponent(target.projectId)}/units/${encodeURIComponent(target.unitId)}/advance`,
+              { advance: true, source: 'scan', ...(target.packageCount ? { package_count: target.packageCount } : {}) },
+            );
+        const part = (raw.part ?? null) as Record<string, unknown> | null;
+        const unit = (raw.unit ?? null) as Record<string, unknown> | null;
+        record.physical = {
+          kind: target.kind,
+          projectId: target.projectId,
+          id: String(part?.id ?? unit?.id ?? ''),
+          partCode: part ? String(part.part_code ?? '') : undefined,
+          unitIndex: Number(part?.unit_index ?? unit?.unit_index ?? 0) || undefined,
+          status: String(part?.status ?? unit?.status ?? ''),
+          nextStatus: raw.next_status ? String(raw.next_status) : undefined,
+        };
+        set((s) => ({
+          history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
+          activeScan: { ...record },
+        }));
+        await haptic('success');
+        return record;
+      } catch (err) {
+        if (isNetworkError(err)) {
+          record.error = 'Sin conexión — guardado para sincronizar.';
+          set((s) => {
+            const alreadyQueued = s.pendingScans.some((p) => p.rawText === trimmed);
+            if (!alreadyQueued) {
+              const queue = [
+                ...s.pendingScans,
+                { rawText: trimmed, advance: true, at: new Date().toISOString() },
+              ];
+              savePendingScans(queue);
+              return {
+                pendingScans: queue,
+                history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
+                activeScan: { ...record },
+              };
+            }
+            return {
+              history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
+              activeScan: { ...record },
+            };
+          });
+          await haptic('warning');
+        } else {
+          record.error = err instanceof Error ? err.message : 'No se pudo resolver el escaneo.';
+          set((s) => ({
+            history: s.history.map((r) => (r.id === record.id ? { ...record } : r)),
+            activeScan: { ...record },
+          }));
+          await haptic('error');
+        }
+        return record;
+      }
+    }
+
+    const projectId = target.projectId;
+    const moduleCode = target.moduleCode;
 
     const apply = (resolution: FloorScanResolution) => {
       record.resolution = resolution;
@@ -282,6 +396,44 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
   },
 
   advanceScan: async (record) => {
+    const physical = record.physical;
+    if (physical && !record.resolution) {
+      const path =
+        physical.kind === 'part'
+          ? `/projects/${encodeURIComponent(physical.projectId)}/parts/${encodeURIComponent(physical.id)}/advance`
+          : `/projects/${encodeURIComponent(physical.projectId)}/units/${encodeURIComponent(physical.id)}/advance`;
+      try {
+        const raw = await apiClient.post<Record<string, unknown>>(path, {
+          advance: true,
+          source: 'scan',
+        });
+        const part = (raw.part ?? null) as Record<string, unknown> | null;
+        const unit = (raw.unit ?? null) as Record<string, unknown> | null;
+        const next: PhysicalScanResolution = {
+          ...physical,
+          status: String(part?.status ?? unit?.status ?? physical.status),
+          nextStatus: raw.next_status ? String(raw.next_status) : undefined,
+        };
+        set((s) => ({
+          history: s.history.map((r) =>
+            r.id === record.id ? { ...r, physical: next, error: undefined } : r,
+          ),
+          activeScan:
+            s.activeScan?.id === record.id
+              ? { ...s.activeScan, physical: next, error: undefined }
+              : s.activeScan,
+        }));
+        await haptic('success');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'error';
+        set((s) => ({
+          history: s.history.map((r) => (r.id === record.id ? { ...r, error: message } : r)),
+          activeScan: s.activeScan?.id === record.id ? { ...s.activeScan, error: message } : s.activeScan,
+        }));
+        await haptic('error');
+      }
+      return;
+    }
     const resolution = record.resolution;
     if (!resolution) return;
     try {
@@ -354,29 +506,34 @@ export const useFloorScannerStore = create<FloorScannerState>((set, get) => ({
     const remaining: PendingScan[] = [];
     for (const pending of pendingScans) {
       const parsed = parsePieceLabelScan(pending.rawText);
-      const projectId =
-        parsed?.kind === 'payload' || parsed?.kind === 'modulePayload'
-          ? parsed.fields.projectId
-          : get().activeProjectId;
-      const moduleCode =
-        parsed?.kind === 'payload'
-          ? parsed.fields.moduleCode
-          : parsed?.kind === 'modulePayload'
-            ? parsed.fields.factoryCode || parsed.fields.moduleCode
-            : parsed?.kind === 'plainCode'
-              ? parsed.code
-              : '';
-      if (!projectId || !moduleCode) {
+      const target = parsed ? scanTargetFor(parsed, get().activeProjectId) : null;
+      if (!target) {
         continue; // unresolvable offline scan — drop silently
       }
       try {
-        await apiClient.post(`/projects/${encodeURIComponent(projectId)}/floor-scan`, {
-          module: moduleCode,
-          advance: pending.advance,
-          ...(pending.targetStatus
-            ? { target_status: pending.targetStatus }
-            : {}),
-        });
+        if (target.kind === 'part') {
+          await apiClient.post(
+            `/projects/${encodeURIComponent(target.projectId)}/parts/${encodeURIComponent(target.partId)}/advance`,
+            { advance: pending.advance, source: 'scan' },
+          );
+        } else if (target.kind === 'unit') {
+          await apiClient.post(
+            `/projects/${encodeURIComponent(target.projectId)}/units/${encodeURIComponent(target.unitId)}/advance`,
+            {
+              advance: pending.advance,
+              source: 'scan',
+              ...(target.packageCount ? { package_count: target.packageCount } : {}),
+            },
+          );
+        } else {
+          await apiClient.post(`/projects/${encodeURIComponent(target.projectId)}/floor-scan`, {
+            module: target.moduleCode,
+            advance: pending.advance,
+            ...(pending.targetStatus
+              ? { target_status: pending.targetStatus }
+              : {}),
+          });
+        }
       } catch (err) {
         if (isNetworkError(err)) remaining.push(pending);
       }

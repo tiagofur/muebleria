@@ -1,0 +1,19 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-030..OC-031, AGENTS.md): operaciones canónicas de pieza física (PartOperation) y estados de operación.",
+  "operationTypes": [
+    "cut",
+    "cnc",
+    "edge_banding",
+    "inspection"
+  ],
+  "operationStatuses": [
+    "queued",
+    "in_progress",
+    "completed",
+    "blocked",
+    "rework",
+    "skipped"
+  ],
+  "rejectedOperationTypes": ["paint", "packing", "assembly"],
+  "rejectedOperationStatuses": ["finished", "waiting", "archived"]
+}

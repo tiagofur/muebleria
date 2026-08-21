@@ -17,6 +17,10 @@ export type PieceLabelQrFields = {
   readonly materialCode: string;
   readonly lengthMm: number;
   readonly widthMm: number;
+  /** Unique physical piece instance identifier (OC-030). */
+  readonly partInstanceId?: string;
+  /** Unit index (1..N) within the module item (OC-030). */
+  readonly unitIndex?: number;
   /** Piece quantity (v2) — how many identical pieces share this label. */
   readonly quantity?: number;
   /** Edge-banded sides shorthand, e.g. "L1+W2" (v2). Empty = none. */
@@ -33,6 +37,8 @@ export type ModuleLabelQrFields = {
   readonly factoryCode: string;
   readonly moduleCode: string;
   readonly moduleName: string;
+  /** Specific module unit instance identifier (OC-033). */
+  readonly moduleUnitId?: string;
   readonly packageIndex?: number;
   readonly totalPackages?: number;
   readonly unitIndex?: number;
@@ -54,6 +60,8 @@ export function pieceLabelQrPayload(fields: PieceLabelQrFields): string {
     material: fields.materialCode,
     L: fields.lengthMm,
     W: fields.widthMm,
+    ...(fields.partInstanceId ? { pId: fields.partInstanceId } : {}),
+    ...(fields.unitIndex ? { uIdx: fields.unitIndex } : {}),
     qty: fields.quantity ?? 1,
     edges: fields.edgeSides ?? '',
     edge: fields.edgeCode ?? '',
@@ -68,6 +76,7 @@ export function moduleLabelQrPayload(fields: ModuleLabelQrFields): string {
     k: 'mod',
     projectId: fields.projectId,
     itemId: fields.itemId,
+    ...(fields.moduleUnitId ? { uId: fields.moduleUnitId } : {}),
     fc: fields.factoryCode,
     mod: fields.moduleCode,
     name: fields.moduleName.slice(0, 60),
@@ -137,7 +146,7 @@ export function unwrapPieceLabelQrUrl(text: string): string | null {
  */
 export type ParsedPieceLabelScan =
   | { readonly kind: 'payload'; readonly version: 1 | 2; readonly fields: PieceLabelQrFields; readonly target?: 'piece' }
-  | { readonly kind: 'modulePayload'; readonly version: 2; readonly fields: ModuleLabelQrFields; readonly target: 'module' }
+  | { readonly kind: 'modulePayload'; readonly version: 2; readonly fields: ModuleLabelQrFields; readonly target: 'module' | 'package' }
   | { readonly kind: 'plainCode'; readonly code: string };
 
 function scanString(raw: unknown): string {
@@ -182,18 +191,26 @@ export function parsePieceLabelScan(text: string): ParsedPieceLabelScan | null {
     if (!moduleCode && !factoryCode) return null;
 
     const dims = Array.isArray(parsed.dims) ? parsed.dims : [];
+    // A module label whose unit splits into several bultos identifies ONE
+    // package of it (production rule: Packaging/Shipping work unidad/bulto).
+    // Labels always carry bulto/tot (default 1/1) — multiplicity is the
+    // honest discriminator between "the unit" and "one of its bultos".
+    const packageIndex = scanNumber(parsed.bulto || parsed.idx) || undefined;
+    const totalPackages = scanNumber(parsed.tot || parsed.total) || undefined;
+    const isPackage = (totalPackages ?? 1) > 1 || (packageIndex ?? 1) > 1;
     return {
       kind: 'modulePayload',
       version: 2,
-      target: 'module',
+      target: isPackage ? 'package' : 'module',
       fields: {
         projectId: scanString(parsed.projectId || parsed.proj),
         itemId,
         factoryCode: factoryCode || moduleCode,
         moduleCode,
         moduleName: scanString(parsed.name || parsed.moduleName),
-        packageIndex: scanNumber(parsed.bulto || parsed.idx) || undefined,
-        totalPackages: scanNumber(parsed.tot || parsed.total) || undefined,
+        moduleUnitId: scanString(parsed.uId) || undefined,
+        packageIndex,
+        totalPackages,
         unitIndex: scanNumber(parsed.uIdx) || undefined,
         unitQuantity: scanNumber(parsed.uQty) || undefined,
         widthMm: dims[0] ? scanNumber(dims[0]) : null,
@@ -220,6 +237,8 @@ export function parsePieceLabelScan(text: string): ParsedPieceLabelScan | null {
       materialCode: scanString(parsed.material),
       lengthMm: scanNumber(parsed.L),
       widthMm: scanNumber(parsed.W),
+      partInstanceId: scanString(parsed.pId) || undefined,
+      unitIndex: scanNumber(parsed.uIdx) || undefined,
       quantity: version === 2 ? Math.max(1, scanNumber(parsed.qty) || 1) : undefined,
       edgeSides: version === 2 ? scanString(parsed.edges) || undefined : undefined,
       edgeCode: version === 2 ? scanString(parsed.edge) || undefined : undefined,

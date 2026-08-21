@@ -338,6 +338,37 @@ vive a nivel `ProjectItem`. Es útil como resumen legacy pero mezcla dos granula
 4. migrar estaciones y scans gradualmente;
 5. deprecar mutaciones directas de `ProjectItem.floorStatus` cuando todos los consumidores estén adaptados.
 
+### Estado de implementación (F136 / #301)
+
+Pasos 1–3 implementados; 4–5 en curso con esta política de bridge:
+
+- `floorStatus` se re-deriva desde piezas/unidades en cada avance físico
+  (endpoints `POST /api/projects/{id}/parts/{partId}/advance`,
+  `.../units/{unitId}/advance`, `.../rework`, `.../assembly-override`),
+  dentro de una transacción con lock de fila (`SELECT … FOR UPDATE`) para que
+  escaneos concurrentes no se pisen.
+- Las mutaciones directas legacy (`floor-scan` y
+  `PATCH .../items/{itemId}/floor-status`) responden `409` para líneas que ya
+  tienen unidades físicas: desde ese punto la verdad es la unidad/pieza y el
+  estado del item es derivado. Líneas sin unidades siguen el flujo legacy.
+- El gate de armado bloquea también contra revisión liberada distinta
+  (piezas/unidad de una revisión anterior); sólo un override supervisor
+  auditado lo habilita.
+- Generación: `PUT /api/projects/{id}/part-executions` persiste las
+  instancias derivadas del BOM (la resolución vive en TS) tras validar
+  server-side líneas/cantidades/revisión liberada; regenerar sobre avance
+  físico existente exige `force` de supervisión y queda auditado.
+- Escáner (móvil): QR de pieza (`pId`) completa la operación actual vía el
+  endpoint de pieza; QR de unidad/bulto (`uId`) avanza la unidad por el
+  gate server-side. Un bulto se identifica por multiplicidad (bulto/tot > 1)
+  y al empaquetar se registra `package_count` en la unidad.
+- Dashboards: `buildProjectFloorSummary` cambia a modo físico cuando hay
+  ejecución generada — Corte/Enchape cuentan piezas, Armado+ cuenta
+  unidades (las piezas en CNC cuentan como cola de Enchape, en tránsito).
+- Costing de rework (OC-061): el endpoint de retrabajo acepta
+  `material_cost`/`labor_minutes` y los registra en el payload de los
+  eventos `quality_issue_reported`/`rework_started` para job costing.
+
 ---
 
 ## 16. Métricas correctas por estación

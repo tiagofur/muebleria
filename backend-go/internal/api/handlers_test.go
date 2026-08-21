@@ -80,6 +80,13 @@ type stubStore struct {
 	// Floor scan (F089-RN): per-id modules + floor status write log.
 	modulesByID       map[string]*domain.Module
 	floorStatusWrites []floorStatusWrite
+	// Physical part executions (OC-030..034): in-memory state + write log.
+	partInstances     []domain.PartInstance
+	moduleUnits       []domain.ModuleUnitExecution
+	itemFloorStatuses map[string]string
+	itemQuantities    map[string]int
+	mutateFloorEvents []domain.FloorStatusEvent
+	mutateErr         error
 	floorEventWrites  []domain.FloorStatusEvent
 	floorEventsList   []domain.FloorStatusEvent
 	userSectorsList   []domain.UserSector
@@ -397,6 +404,36 @@ func (s *stubStore) InsertFloorEvent(_ context.Context, ev domain.FloorStatusEve
 
 func (s *stubStore) ListFloorEvents(_ context.Context, _ string) ([]domain.FloorStatusEvent, error) {
 	return s.floorEventsList, nil
+}
+
+func (s *stubStore) MutateProjectPartExecutions(
+	_ context.Context,
+	_ string,
+	mutate func(*domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
+) (*domain.PartExecutionsMutation, error) {
+	if s.mutateErr != nil {
+		return nil, s.mutateErr
+	}
+	snap := &domain.PartExecutionsSnapshot{
+		Parts:          append([]domain.PartInstance(nil), s.partInstances...),
+		Units:          append([]domain.ModuleUnitExecution(nil), s.moduleUnits...),
+		ItemStatuses:   map[string]string{},
+		ItemQuantities: map[string]int{},
+	}
+	for k, v := range s.itemFloorStatuses {
+		snap.ItemStatuses[k] = v
+	}
+	for k, v := range s.itemQuantities {
+		snap.ItemQuantities[k] = v
+	}
+	mutation, err := mutate(snap)
+	if err != nil {
+		return nil, err
+	}
+	s.partInstances = mutation.Parts
+	s.moduleUnits = mutation.Units
+	s.mutateFloorEvents = append(s.mutateFloorEvents, mutation.FloorEvents...)
+	return mutation, nil
 }
 
 func (s *stubStore) InsertProjectEvent(_ context.Context, ev domain.ProjectEvent) error {

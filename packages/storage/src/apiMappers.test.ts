@@ -53,6 +53,8 @@ import type {
   Approval,
   ProductionRelease,
   ChangeOrder,
+  PartInstance,
+  ModuleUnitExecution,
   ProjectTemplate,
   Structure,
 } from '@muebles/domain';
@@ -1909,6 +1911,107 @@ describe('projectToApi / projectFromApi — commercialStatus and events (OC-010.
     expect(roundCo?.impact?.costDelta).toBe(450);
     expect(roundCo?.impact?.priceDelta).toBe(750);
     expect(roundCo?.impact?.scopeDescription).toBe('1 cajón Blum Legrabox extra');
+  });
+
+  it('round-trips part instances and module units (OC-030..OC-034)', () => {
+    const part: PartInstance = {
+      id: 'p1_i1_u1_LAT_1',
+      projectId: 'p-prod-phase2',
+      productionRevision: 'rev-1',
+      projectItemId: 'item-1',
+      unitIndex: 1,
+      partCode: 'LAT-IZQ',
+      description: 'Lateral Izquierdo',
+      materialId: 'mat-mdf-18',
+      lengthMm: 720,
+      widthMm: 560,
+      thicknessMm: 18,
+      grain: 1,
+      edges: [
+        { side: 'L1', enabled: true },
+        { side: 'L2', enabled: false },
+      ],
+      requiredOperations: [
+        {
+          id: 'op-1',
+          type: 'cut',
+          sequence: 1,
+          status: 'completed',
+          operatorName: 'Carlos',
+          completedAt: '2026-08-21T11:00:00Z',
+        },
+        {
+          id: 'op-2',
+          type: 'edge_banding',
+          sequence: 2,
+          status: 'queued',
+        },
+      ],
+      currentOperationIndex: 1,
+      status: 'in_progress',
+    };
+
+    const unit: ModuleUnitExecution = {
+      id: 'p-prod-phase2_item-1_u1',
+      projectId: 'p-prod-phase2',
+      projectItemId: 'item-1',
+      unitIndex: 1,
+      productionRevision: 'rev-1',
+      status: 'awaiting_parts',
+      packageCount: 2,
+      notes: 'Frente en alto brillo',
+      supervisorOverride: {
+        overriddenBy: 'user-sup',
+        overriddenAt: '2026-08-21T12:00:00.000Z',
+        reason: 'Frente llega mañana, armar estructura hoy',
+        missingPartsCount: 1,
+      },
+    };
+
+    const p: Project = {
+      id: 'p-prod-phase2',
+      name: 'Cocina Integral O2',
+      customerId: 'cust-20',
+      status: 'produced',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 500,
+      partInstances: [part],
+      moduleUnits: [unit],
+      items: [],
+      createdAt: '2026-08-21T10:00:00.000Z',
+      updatedAt: '2026-08-21T11:00:00.000Z',
+    };
+
+    const api = projectToApi(p);
+    expect(api.part_instances).toHaveLength(1);
+    expect(api.module_units).toHaveLength(1);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    expect(round.partInstances).toHaveLength(1);
+    const roundPart = round.partInstances?.[0];
+    expect(roundPart?.id).toBe('p1_i1_u1_LAT_1');
+    expect(roundPart?.partCode).toBe('LAT-IZQ');
+    expect(roundPart?.lengthMm).toBe(720);
+    expect(roundPart?.widthMm).toBe(560);
+    expect(roundPart?.grain).toBe(1);
+    expect(roundPart?.edges).toHaveLength(2);
+    expect(roundPart?.edges[0]?.side).toBe('L1');
+    expect(roundPart?.edges[0]?.enabled).toBe(true);
+    expect(roundPart?.requiredOperations).toHaveLength(2);
+    expect(roundPart?.requiredOperations[0]?.status).toBe('completed');
+    expect(roundPart?.requiredOperations[0]?.operatorName).toBe('Carlos');
+
+    expect(round.moduleUnits).toHaveLength(1);
+    const roundUnit = round.moduleUnits?.[0];
+    expect(roundUnit?.id).toBe('p-prod-phase2_item-1_u1');
+    expect(roundUnit?.status).toBe('awaiting_parts');
+    expect(roundUnit?.packageCount).toBe(2);
+    expect(roundUnit?.notes).toBe('Frente en alto brillo');
+    // OC-032: el override supervisor es audit — no puede perderse en el roundtrip.
+    expect(roundUnit?.supervisorOverride?.overriddenBy).toBe('user-sup');
+    expect(roundUnit?.supervisorOverride?.reason).toBe('Frente llega mañana, armar estructura hoy');
+    expect(roundUnit?.supervisorOverride?.missingPartsCount).toBe(1);
   });
 });
 

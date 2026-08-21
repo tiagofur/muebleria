@@ -34,7 +34,7 @@ describe('pieceLabelQrPayload', () => {
     expect(parsed.rev).toBe('');
   });
 
-  it('v2 carries quantity, edge sides, edge band code and revision', () => {
+  it('v2 carries partInstanceId, unitIndex, edge sides, edge band code and revision', () => {
     const raw = pieceLabelQrPayload({
       projectId: 'proj-1',
       moduleCode: 'MOD-GAB-01',
@@ -43,20 +43,58 @@ describe('pieceLabelQrPayload', () => {
       materialCode: 'TAB-1',
       lengthMm: 720,
       widthMm: 560,
-      quantity: 3,
+      partInstanceId: 'p1_i1_u1_LAT_1',
+      unitIndex: 1,
+      quantity: 1,
       edgeSides: 'L1+W2',
       edgeCode: 'CANT-ABS-BLA',
       revision: '2',
     });
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    expect(parsed.qty).toBe(3);
+    expect(parsed.pId).toBe('p1_i1_u1_LAT_1');
+    expect(parsed.uIdx).toBe(1);
+    expect(parsed.qty).toBe(1);
     expect(parsed.edges).toBe('L1+W2');
     expect(parsed.edge).toBe('CANT-ABS-BLA');
     expect(parsed.rev).toBe('2');
+
+    const scan = parsePieceLabelScan(raw);
+    expect(scan?.kind).toBe('payload');
+    if (scan?.kind === 'payload') {
+      expect(scan.fields.partInstanceId).toBe('p1_i1_u1_LAT_1');
+      expect(scan.fields.unitIndex).toBe(1);
+    }
   });
 });
 
 describe('moduleLabelQrPayload (Module / Package QR)', () => {
+  it('encodes module and package identifiers with moduleUnitId', () => {
+    const raw = moduleLabelQrPayload({
+      projectId: 'proj-10',
+      itemId: 'item-20',
+      moduleUnitId: 'proj-10_item-20_u2',
+      factoryCode: 'GAB-01-L2',
+      moduleCode: 'GAB-01',
+      moduleName: 'Bajo Fregadero',
+      packageIndex: 3,
+      totalPackages: 8,
+      unitIndex: 2,
+      unitQuantity: 2,
+      widthMm: 800,
+      heightMm: 850,
+      depthMm: 600,
+      revision: '1',
+    });
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(parsed.uId).toBe('proj-10_item-20_u2');
+
+    const scan = parsePieceLabelScan(raw);
+    expect(scan?.kind).toBe('modulePayload');
+    if (scan?.kind === 'modulePayload') {
+      expect(scan.fields.moduleUnitId).toBe('proj-10_item-20_u2');
+      expect(scan.fields.unitIndex).toBe(2);
+    }
+  });
   it('encodes module and package identifiers as compact JSON', () => {
     const raw = moduleLabelQrPayload({
       projectId: 'proj-10',
@@ -106,7 +144,7 @@ describe('moduleLabelQrPayload (Module / Package QR)', () => {
     expect(parsed).toEqual({
       kind: 'modulePayload',
       version: 2,
-      target: 'module',
+      target: 'package',
       fields: {
         projectId: 'p1',
         itemId: 'i1',
@@ -182,7 +220,7 @@ describe('parsePieceLabelScan (F089 + Module QR)', () => {
     expect(parsed).toEqual({
       kind: 'modulePayload',
       version: 2,
-      target: 'module',
+      target: 'package',
       fields: {
         projectId: 'proj-1',
         itemId: 'item-1',
@@ -337,5 +375,31 @@ describe('pieceLabelQrPayloadUrl / unwrapPieceLabelQrUrl (F091 deep links)', () 
     // A non-label fragment degrades to plainCode of the whole URL
     const parsed = parsePieceLabelScan('muebles://scan#hello');
     expect(parsed?.kind).toBe('plainCode');
+  });
+});
+
+describe('parsePieceLabelScan — bulto classification (#301)', () => {
+  it('classifies a module QR WITHOUT bulto index as target module', () => {
+    const raw = moduleLabelQrPayload({
+      projectId: 'p1', itemId: 'i1', factoryCode: 'GAB-01',
+      moduleCode: 'GAB-01', moduleName: 'Gabinete',
+      moduleUnitId: 'p1_i1_u1',
+    });
+    const parsed = parsePieceLabelScan(raw);
+    expect(parsed?.kind === 'modulePayload' && parsed.target === 'module').toBe(true);
+  });
+
+  it('classifies a module QR WITH bulto index as target package (unidad/bulto)', () => {
+    const raw = moduleLabelQrPayload({
+      projectId: 'p1', itemId: 'i1', factoryCode: 'GAB-01',
+      moduleCode: 'GAB-01', moduleName: 'Gabinete',
+      moduleUnitId: 'p1_i1_u1', packageIndex: 2, totalPackages: 5,
+    });
+    const parsed = parsePieceLabelScan(raw);
+    expect(parsed?.kind === 'modulePayload' && parsed.target === 'package').toBe(true);
+    if (parsed?.kind === 'modulePayload') {
+      expect(parsed.fields.moduleUnitId).toBe('p1_i1_u1');
+      expect(parsed.fields.packageIndex).toBe(2);
+    }
   });
 });

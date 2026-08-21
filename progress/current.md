@@ -1,73 +1,67 @@
-# Sesión activa: Issue #300 — Operational Core O1: Lifecycle, approvals, Production Release y Change Orders (OC-010..OC-024)
+# Sesión activa: Issue #301 — Operational Core O2: Producción física (OC-030..OC-034)
 
-**Fecha:** 2026-08-21  
-**Objetivo:** Construir la columna vertebral operacional del Project/Job según `docs/operational-core-v1.md` (OC-010..OC-024) y `docs/project-lifecycle.md`.
+**Fecha:** 2026-08-21
+**Objetivo:** Migrar el seguimiento físico a la granularidad real del taller según `docs/production-flow-v2.md` y `docs/operational-core-v1.md`.
 
-## Plan por fases
-- [x] Planificación y aprobación del plan (6 fases)
-- [x] **Fase 1:** Dominio Base — Event Log Append-Only, CommercialStatus, ProjectStage y Anticipo Real (OC-010..013)
-- [x] **Fase 2:** Persistencia, Mappers y Paridad Backend Go (Eventos y Estado Comercial)
-- [x] **Fase 3:** Revisiones de Diseño, Aprobaciones y Production Release Formal (OC-020..022)
-- [x] **Fase 4:** Detección de Staleness Uniforme y Change Orders (OC-023..024)
-- [x] **Fase 5:** Integración UI, Dashboards y Modales
-- [x] **Fase 6:** Verificación Global, Docs Reconcile y Ledger
+## Estado
 
-## Estado actual
-- **Fase 1 completada:** Eventos append-only, estados comerciales (`draft`, `sent`, `won`, `lost`, `expired`, `cancelled`), cálculo de `ProjectStage`, registro de anticipos y KPIs de ciclo de vida en `packages/domain/src/projectLifecycle.ts`.
-- **Fase 2 completada:**
-  - Migración Postgres `000066_project_events_and_commercial_status` (up/down).
-  - Backend Go: dominio, storage (`ListProjectEvents`, `InsertProjectEvent`, `upsertProjectEventsTx`, `commercial_status`), endpoints HTTP (`GET/POST /api/projects/{id}/events`), tests unitarios Go 100% pasando.
-  - TypeScript Storage: mappers `projectEventToApi`, `projectEventFromApi`, `commercial_status` roundtrip en `packages/storage`.
-- **Fase 3 completada:**
-  - Migración Postgres `000067_project_revisions_approvals_and_release` (up/down).
-  - Go Backend: dominio `DesignRevision`, `Approval`, `ProductionRelease`, storage CRUD y serialización JSONB.
-  - TS Mappers: serialización bidireccional y tests unitarios en `packages/storage`.
-- **Fase 4 completada:**
-  - Migración Postgres `000068_project_change_orders` (up/down).
-  - Dominio TS: `getProjectStalenessReport`, `isProjectStaleForProduction`, `createChangeOrder`, `submitChangeOrder`, `approveChangeOrder`, `rejectChangeOrder`.
-  - Go Backend y TS Mappers: soporte completo para `ChangeOrder` y roundtrip tests.
-- **Fase 5 completada:**
-  - UI Components: `ProjectStalenessBanner`, `ProductionReleaseModal` (6 gates formales), `ChangeOrderModal`, `LifecyclePanel`.
-  - Integración en `ProjectDetailView`, `ProjectsScreen`, `projectStore` y `ShellView`.
-- **Fase 6 completada:**
-  - `pnpm test` pasando al 100% (772 tests en domain, 1151 tests en UI, 140 en storage, etc.).
-  - `pnpm typecheck` pasando al 100% en todos los paquetes del monorepo.
-  - `go test -v ./...` pasando al 100% en `backend-go`.
-  - Actualizado `feature_list.json` con la feature `F135`.
+F136 completa en tres pasadas: (1) implementación inicial de fases, (2) revisión
+con correcciones duras (concurrencia, RBAC/audit, revisión stale, transiciones,
+split-brain), (3) **esta sesión**: deuda documentada.
 
-## Revisión de pares (2026-08-21, sesión posterior)
+## Esta sesión — deuda resuelta (#301)
 
-Verdict: implementación sólida; se detectaron y corrigieron 5 gaps (4 mejoras
-propuestas en la revisión del plan + 1 fix funcional):
+1. **Generación server-side (`PUT /api/projects/{id}/part-executions`):**
+   persiste las instancias derivadas del BOM (resolución en TS) tras validar
+   server-side: líneas existentes, una unidad por unidad de cantidad, rutas que
+   empiezan en cut, revisión = liberada. Regenerar sobre avance existente exige
+   `force` supervisor y audita el reset con floor events. Snapshot de storage
+   extendido con cantidades de línea.
+2. **Escáner móvil migrado a los endpoints físicos:** QR de pieza (`pId`)
+   completa la operación actual (server resuelve `currentOperationIndex`; gate
+   RBAC por "alguna estación de piezas asignada"); QR de unidad/bulto (`uId`)
+   avanza la unidad por el gate de armado server-side; fallback legacy para
+   etiquetas v1/v2 sin pId/uId; cola offline re-enrutada en sync. ScannerScreen
+   muestra la resolución física con botón Avanzar.
+3. **Dashboards por pieza:** `buildProjectFloorSummary` entra en modo físico
+   cuando hay ejecución generada — Corte/Enchape cuentan piezas (piezas en CNC
+   = cola de Enchape, en tránsito), Armado+ cuenta unidades. PlantBoard,
+   ProgressStrip y ManagerDashboard heredan el conteo honesto sin cambios.
+   `countMode`/`totalParts`/`totalUnits` expuestos.
+4. **Pantalla de armado por unidad:** `physicalStationQueue` (dominio) +
+   FabricScreen renderiza en modo físico filas por pieza (código, U#, dims,
+   operación, retrabajo) y por unidad ("Unidad 2 de 3", readiness, faltantes
+   con su estación vía `describeMissingPieces`, bultos). Callbacks opcionales
+   `onAdvancePart`/`onAdvanceUnit`; sin ellos no se muestra botón (el legacy
+   daría 409). Batch legacy deshabilitado sobre filas físicas.
+5. **Identidad de bulto:** clasificación honesta en el parser QR (target
+   `package` por multiplicidad bulto/tot>1); `package_count` se registra en la
+   unidad al entrar a `packaged` (endpoint + cliente + escáner envía
+   totalPackages).
+6. **Costing de rework (OC-061):** `material_cost`/`labor_minutes` validados y
+   registrados en el payload de `quality_issue_reported`/`rework_started`
+   (consultables para job costing); cliente `reworkPart` extendido.
 
-1. **Paridad TS↔Go con contract fixture** (regla dura de AGENTS.md):
-   - `contracts/projectEventTypes.json` (convención de `contracts/roles.json`).
-   - TS: `PROJECT_EVENT_TYPES` + `isProjectEventType` exportados.
-   - Go: `IsValidProjectEventType`; POST /events rechaza tipos inventados (400).
-   - Tests de paridad en ambos lados (`projectLifecycle.test.ts`,
-     `backend-go/internal/domain/projectEventsParity_test.go`).
-2. **RBAC + enforcement en el event log** (`roleCanAppendProjectEvent` TS↔Go):
-   - Política por categoría: comercial (vendedor/gerente_ventas) posee
-     quote/deposit/customer_approval; ingeniería posee gates técnicos y
-     co-firma `production_released`; planta posee hitos físicos; decisiones de
-     CO y closeout son de gerentes/admin.
-   - Enforcement server-side en `POST /api/projects/{id}/events` (403) y en
-     eventos NUEVOS que llegan vía `PUT /api/projects/{id}` (dual-write):
-     `authorizeProjectEventAppends` — reenviar el log existente nunca se
-     rechaza.
-3. **KPIs honestos (OC-006):** duraciones apoyadas en eventos backfilled ahora
-   reportan `origin: 'proxy'` (antes siempre `'actual'`).
-4. **Semántica CO vs producción codificada en test:** aprobar una ChangeOrder
-   post-release NO re-libera: el proyecto queda stale hasta una nueva
-   `ProductionRelease` explícita contra la nueva revisión.
-5. **Fix funcional OC-013:** no existía UI para registrar el anticipo, por lo
-   que el gate `deposit_received` (requerido por defecto) hacía imposible
-   liberar a producción desde la app. Agregado: store action `recordDeposit`,
-   sección "Anticipo" en `LifecyclePanel` (con tests), wiring en
-   `ProjectDetailView`/`ShellView` y CSS con tokens.
+## Deuda restante (siguiente sesión)
 
-**Verificación post-revisión:** `pnpm test` (domain 780, ui 1155, web 298,
-storage 140), `pnpm typecheck` y `go test ./...` en verde.
+- **Wiring del shell web:** cablear `onAdvancePart`/`onAdvanceUnit` desde
+  AppContent → ShellView → FabricScreen a `apiWorkspaceRepository` (hoy las
+  filas físicas se muestran sin botón de avance en web; móvil sí avanza).
+- **Disparar la generación:** invocar `generatePartExecutions` al liberar
+  producción (o al abrir la estación) desde el flujo de release web.
+- **Dashboard de WC vs physical:** ProductionQueueScreen móvil sigue
+  listando proyectos; puede sumar conteos físicos vía `part-executions`.
 
+## Verificación (evidencia de esta sesión)
 
-
+- `pnpm --filter @muebles/domain test`: **807 tests** OK (colas físicas,
+  summary físico, clasificación bulto).
+- `pnpm --filter @muebles/ui test`: **1158 tests** OK (filas por pieza/unidad,
+  callbacks físicos, faltantes con estación).
+- `pnpm --filter mobile test`: **42 tests** OK (routing físico pId/uId/bulto,
+  gate 409, offline queue, fallback legacy).
+- `pnpm --filter @muebles/storage test`: **141 tests** OK; roundtrip
+  supervisorOverride cubierto.
+- `go test ./...`: OK — generación (validación/force/audit), scanner mode,
+  package_count, costing.
+- `pnpm typecheck`: monorepo completo OK.

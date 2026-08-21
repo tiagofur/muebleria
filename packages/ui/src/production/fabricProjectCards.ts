@@ -1,8 +1,16 @@
 import {
+  describeMissingPieces,
+  deriveLegacyItemFloorStatus,
+  type AssemblyReadiness,
   itemsWaitingForSector,
   normalizeItemFloorStatus,
+  physicalStationQueue,
   type BoardSheetEstimate,
   type ItemFloorStatus,
+  type MissingPieceInfo,
+  type ModuleUnitStatus,
+  type PartOperationStatus,
+  type PartOperationType,
   type PickingStatus,
   type ProductionEdgeTotal,
   type ProductionMaterialTotal,
@@ -12,11 +20,38 @@ import {
 
 export type FabricStation = 'cutting' | 'edge_banding' | 'assembly' | 'packaging';
 
+/** Physical piece row (#301): one card line per PIECE at cut/edge stations. */
+export type FabricStationPartDetail = {
+  readonly id: string;
+  readonly partCode: string;
+  readonly unitIndex: number;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly thicknessMm: number;
+  readonly materialId: string;
+  readonly operationType: PartOperationType;
+  readonly operationStatus: PartOperationStatus;
+};
+
+/** Physical unit row (#301): one card line per UNIT at assembly/packaging. */
+export type FabricStationUnitDetail = {
+  readonly id: string;
+  readonly unitIndex: number;
+  /** Total physical units of the same line ("Unidad 2 de 3"). */
+  readonly unitTotal: number;
+  readonly unitStatus: ModuleUnitStatus;
+  readonly packageCount?: number;
+  readonly missing: readonly MissingPieceInfo[];
+};
+
 export type FabricStationRow = {
   readonly itemId: string;
   readonly moduleName: string;
   readonly quantity: number;
   readonly currentStatus: ItemFloorStatus;
+  readonly assemblyReadiness?: AssemblyReadiness;
+  readonly part?: FabricStationPartDetail;
+  readonly unit?: FabricStationUnitDetail;
 };
 
 export type FabricActiveClaim = {
@@ -79,6 +114,71 @@ export function fabricProjectCards({
     // Process stage gating — the floor only sees works whose materials were
     // released by Almacén (ventas → ingeniería → almacén → producción).
     if (!project.materialsRelease) return [];
+
+    // Physical mode (#301): pieces at cutting/edge, units at assembly/packaging.
+    const hasPhysicalExecutions =
+      (project.partInstances?.length ?? 0) > 0 && (project.moduleUnits?.length ?? 0) > 0;
+    if (hasPhysicalExecutions) {
+      const moduleIdByItem = new Map(project.items.map((i) => [i.id, i.moduleId]));
+      const legacyByItem = new Map(
+        project.items.map((item) => {
+          const itemUnits = project.moduleUnits?.filter((u) => u.projectItemId === item.id) ?? [];
+          const itemParts = project.partInstances?.filter((p) => p.projectItemId === item.id) ?? [];
+          return [
+            item.id,
+            deriveLegacyItemFloorStatus(itemUnits, itemParts),
+          ] as const;
+        }),
+      );
+      const rows = physicalStationQueue(project, station).map((row) => {
+        if (row.kind === 'part') {
+          return {
+            itemId: row.part.projectItemId,
+            moduleName: moduleLabelFor?.(moduleIdByItem.get(row.part.projectItemId) ?? '') ?? '',
+            quantity: 1,
+            currentStatus: legacyByItem.get(row.part.projectItemId) ?? 'pending',
+            part: {
+              id: row.part.id,
+              partCode: row.part.partCode,
+              unitIndex: row.part.unitIndex,
+              lengthMm: row.part.lengthMm,
+              widthMm: row.part.widthMm,
+              thicknessMm: row.part.thicknessMm,
+              materialId: row.part.materialId,
+              operationType: row.operationType,
+              operationStatus: row.operationStatus,
+            },
+          };
+        }
+        return {
+          itemId: row.unit.projectItemId,
+          moduleName: moduleLabelFor?.(moduleIdByItem.get(row.unit.projectItemId) ?? '') ?? '',
+          quantity: 1,
+          currentStatus: legacyByItem.get(row.unit.projectItemId) ?? 'pending',
+          assemblyReadiness: row.readiness,
+          unit: {
+            id: row.unit.id,
+            unitIndex: row.unit.unitIndex,
+            unitTotal:
+              project.moduleUnits?.filter((u) => u.projectItemId === row.unit.projectItemId).length ??
+              1,
+            unitStatus: row.unit.status,
+            packageCount: row.unit.packageCount,
+            missing: describeMissingPieces(row.readiness),
+          },
+        };
+      });
+      if (rows.length === 0) return [];
+      return [
+        buildCard(project, station, rows, {
+          metricsByProject,
+          pickingStates,
+          activeClaims,
+          customerLabelFor,
+        }),
+      ];
+    }
+
     const items = itemsWaitingForSector(project, station).map((item) => ({
       itemId: item.id,
       moduleName: moduleLabelFor?.(item.moduleId) ?? item.moduleId,
@@ -87,39 +187,53 @@ export function fabricProjectCards({
     }));
     if (items.length === 0) return [];
 
-    const metrics = metricsByProject[project.id];
-    const sheetByCode = new Map(
-      metrics?.sheetEstimates.map((estimate) => [estimate.code, estimate.estimatedSheets]) ?? [],
-    );
-    const boardsPickingState = pickingStates.find(
-      (state) =>
-        state.projectId === project.id &&
-        state.material === 'tableros',
-    );
-    const edgesPickingState = pickingStates.find(
-      (state) =>
-        state.projectId === project.id &&
-        state.material === 'cintillas',
-    );
-
-    return [{
-      projectId: project.id,
-      projectName: project.name,
-      customerLabel: customerLabelFor?.(project.customerId) ?? '',
-      items,
-      materials: (metrics?.materials ?? []).map((material) => ({
-        ...material,
-        estimatedSheets: sheetByCode.get(material.materialCode ?? material.key),
-        pickingStatus: boardsPickingState?.status,
-      })),
-      edges: (metrics?.edges ?? []).map((edge) => ({
-        ...edge,
-        previewColor: metrics?.edgeBandColors[edge.edgeBandCode ?? edge.key],
-        pickingStatus: edgesPickingState?.status,
-      })),
-      activeClaims: activeClaims.filter(
-        (claim) => claim.projectId === project.id && claim.sector === station,
-      ),
-    }];
+    return [
+      buildCard(project, station, items, {
+        metricsByProject,
+        pickingStates,
+        activeClaims,
+        customerLabelFor,
+      }),
+    ];
   });
+}
+
+function buildCard(
+  project: Project,
+  station: FabricStation,
+  items: readonly FabricStationRow[],
+  input: Pick<
+    FabricProjectCardInput,
+    'metricsByProject' | 'pickingStates' | 'activeClaims' | 'customerLabelFor'
+  >,
+): FabricProjectCard {
+  const metrics = input.metricsByProject[project.id];
+  const sheetByCode = new Map(
+    metrics?.sheetEstimates.map((estimate) => [estimate.code, estimate.estimatedSheets]) ?? [],
+  );
+  const boardsPickingState = input.pickingStates.find(
+    (state) => state.projectId === project.id && state.material === 'tableros',
+  );
+  const edgesPickingState = input.pickingStates.find(
+    (state) => state.projectId === project.id && state.material === 'cintillas',
+  );
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    customerLabel: input.customerLabelFor?.(project.customerId) ?? '',
+    items,
+    materials: (metrics?.materials ?? []).map((material) => ({
+      ...material,
+      estimatedSheets: sheetByCode.get(material.materialCode ?? material.key),
+      pickingStatus: boardsPickingState?.status,
+    })),
+    edges: (metrics?.edges ?? []).map((edge) => ({
+      ...edge,
+      previewColor: metrics?.edgeBandColors[edge.edgeBandCode ?? edge.key],
+      pickingStatus: edgesPickingState?.status,
+    })),
+    activeClaims: input.activeClaims.filter(
+      (claim) => claim.projectId === project.id && claim.sector === station,
+    ),
+  };
 }

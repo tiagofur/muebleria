@@ -1,0 +1,12 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-033, AGENTS.md): estados canónicos de unidades físicas de mueble (ModuleUnitExecution) a partir del punto de convergencia (Armado).",
+  "unitStatuses": [
+    "awaiting_parts",
+    "assembly",
+    "module_qc",
+    "packaged",
+    "loaded",
+    "installed"
+  ],
+  "rejectedUnitStatuses": ["pending", "cut", "edged", "shipped", "done"]
+}

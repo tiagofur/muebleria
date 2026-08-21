@@ -3030,6 +3030,67 @@
         "ui",
         "go"
       ]
+    },
+    {
+      "id": "F136",
+      "phase": 0,
+      "name": "operational_core_o2",
+      "title": "Issue #301 — Operational Core O2: Producción física: piezas hasta Enchape, muebles desde Armado (OC-030..OC-034)",
+      "description": "Implementación de la granularidad física real del taller: tracking por pieza individual (PartInstance) con routing por operación (corte, CNC, tapacanto) previo a armado, gate de convergencia en Armado con guard de revisión liberada (stale revision) y override supervisor auditado (OC-032), seguimiento por unidad física (ModuleUnitExecution) desde armado hasta instalación con cadena de transiciones validada (OC-033), derivación backward-compatible de ItemFloorStatus (OC-034), rework/refabricación por pieza con eventos quality_issue_reported/rework_started (OC-060/061), contrato QR con partInstanceId/moduleUnitId retrocompatible, persistencia JSONB (migración 000069), paridad Go/TS (contratos + lógica espejada), endpoints server-authoritative con SELECT FOR UPDATE (concurrencia de estaciones), RBAC por sector, auditoría en floor events y guard anti split-brain sobre los endpoints legacy por item.",
+      "acceptance": [
+        "Dominio puro PartInstance y PartOperation con routing dinámico según mecanizado y tapacanto (OC-030, OC-031)",
+        "Guard de secuencia física: una operación sólo se completa cuando las previas están terminadas (cut → cnc → edge_banding)",
+        "Gate de convergencia en Armado con piezas faltantes, guard de revisión stale vs revisión liberada y override supervisor auditado (OC-032)",
+        "Cadena de transiciones de unidad validada: saltos y retrocesos rechazados; timestamp por hito (OC-033)",
+        "ModuleUnitExecution para seguimiento por unidad física a partir de Armado hasta Instalación (OC-033)",
+        "Derivación backward-compatible de ItemFloorStatus desde piezas/unidades (OC-034), persistida por el backend en cada avance",
+        "Rework y refabricación por pieza con eventos quality_issue_reported y rework_started, incluyendo costing material_cost/labor_minutes (OC-060/061)",
+        "Migración PostgreSQL 000069 (part_instances/module_units JSONB en projects) y paridad Go/TS vía fixtures + lógica espejada con tests",
+        "Endpoints server-authoritative: GET/PUT part-executions (generación con validación de líneas/cantidades/revisión y guard de force sobre avance), POST parts/{id}/advance|rework, units/{id}/advance|assembly-override — mutación transaccional con SELECT FOR UPDATE, RBAC por sector y floor events en la misma tx",
+        "Avance de pieza en modo escáner: advance sin operation_type completa la operación actual resuelta por el server",
+        "Bulto: QR de módulo con multiplicidad (bulto/tot>1) clasifica target package; al empaquetar se registra package_count en la unidad",
+        "Guard anti split-brain: floor-scan y PATCH floor-status responden 409 para líneas con unidades físicas",
+        "Contrato QR con pId (partInstanceId) y uId (moduleUnitId) retrocompatible v1/v2",
+        "Escáner móvil enruta por pId/uId a los endpoints físicos (pieza→operación actual, unidad/bulto→gate de armado server-side) con fallback legacy y cola offline",
+        "Dashboards físicos: buildProjectFloorSummary cuenta piezas en Corte/Enchape y unidades en Armado+ cuando hay ejecución generada (PlantBoard/ProgressStrip/ManagerDashboard)",
+        "Colas de estación físicas: physicalStationQueue + FabricScreen renderiza filas por pieza (código/dims/operación) y por unidad (Unidad X de N, faltantes con estación) con callbacks onAdvancePart/onAdvanceUnit",
+        "Métodos cliente en apiWorkspaceRepository (getPartExecutions, generatePartExecutions, advancePartOperation, advanceModuleUnit, assemblyOverride, reworkPart)",
+        "Serialización completa de supervisorOverride en apiMappers (antes se perdía en roundtrip)",
+        "Pruebas: dominio TS, storage, UI, móvil (routing físico) y Go (domain+api: gate/override/rework/RBAC/409 legacy/generación/bulto/costing) con typecheck al 100%"
+      ],
+      "references": [
+        "docs/operational-core-v1.md",
+        "docs/production-flow-v2.md",
+        "contracts/partOperationTypes.json",
+        "contracts/moduleUnitStatuses.json",
+        "contracts/projectEventTypes.json",
+        "packages/domain/src/partExecution.ts",
+        "packages/domain/src/pieceLabelQr.ts",
+        "packages/domain/src/projectLifecycle.ts",
+        "backend-go/internal/domain/partExecution.go",
+        "backend-go/internal/storage/partExecutions.go",
+        "backend-go/internal/api/partExecutions.go",
+        "backend-go/internal/api/routes.go",
+        "backend-go/db/migration/000069_part_executions_and_module_units.up.sql",
+        "packages/storage/src/apiMappers.ts",
+        "packages/storage/src/apiWorkspaceRepository.ts",
+        "packages/ui/src/production/FabricScreen.tsx",
+        "packages/ui/src/production/fabricProjectCards.ts"
+      ],
+      "status": "done",
+      "tags": [
+        "operational-core",
+        "production",
+        "physical-tracking",
+        "part-instances",
+        "module-units",
+        "assembly-gate",
+        "qr",
+        "domain",
+        "storage",
+        "ui",
+        "go"
+      ]
     }
   ]
 }

@@ -863,6 +863,45 @@ export {
   type ChangeOrder,
 } from './projectLifecycle';
 
+export {
+  PART_OPERATION_TYPES,
+  isPartOperationType,
+  PART_OPERATION_STATUSES,
+  isPartOperationStatus,
+  MODULE_UNIT_STATUSES,
+  isModuleUnitStatus,
+  MODULE_UNIT_STATUS_TRANSITIONS,
+  canTransitionModuleUnitStatus,
+  nextModuleUnitStatus,
+  resolvePartRequiredOperations,
+  derivePartInstancesForProject,
+  deriveModuleUnitsForProject,
+  advancePartOperation,
+  checkAssemblyReadiness,
+  aggregateAssemblyReadiness,
+  recordSupervisorAssemblyOverride,
+  partsWaitingForSector,
+  unitsWaitingForSector,
+  advanceModuleUnitStatus,
+  triggerPartRework,
+  deriveLegacyItemFloorStatus,
+  physicalStationQueue,
+  describeMissingPieces,
+  type PhysicalStationSector,
+  type PhysicalStationRow,
+  type MissingPieceInfo,
+  type PartOperationType,
+  type PartOperationStatus,
+  type ModuleUnitStatus,
+  type PartOperation,
+  type PartInstanceStatus,
+  type PartInstance,
+  type ModuleUnitExecution,
+  type SupervisorAssemblyOverride,
+  type AssemblyReadiness,
+  type DerivePartInstancesOptions,
+} from './partExecution';
+
 
 
 

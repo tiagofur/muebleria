@@ -248,6 +248,29 @@ func RoleCanAdvanceStation(role UserRole, targetStatus string, assignedSectors [
 	if sector == "" {
 		return false
 	}
+	return RoleCanWorkSector(role, ProductionSector(sector), assignedSectors)
+}
+
+// RoleCanSuperviseFloor — supervisor-only floor actions (OC-032 assembly
+// override, OC-061 part rework): the unrestricted roles of
+// RoleCanAdvanceStation. Scoped station operators (produccion/almacen) never
+// qualify, even with the right sector assigned.
+func RoleCanSuperviseFloor(role UserRole) bool {
+	switch role {
+	case RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleIngeniero:
+		return true
+	default:
+		return false
+	}
+}
+
+// RoleCanWorkSector is the sector-level check behind RoleCanAdvanceStation,
+// also usable for stations that produce no ItemFloorStatus of their own
+// (cnc) and for part-level operations (OC-030..031).
+func RoleCanWorkSector(role UserRole, sector ProductionSector, assignedSectors []string) bool {
+	if sector == "" {
+		return false
+	}
 	switch role {
 	case RoleAdmin, RoleGerenteProduccion, RoleGerenteVentas, RoleIngeniero:
 		return true
@@ -255,9 +278,9 @@ func RoleCanAdvanceStation(role UserRole, targetStatus string, assignedSectors [
 		if len(assignedSectors) == 0 {
 			return true
 		}
-		return containsSector(assignedSectors, sector)
+		return containsSector(assignedSectors, string(sector))
 	case RoleAlmacen:
-		return containsSector(assignedSectors, sector)
+		return containsSector(assignedSectors, string(sector))
 	default:
 		return false
 	}
@@ -276,12 +299,12 @@ func containsSector(sectors []string, sector string) bool {
 // (OC-010..OC-024): who may append which lifecycle event to the audit log.
 var projectEventAppendRoles = map[string][]UserRole{
 	// Commercial pipeline + real deposit (OC-011/OC-013).
-	"quote_created":   {RoleAdmin, RoleGerenteVentas, RoleVendedor},
-	"quote_sent":      {RoleAdmin, RoleGerenteVentas, RoleVendedor},
-	"quote_won":       {RoleAdmin, RoleGerenteVentas, RoleVendedor},
-	"quote_lost":      {RoleAdmin, RoleGerenteVentas, RoleVendedor},
-	"quote_expired":   {RoleAdmin, RoleGerenteVentas, RoleVendedor},
-	"quote_cancelled": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_created":    {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_sent":       {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_won":        {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_lost":       {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_expired":    {RoleAdmin, RoleGerenteVentas, RoleVendedor},
+	"quote_cancelled":  {RoleAdmin, RoleGerenteVentas, RoleVendedor},
 	"deposit_received": {RoleAdmin, RoleGerenteVentas, RoleVendedor},
 	// Survey: ventas or ingeniería can be on site.
 	"survey_started":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
@@ -309,11 +332,11 @@ var projectEventAppendRoles = map[string][]UserRole{
 	"materials_ready":              {RoleAdmin, RoleGerenteProduccion, RoleAlmacen, RoleIngeniero},
 	"materials_release_overridden": {RoleAdmin, RoleGerenteProduccion, RoleAlmacen},
 	// Physical milestones.
-	"production_started":    {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
-	"production_completed":  {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
-	"shipment_loaded":       {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
-	"shipment_departed":     {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
-	"installation_started":  {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},
+	"production_started":     {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"production_completed":   {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"shipment_loaded":        {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
+	"shipment_departed":      {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
+	"installation_started":   {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},
 	"installation_completed": {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},
 	// Closeout.
 	"punch_opened":      {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},

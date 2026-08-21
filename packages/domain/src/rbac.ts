@@ -617,6 +617,9 @@ const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> 
   // Physical milestones.
   production_started: ['admin', 'gerente_produccion', 'produccion'],
   production_completed: ['admin', 'gerente_produccion', 'produccion'],
+  // Quality / rework (OC-060/061): supervisors and floor report damage.
+  quality_issue_reported: ['admin', 'gerente_produccion', 'produccion'],
+  rework_started: ['admin', 'gerente_produccion', 'produccion'],
   shipment_loaded: ['admin', 'gerente_produccion', 'produccion', 'almacen'],
   shipment_departed: ['admin', 'gerente_produccion', 'produccion', 'almacen'],
   installation_started: ['admin', 'gerente_ventas', 'gerente_produccion', 'produccion'],

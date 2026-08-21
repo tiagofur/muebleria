@@ -59,6 +59,8 @@ export type ProductionLogisticsEventType =
   | 'shipment_loaded'
   | 'shipment_departed';
 
+export type QualityEventType = 'quality_issue_reported' | 'rework_started';
+
 export type InstallationCloseEventType =
   | 'installation_started'
   | 'installation_completed'
@@ -74,6 +76,7 @@ export type ProjectEventType =
   | EngineeringReleaseEventType
   | MaterialsEventType
   | ProductionLogisticsEventType
+  | QualityEventType
   | InstallationCloseEventType;
 
 /**
@@ -117,6 +120,8 @@ export const PROJECT_EVENT_TYPES: readonly ProjectEventType[] = [
   'materials_release_overridden',
   'production_started',
   'production_completed',
+  'quality_issue_reported',
+  'rework_started',
   'shipment_loaded',
   'shipment_departed',
   'installation_started',
@@ -248,6 +253,8 @@ export const PROJECT_EVENT_TYPE_LABELS_ES: Readonly<Record<ProjectEventType, str
   materials_release_overridden: 'Liberación de materiales con excepción',
   production_started: 'Producción iniciada',
   production_completed: 'Producción completada',
+  quality_issue_reported: 'Problema de calidad reportado',
+  rework_started: 'Retrabajo iniciado',
   shipment_loaded: 'Cargado para despacho',
   shipment_departed: 'Despacho enviado a obra',
   installation_started: 'Instalación iniciada en obra',

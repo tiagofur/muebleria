@@ -292,3 +292,94 @@ describe('floor event log helpers', () => {
     expect(latestFloorEvent(undefined)).toBeUndefined();
   });
 });
+
+describe('buildProjectFloorSummary — modo físico (#301: piezas hasta Enchape, unidades desde Armado)', () => {
+  const partReady = (id: string) => ({
+    id,
+    projectId: 'p',
+    productionRevision: 'rev-1',
+    projectItemId: 'i1',
+    unitIndex: 1,
+    partCode: id.toUpperCase(),
+    description: '',
+    materialId: 'm',
+    lengthMm: 1,
+    widthMm: 1,
+    thicknessMm: 1,
+    grain: 0,
+    edges: [],
+    requiredOperations: [
+      { id: 'op-cut', type: 'cut' as const, sequence: 1, status: 'completed' as const },
+    ],
+    currentOperationIndex: 0,
+    status: 'ready_for_assembly' as const,
+  });
+  const partPending = (id: string) => ({
+    ...partReady(id),
+    requiredOperations: [
+      { id: 'op-cut', type: 'cut' as const, sequence: 1, status: 'queued' as const },
+    ],
+    status: 'pending' as const,
+  });
+  const unit = (id: string, status: string) => ({
+    id,
+    projectId: 'p',
+    projectItemId: 'i1',
+    unitIndex: 1,
+    productionRevision: 'rev-1',
+    status,
+  });
+
+  it('cuenta piezas en Corte/Enchape y unidades en Armado+ cuando hay ejecución física', () => {
+    // 2 piezas listas + 1 en corte; 1 unidad en armado, 1 instalada
+    const project = {
+      ...makeProject([makeItem('i1', 'pending')]),
+      partInstances: [partReady('a'), partReady('b'), partPending('c')],
+      moduleUnits: [unit('u1', 'assembly'), unit('u2', 'installed')],
+    } as Parameters<typeof buildProjectFloorSummary>[0];
+
+    const summary = buildProjectFloorSummary(project);
+    expect(summary.countMode).toBe('physical');
+    expect(summary.totalItems).toBe(2); // unidades físicas, no líneas
+    expect(summary.totalParts).toBe(3);
+    expect(summary.totalUnits).toBe(2);
+
+    const bySector = new Map(summary.stages.map((s) => [s.sector, s]));
+    // Piezas: 2/3 cortadas, 1 en cola de corte; 2/3 listas para armado
+    expect(bySector.get('cutting')).toMatchObject({ done: 2, waiting: 1, total: 3 });
+    expect(bySector.get('edge_banding')).toMatchObject({ done: 2, waiting: 0, total: 3 });
+    // Unidades: sólo la instalada pasó armado; 1 está EN armado ahora
+    expect(bySector.get('assembly')).toMatchObject({ done: 1, waiting: 1, total: 2 });
+    expect(bySector.get('installation')).toMatchObject({ done: 1, waiting: 0, total: 2 });
+    expect(summary.activeSector).toBe('cutting');
+  });
+
+  it('una pieza en CNC cuenta como cola de Enchape (en tránsito, no en corte)', () => {
+    const inCnc = {
+      ...partPending('x'),
+      status: 'in_progress' as const,
+      requiredOperations: [
+        { id: 'op-cut', type: 'cut' as const, sequence: 1, status: 'completed' as const },
+        { id: 'op-cnc', type: 'cnc' as const, sequence: 2, status: 'in_progress' as const },
+      ],
+      currentOperationIndex: 1,
+    };
+    const project = {
+      ...makeProject([makeItem('i1')]),
+      partInstances: [inCnc],
+      moduleUnits: [unit('u1', 'awaiting_parts')],
+    } as Parameters<typeof buildProjectFloorSummary>[0];
+
+    const bySector = new Map(
+      buildProjectFloorSummary(project).stages.map((s) => [s.sector, s]),
+    );
+    expect(bySector.get('cutting')).toMatchObject({ done: 1, waiting: 0, total: 1 });
+    expect(bySector.get('edge_banding')).toMatchObject({ done: 0, waiting: 1, total: 1 });
+  });
+
+  it('sin ejecución física sigue contando líneas (legacy)', () => {
+    const summary = buildProjectFloorSummary(makeProject([makeItem('a')]));
+    expect(summary.countMode).toBe('items');
+    expect(summary.totalParts).toBeUndefined();
+  });
+});

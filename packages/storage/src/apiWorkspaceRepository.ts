@@ -16,6 +16,10 @@ import type {
   ItemFloorStatus,
   FloorStatusEvent,
   LoadingProgress,
+  PartInstance,
+  PartOperationType,
+  ModuleUnitExecution,
+  ModuleUnitStatus,
   ProjectPickingState,
   MaterialStock,
   StockMaterialKind,
@@ -34,6 +38,10 @@ import {
   ambientCategoryToApi,
   ambientMaterialToApi,
   catalogFromApi,
+  moduleUnitFromApi,
+  moduleUnitToApi,
+  partInstanceFromApi,
+  partInstanceToApi,
   categoryToApi,
   componentToApi,
   customerToApi,
@@ -884,6 +892,179 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       },
       event: floorEventFromApi(raw.event),
     };
+  }
+
+  // --- Physical part & unit execution (OC-030..OC-034 / #301) ---
+
+  /**
+   * Raw assembly readiness payload returned by the part-executions endpoints.
+   * Mirrors domain AssemblyReadiness (snake_case over the wire).
+   */
+  async getPartExecutions(projectId: string): Promise<{
+    partInstances: readonly PartInstance[];
+    moduleUnits: readonly ModuleUnitExecution[];
+    assemblyReadiness: readonly Record<string, unknown>[];
+  }> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get part executions: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    const partsRaw = Array.isArray(raw.part_instances) ? raw.part_instances : [];
+    const unitsRaw = Array.isArray(raw.module_units) ? raw.module_units : [];
+    const readinessRaw = Array.isArray(raw.assembly_readiness) ? raw.assembly_readiness : [];
+    return {
+      partInstances: partsRaw.map((p) => partInstanceFromApi(p as Record<string, unknown>)),
+      moduleUnits: unitsRaw.map((u) => moduleUnitFromApi(u as Record<string, unknown>)),
+      assemblyReadiness: readinessRaw as Record<string, unknown>[],
+    };
+  }
+
+  async advancePartOperation(
+    projectId: string,
+    partId: string,
+    payload: {
+      /** Station advance: the explicit operation to complete. Omit it to let
+       * the server complete the piece's CURRENT operation (scanner mode). */
+      operationType?: PartOperationType;
+      advance?: boolean;
+      operatorName?: string;
+      machineId?: string;
+      notes?: string;
+      source?: string;
+    },
+  ): Promise<{ part: PartInstance; assemblyReadiness?: Record<string, unknown> }> {
+    return this.postPartExecution(
+      `/projects/${projectId}/parts/${encodeURIComponent(partId)}/advance`,
+      {
+        operation_type: payload.operationType,
+        advance: payload.advance ?? payload.operationType === undefined,
+        operator_name: payload.operatorName,
+        machine_id: payload.machineId,
+        notes: payload.notes,
+        source: payload.source,
+      },
+    );
+  }
+
+  async advanceModuleUnit(
+    projectId: string,
+    unitId: string,
+    payload: {
+      targetStatus?: ModuleUnitStatus;
+      advance?: boolean;
+      notes?: string;
+      source?: string;
+      /** Bulto count recorded when the unit enters `packaged`. */
+      packageCount?: number;
+    },
+  ): Promise<{
+    unit: ModuleUnitExecution;
+    nextStatus: string;
+    assemblyReadiness?: Record<string, unknown>;
+  }> {
+    return this.postPartExecution(
+      `/projects/${projectId}/units/${encodeURIComponent(unitId)}/advance`,
+      {
+        target_status: payload.targetStatus,
+        advance: payload.advance,
+        notes: payload.notes,
+        source: payload.source,
+        package_count: payload.packageCount,
+      },
+    );
+  }
+
+  async assemblyOverride(
+    projectId: string,
+    unitId: string,
+    reason: string,
+  ): Promise<{ unit: ModuleUnitExecution }> {
+    return this.postPartExecution(
+      `/projects/${projectId}/units/${encodeURIComponent(unitId)}/assembly-override`,
+      { reason },
+    );
+  }
+
+  async reworkPart(
+    projectId: string,
+    partId: string,
+    payload: {
+      action: 'rework' | 'refabricate';
+      reason: string;
+      targetOperation?: PartOperationType;
+      /** OC-061 job costing: affected material cost and labor minutes. */
+      materialCost?: number;
+      laborMinutes?: number;
+    },
+  ): Promise<{ part: PartInstance }> {
+    return this.postPartExecution(
+      `/projects/${projectId}/parts/${encodeURIComponent(partId)}/rework`,
+      {
+        action: payload.action,
+        reason: payload.reason,
+        target_operation: payload.targetOperation,
+        material_cost: payload.materialCost,
+        labor_minutes: payload.laborMinutes,
+      },
+    );
+  }
+
+  /**
+   * Generate/replace the physical executions of a project (#301). The BOM
+   * resolution lives in TS domain (derivePartInstancesForProject); the server
+   * validates lines/quantities/released revision and refuses to discard floor
+   * progress without an explicit supervisor force.
+   */
+  async generatePartExecutions(
+    projectId: string,
+    payload: {
+      partInstances: readonly PartInstance[];
+      moduleUnits: readonly ModuleUnitExecution[];
+      force?: boolean;
+    },
+  ): Promise<{ partInstances: number; moduleUnits: number; forced: boolean }> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        part_instances: payload.partInstances.map(partInstanceToApi),
+        module_units: payload.moduleUnits.map(moduleUnitToApi),
+        force: payload.force,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Generate part executions failed: ${res.status} ${text}`);
+    }
+    return (await res.json()) as { partInstances: number; moduleUnits: number; forced: boolean };
+  }
+
+  /** Shared POST + parse for the part-executions endpoints. */
+  private async postPartExecution<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Part execution failed: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    const part = raw.part ? partInstanceFromApi(raw.part as Record<string, unknown>) : undefined;
+    const unit = raw.unit ? moduleUnitFromApi(raw.unit as Record<string, unknown>) : undefined;
+    return {
+      ...(part ? { part } : {}),
+      ...(unit ? { unit } : {}),
+      ...(raw.next_status !== undefined ? { nextStatus: String(raw.next_status ?? '') } : {}),
+      ...(raw.assembly_readiness !== undefined && raw.assembly_readiness !== null
+        ? { assemblyReadiness: raw.assembly_readiness as Record<string, unknown> }
+        : {}),
+    } as T;
   }
 
   async getProjectLoadingStatus(projectId: string): Promise<{
