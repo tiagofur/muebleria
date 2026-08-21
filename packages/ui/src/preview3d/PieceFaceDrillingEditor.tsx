@@ -16,7 +16,7 @@ import type {
   HoleFace,
   ResolvedBoardPart,
 } from '@muebles/domain';
-import { getFaceDimensions, resolvePartDrilling } from '@muebles/domain';
+import { getFaceDimensions, resolvePartDrilling, snapValue } from '@muebles/domain';
 import './pieceFaceDrillingEditor.css';
 
 const FACE_LABELS_ES: Readonly<Record<HoleFace, string>> = {
@@ -42,12 +42,11 @@ export function snappedPlacementPatch(
   yMm: number,
   gridMm: number,
 ): Partial<HardwarePlacement> {
-  const snap = (v: number) => Math.round(v / gridMm) * gridMm;
   return {
     relativePosition: {
       ...current.relativePosition,
-      xMm: snap(xMm),
-      yMm: snap(yMm),
+      xMm: snapValue(xMm, gridMm),
+      yMm: snapValue(yMm, gridMm),
       xFormula: undefined,
       yFormula: undefined,
     },
@@ -222,7 +221,7 @@ export function PieceFaceDrillingEditor({
 
       <p className="face-editor__meta" data-testid={`${testId}-meta`}>
         {FACE_LABELS_ES[activeFace]} · {Math.round(face.widthMm)} × {Math.round(face.heightMm)} mm ·{' '}
-        {holesOnFace.length} perforaciones · snap {gridMm} mm
+        {holesOnFace.length} {holesOnFace.length === 1 ? 'perforación' : 'perforaciones'} · snap {gridMm} mm
       </p>
 
       {issuesOnFace.length > 0 ? (

@@ -24,7 +24,7 @@ export type HardwarePlacementGizmoProps = {
 
 /**
  * F131: the gizmo attaches to the FIRST placement of the selected board.
- * Returns null when the board is not selected or carries no placements, so
+ * Returns false when the board is not selected or carries no placements, so
  * the scene renders handles only where they are meaningful.
  */
 export function pickGizmoPlacement(

@@ -79,7 +79,7 @@ describe('PieceFaceDrillingEditor', () => {
     // Cara back 400×700 → la taza Ø35 del placement (200,100) es visible.
     expect(screen.getByTestId('face-drilling-editor-hole-0')).toBeTruthy();
     expect(screen.getByTestId('face-drilling-editor-meta').textContent).toContain(
-      '1 perforaciones',
+      '1 perforación',
     );
   });
 
