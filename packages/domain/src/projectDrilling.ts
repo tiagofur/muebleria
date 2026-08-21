@@ -95,7 +95,6 @@ export function resolveProjectDrilling(
   // Resolve each unique module ONCE (placements + derived joints are per
   // module template; identical copies share the same holes).
   const derivedByModule = new Map<string, DerivedJointPlacement[]>();
-  const placementsByModule = new Map<string, HardwarePlacement[]>();
   const partsByModule = new Map<string, readonly ResolvedBoardPart[]>();
 
   for (const item of project.items) {
@@ -115,17 +114,6 @@ export function resolveProjectDrilling(
       continue; // unresolvable items are reported by the BOM path, not here
     }
     partsByModule.set(module.id, parts);
-
-    const instances = instancesForModule(
-      module,
-      catalog.structures ?? [],
-      module.components,
-    );
-    const manual: HardwarePlacement[] = [];
-    for (const part of parts) {
-      manual.push(...manualPlacementsForPart(instances, part.id));
-    }
-    placementsByModule.set(module.id, manual);
 
     derivedByModule.set(
       module.id,

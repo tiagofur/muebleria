@@ -631,3 +631,31 @@ mezcla trabajo paralelo; agregar por lista explícita de archivos o `git add -p`
 - Notas para F131: override «por módulo» aún solo vía parámetro del generador
   (sin campo en Module); `horizontal[0]!.thicknessMm` asume espesor uniforme
   por unión; handing/espejo de puerta sigue siendo concern del export (F130).
+
+## F130 — Export DXF de perforaciones por cara + reporte (2026-08-21)
+
+- Primer entregable importable en máquina: el DXF de nesting lleva las
+  perforaciones REALES (placements manuales + uniones derivadas F129 + motor
+  F128) del proyecto completo.
+- **Dominio**: `generateCutRowsWithLinks` (cut.ts — rows + links con
+  partId/labelRef/ResolvedBoardPart por línea; generateCutRows delega) y
+  `resolveProjectDrilling` (projectDrilling.ts): ensambla por pieza manual
+  (instancias estructura+módulo, convención `-copy-N`) + derivado (partId) y
+  resuelve con F128. Patterns keyeados por labelRef (único por línea; partCode
+  'P01' colisiona entre módulos); data schema `muebles.drilling-data.v1`
+  intacto; fallback F074 marcado por pieza; quantity×N no duplica.
+- **DXF**: capas dinámicas por cara+Ø — `PERF_F<Ø>` / `PERF_B<Ø>` (back
+  ESPEJADO en eje ancho: el operador voltea la pieza y corre las coordenadas
+  tal cual; verificado por el reviewer con ejecución) / `PERF_CANTO<Ø>`
+  (proyectado al canto para agregados horizontales). Capa = selección de
+  herramienta (SCM Maestro capa→tool); profundidad vive en el reporte.
+  Join labelRef con fallback partCode; layer table dinámico; goldens
+  regenerados (delta exacto: capas nuevas).
+- **Wiring**: DXF del tab Ingeniería con drilling real (best-effort); reporte
+  del hub con fuente real + fallback heurístico (catalog enhebrado
+  Workspace→Hub→hook); pack ZIP agrega `perforaciones_<obra>.json`.
+- Suite 2444, typecheck 7/7. Review APPROVED (`progress/review_F130.md`).
+- Notas F131: blindar rama back/espejo con test persistido; manual placements
+  de agregados (prefijo `agr-`); first-wins partId→módulo cuando dos módulos
+  comparten estructura con dims distintas; colisión de nombre de capa con Ø
+  no enteros (7.5→8).

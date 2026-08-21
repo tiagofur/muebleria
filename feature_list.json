@@ -2870,7 +2870,7 @@
         "packages/excel/src/partDrillingExport.ts",
         "apps/web/src/exportProductionPack.ts"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "cnc",
         "perforaciones",
