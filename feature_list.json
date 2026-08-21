@@ -2419,7 +2419,7 @@
         "pnpm test, pnpm typecheck, go test y ./init.sh verdes al 100%."
       ],
       "references": [
-        "docs/cut-plan-implementation.md",
+        "docs/history/cut-plan-implementation.md",
         "docs/production-module.md",
         "packages/domain/src/optimizer/",
         "packages/excel/src/cutPlanPdfExport.ts",
@@ -2694,7 +2694,7 @@
         "pnpm test + pnpm typecheck verdes"
       ],
       "references": [
-        "docs/cut-plan-implementation.md",
+        "docs/history/cut-plan-implementation.md",
         "packages/domain/src/optimizer/guillotine.ts",
         "docs/production-module.md"
       ],
