@@ -32,11 +32,16 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly project: Project;
   readonly catalog: Catalog | null;
   readonly cutRows: readonly ProductionCutRow[] | null;
+  /** Workshop-level default (F133); the project's persisted plan always wins. */
+  readonly defaultCutStrategy?: CutStrategy;
   readonly onSaveCutPlan?: (cutPlan: CutPlan) => void;
   readonly onExportCutPlanPdf?: (cutPlan: CutPlan) => void;
   readonly onExportOptimizer?: () => void;
   readonly onExportCutPlanDxf?: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => void;
-  readonly onExportCutPlanPtx?: (cutPlan: CutPlan) => void;
+  readonly onExportCutPlanPtx?: (
+    cutPlan: CutPlan,
+    mode?: 'unified' | 'by-material',
+  ) => void;
   readonly exportBusy?: boolean;
 };
 
@@ -44,6 +49,7 @@ export function ProductionOrderOptimizationPanel({
   project,
   catalog,
   cutRows,
+  defaultCutStrategy,
   onSaveCutPlan,
   onExportCutPlanPdf,
   onExportOptimizer,
@@ -51,9 +57,10 @@ export function ProductionOrderOptimizationPanel({
   onExportCutPlanPtx,
   exportBusy = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
-  // Cut strategy dispatch (F126): saw guillotine vs CNC nesting
+  // Cut strategy dispatch (F126 saw/nesting + F133 workshop default):
+  // the project's persisted plan wins, then the taller default, then sierra.
   const [cutStrategy, setCutStrategy] = useState<CutStrategy>(
-    project.cutPlan?.config.cutStrategy ?? 'saw-guillotine',
+    project.cutPlan?.config.cutStrategy ?? defaultCutStrategy ?? 'saw-guillotine',
   );
   const [toolSpacingMm, setToolSpacingMm] = useState<number>(
     project.cutPlan?.config.toolSpacingMm ?? DEFAULT_TOOL_SPACING_MM,
@@ -654,18 +661,30 @@ export function ProductionOrderOptimizationPanel({
                     Patrón de corte pre-optimizado v1.14 para seccionadoras automáticas SCM (Maestro Cut / WinCut), Homag (Cut Rite), Biesse (Selco) y Giben.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  onClick={() => {
-                    if (currentCutPlan) onExportCutPlanPtx?.(currentCutPlan);
-                  }}
-                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanPtx}
-                  data-testid="prod-opt-export-ptx"
-                  style={{ alignSelf: 'flex-start' }}
-                >
-                  Descargar PTX
-                </button>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={() => {
+                      if (currentCutPlan) onExportCutPlanPtx?.(currentCutPlan, 'unified');
+                    }}
+                    disabled={exportBusy || !currentCutPlan || !onExportCutPlanPtx}
+                    data-testid="prod-opt-export-ptx"
+                  >
+                    Descargar PTX (Todo en 1)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small btn--secondary"
+                    onClick={() => {
+                      if (currentCutPlan) onExportCutPlanPtx?.(currentCutPlan, 'by-material');
+                    }}
+                    disabled={exportBusy || !currentCutPlan || !onExportCutPlanPtx}
+                    data-testid="prod-opt-export-ptx-by-material"
+                  >
+                    Por Material (ZIP)
+                  </button>
+                </div>
               </div>
             </>
           )}

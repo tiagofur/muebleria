@@ -395,7 +395,7 @@ export interface ShellViewCtx {
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
-  readonly handleExportCutPlanPtx: (cutPlan: CutPlan) => Promise<void>;
+  readonly handleExportCutPlanPtx: (cutPlan: CutPlan, mode?: 'unified' | 'by-material') => Promise<void>;
   readonly handleExportDespiecePdf: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportElevations: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportHardwareList: (projectId?: string | undefined) => Promise<void>;
@@ -1058,6 +1058,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             hardwareRows={engHardwareRows}
             hardwareError={engHardwareError}
             customerLabel={resolveCustomerName(engProject.customerId, customers)}
+            defaultCutStrategy={workshopSettings.defaultCutStrategy}
             onBack={() => navigate(pathForNav('engineering'))}
             resolveMediaUrl={resolveMediaUrl}
             onExportModulePdf={(labels) => { void handleExportModuleLabels(engProject.id, { labels }); }}

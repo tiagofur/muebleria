@@ -618,6 +618,10 @@ type WorkshopSettings struct {
 	DefaultLaborFixedCost float64 `json:"default_labor_fixed_cost"`
 	DefaultCurrency       string  `json:"default_currency"`
 	VendedorCanViewCosts  bool    `json:"vendedor_can_view_costs"`
+	// DefaultCutStrategy seeds the Optimización tab for projects without a
+	// generated plan yet (F133): '' | 'saw-guillotine' | 'cnc-nesting'.
+	// Empty/invalid falls back to saw-guillotine; the per-project plan wins.
+	DefaultCutStrategy string `json:"default_cut_strategy,omitempty"`
 }
 
 // DefaultWorkshopSettings matches TS DEFAULT_WORKSHOP_SETTINGS.
@@ -627,6 +631,7 @@ func DefaultWorkshopSettings() WorkshopSettings {
 		DefaultLaborFixedCost: 0,
 		DefaultCurrency:       "MXN",
 		VendedorCanViewCosts:  false,
+		DefaultCutStrategy:    "saw-guillotine",
 	}
 }
 

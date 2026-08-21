@@ -96,3 +96,27 @@ describe('workshopSettings (F031 / #37)', () => {
     expect(next.projects).toBe(ws.projects);
   });
 });
+
+describe('workshopSettings — defaultCutStrategy (F133)', () => {
+  it('sin settings o con valor inválido resuelve sierra guillotina', () => {
+    expect(resolveWorkshopSettings(undefined).defaultCutStrategy).toBe(
+      'saw-guillotine',
+    );
+    expect(
+      resolveWorkshopSettings({
+        defaultCutStrategy: 'laser-cut' as never,
+      }).defaultCutStrategy,
+    ).toBe('saw-guillotine');
+  });
+
+  it('conserva una estrategia válida del taller', () => {
+    expect(
+      resolveWorkshopSettings({ defaultCutStrategy: 'cnc-nesting' })
+        .defaultCutStrategy,
+    ).toBe('cnc-nesting');
+    expect(
+      resolveWorkshopSettings({ defaultCutStrategy: 'saw-guillotine' })
+        .defaultCutStrategy,
+    ).toBe('saw-guillotine');
+  });
+});

@@ -24,6 +24,8 @@ import {
   componentFromApi,
   structureToApi,
   structureFromApi,
+  workshopSettingsToApi,
+  workshopSettingsFromApi,
 } from './apiMappers';
 import type {
   AmbientCategory,
@@ -1608,5 +1610,30 @@ describe('apiMappers — engineering log round-trip (roadmap-screens 2a.4)', () 
       engineering_log: { revision: 0 },
     } as unknown as Record<string, unknown>);
     expect(back.engineeringLog).toBeUndefined();
+  });
+});
+
+describe('workshopSettingsToApi / workshopSettingsFromApi — cut strategy (F133)', () => {
+  it('round-trips cnc-nesting through snake_case', () => {
+    const base = workshopSettingsFromApi({});
+    const api = workshopSettingsToApi({
+      ...base,
+      defaultCutStrategy: 'cnc-nesting',
+    });
+    expect(api.default_cut_strategy).toBe('cnc-nesting');
+    expect(workshopSettingsFromApi(api).defaultCutStrategy).toBe('cnc-nesting');
+  });
+
+  it('estrategia basura del payload resuelve a sierra al ingerir', () => {
+    const round = workshopSettingsFromApi({
+      default_cut_strategy: 'laser-cut',
+    });
+    expect(round.defaultCutStrategy).toBe('saw-guillotine');
+  });
+
+  it('sin campo en el payload el default sigue siendo sierra', () => {
+    expect(workshopSettingsFromApi({}).defaultCutStrategy).toBe(
+      'saw-guillotine',
+    );
   });
 });

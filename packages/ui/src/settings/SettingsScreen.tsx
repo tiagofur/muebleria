@@ -55,6 +55,9 @@ export function SettingsScreen({
   const [ptxExportMode, setPtxExportMode] = useState<'unified' | 'by-material'>(
     settings.ptxExportMode ?? 'unified',
   );
+  const [cutStrategy, setCutStrategy] = useState<'saw-guillotine' | 'cnc-nesting'>(
+    settings.defaultCutStrategy ?? 'saw-guillotine',
+  );
   const [sawKerf, setSawKerf] = useState(String(settings.defaultSawKerfMm ?? 4.4));
   const [trimTop, setTrimTop] = useState(String(settings.defaultTrimMargins?.topMm ?? 10));
   const [trimBottom, setTrimBottom] = useState(String(settings.defaultTrimMargins?.bottomMm ?? 10));
@@ -74,6 +77,7 @@ export function SettingsScreen({
     setVendedorCanViewCosts(settings.vendedorCanViewCosts);
     setWorkshopName(settings.workshopName ?? '');
     setPtxExportMode(settings.ptxExportMode ?? 'unified');
+    setCutStrategy(settings.defaultCutStrategy ?? 'saw-guillotine');
     setSawKerf(String(settings.defaultSawKerfMm ?? 4.4));
     setTrimTop(String(settings.defaultTrimMargins?.topMm ?? 10));
     setTrimBottom(String(settings.defaultTrimMargins?.bottomMm ?? 10));
@@ -127,6 +131,7 @@ export function SettingsScreen({
       vendedorCanViewCosts,
       workshopName: workshopName.trim() || undefined,
       ptxExportMode,
+      defaultCutStrategy: cutStrategy,
       defaultSawKerfMm: kerfVal,
       defaultTrimMargins: {
         topMm: topVal,
@@ -300,6 +305,42 @@ export function SettingsScreen({
         {/* TAB 2: INGENIERÍA Y PRODUCCIÓN */}
         {activeTab === 'ingenieria' ? (
           <>
+            <fieldset className="catalog-form__section" data-testid="settings-section-cut-strategy">
+              <legend className="catalog-form__section-title">
+                Tipo de corte
+              </legend>
+              <div className="catalog-form__field">
+                <label>Tipo de corte por defecto</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+                    <input
+                      type="radio"
+                      name="cutStrategy"
+                      value="saw-guillotine"
+                      checked={cutStrategy === 'saw-guillotine'}
+                      onChange={() => setCutStrategy('saw-guillotine')}
+                      data-testid="settings-cut-strategy-saw"
+                    />
+                    <span><strong>Sierra (guillotina):</strong> cortes rectos de borde a borde, con kerf y secuencia paso a paso.</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+                    <input
+                      type="radio"
+                      name="cutStrategy"
+                      value="cnc-nesting"
+                      checked={cutStrategy === 'cnc-nesting'}
+                      onChange={() => setCutStrategy('cnc-nesting')}
+                      data-testid="settings-cut-strategy-nesting"
+                    />
+                    <span><strong>CNC nesting:</strong> piezas anidadas libremente con espaciado de fresa; el plan se exporta en DXF.</span>
+                  </label>
+                </div>
+                <span className="settings-hint" style={{ marginTop: 6 }}>
+                  Se aplica a las obras que aún no generan un plan. Cada obra puede cambiarlo en Ingeniería → Optimización.
+                </span>
+              </div>
+            </fieldset>
+
             <fieldset className="catalog-form__section" data-testid="settings-section-ingenieria">
               <legend className="catalog-form__section-title">
                 Seccionadoras de Corte (PTX)

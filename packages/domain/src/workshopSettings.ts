@@ -18,6 +18,7 @@ export const DEFAULT_WORKSHOP_SETTINGS: WorkshopSettings = {
     rightMm: 10,
   },
   defaultDeductEdgeBand: true,
+  defaultCutStrategy: 'saw-guillotine',
 };
 
 /** Merge partial/legacy settings with product defaults. */
@@ -82,6 +83,11 @@ export function resolveWorkshopSettings(
       typeof deductEdge === 'boolean'
         ? deductEdge
         : DEFAULT_WORKSHOP_SETTINGS.defaultDeductEdgeBand,
+    defaultCutStrategy:
+      settings.defaultCutStrategy === 'cnc-nesting' ||
+      settings.defaultCutStrategy === 'saw-guillotine'
+        ? settings.defaultCutStrategy
+        : DEFAULT_WORKSHOP_SETTINGS.defaultCutStrategy,
   };
 }
 

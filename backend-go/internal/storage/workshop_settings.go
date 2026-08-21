@@ -12,7 +12,7 @@ import (
 func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error) {
 	var ws domain.WorkshopSettings
 	err := s.Pool.QueryRow(ctx, `
-		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs
+		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy
 		FROM workshop_settings
 		WHERE id = 1
 	`).Scan(
@@ -20,6 +20,7 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 		&ws.DefaultLaborFixedCost,
 		&ws.DefaultCurrency,
 		&ws.VendedorCanViewCosts,
+		&ws.DefaultCutStrategy,
 	)
 	if err != nil {
 		// Table empty or not migrated yet — safe defaults (COST-01: hide costs).
@@ -33,19 +34,21 @@ func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.Wo
 	ws = normalizeWorkshopSettings(ws)
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO workshop_settings (
-			id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, updated_at
-		) VALUES (1, $1, $2, $3, $4, NOW())
+			id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, updated_at
+		) VALUES (1, $1, $2, $3, $4, $5, NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			default_margin_factor = EXCLUDED.default_margin_factor,
 			default_labor_fixed_cost = EXCLUDED.default_labor_fixed_cost,
 			default_currency = EXCLUDED.default_currency,
 			vendedor_can_view_costs = EXCLUDED.vendedor_can_view_costs,
+			default_cut_strategy = EXCLUDED.default_cut_strategy,
 			updated_at = NOW()
 	`,
 		ws.DefaultMarginFactor,
 		ws.DefaultLaborFixedCost,
 		ws.DefaultCurrency,
 		ws.VendedorCanViewCosts,
+		ws.DefaultCutStrategy,
 	)
 	if err != nil {
 		return domain.WorkshopSettings{}, fmt.Errorf("upsert workshop_settings: %w", err)
@@ -67,5 +70,12 @@ func normalizeWorkshopSettings(ws domain.WorkshopSettings) domain.WorkshopSettin
 	} else {
 		ws.DefaultCurrency = strings.ToUpper(cur)
 	}
+	// F133: only the two known strategies persist; anything else falls back
+	// to sierra (matches TS resolveWorkshopSettings).
+	strategy := strings.TrimSpace(ws.DefaultCutStrategy)
+	if strategy != "cnc-nesting" && strategy != "saw-guillotine" {
+		strategy = def.DefaultCutStrategy
+	}
+	ws.DefaultCutStrategy = strategy
 	return ws
 }

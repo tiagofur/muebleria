@@ -46,6 +46,7 @@ describe('SettingsScreen (#37 / F044)', () => {
       vendedorCanViewCosts: true,
       workshopName: undefined,
       ptxExportMode: 'unified',
+      defaultCutStrategy: 'saw-guillotine',
       defaultSawKerfMm: 4.4,
       defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
       defaultDeductEdgeBand: true,
@@ -86,10 +87,33 @@ describe('SettingsScreen (#37 / F044)', () => {
       vendedorCanViewCosts: false,
       workshopName: undefined,
       ptxExportMode: 'by-material',
+      defaultCutStrategy: 'saw-guillotine',
       defaultSawKerfMm: 4.0,
       defaultTrimMargins: { topMm: 15, bottomMm: 10, leftMm: 10, rightMm: 10 },
       defaultDeductEdgeBand: false,
     });
+  });
+
+  it('guarda el tipo de corte por defecto del taller (F133)', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<SettingsScreen settings={base} onSave={onSave} />);
+
+    await user.click(screen.getByTestId('settings-tab-tab-ingenieria'));
+    expect(screen.getByTestId('settings-section-cut-strategy')).toBeTruthy();
+
+    // El radio refleja el settings (sin default → sierra marcada).
+    expect(
+      (screen.getByTestId('settings-cut-strategy-saw') as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+
+    await user.click(screen.getByTestId('settings-cut-strategy-nesting'));
+    await user.click(screen.getByTestId('settings-save'));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultCutStrategy: 'cnc-nesting' }),
+    );
   });
 
   it('rejects non-positive margin', async () => {

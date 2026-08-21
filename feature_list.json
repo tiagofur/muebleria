@@ -2907,6 +2907,35 @@
       ]
     },
     {
+      "id": "F133",
+      "phase": 0,
+      "name": "default_cut_strategy_setting",
+      "title": "Tipo de corte por defecto del taller (sierra | nesting)",
+      "description": "Surge de uso real (2026-08-20): el inicial del panel de Optimización está hardcodeado a Sierra para obras sin plan previo y el settings «Ingeniería y Producción» (kerf, refilados, PTX) no incluye el tipo de corte. Agrega defaultCutStrategy a WorkshopSettings, selector en Ajustes → Ingeniería y Producción, y fallback del panel. Precedencia: plan de la obra (último generado) → default del taller → Sierra. El cambio por obra ya existe (selector F126) y no cambia.",
+      "acceptance": [
+        "defaultCutStrategy?: 'saw-guillotine' | 'cnc-nesting' en WorkshopSettings (domain) con paridad Go + mappers API",
+        "resolveWorkshopSettings tolera ausencia (retrocompatible) y el default explícito sigue siendo saw-guillotine cuando no hay settings",
+        "Selector «Tipo de corte por defecto» en Ajustes → Ingeniería y Producción (mismo patrón que modo PTX), se guarda y persiste",
+        "ProductionOrderOptimizationPanel inicializa con: plan de la obra → settings.defaultCutStrategy → saw-guillotine",
+        "El selector por obra (F126) sigue funcionando igual y el plan generado persiste su estrategia",
+        "Tests: domain (resolve + default), panel (inicializa con default del taller, plan de obra gana), settings screen (select bound y guardado)",
+        "pnpm test + pnpm typecheck verdes; go test del paquete tocado verde"
+      ],
+      "references": [
+        "packages/domain/src/workshopSettings.ts",
+        "packages/ui/src/settings/SettingsScreen.tsx",
+        "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "production",
+        "optimizer",
+        "settings",
+        "ui",
+        "domain"
+      ]
+    },
+    {
       "id": "F132",
       "phase": 0,
       "name": "scm_postprocessor",

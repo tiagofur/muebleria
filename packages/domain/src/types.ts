@@ -1195,6 +1195,13 @@ export interface WorkshopTrimMargins {
   readonly rightMm: number;
 }
 
+/**
+ * Cutting strategy for the 2D optimizer (F124): guillotine saw or CNC nesting.
+ * Lives here (not in optimizer/) so `WorkshopSettings.defaultCutStrategy` can
+ * reference it without an import cycle; optimizer/types re-exports it.
+ */
+export type CutStrategy = 'saw-guillotine' | 'cnc-nesting';
+
 export interface WorkshopSettings {
   readonly defaultMarginFactor: number;
   readonly defaultLaborFixedCost: number;
@@ -1222,6 +1229,12 @@ export interface WorkshopSettings {
    * - false: cut to finished dimension (edgebander with pre-milling / tupí).
    */
   readonly defaultDeductEdgeBand?: boolean;
+  /**
+   * Default cut strategy for projects without a generated plan yet (F133):
+   * guillotine saw or CNC nesting. Per-project choice (Ingeniería →
+   * Optimización, F126) always wins over this default.
+   */
+  readonly defaultCutStrategy?: CutStrategy;
 }
 
 export interface Workspace {

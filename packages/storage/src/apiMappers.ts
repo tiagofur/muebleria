@@ -1935,6 +1935,8 @@ export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
       row.default_deduct_edge_band ?? row.defaultDeductEdgeBand,
       true,
     ),
+    defaultCutStrategy: (row.default_cut_strategy ??
+      row.defaultCutStrategy) as WorkshopSettings['defaultCutStrategy'],
   });
 }
 
@@ -1959,6 +1961,7 @@ export function workshopSettingsToApi(
         }
       : undefined,
     default_deduct_edge_band: s.defaultDeductEdgeBand,
+    default_cut_strategy: s.defaultCutStrategy,
   };
 }
 

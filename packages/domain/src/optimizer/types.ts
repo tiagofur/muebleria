@@ -5,7 +5,7 @@
  * vertical panel saws, beam saws, and CNC machine post-processing).
  */
 
-import type { Grain, ProductionCutRow } from '../types';
+import type { CutStrategy, Grain, ProductionCutRow } from '../types';
 
 /**
  * Configurable trim (refilado) margins per side (mm).
@@ -38,9 +38,10 @@ export const DEFAULT_MIN_REMNANT_WIDTH_MM = 400;
 /**
  * Cutting strategy for a board sheet. Saw cutting is guillotine-only (straight
  * cuts spanning the board); CNC nesting places pieces freely, mixing large and
- * small parts on the same sheet.
+ * small parts on the same sheet. Defined in ../types (WorkshopSettings also
+ * references it) and re-exported here so existing import paths keep working.
  */
-export type CutStrategy = 'saw-guillotine' | 'cnc-nesting';
+export type { CutStrategy };
 
 /** CNC nesting spacing between pieces: 6mm router bit + 2mm safety margin. */
 export const DEFAULT_TOOL_SPACING_MM = 8;

@@ -159,6 +159,46 @@ describe('ProductionOrderOptimizationPanel (F115)', () => {
   });
 });
 
+describe('ProductionOrderOptimizationPanel — default del taller (F133)', () => {
+  it('obra sin plan arranca con el default del taller (nesting)', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={null}
+        cutRows={[]}
+        defaultCutStrategy="cnc-nesting"
+      />,
+    );
+    expect(screen.getByTestId('prod-opt-strategy-nesting').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText('Espaciado fresa (mm)')).toBeTruthy();
+  });
+
+  it('sin default y sin plan sigue siendo sierra (retrocompatible)', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={null}
+        cutRows={[]}
+      />,
+    );
+    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('el plan de la obra gana sobre el default del taller', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={null}
+        cutRows={[]}
+        defaultCutStrategy="cnc-nesting"
+      />,
+    );
+    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Disco / Kerf (mm)')).toBeTruthy();
+  });
+});
+
 describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () => {
   it('el selector cambia la config: nesting muestra espaciado de fresa y oculta el kerf', () => {
     render(
@@ -180,7 +220,7 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
     expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('plan sierra: exporta PDF, Optimizer XLSX y PTX, y no ofrece DXF', () => {
+  it('plan sierra: exporta PDF, Optimizer XLSX y PTX (unificado y por material), y no ofrece DXF', () => {
     const onExportCutPlanPtx = vi.fn();
     render(
       <ProductionOrderOptimizationPanel
@@ -196,11 +236,15 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
     expect(screen.getByTestId('prod-opt-export-pdf-manual')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-export-optimizer-xlsx')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-export-ptx')).toBeTruthy();
+    expect(screen.getByTestId('prod-opt-export-ptx-by-material')).toBeTruthy();
     expect(screen.queryByTestId('prod-opt-export-dxf-sheets')).toBeNull();
     expect(screen.queryByTestId('prod-opt-export-dxf-pieces')).toBeNull();
 
     fireEvent.click(screen.getByTestId('prod-opt-export-ptx'));
-    expect(onExportCutPlanPtx).toHaveBeenCalledTimes(1);
+    expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'unified');
+
+    fireEvent.click(screen.getByTestId('prod-opt-export-ptx-by-material'));
+    expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'by-material');
   });
 
   it('plan nesting: exporta DXF (tableros y piezas) y oculta PDF/Optimizer', () => {

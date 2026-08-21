@@ -82,6 +82,7 @@ export function EngineeringWorkspace({
   hardwareRows,
   hardwareError,
   customerLabel,
+  defaultCutStrategy,
   onBack,
   resolveMediaUrl,
   // Export callbacks
@@ -123,6 +124,8 @@ export function EngineeringWorkspace({
   readonly hardwareRows: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
   readonly customerLabel?: string;
+  /** Workshop-level cut strategy default (F133) passed to the Optimización tab. */
+  readonly defaultCutStrategy?: import('@muebles/domain').CutStrategy;
   readonly onBack: () => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   readonly onExportCsv?: () => void | Promise<void>;
@@ -158,6 +161,7 @@ export function EngineeringWorkspace({
   ) => void | Promise<void>;
   readonly onExportCutPlanPtx?: (
     cutPlan: import('@muebles/domain').CutPlan,
+    mode?: 'unified' | 'by-material',
   ) => void | Promise<void>;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
@@ -328,6 +332,7 @@ export function EngineeringWorkspace({
             project={project}
             catalog={catalog}
             cutRows={cutRows}
+            defaultCutStrategy={defaultCutStrategy}
             onSaveCutPlan={onSaveCutPlan}
             onExportCutPlanPdf={onExportCutPlanPdf}
             onExportOptimizer={onExportOptimizer}
