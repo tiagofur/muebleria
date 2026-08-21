@@ -20,6 +20,8 @@ import type {
   PartOperationType,
   ModuleUnitExecution,
   ModuleUnitStatus,
+  InstallationJob,
+  ClientCloseout,
   ProjectPickingState,
   MaterialStock,
   StockMaterialKind,
@@ -32,7 +34,8 @@ import {
   DEFAULT_WORKSHOP_SETTINGS,
   withWorkshopSettings,
 } from '@muebles/domain';
-import type { WorkspaceRepository } from './workspaceRepository';
+import type { WorkspaceRepository, InstallationView, InstallationCloseoutCheck } from './workspaceRepository';
+import { CloseoutGateError } from './workspaceRepository';
 import {
   agregadoToApi,
   ambientCategoryToApi,
@@ -42,6 +45,9 @@ import {
   moduleUnitToApi,
   partInstanceFromApi,
   partInstanceToApi,
+  installationJobFromApi,
+  installationJobToApi,
+  closeoutChecksFromApi,
   categoryToApi,
   componentToApi,
   customerToApi,
@@ -1041,6 +1047,98 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Generate part executions failed: ${res.status} ${text}`);
     }
     return (await res.json()) as { partInstances: number; moduleUnits: number; forced: boolean };
+  }
+
+  // --- Installation job (OC-070..OC-074) ---
+
+  /** Parse the derived installation view shared by GET/PUT/closeout. */
+  private parseInstallationView(raw: Record<string, unknown>): InstallationView {
+    const unitsRaw = (raw.units ?? {}) as Record<string, unknown>;
+    return {
+      installation: installationJobFromApi(raw.installation) ?? null,
+      jobStatus: (String(raw.job_status ?? 'planned')) as InstallationView['jobStatus'],
+      units: {
+        mode: String(unitsRaw.mode ?? 'none'),
+        installed: Number(unitsRaw.installed ?? 0),
+        total: Number(unitsRaw.total ?? 0),
+      },
+      closeoutChecks: closeoutChecksFromApi(raw.closeout_checks ?? raw.closeoutChecks),
+      closeoutReady: Boolean(raw.closeout_ready ?? raw.closeoutReady),
+    };
+  }
+
+  async getInstallation(projectId: string): Promise<InstallationView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/installation`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get installation: ${res.status} ${text}`);
+    }
+    return this.parseInstallationView((await res.json()) as Record<string, unknown>);
+  }
+
+  async saveInstallation(
+    projectId: string,
+    job: InstallationJob,
+  ): Promise<InstallationView & { eventsAppended: number }> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/installation`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(installationJobToApi(job)),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Save installation failed: ${res.status} ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    return {
+      ...this.parseInstallationView(raw),
+      eventsAppended: Number(raw.events_appended ?? raw.eventsAppended ?? 0),
+    };
+  }
+
+  async installationCloseout(
+    projectId: string,
+    payload: {
+      action: 'complete_installation' | 'sign_off' | 'close';
+      signedOffBy?: string;
+      notes?: string;
+      photoIds?: readonly string[];
+    },
+  ): Promise<{ installation: InstallationJob; closeout?: ClientCloseout } & InstallationView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/installation/closeout`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        action: payload.action,
+        signed_off_by: payload.signedOffBy,
+        notes: payload.notes,
+        photo_ids: payload.photoIds,
+      }),
+    });
+    const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      const checks: readonly InstallationCloseoutCheck[] = closeoutChecksFromApi(
+        raw.closeout_checks ?? raw.closeoutChecks,
+      );
+      if (res.status === 409 && checks.length > 0) {
+        throw new CloseoutGateError(checks, String(raw.error ?? 'gates de cierre pendientes'));
+      }
+      throw new Error(`Installation closeout failed: ${res.status} ${JSON.stringify(raw)}`);
+    }
+    const view = this.parseInstallationView(raw);
+    const installation =
+      installationJobFromApi(raw.installation) ??
+      view.installation ??
+      (() => {
+        throw new Error('Installation closeout failed: respuesta sin installation');
+      })();
+    return {
+      ...view,
+      installation,
+      closeout: installation.closeout,
+    };
   }
 
   /** Shared POST + parse for the part-executions endpoints. */

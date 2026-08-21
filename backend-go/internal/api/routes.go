@@ -129,6 +129,12 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/projects/{id}/units/{unitId}/advance", authMW(http.HandlerFunc(server.HandleAdvanceModuleUnit)))
 	mux.Handle("POST /api/projects/{id}/units/{unitId}/assembly-override", authMW(http.HandlerFunc(server.HandleAssemblyOverride)))
 
+	// Installation job (OC-070..OC-074, #303): visits, field issues, punch
+	// items and gated closeout — server-authoritative with audit events.
+	mux.Handle("GET /api/projects/{id}/installation", authMW(http.HandlerFunc(server.HandleProjectInstallation)))
+	mux.Handle("PUT /api/projects/{id}/installation", authMW(http.HandlerFunc(server.HandleProjectInstallation)))
+	mux.Handle("POST /api/projects/{id}/installation/closeout", authMW(http.HandlerFunc(server.HandleProjectInstallationCloseout)))
+
 	// Lifecycle events (OC-010): append-only audit trail.
 	mux.Handle("GET /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))
 	mux.Handle("POST /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))

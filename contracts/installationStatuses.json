@@ -1,0 +1,27 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-070..OC-074, AGENTS.md): vocabularios de estados y transiciones del subproceso de instalación (InstallationJob/Visit, FieldIssue, PunchItem) y códigos de gates de cierre.",
+  "jobStatuses": ["planned", "in_progress", "completed"],
+  "visitStatuses": ["scheduled", "in_progress", "completed", "cancelled"],
+  "visitResults": ["finished", "partial", "blocked"],
+  "fieldIssueStatuses": ["open", "action_required", "blocked", "resolved", "verified"],
+  "fieldIssueStatusTransitions": {
+    "open": ["action_required", "blocked", "resolved"],
+    "action_required": ["blocked", "resolved"],
+    "blocked": ["action_required", "resolved"],
+    "resolved": ["verified", "open"],
+    "verified": ["open"]
+  },
+  "punchItemStatuses": ["open", "closed"],
+  "punchItemStatusTransitions": {
+    "open": ["closed"],
+    "closed": ["open"]
+  },
+  "punchSeverities": ["minor", "major", "critical"],
+  "closeoutCheckCodes": [
+    "units_installed",
+    "field_issues_resolved",
+    "punch_blockers_closed",
+    "visits_completed",
+    "client_signoff"
+  ]
+}

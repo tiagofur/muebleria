@@ -634,6 +634,10 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &p) {
 			return
 		}
+		// OC-070..OC-074: the installation job is server-authoritative — it
+		// only changes through the dedicated installation endpoints (gates,
+		// RBAC and audit). A client-sent copy is ignored, never persisted.
+		p.Installation = existing.Installation
 
 		// F036 status transitions: reopen / mark produced vs general mutate.
 		statusChanging := p.Status != "" && p.Status != existing.Status
@@ -691,6 +695,11 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// RBAC gates as POST /api/projects/{id}/events; resending the existing
 		// log is always allowed.
 		if !authorizeProjectEventAppends(w, role, existing.Events, p.Events) {
+			return
+		}
+		// OC-074: new closeout events in the dual-write path must pass the
+		// closeout gates against the stored project state.
+		if !authorizeCloseoutEventAppends(w, existing, p.Events) {
 			return
 		}
 		err = s.Store.UpdateProject(r.Context(), id, &p)

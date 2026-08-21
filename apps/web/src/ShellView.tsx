@@ -107,6 +107,7 @@ import {
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
+  roleCanAppendProjectEvent,
 } from '@muebles/domain';
 
 
@@ -185,6 +186,7 @@ import {
   PageLoading,
   buildProductionOrderReadiness,
   type CommandPaletteItem,
+  type InstallationJobPanelHandlers,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -413,6 +415,8 @@ export interface ShellViewCtx {
   readonly handleAdvanceUnit: (projectId: string, unitId: string) => void;
   /** #301 — generate physical executions after a production release. */
   readonly handleGeneratePartExecutions: (projectId: string) => void;
+  /** #303 — installation job mutations (visits, issues, punch, closeout). */
+  readonly installationJobHandlers: InstallationJobPanelHandlers;
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -650,6 +654,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleAdvancePart,
     handleAdvanceUnit,
     handleGeneratePartExecutions,
+    installationJobHandlers,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,
@@ -931,7 +936,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             session === 'auth' &&
             (canMarkProduced || roleCanExportProduction(actorRole))
           }
+          canManageJob={
+            session === 'auth' &&
+            roleCanAppendProjectEvent(actorRole, 'installation_started')
+          }
+          canCloseout={
+            session === 'auth' &&
+            roleCanAppendProjectEvent(actorRole, 'client_signed_off')
+          }
           onAdvance={handleFloorAdvance}
+          jobHandlers={installationJobHandlers}
           customerFor={(customerId) =>
             customers.find((customer) => customer.id === customerId)
           }

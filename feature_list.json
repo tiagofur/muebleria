@@ -3092,6 +3092,35 @@
         "ui",
         "go"
       ]
+    },
+    {
+      "id": "F137",
+      "phase": 0,
+      "name": "operational_core_o4",
+      "title": "Issue #303 — Operational Core O4: Instalación profesional, Field Issues, Punch y Closeout (OC-070..OC-074)",
+      "description": "La instalación pasa de un botón `loaded → installed` a un subproceso real: InstallationJob por obra con múltiples InstallationVisit (fecha, crew, arrival/start/end, notas, fotos, unidades trabajadas, resultado) (OC-070/071), FieldIssue con estados open/action_required/blocked/resolved/verified, fotos y vínculo a mueble/pieza (OC-072), PunchItem con owner, due date, severidad, flag bloqueador y evidencia de resolución (OC-073), y cierre/conformidad auditado: gates server-authoritative (unidades instaladas, field issues resueltos, punch bloqueadores cerrados, visitas cerradas) antes de client_signed_off/project_closed — `installed` de todas las unidades NO cierra el proyecto solo (OC-074). Persistencia JSONB (projects.installation), paridad TS↔Go vía contracts/installationStatuses.json + lógica espejada, endpoints server-authoritative con RBAC y auditoría vía lifecycle events, pantalla Instalaciones en modo job (visitas/incidencias/punch/closeout) en web.",
+      "acceptance": [
+        "InstallationJob + InstallationVisit en dominio puro con transiciones validadas; una obra soporta varias visitas sin hacks (OC-070, OC-071)",
+        "FieldIssue con estados open/action_required/blocked/resolved/verified, transiciones validadas, fotos y vínculo a mueble/pieza (OC-072)",
+        "PunchItem con owner, dueDate, severidad, flag bloqueador y evidencia de resolución; punch_opened/punch_closed auditados (OC-073)",
+        "Gates de cierre evaluables (unidades instaladas, field issues resueltos, punch bloqueadores cerrados, visitas cerradas) y bloqueo server-side de client_signed_off/project_closed cuando fallan (OC-074)",
+        "installation_started/installation_completed derivados del trabajo real (visitas) y auditados; warranty queda anclada al cierre coherente",
+        "Persistencia: projects.installation JSONB (migración), mappers TS snake_case, repository local y API",
+        "Backend Go: GET/PUT /api/projects/{id}/installation + POST closeout con RBAC, validación de transiciones y gates, paridad contracts/installationStatuses.json",
+        "UI web: InstalacionesScreen en modo job (visitas, incidencias, punch, closeout con blockers explicando cómo resolverse) preservando avance físico por unidad",
+        "pnpm test + pnpm typecheck verdes; go test ./... verde"
+      ],
+      "references": [
+        "docs/operational-core-v1.md",
+        "docs/project-lifecycle.md",
+        "docs/production-flow-v2.md",
+        "packages/domain/src/installation.ts",
+        "contracts/installationStatuses.json",
+        "backend-go/internal/api/installation.go",
+        "packages/ui/src/production/InstalacionesScreen.tsx"
+      ],
+      "status": "in_progress",
+      "createdAt": "2026-08-21"
     }
   ]
 }

@@ -90,6 +90,13 @@ type stubStore struct {
 	floorEventWrites  []domain.FloorStatusEvent
 	floorEventsList   []domain.FloorStatusEvent
 	userSectorsList   []domain.UserSector
+	// Installation job (OC-070..074): in-memory state + audit write log.
+	installationJob               *domain.InstallationJob
+	installationUnits             []domain.ModuleUnitExecution
+	installationItems             []domain.ProjectItem
+	installationHasStartedEvent   bool
+	installationHasCompletedEvent bool
+	installationEvents            []domain.ProjectEvent
 	// Compras/Almacén picking (Fase 3)
 	pickingList         []domain.ProjectPicking
 	pickingUpsertWrites []domain.ProjectPicking
@@ -433,6 +440,27 @@ func (s *stubStore) MutateProjectPartExecutions(
 	s.partInstances = mutation.Parts
 	s.moduleUnits = mutation.Units
 	s.mutateFloorEvents = append(s.mutateFloorEvents, mutation.FloorEvents...)
+	return mutation, nil
+}
+
+func (s *stubStore) MutateProjectInstallation(
+	_ context.Context,
+	_ string,
+	mutate func(*domain.InstallationSnapshot) (*domain.InstallationMutation, error),
+) (*domain.InstallationMutation, error) {
+	snap := &domain.InstallationSnapshot{
+		Job:                           s.installationJob,
+		Units:                         append([]domain.ModuleUnitExecution(nil), s.installationUnits...),
+		Items:                         append([]domain.ProjectItem(nil), s.installationItems...),
+		HasInstallationStartedEvent:   s.installationHasStartedEvent,
+		HasInstallationCompletedEvent: s.installationHasCompletedEvent,
+	}
+	mutation, err := mutate(snap)
+	if err != nil {
+		return nil, err
+	}
+	s.installationJob = mutation.Job
+	s.installationEvents = append(s.installationEvents, mutation.Events...)
 	return mutation, nil
 }
 

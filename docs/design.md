@@ -429,6 +429,10 @@ pnpm add lucide-react --filter @muebles/ui
 | Atrás | `ChevronLeft` |
 | Precio / Costo | `DollarSign` |
 | Dimensiones | `Ruler` |
+| Instalación — visita de campo | `CalendarDays` |
+| Instalación — incidencia de campo | `TriangleAlert` |
+| Instalación — punch list | `ListChecks` |
+| Instalación — cierre/conformidad | `ClipboardCheck` |
 | Status activo | `CheckCircle2` |
 | Status inactivo | `MinusCircle` |
 | Email (login) | `Mail` |

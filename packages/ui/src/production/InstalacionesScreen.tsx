@@ -2,11 +2,14 @@
  * Instalaciones — instalación en obra board (menu reorg).
  *
  * The last process step gets its own screen: what's CARGADO and on its way
- * to the client (loaded → installed), grouped per project. Shares the
- * ship-board layout with Embarques.
+ * to the client (loaded → installed), grouped per project, plus the
+ * installation job subprocess per project — visits, field issues, punch
+ * items and the gated client closeout (OC-070..OC-074).
  *
  * Read-derive only; advancing goes through the shell callback so the server
- * enforces station scoping and writes the floor-status event (F094).
+ * enforces station scoping and writes the floor-status event (F094). Job
+ * mutations go through the installation handlers (server validates
+ * transitions and appends the lifecycle audit events).
  */
 
 import { useMemo, type ReactNode } from 'react';
@@ -21,6 +24,7 @@ import {
   type ProjectItem,
 } from '@muebles/domain';
 import { EmptyState, PageHeader } from '../common';
+import { InstallationJobPanel, type InstallationJobPanelHandlers } from './InstallationJobPanel';
 
 type InstalacionesRow = {
   readonly itemId: string;
@@ -49,7 +53,10 @@ function rowFromItem(item: ProjectItem): InstalacionesRow {
   };
 }
 
-/** Factory projects with loaded items to install (pure, testable). */
+/**
+ * Factory projects with active installation work (pure, testable): either
+ * items still to install on site or an installation job in progress/closeout.
+ */
 export function instalacionesProjects(
   projects: readonly Project[],
   customerFor?: (customerId: string) => Customer | undefined,
@@ -64,7 +71,14 @@ export function instalacionesProjects(
       if (status === 'loaded') toInstall.push(rowFromItem(item));
       else if (status === 'installed') installedCount++;
     }
-    if (toInstall.length === 0) continue;
+    const job = project.installation;
+    const hasJobWork =
+      Boolean(job) &&
+      (job!.visits.length > 0 ||
+        job!.fieldIssues.length > 0 ||
+        job!.punchItems.length > 0 ||
+        Boolean(job!.closeout));
+    if (toInstall.length === 0 && !hasJobWork) continue;
     const customer = customerFor?.(project.customerId);
     result.push({
       projectId: project.id,
@@ -83,19 +97,28 @@ export function instalacionesProjects(
 export function InstalacionesScreen({
   projects,
   canAdvance,
+  canManageJob,
+  canCloseout,
   onAdvance,
+  jobHandlers,
   customerFor,
   testId,
 }: {
   /** Projects in the factory (accepted/produced), already role-filtered. */
   readonly projects: readonly Project[];
   readonly canAdvance: boolean;
+  /** Installation roles may work the job (visits, issues, punch). */
+  readonly canManageJob?: boolean;
+  /** Closeout roles may sign off and close the project. */
+  readonly canCloseout?: boolean;
   /** Advance one loaded item to installed (Marcar Instalado). */
   readonly onAdvance: (
     projectId: string,
     itemId: string,
     target: ItemFloorStatus,
   ) => void;
+  /** Installation job mutations (OC-070..OC-074). */
+  readonly jobHandlers?: InstallationJobPanelHandlers;
   /** Existing customer data for the installation destination and contact. */
   readonly customerFor?: (customerId: string) => Customer | undefined;
   readonly testId?: string;
@@ -103,6 +126,10 @@ export function InstalacionesScreen({
   const cards = useMemo(
     () => instalacionesProjects(projects, customerFor),
     [projects, customerFor],
+  );
+  const projectById = useMemo(
+    () => new Map(projects.map((p) => [p.id, p] as const)),
+    [projects],
   );
   const totalToInstall = cards.reduce((acc, c) => acc + c.toInstall.length, 0);
   const totalInstalled = cards.reduce((acc, c) => acc + c.installedCount, 0);
@@ -195,51 +222,61 @@ export function InstalacionesScreen({
                   </span>
                 ) : null}
               </div>
-              <div className="ship-board__section">
-                <h4 className="ship-board__section-title">
-                  En camino
-                  <span className="ship-board__section-count">
-                    {card.toInstall.length}
-                  </span>
-                </h4>
-                <ul className="ship-board__list">
-                  {card.toInstall.map((row) => (
-                    <li
-                      key={row.itemId}
-                      className="ship-board__row"
-                      data-testid={`instalaciones-install-${row.itemId}`}
-                    >
-                      <div className="ship-board__row-main">
-                        <span className="ship-board__row-module">
-                          {row.moduleName}
-                        </span>
-                        <span className="ship-board__row-meta">
-                          {row.quantity}{' '}
-                          {row.quantity === 1 ? 'mueble' : 'muebles'} · está en{' '}
-                          {ITEM_FLOOR_STATUS_LABELS_ES[row.currentStatus]}
-                        </span>
-                      </div>
-                      {canAdvance ? (
-                        <button
-                          type="button"
-                          className="btn btn--primary"
-                          onClick={() =>
-                            onAdvance(card.projectId, row.itemId, 'installed')
-                          }
-                          data-testid={`instalaciones-advance-${row.itemId}`}
-                        >
-                          <Hammer size={16} strokeWidth={1.5} aria-hidden />
-                          Marcar {ITEM_FLOOR_STATUS_LABELS_ES.installed}
-                        </button>
-                      ) : (
-                        <span className="ship-board__row-waiting">
-                          {ITEM_FLOOR_STATUS_LABELS_ES.installed}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {card.toInstall.length > 0 ? (
+                <div className="ship-board__section">
+                  <h4 className="ship-board__section-title">
+                    En camino
+                    <span className="ship-board__section-count">
+                      {card.toInstall.length}
+                    </span>
+                  </h4>
+                  <ul className="ship-board__list">
+                    {card.toInstall.map((row) => (
+                      <li
+                        key={row.itemId}
+                        className="ship-board__row"
+                        data-testid={`instalaciones-install-${row.itemId}`}
+                      >
+                        <div className="ship-board__row-main">
+                          <span className="ship-board__row-module">
+                            {row.moduleName}
+                          </span>
+                          <span className="ship-board__row-meta">
+                            {row.quantity}{' '}
+                            {row.quantity === 1 ? 'mueble' : 'muebles'} · está en{' '}
+                            {ITEM_FLOOR_STATUS_LABELS_ES[row.currentStatus]}
+                          </span>
+                        </div>
+                        {canAdvance ? (
+                          <button
+                            type="button"
+                            className="btn btn--primary"
+                            onClick={() =>
+                              onAdvance(card.projectId, row.itemId, 'installed')
+                            }
+                            data-testid={`instalaciones-advance-${row.itemId}`}
+                          >
+                            <Hammer size={16} strokeWidth={1.5} aria-hidden />
+                            Marcar {ITEM_FLOOR_STATUS_LABELS_ES.installed}
+                          </button>
+                        ) : (
+                          <span className="ship-board__row-waiting">
+                            {ITEM_FLOOR_STATUS_LABELS_ES.installed}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {jobHandlers ? (
+                <InstallationJobPanel
+                  project={projectById.get(card.projectId)!}
+                  canManage={canManageJob ?? false}
+                  canCloseout={canCloseout ?? false}
+                  handlers={jobHandlers}
+                />
+              ) : null}
             </li>
           ))}
         </ul>

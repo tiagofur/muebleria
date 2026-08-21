@@ -130,6 +130,14 @@ type Store interface {
 		projectID string,
 		mutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
 	) (*domain.PartExecutionsMutation, error)
+	// Installation job (OC-070..074): locked read-modify-write of the
+	// installation JSONB (visits, field issues, punch, closeout) with the
+	// audit lifecycle events appended in the same transaction.
+	MutateProjectInstallation(
+		ctx context.Context,
+		projectID string,
+		mutate func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error),
+	) (*domain.InstallationMutation, error)
 	// Project lifecycle events log (OC-010): immutable append-only events.
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)
