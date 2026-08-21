@@ -169,8 +169,8 @@ describe('ProductionOrderOptimizationPanel — default del taller (F133)', () =>
         defaultCutStrategy="cnc-nesting"
       />,
     );
-    expect(screen.getByTestId('prod-opt-strategy-nesting').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('false');
+    expect((screen.getByTestId('prod-opt-strategy-nesting') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId('prod-opt-strategy-saw') as HTMLInputElement).checked).toBe(false);
     expect(screen.getByText('Espaciado fresa (mm)')).toBeTruthy();
   });
 
@@ -182,7 +182,7 @@ describe('ProductionOrderOptimizationPanel — default del taller (F133)', () =>
         cutRows={[]}
       />,
     );
-    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByTestId('prod-opt-strategy-saw') as HTMLInputElement).checked).toBe(true);
   });
 
   it('el plan de la obra gana sobre el default del taller', () => {
@@ -194,7 +194,7 @@ describe('ProductionOrderOptimizationPanel — default del taller (F133)', () =>
         defaultCutStrategy="cnc-nesting"
       />,
     );
-    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByTestId('prod-opt-strategy-saw') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByText('Disco / Kerf (mm)')).toBeTruthy();
   });
 });
@@ -216,8 +216,8 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
 
     expect(screen.getByText('Espaciado fresa (mm)')).toBeTruthy();
     expect(screen.queryByText('Disco / Kerf (mm)')).toBeNull();
-    expect(screen.getByTestId('prod-opt-strategy-nesting').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('prod-opt-strategy-saw').getAttribute('aria-pressed')).toBe('false');
+    expect((screen.getByTestId('prod-opt-strategy-nesting') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId('prod-opt-strategy-saw') as HTMLInputElement).checked).toBe(false);
   });
 
   it('plan sierra: exporta PDF, Optimizer XLSX y PTX (unificado y por material), y no ofrece DXF', () => {

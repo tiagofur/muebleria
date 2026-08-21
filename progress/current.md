@@ -39,6 +39,15 @@
     actualizados con el campo nuevo). Suite 2391, typecheck 7/7,
     `go test` storage/domain/api verdes (normalize table-driven).
 
+## Bitácora
+
+- 2026-08-20 (post-cierre): feedback del dueño — el selector sierra/nesting del panel
+  de Optimización no era claro (botones chicos) y no coincidía con el patrón de
+  Ajustes. Unificado: radiogroup con radios + descripciones idénticas al fieldset
+  «Tipo de corte» de Ajustes → Ingeniería y Producción, como bloque propio arriba de
+  la barra de parámetros. Tests migrados de aria-pressed a checked (mismos testids).
+  Suite ui 1139, typecheck verde.
+
 ## Incidente y split de commits
 
 El primer commit de F133 (`4fbfe80`) mezcló trabajo PTX/settings que apareció en

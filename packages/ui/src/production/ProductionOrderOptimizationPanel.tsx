@@ -199,6 +199,38 @@ export function ProductionOrderOptimizationPanel({
           )}
         </div>
 
+        {/* Strategy selector (F126/F133) — same radio pattern as Ajustes →
+            Ingeniería y Producción so both screens read identically. */}
+        <div style={{ marginBottom: 12 }} role="radiogroup" aria-label="Tipo de corte" data-testid="prod-opt-strategy">
+          <label style={{ display: 'block', fontSize: '0.85em', fontWeight: 500, marginBottom: 4 }}>
+            Tipo de corte
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+              <input
+                type="radio"
+                name="cutStrategy"
+                value="saw-guillotine"
+                checked={!isNesting}
+                onChange={() => setCutStrategy('saw-guillotine')}
+                data-testid="prod-opt-strategy-saw"
+              />
+              <span><strong>Sierra (guillotina):</strong> cortes rectos de borde a borde, con kerf y secuencia paso a paso.</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+              <input
+                type="radio"
+                name="cutStrategy"
+                value="cnc-nesting"
+                checked={isNesting}
+                onChange={() => setCutStrategy('cnc-nesting')}
+                data-testid="prod-opt-strategy-nesting"
+              />
+              <span><strong>CNC nesting:</strong> piezas anidadas libremente con espaciado de fresa; el plan se exporta en DXF.</span>
+            </label>
+          </div>
+        </div>
+
         <div
           style={{
             display: 'flex',
@@ -210,28 +242,6 @@ export function ProductionOrderOptimizationPanel({
             borderRadius: 'var(--radius-md)',
           }}
         >
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} role="group" aria-label="Tipo de corte">
-            <span style={{ fontSize: '0.85em', fontWeight: 500 }}>Tipo de corte:</span>
-            <button
-              type="button"
-              className={`btn btn--small ${!isNesting ? 'btn--primary' : 'btn--ghost'}`}
-              aria-pressed={!isNesting}
-              data-testid="prod-opt-strategy-saw"
-              onClick={() => setCutStrategy('saw-guillotine')}
-            >
-              Sierra
-            </button>
-            <button
-              type="button"
-              className={`btn btn--small ${isNesting ? 'btn--primary' : 'btn--ghost'}`}
-              aria-pressed={isNesting}
-              data-testid="prod-opt-strategy-nesting"
-              onClick={() => setCutStrategy('cnc-nesting')}
-            >
-              CNC Nesting
-            </button>
-          </div>
-
           {isNesting ? (
             <label
               style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.85em' }}
