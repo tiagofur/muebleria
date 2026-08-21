@@ -4,59 +4,116 @@
 > **Actualizado:** 2026-08-21  
 > **Norte:** producto vendible y operable en talleres reales de LatAm.
 
-Este documento sigue siendo la fuente narrativa del roadmap comercial, pero desde
-2026-08-21 se complementa con `docs/operational-core-v1.md` para la consolidación
-operativa. GitHub issues contienen trabajo futuro; `feature_list.json` es ledger de
-implementación/historia y no sustituye la priorización narrativa.
+Este documento es la fuente narrativa de prioridad comercial. Se complementa con:
+
+- `docs/operational-core-v1.md` — consolidación operacional;
+- `docs/proyectar-3d-north-star.md` — quality bar del editor 3D;
+- `docs/proyectar-3d-roadmap-vnext.md` — ejecución de Proyectar;
+- GitHub issues — trabajo futuro;
+- `feature_list.json` — ledger de implementación/historia.
 
 ---
 
-## 0. Propuesta de valor actualizada
+## 0. Posicionamiento
+
+> **Mueblería no es una alternativa barata a Promob.**
+
+Es una plataforma operativa vertical para un segmento de talleres/fabricantes pequeños y
+medianos que necesita:
+
+- excelente cotización;
+- excelente diseño modular 3D;
+- BOM confiable;
+- materiales/compras;
+- producción;
+- CNC cuando aplica;
+- instalación;
+- job costing.
+
+El precio puede ser menor, pero la razón principal de compra debe ser **calidad,
+facilidad, velocidad e integración del flujo completo**.
+
+Ver `docs/proyectar-3d-competitive-position.md`.
+
+---
+
+## 1. Propuesta de valor
 
 > **Plataforma operativa de muebles: cotizar, proyectar, preparar materiales, producir,
 > instalar y saber si la obra fue rentable.**
 
-Más simple de aprender que soluciones pesadas, más profunda que Excel y específica al
-lenguaje del taller.
-
 Diferenciadores:
 
 1. cotización rápida con BOM real;
-2. Proyectar 2D/3D conectado a producción;
+2. Proyectar 2D/3D de nivel profesional para nuestro nicho;
 3. corte/etiquetas/CNC integrados al mismo job;
 4. flujo material→taller→instalación trazable;
-5. rentabilidad por obra como objetivo de Operational Core;
-6. UX en español y adaptada a talleres pequeños/medianos.
+5. rentabilidad por obra;
+6. UX específica del taller y fácil de aprender;
+7. menor necesidad de unir cinco herramientas externas para completar el trabajo.
 
-Dos modos comerciales siguen coexistiendo:
+Dos modos comerciales coexisten:
 
 - **Proyectar:** trabajo espacial/3D;
 - **Cotizar rápido:** catálogo + opciones sin abrir 3D.
 
+Ambos convergen al mismo Project/Job/BOM.
+
 ---
 
-## 1. Decisiones cerradas
+## 2. Decisiones cerradas
 
 | # | Decisión | Elección |
 |---|---|---|
-| D1 | Añadir muebles | Mejorar flujo actual; no copiar barra Promob |
-| D2 | Acabados herrajes | Variantes predefinidas primero |
-| D3 | Inspector | Evolución del inspector actual, no arquitectura paralela |
-| D4 | Fuentes de planificación | Roadmap narrativo + GitHub issues; feature_list como ledger |
-| D5 | Nesting | Nativo permitido; sierra y CNC son estrategias distintas |
-| D6 | CNC de marca | Postprocesador específico sólo con máquina real confirmada |
-| D7 | Granularidad producción | **Corte/CNC/Enchape por pieza; Armado+ por mueble/unidad/bulto** |
-| D8 | Próxima prioridad | Tras cerrar F128, Operational Core gana prioridad por defecto |
-| D9 | Validación | Pilotos reales compiten con features profundas por prioridad |
+| D1 | Biblioteca de módulos en Proyectar | **Biblioteca lateral persistente permitida y deseable** si mejora discoverability/velocidad; no copiar skin/layout exacto de Promob |
+| D2 | Materiales en Proyectar | Biblioteca/material dock accesible dentro del workspace, con grupos/favoritos/recientes y scopes de aplicación |
+| D3 | Inspector | Un inspector contextual estable; evolución del actual, no múltiples paradigmas paralelos |
+| D4 | Posicionamiento | No competir por ser “más barato”; competir por ser ideal para el nicho y por flujo completo |
+| D5 | Fuentes de planificación | Roadmap narrativo + GitHub issues; feature_list como ledger |
+| D6 | Nesting | Nativo permitido; sierra y CNC son estrategias distintas |
+| D7 | CNC de marca | Postprocesador específico sólo con máquina real confirmada |
+| D8 | Granularidad producción | **Corte/CNC/Enchape por pieza; Armado+ por mueble/unidad/bulto** |
+| D9 | Profundidad CAD | UX 3D profesional para muebles modulares; no CAD libre generalista |
+| D10 | Quality bar Proyectar | Matriz ★ del North Star, validada con usuarios reales |
+| D11 | Próxima prioridad operacional | Tras cerrar trabajo activo, Operational Core protege verdad/lifecycle antes de profundidad técnica ilimitada |
+| D12 | Trabajo paralelo | Proyectar puede avanzar por slices de alto impacto sin esperar todo Operational Core, respetando dependencias |
+| D13 | Validación | Pilotos/benchmarks reales pueden reordenar features |
 
 ---
 
-## 2. Estado real a 2026-08-21
+## 3. Tres pilares
 
-El producto ya superó el roadmap inicial en varias áreas:
+### A — Vender
+
+```text
+Cliente → Cotización → Proyectar → Presentación → Aprobación
+```
+
+### B — Fabricar
+
+```text
+Ingeniería → BOM → Materiales → Corte → CNC → Enchape → Armado → QC
+```
+
+### C — Operar
+
+```text
+Proyecto → Compras → Embarque → Instalación → Warranty → Costing
+```
+
+La ventaja de Mueblería es que los tres pilares comparten el mismo job y la misma
+revisión, no que cada módulo tenga más botones.
+
+---
+
+## 4. Estado real a 2026-08-21
+
+El producto ya superó el roadmap MVP original:
 
 - Proyectar/3D avanzado;
+- multi-space/ambientes;
 - herrajes y placements;
+- estructuras/agregados en evolución;
 - production workspace y estaciones;
 - mobile companion;
 - stock + purchase orders;
@@ -64,47 +121,112 @@ El producto ya superó el roadmap inicial en varias áreas:
 - cut-plan 2D guillotina;
 - CNC nesting + DXF;
 - machining profiles;
-- F128 drilling resolution en cierre/avance actual.
+- drilling resolution en trabajo reciente;
+- warranty.
 
-Por eso las fases A/B/C históricas ya no deben leerse como “todo pendiente”. Ver
-`feature_list.json`, código y `docs/documentation-sync-2026-08-21.md` para reconciliar.
-
----
-
-## 3. Prioridad inmediata — cerrar trabajo activo
-
-### F128 — Drilling Resolution Engine
-
-Se termina correctamente, con tests y wiring acordado. No se abandona una feature
-profunda a medio implementar sólo por el cambio de prioridades.
+Por eso los roadmaps viejos no deben interpretarse como lista lineal pendiente. Código,
+tests y `feature_list.json` definen lo implementado; este doc define prioridad.
 
 ---
 
-## 4. Fase O0 — Guardrails y verdad del producto (P0)
+## 5. Proyectar 3D — nueva North Star
 
-Fuente: `docs/operational-core-v1.md` OC-001–006.
+Fuente: `docs/proyectar-3d-north-star.md`.
 
-Objetivos:
+### Meta de calidad
+
+| Área | Target |
+|---|---:|
+| Encontrar muebles | ★★★★★ |
+| Insertar/drag | ★★★★★ |
+| Snap | ★★★★★ |
+| Dimensiones | ★★★★★ |
+| Materiales | ★★★★★ |
+| Agregados | ★★★★★ |
+| Herrajes | ★★★★★ |
+| Selección/contexto | ★★★★★ |
+| Undo/redo | ★★★★★ |
+| Mover/copiar/duplicar | ★★★★★ |
+| Multi-select/align | ★★★★★ |
+| Multi-ambiente | ★★★★★ |
+| Presentación | ★★★★☆ |
+| Fotorrealismo | ★★★☆☆ |
+| CAD libre | ★★☆☆☆ |
+| Parametrización ultra-compleja | ★★★☆☆ |
+| Diseño→producción | ★★★★★+ |
+
+### Modelo mental
+
+```text
+Biblioteca persistente → Canvas 3D → Inspector contextual
+```
+
+### Meta GitHub
+
+#308 coordina el plan.
+
+### Nuevos slices
+
+- #309 P3D-0 — workspace + bibliotecas;
+- #310 P3D-1 — selección/manipulación;
+- #311 P3D-4 — environment/multi-space;
+- #312 P3D-6 — performance budget;
+- #313 P3D-7 — contract tests diseño→BOM→producción;
+- #314 P3D-8 — benchmark/validación (no feature).
+
+### Issues existentes reutilizados
+
+- #277 drag insertion;
+- #278 inspector;
+- #279 materiales;
+- #280–#282 herrajes;
+- #266 ambient materials;
+- #260 presentation;
+- #294–#297 agregados.
+
+No duplicar estos issues sólo para adaptar naming.
+
+---
+
+## 6. Orden recomendado de Proyectar
+
+Cuando haya capacidad dedicada al editor:
+
+1. #309 biblioteca/workspace;
+2. #277 insertion + #310 manipulation;
+3. #278 inspector + #279 materials;
+4. #294–#297 aggregates + #280–#282 hardware según dependencias;
+5. #311 environment/multi-space;
+6. #260 presentation;
+7. #312 performance hardening transversal;
+8. #313 integration contracts;
+9. #314 validation continua.
+
+Este orden puede cambiar con evidencia de piloto.
+
+---
+
+## 7. Operational Core O0 — Guardrails y verdad (P0)
+
+Fuente: `docs/operational-core-v1.md` OC-001–006 / issue #299.
 
 - arreglar `init.sh`;
-- CI remoto obligatorio;
-- reconciliar roadmap/issues/feature ledger;
+- CI remoto;
+- reconciliar roadmap/issues/ledger;
 - roles canónicos;
-- DTO auth seguro;
-- Data Truth Contract para dashboards.
+- auth DTO seguro;
+- Data Truth Contract.
 
-**Resultado:** “done”, “verde”, “rol” y “KPI real” vuelven a tener significado único.
+**Resultado:** “done”, “verde”, “rol” y “KPI real” tienen significado único.
 
 ---
 
-## 5. Fase O1 — Lifecycle + aprobación + Production Release (P0)
+## 8. Operational Core O1 — Lifecycle + Release (P0)
 
-OC-010–024.
-
-Entregables:
+Issue #300.
 
 - `ProjectEvent[]`;
-- commercial status real incluyendo won/lost;
+- commercial status real;
 - stage derivado;
 - anticipo real;
 - DesignRevision;
@@ -113,70 +235,57 @@ Entregables:
 - stale detection;
 - ChangeOrder.
 
-**Resultado:** siempre sabemos qué se vendió, qué se aprobó y qué revisión se fabricó.
+**Resultado:** siempre sabemos qué se vendió, aprobó y fabricó.
+
+Dependencia importante para Proyectar: cambios post-release deben activar stale/release,
+no overwrite silencioso.
 
 ---
 
-## 6. Fase O2 — Producción física pieza→mueble (P0)
+## 9. Operational Core O2 — Producción pieza→mueble (P0)
 
-OC-030–034 + `docs/production-flow-v2.md`.
-
-### Antes de Armado
+Issue #301 + `docs/production-flow-v2.md`.
 
 ```text
-Corte → CNC → Enchape
+Corte → CNC → Enchape       (pieza)
+Armado → QC → Pack → Load   (mueble/unidad/bulto)
 ```
 
-seguimiento por pieza física/ruta.
-
-### Armado y después
-
-```text
-Armado → QC → Empaque → Carga → Instalación
-```
-
-seguimiento por mueble/unidad/bulto.
-
-**Resultado:** CNC y scans dejan de depender de un status demasiado grueso por línea de
-mueble.
+Esto conecta directamente con drilling/CNC derivado desde Proyectar/Ingeniería.
 
 ---
 
-## 7. Fase O3 — Materiales + QC (P1)
+## 10. Operational Core O3 — Materiales + QC (P1)
 
-OC-050–062.
+Issue #302.
 
-- requirements desde BOM liberado;
+- requirements desde BOM;
 - reservas;
 - shortage;
-- PO/receiving ligado a need-by/project;
+- PO/receiving;
 - material-ready con evidencia;
 - QualityIssue;
 - rework/scrap;
 - QC gates.
 
-**Resultado:** materiales y calidad forman parte del job, no módulos paralelos.
-
 ---
 
-## 8. Fase O4 — Instalación y closeout (P1)
+## 11. Operational Core O4 — Instalación/closeout (P1)
 
-OC-070–074.
+Issue #303.
 
 - InstallationJob;
 - visitas;
 - crews;
 - field issues;
 - punch list;
-- client sign-off/closeout.
-
-**Resultado:** “installed” deja de significar artificialmente “todo terminó”.
+- sign-off/closeout.
 
 ---
 
-## 9. Fase O5 — Job Costing (P1)
+## 12. Operational Core O5 — Job Costing (P1)
 
-OC-080–084.
+Issue #304.
 
 - CostBaseline;
 - TimeEntry;
@@ -185,72 +294,79 @@ OC-080–084.
 - estimate vs actual;
 - actual margin.
 
-**Resultado:** el dueño sabe qué tipo de obra realmente gana dinero.
-
 ---
 
-## 10. Trabajo transversal
+## 13. UX transversal y Survey
 
-### Site Survey
+Issue #305.
 
-OC-040/041 puede avanzar en paralelo cuando haya capacidad: medidas de campo deben
-diferenciar preliminar/levantada/aprobada/fabricación cuando aplique.
-
-### Operational UX / Project Workspace
-
-OC-090+:
-
+- Site Survey estructurado;
+- Project Workspace transversal;
 - dashboards exception-first;
-- proyecto/job como contexto transversal;
-- navegación simplificada para talleres pequeños;
-- navegación departamental para empresas medianas.
-
-### Pilotos
-
-No esperar a que termine todo Operational Core para probar. Empezar/continuar pilotos
-desde ahora con lo ya funcional.
+- navegación pequeña vs mediana empresa.
 
 ---
 
-## 11. F129–F131 y CNC profundo
+## 14. Pilotos
 
-Siguen siendo features válidas:
+Issue #306.
 
-- F129 joint drilling rules;
-- F130 drilling DXF export;
-- F131 visual drilling editor.
+No esperar a “terminar todo”. Pilotos validan:
 
-### Nueva regla de prioridad
+- quote flow;
+- Proyectar;
+- survey;
+- approvals;
+- materials;
+- Cut/CNC/Edge;
+- assembly/QC;
+- shipping/install;
+- costing.
 
-Después de F128, **no desplazan automáticamente Operational Core**.
-
-Se priorizan si:
-
-1. un taller piloto real necesita la capacidad para operar;
-2. desbloquean una venta/piloto concreto;
-3. el costo es pequeño y completa una cadena ya usada;
-4. producto decide explícitamente asumir el tradeoff.
-
-F132 postprocesador SCM sigue postergado hasta máquina/software confirmados.
+Cuando exista `type:validation`, #306 y #314 deben usarlo.
 
 ---
 
-## 12. Lanzamiento y comercial
+## 15. CNC profundo F129–F132
 
-El trabajo histórico de F075–F077 sigue siendo importante:
+Sigue siendo válido:
 
-- packaging/installable release;
-- onboarding/demo data;
-- pricing/landing/demo script.
+- joint drilling rules;
+- drilling DXF;
+- visual drilling editor;
+- postprocesador específico.
 
-No debe quedar eternamente detrás de features técnicas. La validación comercial es parte
-del producto, no “trabajo para después de terminar”.
+Pero no desplaza automáticamente Operational Core o Proyectar UX.
+
+Se prioriza cuando:
+
+1. piloto real lo necesita;
+2. desbloquea venta concreta;
+3. completa cadena usada;
+4. producto asume explícitamente el tradeoff.
+
+Postprocesadores de marca requieren hardware/software confirmados.
 
 ---
 
-## 13. Features congeladas/condicionadas
+## 16. Lanzamiento/comercial
 
-Por defecto requieren demanda demostrada:
+Packaging, onboarding/demo, pricing/landing/script siguen siendo esenciales.
+
+No permitir que features técnicas pospongan indefinidamente:
+
+- instalador usable;
+- demo excelente;
+- onboarding;
+- materiales/catálogos semilla;
+- pricing validado;
+- ventas reales.
+
+---
+
+## 17. Features condicionadas
+
+Por defecto necesitan demanda demostrada:
 
 - SketchUp plugin;
 - render premium backend;
@@ -260,52 +376,66 @@ Por defecto requieren demanda demostrada:
 - marketplace;
 - forecasting/multi-planta avanzado.
 
-El trigger es evidencia de cliente, no curiosidad técnica.
-
 ---
 
-## 14. Anti-scope
+## 18. Anti-scope
 
-- no Promob completo;
+- no “Promob completo”;
+- no “Promob barato” como positioning;
 - no SketchUp interno;
 - no contabilidad fiscal/nómina;
 - no ERP horizontal;
 - no CAM universal;
-- no construir integraciones de máquina sin hardware real;
-- no dashboards con proxies disfrazados de datos reales.
+- no integraciones de máquina sin hardware real;
+- no dashboards con proxies como hechos;
+- no features CAD añadidas sólo para igualar una checklist competitiva.
 
 ---
 
-## 15. Métricas de éxito
+## 19. Métricas de éxito
 
-### Fase piloto
+### Proyectar
+
+Targets iniciales de benchmark:
+
+- primer módulo colocado <60 s usuario nuevo;
+- cambio de material común <15 s;
+- agregado común <30 s;
+- duplicar/alinear 3 unidades <30 s;
+- 0 necesidad de conocer internals del BOM.
+
+Validar mediante #314; recalibrar con evidencia.
+
+### Piloto operacional
 
 - 3–5 talleres reales;
-- cocina/proyecto típico cotizado sin Excel manual;
-- al menos una obra atraviesa venta→producción→instalación;
-- registrar fricciones reales;
-- ninguna revisión equivocada fabricada por falta de gate;
+- al menos una obra venta→producción→instalación;
+- ninguna revisión equivocada por falta de gate;
 - shortages visibles antes de corte;
-- medir retrabajos y pendientes de instalación.
+- retrabajo/punch explícito;
+- quote time medido;
+- margen real disponible cuando O5 esté listo.
 
 ### 12 meses
 
 - 15–30 talleres pagando como objetivo orientativo;
 - MRR compatible con pricing validado;
 - quote time <15 min en catálogo conocido;
-- job margin real disponible;
-- evidencia de reducción de errores/retrabajo.
+- evidencia de reducción de errores/retrabajo;
+- Proyectar percibido como herramienta profesional por usuarios del nicho.
 
 ---
 
-## 16. Cómo se actualiza este roadmap
+## 20. Cómo se actualiza este roadmap
 
-- narrativa/prioridad: este archivo;
-- contrato de producto: `docs/prd-v2.md`;
-- plan operativo: `docs/operational-core-v1.md`;
-- ejecución futura: GitHub issues;
-- implementación/historia: `feature_list.json` + código/tests;
-- divergencias: `docs/documentation-sync-2026-08-21.md`.
+- producto: `docs/prd-v2.md`;
+- posicionamiento Proyectar: `docs/proyectar-3d-competitive-position.md`;
+- calidad Proyectar: `docs/proyectar-3d-north-star.md`;
+- ejecución Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
+- consolidación operacional: `docs/operational-core-v1.md`;
+- issues: trabajo futuro;
+- ledger: `feature_list.json`;
+- código/tests: verdad implementada.
 
-Al cerrar una capacidad grande, actualizar roadmap y docs canónicos; no limitarse a
-marcar un JSON `done`.
+No crear roadmaps paralelos no referenciados. Cuando una capacidad grande se cierra,
+actualizar las fuentes canónicas, no sólo el JSON.
