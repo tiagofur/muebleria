@@ -2,6 +2,7 @@ import type { MaterialStock, StockMaterialKind, StockMovement, StockStatus } fro
 import { stockStatus } from './stock';
 import type { PurchaseOrder } from './purchasingOrders';
 import type { Project } from './types';
+import type { DataTruthOrigin } from './dataTruth';
 
 /** Material types with a picking list per project. */
 export const PICKING_MATERIALS = ['herrajes', 'tableros', 'cintillas'] as const;
@@ -74,9 +75,13 @@ export type WarehouseProjectMetrics = {
   readonly cintillasStatus: PickingStatus;
   readonly isFullyPicked: boolean;
   readonly hardwareCount: number;
+  readonly hardwareCountOrigin: DataTruthOrigin;
   readonly boardAreaM2: number;
+  readonly boardAreaOrigin: DataTruthOrigin;
   readonly edgeLengthMl: number;
+  readonly edgeLengthOrigin: DataTruthOrigin;
   readonly daysInWarehouse?: number;
+  readonly daysInWarehouseOrigin?: DataTruthOrigin;
 };
 
 export type WarehouseStockAlert = {
@@ -94,8 +99,11 @@ export type WarehouseDashboardStats = {
   readonly pendingPickingProjects: number;
   readonly materialsReleasedProjects: number;
   readonly totalBoardAreaM2: number;
+  readonly boardAreaOrigin: DataTruthOrigin;
   readonly totalEdgeLengthMl: number;
+  readonly edgeLengthOrigin: DataTruthOrigin;
   readonly totalHardwareLines: number;
+  readonly hardwareLinesOrigin: DataTruthOrigin;
   // Stock health
   readonly stockTotalItems: number;
   readonly stockOkCount: number;
@@ -186,6 +194,10 @@ export function computeWarehouseDashboardStats(
       }
     }
 
+    const hasDirectBoard = p.boardAreaM2 !== undefined;
+    const hasDirectEdge = p.edgeLengthMl !== undefined;
+    const hasDirectHw = p.hardwareCount !== undefined;
+
     const boardAreaM2 = p.boardAreaM2 ?? Math.round(moduleCount * 2.8 * 10) / 10;
     const edgeLengthMl = p.edgeLengthMl ?? Math.round(moduleCount * 14 * 10) / 10;
     const hardwareCount = p.hardwareCount ?? moduleCount * 4;
@@ -207,11 +219,20 @@ export function computeWarehouseDashboardStats(
       cintillasStatus: ctStatus,
       isFullyPicked,
       hardwareCount,
+      hardwareCountOrigin: hasDirectHw ? 'actual' : 'proxy',
       boardAreaM2,
+      boardAreaOrigin: hasDirectBoard ? 'actual' : 'proxy',
       edgeLengthMl,
+      edgeLengthOrigin: hasDirectEdge ? 'actual' : 'proxy',
       daysInWarehouse,
+      daysInWarehouseOrigin: p.createdAt ? 'proxy' : 'missing',
     });
   }
+
+  // Determine overall truth origin for aggregate sums
+  const hasProxyBoard = projectMetricsList.some((m) => m.boardAreaOrigin === 'proxy');
+  const hasProxyEdge = projectMetricsList.some((m) => m.edgeLengthOrigin === 'proxy');
+  const hasProxyHw = projectMetricsList.some((m) => m.hardwareCountOrigin === 'proxy');
 
   // Stock health
   const stockList = stock ?? [];
@@ -267,8 +288,11 @@ export function computeWarehouseDashboardStats(
     pendingPickingProjects: activeProjects.length - fullyPickedProjects,
     materialsReleasedProjects,
     totalBoardAreaM2: Math.round(totalBoardAreaM2 * 100) / 100,
+    boardAreaOrigin: activeProjects.length === 0 ? 'missing' : (hasProxyBoard ? 'proxy' : 'actual'),
     totalEdgeLengthMl: Math.round(totalEdgeLengthMl * 10) / 10,
+    edgeLengthOrigin: activeProjects.length === 0 ? 'missing' : (hasProxyEdge ? 'proxy' : 'actual'),
     totalHardwareLines,
+    hardwareLinesOrigin: activeProjects.length === 0 ? 'missing' : (hasProxyHw ? 'proxy' : 'actual'),
     stockTotalItems: stockList.length,
     stockOkCount,
     stockLowCount,

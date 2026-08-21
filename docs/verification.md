@@ -22,17 +22,16 @@
 ./init.sh
 ```
 
-**Contrato objetivo:**
+**Contrato:**
 
-- Node/pnpm requeridos presentes;
-- instalación de dependencias exitosa;
-- tests obligatorios verdes;
-- ningún `|| true` puede convertir un fallo en éxito;
-- monorepo existente no puede “saltar” tests por ausencia de tooling y devolver verde.
+- Node >= 20 y pnpm requeridos presentes;
+- instalación de dependencias estricta sin fallbacks permisivos (`|| true`);
+- typecheck estricto (`pnpm typecheck`);
+- suite de tests obligatorios de TypeScript verdes;
+- suite de tests de backend Go (`go test ./...`) ejecutada y verde;
+- ningún error silenciado.
 
-> **Deuda conocida al 2026-08-21:** el script actual contiene un fallback `|| true`
-> alrededor del install y debe corregirse mediante Operational Core OC-001. Hasta ese
-> fix, no interpretar `./init.sh` verde como prueba absoluta del install.
+> **Implementado (OC-001 + OC-002):** `./init.sh` valida harness, monorepo TS completo y backend Go. CI remoto corre en GitHub Actions (`.github/workflows/ci.yml`).
 
 ---
 
@@ -88,16 +87,18 @@ la suite backend razonablemente completa definida por el repo.
 
 ## 4. CI remoto
 
-Operational Core OC-002 debe convertir en required checks, como mínimo:
+Operational Core OC-002 implementa los required checks en `.github/workflows/ci.yml`:
 
 ```text
-feature-list/schema validation
-pnpm test
-pnpm typecheck
-go test
+1. feature-list/schema validation
+2. pnpm install + typecheck + test (pnpm según packageManager)
+3. go test -v ./... con service container de Postgres (DATABASE_URL), para que
+   los tests de integración de storage corran en vez de saltarse con t.Skip
 ```
 
-Y checks específicos cuando corresponda.
+Fixture de paridad vivo: `contracts/roles.json` — los tests de roles en
+`packages/domain/src/rbac.test.ts` y `backend-go/internal/domain/rbac_test.go`
+afirman contra el mismo archivo (ver §5).
 
 Una feature que altera workflow/seguridad/persistencia no se considera `verified` si
 sólo existe una afirmación en commit message y no hay evidencia ejecutable.

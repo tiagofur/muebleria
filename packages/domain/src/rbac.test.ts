@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+// Fixture de paridad TS↔Go (OC-004): backend-go/internal/domain/rbac_test.go
+// afirma contra el mismo contracts/roles.json, así que una divergencia de
+// roles rompe CI en algún lado (docs/architecture.md §7).
+import rolesContract from '../../../contracts/roles.json';
 import {
   isValidUserRole,
   navIdsForRole,
@@ -27,19 +31,28 @@ import {
   roleCanAccessEmbarquesNav,
   sectorsAllowedForRole,
   roleCanAdvanceStation,
+  PRODUCT_ROLES,
+  USER_ROLES,
   roleCanAccessPurchasingNav,
   roleCanAccessWarehouseDashboard,
   roleCanMarkPicking,
   roleCanManagePurchasing,
 } from './rbac';
 
-describe('rbac (F035)', () => {
-  it('accepts product roles and rejects legacy labels', () => {
-    expect(isValidUserRole('ingeniero')).toBe(true);
-    expect(isValidUserRole('gerente_ventas')).toBe(true);
-    expect(isValidUserRole('produccion')).toBe(true);
-    expect(isValidUserRole('disenador')).toBe(false);
-    expect(isValidUserRole('carpintero')).toBe(false);
+describe('rbac (F035 / OC-004)', () => {
+  it('matches the shared roles contract and rejects legacy labels', () => {
+    const { canonicalRoles, rejectedRoles } = rolesContract;
+
+    expect(USER_ROLES).toEqual(canonicalRoles);
+    expect(PRODUCT_ROLES).toEqual(canonicalRoles);
+
+    for (const r of canonicalRoles) {
+      expect(isValidUserRole(r)).toBe(true);
+    }
+
+    for (const r of rejectedRoles) {
+      expect(isValidUserRole(r)).toBe(false);
+    }
   });
 
   it('denies catalog ABM to vendedor and produccion', () => {

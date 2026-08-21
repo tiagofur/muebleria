@@ -158,7 +158,9 @@ export function WarehouseDashboard({
           <div className="stat-card__body">
             <span className="stat-card__value">{stats.totalBoardAreaM2} m²</span>
             <span className="stat-card__label">Demanda de Tableros</span>
-            <span className="stat-card__subtext">Área neta calculada</span>
+            <span className="stat-card__subtext">
+              {stats.boardAreaOrigin === 'proxy' ? 'Área estimada (~2.8 m²/mód)' : 'Área neta calculada'}
+            </span>
           </div>
         </div>
 
@@ -169,7 +171,9 @@ export function WarehouseDashboard({
           <div className="stat-card__body">
             <span className="stat-card__value">{stats.totalEdgeLengthMl} ml</span>
             <span className="stat-card__label">Demanda de Cintillas</span>
-            <span className="stat-card__subtext">Metros lineales totales</span>
+            <span className="stat-card__subtext">
+              {stats.edgeLengthOrigin === 'proxy' ? 'Metros lineales estimados (~14 ml/mód)' : 'Metros lineales calculados'}
+            </span>
           </div>
         </div>
 

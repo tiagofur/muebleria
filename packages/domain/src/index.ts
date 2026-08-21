@@ -124,6 +124,7 @@ export type { ProductRole } from './rbac';
 export {
   ASSIGNABLE_ROLES,
   PRODUCT_ROLES,
+  USER_ROLES,
   isValidUserRole,
   navIdsForRole,
   roleCanAccessCatalogNav,
@@ -544,6 +545,12 @@ export {
   type EngineerWorkloadSummary,
   type EngineeringDashboardStats,
 } from './engineering';
+
+export {
+  DATA_TRUTH_ORIGIN_LABELS_ES,
+  type DataTruthOrigin,
+  type DataTruthMetric,
+} from './dataTruth';
 
 export {
   projectProcessStage,

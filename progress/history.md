@@ -688,3 +688,51 @@ sistema 32 (F129) → export DXF por caras + reporte (F130) → editor visual +
 gizmo (F131). F132 (post-procesador SCM nativo) queda postergada hasta
 confirmar máquina/software del taller — el flujo oficial hacia SCM es el DXF
 por capas de F130, importable en Maestro con asignación capa→herramienta.
+
+## Issue #299 / F134 — Operational Core O0: guardrails, roles, auth y Data Truth (2026-08-21)
+
+Implementación (ronda 1):
+
+- **OC-001** `init.sh` estricto: sin `|| true`, node/pnpm obligatorios cuando
+  existe monorepo, agrega `pnpm typecheck` y sección Go (`go test ./...`),
+  exit 1 en cualquier fallo. Harness apunta a fuentes v2 (prd-v2,
+  operational-core-v1).
+- **OC-002** CI remota `.github/workflows/ci.yml`: validación de ledger +
+  typecheck/tests TS + go test.
+- **OC-004** `UserRole`/`ProductRole` consolidados como alias del mismo set de
+  8 roles canónicos (TS suma `gerente_produccion` y `almacen`; Go ya era
+  canónico). `USER_ROLES` exportado en domain.
+- **OC-005** `PublicUserDTO` + `ToPublicUserDTO(s)` en backend: login, refresh,
+  admin users y staff serializan DTO explícito;
+  `TestPublicUserDTONeverLeaksSecrets` (además `PasswordHash` tiene `json:"-"`).
+- **OC-006** `packages/domain/src/dataTruth.ts`
+  (`actual|estimated|forecast|proxy|missing` + labels ES): heurísticas
+  etiquetadas `proxy` (piezas ~8/mód, m² ~2.8/mód, ml ~14/mód, herrajes ~4/mód;
+  días en almacén `proxy|missing` vía createdAt, sin camino `actual` aún);
+  agregados degradan a `proxy`/`missing` si algún proyecto usa heurística; la
+  UI muestra «estimada» condicionada al origin del dominio. Tests
+  `dataTruth.test.ts`.
+- **OC-003** DS-10/DS-11/DS-17 resueltos en documentation-sync;
+  `docs/verification.md` actualizado.
+
+Review (ronda 2, `progress/review_issue-299.md`): CHANGES_REQUESTED inicial por
+cierre defectuoso y overclaims del walkthrough. Correcciones aplicadas:
+
+- CI: pnpm tomado de `packageManager` (el pin manual v9 chocaba con pnpm@11.1.2),
+  Go 1.25.x (go.mod declara 1.25.0), **Postgres service container + DATABASE_URL**
+  (sin él los tests de integración de storage se saltaban con `t.Skip` y la CI
+  daba un verde falso), push sólo en main/master (las ramas quedan cubiertas
+  por pull_request).
+- `structures_108_test.go`: aplica migraciones sobre base fresca (CI).
+- `HandleOperatorsBySector` también serializa `PublicUserDTOs`.
+- Paridad de roles TS↔Go ahora es contract fixture real: `contracts/roles.json`
+  compartido por ambos tests (docs/architecture.md §7).
+- Cierre de sesión correcto: F134 dada de alta en el ledger.
+
+Verificación: `./init.sh` verde completo (harness, typecheck, suite TS, go test
+incluida integración de storage contra Postgres). El primer run de la CI remota
+corresponde al push de esta sesión.
+
+Deuda anotada: `daysInWarehouse` seguirá siendo proxy hasta que exista un
+evento real de depósito; media access (URLs firmadas) sigue pendiente de
+docs/architecture.md §11.

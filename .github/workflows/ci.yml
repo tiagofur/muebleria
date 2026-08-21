@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-ledger:
+    name: Validate Feature List & Harness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate feature_list.json
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          try:
+              data = json.load(open("feature_list.json"))
+              valid = {"pending", "in_progress", "done", "blocked"}
+              in_progress = [f for f in data["features"] if f["status"] == "in_progress"]
+              if len(in_progress) > 1:
+                  print(f"[FAIL] Hay {len(in_progress)} features en in_progress (máximo 1)")
+                  sys.exit(1)
+              for f in data["features"]:
+                  if f["status"] not in valid:
+                      print(f"[FAIL] Estado inválido en feature {f['id']}: {f['status']}")
+                      sys.exit(1)
+              print(f"[OK] feature_list.json válido ({len(data['features'])} features, {len(in_progress)} en progreso)")
+          except Exception as e:
+              print(f"[FAIL] feature_list.json inválido: {e}")
+              sys.exit(1)
+          PY
+
+  typescript:
+    name: TypeScript (Typecheck & Tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        # La versión sale de packageManager en package.json; no fijar aquí
+        # para que no diverja (OC-002).
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run Tests
+        run: pnpm test
+
+  backend-go:
+    name: Go Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Sin esto, los tests de integración de storage se saltan con t.Skip
+      # y la CI da un verde falso (OC-002). Los propios tests aplican las
+      # migraciones embebidas sobre la base fresca.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: backend-go/go.sum
+
+      - name: Run Go Tests
+        working-directory: backend-go
+        run: go test -v ./...

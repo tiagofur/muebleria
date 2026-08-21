@@ -2955,6 +2955,39 @@
         "ui",
         "domain"
       ]
+    },
+    {
+      "id": "F134",
+      "phase": 0,
+      "name": "operational_core_o0",
+      "title": "Issue #299 — Operational Core O0: guardrails, roles canónicos, auth hardening y Data Truth (OC-001..OC-006)",
+      "description": "Cimientos del Operational Core: init.sh estricto sin fallbacks (OC-001), CI remota en GitHub Actions con Postgres para que los tests de integración de storage corran en vez de saltearse (OC-002), reconciliación docs↔código (OC-003), consolidación de UserRole/ProductRole en los 8 roles canónicos con fixture de paridad TS↔Go compartido (OC-004), PublicUserDTO para todos los endpoints que devuelven usuarios (OC-005) y contrato de verdad de datos actual|estimated|forecast|proxy|missing etiquetando las heurísticas de dashboards (OC-006).",
+      "acceptance": [
+        "./init.sh sin `|| true`: install + typecheck + tests TS + tests Go, exit 1 en cualquier fallo",
+        "CI remota (.github/workflows/ci.yml): ledger, typecheck+tests TS (pnpm desde packageManager), go test 1.25 con service container Postgres y DATABASE_URL",
+        "UserRole y ProductRole unificados (alias) con los 8 roles canónicos; contracts/roles.json leído por los tests TS y Go (paridad que rompe CI al divergir)",
+        "Login, refresh, admin users, staff (create/update/by-role) y operadores por sector serializan PublicUserDTO; test anti-leak de password hash",
+        "DataTruthOrigin/DataTruthMetric en domain; cutPieceCount (~8/mód), m² (~2.8/mód), ml (~14/mód) y herrajes (~4/mód) etiquetados proxy; días en almacén proxy|missing (basado en createdAt); UI muestra estimación condicionada al origin",
+        "DS-10, DS-11 y DS-17 marcados resueltos en docs/documentation-sync-2026-08-21.md",
+        "pnpm test + pnpm typecheck verdes; go test ./... verde (incl. integración storage con DATABASE_URL)"
+      ],
+      "references": [
+        "init.sh",
+        ".github/workflows/ci.yml",
+        "contracts/roles.json",
+        "packages/domain/src/dataTruth.ts",
+        "backend-go/internal/api/handlers.go",
+        "docs/verification.md"
+      ],
+      "status": "done",
+      "tags": [
+        "operational-core",
+        "guardrails",
+        "ci",
+        "rbac",
+        "security",
+        "data-truth"
+      ]
     }
   ]
 }

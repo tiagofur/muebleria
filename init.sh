@@ -6,7 +6,7 @@
 #
 # Modos:
 #   bootstrap — monorepo TS aún no scaffolded; solo valida el harness.
-#   full      — monorepo existe; valida harness + instala deps + corre tests.
+#   full      — monorepo existe; valida harness + instala deps + typecheck + tests (TS y Go).
 #
 # Salida: [OK] / [WARN] / [FAIL] por sección. Exit code 0 solo si todo verde.
 
@@ -32,10 +32,11 @@ HARNESS_FILES=(
   "AGENTS.md"
   "feature_list.json"
   "progress/current.md"
-  "docs/prd.md"
+  "docs/prd-v2.md"
   "docs/architecture.md"
   "docs/conventions.md"
   "docs/verification.md"
+  "docs/operational-core-v1.md"
   "CHECKPOINTS.md"
   ".agents/skills/leader/SKILL.md"
   ".agents/skills/implementer/SKILL.md"
@@ -81,10 +82,18 @@ if [ $? -ne 0 ]; then EXIT_CODE=1; fi
 echo ""
 echo "── 3. Verificando entorno Node.js / pnpm ───────────────"
 
+HAS_PACKAGE_JSON=false
+if [ -f "package.json" ]; then
+  HAS_PACKAGE_JSON=true
+fi
+
 if ! command -v node >/dev/null 2>&1; then
-  warn "node no está instalado — necesario para el monorepo TS"
-  warn "Instalar: https://nodejs.org (LTS >= 20)"
-  # No falla en bootstrap; el monorepo puede no existir aún
+  if [ "$HAS_PACKAGE_JSON" = true ]; then
+    fail "node no está instalado — obligatorio para el monorepo TS (LTS >= 20)"
+    EXIT_CODE=1
+  else
+    warn "node no está instalado (modo bootstrap)"
+  fi
 else
   NODE_VER=$(node --version)
   NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v\([0-9]*\).*/\1/')
@@ -97,8 +106,12 @@ else
 fi
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  warn "pnpm no está instalado — necesario para el monorepo"
-  warn "Instalar: npm install -g pnpm  o  corepack enable"
+  if [ "$HAS_PACKAGE_JSON" = true ]; then
+    fail "pnpm no está instalado — obligatorio para el monorepo (instalar: corepack enable o npm i -g pnpm)"
+    EXIT_CODE=1
+  else
+    warn "pnpm no está instalado (modo bootstrap)"
+  fi
 else
   ok "pnpm $(pnpm --version)"
 fi
@@ -107,45 +120,71 @@ fi
 echo ""
 echo "── 4. Monorepo TypeScript ──────────────────────────────"
 
-if [ ! -f "package.json" ]; then
+if [ "$HAS_PACKAGE_JSON" = false ]; then
   warn "package.json no encontrado — modo bootstrap (monorepo aún no scaffolded)"
-  info "La primera feature pendiente en feature_list.json es el scaffold."
-  info "Cuando exista package.json, este paso instalará deps y correrá tests."
 else
   ok "package.json existe"
 
   if command -v pnpm >/dev/null 2>&1; then
     info "Instalando dependencias..."
-    if pnpm install --prefer-offline --frozen-lockfile 2>/dev/null || pnpm install --prefer-offline 2>/dev/null || true; then
+    if pnpm install --prefer-offline 2>&1; then
       ok "pnpm install completado"
     else
       fail "pnpm install falló"
       EXIT_CODE=1
     fi
 
-    info "Ejecutando tests..."
-    if pnpm test 2>&1 || pnpm exec vitest run 2>&1; then
-      ok "Todos los tests pasan"
+    info "Verificando tipos (typecheck)..."
+    if pnpm typecheck 2>&1; then
+      ok "pnpm typecheck completado sin errores"
     else
-      fail "Hay tests rotos"
+      fail "Hay errores de tipado (pnpm typecheck falló)"
       EXIT_CODE=1
     fi
-  else
-    warn "pnpm no disponible — saltando install y tests"
+
+    info "Ejecutando tests TS..."
+    if pnpm test 2>&1; then
+      ok "Todos los tests de TypeScript pasan"
+    else
+      fail "Hay tests de TypeScript rotos"
+      EXIT_CODE=1
+    fi
   fi
 fi
 
-# ── 5. Resumen ───────────────────────────────────────────────────────────────
+# ── 5. Backend Go (si existe) ───────────────────────────────────────────────
 echo ""
-echo "── 5. Resumen ──────────────────────────────────────────"
+echo "── 5. Backend Go ───────────────────────────────────────"
+
+if [ -f "backend-go/go.mod" ]; then
+  if ! command -v go >/dev/null 2>&1; then
+    fail "go no está instalado — requerido para backend-go"
+    EXIT_CODE=1
+  else
+    ok "go $(go version | awk '{print $3}')"
+    info "Ejecutando tests Go..."
+    if (cd backend-go && go test ./... 2>&1); then
+      ok "Todos los tests de Go pasan"
+    else
+      fail "Hay tests de Go rotos"
+      EXIT_CODE=1
+    fi
+  fi
+else
+  info "backend-go/go.mod no existe — omitiendo backend Go"
+fi
+
+# ── 6. Resumen ───────────────────────────────────────────────────────────────
+echo ""
+echo "── 6. Resumen ──────────────────────────────────────────"
 
 if [ $EXIT_CODE -eq 0 ]; then
-  ok "Entorno listo. Puedes empezar a trabajar."
+  ok "Entorno listo. Todas las verificaciones pasaron exitosamente."
   echo ""
   info "Próximos pasos:"
   info "  1. Lee AGENTS.md para orientarte."
-  info "  2. Abre feature_list.json y toma la siguiente tarea pending."
-  info "  3. Documenta en progress/current.md antes de tocar código."
+  info "  2. Identifica la feature activa en progress/current.md."
+  info "  3. Respeta las fuentes canónicas y documenta antes de cerrar."
 else
   fail "Entorno NO está listo. Resuelve los errores antes de avanzar."
 fi

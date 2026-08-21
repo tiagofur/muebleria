@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -1953,5 +1954,47 @@ func TestHandleMaterialByIDSoftDeleteKeepsImage(t *testing.T) {
 	}
 	if !fileExists(t, imgPath) {
 		t.Error("image file must survive soft delete (deactivate)")
+	}
+}
+
+// TestPublicUserDTONeverLeaksSecrets (OC-005) ensures that JSON serialization of PublicUserDTO
+// and LoginResponse never contains password hashes or raw passwords.
+func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
+	t.Parallel()
+
+	u := domain.User{
+		ID:           "u-123",
+		Email:        "carlos@carpinteria.com",
+		PasswordHash: "$2a$12$eImiTXuWVxfM37uY4JANjOL.oUvhqp7VOHWcxSGYV7G4j7n",
+		Name:         "Carlos Carpintero",
+		Role:         domain.RoleProduccion,
+		Active:       true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	dto := ToPublicUserDTO(&u)
+	resp := LoginResponse{
+		Token: "jwt-token-example",
+		User:  dto,
+	}
+
+	out, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	raw := string(out)
+	if strings.Contains(raw, "eImiTXuWVxfM37uY4JANjOL") {
+		t.Errorf("password hash leaked in LoginResponse JSON: %s", raw)
+	}
+	if strings.Contains(strings.ToLower(raw), "password") {
+		t.Errorf("found 'password' field in LoginResponse JSON: %s", raw)
+	}
+	if !strings.Contains(raw, `"email":"carlos@carpinteria.com"`) {
+		t.Errorf("missing email in JSON: %s", raw)
+	}
+	if !strings.Contains(raw, `"role":"produccion"`) {
+		t.Errorf("missing role in JSON: %s", raw)
 	}
 }

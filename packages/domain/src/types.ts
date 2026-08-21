@@ -237,7 +237,7 @@ export interface HardwareMachiningProfile {
 export type HardwarePartRole = 'body' | 'base' | 'grip';
 
 /**
- * Product account roles (F035).
+ * Product account roles (F035 / OC-004).
  * `user` = approved account without job title until admin assigns a puesto.
  */
 export type UserRole =
@@ -245,8 +245,10 @@ export type UserRole =
   | 'user'
   | 'vendedor'
   | 'gerente_ventas'
+  | 'gerente_produccion'
   | 'ingeniero'
-  | 'produccion';
+  | 'produccion'
+  | 'almacen';
 
 export interface User {
   readonly id: string;

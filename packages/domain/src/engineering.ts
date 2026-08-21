@@ -7,6 +7,7 @@
  */
 
 import type { Project } from './types';
+import type { DataTruthOrigin } from './dataTruth';
 
 /** Engineering lifecycle status derived from the log fields. */
 export type EngineeringStatus =
@@ -119,6 +120,8 @@ export interface EngineeringDashboardProjectMetrics {
   readonly cycleTimeHours?: number;
   readonly moduleCount: number;
   readonly cutPieceCount: number;
+  /** Provenance of cutPieceCount: 'actual' when calculated from BOM/parts, 'proxy' when heuristic moduleCount * 8. */
+  readonly cutPieceOrigin: DataTruthOrigin;
   readonly isStagnant: boolean;
   readonly stagnantReason?: string;
 }
@@ -144,6 +147,7 @@ export interface EngineeringDashboardStats {
   readonly avgRevisionCount: number | null;
   readonly totalModulesCalculated: number;
   readonly totalCutPiecesCalculated: number;
+  readonly totalCutPiecesOrigin: DataTruthOrigin;
   readonly stagnantAlerts: readonly EngineeringDashboardProjectMetrics[];
   readonly engineerWorkload: readonly EngineerWorkloadSummary[];
   readonly projects: readonly EngineeringDashboardProjectMetrics[];
@@ -306,6 +310,7 @@ export function computeEngineeringDashboardStats(
       cycleTimeHours,
       moduleCount,
       cutPieceCount,
+      cutPieceOrigin: 'proxy',
       isStagnant,
       stagnantReason,
     };
@@ -360,6 +365,7 @@ export function computeEngineeringDashboardStats(
     avgRevisionCount,
     totalModulesCalculated,
     totalCutPiecesCalculated,
+    totalCutPiecesOrigin: 'proxy',
     stagnantAlerts,
     engineerWorkload,
     projects: projectMetricsList,

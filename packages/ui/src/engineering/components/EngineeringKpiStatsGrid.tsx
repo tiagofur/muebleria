@@ -167,7 +167,10 @@ export function EngineeringKpiStatsGrid({
                 {stats.totalCutPiecesCalculated}
               </span>
               <span className="eng-dashboard__cycle-label">
-                Piezas calculadas
+                Piezas estimadas
+                {stats.totalCutPiecesOrigin === 'proxy' ? (
+                  <span className="eng-dashboard__cycle-sub"> (~8/módulo)</span>
+                ) : null}
               </span>
             </div>
 

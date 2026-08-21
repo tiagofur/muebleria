@@ -83,7 +83,7 @@ func (s *Server) HandleStaffByRole(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondWithJSON(w, http.StatusOK, filtered)
+	respondWithJSON(w, http.StatusOK, ToPublicUserDTOs(filtered))
 }
 
 // HandleStaffCreate handles POST /api/staff/{department}
@@ -148,7 +148,7 @@ func (s *Server) HandleStaffCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, user)
+	respondWithJSON(w, http.StatusCreated, ToPublicUserDTO(user))
 }
 
 // HandleStaffUpdate handles PUT /api/staff/{department}/{id}
@@ -207,7 +207,7 @@ func (s *Server) HandleStaffUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, existing)
+	respondWithJSON(w, http.StatusOK, ToPublicUserDTO(existing))
 }
 
 // HandleStaffDelete handles DELETE /api/staff/{department}/{id}

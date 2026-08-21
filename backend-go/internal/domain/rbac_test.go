@@ -1,18 +1,62 @@
 package domain
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+// contracts/roles.json es el fixture de paridad TS↔Go (OC-004): el test de
+// packages/domain/src/rbac.test.ts afirma contra el mismo archivo, así que
+// cualquier divergencia rompe CI en algún lado (docs/architecture.md §7:
+// no declarar paridad sólo por inspección manual).
+type rolesContractFixture struct {
+	CanonicalRoles []string `json:"canonicalRoles"`
+	RejectedRoles  []string `json:"rejectedRoles"`
+}
+
+func loadRolesContract(t *testing.T) rolesContractFixture {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "roles.json"))
+	if err != nil {
+		t.Fatalf("read contracts/roles.json: %v", err)
+	}
+	var c rolesContractFixture
+	if err := json.Unmarshal(data, &c); err != nil {
+		t.Fatalf("parse contracts/roles.json: %v", err)
+	}
+	if len(c.CanonicalRoles) == 0 || len(c.RejectedRoles) == 0 {
+		t.Fatal("contracts/roles.json debe definir canonicalRoles y rejectedRoles")
+	}
+	return c
+}
 
 func TestProductRolesValid(t *testing.T) {
 	t.Parallel()
-	for _, role := range []UserRole{
-		RoleAdmin, RoleUser, RoleVendedor, RoleGerenteVentas, RoleIngeniero, RoleProduccion,
-	} {
-		if !IsValidUserRole(role) {
-			t.Fatalf("expected valid: %s", role)
+	contract := loadRolesContract(t)
+
+	goRoles := []string{
+		string(RoleAdmin), string(RoleUser), string(RoleVendedor), string(RoleGerenteVentas),
+		string(RoleGerenteProduccion), string(RoleIngeniero), string(RoleProduccion), string(RoleAlmacen),
+	}
+	slices.Sort(goRoles)
+	want := slices.Clone(contract.CanonicalRoles)
+	slices.Sort(want)
+	if !slices.Equal(goRoles, want) {
+		t.Fatalf("el set de roles Go diverge del contrato: go=%v contrato=%v", goRoles, want)
+	}
+
+	for _, role := range contract.CanonicalRoles {
+		if !IsValidUserRole(UserRole(role)) {
+			t.Errorf("rol del contrato debe ser válido: %s", role)
 		}
 	}
-	if IsValidUserRole("disenador") || IsValidUserRole("carpintero") {
-		t.Fatal("legacy roles must not be valid after F035")
+	for _, role := range contract.RejectedRoles {
+		if IsValidUserRole(UserRole(role)) {
+			t.Errorf("rol debe ser rechazado: %s", role)
+		}
 	}
 }
 

@@ -109,7 +109,7 @@ La solución adoptada es:
 
 **Código actual:** `depositAtMs = createdAtMs`; `cutPieceCount = moduleCount * 8`.
 
-**Resolución:** Data Truth Contract; dato ausente se muestra como ausente/estimado, no como actual.
+**Resolución:** Resuelto en OC-006 (Data Truth Contract: `actual | estimated | forecast | proxy | missing`). Heurísticas etiquetadas explícitamente como proxy en domain y UI.
 
 ---
 
@@ -117,7 +117,7 @@ La solución adoptada es:
 
 **Código actual:** fallback por módulo para m², ml y herrajes; `daysInWarehouse` basado en `createdAt`.
 
-**Resolución:** derivar de BOM/cut plan/eventos reales o etiquetar explícitamente como estimado.
+**Resolución:** Resuelto en OC-006 (Data Truth Contract). Subtítulos y KPIs en UI declaran procedencia estimada (~2.8 m²/mód, ~14 ml/mód) vs calculada real.
 
 ---
 
@@ -169,9 +169,9 @@ La solución adoptada es:
 
 ### DS-17 — Roles TS divergentes
 
-**Código:** `UserRole` y `ProductRole` no contienen exactamente los mismos valores (`gerente_produccion`, `almacen`).
+**Código:** `UserRole` y `ProductRole` no contenían exactamente los mismos valores (`gerente_produccion`, `almacen`).
 
-**Resolución:** consolidar una fuente canónica.
+**Resolución:** Resuelto en OC-004. `UserRole` y `ProductRole` consolidados como alias idénticos con los 8 roles canónicos en TS y Go.
 
 ---
 

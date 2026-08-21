@@ -3,24 +3,17 @@
  * Portfolio ownership (F034) layers on top for vendedor.
  */
 
-import type { ItemFloorStatus } from './types';
+import type { ItemFloorStatus, UserRole } from './types';
 import {
   PRODUCTION_SECTORS,
   sectorForFloorStatus,
   type ProductionSector,
 } from './productionSectors';
 
-export type ProductRole =
-  | 'admin'
-  | 'user'
-  | 'vendedor'
-  | 'gerente_ventas'
-  | 'gerente_produccion'
-  | 'ingeniero'
-  | 'produccion'
-  | 'almacen';
+export type { UserRole };
+export type ProductRole = UserRole;
 
-export const PRODUCT_ROLES: readonly ProductRole[] = [
+export const USER_ROLES: readonly UserRole[] = [
   'admin',
   'user',
   'vendedor',
@@ -30,6 +23,8 @@ export const PRODUCT_ROLES: readonly ProductRole[] = [
   'produccion',
   'almacen',
 ] as const;
+
+export const PRODUCT_ROLES: readonly ProductRole[] = USER_ROLES;
 
 /** Assignable job titles from admin panel (includes sin puesto). */
 export const ASSIGNABLE_ROLES: readonly ProductRole[] = PRODUCT_ROLES;

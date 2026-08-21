@@ -590,7 +590,7 @@ func (s *Server) HandleOperatorsBySector(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "failed to get operators")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, users)
+	respondWithJSON(w, http.StatusOK, ToPublicUserDTOs(users))
 }
 
 // HandleMySectors handles GET /api/me/sectors — the caller's own station

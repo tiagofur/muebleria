@@ -1,0 +1,13 @@
+{
+  "canonicalRoles": [
+    "admin",
+    "user",
+    "vendedor",
+    "gerente_ventas",
+    "gerente_produccion",
+    "ingeniero",
+    "produccion",
+    "almacen"
+  ],
+  "rejectedRoles": ["disenador", "carpintero", "supervisor"]
+}

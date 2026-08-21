@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -166,9 +167,47 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// PublicUserDTO is the safe public representation of a user, guaranteeing
+// that internal secrets (such as password hashes) are never serialized (OC-005).
+type PublicUserDTO struct {
+	ID        string          `json:"id"`
+	Email     string          `json:"email"`
+	Name      string          `json:"name"`
+	Role      domain.UserRole `json:"role"`
+	Active    bool            `json:"active"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+func ToPublicUserDTO(u *domain.User) PublicUserDTO {
+	if u == nil {
+		return PublicUserDTO{}
+	}
+	return PublicUserDTO{
+		ID:        u.ID,
+		Email:     u.Email,
+		Name:      u.Name,
+		Role:      u.Role,
+		Active:    u.Active,
+		CreatedAt: u.CreatedAt,
+		UpdatedAt: u.UpdatedAt,
+	}
+}
+
+func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
+	if users == nil {
+		return []PublicUserDTO{}
+	}
+	out := make([]PublicUserDTO, len(users))
+	for i, u := range users {
+		out[i] = ToPublicUserDTO(&u)
+	}
+	return out
+}
+
 type LoginResponse struct {
-	Token string      `json:"token"`
-	User  domain.User `json:"user"`
+	Token string        `json:"token"`
+	User  PublicUserDTO `json:"user"`
 }
 
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +246,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
 		Token: token,
-		User:  *u,
+		User:  ToPublicUserDTO(u),
 	})
 }
 
@@ -242,7 +281,7 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
 		Token: token,
-		User:  *u,
+		User:  ToPublicUserDTO(u),
 	})
 }
 
@@ -1372,7 +1411,7 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		respondWithInternalError(w, err, "handler")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, list)
+	respondWithJSON(w, http.StatusOK, ToPublicUserDTOs(list))
 }
 
 // HandleAssignableOwners: GET /api/assignable-owners
