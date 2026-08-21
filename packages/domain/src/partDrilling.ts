@@ -7,6 +7,14 @@
 import type { ProductionCutRow, Project } from './types';
 
 export type HoleFace = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'back';
+
+/**
+ * Emergency thickness for degenerate descriptors that reach the drilling
+ * pipeline WITHOUT a resolved material thickness (the normal BOM flow always
+ * carries the real material T — this default never applies in production).
+ * Single source for both the heuristic and the resolver (F128 review debt).
+ */
+export const DEFAULT_BOARD_THICKNESS_MM = 18;
 export type HoleType = 'dowel' | 'minifix' | 'hinge' | 'shelf' | 'screw';
 
 export interface HoleDefinition {
@@ -60,7 +68,7 @@ export function inferHolesForPiece(row: ProductionCutRow): readonly HoleDefiniti
   const holes: HoleDefinition[] = [];
   const L = row.lengthMm;
   const W = row.widthMm;
-  const T = row.thicknessMm ?? 18;
+  const T = row.thicknessMm ?? DEFAULT_BOARD_THICKNESS_MM;
 
   if (name.includes('puerta') || name.includes('door')) {
     // Hinge cup holes 35mm on the inner face, C-distance from the hinge edge.

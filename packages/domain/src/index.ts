@@ -686,6 +686,7 @@ export {
 
 // --- Part Drilling Data (F074) ---
 export {
+  DEFAULT_BOARD_THICKNESS_MM,
   generatePartDrillingData,
   inferHolesForPiece,
   type HoleFace,

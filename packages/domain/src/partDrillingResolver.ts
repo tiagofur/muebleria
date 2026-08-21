@@ -16,7 +16,14 @@
 
 import { ValidationError } from './errors';
 import { evaluatePartFormula } from './engine/shared';
-import { inferHolesForPiece, type HoleDefinition, type HoleFace, type HoleType, type PartDrillingPattern } from './partDrilling';
+import {
+  DEFAULT_BOARD_THICKNESS_MM,
+  inferHolesForPiece,
+  type HoleDefinition,
+  type HoleFace,
+  type HoleType,
+  type PartDrillingPattern,
+} from './partDrilling';
 import type {
   AnchorFace,
   Hardware,
@@ -413,7 +420,7 @@ export function resolvePartDrilling(
 
   const lengthMm = piece.lengthMm;
   const widthMm = piece.widthMm;
-  const thicknessMm = piece.thicknessMm ?? 15;
+  const thicknessMm = piece.thicknessMm ?? DEFAULT_BOARD_THICKNESS_MM;
   const { id, pieceCode, moduleCode, partName, materialName, pieceContext } = extractPieceMetadata(piece);
 
   const resolvedHoles: HoleDefinition[] = [];

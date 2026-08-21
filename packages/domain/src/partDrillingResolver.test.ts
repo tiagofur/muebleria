@@ -668,3 +668,22 @@ describe('validateDrillingHoles — separación entre caras opuestas (review F12
     expect(result.issues).toHaveLength(0);
   });
 });
+
+describe('DEFAULT_BOARD_THICKNESS_MM — default único de espesor (deuda F128)', () => {
+  it('pieza sin espesor resuelve contra 18 en heurística y validación', () => {
+    // Descriptor degenerado sin thicknessMm (el flujo BOM real siempre lo trae).
+    const noThickness = {
+      ...testDoor,
+      description: 'Estante',
+      lengthMm: 800,
+      widthMm: 400,
+      thicknessMm: undefined,
+    } as unknown as ResolvedBoardPart;
+
+    const result = resolvePartDrilling({ piece: noThickness });
+    expect(result.fallbackUsed).toBe(true);
+    // Pines centrados en el canto con T=18 → x = 9 (con el viejo ?? 15 sería 7).
+    expect(result.holes.every((h) => h.xMm === 9)).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+});
