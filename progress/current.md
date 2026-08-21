@@ -89,3 +89,25 @@ cierre y closeout/conformidad auditado (OC-070..OC-074).
   aplica sólo el job. En modo local/offline la acción pura appendea eventos.
 - UI: una primaria por contexto (Iniciar/Completar visita, Registrar conformidad);
   gates deshabilitados explican cómo resolverse (UX operacional §2.4).
+
+## Sexta pasada — feedback de producto: home de proceso = lista de obras
+
+El panel de job incrustado por obra en la home de Instalaciones concentraba el
+trabajo de TODAS las obras en una sola pantalla (demasiada información, ambigüedad
+de a qué obra pertenece cada dato). Refactor al patrón canónico que ya usan
+Embarques/Órdenes:
+
+- **Home (`/installations`)**: lista de obras — card con cliente + dirección/teléfono,
+  badge de estado del job, resumen `X/Y unidades · N en camino · visitas/incidencias/
+  punch bloqueantes` y UNA primaria "Abrir instalación". Sin acciones de proceso inline.
+- **Detalle (`/installations/:projectId`, nuevo `InstalacionesProjectDetail`)**: back a
+  la lista, contexto de obra + contacto, "En camino → Marcar Instalado" y el panel
+  completo OC-070..OC-074 (visitas, incidencias, punch, cierre con gates).
+- **Docs**: regla dura codificada en `docs/operational-ux.md` §4 ("home de proceso =
+  lista de obras; el trabajo vive en el detalle por obra") y `docs/design.md` §6.7d
+  actualizado con la spec lista → detalle — para que ninguna feature vuelva a
+  inline-ar el trabajo de todas las obras en una home.
+
+Verificación de la pasada: ui **1173** (screen lista 8 + detalle 5) · resto de
+paquetes sin cambios y en verde (domain 836 · storage 143 · web 301 · mobile 45 ·
+desktop 17 · excel 89) · `pnpm typecheck` monorepo OK.

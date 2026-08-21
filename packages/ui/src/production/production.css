@@ -2778,3 +2778,108 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+/* ── Instalaciones — lista compacta + detalle por obra ──────────────────── */
+
+.instalaciones-list__address {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.instalaciones-list__address > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.instalaciones-list__address--link {
+  color: var(--text-brand);
+  text-decoration: none;
+  text-underline-offset: var(--space-1);
+}
+
+.instalaciones-list__address--link:hover {
+  text-decoration: underline;
+}
+
+.instalaciones-list__address--link:focus-visible {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus);
+  outline: none;
+}
+
+.instalaciones-list__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.instalaciones-list__meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.instalaciones-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.instalaciones-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.instalaciones-detail__back {
+  flex: 1 0 100%;
+}
+
+.instalaciones-detail__project-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.instalaciones-detail__title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.instalaciones-detail__customer {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.instalaciones-detail__summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.instalaciones-detail__units {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .instalaciones-detail__summary {
+    align-items: flex-start;
+  }
+}

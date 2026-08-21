@@ -257,6 +257,8 @@ import {
   productionOrderFromPath,
   productionOrderPath,
   shipmentDetailFromPath,
+  installationDetailPath,
+  installationDetailFromPath,
   shipmentDetailPath,
   projectPath,
   structureEditIdFromPath,
@@ -845,6 +847,8 @@ export function AppContent({
   );
   const routeShipmentProjectId =
     navId === 'shipments' ? shipmentDetailFromPath(location.pathname) : null;
+  const routeInstallationProjectId =
+    navId === 'installations' ? installationDetailFromPath(location.pathname) : null;
   const routeEngineeringProjectId =
     navId === 'engineering' ? engineeringProjectFromPath(location.pathname) : null;
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
@@ -2229,6 +2233,7 @@ export function AppContent({
     routeProductionOrderTab,
     routeProjectId,
     routeShipmentProjectId,
+    routeInstallationProjectId,
     routeStructureEditId,
     routeStructureId,
     saveAsTemplate,

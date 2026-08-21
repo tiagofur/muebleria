@@ -246,6 +246,8 @@ export {
   type EmbarquesProjectDetailProps,
   InstalacionesScreen,
   instalacionesProjects,
+  InstalacionesProjectDetail,
+  type InstalacionesProjectDetailProps,
   InstallationJobPanel,
   type InstallationJobPanelHandlers,
   installationJobCardView,

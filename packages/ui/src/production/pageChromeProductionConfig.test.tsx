@@ -64,7 +64,7 @@ describe('F106 page chrome — Producción, Almacén y Config', () => {
 
   it('Instalaciones renders shared header with to-install stat', () => {
     render(
-      <InstalacionesScreen projects={[]} canAdvance onAdvance={vi.fn()} />,
+      <InstalacionesScreen projects={[]} onOpenProject={vi.fn()} />,
     );
     expectSharedHeader('Instalaciones');
     expect(screen.getByTestId('instalaciones-to-install')).toBeDefined();

@@ -1,124 +1,87 @@
 /**
- * Instalaciones — instalación en obra board (menu reorg).
- *
- * The last process step gets its own screen: what's CARGADO and on its way
- * to the client (loaded → installed), grouped per project, plus the
- * installation job subprocess per project — visits, field issues, punch
- * items and the gated client closeout (OC-070..OC-074).
- *
- * Read-derive only; advancing goes through the shell callback so the server
- * enforces station scoping and writes the floor-status event (F094). Job
- * mutations go through the installation handlers (server validates
- * transitions and appends the lifecycle audit events).
+ * Instalaciones — installation home: a LIST of projects with installation
+ * work (canonical process-screen pattern: the home is a project list; the
+ * process work — visits, field issues, punch, closeout — lives in the
+ * per-project detail screen, docs/operational-ux.md §4).
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { Hammer, Mail, MapPin, Phone } from 'lucide-react';
+import { Hammer, MapPin, Phone } from 'lucide-react';
 
 import {
   normalizeItemFloorStatus,
-  ITEM_FLOOR_STATUS_LABELS_ES,
-  type ItemFloorStatus,
   type Customer,
   type Project,
-  type ProjectItem,
 } from '@muebles/domain';
 import { EmptyState, PageHeader } from '../common';
-import { InstallationJobPanel, type InstallationJobPanelHandlers } from './InstallationJobPanel';
+import { installationJobCardView, type InstallationJobCardView } from './installationJobView';
 
-type InstalacionesRow = {
-  readonly itemId: string;
-  readonly moduleName: string;
-  readonly quantity: number;
-  readonly currentStatus: ItemFloorStatus;
-};
-
-type InstalacionesProject = {
+export type InstalacionesCard = {
   readonly projectId: string;
   readonly projectName: string;
   readonly customerLabel: string;
   readonly customerAddress?: string;
   readonly customerPhone?: string;
-  readonly customerEmail?: string;
-  readonly toInstall: readonly InstalacionesRow[];
+  readonly toInstallCount: number;
   readonly installedCount: number;
+  readonly job: InstallationJobCardView;
 };
 
-function rowFromItem(item: ProjectItem): InstalacionesRow {
+function cardFromProject(
+  project: Project,
+  customer?: Customer,
+): InstalacionesCard | null {
+  if (project.status !== 'accepted' && project.status !== 'produced') return null;
+  let toInstall = 0;
+  let installed = 0;
+  for (const item of project.items ?? []) {
+    const status = normalizeItemFloorStatus(item.floorStatus);
+    if (status === 'loaded') toInstall++;
+    else if (status === 'installed') installed++;
+  }
+  const job = installationJobCardView(project);
+  const hasJobWork =
+    job.hasJob &&
+    ((project.installation?.visits.length ?? 0) > 0 ||
+      (project.installation?.fieldIssues.length ?? 0) > 0 ||
+      (project.installation?.punchItems.length ?? 0) > 0 ||
+      job.closeoutSigned);
+  if (toInstall === 0 && !hasJobWork) return null;
   return {
-    itemId: item.id,
-    moduleName: item.moduleId,
-    quantity: item.quantity,
-    currentStatus: normalizeItemFloorStatus(item.floorStatus),
+    projectId: project.id,
+    projectName: project.name,
+    customerLabel: customer?.name ?? '',
+    customerAddress: customer?.address,
+    customerPhone: customer?.phone,
+    toInstallCount: toInstall,
+    installedCount: installed,
+    job,
   };
 }
 
-/**
- * Factory projects with active installation work (pure, testable): either
- * items still to install on site or an installation job in progress/closeout.
- */
+/** Projects with active installation work (pure, testable). */
 export function instalacionesProjects(
   projects: readonly Project[],
   customerFor?: (customerId: string) => Customer | undefined,
-): readonly InstalacionesProject[] {
-  const result: InstalacionesProject[] = [];
+): readonly InstalacionesCard[] {
+  const cards: InstalacionesCard[] = [];
   for (const project of projects) {
-    if (project.status !== 'accepted' && project.status !== 'produced') continue;
-    const toInstall: InstalacionesRow[] = [];
-    let installedCount = 0;
-    for (const item of project.items) {
-      const status = normalizeItemFloorStatus(item.floorStatus);
-      if (status === 'loaded') toInstall.push(rowFromItem(item));
-      else if (status === 'installed') installedCount++;
-    }
-    const job = project.installation;
-    const hasJobWork =
-      Boolean(job) &&
-      (job!.visits.length > 0 ||
-        job!.fieldIssues.length > 0 ||
-        job!.punchItems.length > 0 ||
-        Boolean(job!.closeout));
-    if (toInstall.length === 0 && !hasJobWork) continue;
-    const customer = customerFor?.(project.customerId);
-    result.push({
-      projectId: project.id,
-      projectName: project.name,
-      customerLabel: customer?.name ?? '',
-      customerAddress: customer?.address,
-      customerPhone: customer?.phone,
-      customerEmail: customer?.email,
-      toInstall,
-      installedCount,
-    });
+    const card = cardFromProject(project, customerFor?.(project.customerId));
+    if (card) cards.push(card);
   }
-  return result;
+  return cards;
 }
 
 export function InstalacionesScreen({
   projects,
-  canAdvance,
-  canManageJob,
-  canCloseout,
-  onAdvance,
-  jobHandlers,
+  onOpenProject,
   customerFor,
   testId,
 }: {
   /** Projects in the factory (accepted/produced), already role-filtered. */
   readonly projects: readonly Project[];
-  readonly canAdvance: boolean;
-  /** Installation roles may work the job (visits, issues, punch). */
-  readonly canManageJob?: boolean;
-  /** Closeout roles may sign off and close the project. */
-  readonly canCloseout?: boolean;
-  /** Advance one loaded item to installed (Marcar Instalado). */
-  readonly onAdvance: (
-    projectId: string,
-    itemId: string,
-    target: ItemFloorStatus,
-  ) => void;
-  /** Installation job mutations (OC-070..OC-074). */
-  readonly jobHandlers?: InstallationJobPanelHandlers;
+  /** Open the per-project installation detail screen. */
+  readonly onOpenProject: (projectId: string) => void;
   /** Existing customer data for the installation destination and contact. */
   readonly customerFor?: (customerId: string) => Customer | undefined;
   readonly testId?: string;
@@ -127,12 +90,7 @@ export function InstalacionesScreen({
     () => instalacionesProjects(projects, customerFor),
     [projects, customerFor],
   );
-  const projectById = useMemo(
-    () => new Map(projects.map((p) => [p.id, p] as const)),
-    [projects],
-  );
-  const totalToInstall = cards.reduce((acc, c) => acc + c.toInstall.length, 0);
-  const totalInstalled = cards.reduce((acc, c) => acc + c.installedCount, 0);
+  const totalToInstall = cards.reduce((acc, c) => acc + c.toInstallCount, 0);
 
   return (
     <section
@@ -142,29 +100,19 @@ export function InstalacionesScreen({
     >
       <PageHeader
         title="Instalaciones"
-        subtitle="Qué va cargado y en camino a obra. Al marcar instalado, la obra avanza en Estado de Planta."
+        subtitle="Obras con instalación en curso o pendiente. Abrí una obra para gestionar visitas, incidencias, punch list y cierre."
         icon={<Hammer size={16} strokeWidth={1.5} />}
         contextualControls={
-          <>
-            <span className="ship-board__stat" data-testid="instalaciones-to-install">
-              {totalToInstall} para instalar
-            </span>
-            {totalInstalled > 0 ? (
-              <span
-                className="ship-board__stat ship-board__stat--road"
-                data-testid="instalaciones-installed"
-              >
-                {totalInstalled} instalados
-              </span>
-            ) : null}
-          </>
+          <span className="ship-board__stat" data-testid="instalaciones-to-install">
+            {totalToInstall} para instalar
+          </span>
         }
       />
 
       {cards.length === 0 ? (
         <EmptyState
           title="Nada para instalar"
-          description="Cuando cargues muebles desde Embarques, aparecen acá para instalar en obra."
+          description="Cuando cargues muebles desde Embarques, las obras aparecen acá para instalar en obra."
         />
       ) : (
         <ul className="ship-board__cards">
@@ -178,105 +126,61 @@ export function InstalacionesScreen({
                 <div>
                   <h3 className="ship-board__card-title">{card.projectName}</h3>
                   {card.customerLabel ? (
-                    <p className="ship-board__card-customer">
-                      {card.customerLabel}
+                    <p className="ship-board__card-customer">{card.customerLabel}</p>
+                  ) : null}
+                  {card.customerAddress ? (
+                    <p className="instalaciones-list__address">
+                      <MapPin size={14} strokeWidth={1.5} aria-hidden />
+                      <span>{card.customerAddress}</span>
                     </p>
                   ) : null}
-                  {card.customerAddress || card.customerPhone || card.customerEmail ? (
-                    <address
-                      className="ship-board__customer-details"
-                      aria-label={`Datos de contacto${
-                        card.customerLabel ? ` de ${card.customerLabel}` : ''
-                      }`}
+                  {card.customerPhone ? (
+                    <a
+                      className="instalaciones-list__address instalaciones-list__address--link"
+                      href={`tel:${card.customerPhone}`}
                     >
-                      {card.customerAddress ? (
-                        <span className="ship-board__customer-detail">
-                          <MapPin size={16} strokeWidth={1.5} aria-hidden />
-                          <span>{card.customerAddress}</span>
-                        </span>
-                      ) : null}
-                      {card.customerPhone ? (
-                        <a
-                          className="ship-board__customer-detail ship-board__customer-detail-link"
-                          href={`tel:${card.customerPhone}`}
-                        >
-                          <Phone size={16} strokeWidth={1.5} aria-hidden />
-                          <span>{card.customerPhone}</span>
-                        </a>
-                      ) : null}
-                      {card.customerEmail ? (
-                        <a
-                          className="ship-board__customer-detail ship-board__customer-detail-link"
-                          href={`mailto:${card.customerEmail}`}
-                        >
-                          <Mail size={16} strokeWidth={1.5} aria-hidden />
-                          <span>{card.customerEmail}</span>
-                        </a>
-                      ) : null}
-                    </address>
+                      <Phone size={14} strokeWidth={1.5} aria-hidden />
+                      <span>{card.customerPhone}</span>
+                    </a>
                   ) : null}
                 </div>
-                {card.installedCount > 0 ? (
-                  <span className="ship-board__card-done">
-                    {card.installedCount} instalados
-                  </span>
-                ) : null}
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => onOpenProject(card.projectId)}
+                  data-testid={`instalaciones-open-${card.projectId}`}
+                >
+                  <Hammer size={16} strokeWidth={1.5} aria-hidden />
+                  Abrir instalación
+                </button>
               </div>
-              {card.toInstall.length > 0 ? (
-                <div className="ship-board__section">
-                  <h4 className="ship-board__section-title">
-                    En camino
-                    <span className="ship-board__section-count">
-                      {card.toInstall.length}
-                    </span>
-                  </h4>
-                  <ul className="ship-board__list">
-                    {card.toInstall.map((row) => (
-                      <li
-                        key={row.itemId}
-                        className="ship-board__row"
-                        data-testid={`instalaciones-install-${row.itemId}`}
-                      >
-                        <div className="ship-board__row-main">
-                          <span className="ship-board__row-module">
-                            {row.moduleName}
-                          </span>
-                          <span className="ship-board__row-meta">
-                            {row.quantity}{' '}
-                            {row.quantity === 1 ? 'mueble' : 'muebles'} · está en{' '}
-                            {ITEM_FLOOR_STATUS_LABELS_ES[row.currentStatus]}
-                          </span>
-                        </div>
-                        {canAdvance ? (
-                          <button
-                            type="button"
-                            className="btn btn--primary"
-                            onClick={() =>
-                              onAdvance(card.projectId, row.itemId, 'installed')
-                            }
-                            data-testid={`instalaciones-advance-${row.itemId}`}
-                          >
-                            <Hammer size={16} strokeWidth={1.5} aria-hidden />
-                            Marcar {ITEM_FLOOR_STATUS_LABELS_ES.installed}
-                          </button>
-                        ) : (
-                          <span className="ship-board__row-waiting">
-                            {ITEM_FLOOR_STATUS_LABELS_ES.installed}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {jobHandlers ? (
-                <InstallationJobPanel
-                  project={projectById.get(card.projectId)!}
-                  canManage={canManageJob ?? false}
-                  canCloseout={canCloseout ?? false}
-                  handlers={jobHandlers}
-                />
-              ) : null}
+              <p className="instalaciones-list__summary">
+                <span
+                  className={
+                    card.job.jobStatus === 'completed'
+                      ? 'status-badge status-badge--done'
+                      : card.job.jobStatus === 'in_progress'
+                        ? 'status-badge status-badge--progress'
+                        : 'status-badge status-badge--open'
+                  }
+                >
+                  {card.job.jobStatusLabel}
+                </span>
+                <span className="instalaciones-list__meta">
+                  {card.job.units.installed}/{card.job.units.total} unidades instaladas
+                  {card.toInstallCount > 0 ? ` · ${card.toInstallCount} en camino` : ''}
+                  {card.job.openVisitCount > 0
+                    ? ` · ${card.job.openVisitCount} visita${card.job.openVisitCount === 1 ? '' : 's'}`
+                    : ''}
+                  {card.job.openIssueCount > 0
+                    ? ` · ${card.job.openIssueCount} incidencia${card.job.openIssueCount === 1 ? '' : 's'}`
+                    : ''}
+                  {card.job.blockingPunchCount > 0
+                    ? ` · ${card.job.blockingPunchCount} punch bloqueante${card.job.blockingPunchCount === 1 ? '' : 's'}`
+                    : ''}
+                  {card.job.closed ? ' · obra cerrada' : ''}
+                </span>
+              </p>
             </li>
           ))}
         </ul>
