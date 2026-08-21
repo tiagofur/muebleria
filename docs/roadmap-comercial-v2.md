@@ -1,197 +1,311 @@
-# Roadmap Comercial v2 — Única fuente de verdad
+# Roadmap Comercial v2 — Prioridad vigente
 
-> **Estado:** ACTIVO. Este documento reemplaza como backlog canónico a:
-> `docs/app-excellence.md` (§roadmap) y `docs/prd.md §17`. Esos quedan como
-> registro histórico; el trabajo vivo vive aquí + GitHub issues (`tiagofur/muebleria`).
->
-> **Fecha:** 2026-08-10 · **Horizonte:** 12 meses a "producto vendible en LatAm"
+> **Estado:** ACTIVO  
+> **Actualizado:** 2026-08-21  
+> **Norte:** producto vendible y operable en talleres reales de LatAm.
 
----
-
-## 0. Propuesta de valor (norte comercial)
-
-> **Cotizador + BOM + Producción para carpinterías pequeñas y medianas de
-> LatAm.** Más simple que Promob, más completo que Excel, en español, con 3D
-> que vende y sin requerir SketchUp. Muebles de medidas cerradas (cocinas,
-> clóset, baño, oficina). De $40–80/mes por taller.
-
-**No competimos** con Promob en mueble complejo/paramétrico libre ni en
-fotorrealismo de catálogo. **Competimos** en:
-1. Tiempo de cotización (minutos, no horas).
-2. BOM + corte + etiquetas listos para producir, no solo dibujar.
-3. Curva de aprendizaje de horas, no semanas.
-4. Precio accesible para el taller chico que Promob no atiende.
-
-**Dos modos de uso coexisten** (decisión de producto):
-- **Proyectar (50%):** diseño 3D → muebles al proyecto con colocación espacial.
-- **Cotizar rápido (50%):** añadir muebles por catálogo sin abrir el 3D.
-
-Ambos modos deben hacerse **bien**. El 3D no es decorativo: genera BOM y
-coloca piezas en muros reales. La cotización sin 3D no es subproducto:
-es el flujo rápido para el vendedor que sabe qué vende.
+Este documento sigue siendo la fuente narrativa del roadmap comercial, pero desde
+2026-08-21 se complementa con `docs/operational-core-v1.md` para la consolidación
+operativa. GitHub issues contienen trabajo futuro; `feature_list.json` es ledger de
+implementación/historia y no sustituye la priorización narrativa.
 
 ---
 
-## 1. Decisiones de producto (cerradas)
+## 0. Propuesta de valor actualizada
 
-| # | Decisión | Elección | Implicación |
-|---|----------|----------|-------------|
-| D1 | Flujo añadir muebles | **Mejorar flujo actual** (cotización → "sin colocar" → drag al muro) | No se construye barra catálogo izquierda tipo Promob. Se pule el puente cotización↔3D. |
-| D2 | Acabados de herrajes | **Variantes predefinidas primero, capas después** | Cada herraje ofrece N acabados cerrados (cromado/negro/bronce/mate). Modelo de capas por componente queda congelado (F080). |
-| D3 | Panel inspector | **Rediseño del PartInspector actual** | Reorganizar en secciones colapsables, no arquitectura nueva con tabs. |
-| D4 | Gestión del roadmap | **Este doc + GitHub issues + feature_list.json + PRD §17** | Una sola fuente narrativa (este doc), trackeo operativo en GitHub. |
+> **Plataforma operativa de muebles: cotizar, proyectar, preparar materiales, producir,
+> instalar y saber si la obra fue rentable.**
 
-**Stack:** React 19 + R3F + three.js + Vite + Electron + Go + Postgres. **No
-migra** a C#/Qt/nativo. El 99% del mercado es Windows 10/11; Chromium (vía
-Electron) es el mismo motor que ya corre en esos PCs.
+Más simple de aprender que soluciones pesadas, más profunda que Excel y específica al
+lenguaje del taller.
 
----
+Diferenciadores:
 
-## 2. Fases del roadmap comercial
+1. cotización rápida con BOM real;
+2. Proyectar 2D/3D conectado a producción;
+3. corte/etiquetas/CNC integrados al mismo job;
+4. flujo material→taller→instalación trazable;
+5. rentabilidad por obra como objetivo de Operational Core;
+6. UX en español y adaptada a talleres pequeños/medianos.
 
-### Fase A — Proyectar pulido (6–8 semanas)
+Dos modos comerciales siguen coexistiendo:
 
-Hacer que el flujo "añadir mueble → colocarlo en 3D" sea fluido, obvio y
-agradable. Es el corazón del "se siente como Promob" sin copiar la barra de
-catálogo.
-
-| ID | Feature | Tiempo | Deps |
-|----|---------|--------|------|
-| **F065** | Colocación drag-drop mejorada: ítem "sin colocar" → drag directo al muro/piso con preview fantasma, snap visual, feedback de validez (rojo si colisión, verde si ok) | 2–3 sem | — |
-| **F066** | Inspector 3D rediseñado con secciones colapsables: Dimensiones / Material / Herrajes / Acabado / Avanzado. Reemplaza `PartInspector` actual | 2 sem | — |
-| **F067** | Paleta de materiales con aplicación por drag: arrastrar material desde el panel al piso, muro o pieza seleccionada (raycast al soltar). "Pintar" la escena | 2–3 sem | F066 |
-
-**Resultado Fase A:** un vendedor abre un proyecto, añade 6 muebles desde
-cotización, los arrastra al muro en 3D, aplica materiales, y ve algo que "se
-ve como Promob" en menos de 10 minutos.
+- **Proyectar:** trabajo espacial/3D;
+- **Cotizar rápido:** catálogo + opciones sin abrir 3D.
 
 ---
 
-### Fase B — Herrajes 3D completos (6–8 semanas)
+## 1. Decisiones cerradas
 
-Herrajes visibles con posición, rotación y acabado. Sin perforaciones
-dinámicas todavía (eso es Fase Congelada F081).
-
-| ID | Feature | Tiempo | Deps |
-|----|---------|--------|------|
-| **F068** | Geometrías 3D de herrajes adicionales: bisagra (cuerpo + copa), corredera telescópica, riel, pata nivelable. Extender `previewShape` y `HardwareMesh.tsx` más allá de knob/bar-pull/cup-pull | 2–3 sem | rama actual `feat/agregado-hardware-3d` |
-| **F069** | Variantes de acabado para herrajes: catálogo de acabados (cromado/negro/bronce/mate/cepillado), selector en inspector, swap de material PBR al elegir. Migración aditiva `hardware_finishes` | 2–3 sem | F066, F068 |
-| **F070** | Editor de placement de herrajes en 3D: gizmo de posición/rotación interactivo en el viewport, ajuste fino en inspector (mm y grados), multi-selección | 2 sem | F068, F069 |
-
-**Resultado Fase B:** cada mueble muestra sus jaladeras, bisagras y
-correderas en el lugar correcto con el acabado elegido. El cliente ve en la
-cotización 3D "cómo queda realmente".
-
----
-
-### Fase C — Producción y corte de valor (6–8 semanas)
-
-El diferenciador real vs Promob: **no solo dibujás, producís**. Lo que el
-taller necesita para cortar y armar, listo.
-
-| ID | Feature | Tiempo | Deps |
-|----|---------|--------|------|
-| **F071** | Etiquetas Zebra/ZPL para impresoras térmicas: 1–3 tamaños comunes (ej. 100×50, 100×150 mm), con código de pieza, dimensiones, material, QR. Genera `.zpl` descargable + impresión directa vía CUPS | 2 sem | — |
-| **F072** | PDF preview de corte visual para cortes manuales: dibuja las piezas como rectángulos empaquetados sobre el tablero estándar (ej. 2440×1830), con dimensiones y código. Para el taller que corta a mano | 2–3 sem | — |
-| **F073** | CSV de plan de corte editable y configurable: columnas seleccionables, separador configurable, presets por taller. Más allá del CSV fijo actual | 1–2 sem | — |
-| **F074** | Lista de piezas con perforaciones como datos estructurados: cada pieza lleva su lista de perforaciones (diámetro, posición, profundidad) como datos, no como geometría. Fluye al CSV y a la etiqueta | 2–3 sem | — |
-
-**Resultado Fase C:** un taller produce un proyecto de punta a punta —cotizó,
-vio el 3D, generó plan de corte, etiquetó las piezas con su Zebra, cortó a
-mano con el PDF de corte, armó con la lista de piezas— sin tocar Excel ni
-Software externo (salvo el optimizador de corte opcional).
-
-> **Nota sobre optimizador de corte (actualizada 2026-08-20):** el nesting
-> nativo fue habilitado por decisión explícita del dueño del producto (D5
-> revisada). Serie F124–F126: motor MaxRects diferenciado para CNC (mezcla
-> piezas grandes y chicas con espaciado de herramienta) + export DXF R12
-> exclusivo del modo nesting. Para sierra, el taller sigue exportando al
-> optimizador externo (Plantilla_Optimizer.xlsx o CSV) o corta a mano con F072.
+| # | Decisión | Elección |
+|---|---|---|
+| D1 | Añadir muebles | Mejorar flujo actual; no copiar barra Promob |
+| D2 | Acabados herrajes | Variantes predefinidas primero |
+| D3 | Inspector | Evolución del inspector actual, no arquitectura paralela |
+| D4 | Fuentes de planificación | Roadmap narrativo + GitHub issues; feature_list como ledger |
+| D5 | Nesting | Nativo permitido; sierra y CNC son estrategias distintas |
+| D6 | CNC de marca | Postprocesador específico sólo con máquina real confirmada |
+| D7 | Granularidad producción | **Corte/CNC/Enchape por pieza; Armado+ por mueble/unidad/bulto** |
+| D8 | Próxima prioridad | Tras cerrar F128, Operational Core gana prioridad por defecto |
+| D9 | Validación | Pilotos reales compiten con features profundas por prioridad |
 
 ---
 
-### Fase D — Empaquetado y lanzamiento (4–6 semanas)
+## 2. Estado real a 2026-08-21
 
-Salir al mundo. Producto en manos de talleres reales.
+El producto ya superó el roadmap inicial en varias áreas:
 
-| ID | Feature | Tiempo | Deps |
-|----|---------|--------|------|
-| **F075** | Electron empaquetado + firma Windows: instalador `.exe` con `electron-builder`, firma con certificado, auto-update. Cierra issue #38 / F032 | 2–3 sem | — |
-| **F076** | Onboarding + datos semilla para demo comercial: proyecto ejemplo (cocina L completa), catálogo con muebles LatAm, tour guiado de 3 pasos | 1–2 sem | F075 |
-| **F077** | Prep venta: pricing tiers ($40/80/mes), landing minimal, doc de demo, script de venta para ferias/contactos | 1–2 sem | F075, F076 |
+- Proyectar/3D avanzado;
+- herrajes y placements;
+- production workspace y estaciones;
+- mobile companion;
+- stock + purchase orders;
+- dashboards por área;
+- cut-plan 2D guillotina;
+- CNC nesting + DXF;
+- machining profiles;
+- F128 drilling resolution en cierre/avance actual.
 
-**Resultado Fase D:** producto instalable en Windows con doble clic, demo
-lista para mostrar en una carpintería, modelo de cobro definido.
-
----
-
-## 3. Congelado — Solo con clientes pagando
-
-Estas features **no se empiezan** hasta tener al menos 3 talleres pagando
-durante 3 meses. Son válidas como visión pero matan el time-to-market si se
-adelantan.
-
-| ID | Feature | Disparador |
-|----|---------|------------|
-| **F078** | SketchUp plugin (exportador de modelo → tu API). Captura usuarios que ya usan SketchUp | Cliente pide "trabajar en SketchUp" |
-| **F079** | Render backend Blender headless (render premium, add-on pago) | Cliente pide imagen fotorrealista de catálogo |
-| **F080** | Capas de acabado por componente de herraje (cuerpo cromado + base negra independiente) | Demanda de catálogo de herrajes complejos |
-| **F081** | Perforaciones dinámicas tipo Promob Builder (CSG visual + export a CNC) | Cliente con CNC que necesita G-code |
-
-**Razón del congelamiento:** cada una de estas es 4–12 semanas de trabajo
-que no genera ingresos hasta que exista demanda probada. El riesgo de
-adelantarlas es morir puliendo lo que nadie pidió.
+Por eso las fases A/B/C históricas ya no deben leerse como “todo pendiente”. Ver
+`feature_list.json`, código y `docs/documentation-sync-2026-08-21.md` para reconciliar.
 
 ---
 
-## 4. Anti-scope (lo que NO vamos a hacer)
+## 3. Prioridad inmediata — cerrar trabajo activo
 
-- **No** competir con Promob en mueble paramétrico libre ni fotorrealismo.
-- **No** construir un modelador 3D tipo SketchUp. Si el cliente quiere
-  modelar libre, integramos (F078, congelado).
-- **No** migrar a C#/Qt/nativo. El stack actual cumple.
-- **No** G-code ni post-procesadores CNC de marca hasta hardware real del
-  usuario (D6; el DXF neutro de F124–F126 es el límite).
-- **No** mobile nativo (iOS/Android apps) en este horizonte.
-- **No** multi-idioma más allá de español/portugués en este horizonte.
-- **No** marketplace de catálogos de terceros en este horizonte.
+### F128 — Drilling Resolution Engine
+
+Se termina correctamente, con tests y wiring acordado. No se abandona una feature
+profunda a medio implementar sólo por el cambio de prioridades.
 
 ---
 
-## 5. Issues abiertos existentes (reconciliación)
+## 4. Fase O0 — Guardrails y verdad del producto (P0)
 
-| Issue | Título | Se integra en |
-|-------|--------|---------------|
-| #254 | Producción: elevaciones separadas por ambiente | Mejora de Producción (dentro de Fase C, póstre a F072) |
-| #255 | Producción: islas en planta y elevación dedicada | Mejora de Producción (dentro de Fase C, póstre a F072) |
-| #256 | Producción: vistas planta y 3D multi-ambiente | Mejora de Producción (dentro de Fase C, póstre a F072) |
+Fuente: `docs/operational-core-v1.md` OC-001–006.
 
-Estos tres son mejoras al módulo Producción ya funcional; no bloquean Fase A
-ni B. Se cierran como parte de Fase C cuando se trabaje el PDF de corte y
-elevaciones.
+Objetivos:
 
----
+- arreglar `init.sh`;
+- CI remoto obligatorio;
+- reconciliar roadmap/issues/feature ledger;
+- roles canónicos;
+- DTO auth seguro;
+- Data Truth Contract para dashboards.
 
-## 6. Métricas de éxito (12 meses)
-
-| Métrica | Meta Fase D | Meta 12 meses |
-|---------|-------------|---------------|
-| Talleres en piloto gratis | 3–5 | — |
-| Talleres pagando | — | 15–30 |
-| MRR | — | $600–2400 USD |
-| Tiempo de cotización (medición en taller) | < 30 min cocina L | < 15 min |
-| Dogfood exitoso (cocina L + 6 muebles < 10 min) | 1 taller | 5 talleres |
+**Resultado:** “done”, “verde”, “rol” y “KPI real” vuelven a tener significado único.
 
 ---
 
-## 7. Cómo se actualiza este doc
+## 5. Fase O1 — Lifecycle + aprobación + Production Release (P0)
 
-- **Fuente narrativa:** este archivo (`docs/roadmap-comercial-v2.md`).
-- **Trackeo operativo:** GitHub issues con label `type:feature` + milestone
-  por fase (`fase-a-proyectar`, `fase-b-herrajes`, etc.).
-- **Registro histórico de features:** `feature_list.json` (F065+).
-- **Contrato de producto:** `docs/prd.md §17` referencia este doc.
-- Al cerrar una fase: marcar issues done, actualizar §17, mover métricas.
+OC-010–024.
 
-Al empezar una feature: crear rama `feat/F0XX-<slug>`, mover issue a
-`status:approved`, actualizar `progress/current.md`.
+Entregables:
+
+- `ProjectEvent[]`;
+- commercial status real incluyendo won/lost;
+- stage derivado;
+- anticipo real;
+- DesignRevision;
+- Approval;
+- ProductionRelease;
+- stale detection;
+- ChangeOrder.
+
+**Resultado:** siempre sabemos qué se vendió, qué se aprobó y qué revisión se fabricó.
+
+---
+
+## 6. Fase O2 — Producción física pieza→mueble (P0)
+
+OC-030–034 + `docs/production-flow-v2.md`.
+
+### Antes de Armado
+
+```text
+Corte → CNC → Enchape
+```
+
+seguimiento por pieza física/ruta.
+
+### Armado y después
+
+```text
+Armado → QC → Empaque → Carga → Instalación
+```
+
+seguimiento por mueble/unidad/bulto.
+
+**Resultado:** CNC y scans dejan de depender de un status demasiado grueso por línea de
+mueble.
+
+---
+
+## 7. Fase O3 — Materiales + QC (P1)
+
+OC-050–062.
+
+- requirements desde BOM liberado;
+- reservas;
+- shortage;
+- PO/receiving ligado a need-by/project;
+- material-ready con evidencia;
+- QualityIssue;
+- rework/scrap;
+- QC gates.
+
+**Resultado:** materiales y calidad forman parte del job, no módulos paralelos.
+
+---
+
+## 8. Fase O4 — Instalación y closeout (P1)
+
+OC-070–074.
+
+- InstallationJob;
+- visitas;
+- crews;
+- field issues;
+- punch list;
+- client sign-off/closeout.
+
+**Resultado:** “installed” deja de significar artificialmente “todo terminó”.
+
+---
+
+## 9. Fase O5 — Job Costing (P1)
+
+OC-080–084.
+
+- CostBaseline;
+- TimeEntry;
+- material actual;
+- other actuals;
+- estimate vs actual;
+- actual margin.
+
+**Resultado:** el dueño sabe qué tipo de obra realmente gana dinero.
+
+---
+
+## 10. Trabajo transversal
+
+### Site Survey
+
+OC-040/041 puede avanzar en paralelo cuando haya capacidad: medidas de campo deben
+diferenciar preliminar/levantada/aprobada/fabricación cuando aplique.
+
+### Operational UX / Project Workspace
+
+OC-090+:
+
+- dashboards exception-first;
+- proyecto/job como contexto transversal;
+- navegación simplificada para talleres pequeños;
+- navegación departamental para empresas medianas.
+
+### Pilotos
+
+No esperar a que termine todo Operational Core para probar. Empezar/continuar pilotos
+desde ahora con lo ya funcional.
+
+---
+
+## 11. F129–F131 y CNC profundo
+
+Siguen siendo features válidas:
+
+- F129 joint drilling rules;
+- F130 drilling DXF export;
+- F131 visual drilling editor.
+
+### Nueva regla de prioridad
+
+Después de F128, **no desplazan automáticamente Operational Core**.
+
+Se priorizan si:
+
+1. un taller piloto real necesita la capacidad para operar;
+2. desbloquean una venta/piloto concreto;
+3. el costo es pequeño y completa una cadena ya usada;
+4. producto decide explícitamente asumir el tradeoff.
+
+F132 postprocesador SCM sigue postergado hasta máquina/software confirmados.
+
+---
+
+## 12. Lanzamiento y comercial
+
+El trabajo histórico de F075–F077 sigue siendo importante:
+
+- packaging/installable release;
+- onboarding/demo data;
+- pricing/landing/demo script.
+
+No debe quedar eternamente detrás de features técnicas. La validación comercial es parte
+del producto, no “trabajo para después de terminar”.
+
+---
+
+## 13. Features congeladas/condicionadas
+
+Por defecto requieren demanda demostrada:
+
+- SketchUp plugin;
+- render premium backend;
+- acabados extremadamente complejos;
+- postprocesadores de marca;
+- CAD libre;
+- marketplace;
+- forecasting/multi-planta avanzado.
+
+El trigger es evidencia de cliente, no curiosidad técnica.
+
+---
+
+## 14. Anti-scope
+
+- no Promob completo;
+- no SketchUp interno;
+- no contabilidad fiscal/nómina;
+- no ERP horizontal;
+- no CAM universal;
+- no construir integraciones de máquina sin hardware real;
+- no dashboards con proxies disfrazados de datos reales.
+
+---
+
+## 15. Métricas de éxito
+
+### Fase piloto
+
+- 3–5 talleres reales;
+- cocina/proyecto típico cotizado sin Excel manual;
+- al menos una obra atraviesa venta→producción→instalación;
+- registrar fricciones reales;
+- ninguna revisión equivocada fabricada por falta de gate;
+- shortages visibles antes de corte;
+- medir retrabajos y pendientes de instalación.
+
+### 12 meses
+
+- 15–30 talleres pagando como objetivo orientativo;
+- MRR compatible con pricing validado;
+- quote time <15 min en catálogo conocido;
+- job margin real disponible;
+- evidencia de reducción de errores/retrabajo.
+
+---
+
+## 16. Cómo se actualiza este roadmap
+
+- narrativa/prioridad: este archivo;
+- contrato de producto: `docs/prd-v2.md`;
+- plan operativo: `docs/operational-core-v1.md`;
+- ejecución futura: GitHub issues;
+- implementación/historia: `feature_list.json` + código/tests;
+- divergencias: `docs/documentation-sync-2026-08-21.md`.
+
+Al cerrar una capacidad grande, actualizar roadmap y docs canónicos; no limitarse a
+marcar un JSON `done`.
