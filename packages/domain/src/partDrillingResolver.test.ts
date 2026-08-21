@@ -621,3 +621,50 @@ describe('resolvePartDrilling — Fallback F074', () => {
     expect(result.issues).toHaveLength(0);
   });
 });
+
+describe('validateDrillingHoles — separación entre caras opuestas (review F128)', () => {
+  const piece700 = {
+    id: 'p-opp',
+    code: 'P-OPP',
+    description: 'Pieza opuestas',
+    lengthMm: 700,
+    widthMm: 500,
+    thicknessMm: 18,
+  };
+
+  it('pines left/right enfrentados no colisionan (separación = ancho, no espesor)', () => {
+    const issues = validateDrillingHoles(piece700, [
+      { face: 'left', xMm: 9, yMm: 400, diameterMm: 5, depthMm: 10, type: 'shelf' },
+      { face: 'right', xMm: 9, yMm: 400, diameterMm: 5, depthMm: 10, type: 'shelf' },
+    ]);
+    expect(issues).toHaveLength(0);
+  });
+
+  it('tarugos top/bottom enfrentados no colisionan (separación = largo)', () => {
+    const issues = validateDrillingHoles(piece700, [
+      { face: 'top', xMm: 100, yMm: 9, diameterMm: 8, depthMm: 30, type: 'dowel' },
+      { face: 'bottom', xMm: 100, yMm: 9, diameterMm: 8, depthMm: 30, type: 'dowel' },
+    ]);
+    expect(issues).toHaveLength(0);
+  });
+
+  it('front/back enfrentados que atraviesan el espesor sí colisionan (control)', () => {
+    const issues = validateDrillingHoles(piece700, [
+      { face: 'front', xMm: 100, yMm: 100, diameterMm: 8, depthMm: 12, type: 'dowel' },
+      { face: 'back', xMm: 100, yMm: 100, diameterMm: 5, depthMm: 10, type: 'screw' },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.code).toBe('HOLE_COLLISION');
+    expect(issues[0]!.context).toMatchObject({ separationMm: 18 });
+  });
+
+  it('fallback estante: sin issues falsas de colisión (regresión review)', () => {
+    const result = resolvePartDrilling({
+      piece: { ...testDoor, description: 'Estante', lengthMm: 800, widthMm: 400 },
+    });
+    expect(result.fallbackUsed).toBe(true);
+    expect(result.holes).toHaveLength(2);
+    expect(result.holes.every((h) => h.face === 'left' || h.face === 'right')).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+});

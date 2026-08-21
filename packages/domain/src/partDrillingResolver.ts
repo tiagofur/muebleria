@@ -315,16 +315,23 @@ export function validateDrillingHoles(
 
       // Case B: Opposite face internal penetration collision
       if (OPPOSITE_FACE[h1.face] === h2.face) {
-        // Face coords are identical in plane (mirroring handled at CAM export)
+        // Face coords are identical in plane (mirroring handled at CAM export).
+        // The physical separation between the two faces depends on the pair:
+        // front/back → thickness, left/right → width, top/bottom → length
+        // (the face's normal-axis dimension — never just the thickness).
         const dist = Math.hypot(h1.xMm - h2.xMm, h1.yMm - h2.yMm);
         const minDist = (h1.diameterMm + h2.diameterMm) / 2;
         const totalDepth = h1.depthMm + h2.depthMm;
-        const thickness = piece.thicknessMm;
+        const separationMm = getFaceDimensions(h1.face, {
+          lengthMm: piece.lengthMm ?? 0,
+          widthMm: piece.widthMm ?? 0,
+          thicknessMm: piece.thicknessMm ?? 0,
+        }).maxDepthMm;
 
-        if (dist < minDist - 0.1 && totalDepth > thickness + 1e-6) {
+        if (dist < minDist - 0.1 && totalDepth > separationMm + 1e-6) {
           issues.push({
             code: 'HOLE_COLLISION',
-            message: `Colisión interna de perforaciones en caras opuestas (${h1.face}/${h2.face}) de la pieza "${pieceName}": "${h1.description || h1.type}" (prof. ${h1.depthMm} mm) y "${h2.description || h2.type}" (prof. ${h2.depthMm} mm) suman ${totalDepth} mm, superando el espesor de ${thickness} mm.`,
+            message: `Colisión interna de perforaciones en caras opuestas (${h1.face}/${h2.face}) de la pieza "${pieceName}": "${h1.description || h1.type}" (prof. ${h1.depthMm} mm) y "${h2.description || h2.type}" (prof. ${h2.depthMm} mm) suman ${totalDepth} mm, superando la separación de ${separationMm} mm entre esas caras.`,
             hole: h1,
             conflictingHole: h2,
             context: {
@@ -334,7 +341,7 @@ export function validateDrillingHoles(
               hole1: h1,
               hole2: h2,
               totalDepthMm: totalDepth,
-              thicknessMm: thickness,
+              separationMm,
             },
           });
         }
