@@ -1,7 +1,7 @@
 # Sesión activa
 
 **Feature:** F130 — Export DXF de perforaciones por cara + reporte (perforaciones CNC — 4/5)
-**Estado:** implementada, esperando review
+**Estado:** done (review APPROVED, pushed)
 **Inicio:** 2026-08-21 (tarde)
 
 ## Plan
@@ -39,3 +39,10 @@
   reporte del hub con fuente real + fallback heurístico (catalog enhebrado
   Workspace→Hub→hook); pack ZIP incluye `perforaciones_<obra>.json` real.
 - Suite 2444, typecheck 7/7. Deuda no mezclada: agregado-scoped manual placements (F131).
+
+
+## Cierre (2026-08-21)
+
+- Review APPROVED (`progress/review_F130.md`); post-review: calculo muerto
+  placementsByModule removido. F130 done.
+- Serie: F127-F130 done -> F131 (editor visual 2D por cara + gizmo 3D) -> F132 (SCM, postergada).
