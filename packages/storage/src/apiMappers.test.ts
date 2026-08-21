@@ -1637,3 +1637,37 @@ describe('workshopSettingsToApi / workshopSettingsFromApi — cut strategy (F133
     );
   });
 });
+
+describe('structureToApi / structureFromApi — joint drilling rules (F129)', () => {
+  it('round-trips el override de reglas de unión (snake_case JSONB)', () => {
+    const st = structureFromApi({
+      id: 'st-1',
+      code: 'EST-1',
+      name: 'Cuerpo',
+      revision: 1,
+    });
+    const withRules = {
+      ...st,
+      jointDrillingRules: {
+        gridMm: 32,
+        sideToFloor: { endMarginMm: 80, withDowels: false },
+        doorHinge: { systemLineMm: 37, endMarginMm: 120 },
+      },
+    };
+    const api = structureToApi(withRules);
+    expect(api.joint_drilling_rules).toEqual(withRules.jointDrillingRules);
+
+    const round = structureFromApi(api as Record<string, unknown>);
+    expect(round.jointDrillingRules).toEqual(withRules.jointDrillingRules);
+  });
+
+  it('null/ausente = sin override (defaults del taller)', () => {
+    const round = structureFromApi({
+      id: 'st-2',
+      code: 'EST-2',
+      name: 'Cuerpo',
+      joint_drilling_rules: null,
+    });
+    expect(round.jointDrillingRules).toBeUndefined();
+  });
+});

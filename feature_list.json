@@ -2843,7 +2843,7 @@
         "packages/domain/src/structures/",
         "docs/prd.md §6.7 (CNC)"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "cnc",
         "perforaciones",

@@ -329,6 +329,12 @@ export interface BoardPart {
   readonly optionRole: string;
   readonly lengthFormula?: string;
   readonly widthFormula?: string;
+  /**
+   * Structural placement of the source component (F129): lets the joint
+   * drilling rules classify pieces (lateral / base / door / back) on composed
+   * modules. Absent on legacy template boardParts.
+   */
+  readonly componentPlacement?: ComponentPlacement;
   readonly x?: number;
   readonly y?: number;
   readonly z?: number;
@@ -349,6 +355,65 @@ export interface ExternalDims {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
+}
+
+/**
+ * Declarative joint drilling rules (F129) — parametric 32mm-system patterns
+ * that the generator (`jointDrillingRules.ts`) turns into derived hardware
+ * placements for the F128 resolver. Rules reference hardware by CATALOG CODE
+ * (stable business identity, workshop-editable), not by id.
+ */
+export type JointKind =
+  | 'side-to-floor'
+  | 'side-to-top'
+  | 'back-panel'
+  | 'door-hinge';
+
+/** Minifix (+ companion dowels) joint between a side panel and piso/techo. */
+export interface PanelJointRule {
+  /** Default 'HER-MIN-15'. */
+  readonly minifixCode?: string;
+  /** Default 'HER-TAQ-8X30'. */
+  readonly dowelCode?: string;
+  /** First/last minifix distance from the joint ends (mm). Default 50. */
+  readonly endMarginMm?: number;
+  /** Max gap between minifixes before inserting intermediates (mm). Default 512. */
+  readonly maxSpacingMm?: number;
+  /** Companion dowels at ±grid from each minifix. Default true. */
+  readonly withDowels?: boolean;
+}
+
+/** Screws fixing the back panel (fondo) around its perimeter. */
+export interface BackPanelRule {
+  /** Default 'HER-TOR-4X50'. */
+  readonly screwCode?: string;
+  /** Distance from the panel edge to the screw line (mm). Default 16. */
+  readonly insetMm?: number;
+  /** Max gap between screws before inserting intermediates (mm). Default 400. */
+  readonly maxSpacingMm?: number;
+}
+
+/** Hinge cups on the door + base plates on the side panel (sistema 32). */
+export interface DoorHingeRule {
+  /** Default 'HER-BIS-CL'. */
+  readonly hingeCode?: string;
+  /** Default 'HER-PLACA-BIS'. */
+  readonly plateCode?: string;
+  /** Cup center distance from the hinge edge (mm). Default 22.5. */
+  readonly cupInsetMm?: number;
+  /** Plate row distance from the FRONT edge (mm) — the system line. Default 37. */
+  readonly systemLineMm?: number;
+  /** First/last hinge distance from the door ends (mm). Default 100. */
+  readonly endMarginMm?: number;
+}
+
+export interface JointDrillingRules {
+  /** System 32 grid (mm). Default 32. */
+  readonly gridMm?: number;
+  readonly sideToFloor?: PanelJointRule;
+  readonly sideToTop?: PanelJointRule;
+  readonly backPanel?: BackPanelRule;
+  readonly doorHinge?: DoorHingeRule;
 }
 
 /**
@@ -452,6 +517,12 @@ export interface Structure {
    * `history[0]` is always the most recently superseded revision.
    */
   readonly history?: readonly StructureRevision[];
+  /**
+   * Joint drilling rules override (F129): when omitted the workshop defaults
+   * (`DEFAULT_JOINT_DRILLING_RULES`) apply. Drilling-only — does NOT bump the
+   * BOM revision (rules never change materials or piece dimensions).
+   */
+  readonly jointDrillingRules?: JointDrillingRules;
 }
 
 /**
@@ -528,6 +599,14 @@ export interface HardwarePlacement {
   readonly scale?: number;
   /** Optional role within a multi-part hardware profile (F128): e.g. 'cam' vs 'bolt' for minifix. */
   readonly partRole?: string;
+  /**
+   * Application-specific machining that REPLACES the catalog profile for this
+   * placement (F129). Joint generators use it when the physical application
+   * differs from the generic catalog footprint — e.g. back-panel screws are a
+   * THROUGH pilot on the fondo, while the catalog tornillo is a 35mm blind
+   * pilot for thick members. Keep undefined to use the catalog profile.
+   */
+  readonly derivedMachining?: HardwareMachiningProfile;
 }
 
 export interface Component {
@@ -1277,6 +1356,8 @@ export interface ResolvedBoardPart {
   readonly rotateX?: number;
   readonly rotateY?: number;
   readonly rotateZ?: number;
+  /** Source component placement (F129) — see BoardPart.componentPlacement. */
+  readonly componentPlacement?: ComponentPlacement;
   readonly thicknessMm: number;
 }
 

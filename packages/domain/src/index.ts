@@ -42,6 +42,11 @@ export type {
   MachiningOperation,
   HardwareMachiningPart,
   HardwareMachiningProfile,
+  JointKind,
+  PanelJointRule,
+  BackPanelRule,
+  DoorHingeRule,
+  JointDrillingRules,
   Component,
   ModuleComponentInstance,
   Agregado,
@@ -711,6 +716,17 @@ export {
   type HardwareCatalogLookup,
   type PieceDescriptor,
 } from './partDrillingResolver';
+
+// --- Joint Drilling Rules (F129) ---
+export {
+  DEFAULT_JOINT_DRILLING_RULES,
+  deriveJointHardwarePlacements,
+  hingePositions,
+  jointFastenerPositions,
+  type DerivedJointPlacement,
+  type DeriveJointPlacementsParams,
+  type JointPart,
+} from './jointDrillingRules';
 
 // --- Hardware Machining Profiles (F127) ---
 export {

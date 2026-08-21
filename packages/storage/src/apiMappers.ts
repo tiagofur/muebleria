@@ -871,6 +871,10 @@ export function structureToApi(st: import('@muebles/domain').Structure): Record<
     components: (st.components ?? []).map(componentInstanceToApi),
     presets: (st.presets ?? []).map(presetToApi),
     agregados: (st.agregados ?? []).map(agregadoInstanceToApi),
+    // F129 joint drilling override; null = taller defaults.
+    joint_drilling_rules: st.jointDrillingRules
+      ? (JSON.parse(JSON.stringify(st.jointDrillingRules)) as Record<string, unknown>)
+      : null,
   };
 }
 
@@ -885,6 +889,11 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
   const agregadosRaw = raw.agregados;
   const revisionRaw = raw.revision;
   const historyRaw = raw.history;
+  const jointRulesRaw = raw.joint_drilling_rules ?? raw.jointDrillingRules;
+  const jointDrillingRules =
+    jointRulesRaw && typeof jointRulesRaw === 'object' && !Array.isArray(jointRulesRaw)
+      ? (jointRulesRaw as import('@muebles/domain').Structure['jointDrillingRules'])
+      : undefined;
   const history = Array.isArray(historyRaw)
     ? (historyRaw as Record<string, unknown>[]).map(structureRevisionFromApi)
     : undefined;
@@ -910,6 +919,7 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
     agregados: Array.isArray(agregadosRaw)
       ? (agregadosRaw as Record<string, unknown>[]).map(agregadoInstanceFromApi)
       : undefined,
+    jointDrillingRules,
   };
 }
 

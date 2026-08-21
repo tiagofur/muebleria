@@ -1,55 +1,49 @@
 # Sesión activa
 
-**Feature:** F128 — Motor de resolución: placements + perfiles → agujeros por pieza (perforaciones CNC — 2/5)
-**Estado:** done (sesión cerrada, revisada y pusheada — 3 rondas de review)
-**Inicio:** 2026-08-20 (noche)
+**Feature:** F129 — Reglas de unión paramétricas sistema 32 (perforaciones CNC — 3/5)
+**Estado:** implementada, esperando review
+**Inicio:** 2026-08-21
 
 ## Plan
 
-1. Estudiar flujo: `ResolvedBoardPart` (campos, link a componentInstanceId),
-   `HardwarePlacement` (frame por cara), consumidores de `HoleDefinition`.
-2. Motor puro en `packages/domain` (`partDrillingResolver.ts`):
-   `resolvePartDrilling({ piece, placements, hardware })` → holes reales por cara
-   (coords desde cantos, mismo face-plane que placements) + issues estructuradas
-   (profundidad vs dimensión de entrada, fuera de pieza, colisiones) + dedupe.
-3. `assertDrillingValid` que lanza `ValidationError` accionable con contexto.
-4. Fallback a heurísticas F074 cuando no salen holes de placements/perfiles
-   (deprecación gradual, exports intactos — el rewiring es F130).
-5. Tests: golden bisagra sobre puerta, minifix cazuela+perno en dos piezas,
-   mover placement mueve holes, cambiar herraje adapta Ø/prof, validaciones,
-   dedupe, fallback.
+1. Estudiar: resolver F128 (partRole/placements derivados), workshopRules,
+   Structure/instancias, persistencia de structures (mappers/Go), fixture gabete demo.
+2. Tipos declarativos `JointDrillingRuleSet` (unión, herraje, offsets paramétricos,
+   grilla 32) + `DEFAULT_JOINT_DRILLING_RULES` del taller; override opcional por
+   estructura.
+3. Generador `deriveJointHardwarePlacements(...)`: costado-piso/techo (minifix),
+   respaldo (tornillo), puerta-costado (bisagra+placa, cantidad vía workshopRules).
+   Emite placements derivados que F128 resuelve; snap 32 y línea de sistema 37mm
+   configurable.
+4. Golden del gabete demo + tests unitarios.
+5. Suite + typecheck + go test + commit + reviewer + cierre.
 
 ## Bitácora
 
-- 2026-08-20: F127 done + review APPROVED. Post-cierre por feedback del taller:
-  F133 (default de corte del taller) done; selector unificado con Ajustes (`19f467a`);
-  visor strategy-aware sin líneas guillotina en nesting (`1dbccd1`).
-- 2026-08-20 (noche): F128 implementada y verificada:
-  - `packages/domain/src/partDrillingResolver.ts`: motor puro de resolución de perforaciones CNC a partir de `HardwarePlacement` y `HardwareMachiningProfile`. Coordenadas por cara referenciadas a cantos, evaluación de fórmulas paramétricas (`W`, `L`, `T`, `HW`, etc.), rotación en plano (`rotationDeg.z`), cara opuesta (`face: 'opposite'`), profundidad de pasantes (`through_hole`).
-  - Deduplicación de agujeros coincidentes generados desde distintos placements (`deduplicateHoles`).
-  - Validaciones geométricas estructuradas (`validateDrillingHoles`): `DEPTH_EXCEEDS_MATERIAL`, `HOLE_OUT_OF_BOUNDS`, `HOLE_COLLISION` (en la misma cara y por penetración interna en caras opuestas) + `assertDrillingValid` que lanza `ValidationError`.
-  - Fallback a heurísticas F074 (`inferHolesForPiece`) cuando no existen perfiles de maquinado o placements (`fallbackUsed: true`).
-  - `partRole` opcional en `HardwarePlacement` y `cloneHardwarePlacement` para herrajes multipartes (ej. `cam` vs `bolt` en minifix).
-  - 18 tests en `partDrillingResolver.test.ts` (golden bisagra 35mm, golden minifix 15mm en unión costado-piso, reactividad al mover placement o cambiar herraje, rotación 90°, fórmulas paramétricas, deduplicación, validaciones y fallback).
-  - `pnpm test` (710 tests en domain, todos verdes), `pnpm typecheck` verde y `./init.sh` verde.
+- 2026-08-21: F128 cerrada (3 rondas review, APPROVED). Deuda saldada:
+  DEFAULT_BOARD_THICKNESS_MM unificado (6689a4a). F129 in_progress.
 
-## Contexto previo (sesiones de hoy)
+## Bitácora (implementación)
 
-- F127 cerrada: herrajes con perfil de maquinado en catálogo (TS/Go paridad,
-  seeds 4 básicos, migración 000063). Review APPROVED (`progress/review_F127.md`).
-- F133 cerrada: defaultCutStrategy (precedencia plan obra → taller → sierra).
-  Incidente de split de commits documentado en history.md (F133).
-- Deuda anotada: paridad Go de settings PTX; `btn--secondary` del panel.
-
-
-## Cierre (2026-08-21)
-
-- F128 implementada por sesión paralela (`cb21e4a`); esta sesión hizo la revisión
-  (RECHAZADA→APPROVED en 3 rondas) y los fixes: `4dd56ab` (heurística face-planes,
-  contrato ejes DXF, copy) y `7fed3e9` (colisión caras opuestas con separación real).
-- Suite 2422, typecheck 7/7, domain 716 (24 en el resolver), HEAD == origin `7fed3e9`.
-
-## Siguiente
-
-F129 — reglas de unión paramétricas sistema 32 (minifix/taquetes/bisagras como
-placements derivados que F128 resuelve). F130 tomará el wiring DXF ya adelantado.
+- Tipos declarativos JointKind/PanelJointRule/BackPanelRule/DoorHingeRule/JointDrillingRules
+  en types.ts + `Structure.jointDrillingRules?` (drilling-only: NO bump de revisión BOM,
+  NO viaja en structureRevision). `BoardPart/ResolvedBoardPart.componentPlacement?` — el BOM
+  expone el placement del componente para clasificar piezas (bom.ts expansión+resolución).
+- `jointDrillingRules.ts`: DEFAULT_JOINT_DRILLING_RULES (taller: minifix+taquetes 50/512,
+  fondo tornillos 16/400, bisagra 22.5/37/100, grilla 32) + `deriveJointHardwarePlacements`
+  (puro). Reglas referencian herrajes por CÓDIGO (portables); merge parcial con defaults
+  via effectiveRules. Uniones: costado↔piso/techo (cazuela en cara del costado a T_piso/2
+  exacto — floor() sacaba la Ø15 0.5mm del canto con Arauco 15mm; perno en canto top/bottom
+  del piso), respaldo (perímetro), puerta (tazas + placas a D−37, cantidad via
+  suggestHingeCount). Snap 32 en intermedios; taquetes a ±32 exacto del minifix.
+- `HardwarePlacement.derivedMachining?` (F129): maquinado de aplicación que reemplaza el
+  perfil de catálogo para ese placement — el fondo usa piloto PASANTE Ø3 (el tornillo del
+  catálogo es piloto ciego 35mm para miembros gruesos; profundidad > fondo = error real
+  de aplicación). Resolver: `placement.derivedMachining ?? hardware?.machining`.
+- Tests domain 10 (unit posiciones/hinge, override parcial, golden gabete 300×720×590
+  con BOM real resuelto — piso 269×590×15, costados ×2, puerta 717, fondo 6 pasantes —
+  e integración F129→F128: cada pieza resuelve sin issues). Storage +2 round-trip del
+  override. Suite 2439, typecheck 7/7, go test verde.
+- Persistencia: apiMappers to/from (joint_drilling_rules, revisiones NO), Go
+  JointDrillingRules structs (camelCase JSONB), structures.go SELECT/INSERT/UPDATE con
+  nullableJSON, migración aditiva 000065 (JSONB).

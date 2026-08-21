@@ -442,7 +442,10 @@ export function resolvePartDrilling(
 
   for (const placement of placements) {
     const hardware = findHardwareInCatalog(placement.hardwareId, hardwareCatalog);
-    const profile = hardware?.machining;
+    // Derived joints (F129) may carry their application-specific machining —
+    // e.g. a through pilot for back-panel screws — which overrides the
+    // catalog footprint for this placement only.
+    const profile = placement.derivedMachining ?? hardware?.machining;
     if (!profile || profile.parts.length === 0) continue;
 
     foundAnyMachiningProfile = true;

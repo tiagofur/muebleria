@@ -30,6 +30,7 @@ import type {
   BoardPart,
   Catalog,
   Component,
+  ComponentPlacement,
   Grain,
   HardwareLine,
   MaterialBoard,
@@ -315,6 +316,7 @@ function resolveBoardPartsAndHardware(
       rotateX: part.rotateX,
       rotateY: part.rotateY,
       rotateZ: part.rotateZ,
+      componentPlacement: part.componentPlacement,
       thicknessMm: material.thicknessMm,
     };
   });
@@ -495,6 +497,7 @@ function expandComponentInstances(
         widthMm,
         edges,
         optionRole,
+        componentPlacement: placement as ComponentPlacement,
         x,
         y,
         z,

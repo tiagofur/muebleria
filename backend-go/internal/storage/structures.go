@@ -199,7 +199,7 @@ func loadStructurePresetsTx(ctx context.Context, tx pgx.Tx, structureID string) 
 // reusable Component instances instead of carrying their own board parts.
 func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure, error) {
 	query := `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, created_at, updated_at
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
 		FROM structures
 		ORDER BY name ASC;
 	`
@@ -215,7 +215,8 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		var w, h, d *int
 		var notes *string
 		var agrsRaw []byte
-		if err := rows.Scan(&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &st.CreatedAt, &st.UpdatedAt); err != nil {
+		var jointRulesRaw []byte
+		if err := rows.Scan(&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if w != nil {
@@ -235,6 +236,9 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		}
 		if st.Agregados == nil {
 			st.Agregados = []domain.ModuleAgregadoInstance{}
+		}
+		if len(jointRulesRaw) > 0 {
+			_ = json.Unmarshal(jointRulesRaw, &st.JointDrillingRules)
 		}
 		components, err := s.loadStructureComponents(ctx, st.ID)
 		if err != nil {
@@ -264,15 +268,16 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 
 func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domain.Structure, error) {
 	query := `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, created_at, updated_at
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
 		FROM structures WHERE id = $1;
 	`
 	var st domain.Structure
 	var w, h, d *int
 	var notes *string
 	var agrsRaw []byte
+	var jointRulesRaw []byte
 	err := s.Pool.QueryRow(ctx, query, id).Scan(
-		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &st.CreatedAt, &st.UpdatedAt,
+		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("structure not found: %w", err)
@@ -295,6 +300,9 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 	if st.Agregados == nil {
 		st.Agregados = []domain.ModuleAgregadoInstance{}
 	}
+	if len(jointRulesRaw) > 0 {
+		_ = json.Unmarshal(jointRulesRaw, &st.JointDrillingRules)
+	}
 	components, err := s.loadStructureComponents(ctx, st.ID)
 	if err != nil {
 		return nil, err
@@ -314,6 +322,14 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 	st.History = history
 
 	return &st, nil
+}
+
+// nullableJSON marshals nil profiles to SQL NULL (F129 joint rules column).
+func nullableJSON(b []byte) any {
+	if len(b) == 0 || string(b) == "null" {
+		return nil
+	}
+	return b
 }
 
 func nullIfEmpty(s string) interface{} {
@@ -363,19 +379,20 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	if st.Agregados == nil {
 		agrsJSON = []byte("[]")
 	}
+	jointRulesJSON, _ := json.Marshal(st.JointDrillingRules)
 
 	if st.ID != "" {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active, agregados)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 			RETURNING created_at, updated_at;
-		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON).Scan(&st.CreatedAt, &st.UpdatedAt)
+		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON)).Scan(&st.CreatedAt, &st.UpdatedAt)
 	} else {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active, agregados)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			RETURNING id, created_at, updated_at;
-		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
+		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON)).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
 	}
 	if err != nil {
 		return fmt.Errorf("error inserting structure: %w", err)
@@ -498,12 +515,13 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	if st.Agregados == nil {
 		agrsJSON = []byte("[]")
 	}
+	jointRulesJSON, _ := json.Marshal(st.JointDrillingRules)
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE structures
-		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, agregados = $9, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $10;
-	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, id)
+		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, agregados = $9, joint_drilling_rules = $10, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $11;
+	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, nullableJSON(jointRulesJSON), id)
 	if err != nil {
 		return fmt.Errorf("error updating structure: %w", err)
 	}

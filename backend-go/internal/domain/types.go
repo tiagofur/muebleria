@@ -331,6 +331,38 @@ type ModuleAgregadoInstance struct {
 	OptionOverrides map[string]string   `json:"option_overrides,omitempty"`
 }
 
+// JointDrillingRules mirrors the TS domain shape (F129) — camelCase keys so
+// the JSONB column round-trips through the API without rewriting.
+type JointDrillingRules struct {
+	GridMm      *int             `json:"gridMm,omitempty"`
+	SideToFloor *PanelJointRule  `json:"sideToFloor,omitempty"`
+	SideToTop   *PanelJointRule  `json:"sideToTop,omitempty"`
+	BackPanel   *BackPanelRule   `json:"backPanel,omitempty"`
+	DoorHinge   *DoorHingeRule   `json:"doorHinge,omitempty"`
+}
+
+type PanelJointRule struct {
+	MinifixCode string   `json:"minifixCode,omitempty"`
+	DowelCode   string   `json:"dowelCode,omitempty"`
+	EndMarginMm *float64 `json:"endMarginMm,omitempty"`
+	MaxSpacingMm *float64 `json:"maxSpacingMm,omitempty"`
+	WithDowels  *bool    `json:"withDowels,omitempty"`
+}
+
+type BackPanelRule struct {
+	ScrewCode   string   `json:"screwCode,omitempty"`
+	InsetMm     *float64 `json:"insetMm,omitempty"`
+	MaxSpacingMm *float64 `json:"maxSpacingMm,omitempty"`
+}
+
+type DoorHingeRule struct {
+	HingeCode    string   `json:"hingeCode,omitempty"`
+	PlateCode    string   `json:"plateCode,omitempty"`
+	CupInsetMm   *float64 `json:"cupInsetMm,omitempty"`
+	SystemLineMm *float64 `json:"systemLineMm,omitempty"`
+	EndMarginMm  *float64 `json:"endMarginMm,omitempty"`
+}
+
 type Structure struct {
 	ID         string                   `json:"id"`
 	Code       string                   `json:"code"`
@@ -343,6 +375,9 @@ type Structure struct {
 	Presets    []DimensionPreset        `json:"presets,omitempty"`
 	Notes      string                   `json:"notes,omitempty"`
 	Active     bool                     `json:"active"`
+	// JointDrillingRules overrides the workshop defaults (F129). Nil = defaults.
+	// Sub-struct json tags are camelCase to mirror the TS shape stored in JSONB.
+	JointDrillingRules *JointDrillingRules `json:"joint_drilling_rules,omitempty"`
 	// Revision is the monotonic version of the structure's BOM-relevant fields.
 	// Starts at 1 (DEFAULT_STRUCTURE_REVISION); legacy rows (0 / missing) are
 	// normalised to 1 by the engine helpers.
