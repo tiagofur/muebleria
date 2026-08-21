@@ -34,9 +34,11 @@ import {
   type ModuleBaseMode,
   type PlinthSides,
   type ResolvedBoardPart,
+  type HardwarePlacement,
   type ResolvedHardwarePlacement,
 } from '@muebles/domain';
 import { HardwareMesh } from './HardwareMesh';
+import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
 import {
   boardPartsToVisuals,
   cameraPositionForView,
@@ -141,6 +143,16 @@ export type FurnitureSceneWall = {
 };
 
 export type FurnitureScene3DProps = {
+  /**
+   * F131: raw hardware placements by componentInstanceId — enables the 3D
+   * gizmo editor (snap 32mm) on the selected board. Omitted → read-only gizmo.
+   */
+  readonly rawHardwarePlacements?: ReadonlyMap<string, readonly HardwarePlacement[]>;
+  readonly onUpdateHardwarePlacement?: (
+    componentInstanceId: string,
+    index: number,
+    patch: Partial<HardwarePlacement>,
+  ) => void;
   readonly modules: readonly FurnitureSceneModule[];
   readonly totalWidth: number;
   readonly totalHeight: number;
@@ -364,6 +376,8 @@ function BoardMesh({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   hardwarePlacements,
   hardwareCatalog,
+  gizmoRawPlacement,
+  onGizmoPlacementChange,
 }: {
   readonly visual: BoardPartVisual;
   readonly showWireframe?: boolean;
@@ -380,6 +394,10 @@ function BoardMesh({
    */
   readonly hardwarePlacements?: readonly ResolvedHardwarePlacement[];
   readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
+  /** F131: raw placement backing the first resolved one (gizmo edit target). */
+  readonly gizmoRawPlacement?: HardwarePlacement;
+  /** F131: gizmo edits flow up (snap 32mm); absent → gizmo mounts read-only. */
+  readonly onGizmoPlacementChange?: (patch: Partial<HardwarePlacement>) => void;
 }): ReactNode {
   const [w, t, l] = visual.size;
   const transparent = showWireframe || dimmed;
@@ -408,8 +426,33 @@ function BoardMesh({
           );
         })
       : null;
+  // F131 (deuda F070): gizmo montado en el viewport para la pieza seleccionada.
+  const showGizmo =
+    selected && pickGizmoPlacement(selected, hardwarePlacements ?? []);
+  const gizmoAnchor = hardwarePlacements?.[0];
   return (
     <group position={visual.position} rotation={visual.rotation}>
+      {showGizmo && gizmoAnchor ? (
+        <group position={gizmoAnchor.localPosition}>
+          <HardwarePlacementGizmo
+            placement={
+              gizmoRawPlacement ?? {
+                hardwareId: gizmoAnchor.hardwareId,
+                anchorFace: 'front',
+                relativePosition: {
+                  xMm: gizmoAnchor.localPosition[0],
+                  yMm: gizmoAnchor.localPosition[2],
+                },
+              }
+            }
+            anchorFace={gizmoRawPlacement?.anchorFace ?? 'front'}
+            boardWidthMm={visual.size[0]}
+            boardHeightMm={visual.size[2]}
+            snapMm={32}
+            onChangePlacement={onGizmoPlacementChange}
+          />
+        </group>
+      ) : null}
       <mesh
         position={[w / 2, t / 2, l / 2]}
         castShadow={!showWireframe && !dimmed}
@@ -988,6 +1031,8 @@ function ModuleGroup({
   paintHoverCountertop = false,
   controlsRef,
   setOrbitSuppressed,
+  rawPlacementsByInstanceId,
+  onUpdatePlacement,
 }: {
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
@@ -1030,6 +1075,13 @@ function ModuleGroup({
   readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
+  /** F131: raw placements by componentInstanceId for the 3D gizmo editor. */
+  readonly rawPlacementsByInstanceId?: ReadonlyMap<string, readonly HardwarePlacement[]>;
+  readonly onUpdatePlacement?: (
+    componentInstanceId: string,
+    index: number,
+    patch: Partial<HardwarePlacement>,
+  ) => void;
 }): ReactNode {
   const { camera, gl } = useThree();
   /** True only after pointer moved past threshold (real drag). */
@@ -1297,6 +1349,12 @@ function ModuleGroup({
             lightingMode={lightingMode}
             hardwarePlacements={placementsByPartId.get(v.id)}
             hardwareCatalog={hardwareCatalog}
+            gizmoRawPlacement={rawPlacementsByInstanceId?.get(v.id)?.[0]}
+            onGizmoPlacementChange={
+              onUpdatePlacement
+                ? (patch) => onUpdatePlacement(v.id, 0, patch)
+                : undefined
+            }
           />
         );
       })}
@@ -1373,6 +1431,8 @@ function SceneContent({
   onSelectPart,
   selectedModuleKey,
   onSelectModule,
+  rawHardwarePlacements,
+  onUpdateHardwarePlacement,
   wallDragByKey,
   onModuleWallOffset,
   onModuleWallDragStart,
@@ -1426,6 +1486,8 @@ function SceneContent({
   readonly onSelectPart?: (partId: string) => void;
   readonly selectedModuleKey?: string | null;
   readonly onSelectModule?: (moduleKey: string | null) => void;
+  readonly rawHardwarePlacements?: FurnitureScene3DProps['rawHardwarePlacements'];
+  readonly onUpdateHardwarePlacement?: FurnitureScene3DProps['onUpdateHardwarePlacement'];
   readonly wallDragByKey?: FurnitureScene3DProps['wallDragByKey'];
   readonly onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
   readonly onModuleWallDragStart?: (moduleKey: string) => void;
@@ -1840,6 +1902,8 @@ function SceneContent({
             <ModuleGroup
               key={mod.key}
               mod={mod}
+              rawPlacementsByInstanceId={rawHardwarePlacements}
+              onUpdatePlacement={onUpdateHardwarePlacement}
               colorMode={colorMode}
               materialColors={materialColors}
               materialTextures={materialTextures}
@@ -1984,6 +2048,8 @@ export function FurnitureScene3D({
   totalWidth,
   totalHeight,
   totalDepth,
+  rawHardwarePlacements,
+  onUpdateHardwarePlacement,
   className,
   style,
   testId = 'furniture-scene-3d',
@@ -2300,6 +2366,8 @@ export function FurnitureScene3D({
               )}
               <Suspense fallback={null}>
                 <SceneContent
+                  rawHardwarePlacements={rawHardwarePlacements}
+                  onUpdateHardwarePlacement={onUpdateHardwarePlacement}
                   modules={sceneModules}
                   walls={walls}
                   totalWidth={totalWidth}

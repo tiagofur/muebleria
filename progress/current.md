@@ -1,48 +1,40 @@
 # Sesión activa
 
-**Feature:** F130 — Export DXF de perforaciones por cara + reporte (perforaciones CNC — 4/5)
-**Estado:** done (review APPROVED, pushed)
-**Inicio:** 2026-08-21 (tarde)
+**Feature:** F131 — Editor visual 2D de perforaciones por cara + gizmo 3D (perforaciones CNC — 5/5)
+**Estado:** implementada, esperando review
+**Inicio:** 2026-08-21 (noche)
 
 ## Plan
 
-1. Leer wiring existente: dxfCutPlanExport (drillingByPiece de cb21e4a), useExportHandlers:437
-   (no pasa drilling), exportProductionPack, useProductionOrderDocuments (reporte), partDrillingExport.
-2. Dominio: ensamblador real — BOM parts + join instancias→partId + placements manuales +
-   derived joints (F129) → resolvePartDrilling por pieza → patrones (schema v1 compatible).
-3. DXF: capas por cara+tipo+Ø (PERF_F_/PERF_B_ espejada/CANTO), convención documentada.
-4. Reporte: fuente real del motor, schema muebles.drilling-data.v1 intacto.
-5. Wiring: panel Ingeniería pasa drilling al DXF; pack ZIP incluye datos reales.
-6. Goldens + suite + reviewer + cierre.
+1. Investigar: HardwarePlacementGizmo (huérfano F070), HardwarePlacementsEditor,
+   PartInspector/preview3d (dónde montar), ComponentDetailView (perforaciones RO).
+2. Vista 2D por cara (SVG): pieza + caras (face-plane), herrajes manuales y
+   agujeros derivados (F129+F128), drag con snap 32, validaciones inline.
+3. Montar gizmo 3D en el viewport (deuda F070).
+4. Tests de interacción + tokens design.md + suite + reviewer + cierre.
 
 ## Bitácora
 
-- 2026-08-21: F129 cerrada (APPROVED). Serie: F127-F129 done. F130 in_progress.
+- 2026-08-21: F130 cerrada (APPROVED). Serie F127-F130 done. F131 in_progress.
 
 
-## Bitácora (implementación F130)
+## Bitácora (implementación F131)
 
-- **Dominio**: `generateCutRowsWithLinks` (cut.ts refactor — rows + links con
-  partId/labelRef/part por línea; generateCutRows delega) y `resolveProjectDrilling`
-  (projectDrilling.ts): por pieza une placements manuales (instancias estructura+
-  módulo vía convención `-copy-N`) + derived joints (F129, con reglas del structure
-  si las tiene) y resuelve con el motor F128. Patterns keyeados por labelRef
-  (único por línea); data en schema muebles.drilling-data.v1 intacto. Piezas sin
-  herraje caen al fallback F074 marcado. Tests 5/5 (gabete real: minifix+pernos,
-  bisagras Ø35×2 en puerta, pasantes en fondo, sin issues; quantity no duplica).
-- **DXF**: capas dinámicas por cara+Ø — PERF_F<Ø> / PERF_B<Ø> (back ESPEJADO en
-  eje ancho: el operador voltea y corre las coordenadas tal cual) /
-  PERF_CANTO<Ø> (proyectado al canto); profundidad vive en el reporte (capa=tool).
-  Join por labelRef con fallback partCode. Layer table dinámico (colores 4/1/6).
-  Goldens regenerados por UPDATE_GOLDEN (delta = capas nuevas + círculos en ellas).
-- **Wiring**: handleExportCutPlanDxf pasa drilling real (best-effort);
-  reporte del hub con fuente real + fallback heurístico (catalog enhebrado
-  Workspace→Hub→hook); pack ZIP incluye `perforaciones_<obra>.json` real.
-- Suite 2444, typecheck 7/7. Deuda no mezclada: agregado-scoped manual placements (F131).
-
-
-## Cierre (2026-08-21)
-
-- Review APPROVED (`progress/review_F130.md`); post-review: calculo muerto
-  placementsByModule removido. F130 done.
-- Serie: F127-F130 done -> F131 (editor visual 2D por cara + gizmo 3D) -> F132 (SCM, postergada).
+- `PieceFaceDrillingEditor` (preview3d): vista SVG por cara con las dimensiones
+  del face-plane (getFaceDimensions del dominio), grilla 32, agujeros REALES del
+  motor F128 (manual+derivado), anclas arrastrables con snap 32 y validaciones
+  inline (issues del motor con hole resaltado). Helper puro `snappedPlacementPatch`
+  (limpia fórmulas — drag explícito gana a paramétrico); test de coordenadas vía
+  helper porque jsdom no transporta clientX en pointer events.
+- Integración: sección Herrajes del PartInspector (prop opcional hardwareCatalog;
+  editor sobre las filas numéricas existentes).
+- Gizmo montado (deuda F070): BoardMesh renderiza HardwarePlacementGizmo para la
+  pieza seleccionada con placements, posicionado en localPosition del resolved,
+  snap 32, editable vía props opcionales `rawHardwarePlacements` +
+  `onUpdateHardwarePlacement` (thread FurnitureScene3D→SceneContent→ModuleGroup→
+  BoardMesh); sin ellos monta read-only. Helper puro `pickGizmoPlacement`.
+- Gates respetados: radiogroup (no tablist local), 0 literales de color nuevos
+  (tokens brand/surface/accent).
+- Tests: editor 7 (caras, holes del motor, redibujo por face-plane, helper snap,
+  wiring pointerDown, issues inline, sin catálogo), gizmo +1, inspector +1.
+  Suite 2453, typecheck 7/7.

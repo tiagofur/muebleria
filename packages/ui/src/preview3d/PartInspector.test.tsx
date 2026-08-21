@@ -199,3 +199,34 @@ describe('PartList', () => {
     expect(onSelect).toHaveBeenCalledWith('lat-copy-0');
   });
 });
+
+describe('PartInspector — editor 2D por cara (F131)', () => {
+  it('renderiza el editor visual en la sección Herrajes cuando hay placements', async () => {
+    const { PartInspector } = await import('./PartInspector');
+    const { screen, cleanup, render } = await import('@testing-library/react');
+    const part = {
+      id: 'p1',
+      description: 'Puerta test',
+      quantity: 1,
+      lengthMm: 700,
+      widthMm: 400,
+      thicknessMm: 18,
+      grain: 0,
+      edges: [],
+      optionRole: 'FRENTE',
+      materialId: 'm1',
+    };
+    render(
+      <PartInspector
+        part={part as never}
+        placements={[
+          { hardwareId: 'hw-1', anchorFace: 'back', relativePosition: { xMm: 100, yMm: 100 } },
+        ]}
+        hardwareCatalog={[]}
+      />,
+    );
+    expect(screen.getByTestId('part-inspector-face-editor')).toBeTruthy();
+    expect(screen.getByTestId('part-inspector-face-editor-face-back')).toBeTruthy();
+    cleanup();
+  });
+});

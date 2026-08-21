@@ -11,7 +11,8 @@
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import type { HardwarePlacement, ResolvedBoardPart } from '@muebles/domain';
+import type { Hardware, HardwarePlacement, ResolvedBoardPart } from '@muebles/domain';
+import { PieceFaceDrillingEditor } from './PieceFaceDrillingEditor';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import {
   type InspectorSectionId,
@@ -23,6 +24,8 @@ export type PartInspectorProps = {
   readonly part: ResolvedBoardPart | null;
   readonly placements?: readonly HardwarePlacement[];
   readonly onUpdateHardwarePlacement?: (idx: number, patch: Partial<HardwarePlacement>) => void;
+  /** F131: hardware catalog — enables the per-face 2D editor with real holes. */
+  readonly hardwareCatalog?: readonly Hardware[];
   readonly onClear?: () => void;
   readonly isolateSelected?: boolean;
   readonly onIsolateChange?: (isolate: boolean) => void;
@@ -139,6 +142,7 @@ export function PartInspector({
   isolateSelected = false,
   onIsolateChange,
   testId = 'part-inspector',
+  hardwareCatalog,
 }: PartInspectorProps): ReactNode {
   const sections = useInspectorSectionState();
 
@@ -257,6 +261,16 @@ export function PartInspector({
             </p>
           ) : (
             <div className="part-inspector__hardware-list" data-testid={`${testId}-hardware-list`}>
+              {/* F131: editor visual 2D por cara (agujeros reales + snap 32) */}
+              {part ? (
+                <PieceFaceDrillingEditor
+                  piece={part}
+                  placements={placements}
+                  hardwareCatalog={hardwareCatalog}
+                  onUpdatePlacement={onUpdateHardwarePlacement}
+                  testId={`${testId}-face-editor`}
+                />
+              ) : null}
               {placements.map((hw, idx) => (
                 <div key={idx} className="part-inspector__hardware-item" data-testid={`${testId}-hardware-item-${idx}`}>
                   <div className="part-inspector__hardware-name">

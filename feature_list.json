@@ -2898,7 +2898,7 @@
         "packages/ui/src/preview3d/",
         "docs/design.md"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "tags": [
         "cnc",
         "perforaciones",

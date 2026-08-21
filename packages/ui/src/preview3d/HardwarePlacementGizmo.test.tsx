@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  pickGizmoPlacement,
   HardwarePlacementGizmo,
   computeNextPosition,
   computeNextRotation,
@@ -35,5 +36,14 @@ describe('computeNextRotation', () => {
 describe('HardwarePlacementGizmo component', () => {
   it('is an exported React component function', () => {
     expect(typeof HardwarePlacementGizmo).toBe('function');
+  });
+});
+
+describe('pickGizmoPlacement (F131 — gizmo montado en viewport)', () => {
+  it('solo la pieza seleccionada con placements activa el gizmo', () => {
+    expect(pickGizmoPlacement(true, [{}])).toBe(true);
+    expect(pickGizmoPlacement(false, [{}])).toBe(false);
+    expect(pickGizmoPlacement(true, [])).toBe(false);
+    expect(pickGizmoPlacement(false, [])).toBe(false);
   });
 });

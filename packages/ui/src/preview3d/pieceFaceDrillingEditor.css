@@ -1,0 +1,116 @@
+/* F131: per-face drilling editor — tokens only (docs/design.md §3). */
+
+.face-editor {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.face-editor__faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.face-editor__face-tab {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.face-editor__face-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.face-editor__face-tab--active {
+  background: var(--surface-selected);
+  border-color: var(--border-brand);
+  color: var(--text-brand);
+  font-weight: var(--weight-semibold);
+}
+
+.face-editor__svg {
+  width: 100%;
+  height: auto;
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  touch-action: none;
+}
+
+.face-editor__board {
+  fill: var(--surface-card);
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.face-editor__grid {
+  stroke: var(--border-subtle);
+  stroke-width: 0.5;
+  stroke-dasharray: 4 6;
+}
+
+.face-editor__hole {
+  fill: var(--brand-50);
+  stroke: var(--brand-500);
+  stroke-width: 1;
+}
+
+.face-editor__hole--error {
+  fill: var(--danger-50);
+  stroke: var(--danger-500);
+  stroke-width: 2;
+}
+
+.face-editor__anchor circle {
+  fill: var(--surface-selected);
+  stroke: var(--accent-500);
+  stroke-width: 2;
+  cursor: grab;
+}
+
+.face-editor__anchor--dragging circle {
+  fill: var(--brand-100);
+  cursor: grabbing;
+}
+
+.face-editor__anchor-label {
+  fill: var(--text-primary);
+  font-size: 12px;
+  font-weight: var(--weight-semibold);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.face-editor__meta {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.face-editor__issues {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.face-editor__issue {
+  background: var(--danger-50);
+  color: var(--danger-700);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.face-editor__ok {
+  font-size: var(--text-sm);
+  color: var(--success-700);
+  margin: 0;
+}
