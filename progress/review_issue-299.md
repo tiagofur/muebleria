@@ -115,3 +115,16 @@ lo implementado (Postgres en CI, 13/13, media access, daysInWarehouse `actual`).
 El primer run de la CI remota corresponde al push de esta sesión; si fallara por
 detalles de entorno de Actions (no reproducibles localmente), se corrige en follow-up
 sin reabrir el veredicto de la implementación.
+
+**Confirmación (post-push):** la CI remota falló dos veces y en ambos casos eran
+falsos-verdes locales que `./init.sh` no podía detectar — exactamente el trabajo que
+OC-002 debe hacer:
+
+1. pnpm@11.1.2 requiere Node >= 22.13; el job TS corría Node 20 y crasheaba
+   (`node:sqlite`). Fix: `node-version: 22` en ci.yml.
+2. `apps/desktop/build/icon.png` estaba excluido por `.gitignore` (`build/`), así que
+   el test F075 pasaba local (archivo presente sin trackear) y fallaba en checkout
+   limpio. Fix: asset trackeado con negación puntual de gitignore.
+
+Run final verde: `32514021227` (Validate Ledger ✓ · TypeScript ✓ · Go Backend con
+Postgres service ✓). Veredicto **APPROVED** definitivo.

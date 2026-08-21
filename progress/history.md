@@ -730,8 +730,18 @@ cierre defectuoso y overclaims del walkthrough. Correcciones aplicadas:
 - Cierre de sesión correcto: F134 dada de alta en el ledger.
 
 Verificación: `./init.sh` verde completo (harness, typecheck, suite TS, go test
-incluida integración de storage contra Postgres). El primer run de la CI remota
-corresponde al push de esta sesión.
+incluida integración de storage contra Postgres).
+
+Post-cierre — la CI remota cazó dos falsos-verdes locales (OC-002 cumplió):
+
+- pnpm@11.1.2 requiere Node >= 22.13: el job TS con Node 20 crasheaba
+  (`node:sqlite` inexistente). CI pasó a Node 22.
+- `apps/desktop/build/icon.png` estaba ignorado por `.gitignore` (`build/`):
+  el test F075 pasaba local por el archivo sin trackear y fallaba en checkout
+  limpio. El asset ahora se trackea (negación puntual en .gitignore).
+
+CI verde: run 32514021227 (ledger + TS typecheck/tests + go test con Postgres
+service).
 
 Deuda anotada: `daysInWarehouse` seguirá siendo proxy hasta que exista un
 evento real de depósito; media access (URLs firmadas) sigue pendiente de
