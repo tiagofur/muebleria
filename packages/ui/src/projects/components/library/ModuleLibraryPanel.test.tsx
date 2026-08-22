@@ -43,6 +43,7 @@ afterEach(() => {
 const categories: readonly ModuleCategory[] = [
   { id: 'cat-cocina', name: 'Cocina', sortOrder: 1 },
   { id: 'cat-bajos', name: 'Bajos', parentId: 'cat-cocina', sortOrder: 1 },
+  { id: 'cat-cajones', name: 'Cajones', parentId: 'cat-bajos', sortOrder: 1 },
   { id: 'cat-bano', name: 'Baño', sortOrder: 2 },
 ];
 
@@ -50,7 +51,7 @@ const modBajo: Module = {
   id: 'm-bajo',
   code: 'MOD-BM-600',
   name: 'Bajo mesada 600',
-  categoryId: 'cat-bajos',
+  categoryId: 'cat-cajones',
   hardwareLines: [],
   presets: [
     { id: 'p600', name: '600', width: 600, height: 720, depth: 560 },
@@ -112,43 +113,72 @@ describe('moduleDefaultDims', () => {
 });
 
 describe('ModuleLibraryPanel', () => {
-  it('renderiza todas las tarjetas agrupadas por categoría', () => {
+  it('renders one catalog result list without duplicate collection shelves', () => {
     render(<Harness />);
-    expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
-    expect(screen.getByTestId('module-library-card-m-van')).toBeTruthy();
-    expect(screen.getByTestId('module-library-card-m-gen')).toBeTruthy();
-    expect(screen.getByTestId('module-library-group-Cocina › Bajos')).toBeTruthy();
-    expect(screen.getByTestId('module-library-group-Baño')).toBeTruthy();
-    expect(screen.getByTestId('module-library-group-Sin categoría')).toBeTruthy();
+    expect(screen.getByTestId('module-library-results')).toBeTruthy();
+    expect(screen.getAllByTestId('module-library-card-m-bajo')).toHaveLength(1);
+    expect(screen.queryByTestId('module-library-workshop')).toBeNull();
+    expect(screen.getByTestId('module-library-result-count').textContent).toBe('3 de 3');
   });
 
-  it('filtra por búsqueda tolerante (acentos, código)', () => {
+  it('offers arbitrary-depth category paths in the compact scope selector', () => {
     render(<Harness />);
-    const search = screen.getByLabelText('Buscar muebles en la biblioteca');
-    fireEvent.change(search, { target: { value: 'vanitory' } });
-    expect(screen.getByTestId('module-library-card-m-van')).toBeTruthy();
-    expect(screen.queryByTestId('module-library-card-m-bajo')).toBeNull();
-  });
-
-  it('filtra por chip L1 y muestra chips L2 + breadcrumb', () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    expect(screen.getByTestId('module-library-chip-cat-bajos')).toBeTruthy();
-    expect(screen.queryByTestId('module-library-card-m-van')).toBeNull();
-    expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
-    expect(screen.getByTestId('module-library-breadcrumb').textContent).toBe(
-      'Cocina › Bajos',
+    const scope = screen.getByTestId('module-library-scope') as HTMLSelectElement;
+    expect(Array.from(scope.options).map((option) => option.text)).toContain(
+      'Cocina › Bajos › Cajones',
     );
+
+    fireEvent.change(scope, { target: { value: 'category:cat-cajones' } });
+    expect(screen.getByTestId('module-library-breadcrumb').textContent).toBe(
+      'Cocina › Bajos › Cajones',
+    );
+    expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
+    expect(screen.queryByTestId('module-library-card-m-van')).toBeNull();
   });
 
-  it('chip Todas limpia el filtro de categoría', () => {
+  it('searches inside the active category scope by default', () => {
     render(<Harness />);
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    fireEvent.click(screen.getByTestId('module-library-chip-all'));
+    fireEvent.change(screen.getByTestId('module-library-scope'), {
+      target: { value: 'category:cat-cajones' },
+    });
+    fireEvent.change(screen.getByLabelText('Buscar muebles en el alcance actual'), {
+      target: { value: 'bajo' },
+    });
+    expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Buscar muebles en el alcance actual'), {
+      target: { value: 'vanitory' },
+    });
+    expect(screen.queryByTestId('module-library-card-m-van')).toBeNull();
+    expect(screen.getByText(/No hay muebles que coincidan/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver todo el catálogo' }));
     expect(screen.getByTestId('module-library-card-m-van')).toBeTruthy();
-    expect(screen.queryByTestId('module-library-breadcrumb')).toBeNull();
+  });
+
+  it('uses collection scopes as a single, non-duplicated result list', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('module-library-fav-m-bajo'));
+    fireEvent.change(screen.getByTestId('module-library-scope'), {
+      target: { value: 'collection:favorites' },
+    });
+    expect(screen.getAllByTestId('module-library-card-m-bajo')).toHaveLength(1);
+    expect(screen.getByTestId('module-library-result-count').textContent).toBe('1 de 1');
+  });
+
+  it('persists scope and query when the library remounts during studio work', () => {
+    const view = render(<Harness />);
+    fireEvent.change(screen.getByTestId('module-library-scope'), {
+      target: { value: 'category:cat-cajones' },
+    });
+    fireEvent.change(screen.getByLabelText('Buscar muebles en el alcance actual'), {
+      target: { value: 'bajo' },
+    });
+    view.unmount();
+    render(<Harness />);
+    expect((screen.getByTestId('module-library-scope') as HTMLSelectElement).value).toBe(
+      'category:cat-cajones',
+    );
+    expect((screen.getByLabelText('Buscar muebles en el alcance actual') as HTMLInputElement).value).toBe('bajo');
   });
 
   it('click en tarjeta notifica onInsert; drag start notifica dims y MIME', () => {
@@ -172,29 +202,9 @@ describe('ModuleLibraryPanel', () => {
     );
   });
 
-  it('toggle de favorito agrega la tarjeta a la sección Favoritos', () => {
-    render(<Harness />);
-    expect(screen.queryByTestId('module-library-favorites')).toBeNull();
-    fireEvent.click(screen.getAllByTestId('module-library-fav-m-bajo')[0]!);
-    const favorites = screen.getByTestId('module-library-favorites');
-    expect(favorites).toBeTruthy();
-    // La tarjeta aparece en Favoritos y en su grupo de catálogo.
-    const cards = screen.getAllByTestId('module-library-card-m-bajo');
-    expect(cards).toHaveLength(2);
-    expect(favorites.contains(cards[0]!)).toBe(true);
-  });
-
   it('muestra estado vacío útil cuando el catálogo no tiene muebles', () => {
     render(<Harness modules={[]} />);
     expect(screen.getByText(/No hay muebles en el catálogo/)).toBeTruthy();
-  });
-
-  it('muestra sin resultados para búsqueda sin matches', () => {
-    render(<Harness />);
-    fireEvent.change(screen.getByLabelText('Buscar muebles en la biblioteca'), {
-      target: { value: 'inexistente-xyz' },
-    });
-    expect(screen.getByText(/Sin resultados/)).toBeTruthy();
   });
 
   it('canEdit=false deshabilita drag pero mantiene click informativo', () => {

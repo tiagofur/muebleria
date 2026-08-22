@@ -1,17 +1,16 @@
 /**
  * ModuleLibraryPanel — biblioteca lateral del catálogo de muebles dentro de
  * Proyectar (F141 / #309, North Star §6). Fuente de inserción sin salir del
- * editor: búsqueda tolerante, categorías jerárquicas (chips L1/L2 +
- * breadcrumb), Favoritos/Recientes/Mi taller y thumbnails con silueta
+ * editor: búsqueda tolerante, scopes jerárquicos compactos con breadcrumb,
+ * Favoritos/Recientes/Mi taller y thumbnails con silueta
  * paramétrica de fallback. El panel no crea ítems: notifica al studio vía
  * onInsert / onCardDragStart y el studio resuelve la inserción atómica.
  */
 
-import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Module, ModuleCategory } from '@muebles/domain';
 import {
   categoryPath,
-  childrenOf,
   defaultMeasurePresetId,
   filterModulesByCategory,
   resolveModuleMeasurePreset,
@@ -25,6 +24,44 @@ import {
 import { searchModules } from './searchModules';
 import type { LibraryCollections } from './useLibraryFavorites';
 import './moduleLibrary.css';
+
+const NAVIGATION_STORAGE_KEY = 'muebles.proyectar.library.navigation.v1';
+
+type LibraryScope =
+  | { readonly kind: 'catalog' }
+  | {
+      readonly kind: 'collection';
+      readonly collection: 'workshop' | 'favorites' | 'recent';
+    }
+  | { readonly kind: 'category'; readonly categoryId: string };
+
+function scopeId(scope: LibraryScope): string {
+  if (scope.kind === 'catalog') return 'catalog';
+  if (scope.kind === 'collection') return `collection:${scope.collection}`;
+  return `category:${scope.categoryId}`;
+}
+
+function scopeFromId(value: string): LibraryScope {
+  if (value === 'collection:workshop') return { kind: 'collection', collection: 'workshop' };
+  if (value === 'collection:favorites') return { kind: 'collection', collection: 'favorites' };
+  if (value === 'collection:recent') return { kind: 'collection', collection: 'recent' };
+  if (value.startsWith('category:')) return { kind: 'category', categoryId: value.slice('category:'.length) };
+  return { kind: 'catalog' };
+}
+
+function readNavigation(): { readonly scope: LibraryScope; readonly search: string } {
+  try {
+    const raw = globalThis.localStorage?.getItem(NAVIGATION_STORAGE_KEY);
+    if (!raw) return { scope: { kind: 'catalog' }, search: '' };
+    const parsed = JSON.parse(raw) as { scope?: unknown; search?: unknown };
+    return {
+      scope: typeof parsed.scope === 'string' ? scopeFromId(parsed.scope) : { kind: 'catalog' },
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+    };
+  } catch {
+    return { scope: { kind: 'catalog' }, search: '' };
+  }
+}
 
 /** Dimensiones representativas del módulo (preset default → exterior → 600×720×560). */
 export function moduleDefaultDims(mod: Module): {
@@ -176,38 +213,19 @@ export function ModuleLibraryPanel({
   onCardDragStart,
   onCardDragEnd,
 }: ModuleLibraryPanelProps): ReactNode {
-  const [search, setSearch] = useState('');
-  const [selectedL1Id, setSelectedL1Id] = useState('');
-  const [selectedL2Id, setSelectedL2Id] = useState('');
+  const [navigation, setNavigation] = useState(readNavigation);
+  const { search, scope } = navigation;
 
-  const l1Nodes = useMemo(
-    () => childrenOf(categories, undefined),
-    [categories],
-  );
-  const l2Nodes = useMemo(
-    () =>
-      selectedL1Id ? childrenOf(categories, selectedL1Id) : [],
-    [categories, selectedL1Id],
-  );
-  const effectiveFilterId = selectedL2Id || selectedL1Id || null;
-
-  const searching = search.trim().length > 0;
-  const filtered = useMemo(() => {
-    let list = modules;
-    if (!searching && effectiveFilterId !== null) {
-      list = filterModulesByCategory(list, effectiveFilterId, categories);
+  useEffect(() => {
+    try {
+      globalThis.localStorage?.setItem(
+        NAVIGATION_STORAGE_KEY,
+        JSON.stringify({ scope: scopeId(scope), search }),
+      );
+    } catch {
+      // Storage bloqueado o lleno: la navegación conserva el estado en memoria.
     }
-    if (searching) {
-      list = searchModules(list, search, categories);
-    }
-    return list;
-  }, [modules, categories, searching, search, effectiveFilterId]);
-
-  const breadcrumb = useMemo(() => {
-    if (effectiveFilterId === null) return null;
-    const path = categoryPath(effectiveFilterId, categories);
-    return path.length > 0 ? path.map((c) => c.name).join(' › ') : null;
-  }, [effectiveFilterId, categories]);
+  }, [scope, search]);
 
   const byId = useMemo(
     () => new Map(modules.map((m) => [m.id, m])),
@@ -237,34 +255,54 @@ export function ModuleLibraryPanel({
     [collections.recent, byId],
   );
 
-  const groupedCatalog = useMemo(() => {
-    if (searching || effectiveFilterId !== null) return null;
-    const groupsMap = new Map<
-      string,
-      { title: string; items: Module[] }
-    >();
-    const uncategorized: Module[] = [];
-    for (const m of filtered) {
-      if (!m.categoryId) {
-        uncategorized.push(m);
-        continue;
-      }
-      const path = categoryPath(m.categoryId, categories);
-      const title =
-        path.length > 0 ? path.map((c) => c.name).join(' › ') : 'Sin categoría';
-      const existing = groupsMap.get(title);
-      if (existing) {
-        existing.items.push(m);
-      } else {
-        groupsMap.set(title, { title, items: [m] });
-      }
+  const scopeOptions = useMemo(() => {
+    const categoryOptions = categories.map((category) => ({
+      value: `category:${category.id}`,
+      label: categoryPath(category.id, categories)
+        .map((node) => node.name)
+        .join(' › '),
+    }));
+    return [
+      { value: 'catalog', label: 'Catálogo · Todos los muebles' },
+      { value: 'collection:workshop', label: 'En proyecto · Mi taller' },
+      { value: 'collection:favorites', label: 'En proyecto · Favoritos' },
+      { value: 'collection:recent', label: 'En proyecto · Recientes' },
+      ...categoryOptions,
+    ];
+  }, [categories]);
+
+  const scopeLabel = useMemo(() => {
+    if (scope.kind === 'catalog') return 'Catálogo · Todos los muebles';
+    if (scope.kind === 'collection') {
+      return scope.collection === 'workshop'
+        ? 'En proyecto · Mi taller'
+        : scope.collection === 'favorites'
+          ? 'En proyecto · Favoritos'
+          : 'En proyecto · Recientes';
     }
-    const groups = Array.from(groupsMap.values());
-    if (uncategorized.length > 0) {
-      groups.push({ title: 'Sin categoría', items: uncategorized });
+    return categoryPath(scope.categoryId, categories)
+      .map((category) => category.name)
+      .join(' › ');
+  }, [scope, categories]);
+
+  const scopedModules = useMemo(() => {
+    if (scope.kind === 'catalog') return modules;
+    if (scope.kind === 'category') {
+      return filterModulesByCategory(modules, scope.categoryId, categories);
     }
-    return groups;
-  }, [filtered, categories, searching, effectiveFilterId]);
+    if (scope.collection === 'workshop') return workshopModules;
+    if (scope.collection === 'favorites') return favoriteModules;
+    return recentModules;
+  }, [scope, modules, categories, workshopModules, favoriteModules, recentModules]);
+
+  const filtered = useMemo(
+    () => searchModules(scopedModules, search, categories),
+    [scopedModules, search, categories],
+  );
+
+  const clearFilters = (): void => {
+    setNavigation({ scope: { kind: 'catalog' }, search: '' });
+  };
 
   const renderCard = (mod: Module): ReactNode => (
     <LibraryCard
@@ -295,87 +333,46 @@ export function ModuleLibraryPanel({
       aria-label="Biblioteca de muebles"
       data-testid="module-library"
     >
-      <h3 className="spatial-studio__section-title">
-        Biblioteca ({modules.length})
-      </h3>
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder="Buscar mueble por nombre, código o categoría…"
-        aria-label="Buscar muebles en la biblioteca"
-      />
-      {categories.length > 0 && !searching ? (
-        <div
-          className="module-library__chips"
-          role="group"
-          aria-label="Categorías de la biblioteca"
-        >
-          <button
-            type="button"
-            className={
-              effectiveFilterId === null
-                ? 'spatial-studio__filter spatial-studio__filter--on'
-                : 'spatial-studio__filter'
-            }
-            aria-pressed={effectiveFilterId === null}
-            onClick={() => {
-              setSelectedL1Id('');
-              setSelectedL2Id('');
-            }}
-            data-testid="module-library-chip-all"
-          >
-            Todas
-          </button>
-          {l1Nodes.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={
-                selectedL1Id === c.id
-                  ? 'spatial-studio__filter spatial-studio__filter--on'
-                  : 'spatial-studio__filter'
-              }
-              aria-pressed={selectedL1Id === c.id}
-              onClick={() => {
-                setSelectedL1Id(c.id);
-                setSelectedL2Id('');
-              }}
-              data-testid={`module-library-chip-${c.id}`}
-            >
-              {c.name}
-            </button>
-          ))}
+      <div className="module-library__controls">
+        <div className="module-library__heading">
+          <h3 className="spatial-studio__section-title">Catálogo</h3>
+          <span className="module-library__count" data-testid="module-library-result-count">
+            {filtered.length} de {scopedModules.length}
+          </span>
         </div>
-      ) : null}
-      {l2Nodes.length > 0 && !searching ? (
-        <div
-          className="module-library__chips module-library__chips--sub"
-          role="group"
-          aria-label="Subcategorías"
+        <label className="module-library__scope-label" htmlFor="module-library-scope">
+          Alcance
+        </label>
+        <select
+          id="module-library-scope"
+          className="module-library__scope"
+          value={scopeId(scope)}
+          onChange={(event) =>
+            setNavigation((current) => ({
+              ...current,
+              scope: scopeFromId(event.target.value),
+            }))
+          }
+          data-testid="module-library-scope"
         >
-          {l2Nodes.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={
-                selectedL2Id === c.id
-                  ? 'spatial-studio__filter spatial-studio__filter--on'
-                  : 'spatial-studio__filter'
-              }
-              aria-pressed={selectedL2Id === c.id}
-              onClick={() => setSelectedL2Id(c.id)}
-              data-testid={`module-library-chip-${c.id}`}
-            >
-              {c.name}
-            </button>
+          {scopeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
           ))}
-        </div>
-      ) : null}
-      {breadcrumb ? (
+        </select>
+        <SearchInput
+          value={search}
+          onChange={(value) =>
+            setNavigation((current) => ({ ...current, search: value }))
+          }
+          placeholder="Buscar en este alcance…"
+          aria-label="Buscar muebles en el alcance actual"
+        />
         <p className="module-library__breadcrumb" data-testid="module-library-breadcrumb">
-          {breadcrumb}
+          {scopeLabel}
         </p>
-      ) : null}
+      </div>
 
       <div className="module-library__results">
         {modules.length === 0 ? (
@@ -384,42 +381,18 @@ export function ModuleLibraryPanel({
             Muebles.
           </p>
         ) : filtered.length === 0 ? (
-          <p className="spatial-studio__hint">
-            Sin resultados para esta búsqueda o categoría.
-          </p>
-        ) : groupedCatalog ? (
-          <>
-            {!searching && workshopModules.length > 0 ? (
-              <div className="module-library__group">
-                <h4 className="module-library__group-title">Mi taller</h4>
-                {renderList(workshopModules, 'module-library-workshop')}
-              </div>
-            ) : null}
-            {!searching && favoriteModules.length > 0 ? (
-              <div className="module-library__group">
-                <h4 className="module-library__group-title">Favoritos</h4>
-                {renderList(favoriteModules, 'module-library-favorites')}
-              </div>
-            ) : null}
-            {!searching && recentModules.length > 0 ? (
-              <div className="module-library__group">
-                <h4 className="module-library__group-title">Recientes</h4>
-                {renderList(recentModules, 'module-library-recent')}
-              </div>
-            ) : null}
-            {groupedCatalog.map((group) => (
-              <div
-                key={group.title}
-                className="module-library__group"
-                data-testid={`module-library-group-${group.title}`}
-              >
-                <h4 className="module-library__group-title">
-                  {group.title} ({group.items.length})
-                </h4>
-                {renderList(group.items, `module-library-list-${group.title}`)}
-              </div>
-            ))}
-          </>
+          <div className="module-library__empty">
+            <p className="spatial-studio__hint">
+              No hay muebles que coincidan con este alcance.
+            </p>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={clearFilters}
+            >
+              Ver todo el catálogo
+            </button>
+          </div>
         ) : (
           renderList(filtered, 'module-library-results')
         )}

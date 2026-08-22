@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import type { Module, Project } from '@muebles/domain';
 
@@ -133,8 +133,13 @@ vi.mock('../../preview3d', async (importOriginal) => {
 
 import { ProjectSpatialStudio } from './ProjectSpatialStudio';
 
+beforeEach(() => {
+  globalThis.localStorage?.clear();
+});
+
 afterEach(() => {
   cleanup();
+  globalThis.localStorage?.clear();
 });
 
 const modA: Module = {
@@ -1637,7 +1642,8 @@ describe('ProjectSpatialStudio — biblioteca (F141)', () => {
     );
     expect(screen.getByTestId('module-library')).toBeTruthy();
     expect(screen.getByTestId('module-library-card-m-a')).toBeTruthy();
-    expect(screen.getByText('Biblioteca (1)')).toBeTruthy();
+    expect(screen.getByText('Catálogo')).toBeTruthy();
+    expect(screen.getByTestId('module-library-result-count').textContent).toBe('1 de 1');
   });
 
   it('no renderiza la biblioteca sin onInsertFromCatalog', () => {

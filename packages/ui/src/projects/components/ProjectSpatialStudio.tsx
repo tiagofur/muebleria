@@ -1889,7 +1889,7 @@ export function ProjectSpatialStudio({
             <>
               <div className="spatial-studio__sidebar-head">
                 <h3 className="spatial-studio__section-title" style={{ margin: 0 }}>
-                  Muebles
+                  En proyecto
                 </h3>
                 <div className="spatial-studio__sidebar-head-actions">
                   {canEdit && onRequestAddItem ? (
