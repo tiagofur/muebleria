@@ -958,3 +958,11 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
 - **Cierre:** F141 `done`; rama `feat/f141-proyectar-library` pushed.
   Deuda E2+: modal add-item partiendo de `quickAddPayloadForModule`; extraer
   familia place/ghost del studio (3.857 líneas) a un hook.
+
+## 2026-08-22 — F141 follow-up closure (PR #329)
+- **Seguimiento:** el commit `1957fbd` corrigió la CI y refinó la biblioteca:
+  selector de alcance jerárquico escalable, búsqueda scoped, una sola lista sin
+  scroll anidado y persistencia de navegación.
+- **Verificación:** GitHub Actions run `32583641510` verde (feature harness,
+  Go tests y TypeScript/tests).
+- **Review:** **APPROVED**. F141 queda `done`.

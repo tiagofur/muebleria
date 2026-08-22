@@ -3242,7 +3242,7 @@
         "packages/ui/src/projects/components/library/",
         "packages/ui/src/preview3d/paintMaterial.ts"
       ],
-      "status": "in_progress",
+      "status": "done",
       "createdAt": "2026-08-21"
     }
   ]
