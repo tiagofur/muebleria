@@ -93,4 +93,105 @@ test.describe('Proyectar studio (WebGL smoke)', () => {
       timeout: 10_000,
     });
   });
+
+  /**
+   * F143 (#310): multi-selección + comandos de productividad en el studio real.
+   * Multi-select Ctrl+click por la lista "De la obra", barra contextual con N,
+   * Duplicar (quantity+1 + copia colocada) y limpieza con Escape. Los caminos
+   * de dominio se cubren en unit; acá se prueba el wiring E2E con WebGL real.
+   */
+  test('multi-selección Ctrl+click, barra de acciones y duplicar (F143)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await enterAsGuest(page);
+    await page.goto('/quotes');
+    await page.waitForSelector('.app-sidebar', { timeout: 30_000 });
+
+    const draftCard = page
+      .locator('.project-card', { hasText: 'Demo plantilla' })
+      .first();
+    test.skip((await draftCard.count()) === 0, 'seed sin proyecto draft');
+    await draftCard.click();
+    await page.waitForSelector('.workspace-chrome, .project-detail', {
+      timeout: 20_000,
+    });
+    await page.click('[data-testid="project-chrome-projectar"]');
+    await page.waitForSelector('[data-testid="spatial-studio-scene"] canvas', {
+      timeout: 45_000,
+    });
+
+    // Insertar dos módulos desde la biblioteca (muro activo del seed).
+    const firstCard = page
+      .locator('[data-testid^="module-library-card-"]')
+      .first();
+    const itemsTab = page.locator('[data-testid="spatial-studio-modules-tab-items"]');
+    for (let i = 0; i < 2; i++) {
+      await firstCard.click();
+      // esperar a que la lista de ítems registre el insert antes del siguiente
+      await page.waitForTimeout(400);
+    }
+    await itemsTab.click();
+    await page.waitForSelector('[data-testid="spatial-studio-filter-all"]', {
+      timeout: 10_000,
+    });
+
+    // Los inserts seleccionan el último mueble → la barra está visible.
+    await page.waitForSelector('[data-testid="spatial-studio-selection-bar"]', {
+      timeout: 10_000,
+    });
+
+    // Multi-select: los dos últimos colocados con Cmd/Ctrl+click.
+    // (En macOS Chromium, Ctrl+click abre el menú contextual: usamos Meta,
+    // que el studio trata igual que Ctrl vía ctrlOrMeta.)
+    const placedRows = page.locator('[data-testid^="spatial-studio-placed-"]');
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll('[data-testid^="spatial-studio-placed-"]')
+          .length >= 2,
+      { timeout: 20_000 },
+    );
+    const rowCount = await placedRows.count();
+    await placedRows.nth(rowCount - 2).click();
+    await placedRows.nth(rowCount - 1).click({ modifiers: ['Meta'] });
+    await expect(
+      page.locator('[data-testid="spatial-studio-selection-count"]'),
+    ).toHaveText('2 seleccionados', { timeout: 10_000 });
+
+    // Inspector contextual de selección múltiple.
+    await page.waitForSelector('[data-testid="spatial-studio-multi-panel"]', {
+      timeout: 10_000,
+    });
+
+    // Alinear (compactar la corrida del muro): aplica o rechaza enseñando,
+    // pero el comando corre E2E sin romper el studio.
+    await page.click('[data-testid="spatial-studio-cmd-compact"]');
+    await expect(
+      page.locator('[data-testid="spatial-studio-selection-bar"]'),
+    ).toHaveCount(1, { timeout: 10_000 });
+
+    await page.screenshot({
+      path: 'test-results/proyectar-multiselect.png',
+      fullPage: false,
+    });
+
+    // Duplicar la selección de 2: quantity+1 por ítem y 2 copias nuevas
+    // colocadas (y seleccionadas) — el plano crece de rowCount a rowCount+2.
+    await page.click('[data-testid="spatial-studio-cmd-duplicate"]');
+    await expect
+      .poll(async () => await placedRows.count(), { timeout: 20_000 })
+      .toBe(rowCount + 2);
+    await expect(
+      page.locator('[data-testid="spatial-studio-selection-count"]'),
+    ).toHaveText('2 seleccionados', { timeout: 10_000 });
+
+    // Escape limpia la selección (la barra desaparece) sin cerrar el studio.
+    await page.keyboard.press('Escape');
+    await expect(
+      page.locator('[data-testid="spatial-studio-selection-bar"]'),
+    ).toHaveCount(0, { timeout: 10_000 });
+    await expect(
+      page.locator('[data-testid="spatial-studio-scene"] canvas'),
+    ).toHaveCount(1);
+  });
 });

@@ -3244,6 +3244,36 @@
       ],
       "status": "done",
       "createdAt": "2026-08-21"
+    },
+    {
+      "id": "F143",
+      "phase": 0,
+      "name": "proyectar_multiselect_align",
+      "title": "Issue #310 P3D-1a — Selección multi/jerárquica + clipboard/align en Proyectar (meta #308, etapa E3)",
+      "description": "Manipulación 5★ del North Star §§10–12. Selección múltiple (Shift añade/rango en lista, Ctrl/Cmd toggle) sincronizada bidireccional Canvas ↔ Lista ↔ Inspector ↔ plano 2D, con selección primaria (la primera) que alimenta el inspector y sirve de referencia para pegar. Click en vacío limpia sólo si fue click real (umbral de drag 6px): orbit/pan jamás cambia la selección; las keys huérfanas se auto-puran (ítem borrado, cambio de ambiente). Drill-down jerárquico como modo detalle opt-in por unidad (toggle 'Ver piezas' en inspector): clicks del canvas seleccionan Pieza/Herraje con highlight existente y ficha read-only; la selección principal sigue siendo el mueble (§11.2). Comandos de productividad como intenciones puras de dominio en kitchenLayoutCommands.ts: duplicate (quantity+1 + placement trasladado; multi conserva arreglo relativo), copy/paste con clipboard interno (cursor a la derecha del último pegado, fallback a espacio libre, rechazo que enseña si el muro no tiene lugar), pasteRelative izq/der/esquina de la primaria, centrar en muro (unidad o grupo conservando span), align izq/der/centros y distribute (muro común, validación de colisión/overflow — nunca produce estado imposible). Todo comando = 1 commit = 1 entrada de undo (§12). Barra de acciones contextual flotante (Duplicar/Copiar/Pegar/Alinear/Centrar/Quitar) + atajos Ctrl+C/V/D, Delete, Esc con precedencia documentada. Guías temporales de distancia durante drag de muro (gap a vecino/extremo, cálculo puro dragGuides.ts, capa efímera sin tocar dominio). Prune extendido con extraInstanceKeys (patrón extraItemIds F141) para que el placement del índice nuevo sobreviva hasta que project.items refleje quantity+1.",
+      "acceptance": [
+        "Multi-selección Shift/Ctrl sincronizada canvas ↔ lista ↔ inspector ↔ plano 2D con primaria estable; selección no cambia durante orbit/pan (click-vacío limpia sólo bajo umbral de drag); keys huérfanas auto-purgadas",
+        "Modo detalle por unidad: seleccionar pieza/herraje desde el canvas con ficha read-only en inspector; ESC/toggle vuelve a la unidad sin perder la selección del mueble",
+        "duplicate/copy/paste/pasteRelative/center/align/distribute como funciones puras de dominio con tests: happy paths + rechazos (multi-muro, too-few, colisión, overflow, muro lleno) con mensajes que enseñan",
+        "Duplicate = quantity+1 (no ítem nuevo): BOM/precio consistentes; pruneKitchenLayout extraInstanceKeys mantiene el placement nuevo antes del re-render",
+        "Barra de acciones contextual + atajos (Ctrl/C-V-D, Delete, Esc con precedencia ghostDrag > detalle > selección > cerrar); teclado ignorado con foco en inputs o modal abierto",
+        "Guías temporales de distancia en drag de muro (vecino/extremo más cercano) como capa efímera del canvas; sin persistencia ni impacto en BOM",
+        "Todo comando deja exactamente 1 entrada de undo (snapshot por intención)",
+        "Smoke WebGL extendido: multi-select por lista, duplicar y alinear sin error con screenshot; pnpm test + pnpm typecheck verdes"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "docs/proyectar-3d-roadmap-vnext.md",
+        "docs/design.md",
+        "packages/domain/src/kitchenLayout.ts",
+        "packages/domain/src/kitchenLayoutCommands.ts",
+        "packages/domain/src/kitchenArrangementCommands.ts",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx",
+        "packages/ui/src/preview3d/FurnitureScene3D.tsx",
+        "tests/smoke/proyectar-studio.spec.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-22"
     }
   ]
 }

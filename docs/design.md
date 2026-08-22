@@ -428,6 +428,14 @@ pnpm add lucide-react --filter @muebles/ui
 | Buscar | `Search` |
 | Cerrar modal | `X` |
 | Atrás | `ChevronLeft` |
+| Copiar (clipboard Proyectar) | `ClipboardCopy` |
+| Pegar (clipboard Proyectar) | `ClipboardPaste` |
+| Pegar a la izquierda/derecha (Proyectar) | `ChevronLeft` / `ChevronRight` |
+| Alinear bordes de islas (Proyectar) | `AlignStartVertical` / `AlignEndVertical` / `AlignCenterVertical` |
+| Alinear corrida de muro (Proyectar) | `AlignHorizontalJustifyCenter` |
+| Distribuir (Proyectar) | `AlignHorizontalDistributeCenter` / `AlignVerticalDistributeCenter` |
+| Centrar en muro (Proyectar) | `Crosshair` |
+| Quitar del plano (Proyectar) | `ListX` |
 | Precio / Costo | `DollarSign` |
 | Dimensiones | `Ruler` |
 | Instalación — visita de campo | `CalendarDays` |

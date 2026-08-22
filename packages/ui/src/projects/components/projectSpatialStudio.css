@@ -816,3 +816,81 @@
   color: var(--text-muted);
   line-height: var(--leading-normal);
 }
+
+/* F143 — barra de acciones contextual de la selección (flotante, canvas). */
+.spatial-studio__selection-bar {
+  position: absolute;
+  z-index: var(--z-raised);
+  bottom: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  max-width: min(92%, 980px);
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-overlay-chrome) 92%, transparent);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+.spatial-studio__selection-bar-count {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  padding: 0 var(--space-1);
+  white-space: nowrap;
+}
+
+.spatial-studio__selection-bar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline: var(--space-1);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.spatial-studio__selection-bar-group:first-of-type {
+  border-inline-start: none;
+}
+
+.spatial-studio__selection-bar-status {
+  font-size: var(--text-sm);
+  color: var(--warning-700);
+  max-width: 46ch;
+}
+
+/* F143 — panel de selección múltiple y modo detalle del inspector. */
+.spatial-studio__multi-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.spatial-studio__detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-2);
+}
+
+.spatial-studio__detail-card-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.spatial-studio__detail-card-meta {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}

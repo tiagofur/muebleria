@@ -159,3 +159,18 @@
     transition: none;
   }
 }
+
+/* F143 — etiqueta de la guía temporal de distancia durante el drag. */
+.module-scene-3d__drag-guide-label {
+  background: var(--surface-card);
+  color: var(--warning-700);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--warning-500);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}

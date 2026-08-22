@@ -452,12 +452,18 @@ function prunePlacementsInSpace(
   walls: readonly KitchenWall[],
   placements: readonly ProjectItemPlacement[],
   itemById: Map<string, ProjectItem>,
+  extraInstanceKeys?: ReadonlySet<string>,
 ): ProjectItemPlacement[] {
   const wallIds = new Set(walls.map((w) => w.id));
   return placements.filter((p) => {
     const item = itemById.get(p.itemId);
     if (!item) return false;
-    if (p.instanceIndex < 0 || p.instanceIndex >= Math.max(1, item.quantity)) {
+    const key = `${p.itemId}#${p.instanceIndex}`;
+    if (
+      p.instanceIndex < 0 ||
+      (p.instanceIndex >= Math.max(1, item.quantity) &&
+        !extraInstanceKeys?.has(key))
+    ) {
       return false;
     }
     if (isFreePlacement(p)) return true;
@@ -473,11 +479,17 @@ function prunePlacementsInSpace(
  * crea el ítem y lo coloca en el mismo evento, antes de que el proyecto
  * re-renderice. Se tratan como quantity 1 (los inserts nuevos usan siempre
  * instanceIndex 0).
+ *
+ * `extraInstanceKeys` (F143/#310) mantiene placements de instancias recién
+ * creadas por duplicate/paste cuyo instanceIndex todavía excede el quantity
+ * visible en `items` (el bump de quantity viaja por otra prop del proyecto y
+ * llega un render después). Las claves son `${itemId}#${instanceIndex}`.
  */
 export function pruneKitchenLayout(
   layout: ProjectKitchenLayout,
   items: readonly ProjectItem[],
   extraItemIds: readonly string[] = [],
+  extraInstanceKeys: readonly string[] = [],
 ): ProjectKitchenLayout {
   const itemById = new Map(items.map((it) => [it.id, it]));
   for (const id of extraItemIds) {
@@ -490,10 +502,12 @@ export function pruneKitchenLayout(
       });
     }
   }
+  const extraKeys = new Set(extraInstanceKeys);
   const placements = prunePlacementsInSpace(
     layout.walls,
     layout.placements,
     itemById,
+    extraKeys,
   );
   const base: ProjectKitchenLayout = {
     walls: layout.walls,
@@ -518,7 +532,7 @@ export function pruneKitchenLayout(
     }
     return {
       ...s,
-      placements: prunePlacementsInSpace(s.walls, s.placements, itemById),
+      placements: prunePlacementsInSpace(s.walls, s.placements, itemById, extraKeys),
     };
   });
 

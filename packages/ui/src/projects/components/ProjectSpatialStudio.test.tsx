@@ -29,6 +29,16 @@ vi.mock('../../preview3d', async (importOriginal) => {
         readonly planXMm: number;
         readonly planYMm: number;
       }) => void;
+      selectedModuleKeys?: readonly string[];
+      selectedPartId?: string | null;
+      selectedHardwareId?: string | null;
+      showDragGuides?: boolean;
+      onSelectModule?: (
+        key: string | null,
+        modifiers?: { shift?: boolean; ctrlOrMeta?: boolean },
+      ) => void;
+      onSelectPart?: (partId: string | null) => void;
+      onSelectHardware?: (hardwareId: string | null) => void;
     }) => (
       <div
         data-testid={props.testId ?? 'furniture-scene-3d'}
@@ -41,6 +51,10 @@ vi.mock('../../preview3d', async (importOriginal) => {
           .join(' ')}
         data-ambient-floor={props.ambientFloor?.id ?? ''}
         data-ambient-wall={props.ambientWall?.id ?? ''}
+        data-selected-keys={props.selectedModuleKeys?.join('|') ?? ''}
+        data-selected-part={props.selectedPartId ?? ''}
+        data-selected-hardware={props.selectedHardwareId ?? ''}
+        data-show-guides={props.showDragGuides ? 'true' : 'false'}
         data-show-ceiling={props.showCeiling ? 'true' : 'false'}
         data-paint-hover={
           props.paintHoverSurface
@@ -108,6 +122,67 @@ vi.mock('../../preview3d', async (importOriginal) => {
             }
           >
             mock unplaced drop wall
+          </button>
+        ) : null}
+        {props.onSelectModule ? (
+          <>
+            <button
+              type="button"
+              data-testid="mock-select-a"
+              onClick={() => props.onSelectModule!('it-a#0')}
+            >
+              mock select A
+            </button>
+            <button
+              type="button"
+              data-testid="mock-select-a-ctrl"
+              onClick={() =>
+                props.onSelectModule!('it-a#0', { ctrlOrMeta: true })
+              }
+            >
+              mock select A ctrl
+            </button>
+            <button
+              type="button"
+              data-testid="mock-select-b-ctrl"
+              onClick={() =>
+                props.onSelectModule!('it-b#0', { ctrlOrMeta: true })
+              }
+            >
+              mock select B ctrl
+            </button>
+            <button
+              type="button"
+              data-testid="mock-select-empty"
+              onClick={() => props.onSelectModule!(null)}
+            >
+              mock select empty
+            </button>
+            <button
+              type="button"
+              data-testid="mock-select-empty-shift"
+              onClick={() => props.onSelectModule!(null, { shift: true })}
+            >
+              mock select empty shift
+            </button>
+          </>
+        ) : null}
+        {props.onSelectPart ? (
+          <button
+            type="button"
+            data-testid="mock-select-part"
+            onClick={() => props.onSelectPart!('part-x')}
+          >
+            mock select part
+          </button>
+        ) : null}
+        {props.onSelectHardware ? (
+          <button
+            type="button"
+            data-testid="mock-select-hardware"
+            onClick={() => props.onSelectHardware!('comp-1:h-1')}
+          >
+            mock select hardware
           </button>
         ) : null}
         {props.onUnplacedDrop ? (
@@ -1866,5 +1941,424 @@ describe('ProjectSpatialStudio — biblioteca (F141)', () => {
     // Tras ESC el ghost se limpia: un drop posterior no crea nada.
     fireEvent.click(screen.getByTestId('mock-unplaced-drop-wall'));
     expect(onInsertFromCatalog).not.toHaveBeenCalled();
+  });
+});
+
+// ── F143: selección multi/jerárquica + clipboard/align ──────────────────────
+
+const placedProject: Project = {
+  ...project,
+  items: [
+    project.items[0]!,
+    {
+      id: 'it-b',
+      moduleId: 'm-a',
+      quantity: 1,
+      optionChoices: {},
+      measurePresetId: 'p600',
+    },
+  ],
+  kitchenLayout: {
+    walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0, name: 'Muro A' }],
+    placements: [
+      {
+        itemId: 'it-a',
+        instanceIndex: 0,
+        wallId: 'w1',
+        offsetMm: 0,
+        elevation: 'floor',
+      },
+      {
+        itemId: 'it-b',
+        instanceIndex: 0,
+        wallId: 'w1',
+        offsetMm: 900,
+        elevation: 'floor',
+      },
+    ],
+  },
+};
+
+const soloProject: Project = {
+  ...project,
+  items: [
+    project.items[0]!,
+    {
+      id: 'it-b',
+      moduleId: 'm-a',
+      quantity: 1,
+      optionChoices: {},
+      measurePresetId: 'p600',
+    },
+  ],
+  kitchenLayout: {
+    walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0, name: 'Muro A' }],
+    placements: [
+      {
+        itemId: 'it-a',
+        instanceIndex: 0,
+        wallId: 'w1',
+        offsetMm: 1000,
+        elevation: 'floor',
+      },
+    ],
+  },
+};
+
+function lastLayout(cb: ReturnType<typeof vi.fn>): Project['kitchenLayout'] {
+  const calls = cb.mock.calls;
+  return calls[calls.length - 1]![0] as Project['kitchenLayout'];
+}
+
+describe('ProjectSpatialStudio F143 — multi-selección', () => {
+  function setup(over?: { project?: Project }) {
+    const onChangeLayout = vi.fn();
+    const onUpdateItem = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={over?.project ?? placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={onClose}
+        onChangeLayout={onChangeLayout}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    return { onChangeLayout, onUpdateItem, onClose };
+  }
+
+  it('ctrl+click en la lista acumula selección y muestra la barra con N', () => {
+    setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    expect(screen.getByTestId('spatial-studio-selection-count').textContent).toBe(
+      '1 seleccionado',
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'), {
+      ctrlKey: true,
+    });
+    expect(screen.getByTestId('spatial-studio-selection-count').textContent).toBe(
+      '2 seleccionados',
+    );
+    // sincronizado canvas ↔ lista: la escena recibe las dos claves
+    expect(
+      screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-keys'),
+    ).toBe('it-a#0|it-b#0');
+    // inspector contextual de selección múltiple
+    expect(
+      screen.getByTestId('spatial-studio-multi-panel').textContent,
+    ).toContain('Muro A');
+  });
+
+  it('shift+click en la lista hace rango con el orden visible', () => {
+    const three: Project = {
+      ...placedProject,
+      items: [
+        ...placedProject.items,
+        {
+          id: 'it-c',
+          moduleId: 'm-a',
+          quantity: 1,
+          optionChoices: {},
+          measurePresetId: 'p600',
+        },
+      ],
+      kitchenLayout: {
+        walls: placedProject.kitchenLayout!.walls,
+        placements: [
+          ...placedProject.kitchenLayout!.placements,
+          {
+            itemId: 'it-c',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 1800,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    setup({ project: three });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-c-0'), {
+      shiftKey: true,
+    });
+    expect(screen.getByTestId('spatial-studio-selection-count').textContent).toBe(
+      '3 seleccionados',
+    );
+  });
+
+  it('click en vacío del canvas limpia; con Shift no', () => {
+    setup();
+    fireEvent.click(screen.getByTestId('mock-select-a'));
+    expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('mock-select-empty-shift'));
+    expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('mock-select-empty'));
+    expect(
+      screen.queryByTestId('spatial-studio-selection-count'),
+    ).toBeNull();
+  });
+
+  it('la selección se auto-purga cuando el ítem desaparece', () => {
+    const { rerender } = render(
+      <ProjectSpatialStudio
+        open
+        project={placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
+    const withoutB: Project = {
+      ...placedProject,
+      items: [placedProject.items[0]!],
+      kitchenLayout: {
+        walls: placedProject.kitchenLayout!.walls,
+        placements: [placedProject.kitchenLayout!.placements[0]!],
+      },
+    };
+    rerender(
+      <ProjectSpatialStudio
+        open
+        project={withoutB}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    // it-a sigue válido; probamos con la inversa: borrar it-a seleccionado
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    const withoutA: Project = {
+      ...placedProject,
+      items: [placedProject.items[1]!],
+      kitchenLayout: {
+        walls: placedProject.kitchenLayout!.walls,
+        placements: [placedProject.kitchenLayout!.placements[1]!],
+      },
+    };
+    rerender(
+      <ProjectSpatialStudio
+        open
+        project={withoutA}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByTestId('spatial-studio-selection-count'),
+    ).toBeNull();
+  });
+
+  it('Escape limpia la selección antes de cerrar el studio', () => {
+    const { onClose } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId('spatial-studio-selection-count'),
+    ).toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('ProjectSpatialStudio F143 — comandos', () => {
+  function setup(over?: { project?: Project }) {
+    const onChangeLayout = vi.fn();
+    const onUpdateItem = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={over?.project ?? placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={onClose}
+        onChangeLayout={onChangeLayout}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    return { onChangeLayout, onUpdateItem, onClose };
+  }
+
+  it('duplicar crea instancia (quantity+1) colocada a la derecha con gap', () => {
+    const { onChangeLayout, onUpdateItem } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-duplicate'));
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', quantity: 2 }),
+    );
+    // it-b@900 ocupa 900–1500: la copia trasladada (620) chocaría y cae al
+    // primer hueco libre del muro (tras it-b, con gap).
+    const layout = lastLayout(onChangeLayout);
+    const copy = layout?.placements.find(
+      (p) => p.itemId === 'it-a' && p.instanceIndex === 1,
+    );
+    expect(copy?.offsetMm).toBe(1520);
+    // la copia queda seleccionada
+    expect(screen.getByTestId('spatial-studio-selection-count').textContent).toBe(
+      '1 seleccionado',
+    );
+  });
+
+  it('duplicar y deshacer restaura layout Y quantity (una intención)', () => {
+    const { onChangeLayout, onUpdateItem } = setup({ project: soloProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-duplicate'));
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', quantity: 2 }),
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-undo'));
+    expect(onUpdateItem).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'it-a', quantity: 1 }),
+    );
+    const layout = lastLayout(onChangeLayout);
+    expect(
+      layout?.placements.some(
+        (p) => p.itemId === 'it-a' && p.instanceIndex === 1,
+      ),
+    ).toBe(false);
+  });
+
+  it('Ctrl+D duplica y Delete quita la selección del plano', () => {
+    const { onChangeLayout, onUpdateItem } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', quantity: 2 }),
+    );
+    // la copia quedó seleccionada: Delete la quita del plano
+    fireEvent.keyDown(window, { key: 'Delete' });
+    const layout = lastLayout(onChangeLayout);
+    expect(
+      layout?.placements.some((p) => p.itemId === 'it-a' && p.instanceIndex === 1),
+    ).toBe(false);
+    // el original y it-b quedan intactos
+    expect(
+      layout?.placements.some((p) => p.itemId === 'it-a' && p.instanceIndex === 0),
+    ).toBe(true);
+    expect(layout?.placements.some((p) => p.itemId === 'it-b')).toBe(true);
+  });
+
+  it('copiar + pegar marcha a la derecha del último pegado', () => {
+    const { onChangeLayout, onUpdateItem } = setup({ project: soloProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-copy'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-paste'));
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', quantity: 2 }),
+    );
+    const layout = lastLayout(onChangeLayout);
+    const copy1 = layout?.placements.find(
+      (p) => p.itemId === 'it-a' && p.instanceIndex === 1,
+    );
+    // fuente en 1000 → copia pegada al costado derecho (1620)
+    expect(copy1?.offsetMm).toBe(1620);
+  });
+
+  it('pegar a la esquina usa la referencia primaria', () => {
+    const { onChangeLayout, onUpdateItem } = setup({ project: soloProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-copy'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-paste-corner'));
+    expect(onUpdateItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'it-a', quantity: 2 }),
+    );
+    const layout = lastLayout(onChangeLayout);
+    const copy = layout?.placements.find(
+      (p) => p.itemId === 'it-a' && p.instanceIndex === 1,
+    );
+    expect(copy?.offsetMm).toBe(0);
+  });
+
+  it('alinear (compactar) junta la corrida con gap 20', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'), {
+      ctrlKey: true,
+    });
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-compact'));
+    const layout = lastLayout(onChangeLayout);
+    const a = layout?.placements.find((p) => p.itemId === 'it-a');
+    const b = layout?.placements.find((p) => p.itemId === 'it-b');
+    expect(a?.offsetMm).toBe(0);
+    expect(b?.offsetMm).toBe(620);
+  });
+
+  it('centrar en muro centra la selección', () => {
+    const { onChangeLayout } = setup({ project: soloProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-center'));
+    const layout = lastLayout(onChangeLayout);
+    const a = layout?.placements.find((p) => p.itemId === 'it-a');
+    expect(a?.offsetMm).toBe(1200);
+  });
+
+  it('centrar que chocaría rechaza con mensaje que enseña (sin tocar el plano)', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-center'));
+    // it-b@900 ocupa el centro del muro: el comando no debe aplicar nada.
+    expect(onChangeLayout).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId('spatial-studio-cmd-status').textContent,
+    ).toContain('otros muebles');
+  });
+
+  it('pegar sin clipboard está bloqueado con explicación', () => {
+    setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    const paste = screen.getByTestId('spatial-studio-cmd-paste');
+    expect((paste as HTMLButtonElement).disabled).toBe(true);
+    expect(paste.getAttribute('title')).toContain('Copiá');
+  });
+});
+
+describe('ProjectSpatialStudio F143 — modo detalle', () => {
+  it('Ver piezas activa selección de pieza/herraje en el canvas', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    // sin modo detalle, la escena no recibe part-pick
+    expect(screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part')).toBe('');
+    fireEvent.click(screen.getByTestId('spatial-studio-detail-toggle'));
+    expect(
+      screen.getByTestId('spatial-studio-detail-hint').textContent,
+    ).toContain('pieza o herraje');
+    fireEvent.click(screen.getByTestId('mock-select-part'));
+    expect(
+      screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part'),
+    ).toBe('part-x');
+    fireEvent.click(screen.getByTestId('mock-select-hardware'));
+    expect(
+      screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-hardware'),
+    ).toBe('comp-1:h-1');
+    // ESC baja un nivel: del detalle a la unidad (no cierra el studio)
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(
+      screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part'),
+    ).toBe('');
+    expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
   });
 });

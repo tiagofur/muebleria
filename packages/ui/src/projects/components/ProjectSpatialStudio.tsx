@@ -25,18 +25,26 @@ import type {
 import {
   addKitchenSpace,
   allKitchenPlacements,
+  alignSelectionCommand,
   BASE_CLEARANCE_PRESETS_MM,
+  centerSelectionOnWallCommand,
+  compactSelectionOnWallCommand,
+  copySelectionToClipboard,
   createDefaultLWalls,
   createPlanUnderlay,
   DEFAULT_BASE_CLEARANCE_MM,
   DEFAULT_WALL_CABINET_Z_MM,
   defaultMeasurePresetId,
+  distributeSelectionCommand,
+  duplicateSelectionCommand,
   emptyKitchenLayout,
   ensureKitchenSpaces,
   isFreePlacement,
   kitchenLayoutWarnings,
   nextOffsetOnWall,
   parseDxfToKitchenWalls,
+  pasteClipboardCommand,
+  pasteRelativeCommand,
   placedModuleCollides,
   planEditSessionHeldByOther,
   pruneKitchenLayout,
@@ -59,6 +67,9 @@ import {
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
   WALL_CABINET_Z_PRESETS_MM,
+  type ClipboardEntry,
+  type ItemQuantityPatch,
+  type LayoutCommandResult,
 } from '@muebles/domain';
 import {
   ArrowDown,
@@ -128,6 +139,17 @@ import type { Catalog, ModuleBaseMode } from '@muebles/domain';
 import { WorkspaceTabs } from '../../common/Tabs';
 import { ModuleLibraryPanel, moduleDefaultDims } from './library/ModuleLibraryPanel';
 import { useLibraryCollections } from './library/useLibraryFavorites';
+import {
+  applySelectionClick,
+  applySelectionRange,
+  EMPTY_STUDIO_SELECTION,
+  isSelected,
+  modifiersFromPointer,
+  primarySelectionKey,
+  pruneSelection,
+  type StudioSelection,
+} from './studioSelection';
+import { StudioSelectionBar } from './StudioSelectionBar';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -210,6 +232,18 @@ function newId(): string {
   return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * F143 — entrada del historial del plano: snapshot de layout + quantities a
+ * restaurar al aplicarla. Los comandos que crean instancias (duplicate/paste)
+ * bumpean quantity vía onUpdateItem; sin este par, "duplicar → deshacer"
+ * dejaría una copia huérfana sin colocar (North Star §12: una intención =
+ * una entrada de undo coherente).
+ */
+type PlanHistoryEntry = {
+  readonly layout: ProjectKitchenLayout;
+  readonly itemQuantities: readonly ItemQuantityPatch[];
+};
+
 function defaultElevationForModule(
   module: Module | undefined,
 ): PlacementElevation {
@@ -286,7 +320,25 @@ export function ProjectSpatialStudio({
 }: ProjectSpatialStudioProps): ReactNode {
   const [useR3f, setUseR3f] = useState(false);
   const [planLockBlocked, setPlanLockBlocked] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  /**
+   * F143 — selección múltiple: lista ordenada de claves `${itemId}#${i}`; la
+   * primera es la primaria (alimenta el inspector y referencia "pegar a…").
+   */
+  const [selection, setSelection] = useState<StudioSelection>(
+    EMPTY_STUDIO_SELECTION,
+  );
+  const selectedKey = primarySelectionKey(selection);
+  /** F143 — clipboard interno del studio (snapshot de instancias copiadas). */
+  const [clipboard, setClipboard] = useState<readonly ClipboardEntry[]>([]);
+  const [pasteCursorByWall, setPasteCursorByWall] = useState<
+    Record<string, number>
+  >({});
+  /** F143 — modo detalle: drill-down a pieza/herraje de la unidad primaria. */
+  const [detailMode, setDetailMode] = useState(false);
+  const [detailPartId, setDetailPartId] = useState<string | null>(null);
+  const [detailHardwareId, setDetailHardwareId] = useState<string | null>(null);
+  /** F143 — feedback de comandos (errores que enseñan, aria-live). */
+  const [commandStatus, setCommandStatus] = useState<string | null>(null);
   const [targetWallId, setTargetWallId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('props');
   const [showOutlines, setShowOutlines] = useState(true);
@@ -311,8 +363,8 @@ export function ProjectSpatialStudio({
     'library',
   );
   const [listFilter, setListFilter] = useState<ListFilter>('all');
-  const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
-  const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
+  const [undoStack, setUndoStack] = useState<PlanHistoryEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<PlanHistoryEntry[]>([]);
   const [showFloorGrid, setShowFloorGrid] = useState(true);
   const [lightingMode, setLightingMode] = useState<SceneLightingMode>(
     DEFAULT_SCENE_LIGHTING_MODE,
@@ -364,6 +416,11 @@ export function ProjectSpatialStudio({
       setPlanLockBlocked(false);
       setDefaultWallsMsg(null);
       setModulesSubTab('library');
+      setDetailMode(false);
+      setDetailPartId(null);
+      setDetailHardwareId(null);
+      setCommandStatus(null);
+      setPasteCursorByWall({});
       return;
     }
     // Default camera 3/4 (isometric) on every open for framing.
@@ -386,7 +443,7 @@ export function ProjectSpatialStudio({
       setModulesSubTab('items');
     }
     if (bootstrap.selectKey) {
-      setSelectedKey(bootstrap.selectKey);
+      setSelection({ keys: [bootstrap.selectKey], anchorKey: bootstrap.selectKey });
       setInspectorTab('props');
     } else if (bootstrap.selectKey === null) {
       // Explicit clear when parent wants list focus only.
@@ -414,23 +471,61 @@ export function ProjectSpatialStudio({
     };
   }, [open, statusCanEdit, planActor?.userId, project.id]);
 
+  /** F143 — teclado: Esc con precedencia (ghost > detalle > selección > cerrar) + atajos. */
   useEffect(() => {
     if (!open) return;
+    const isTyping = (t: EventTarget | null): boolean =>
+      t instanceof HTMLElement &&
+      (t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        t.isContentEditable);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // F065: si hay un ghost drag activo, cancelar el drag primero.
-      if (ghostDrag) {
-        setGhostDrag(null);
-        setGhostHit(null);
+      const modalOpen = Boolean(document.querySelector('.ui-modal-root.is-open'));
+      if (e.key === 'Escape') {
+        // F065: si hay un ghost drag activo, cancelar el drag primero.
+        if (ghostDrag) {
+          setGhostDrag(null);
+          setGhostHit(null);
+          return;
+        }
+        // Nested dialogs (e.g. Agregar mueble) own Esc; do not close the studio.
+        if (modalOpen) return;
+        if (detailPartId || detailHardwareId) {
+          setDetailPartId(null);
+          setDetailHardwareId(null);
+          return;
+        }
+        if (selection.keys.length > 0) {
+          setSelection(EMPTY_STUDIO_SELECTION);
+          return;
+        }
+        onClose();
         return;
       }
-      // Nested dialogs (e.g. Agregar mueble) own Esc; do not close the studio.
-      if (document.querySelector('.ui-modal-root.is-open')) return;
-      onClose();
+      if (modalOpen || isTyping(e.target)) return;
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && (e.key === 'c' || e.key === 'C')) {
+        handleCopySelection();
+        return;
+      }
+      if (!canEdit) return;
+      if (meta && (e.key === 'v' || e.key === 'V')) {
+        handlePaste();
+        return;
+      }
+      if (meta && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        handleDuplicateSelection();
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        handleRemoveSelectionFromPlan();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, ghostDrag]);
+  });
 
   const baseLayout = useMemo(
     () =>
@@ -536,6 +631,25 @@ export function ProjectSpatialStudio({
     [layout.placements],
   );
 
+  /** F143 — orden visible de la lista (sin colocar primero) para Shift+rango. */
+  const listOrderedKeys = useMemo(
+    () => [
+      ...unplaced.map((f) => `${f.itemId}#${f.instanceIndex}`),
+      ...placedEntries.map((p) => `${p.itemId}#${p.instanceIndex}`),
+    ],
+    [unplaced, placedEntries],
+  );
+
+  /** F143 — la selección se auto-purga cuando las instancias dejan de existir. */
+  const validSelectionKeys = useMemo(
+    () => footprints.map((f) => `${f.itemId}#${f.instanceIndex}`),
+    [footprints],
+  );
+  useEffect(() => {
+    setSelection((s) => pruneSelection(s, validSelectionKeys));
+  }, [validSelectionKeys]);
+
+
   const warnings = useMemo(
     () => kitchenLayoutWarnings(layout, project.items, footprints),
     [layout, project.items, footprints],
@@ -635,6 +749,66 @@ export function ProjectSpatialStudio({
         : null,
     [selectedItem, selectedModule],
   );
+
+  /**
+   * F143 — capacidades de la selección para la barra de acciones: comandos de
+   * muro exigen muro común; alinear bordes es para islas (en 1D apilaría).
+   */
+  const selectionCapabilities = useMemo(() => {
+    const placed = selection.keys
+      .map((key) => {
+        const hash = key.lastIndexOf('#');
+        return layout.placements.find(
+          (p) =>
+            p.itemId === key.slice(0, hash) &&
+            p.instanceIndex === Number(key.slice(hash + 1)),
+        );
+      })
+      .filter((p): p is ProjectItemPlacement => Boolean(p));
+    const onWall = placed.filter((p) => !isFreePlacement(p));
+    const islands = placed.filter((p) => isFreePlacement(p));
+    const wallIds = new Set(onWall.map((p) => p.wallId));
+    const singleWall = wallIds.size === 1 && onWall.length > 0;
+    const wall = singleWall
+      ? layout.walls.find((w) => w.id === [...wallIds][0])
+      : undefined;
+    return {
+      count: selection.keys.length,
+      allPlacedOnWall: singleWall && onWall.length === selection.keys.length,
+      allIslands: islands.length > 0 && islands.length === selection.keys.length,
+      wallName: wall?.name?.trim() || null,
+      primaryPlacedOnWall: Boolean(
+        selectedPlacement && !isFreePlacement(selectedPlacement),
+      ),
+    };
+  }, [selection.keys, layout.placements, layout.walls, selectedPlacement]);
+
+  /**
+   * F143 — target del modo detalle (pieza/herraje de la unidad primaria),
+   * resuelto on-the-fly desde el preview del proyecto.
+   */
+  const detailTarget = useMemo(() => {
+    if (!detailMode || !selectedKey) return null;
+    const mod = preview.modules.find((m) => m.instanceKey === selectedKey);
+    if (!mod) return null;
+    if (detailPartId) {
+      const part = mod.parts.find((p) => p.id === detailPartId);
+      if (part) return { kind: 'part' as const, part };
+    }
+    if (detailHardwareId) {
+      const sep = detailHardwareId.indexOf(':');
+      const componentInstanceId = detailHardwareId.slice(0, sep);
+      const hardwareId = detailHardwareId.slice(sep + 1);
+      const placement = (mod.resolvedHardwarePlacements ?? []).find(
+        (p) => p.componentInstanceId === componentInstanceId && p.hardwareId === hardwareId,
+      );
+      if (placement) {
+        const hardware = catalog.hardware.find((h) => h.id === placement.hardwareId);
+        return { kind: 'hardware' as const, placement, hardware };
+      }
+    }
+    return null;
+  }, [detailMode, selectedKey, detailPartId, detailHardwareId, preview.modules, catalog.hardware]);
 
   const pricingCatalog = useMemo((): Catalog => {
     return {
@@ -806,11 +980,17 @@ export function ProjectSpatialStudio({
        * project.items — el prune no debe purgar sus placements.
        */
       readonly extraItemIds?: readonly string[];
+      /**
+       * F143: claves de instancias recién creadas (duplicate/paste) cuyo
+       * instanceIndex aún excede el quantity visible — el prune no debe
+       * purgarlas hasta que el bump llegue en project.items.
+       */
+      readonly extraInstanceKeys?: readonly string[];
     },
   ) => {
     const history = opts?.history ?? 'push';
     if (history === 'push' && !wallDragSession.current) {
-      setUndoStack((s) => [...s.slice(-29), layout]);
+      setUndoStack((s) => [...s.slice(-29), { layout, itemQuantities: [] }]);
       setRedoStack([]);
     }
     // Keep multi-space metadata; write top-level edits into the active space.
@@ -821,7 +1001,12 @@ export function ProjectSpatialStudio({
       activeSpaceId: next.activeSpaceId ?? layout.activeSpaceId,
     });
     onChangeLayout(
-      pruneKitchenLayout(merged, project.items, opts?.extraItemIds ?? []),
+      pruneKitchenLayout(
+        merged,
+        project.items,
+        opts?.extraItemIds ?? [],
+        opts?.extraInstanceKeys ?? [],
+      ),
     );
   };
 
@@ -865,13 +1050,13 @@ export function ProjectSpatialStudio({
     if (!canEdit) {
       // Read-only: local view only — never persist activeSpaceId on frozen OP.
       setViewSpaceId(spaceId);
-      setSelectedKey(null);
+      setSelection(EMPTY_STUDIO_SELECTION);
       setTargetWallId(null);
       return;
     }
     if (spaceId === activeSpaceId) return;
     commit(setActiveKitchenSpace(layout, spaceId));
-    setSelectedKey(null);
+    setSelection(EMPTY_STUDIO_SELECTION);
     setTargetWallId(null);
   };
 
@@ -879,7 +1064,7 @@ export function ProjectSpatialStudio({
     if (!canEdit) return;
     const n = (layout.spaces?.length ?? 0) + 1;
     commit(addKitchenSpace(layout, `Espacio ${n}`, newId));
-    setSelectedKey(null);
+    setSelection(EMPTY_STUDIO_SELECTION);
     setTargetWallId(null);
   };
 
@@ -892,7 +1077,7 @@ export function ProjectSpatialStudio({
     if (!canEdit || !activeSpaceId) return;
     if ((layout.spaces?.length ?? 0) <= 1) return;
     commit(removeKitchenSpace(layout, activeSpaceId));
-    setSelectedKey(null);
+    setSelection(EMPTY_STUDIO_SELECTION);
     setTargetWallId(null);
   };
 
@@ -982,21 +1167,243 @@ export function ProjectSpatialStudio({
     setImportMessage(null);
   };
 
+  /**
+   * F143 — aplicar una entrada del historial restaura layout Y quantities
+   * (los comandos que crean instancias viajan por onUpdateItem). Las claves
+   * cuyos índices serían stale para el prune actual pasan como extra hasta
+   * que el proyecto re-renderice con el quantity restaurado.
+   */
+  const applyHistoryEntry = (entry: PlanHistoryEntry) => {
+    for (const patch of entry.itemQuantities) {
+      const item = project.items.find((i) => i.id === patch.itemId);
+      if (item) {
+        onUpdateItem?.({ ...item, quantity: patch.quantity });
+      }
+    }
+    const restoredItems = new Set(entry.itemQuantities.map((p) => p.itemId));
+    const extraKeys = entry.layout.placements
+      .filter((p) => {
+        if (!restoredItems.has(p.itemId)) return false;
+        const current = project.items.find((i) => i.id === p.itemId)?.quantity;
+        return current !== undefined && p.instanceIndex >= Math.max(1, current);
+      })
+      .map((p) => `${p.itemId}#${p.instanceIndex}`);
+    onChangeLayout(
+      pruneKitchenLayout(entry.layout, project.items, [], extraKeys),
+    );
+  };
+
+  const currentQuantitiesOf = (
+    patches: readonly ItemQuantityPatch[],
+  ): ItemQuantityPatch[] =>
+    patches.map((p) => ({
+      itemId: p.itemId,
+      quantity:
+        project.items.find((i) => i.id === p.itemId)?.quantity ?? p.quantity,
+    }));
+
   const undoPlan = () => {
     if (!canEdit || undoStack.length === 0) return;
     const prev = undoStack[undoStack.length - 1]!;
     setUndoStack((s) => s.slice(0, -1));
-    setRedoStack((s) => [...s, layout]);
-    onChangeLayout(pruneKitchenLayout(prev, project.items));
+    setRedoStack((s) => [
+      ...s,
+      { layout, itemQuantities: currentQuantitiesOf(prev.itemQuantities) },
+    ]);
+    applyHistoryEntry(prev);
   };
 
   const redoPlan = () => {
     if (!canEdit || redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1]!;
     setRedoStack((s) => s.slice(0, -1));
-    setUndoStack((s) => [...s, layout]);
-    onChangeLayout(pruneKitchenLayout(next, project.items));
+    setUndoStack((s) => [
+      ...s,
+      { layout, itemQuantities: currentQuantitiesOf(next.itemQuantities) },
+    ]);
+    applyHistoryEntry(next);
   };
+
+  // ── F143: selección y comandos de productividad ───────────────────────────
+
+  /** Click del canvas / plano 2D: null = click en vacío (sin modificadores). */
+  const handleSceneSelectModule = (
+    key: string | null,
+    modifiers?: { readonly shift?: boolean; readonly ctrlOrMeta?: boolean },
+  ) => {
+    if (!key) {
+      if (!modifiers?.shift && !modifiers?.ctrlOrMeta) {
+        setSelection(EMPTY_STUDIO_SELECTION);
+        setDetailPartId(null);
+        setDetailHardwareId(null);
+      }
+      return;
+    }
+    setSelection((s) => applySelectionClick(s, key, modifiers ?? {}));
+    if (key !== selectedKey) {
+      setDetailPartId(null);
+      setDetailHardwareId(null);
+    }
+    setInspectorTab('position');
+  };
+
+  /** Click de fila en "De la obra": Shift = rango según el orden visible. */
+  const handleListSelect = (key: string, e: { nativeEvent: MouseEvent }) => {
+    const mods = modifiersFromPointer(e.nativeEvent);
+    if (mods.shift) {
+      setSelection((s) => applySelectionRange(s, listOrderedKeys, key));
+    } else {
+      setSelection((s) => applySelectionClick(s, key, mods));
+    }
+    setInspectorTab('props');
+  };
+
+  /**
+   * Ejecuta una intención de dominio como UNA entrada de undo: snapshot de
+   * layout + quantities previos, patches vía onUpdateItem, layout vía commit
+   * sin historia (ya se pusheó a mano). Selecciona las copias creadas.
+   */
+  const runCommand = (result: LayoutCommandResult) => {
+    if (!result.ok) {
+      setCommandStatus(result.message);
+      return;
+    }
+    setCommandStatus(null);
+    if (!wallDragSession.current) {
+      setUndoStack((s) => [
+        ...s.slice(-29),
+        {
+          layout,
+          itemQuantities: currentQuantitiesOf(result.itemPatches),
+        },
+      ]);
+      setRedoStack([]);
+    }
+    for (const patch of result.itemPatches) {
+      const item = project.items.find((i) => i.id === patch.itemId);
+      if (item) {
+        onUpdateItem?.({ ...item, quantity: patch.quantity });
+      }
+    }
+    commit(result.layout, {
+      history: 'none',
+      extraInstanceKeys: result.createdKeys,
+    });
+    if (result.nextCursorByWall) {
+      setPasteCursorByWall(result.nextCursorByWall);
+    }
+    if (result.createdKeys.length > 0) {
+      setSelection({
+        keys: result.createdKeys,
+        anchorKey: result.createdKeys[0] ?? null,
+      });
+      setDetailPartId(null);
+      setDetailHardwareId(null);
+    }
+  };
+
+  const commandContext = () => ({
+    layout,
+    items: project.items,
+    footprints,
+  });
+
+  const handleDuplicateSelection = () => {
+    if (!canEdit || selection.keys.length === 0) return;
+    runCommand(
+      duplicateSelectionCommand({ ...commandContext(), keys: selection.keys }),
+    );
+  };
+
+  const handleCopySelection = () => {
+    if (selection.keys.length === 0) return;
+    setClipboard(
+      copySelectionToClipboard({
+        layout,
+        keys: selection.keys,
+        footprints,
+      }),
+    );
+    setPasteCursorByWall({});
+  };
+
+  const handlePaste = () => {
+    if (!canEdit || clipboard.length === 0) return;
+    runCommand(
+      pasteClipboardCommand({
+        ...commandContext(),
+        entries: clipboard,
+        cursorByWall: pasteCursorByWall,
+      }),
+    );
+  };
+
+  const handlePasteRelative = (side: 'left' | 'right' | 'corner') => {
+    if (!canEdit || clipboard.length === 0 || !selectedKey) return;
+    runCommand(
+      pasteRelativeCommand({
+        ...commandContext(),
+        entries: clipboard,
+        refKey: selectedKey,
+        side,
+      }),
+    );
+  };
+
+  const handleCompactOnWall = () => {
+    if (!canEdit) return;
+    runCommand(
+      compactSelectionOnWallCommand({
+        layout,
+        footprints,
+        keys: selection.keys,
+      }),
+    );
+  };
+
+  const handleDistribute = (axis: 'wall' | 'x' | 'y') => {
+    if (!canEdit) return;
+    runCommand(
+      distributeSelectionCommand({ layout, footprints, keys: selection.keys, axis }),
+    );
+  };
+
+  const handleAlignIslands = (
+    mode: 'left' | 'right' | 'centers-x' | 'front' | 'back' | 'centers-y',
+  ) => {
+    if (!canEdit) return;
+    runCommand(alignSelectionCommand({ layout, footprints, keys: selection.keys, mode }));
+  };
+
+  const handleCenterOnWall = () => {
+    if (!canEdit) return;
+    runCommand(
+      centerSelectionOnWallCommand({ layout, footprints, keys: selection.keys }),
+    );
+  };
+
+  const handleRemoveSelectionFromPlan = () => {
+    if (!canEdit || selection.keys.length === 0) return;
+    const keys = new Set(selection.keys);
+    commit({
+      ...layout,
+      placements: layout.placements.filter(
+        (p) => !keys.has(`${p.itemId}#${p.instanceIndex}`),
+      ),
+    });
+  };
+
+  const handleSceneSelectPart = (partId: string | null) => {
+    setDetailPartId(partId);
+    if (partId) setDetailHardwareId(null);
+  };
+
+  const handleSceneSelectHardware = (hardwareId: string | null) => {
+    setDetailHardwareId(hardwareId);
+    if (hardwareId) setDetailPartId(null);
+  };
+
+
 
   const ensureWalls = (): ProjectKitchenLayout => {
     if (layout.walls.length > 0) return layout;
@@ -1080,7 +1487,7 @@ export function ProjectSpatialStudio({
       // Ítems recién creados (biblioteca) aún no están en project.items.
       { extraItemIds: [itemId] },
     );
-    setSelectedKey(`${itemId}#${instanceIndex}`);
+    setSelection({ keys: [`${itemId}#${instanceIndex}`], anchorKey: `${itemId}#${instanceIndex}` });
     setTargetWallId(wall.id);
   };
 
@@ -1146,7 +1553,7 @@ export function ProjectSpatialStudio({
       // Ítems recién creados (biblioteca) aún no están en project.items.
       { extraItemIds: [itemId] },
     );
-    setSelectedKey(`${itemId}#${instanceIndex}`);
+    setSelection({ keys: [`${itemId}#${instanceIndex}`], anchorKey: `${itemId}#${instanceIndex}` });
     setInspectorTab('position');
   };
 
@@ -1158,7 +1565,15 @@ export function ProjectSpatialStudio({
         (p) => !(p.itemId === itemId && p.instanceIndex === instanceIndex),
       ),
     });
-    if (selectedKey === `${itemId}#${instanceIndex}`) setSelectedKey(null);
+    const removedKey = `${itemId}#${instanceIndex}`;
+    setSelection((s) =>
+      s.keys.includes(removedKey)
+        ? {
+            keys: s.keys.filter((k) => k !== removedKey),
+            anchorKey: s.anchorKey === removedKey ? null : s.anchorKey,
+          }
+        : s,
+    );
   };
 
   const patchPlacement = (
@@ -1349,7 +1764,7 @@ export function ProjectSpatialStudio({
   const handleModuleWallDragStart = (_moduleKey: string) => {
     if (!canEdit || wallDragSession.current) return;
     wallDragSession.current = true;
-    setUndoStack((s) => [...s.slice(-29), layout]);
+    setUndoStack((s) => [...s.slice(-29), { layout, itemQuantities: [] }]);
     setRedoStack([]);
   };
 
@@ -1508,7 +1923,7 @@ export function ProjectSpatialStudio({
     } else {
       // Sin muro activo el ítem queda "Sin colocar"; lo hacemos visible.
       setListFilter('unplaced');
-      setSelectedKey(`${itemId}#0`);
+      setSelection({ keys: [`${itemId}#0`], anchorKey: `${itemId}#0` });
       setInspectorTab('props');
     }
   };
@@ -1633,7 +2048,7 @@ export function ProjectSpatialStudio({
   const handleModuleFreeDragStart = (_moduleKey: string) => {
     if (!canEdit || wallDragSession.current) return;
     wallDragSession.current = true;
-    setUndoStack((s) => [...s.slice(-29), layout]);
+    setUndoStack((s) => [...s.slice(-29), { layout, itemQuantities: [] }]);
     setRedoStack([]);
   };
 
@@ -2036,7 +2451,7 @@ export function ProjectSpatialStudio({
                     <ul className="spatial-studio__item-list">
                       {unplaced.map((f) => {
                         const key = `${f.itemId}#${f.instanceIndex}`;
-                        const active = selectedKey === key;
+                        const active = isSelected(selection, key);
                         const meta = listEntryMeta(
                           f.itemId,
                           f.instanceIndex,
@@ -2099,10 +2514,7 @@ export function ProjectSpatialStudio({
                                       }
                                     : undefined
                                 }
-                                onClick={() => {
-                                  setSelectedKey(key);
-                                  setInspectorTab('props');
-                                }}
+                                onClick={(e) => handleListSelect(key, e)}
                                 onDoubleClick={() => {
                                   if (!canEdit || !activeWallId) return;
                                   placeOnWall(
@@ -2188,7 +2600,7 @@ export function ProjectSpatialStudio({
                     <ul className="spatial-studio__item-list">
                       {placedEntries.map((p) => {
                         const key = `${p.itemId}#${p.instanceIndex}`;
-                        const active = selectedKey === key;
+                        const active = isSelected(selection, key);
                         const meta = listEntryMeta(
                           p.itemId,
                           p.instanceIndex,
@@ -2204,10 +2616,7 @@ export function ProjectSpatialStudio({
                                   ? 'spatial-studio__item-btn spatial-studio__item-btn--active'
                                   : 'spatial-studio__item-btn'
                               }
-                              onClick={() => {
-                                setSelectedKey(key);
-                                setInspectorTab('props');
-                              }}
+                              onClick={(e) => handleListSelect(key, e)}
                               data-testid={`spatial-studio-placed-${p.itemId}-${p.instanceIndex}`}
                             >
                               <span className="spatial-studio__item-code">
@@ -2552,10 +2961,14 @@ export function ProjectSpatialStudio({
                 availableAmbientMaterials={availableAmbientMaterials}
                 showCeiling={layout.showCeiling}
                 selectedModuleKey={selectedKey}
-                onSelectModule={(key) => {
-                  setSelectedKey(key);
-                  if (key) setInspectorTab('position');
-                }}
+                selectedModuleKeys={selection.keys}
+                onSelectModule={handleSceneSelectModule}
+                selectedPartId={detailMode ? detailPartId : null}
+                onSelectPart={detailMode ? handleSceneSelectPart : undefined}
+                isolateSelected={detailMode}
+                selectedHardwareId={detailMode ? detailHardwareId : null}
+                onSelectHardware={detailMode ? handleSceneSelectHardware : undefined}
+                showDragGuides
                 wallDragEnabled={canEdit}
                 wallDragByKey={wallDragByKey}
                 onModuleWallOffset={handleModuleWallOffset}
@@ -2594,6 +3007,26 @@ export function ProjectSpatialStudio({
               WebGL no disponible. Usá un navegador con aceleración 3D.
             </p>
           )}
+
+          <StudioSelectionBar
+            count={selectionCapabilities.count}
+            canEdit={canEdit}
+            hasClipboard={clipboard.length > 0}
+            allOnWall={selectionCapabilities.allPlacedOnWall}
+            allIslands={selectionCapabilities.allIslands}
+            wallName={selectionCapabilities.wallName}
+            primaryPlacedOnWall={selectionCapabilities.primaryPlacedOnWall}
+            status={commandStatus}
+            onDuplicate={handleDuplicateSelection}
+            onCopy={handleCopySelection}
+            onPaste={handlePaste}
+            onPasteRelative={handlePasteRelative}
+            onCompact={handleCompactOnWall}
+            onDistribute={handleDistribute}
+            onAlignIslands={handleAlignIslands}
+            onCenter={handleCenterOnWall}
+            onRemoveFromPlan={handleRemoveSelectionFromPlan}
+          />
 
           {showPlan2d && planMini ? (
             <div
@@ -2671,7 +3104,7 @@ export function ProjectSpatialStudio({
                 })}
                 {planPlacements2D.map((p) => {
                   const key = `${p.itemId}#${p.instanceIndex}`;
-                  const selected = selectedKey === key;
+                  const selected = isSelected(selection, key);
                   const rx =
                     planMini.pad + (p.boxMm.minX - planMini.minX) * planMini.scale;
                   const ry =
@@ -2699,10 +3132,12 @@ export function ProjectSpatialStudio({
                   return (
                     <g
                       key={key}
-                      onClick={() => {
-                        setSelectedKey(key);
-                        setInspectorTab('position');
-                      }}
+                      onClick={(e) =>
+                        handleSceneSelectModule(
+                          key,
+                          modifiersFromPointer(e.nativeEvent),
+                        )
+                      }
                       style={{ cursor: 'pointer' }}
                     >
                       <title>{p.label} ({p.widthMm} × {p.depthMm} mm)</title>
@@ -2771,7 +3206,37 @@ export function ProjectSpatialStudio({
           className="spatial-studio__inspector"
           data-testid="spatial-studio-inspector"
         >
-          {!selectedItem || !selectedRef ? (
+          {selection.keys.length > 1 && selectionCapabilities.count > 1 ? (
+            <>
+              <h3 className="spatial-studio__section-title">
+                Selección · {selection.keys.length} muebles
+              </h3>
+              <section className="spatial-studio__section" data-testid="spatial-studio-multi-panel">
+                <div className="spatial-studio__multi-summary">
+                  {selectionCapabilities.allPlacedOnWall ? (
+                    <span>
+                      Todos en {selectionCapabilities.wallName ?? 'el muro'} · usá
+                      Alinear / Distribuir / Centrar en la barra del canvas.
+                    </span>
+                  ) : selectionCapabilities.allIslands ? (
+                    <span>
+                      {selection.keys.length} islas · alinealas por bordes o
+                      centros desde la barra del canvas.
+                    </span>
+                  ) : (
+                    <span>
+                      Selección mixta (muros o islas distintas) · los comandos de
+                      alineación funcionan sobre muebles de un mismo muro.
+                    </span>
+                  )}
+                  <span>
+                    La primera seleccionada es la referencia para «Pegar a…» y
+                    alimenta este inspector al volver a una sola.
+                  </span>
+                </div>
+              </section>
+            </>
+          ) : !selectedItem || !selectedRef ? (
             <>
               <h3 className="spatial-studio__section-title">
                 Ambiente · {activeSpaceName}
@@ -3174,6 +3639,57 @@ export function ProjectSpatialStudio({
                     : 'sin colocar'}
                 </p>
               </div>
+
+              <div className="spatial-studio__field spatial-studio__check-row">
+                <button
+                  type="button"
+                  className={
+                    detailMode
+                      ? 'btn btn--small spatial-studio__tool--on'
+                      : 'btn btn--small'
+                  }
+                  aria-pressed={detailMode}
+                  onClick={() => {
+                    setDetailMode((v) => !v);
+                    setDetailPartId(null);
+                    setDetailHardwareId(null);
+                  }}
+                  title="Modo detalle: hacer clic en una pieza o herraje del mueble para inspeccionarlo"
+                  data-testid="spatial-studio-detail-toggle"
+                >
+                  <Scan size={14} strokeWidth={1.5} aria-hidden /> Ver piezas
+                </button>
+              </div>
+
+              {detailTarget ? (
+                <div
+                  className="spatial-studio__detail-card"
+                  data-testid="spatial-studio-detail-card"
+                >
+                  <span className="spatial-studio__detail-card-title">
+                    {detailTarget.kind === 'part'
+                      ? detailTarget.part.code?.trim() || detailTarget.part.description
+                      : detailTarget.hardware?.name?.trim() || 'Herraje'}
+                  </span>
+                  {detailTarget.kind === 'part' ? (
+                    <span className="spatial-studio__detail-card-meta">
+                      {detailTarget.part.lengthMm} × {detailTarget.part.widthMm} mm ·{' '}
+                      {catalog.materials.find((m) => m.id === detailTarget.part.materialId)
+                        ?.name?.trim() || 'material del catálogo'}
+                    </span>
+                  ) : (
+                    <span className="spatial-studio__detail-card-meta">
+                      {detailTarget.hardware?.code?.trim() || 'herraje'} · la
+                      edición fina vive en el editor del mueble
+                    </span>
+                  )}
+                </div>
+              ) : detailMode ? (
+                <p className="spatial-studio__hint" data-testid="spatial-studio-detail-hint">
+                  Detalle: hacé clic en una pieza o herraje del mueble en el
+                  canvas. ESC vuelve a la unidad.
+                </p>
+              ) : null}
 
               <div className="spatial-studio__tabs">
                 <WorkspaceTabs
