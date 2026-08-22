@@ -4,10 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import type { MaterialBoard, MaterialCategory } from '@muebles/domain';
-import {
-  BoardMaterialPalette,
-  BOARD_APPLY_SCOPES,
-} from './BoardMaterialPalette';
+import { BoardMaterialPalette } from './BoardMaterialPalette';
 
 afterEach(() => {
   cleanup();
@@ -76,9 +73,7 @@ function Harness(
       canEdit
       scope="fronts"
       onScopeChange={vi.fn()}
-      hasSelection
       status={null}
-      onApply={vi.fn()}
       onCardDragStart={vi.fn()}
       onCardDragEnd={vi.fn()}
       {...props}
@@ -121,40 +116,32 @@ describe('BoardMaterialPalette', () => {
     expect(screen.queryByTestId('board-palette-card-mat-ara')).toBeNull();
   });
 
-  it('click aplica y drag lleva el MIME de tablero; sin selección deshabilita scopes de mueble', () => {
-    const onApply = vi.fn();
+  it('cards son drag-only: no son botones y el drag lleva el MIME de tablero', () => {
     const onCardDragStart = vi.fn();
-    const { rerender } = render(
-      <Harness onApply={onApply} onCardDragStart={onCardDragStart} />,
-    );
-    fireEvent.click(screen.getByTestId('board-palette-card-mat-ara'));
-    expect(onApply).toHaveBeenCalledWith('mat-ara');
+    render(<Harness onCardDragStart={onCardDragStart} />);
+
+    const card = screen.getByTestId('board-palette-card-mat-ara');
+    // Drag-only: la tarjeta no es un botón — se aplica arrastrando al canvas.
+    expect(card.tagName).toBe('DIV');
+    expect(card.getAttribute('draggable')).toBe('true');
+    expect(card.getAttribute('aria-label')).toContain('arrastrar sobre un mueble');
 
     const dataTransfer = { setData: vi.fn(), effectAllowed: '' };
-    fireEvent.dragStart(screen.getByTestId('board-palette-card-mat-ara'), {
-      dataTransfer,
-    });
+    fireEvent.dragStart(card, { dataTransfer });
     expect(dataTransfer.setData).toHaveBeenCalledWith(
       'application/x-muebles-board-paint',
       expect.any(String),
     );
     expect(onCardDragStart).toHaveBeenCalledWith('mat-ara');
+  });
 
-    rerender(
-      <Harness
-        onApply={onApply}
-        onCardDragStart={onCardDragStart}
-        hasSelection={false}
-      />,
-    );
+  it('scope del drop sin gate de selección — el drop siempre aporta el mueble', () => {
+    render(<Harness />);
     const scope = screen.getByTestId('board-palette-scope') as HTMLSelectElement;
-    const fronts = BOARD_APPLY_SCOPES.find((s) => s.id === 'fronts')!;
-    const option = Array.from(scope.options).find(
-      (o) => o.value === fronts.id,
-    )!;
-    expect(option.disabled).toBe(true);
-    const project = Array.from(scope.options).find((o) => o.value === 'project')!;
-    expect(project.disabled).toBe(false);
+    for (const option of Array.from(scope.options)) {
+      expect(option.disabled).toBe(false);
+      expect(option.textContent).not.toMatch(/sin selección/);
+    }
   });
 
   it('estado vacío con catálogo de tableros vacío', () => {

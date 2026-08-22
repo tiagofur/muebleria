@@ -1033,3 +1033,16 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
 - **Verificación:** MaterialPalette + studio 60 tests · ui 1.279 · typecheck 0 ·
   smoke WebGL 1 passed.
 - **Cierre:** commit + push sobre `feat/f142-materials-dock` (PR #330).
+
+## 2026-08-22 — F142 iteración 3 — tableros drag-only, sin click (PR #330)
+- **Agente:** implementador (ZCode), decisión del dueño del producto: "todo sólo
+  drag & drop".
+- **Cambios:** BoardMaterialPalette sin onApply (cards = tarjetas arrastrables,
+  no botones) y sin gate de selección en el scope (el drop siempre aporta el
+  mueble). Selector renombrado a "Al soltar, aplicar a". Studio:
+  applyBoardMaterial exige targetKey del drop; mensaje "Seleccioná un mueble"
+  eliminado junto al path de clic. North Star §7.3: drag & drop es el único
+  gesto de aplicación de materiales (ambientales y tableros).
+- **Verificación:** palette+studio 57 tests · ui 1.279 · typecheck 0 · smoke
+  WebGL 1 passed.
+- **Cierre:** commit + push sobre `feat/f142-materials-dock` (PR #330).

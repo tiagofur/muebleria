@@ -1522,10 +1522,7 @@ export function ProjectSpatialStudio({
    * anti-leak: el material debe existir en el catálogo de tableros — nunca
    * se escribe un id en superficies ambientales desde acá.
    */
-  const applyBoardMaterial = (
-    materialId: string,
-    targetKey: string | null | undefined,
-  ): void => {
+  const applyBoardMaterial = (materialId: string, targetKey: string): void => {
     if (!canEdit) return;
     const material = catalog.materials.find((m) => m.id === materialId);
     if (!material) return;
@@ -1540,13 +1537,7 @@ export function ProjectSpatialStudio({
       return;
     }
 
-    const key = targetKey ?? selectedKey;
-    if (!key) {
-      setBoardStatus(
-        'Seleccioná un mueble —o arrastrá el tablero sobre uno— para aplicarlo.',
-      );
-      return;
-    }
+    const key = targetKey;
     const hash = key.lastIndexOf('#');
     const itemId = hash > 0 ? key.slice(0, hash) : key;
     const item = project.items.find((it) => it.id === itemId);
@@ -2404,9 +2395,7 @@ export function ProjectSpatialStudio({
                   resolveMediaUrl={resolveMediaUrl}
                   scope={boardScope}
                   onScopeChange={setBoardScope}
-                  hasSelection={selectedKey !== null}
                   status={boardStatus}
-                  onApply={(materialId) => applyBoardMaterial(materialId, null)}
                   onCardDragEnd={() => setBoardPaintHoverKey(null)}
                 />
               ) : (

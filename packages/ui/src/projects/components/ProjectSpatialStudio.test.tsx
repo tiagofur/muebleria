@@ -1959,7 +1959,7 @@ describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
     expect(screen.queryByTestId('spatial-studio-material-palette')).toBeNull();
   });
 
-  it('click en tablero con mueble seleccionado aplica FRENTE al ítem', () => {
+  it('drop de tablero sobre un mueble con selección aplica FRENTE y confirma en el dock', () => {
     const onUpdateItem = vi.fn();
     render(
       <ProjectSpatialStudio
@@ -1973,10 +1973,13 @@ describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
         onUpdateItem={onUpdateItem}
       />,
     );
-    // Seleccionar el ítem sin colocar y aplicar desde Tableros.
+    // Seleccionar el ítem sin colocar y arrastrar el tablero al canvas.
     fireEvent.click(screen.getByTestId('spatial-studio-unplaced-it-a-0'));
     openBoardsTab();
-    fireEvent.click(screen.getByTestId('board-palette-card-mat-1'));
+    fireEvent.dragStart(screen.getByTestId('board-palette-card-mat-1'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.click(screen.getByTestId('mock-board-drop-hit'));
     expect(onUpdateItem).toHaveBeenCalledTimes(1);
     const updated = onUpdateItem.mock.calls[0]![0] as {
       optionChoices: Record<string, string>;
@@ -1984,28 +1987,6 @@ describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
     expect(updated.optionChoices.FRENTE).toBe('mat-1');
     expect(screen.getByTestId('board-palette-status').textContent).toMatch(
       /Arauco Blanco aplicado a frentes del mueble/,
-    );
-  });
-
-  it('click sin selección enseña en vez de fallar', () => {
-    const onUpdateItem = vi.fn();
-    render(
-      <ProjectSpatialStudio
-        open
-        project={projectWithWalls}
-        modules={[modA]}
-        catalog={catalog}
-        canEdit
-        onClose={vi.fn()}
-        onChangeLayout={vi.fn()}
-        onUpdateItem={onUpdateItem}
-      />,
-    );
-    openBoardsTab();
-    fireEvent.click(screen.getByTestId('board-palette-card-mat-1'));
-    expect(onUpdateItem).not.toHaveBeenCalled();
-    expect(screen.getByTestId('board-palette-status').textContent).toMatch(
-      /Seleccioná un mueble/,
     );
   });
 
@@ -2060,7 +2041,7 @@ describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
     );
   });
 
-  it('scope obra aplica a nivel proyecto (projectLevelChoices)', () => {
+  it('scope obra aplica a nivel proyecto (projectLevelChoices) via drop', () => {
     const onUpdateProjectLevelChoice = vi.fn();
     render(
       <ProjectSpatialStudio
@@ -2078,7 +2059,10 @@ describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
     fireEvent.change(screen.getByTestId('board-palette-scope'), {
       target: { value: 'project' },
     });
-    fireEvent.click(screen.getByTestId('board-palette-card-mat-1'));
+    fireEvent.dragStart(screen.getByTestId('board-palette-card-mat-1'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.click(screen.getByTestId('mock-board-drop-hit'));
     expect(onUpdateProjectLevelChoice).toHaveBeenCalledWith('FRENTE', 'mat-1');
   });
 });
