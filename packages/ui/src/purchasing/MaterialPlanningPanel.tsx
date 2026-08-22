@@ -27,26 +27,33 @@ export type MaterialPlanningPanelProps = {
   readonly view: MaterialPlanningCardView;
   readonly handlers: MaterialPlanningHandlers;
   readonly unitByMaterial?: Readonly<Record<string, string>>;
+  /** `${kind}:${materialId}` → human label from the catalog (never raw ids). */
+  readonly labelsByMaterial?: Readonly<Record<string, string>>;
   readonly canManage?: boolean;
   readonly testId?: string;
 };
 
-function labelFor(view: MaterialPlanningCardView, kind: string, materialId: string): string {
-  return `${STOCK_KIND_LABELS_ES[kind as keyof typeof STOCK_KIND_LABELS_ES] ?? kind} · ${materialId}`;
+function labelFor(
+  kind: string,
+  materialId: string,
+  labels: Readonly<Record<string, string>>,
+): string {
+  const kindLabel = STOCK_KIND_LABELS_ES[kind as keyof typeof STOCK_KIND_LABELS_ES] ?? kind;
+  const materialLabel = labels[`${kind}:${materialId}`] ?? materialId;
+  return `${kindLabel} · ${materialLabel}`;
 }
 
 export function MaterialPlanningPanel({
   view,
   handlers,
   unitByMaterial = {},
+  labelsByMaterial = {},
   canManage = true,
   testId,
 }: MaterialPlanningPanelProps): ReactNode {
   const [overrideReason, setOverrideReason] = useState('');
   const hasPending = view.coverage.some((line) => line.pendingReserve > 0);
   const hasShortage = view.shortageLines.length > 0;
-  const materialLabel = (kind: string, materialId: string): string =>
-    labelFor(view, kind, materialId);
 
   if (view.released) {
     return (
@@ -98,7 +105,7 @@ export function MaterialPlanningPanel({
                 const unit = unitByMaterial[`${line.kind}:${line.materialId}`] ?? 'u';
                 return (
                   <tr key={`${line.kind}:${line.materialId}`}>
-                    <td>{materialLabel(line.kind, line.materialId)}</td>
+                    <td>{labelFor(line.kind, line.materialId, labelsByMaterial)}</td>
                     <td>
                       {line.required} {unit}
                     </td>

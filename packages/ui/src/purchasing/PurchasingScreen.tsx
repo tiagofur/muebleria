@@ -466,6 +466,7 @@ export function PurchasingScreen({
         view={view}
         handlers={planningHandlers}
         unitByMaterial={planningUnits}
+        labelsByMaterial={stockLabels ?? {}}
         canManage={canMarkPicked}
         testId={`purch-plan-panel-${projectId}`}
       />

@@ -84,6 +84,13 @@ export function QualityPanel({
     setActionByIssue((prev) => ({ ...prev, [issueId]: { ...issueForm(issueId), ...patch } }));
 
   const pendingQcUnits = view.unitGates.filter((u) => u.status === 'module_qc');
+  const unitLabel = (unitId?: string): string => {
+    if (!unitId) return '';
+    const gate = view.unitGates.find((g) => g.unitId === unitId);
+    return gate ? `Unidad ${gate.unitIndex}` : '';
+  };
+  const partLabel = (partInstanceId?: string): string =>
+    (partInstanceId && view.partLabelByInstance[partInstanceId]) || '';
 
   return (
     <div className="quality-panel" data-testid={testId ?? `quality-panel-${view.projectId}`}>
@@ -150,8 +157,10 @@ export function QualityPanel({
                     <span className="status-badge status-badge--open">
                       {QUALITY_ISSUE_CATEGORY_LABELS_ES[issue.category]}
                     </span>
-                    {issue.partInstanceId ? ` · pieza ${issue.partInstanceId}` : ''}
-                    {issue.moduleUnitId ? ` · unidad ${issue.moduleUnitId}` : ''}
+                    {partLabel(issue.partInstanceId)
+                      ? ` · pieza ${partLabel(issue.partInstanceId)}`
+                      : ''}
+                    {unitLabel(issue.moduleUnitId) ? ` · ${unitLabel(issue.moduleUnitId)}` : ''}
                   </span>
                 </div>
                 {canManage && handlers.onRework ? (
@@ -178,17 +187,22 @@ export function QualityPanel({
                       aria-label="Motivo"
                     />
                     {needsPart ? (
-                      <input
-                        type="text"
+                      <select
                         className="input"
-                        value={partInstanceIdByIssue[issue.id] ?? ''}
+                        value={partInstanceIdByIssue[issue.id] ?? issue.partInstanceId ?? ''}
                         onChange={(e) =>
                           setPartInstanceIdByIssue((prev) => ({ ...prev, [issue.id]: e.target.value }))
                         }
-                        placeholder={issue.partInstanceId ?? 'ID pieza afectada'}
                         aria-label="Pieza afectada"
                         data-testid={`quality-rework-part-${issue.id}`}
-                      />
+                      >
+                        <option value="">Pieza afectada…</option>
+                        {view.partOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     ) : null}
                     <input
                       type="number"

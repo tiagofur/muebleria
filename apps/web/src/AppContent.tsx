@@ -1824,16 +1824,30 @@ export function AppContent({
         });
       };
       const repo = getRepository();
+      // API mode: the server re-computes caps/gates/stamps — apply the
+      // server-returned planning (not the local mirror) so ids/timestamps
+      // stay the server truth until the next refresh.
+      const applyServer = (view: { planning: unknown; released: boolean }): void => {
+        const serverPlanning = view.planning as Project['materialPlanning'];
+        projectActions.applyMaterialPlanningProject(projectId, {
+          ...local,
+          materialPlanning: serverPlanning ?? local.materialPlanning,
+          materialsRelease: view.released
+            ? (local.materialsRelease ?? project.materialsRelease)
+            : project.materialsRelease,
+        });
+        toast({ type: 'success', message: successMessage });
+      };
       if (kind === 'derive' && repo.deriveMaterialRequirements && payload.lines) {
-        void repo.deriveMaterialRequirements(projectId, payload.lines).then(applyLocal).catch(fail);
+        void repo.deriveMaterialRequirements(projectId, payload.lines).then(applyServer).catch(fail);
         return;
       }
       if (kind === 'reserve' && repo.reserveMaterials) {
-        void repo.reserveMaterials(projectId).then(applyLocal).catch(fail);
+        void repo.reserveMaterials(projectId).then(applyServer).catch(fail);
         return;
       }
       if (kind === 'release' && repo.releaseMaterials) {
-        void repo.releaseMaterials(projectId, payload.overrideReason).then(applyLocal).catch(fail);
+        void repo.releaseMaterials(projectId, payload.overrideReason).then(applyServer).catch(fail);
         return;
       }
       applyLocal();

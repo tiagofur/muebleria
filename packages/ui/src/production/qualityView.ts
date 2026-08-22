@@ -32,6 +32,10 @@ export interface QualityPanelView {
   readonly reworkCost: { readonly materialCost: number; readonly laborMinutes: number };
   readonly unitGates: readonly QualityUnitGateView[];
   readonly qcChecklist: readonly { readonly code: QcCheckCode; readonly label: string }[];
+  /** partInstanceId → partCode (labels humanos, nunca ids crudos). */
+  readonly partLabelByInstance: Readonly<Record<string, string>>;
+  /** Piezas de la obra como opciones seleccionables (OC-061 rework). */
+  readonly partOptions: readonly { readonly id: string; readonly label: string }[];
 }
 
 /**
@@ -57,6 +61,15 @@ export function qualityPanelView(project: Project): QualityPanelView {
         (r) => r.unitId === unit.id && Boolean(r.override),
       ),
     }));
+  const partLabelByInstance: Record<string, string> = {};
+  const partOptions: { id: string; label: string }[] = [];
+  for (const part of project.partInstances ?? []) {
+    partLabelByInstance[part.id] = part.partCode;
+    partOptions.push({
+      id: part.id,
+      label: `${part.partCode} · U${part.unitIndex}${part.description ? ` · ${part.description}` : ''}`,
+    });
+  }
   return {
     projectId: project.id,
     openIssues: open,
@@ -67,5 +80,7 @@ export function qualityPanelView(project: Project): QualityPanelView {
       code,
       label: QC_CHECK_LABELS_ES[code],
     })),
+    partLabelByInstance,
+    partOptions,
   };
 }
