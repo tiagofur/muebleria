@@ -94,12 +94,26 @@ export const plantillaChoices: OptionChoices = {
   CORREDERA: IDS.hwCorredera,
 };
 
+/**
+ * Árbol de subgrupos de tableros compartido por los catálogos demo — los
+ * `categoryId` de `plantillaCatalog.materials` apuntan a estos nodos.
+ */
+export const demoMaterialCategories: Catalog['materialCategories'] = [
+  { id: 'cat-melamina', name: 'Melamina', sortOrder: 1 },
+  { id: 'cat-mel-blancos', name: 'Blancos', parentId: 'cat-melamina', sortOrder: 1 },
+  { id: 'cat-mel-maderados', name: 'Maderados', parentId: 'cat-melamina', sortOrder: 2 },
+  { id: 'cat-mdf', name: 'MDF', sortOrder: 2 },
+];
+
 export const plantillaCatalog: Catalog = {
+  materialCategories: demoMaterialCategories,
   materials: [
     {
       id: IDS.matArauco,
       code: 'TAB-ARA-BLA',
       name: 'ARAUCO BLANCO',
+      manufacturer: 'Arauco',
+      categoryId: 'cat-mel-blancos',
       widthMm: 1830,
       lengthMm: 2440,
       thicknessMm: 15,
@@ -115,6 +129,8 @@ export const plantillaCatalog: Catalog = {
       id: IDS.matMaderado,
       code: 'TAB-MAD-FRE',
       name: 'MADERADO FRENTE',
+      manufacturer: 'Arauco',
+      categoryId: 'cat-mel-maderados',
       widthMm: 1830,
       lengthMm: 2440,
       thicknessMm: 18,
@@ -130,6 +146,8 @@ export const plantillaCatalog: Catalog = {
       id: IDS.matMdf,
       code: 'TAB-MDF-3',
       name: 'MDF 3MM',
+      manufacturer: 'Masisa',
+      categoryId: 'cat-mdf',
       widthMm: 1830,
       lengthMm: 2440,
       thicknessMm: 3,

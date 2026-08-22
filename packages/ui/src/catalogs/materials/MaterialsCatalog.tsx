@@ -13,7 +13,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { EdgeBand, MaterialBoard } from '@muebles/domain';
+import type { EdgeBand, MaterialBoard, MaterialCategory } from '@muebles/domain';
 import {
   isValidPreviewColor,
   normalizePreviewColor,
@@ -69,6 +69,8 @@ import '../catalogs.css';
 export interface MaterialsCatalogProps {
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
+  /** F142: subgrupos de materiales (árbol de categorías) para el form. */
+  readonly materialCategories?: readonly MaterialCategory[];
   readonly onCreate: (draft: MaterialDraft) => void;
   readonly onUpdate: (id: string, draft: MaterialDraft) => void;
   readonly onDeactivate: (id: string) => void;
@@ -100,6 +102,7 @@ export interface MaterialsCatalogProps {
 export function MaterialsCatalog({
   materials,
   edges,
+  materialCategories = [],
   onCreate,
   onUpdate,
   onDeactivate,
@@ -256,6 +259,9 @@ export function MaterialsCatalog({
     if (codeErr) return codeErr;
     const nameErr = validateRequiredName(draft.name);
     if (nameErr) return nameErr;
+    if (!draft.manufacturer.trim()) {
+      return 'Ingresá el fabricante del tablero (ej. Arauco, Masisa).';
+    }
     const colorTrim = draft.previewColor.trim();
     if (colorTrim && !isValidPreviewColor(colorTrim)) {
       return 'Color de vista previa inválido. Usá #RGB o #RRGGBB, o dejalo vacío.';
@@ -519,6 +525,7 @@ export function MaterialsCatalog({
       </div>
 
       <MaterialFormModal
+        materialCategories={materialCategories}
         open={modalOpen}
         editingId={editingId}
         formId={formId}

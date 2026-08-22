@@ -75,6 +75,7 @@ import {
   edgeToApi,
   hardwareToApi,
   materialToApi,
+  materialCategoryToApi,
   moduleToApi,
   structureToApi,
   optionGroupToApi,
@@ -354,6 +355,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       agregados,
       ambientMaterials,
       ambientCategories,
+      materialCategories,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -370,6 +372,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       // endpoint) working — ambient renders as none, same as today.
       fetchJson('/catalog/ambient-materials').catch(() => []),
       fetchJson('/catalog/ambient-categories').catch(() => []),
+      // F142: subgrupos de tableros. `.catch(() => [])` = backend viejo.
+      fetchJson('/catalog/material-categories').catch(() => []),
     ]);
 
     return catalogFromApi({
@@ -385,6 +389,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       agregados,
       ambientMaterials,
       ambientCategories,
+      materialCategories,
     });
   }
 
@@ -555,6 +560,17 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
           `/catalog/ambient-categories/${cat.id}`,
           '/catalog/ambient-categories',
           ambientCategoryToApi(cat),
+        );
+      }
+    }
+
+    // Material categories (F142: subgrupos de tableros, padres primero).
+    if (catalog.materialCategories) {
+      for (const cat of sortCategoriesForSave(catalog.materialCategories)) {
+        await this.upsert(
+          `/catalog/material-categories/${cat.id}`,
+          '/catalog/material-categories',
+          materialCategoryToApi(cat),
         );
       }
     }

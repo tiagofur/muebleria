@@ -284,35 +284,30 @@ el canvas.
 
 ### 7.2 Organización
 
+El navegador de materiales separa por **naturaleza del material**, no por rol (frentes/
+interiores/cubiertas). El rol se resuelve al aplicar (§7.3), no al navegar:
+
 ```text
 MATERIALES
-
-Frentes
-  Blanco mate
-  Roble natural
-  Nogal
-  Negro
-
-Interiores
-  Blanco
-  Gris
-
-Cubiertas
-  Piedra clara
-  Granito oscuro
-
-Ambiente
-  Piso
-  Pared
-  Revestimiento
-
-⭐ Favoritos
-🕘 Recientes
+├─ Ambiente   → AmbientMaterial (piso, pared, techo, cubierta visual). Presentacional,
+│               no cotizable.
+└─ Tableros   → MaterialBoard (cotizable). Navegación como la biblioteca de muebles:
+                fabricante (campo obligatorio) + subgrupo (categoría opcional) + búsqueda
+                + código. Nunca se mezcla en la misma lista con AmbientMaterial.
 ```
 
-No mezclar material de tablero cotizable con material ambiental si el dominio los separa.
-La UI puede presentarlos juntos visualmente con categorías, pero el modelo sigue respetando
-sus consecuencias distintas.
+Reglas duras:
+
+- drop de tablero sobre superficie ambiental (piso/pared/techo/mesada) se **rechaza** con
+  mensaje que enseña por qué ("los tableros se aplican a los muebles"); el hit más cercano
+  define el target — un mueble detrás de un muro no recibe el drop;
+- id de MaterialBoard nunca termina en `floorMaterialId`/`wallMaterialId`/etc., y id de
+  AmbientMaterial nunca entra en `optionChoices` (anti-leak por tipo);
+- los tableros se filtran por subgrupo (árbol de categorías como muebles) y por fabricante;
+  el campo Fabricante es obligatorio en catálogo.
+
+El modelo sigue respetando las consecuencias distintas de cada naturaleza: tablero afecta
+precio/BOM; ambiente no.
 
 ### 7.3 Aplicación por intención
 

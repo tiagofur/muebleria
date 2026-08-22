@@ -9,6 +9,10 @@ import type { EdgeDraft } from '../EdgesCatalog';
 export type MaterialDraft = {
   code: string;
   name: string;
+  /** Fabricante (F142). Obligatorio en el form; texto libre. */
+  manufacturer: string;
+  /** Subgrupo (categoría de materiales, F142). Empty string = sin subgrupo. */
+  categoryId: string;
   widthMm: number;
   lengthMm: number;
   thicknessMm: number;
@@ -54,6 +58,8 @@ export type MaterialCostInputs = {
 export const emptyDraft = (): MaterialDraft => ({
   code: '',
   name: '',
+  manufacturer: '',
+  categoryId: '',
   widthMm: 1830,
   lengthMm: 2440,
   thicknessMm: 15,
@@ -77,6 +83,8 @@ export function toDraft(item: MaterialBoard): MaterialDraft {
   return {
     code: item.code,
     name: item.name,
+    manufacturer: item.manufacturer ?? '',
+    categoryId: item.categoryId ?? '',
     widthMm: item.widthMm,
     lengthMm: item.lengthMm,
     thicknessMm: item.thicknessMm,

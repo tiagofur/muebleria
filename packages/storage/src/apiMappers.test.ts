@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ambientCategoryFromApi,
   ambientCategoryToApi,
+  materialCategoryToApi,
+  materialCategoryFromApi,
   ambientMaterialFromApi,
   ambientMaterialToApi,
   edgeFromApi,
@@ -53,6 +55,7 @@ import {
   workshopSettingsToApi,
   workshopSettingsFromApi,
 } from './apiMappers';
+import { MATERIAL_MANUFACTURER_UNSET } from '@muebles/domain';
 import type {
   AmbientCategory,
   AmbientMaterial,
@@ -98,6 +101,8 @@ describe('apiMappers', () => {
       id: 'm1',
       code: 'TAB-1',
       name: 'Board',
+      manufacturer: 'Arauco',
+      categoryId: 'mc-1',
       widthMm: 1830,
       lengthMm: 2440,
       thicknessMm: 15,
@@ -112,12 +117,23 @@ describe('apiMappers', () => {
     expect(api.width_mm).toBe(1830);
     expect(api.board_price).toBe(100);
     expect(api.default_edge_band_id).toBe('edge-1');
+    expect(api.manufacturer).toBe('Arauco');
+    expect(api.category_id).toBe('mc-1');
     expect(materialFromApi(api as Record<string, unknown>)).toMatchObject({
       widthMm: 1830,
       boardPrice: 100,
       grainDefault: true,
       defaultEdgeBandId: 'edge-1',
+      manufacturer: 'Arauco',
+      categoryId: 'mc-1',
     });
+    // Datos previos a F142 sin manufacturer/category → undefined en la entidad.
+    const { manufacturer: _m, categoryId: _c, ...legacyRaw } = m;
+    const legacy = materialFromApi(legacyRaw as unknown as Record<string, unknown>);
+    expect(legacy.manufacturer).toBeUndefined();
+    expect(legacy.categoryId).toBeUndefined();
+    // Los writes legacy nunca rompen la validación del server: vacío → unset.
+    expect(materialToApi(legacy).manufacturer).toBe(MATERIAL_MANUFACTURER_UNSET);
   });
 
   it('round-trips PBR finish properties (roughness, metalness, clearcoat)', () => {
@@ -2484,5 +2500,22 @@ describe('site survey roundtrip (OC-040/OC-041)', () => {
     expect(blockers[0]?.spaceName).toBe('Closet');
     expect(blockers[1]?.kind).toBe('not_verified');
     expect(surveyGateBlockersFromApi(undefined)).toEqual([]);
+  });
+});
+
+// ─── F142: categorías de materiales (subgrupos de tableros) ─────────────────
+
+describe('materialCategoryToApi / materialCategoryFromApi', () => {
+  it('round-trips snake_case parent/sort preserving optional parent', () => {
+    const cat = { id: 'mc-1', name: 'Blancos', parentId: 'mc-root', sortOrder: 2 };
+    const api = materialCategoryToApi(cat);
+    expect(api.parent_id).toBe('mc-root');
+    expect(api.sort_order).toBe(2);
+    expect(materialCategoryFromApi(api as Record<string, unknown>)).toEqual(cat);
+
+    const root = { id: 'mc-root', name: 'Melamina', sortOrder: 1 };
+    const rootApi = materialCategoryToApi(root);
+    expect(rootApi.parent_id).toBeNull();
+    expect(materialCategoryFromApi(rootApi as Record<string, unknown>)).toEqual(root);
   });
 });

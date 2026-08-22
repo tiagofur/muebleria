@@ -25,6 +25,14 @@ export interface MaterialBoard {
   readonly id: string;
   readonly code: string;
   readonly name: string;
+  /**
+   * Fabricante del tablero (F142 / #309). Texto libre; obligatorio en forms
+   * y API writes. Opcional en el tipo para tolerar datos previos a F142 —
+   * `materialManufacturer()` resuelve el display con "(sin definir)".
+   */
+  readonly manufacturer?: string;
+  /** Optional leaf-or-any-level category (F142). Unset = uncategorized. */
+  readonly categoryId?: string;
   readonly widthMm: number;
   readonly lengthMm: number;
   readonly thicknessMm: number;
@@ -307,6 +315,11 @@ export type ModuleCategory = CategoryNode;
  * Roots have no parentId; depth is 1..3 (root = 1).
  */
 export type AmbientCategory = CategoryNode;
+
+// --- Board material categories (F142: fabricante + subgrupos como los muebles) ---
+
+/** Reuses the shared hierarchical CategoryNode tree (same as modules/ambient). */
+export type MaterialCategory = CategoryNode;
 
 // --- Module template ---
 
@@ -1316,6 +1329,11 @@ export interface Catalog {
   readonly ambientMaterials?: readonly AmbientMaterial[];
   /** Hierarchical ambient/finish categories (up to 3 levels). */
   readonly ambientCategories?: readonly AmbientCategory[];
+  /**
+   * Hierarchical board material categories (F142: subgrupos como los muebles).
+   * Omitted/undefined treated as [] for older workspaces.
+   */
+  readonly materialCategories?: readonly MaterialCategory[];
   readonly customers?: readonly Customer[];
   /** Reusable components catalog (F049 / H07). */
   readonly components?: readonly Component[];

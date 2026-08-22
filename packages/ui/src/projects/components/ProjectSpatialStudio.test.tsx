@@ -29,6 +29,10 @@ vi.mock('../../preview3d', async (importOriginal) => {
         readonly planXMm: number;
         readonly planYMm: number;
       }) => void;
+      onBoardPaintDrop?: (drop: {
+        readonly moduleKey: string | null;
+        readonly materialId: string;
+      }) => void;
     }) => (
       <div
         data-testid={props.testId ?? 'furniture-scene-3d'}
@@ -110,6 +114,31 @@ vi.mock('../../preview3d', async (importOriginal) => {
             mock unplaced drop wall
           </button>
         ) : null}
+        {props.onBoardPaintDrop ? (
+          <button
+            type="button"
+            data-testid="mock-board-drop-hit"
+            onClick={() =>
+              props.onBoardPaintDrop!({
+                moduleKey: 'it-a#0',
+                materialId: 'mat-1',
+              })
+            }
+          >
+            mock board drop hit
+          </button>
+        ) : null}
+        {props.onBoardPaintDrop ? (
+          <button
+            type="button"
+            data-testid="mock-board-drop-miss"
+            onClick={() =>
+              props.onBoardPaintDrop!({ moduleKey: null, materialId: 'mat-1' })
+            }
+          >
+            mock board drop miss
+          </button>
+        ) : null}
         {props.onUnplacedDrop ? (
           <button
             type="button"
@@ -148,7 +177,7 @@ const modA: Module = {
   name: 'Bajo 600',
   structureId: 'st1',
   components: [],
-  hardwareLines: [],
+  hardwareLines: [{ id: 'h-frente', quantity: 1, optionRole: 'FRENTE' }],
   externalDims: { width: 600, height: 720, depth: 560 },
   furnitureType: 'inferior',
   presets: [
@@ -178,14 +207,38 @@ const project: Project = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
+const matBoard = {
+  id: 'mat-1',
+  code: 'TAB-ARA-BLA',
+  name: 'Arauco Blanco',
+  manufacturer: 'Arauco',
+  widthMm: 1830,
+  lengthMm: 2440,
+  thicknessMm: 15,
+  grainDefault: false,
+  boardPrice: 714,
+  wastePercent: 0,
+  costPerM2: 160,
+  active: true,
+};
+
 const catalog = {
   modules: [modA],
   structures: [],
   components: [],
-  materials: [],
+  materials: [matBoard],
   edges: [],
   hardware: [],
-  optionGroups: [],
+  optionGroups: [
+    {
+      id: 'g-frente',
+      code: 'FRENTE',
+      name: 'Frentes',
+      kind: 'board' as const,
+      required: true,
+      optionIds: ['mat-1'],
+    },
+  ],
 };
 
 describe('ProjectSpatialStudio', () => {
@@ -1866,5 +1919,166 @@ describe('ProjectSpatialStudio — biblioteca (F141)', () => {
     // Tras ESC el ghost se limpia: un drop posterior no crea nada.
     fireEvent.click(screen.getByTestId('mock-unplaced-drop-wall'));
     expect(onInsertFromCatalog).not.toHaveBeenCalled();
+  });
+});
+
+// ─── F142 Dock de tableros (#309) ────────────────────────────────────────────
+
+describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
+  const projectWithWalls: Project = {
+    ...project,
+    kitchenLayout: {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [],
+    },
+  };
+
+  function openBoardsTab(): void {
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-materials'));
+    fireEvent.click(screen.getByTestId('spatial-studio-materials-tab-boards'));
+  }
+
+  it('sub-tabs Ambiente|Tableros: default ambiental, Tableros muestra el dock', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-tab-materials'));
+    expect(screen.getByTestId('spatial-studio-material-palette')).toBeTruthy();
+    expect(screen.queryByTestId('board-material-palette')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('spatial-studio-materials-tab-boards'));
+    expect(screen.getByTestId('board-material-palette')).toBeTruthy();
+    expect(screen.queryByTestId('spatial-studio-material-palette')).toBeNull();
+  });
+
+  it('click en tablero con mueble seleccionado aplica FRENTE al ítem', () => {
+    const onUpdateItem = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    // Seleccionar el ítem sin colocar y aplicar desde Tableros.
+    fireEvent.click(screen.getByTestId('spatial-studio-unplaced-it-a-0'));
+    openBoardsTab();
+    fireEvent.click(screen.getByTestId('board-palette-card-mat-1'));
+    expect(onUpdateItem).toHaveBeenCalledTimes(1);
+    const updated = onUpdateItem.mock.calls[0]![0] as {
+      optionChoices: Record<string, string>;
+    };
+    expect(updated.optionChoices.FRENTE).toBe('mat-1');
+    expect(screen.getByTestId('board-palette-status').textContent).toMatch(
+      /Arauco Blanco aplicado a frentes del mueble/,
+    );
+  });
+
+  it('click sin selección enseña en vez de fallar', () => {
+    const onUpdateItem = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    openBoardsTab();
+    fireEvent.click(screen.getByTestId('board-palette-card-mat-1'));
+    expect(onUpdateItem).not.toHaveBeenCalled();
+    expect(screen.getByTestId('board-palette-status').textContent).toMatch(
+      /Seleccioná un mueble/,
+    );
+  });
+
+  it('drag + drop sobre un mueble aplica aunque no haya selección previa', () => {
+    const onUpdateItem = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    openBoardsTab();
+    fireEvent.dragStart(screen.getByTestId('board-palette-card-mat-1'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.click(screen.getByTestId('mock-board-drop-hit'));
+    expect(onUpdateItem).toHaveBeenCalledTimes(1);
+    const updated = onUpdateItem.mock.calls[0]![0] as {
+      optionChoices: Record<string, string>;
+    };
+    expect(updated.optionChoices.FRENTE).toBe('mat-1');
+  });
+
+  it('drop fuera de un mueble se rechaza con mensaje que enseña (anti-leak)', () => {
+    const onUpdateItem = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    openBoardsTab();
+    fireEvent.dragStart(screen.getByTestId('board-palette-card-mat-1'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.click(screen.getByTestId('mock-board-drop-miss'));
+    expect(onUpdateItem).not.toHaveBeenCalled();
+    expect(screen.getByTestId('board-palette-status').textContent).toMatch(
+      /Los tableros se aplican a los muebles/,
+    );
+  });
+
+  it('scope obra aplica a nivel proyecto (projectLevelChoices)', () => {
+    const onUpdateProjectLevelChoice = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onUpdateProjectLevelChoice={onUpdateProjectLevelChoice}
+      />,
+    );
+    openBoardsTab();
+    fireEvent.change(screen.getByTestId('board-palette-scope'), {
+      target: { value: 'project' },
+    });
+    fireEvent.click(screen.getByTestId('board-palette-card-mat-1'));
+    expect(onUpdateProjectLevelChoice).toHaveBeenCalledWith('FRENTE', 'mat-1');
   });
 });

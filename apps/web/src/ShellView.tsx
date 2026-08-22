@@ -327,6 +327,8 @@ export interface ShellViewCtx {
   readonly agregados: readonly Agregado[];
   readonly allowedNavIds: ReadonlySet<string>;
   readonly ambientCategories: readonly CategoryNode[];
+  /** F142: subgrupos de materiales del taller (árbol de categorías). */
+  readonly materialCategories: readonly CategoryNode[];
   readonly ambientMaterials: readonly AmbientMaterial[];
   readonly analyticsPeriod: AnalyticsPeriodDays;
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
@@ -593,6 +595,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     allowedNavIds,
     ambientCategories,
     ambientMaterials,
+    materialCategories,
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,
@@ -1481,6 +1484,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         <MaterialsCatalog
           materials={materials}
           edges={edges}
+          materialCategories={materialCategories}
           onCreate={createMaterial}
           onCreateEdge={createEdge}
           onUpdate={updateMaterial}
@@ -1738,6 +1742,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           categories={categories}
           optionGroups={optionGroups}
           materials={materials}
+          materialCategories={materialCategories}
           edges={edges}
           hardware={hardware}
           ambientMaterials={ambientMaterials}

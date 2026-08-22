@@ -990,3 +990,35 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
   del empty state; test del auto-switch bootstrap→De la obra). Deuda:
   hover/active de `.spatial-studio__filter` (preexistente, ahora multiplica).
 - **Cierre:** commit + push sobre `feat/f141-proyectar-library` (PR #329).
+
+## 2026-08-22 — F141 iteración 5 — inspector contextual ambiente/mueble (PR #329)
+- **Agente:** implementador (ZCode), feedback del dueño del producto.
+- **Cambios:** propiedades del ambiente movidas del tab Ambiente (sidebar
+  izquierdo) al inspector derecho cuando no hay selección; al seleccionar un
+  mueble el inspector muestra sus propiedades (click en vacío deselecciona).
+  Sidebar queda como fuente de inserción pura (Muebles/Materiales) — modelo
+  §8 del North Star ("¿qué puedo insertar? / ¿qué puedo cambiar?").
+- **Verificación:** 2.808 tests · typecheck 7/7 · smoke WebGL con flujo
+  ambiente→insert→mueble · screenshot review.
+- **Cierre:** commit 5617311 pushed a PR #329.
+
+## 2026-08-22 — F142 — dock de materiales Ambiente|Tableros + scopes (#309, meta #308 E2)
+- **Agente:** implementador (ZCode) + reviewer (2 pasadas: CHANGES_REQUESTED → APPROVED).
+- **Dominio/Backend:** MaterialBoard.manufacturer (obligatorio en forms/API; legacy
+  '(sin definir)') + categoryId; Catalog.materialCategories + CRUD espejo F086 con RBAC
+  (migración 000077 aditiva + backfill); PUT sin fabricante hereda el existente para no
+  romper syncs legacy; materialToApi normaliza vacío → '(sin definir)'.
+- **UI:** sub-tabs Ambiente|Tableros en el dock Materiales; BoardMaterialPalette
+  (fabricante/subgrupo/búsqueda, drag MIME board-paint, scope selector frentes/interior/
+  mueble/obra); cascada de chips extraída a cascadeLevels.ts compartida con la Biblioteca;
+  form Materiales exige fabricante + subgrupo.
+- **Anti-leak por tipo:** resolver puro resolveBoardPaintTarget — sólo el hit más cercano
+  cuenta; mesada bloqueada (boardPaintBlocked); MaterialBoard jamás en surface ids;
+  AmbientMaterial jamás en optionChoices; drop rechazado con mensaje que enseña.
+- **Review debt saldada:** R1 legacy sync (backfill+herencia+normalización), R2 drop
+  atraviesa superficies, R2 tablist a11y, R2 attach conditions, R3 decode/materialId en
+  callback, fixture single-source, formato.
+- **Verificación:** pnpm test 2.830 (domain 945 · storage 154 · excel 89 · ui 1.279 ·
+  mobile 45 · desktop 17 · web 301) · typecheck 0 errores · go build+vet+test 8 pkgs ·
+  smoke WebGL 1 passed · screenshot review OK.
+- **Cierre:** commit + push sobre `feat/f142-materials-dock` (stacked, base F141/PR #329).

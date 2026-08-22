@@ -3244,6 +3244,33 @@
       ],
       "status": "done",
       "createdAt": "2026-08-21"
+    },
+    {
+      "id": "F142",
+      "phase": 0,
+      "name": "proyectar_materials_dock",
+      "title": "Issue #309 P3D-0b — Dock de materiales Ambiente|Tableros + fabricante/subgrupos + scopes (meta #308, etapa E2)",
+      "description": "Tab Materiales del studio con sub-tabs Ambiente (paleta actual, presentación only) y Tableros (MaterialBoard, cotizable). Navegador de tableros estandarizado con la Biblioteca: chips Fabricante (campo nuevo obligatorio en forms/API, texto libre, legacy '(sin definir)') + chips Subgrupo (materialCategories, árbol CategoryNode espejo de ambientCategories F086) + búsqueda tolerante. Aplicación con scopes: drag sobre mueble aplica al scope default 'Frentes de ese mueble'; click aplica al mueble seleccionado con selector de scope (frentes/interior/todo el mueble/frentes de la obra vía projectLevelChoices); drop sobre superficies ambientales rechazado con mensaje que enseña (anti-leak por tipo: MaterialBoard jamás en floor/wall/ceiling/countertop ids; AmbientMaterial jamás en optionChoices). Feedback: precio de línea al instante + status aria-live en el dock. Backend: columna materials.manufacturer + tabla material_categories + endpoints espejo F086 con migraciones aditivas. North Star §7 actualizado a separación por naturaleza.",
+      "acceptance": [
+        "MaterialBoard.manufacturer (texto libre, obligatorio en forms y API writes) + categoryId; Catalog.materialCategories con round-trip storage TS y Go",
+        "Migraciones aditivas Go: materials.manufacturer con default para existentes + tabla material_categories + endpoints CRUD espejo de ambient categories con RBAC",
+        "Dock con sub-tabs Ambiente|Tableros; navegador de tableros con chips fabricante/subgrupo/búsqueda tolerante reutilizando el componente de cascada compartido con la Biblioteca",
+        "Drag de tablero sobre un mueble del canvas aplica al scope default (frentes) con highlight de target; click aplica al seleccionado con selector de scope incluida la opción obra (projectLevelChoices)",
+        "Drop/click de tablero sobre muro/piso/techo/mesada rechazado con mensaje que enseña; guards anti-leak por tipo con tests",
+        "Feedback: precio de línea del inspector refresca tras apply + status aria-live en el dock; sin toast por apply",
+        "Form Materiales exige fabricante y permite categoría",
+        "pnpm test + pnpm typecheck + go test verdes; smoke WebGL extendido (sub-tab Tableros + apply); screenshot review; review APPROVED"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "packages/domain/src/categories.ts",
+        "packages/domain/src/types.ts",
+        "packages/ui/src/preview3d/MaterialPalette.tsx",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx",
+        "backend-go/internal/api/"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-22"
     }
   ]
 }
