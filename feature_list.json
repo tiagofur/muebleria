@@ -3153,7 +3153,7 @@
         "backend-go/internal/api/materialPlanning.go",
         "backend-go/internal/api/quality.go"
       ],
-      "status": "in_progress",
+      "status": "done",
       "createdAt": "2026-08-21"
     }
   ]
