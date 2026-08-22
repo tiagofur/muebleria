@@ -47,7 +47,6 @@ describe('useLibraryCollections', () => {
   it('starts empty by default', () => {
     const { result } = renderHook(() => useLibraryCollections());
     expect(result.current.favorites).toEqual([]);
-    expect(result.current.workshop).toEqual([]);
     expect(result.current.recent).toEqual([]);
   });
 
@@ -63,14 +62,6 @@ describe('useLibraryCollections', () => {
     act(() => result.current.toggleFavorite('m1'));
     expect(result.current.isFavorite('m1')).toBe(false);
     expect(JSON.parse(globalThis.localStorage.getItem(STORAGE_KEY)!).favorites).toEqual([]);
-  });
-
-  it('toggleWorkshopPin manages the taller pins collection independently', () => {
-    const { result } = renderHook(() => useLibraryCollections());
-    act(() => result.current.toggleWorkshopPin('m2'));
-    expect(result.current.isWorkshopPinned('m2')).toBe(true);
-    expect(result.current.isFavorite('m2')).toBe(false);
-    expect(result.current.favorites).toEqual([]);
   });
 
   it('trackInsert pushes to recent (newest first, deduped, capped at 8)', () => {
@@ -97,11 +88,11 @@ describe('useLibraryCollections', () => {
   it('rehydrates from localStorage on next mount', () => {
     globalThis.localStorage.setItem(
       STORAGE_KEY,
+      // Un payload viejo con "workshop" (colección eliminada) se ignora.
       JSON.stringify({ favorites: ['m1'], workshop: ['m2'], recent: ['m3'] }),
     );
     const { result } = renderHook(() => useLibraryCollections());
     expect(result.current.favorites).toEqual(['m1']);
-    expect(result.current.workshop).toEqual(['m2']);
     expect(result.current.recent).toEqual(['m3']);
   });
 
@@ -114,11 +105,10 @@ describe('useLibraryCollections', () => {
   it('sanitizes malformed stored shapes', () => {
     globalThis.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ favorites: 'no-array', workshop: [1, null, 'm2'], recent: 42 }),
+      JSON.stringify({ favorites: 'no-array', recent: 42 }),
     );
     const { result } = renderHook(() => useLibraryCollections());
     expect(result.current.favorites).toEqual([]);
-    expect(result.current.workshop).toEqual(['m2']);
     expect(result.current.recent).toEqual([]);
   });
 });

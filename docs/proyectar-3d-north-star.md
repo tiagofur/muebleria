@@ -249,7 +249,6 @@ Oficina
 
 ⭐ Favoritos
 🕘 Recientes
-🏭 Mi taller
 ```
 
 ### 6.3 Requisitos de excelencia
@@ -260,7 +259,6 @@ Oficina
 - dimensiones/variantes principales visibles sin abrir detalle;
 - favoritos;
 - recientes;
-- “Mi taller” / biblioteca propia;
 - navegación teclado cuando sea útil;
 - drag al canvas;
 - click para insertar con target predecible como alternativa accesible;

@@ -1,11 +1,10 @@
 /**
  * ModuleLibraryPanel — biblioteca lateral del catálogo de muebles dentro de
  * Proyectar (F141 / #309, North Star §6). Fuente de inserción sin salir del
- * editor: búsqueda tolerante, colecciones (Favoritos/Recientes/Mi taller) y
- * navegación por categorías en cascada — un renglón de chips por nivel, no
- * todo mezclado en un solo control. El panel no crea ítems: notifica al
- * studio vía onInsert / onCardDragStart y el studio resuelve la inserción
- * atómica.
+ * editor: búsqueda tolerante, colecciones (Favoritos/Recientes) y navegación
+ * por categorías en cascada — un renglón de chips por nivel, no todo
+ * mezclado en un solo control. El panel no crea ítems: notifica al studio
+ * vía onInsert / onCardDragStart y el studio resuelve la inserción atómica.
  */
 
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
@@ -28,7 +27,7 @@ import './moduleLibrary.css';
 
 const NAVIGATION_STORAGE_KEY = 'muebles.proyectar.library.navigation.v1';
 
-type LibraryCollection = 'workshop' | 'favorites' | 'recent';
+type LibraryCollection = 'favorites' | 'recent';
 
 type LibraryScope =
   | { readonly kind: 'catalog' }
@@ -47,14 +46,12 @@ function scopeId(scope: LibraryScope): string {
 }
 
 function scopeFromId(value: string): LibraryScope {
-  if (value === 'collection:workshop') return { kind: 'collection', collection: 'workshop' };
   if (value === 'collection:favorites') return { kind: 'collection', collection: 'favorites' };
   if (value === 'collection:recent') return { kind: 'collection', collection: 'recent' };
   return { kind: 'catalog' };
 }
 
 const COLLECTION_LABELS: Record<LibraryCollection, string> = {
-  workshop: 'Mi taller',
   favorites: 'Favoritos',
   recent: 'Recientes',
 };
@@ -271,11 +268,6 @@ export function ModuleLibraryPanel({
     }
     return found;
   };
-  const workshopModules = useMemo(
-    () => collectionModules(collections.workshop),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [collections.workshop, byId],
-  );
   const favoriteModules = useMemo(
     () => collectionModules(collections.favorites),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -344,7 +336,6 @@ export function ModuleLibraryPanel({
 
   const scopedModules = useMemo(() => {
     if (scope.kind === 'collection') {
-      if (scope.collection === 'workshop') return workshopModules;
       if (scope.collection === 'favorites') return favoriteModules;
       return recentModules;
     }
@@ -352,7 +343,7 @@ export function ModuleLibraryPanel({
     return deepest
       ? filterModulesByCategory(modules, deepest, categories)
       : modules;
-  }, [scope, path, modules, categories, workshopModules, favoriteModules, recentModules]);
+  }, [scope, path, modules, categories, favoriteModules, recentModules]);
 
   const filtered = useMemo(
     () => searchModules(scopedModules, search, categories),

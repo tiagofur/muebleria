@@ -117,7 +117,6 @@ describe('ModuleLibraryPanel', () => {
     render(<Harness />);
     expect(screen.getByTestId('module-library-results')).toBeTruthy();
     expect(screen.getAllByTestId('module-library-card-m-bajo')).toHaveLength(1);
-    expect(screen.queryByTestId('module-library-workshop')).toBeNull();
     expect(screen.getByTestId('module-library-result-count').textContent).toBe('3 de 3');
   });
 

@@ -79,7 +79,6 @@ Biblioteca → Canvas → Inspector
 - thumbnails;
 - favoritos;
 - recientes;
-- “Mi taller”;
 - estado de búsqueda/categoría preservado;
 - material dock/library accesible;
 - responsive behavior desktop/tablet.

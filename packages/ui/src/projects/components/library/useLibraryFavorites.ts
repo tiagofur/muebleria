@@ -1,8 +1,13 @@
 /**
- * useLibraryFavorites — favoritos, recientes y pins de taller para la
- * biblioteca lateral de Proyectar (F141 / #309). v1 persiste en localStorage
- * (patrón useInspectorSectionState); sync per-user es deuda v2 documentada
- * en el issue. SSR-safe: sin localStorage cae a estado en memoria.
+ * useLibraryFavorites — favoritos y recientes para la biblioteca lateral de
+ * Proyectar (F141 / #309). v1 persiste en localStorage (patrón
+ * useInspectorSectionState); sync per-user es deuda v2 documentada en el
+ * issue. SSR-safe: sin localStorage cae a estado en memoria.
+ *
+ * Nota de producto: la colección "Mi taller" se descartó (decisión 2026-08-22,
+ * issue #309): el catálogo ya es propio de cada taller, y una futura mezcla
+ * con catálogos de fábrica distribuidos se resolvería por procedencia del
+ * módulo, no por una colección manual.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -12,22 +17,18 @@ const RECENT_LIMIT = 8;
 
 export type LibraryCollectionsState = {
   readonly favorites: readonly string[];
-  readonly workshop: readonly string[];
   readonly recent: readonly string[];
 };
 
 export type LibraryCollections = LibraryCollectionsState & {
   readonly isFavorite: (moduleId: string) => boolean;
-  readonly isWorkshopPinned: (moduleId: string) => boolean;
   readonly toggleFavorite: (moduleId: string) => void;
-  readonly toggleWorkshopPin: (moduleId: string) => void;
   /** Registra una inserción (llama el studio al crear el ítem). */
   readonly trackInsert: (moduleId: string) => void;
 };
 
 const DEFAULT_STATE: LibraryCollectionsState = {
   favorites: [],
-  workshop: [],
   recent: [],
 };
 
@@ -50,7 +51,6 @@ function readFromStorage(): LibraryCollectionsState | null {
     const parsed = JSON.parse(raw) as Partial<LibraryCollectionsState>;
     return {
       favorites: sanitizeIds(parsed.favorites),
-      workshop: sanitizeIds(parsed.workshop),
       recent: sanitizeIds(parsed.recent).slice(0, RECENT_LIMIT),
     };
   } catch {
@@ -104,13 +104,6 @@ export function useLibraryCollections(): LibraryCollections {
     [update],
   );
 
-  const toggleWorkshopPin = useCallback(
-    (moduleId: string): void => {
-      update((prev) => ({ ...prev, workshop: toggleIn(prev.workshop, moduleId) }));
-    },
-    [update],
-  );
-
   const trackInsert = useCallback(
     (moduleId: string): void => {
       update((prev) => ({
@@ -129,17 +122,10 @@ export function useLibraryCollections(): LibraryCollections {
     [state.favorites],
   );
 
-  const isWorkshopPinned = useCallback(
-    (moduleId: string): boolean => state.workshop.includes(moduleId),
-    [state.workshop],
-  );
-
   return {
     ...state,
     isFavorite,
-    isWorkshopPinned,
     toggleFavorite,
-    toggleWorkshopPin,
     trackInsert,
   };
 }
