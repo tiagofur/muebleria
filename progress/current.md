@@ -30,3 +30,23 @@
 - Exploración previa: survey hoy es sólo stamp surveyCompletedAt + gate débil;
   workspace de obra fragmentado en 5 rutas; home con cards de volumen; sin
   preferencias de navegación.
+
+## Evidencia (verificación final)
+
+- `./init.sh` verde completo tras la implementación (2026-08-21):
+  - typecheck TS (domain/ui/storage/web/mobile/desktop/excel) sin errores;
+  - tests TS: domain 927+ (siteSurvey 22, opsExceptions 14), ui 1215
+    (SiteSurveyPanel 9, ProjectOverviewPanel 3, Dashboard exception-first 3,
+    AppShell navMode 3, Settings navMode), storage 153 (round-trip survey 3),
+    web 301+;
+  - `go test ./...` verde (siteSurveyParity + lifecycle mirror + endpoints
+    RBAC/gate).
+- Commit: `6577c96` en rama `feat/f140-operational-core-ux`.
+- Migraciones aditivas 000075 (projects.site_survey JSONB) y 000076
+  (workshop_settings.nav_mode), ambas con down.sql.
+
+## Pendiente
+
+- Reviewer.
+- Con aprobación: F140 → done, resumen a progress/history.md, push.
+

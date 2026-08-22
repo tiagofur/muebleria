@@ -93,7 +93,7 @@ export function ProjectOverviewPanel({
     {
       id: 'engineering',
       label: 'Ingeniería / Release',
-      icon: <Wrench size={16} aria-hidden="true" />,
+      icon: <Wrench strokeWidth={1.5} size={16} aria-hidden="true" />,
       detail: release
         ? `Liberada rev. ${release.projectVersion} · ${release.releasedAt.slice(0, 10)}`
         : 'Sin liberación a producción',
@@ -102,21 +102,21 @@ export function ProjectOverviewPanel({
     {
       id: 'production',
       label: 'Producción',
-      icon: <Factory size={16} aria-hidden="true" />,
+      icon: <Factory strokeWidth={1.5} size={16} aria-hidden="true" />,
       detail: stale.stale ? 'Diseño cambió tras el último export' : 'Abrir el hub de fábrica',
       href: nav.onOpenInProduction,
     },
     {
       id: 'shipping',
       label: 'Embarque',
-      icon: <Truck size={16} aria-hidden="true" />,
+      icon: <Truck strokeWidth={1.5} size={16} aria-hidden="true" />,
       detail: 'Control de carga y despacho',
       href: nav.onOpenShipments,
     },
     {
       id: 'installation',
       label: 'Instalación',
-      icon: <ClipboardCheck size={16} aria-hidden="true" />,
+      icon: <ClipboardCheck strokeWidth={1.5} size={16} aria-hidden="true" />,
       detail: installationDate ? `Comprometida: ${installationDate}` : 'Sin fecha comprometida',
       href: nav.onOpenInstallation,
     },
@@ -156,7 +156,7 @@ export function ProjectOverviewPanel({
       {blockers.length > 0 ? (
         <div className="project-overview__blockers" data-testid="project-overview-blockers">
           <h4 className="project-overview__blockers-title">
-            <TriangleAlert size={16} aria-hidden="true" /> Bloqueos ({blockers.length})
+            <TriangleAlert strokeWidth={1.5} size={16} aria-hidden="true" /> Bloqueos ({blockers.length})
           </h4>
           <ul>
             {blockers.map((blocker) => (
@@ -166,7 +166,7 @@ export function ProjectOverviewPanel({
         </div>
       ) : (
         <p className="project-overview__ok" data-testid="project-overview-ok">
-          <CheckCircle2 size={16} aria-hidden="true" /> Sin bloqueos abiertos
+          <CheckCircle2 strokeWidth={1.5} size={16} aria-hidden="true" /> Sin bloqueos abiertos
         </p>
       )}
 
@@ -186,7 +186,7 @@ export function ProjectOverviewPanel({
               <span className="project-overview__link-label">{link.label}</span>
               <span className="project-overview__link-detail">{link.detail}</span>
             </span>
-            <ArrowRight size={16} aria-hidden="true" />
+            <ArrowRight strokeWidth={1.5} size={16} aria-hidden="true" />
           </button>
         ))}
       </div>

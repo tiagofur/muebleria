@@ -8,7 +8,7 @@
 import type { Project, ProjectStatus } from './types';
 import type { DataTruthMetric } from './dataTruth';
 import { computeProductionDesignFingerprint } from './productionRevision';
-import { surveyFabricationBlockers } from './siteSurvey';
+import { surveyFabricationBlockers } from './siteSurveyGate';
 import type { SiteSurvey } from './siteSurvey';
 
 /* ── Event Types & Structures ─────────────────────────────────────────────── */

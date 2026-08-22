@@ -2300,8 +2300,15 @@ export function AppContent({
       const apiPromise = opts.api ? opts.api(repo) : null;
       if (apiPromise) {
         void apiPromise
-          .then(() => {
-            projectActions.applyCostingProject(projectId, local.project);
+          .then((view) => {
+            // Server is authoritative online: apply the survey it persisted
+            // (its entity ids), not the locally-computed payload — otherwise
+            // the next action would reference ids the server never saw.
+            const project = {
+              ...local.project,
+              siteSurvey: view.survey ?? local.project.siteSurvey,
+            };
+            projectActions.applyCostingProject(projectId, project);
             toast({ type: 'success', message: opts.successMessage });
           })
           .catch((err) => {

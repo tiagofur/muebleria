@@ -17,6 +17,7 @@ import {
   type SiteSurvey,
   type SurveyElementKind,
 } from '@muebles/domain';
+import { EmptyState } from '../../common';
 import '../projects.css';
 import './siteSurvey.css';
 
@@ -121,20 +122,13 @@ export function SiteSurveyPanel({
   if (!survey) {
     return (
       <div className="site-survey site-survey--empty" data-testid={testId}>
-        <div className="empty-state">
-          <Ruler size={32} aria-hidden="true" />
-          <h4 className="empty-state__title">Sin levantamiento estructurado</h4>
-          <p className="empty-state__description">
-            Cargá los espacios de la obra (cocina, closet…), levantá las medidas en sitio y
-            aprobálas antes de liberar producción. Una medida preliminar nunca llega a CNC sin
-            este gate.
-          </p>
-          {canCapture && handlers.onStart ? (
-            <button type="button" className="btn btn--primary" onClick={startSurvey}>
-              <Plus size={16} aria-hidden="true" /> Iniciar levantamiento
-            </button>
-          ) : null}
-        </div>
+        <EmptyState
+          icon={Ruler}
+          title="Sin levantamiento estructurado"
+          description="Cargá los espacios de la obra (cocina, closet…), levantá las medidas en sitio y aprobálas antes de liberar producción. Una medida preliminar nunca llega a CNC sin este gate."
+          actionLabel={canCapture && handlers.onStart ? 'Iniciar levantamiento' : undefined}
+          onAction={canCapture && handlers.onStart ? startSurvey : undefined}
+        />
       </div>
     );
   }
@@ -144,7 +138,7 @@ export function SiteSurveyPanel({
       <div className="site-survey__header">
         <div>
           <h4 className="site-survey__title">
-            <Ruler size={18} aria-hidden="true" /> Levantamiento — revisión {survey.revision}
+            <Ruler strokeWidth={1.5} size={18} aria-hidden="true" /> Levantamiento — revisión {survey.revision}
           </h4>
           <p className="site-survey__hint">
             {surveyVerified
@@ -160,7 +154,7 @@ export function SiteSurveyPanel({
               onClick={() => void handlers.onVerify?.(projectId)}
               data-testid="site-survey-verify"
             >
-              <CheckCircle2 size={16} aria-hidden="true" /> Verificar levantamiento
+              <CheckCircle2 strokeWidth={1.5} size={16} aria-hidden="true" /> Verificar levantamiento
             </button>
           ) : null}
           {canApprove && handlers.onFreeze ? (
@@ -182,7 +176,7 @@ export function SiteSurveyPanel({
         <ul className="site-survey__blockers" data-testid="site-survey-blockers">
           {blockers.map((blocker, index) => (
             <li key={`${blocker.kind}-${blocker.spaceId ?? index}`} className="site-survey__blocker">
-              <TriangleAlert size={14} aria-hidden="true" />
+              <TriangleAlert strokeWidth={1.5} size={14} aria-hidden="true" />
               <span>
                 {blocker.message}
                 {blocker.kind === 'preliminary_space' ? ' — levantar en obra' : undefined}
@@ -193,7 +187,7 @@ export function SiteSurveyPanel({
         </ul>
       ) : (
         <p className="site-survey__ok" data-testid="site-survey-ok">
-          <CheckCircle2 size={14} aria-hidden="true" /> Medidas listas para fabricación
+          <CheckCircle2 strokeWidth={1.5} size={14} aria-hidden="true" /> Medidas listas para fabricación
         </p>
       )}
 
@@ -211,7 +205,7 @@ export function SiteSurveyPanel({
                 data-testid="site-survey-new-space"
               />
               <button type="button" className="btn" onClick={addSpace}>
-                <Plus size={16} aria-hidden="true" /> Agregar
+                <Plus strokeWidth={1.5} size={16} aria-hidden="true" /> Agregar
               </button>
             </div>
           </label>
@@ -242,7 +236,7 @@ export function SiteSurveyPanel({
                     onClick={() => setCaptureSpaceId(captureSpaceId === space.id ? null : space.id)}
                     data-testid="site-survey-capture-toggle"
                   >
-                    <Ruler size={14} aria-hidden="true" /> Levantar en obra
+                    <Ruler strokeWidth={1.5} size={14} aria-hidden="true" /> Levantar en obra
                   </button>
                 ) : null}
                 {canApprove && space.intent === 'field' && handlers.onApproveSpace ? (
@@ -252,7 +246,7 @@ export function SiteSurveyPanel({
                     onClick={() => void handlers.onApproveSpace?.(projectId, space.id)}
                     data-testid="site-survey-approve"
                   >
-                    <CheckCircle2 size={14} aria-hidden="true" /> Aprobar
+                    <CheckCircle2 strokeWidth={1.5} size={14} aria-hidden="true" /> Aprobar
                   </button>
                 ) : null}
                 {canCapture && space.intent !== 'fabrication' && handlers.onRemoveSpace ? (
@@ -263,7 +257,7 @@ export function SiteSurveyPanel({
                     title={`Eliminar ${space.name}`}
                     onClick={() => void handlers.onRemoveSpace?.(projectId, space.id)}
                   >
-                    <Trash2 size={14} aria-hidden="true" />
+                    <Trash2 strokeWidth={1.5} size={14} aria-hidden="true" />
                   </button>
                 ) : null}
               </div>
