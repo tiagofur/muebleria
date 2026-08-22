@@ -126,6 +126,7 @@ import {
   buildMaterialRequirements,
   materializeRequirements,
   reserveProjectMaterials,
+  consumePlannedMaterials,
   releaseProjectMaterials,
   reportQualityIssue,
   transitionQualityIssue,
@@ -1039,6 +1040,43 @@ export function AppContent({
     stockCatalog,
   });
 
+  /**
+   * R2 (F138): a picking despacho hands material to the project — its active
+   * reservations are consumed (oldest first). API mode hits the dedicated
+   * endpoint and applies the server planning; the local workspace runs the
+   * pure action. An unmark reverts stock but never revokes consumption (the
+   * reservation record is history).
+   */
+  const consumeOnDespachado = useCallback(
+    (projectId: string, lines: readonly { kind: string; materialId: string; quantity: number }[]) => {
+      if (lines.length === 0) return;
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project?.materialPlanning) return;
+      const typedLines = lines as Array<{ kind: 'herrajes' | 'tableros' | 'cintillas'; materialId: string; quantity: number }>;
+      const repo = getRepository();
+      if (repo.consumeMaterials) {
+        void repo
+          .consumeMaterials(projectId, typedLines)
+          .then((view) => {
+            projectActions.applyMaterialPlanningProject(projectId, {
+              ...project,
+              materialPlanning: view.planning ?? project.materialPlanning,
+            });
+          })
+          .catch(() => {
+            // El despacho de stock ya quedó; el consumo se reintenta en el
+            // próximo despacho (oldest-first) — no bloquea al operador.
+          });
+        return;
+      }
+      const next = consumePlannedMaterials(project.materialPlanning, typedLines);
+      if (next && next !== project.materialPlanning) {
+        projectActions.applyMaterialPlanningProject(projectId, { ...project, materialPlanning: next });
+      }
+    },
+    [getRepository, projectActions],
+  );
+
   const handleTogglePick = useCallback(
     (input: {
       projectId: string;
@@ -1047,9 +1085,11 @@ export function AppContent({
     }) => {
       // F119: persistence + ledger revert live in purchasingStore; the debit
       // lines derive from live projects/catalog so they're computed here.
-      getPurchasingStoreState().togglePick(input, stockDebitLinesFor);
+      getPurchasingStoreState().togglePick(input, stockDebitLinesFor, {
+        onDespachado: consumeOnDespachado,
+      });
     },
-    [stockDebitLinesFor],
+    [stockDebitLinesFor, consumeOnDespachado],
   );
   // F120: quote/dashboard derivations live in useQuoteDerivations.
   const {

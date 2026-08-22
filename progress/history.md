@@ -847,3 +847,19 @@ en purchasingStore.togglePick) quedan como deuda explícita.
 Verificación final: domain 875 (+39) · storage 147 (+4) · ui 1186 (+13) ·
 web 301 · mobile 45 · desktop 17 · excel 89 · `pnpm typecheck` OK ·
 `go test ./...` OK.
+
+### F138 — deuda de review saldada (2026-08-21, mismo PR #321)
+
+- **R2 (consumo de reservas al picking):** endpoint
+  `POST /api/projects/{id}/materials/consume` con `ConsumePlannedMaterials`
+  (Go, espejo de la acción pura TS), repo `consumeMaterials`, hook
+  `onDespachado` en `purchasingStore.togglePick` y consumo en
+  `AppContent.handleTogglePick` (planning del server en modo API; acción pura
+  en offline). Semántica corregida en TS y Go: reservas `consumed` cubren la
+  línea en cobertura/gates OC-054 sin contar como reservadas en la
+  disponibilidad del depósito; desmarcar revierte stock, nunca el consumo.
+- **R1 (data truth):** la tabla de cobertura marca `≈` las líneas de tableros
+  con title "Planchas estimadas del BOM liberado".
+
+Verificación: domain 877 · storage 147 · ui 1187 · web 301 · mobile 45 ·
+desktop 17 · excel 89 · `pnpm typecheck` OK · `go test ./...` OK.

@@ -2121,6 +2121,24 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
   }
 
+  async consumeMaterials(
+    projectId: string,
+    lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<MaterialPlanningView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/consume`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        lines: lines.map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to consume materials: ${res.status} ${text}`);
+    }
+    return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
+  }
+
   async releaseMaterials(projectId: string, overrideReason?: string): Promise<MaterialPlanningView> {
     const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/release`, {
       method: 'POST',

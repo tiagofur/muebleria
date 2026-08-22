@@ -344,11 +344,12 @@ export function computeProjectMaterialCoverage(
   const lines = planning?.requirements?.lines ?? [];
   if (lines.length === 0) return [];
 
-  const activeReserved = new Map<string, number>();
+  // Coverage counts every reservation status: active (earmarked) and
+  // released/consumed (already handed to the project) all satisfy the line.
+  const coveredQty = new Map<string, number>();
   for (const r of planning?.reservations ?? []) {
-    if (r.status !== 'active') continue;
     const key = keyOf(r.kind, r.materialId);
-    activeReserved.set(key, (activeReserved.get(key) ?? 0) + r.quantity);
+    coveredQty.set(key, (coveredQty.get(key) ?? 0) + r.quantity);
   }
   const incomingAllocated = new Map<string, number>();
   for (const po of input.purchaseOrders) {
@@ -362,7 +363,7 @@ export function computeProjectMaterialCoverage(
 
   return lines.map((line) => {
     const key = keyOf(line.kind, line.materialId);
-    const reserved = roundQty(activeReserved.get(key) ?? 0);
+    const reserved = roundQty(coveredQty.get(key) ?? 0);
     const available = availability.get(key)?.available ?? 0;
     const allocated = roundQty(incomingAllocated.get(key) ?? 0);
     const pendingReserve = roundQty(Math.max(0, line.quantity - reserved));

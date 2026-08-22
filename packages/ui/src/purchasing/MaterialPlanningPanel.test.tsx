@@ -92,6 +92,39 @@ describe('MaterialPlanningPanel', () => {
     expect(onDerive).toHaveBeenCalledWith('p1');
   });
 
+  it('marks estimated sheet quantities with ≈ (tableros only)', () => {
+    const project = makeProject({
+      materialPlanning: planningWith({
+        requirements: {
+          releaseId: 'rel-1',
+          bomFingerprint: 'fp-abc',
+          derivedAt: '2026-08-21T10:00:00Z',
+          lines: [
+            { kind: 'herrajes', materialId: 'hw-1', quantity: 10 },
+            { kind: 'tableros', materialId: 'board-1', quantity: 4 },
+          ],
+        },
+      }),
+    });
+    const view = materialPlanningCardView(
+      project,
+      [project.materialPlanning!],
+      [],
+      [],
+    );
+    render(
+      <MaterialPlanningPanel
+        view={view}
+        handlers={{}}
+        unitByMaterial={{ 'tableros:board-1': 'plancha' }}
+        testId="plan"
+      />,
+    );
+    const body = screen.getByTestId('plan').textContent ?? '';
+    expect(body).toContain('≈ 4 plancha');
+    expect(body).not.toContain('≈ 10');
+  });
+
   it('shows coverage evidence with shortage and dispatches reserve / PO / release', () => {
     const onReserve = vi.fn();
     const onCreateShortagePO = vi.fn();

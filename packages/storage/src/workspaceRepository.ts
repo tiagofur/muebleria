@@ -315,6 +315,16 @@ export interface WorkspaceRepository {
   ): Promise<MaterialPlanningView>;
 
   /**
+   * A picking despacho consumes the project's active reservations (oldest
+   * first, partial splits). Reservation records are history: an unmark
+   * reverts stock but never revokes consumption (R2 F138).
+   */
+  consumeMaterials?(
+    projectId: string,
+    lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<MaterialPlanningView>;
+
+  /**
    * Evidence-backed materials release (OC-054). Failing gates require an
    * override reason; throws MaterialsReleaseGateError (with the checks) on 409.
    */

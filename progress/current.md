@@ -26,13 +26,15 @@ Review: CHANGES_REQUESTED (3 defects menores) → aplicados → **APPROVED**
 
 ## Verificación final
 
-domain 875 · storage 147 · ui 1186 · web 301 · mobile 45 · desktop 17 ·
-excel 89 · `pnpm typecheck` OK · `go test ./...` OK.
+domain 877 · storage 147 · ui 1187 · web 301 · mobile 45 · desktop 17 ·
+excel 89 · `pnpm typecheck` OK · `go test ./...` OK (incluye deuda saldada).
 
-## Deuda registrada (no bloquea el DoD del issue)
+## Deuda del review — saldada (mismo PR #321)
 
-- R2 review F138: cablear `consumePlannedMaterials` al despacho de picking
-  (`purchasingStore.togglePick`) para consumir reservas al despachar.
-- R1 review F138: marcar `≈` en líneas de tableros de la cobertura (la
-  estimación de planchas ya está rotulada en su sección).
-- F123 (pending, tests Compras/Almacén) solapa con esta área.
+- ~~R2: cablear `consumePlannedMaterials` al despacho de picking~~ — hecho:
+  endpoint `/materials/consume` + `ConsumePlannedMaterials` (Go) + hook
+  `onDespachado` en `togglePick` + consumo en AppContent; `consumed` cubre la
+  línea en cobertura/gates (TS y Go corregidos y testeado en espejo).
+- ~~R1: marcar `≈` en tableros de la cobertura~~ — hecho (title "Planchas
+  estimadas del BOM liberado").
+- Pendiente externo: F123 (tests Compras/Almacén) sigue pending en el ledger.

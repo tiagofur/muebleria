@@ -315,6 +315,67 @@ type releaseMaterialsRequest struct {
 	OverrideReason string `json:"override_reason,omitempty"`
 }
 
+type consumeMaterialsRequest struct {
+	Lines []struct {
+		Kind       string  `json:"kind"`
+		MaterialID string  `json:"material_id"`
+		Quantity   float64 `json:"quantity"`
+	} `json:"lines"`
+}
+
+// HandleMaterialsConsume handles POST /api/projects/{id}/materials/consume —
+// a picking despacho consumes the project's active reservations (oldest
+// first, partial splits). The reservation record is history: an unmark
+// reverts stock but never revokes consumption.
+func (s *Server) HandleMaterialsConsume(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+	claims := claimsFromRequest(r)
+	if !requirePermission(w, roleCanManagePlanning(actorRole(claims)),
+		"no tenés permiso para despachar material reservado") {
+		return
+	}
+	var body consumeMaterialsRequest
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	lines := make([]domain.ReserveLine, 0, len(body.Lines))
+	for _, line := range body.Lines {
+		if line.Quantity <= 0 {
+			continue
+		}
+		if !domain.ValidStockMaterialKind(line.Kind) || strings.TrimSpace(line.MaterialID) == "" {
+			respondWithError(w, http.StatusBadRequest, "línea de consumo inválida")
+			return
+		}
+		lines = append(lines, domain.ReserveLine{
+			Kind:       line.Kind,
+			MaterialID: strings.TrimSpace(line.MaterialID),
+			Quantity:   line.Quantity,
+		})
+	}
+
+	var view materialsViewResponse
+	mutation, err := s.Store.MutateProjectMaterialPlanning(r.Context(), projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+		if snap.Planning == nil {
+			// Sin planificación no hay reservas que consumir: no-op honesto.
+			view = buildMaterialsView(snap, nil)
+			return &domain.MaterialPlanningMutation{Planning: snap.Planning}, nil
+		}
+		next := domain.ConsumePlannedMaterials(snap.Planning, lines, time.Now().UTC())
+		if err := domain.ValidateMaterialPlanningTransition(snap.Planning, next); err != nil {
+			return nil, fmt.Errorf("BAD_REQUEST:%s", err.Error())
+		}
+		view = buildMaterialsViewWithPlanning(snap, next)
+		return &domain.MaterialPlanningMutation{Planning: next}, nil
+	})
+	if err != nil {
+		respondWithMutationError(w, err)
+		return
+	}
+	view.EventsAppended = len(mutation.Events)
+	respondWithJSON(w, http.StatusOK, view)
+}
+
 // HandleMaterialsRelease handles POST /api/projects/{id}/materials/release —
 // the evidence-backed materials release (OC-054). Failing gates require an
 // override reason; the override is audited (materials_release_overridden)

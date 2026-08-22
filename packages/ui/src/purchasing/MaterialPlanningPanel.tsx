@@ -106,7 +106,14 @@ export function MaterialPlanningPanel({
                 return (
                   <tr key={`${line.kind}:${line.materialId}`}>
                     <td>{labelFor(line.kind, line.materialId, labelsByMaterial)}</td>
-                    <td>
+                    <td
+                      title={
+                        line.kind === 'tableros'
+                          ? 'Planchas estimadas del BOM liberado'
+                          : undefined
+                      }
+                    >
+                      {line.kind === 'tableros' ? '≈ ' : ''}
                       {line.required} {unit}
                     </td>
                     <td>

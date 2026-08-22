@@ -86,4 +86,14 @@ persistencia ni autoridad de servidor. Aplicados y re-verificados:
 - ui **1186** (paneles 13 OK) · web **301** · domain **875** · storage **147**
 - `go test ./...` OK (8 paquetes) · `pnpm typecheck` OK
 
-R1/R2 quedan registradas como deuda explícita (progress/history de F138).
+R1/R2 saldadas en el mismo PR (commit "fix(ops): F138 deuda de review"):
+- **R2 aplicado** — `POST /api/projects/{id}/materials/consume` (Go +
+  `ConsumePlannedMaterials` espejo de `consumePlannedMaterials`), repo
+  `consumeMaterials`, hook `onDespachado` en `togglePick` y consumo en
+  `handleTogglePick` (server planning en modo API, acción pura offline).
+  Semántica corregida en ambos lados: reservas `consumed` siguen cubriendo la
+  línea (cobertura + gates OC-054) sin reducir la disponibilidad del depósito;
+  desmarcar revierte stock pero jamás revoca el consumo (el registro es
+  historia). Tests espejo TS/Go + handler test.
+- **R1 aplicado** — la cobertura marca `≈` + title "Planchas estimadas del
+  BOM liberado" en las líneas de tableros (data truth §6 operational-ux).

@@ -325,12 +325,12 @@ func EvaluateMaterialsReleaseReadiness(planning *MaterialPlanning, stock []Mater
 
 	// lines_reserved: every requirement line covered by this project's
 	// active/released reservations.
+	// Coverage counts every reservation status: active (earmarked) and
+	// released/consumed (already handed to the project) all satisfy the line.
 	reservedByLine := map[string]float64{}
 	if planning != nil {
 		for _, r := range planning.Reservations {
-			if r.Status == MaterialReservationActive || r.Status == MaterialReservationReleased {
-				reservedByLine[r.Kind+":"+r.MaterialID] += r.Quantity
-			}
+			reservedByLine[r.Kind+":"+r.MaterialID] += r.Quantity
 		}
 	}
 	uncovered := 0
@@ -467,12 +467,9 @@ func ComputeProjectCoverage(projectID string, stock []MaterialStock, plannings [
 		availability[row.Kind+":"+row.MaterialID] = row
 	}
 
-	activeReserved := map[string]float64{}
+	coveredQty := map[string]float64{}
 	for _, r := range planning.Reservations {
-		if r.Status != MaterialReservationActive {
-			continue
-		}
-		activeReserved[r.Kind+":"+r.MaterialID] += r.Quantity
+		coveredQty[r.Kind+":"+r.MaterialID] += r.Quantity
 	}
 	incomingAllocated := map[string]float64{}
 	for _, po := range pos {
@@ -491,7 +488,7 @@ func ComputeProjectCoverage(projectID string, stock []MaterialStock, plannings [
 	out := make([]ProjectLineCoverage, 0, len(planning.Requirements.Lines))
 	for _, line := range planning.Requirements.Lines {
 		key := line.Kind + ":" + line.MaterialID
-		reserved := roundQty(activeReserved[key])
+		reserved := roundQty(coveredQty[key])
 		available := availability[key].Available
 		allocated := roundQty(incomingAllocated[key])
 		pending := roundQty(math.Max(0, line.Quantity-reserved))
@@ -634,4 +631,43 @@ func randomSuffix() string {
 		out[i] = alphabet[mrand.Intn(len(alphabet))]
 	}
 	return string(out)
+}
+
+// ConsumePlannedMaterials mirrors consumePlannedMaterials: a picking despacho
+// consumes the project's active reservations oldest-first, splitting partial
+// consumption. Reservation records are history — consumption is not reverted
+// by an unmark (the stock revert restores availability, not the record).
+func ConsumePlannedMaterials(planning *MaterialPlanning, lines []ReserveLine, at time.Time) *MaterialPlanning {
+	if planning == nil {
+		return planning
+	}
+	remaining := map[string]float64{}
+	for _, l := range lines {
+		if l.Quantity > 0 {
+			remaining[l.Kind+":"+l.MaterialID] += l.Quantity
+		}
+	}
+	if len(remaining) == 0 {
+		return planning
+	}
+
+	next := *planning
+	next.Reservations = append([]MaterialReservation(nil), planning.Reservations...)
+	for i := range next.Reservations {
+		r := &next.Reservations[i]
+		key := r.Kind + ":" + r.MaterialID
+		pending, ok := remaining[key]
+		if !ok || r.Status != MaterialReservationActive {
+			continue
+		}
+		consume := math.Min(r.Quantity, pending)
+		remaining[key] = roundQty(pending - consume)
+		if consume >= r.Quantity {
+			r.Status = MaterialReservationConsumed
+			r.ConsumedAt = &at
+		} else {
+			r.Quantity = roundQty(r.Quantity - consume)
+		}
+	}
+	return &next
 }

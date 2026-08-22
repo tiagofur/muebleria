@@ -302,6 +302,60 @@ describe('consumePlannedMaterials', () => {
   });
 });
 
+describe('consumePlannedMaterials + cobertura (R2 F138)', () => {
+  it('las reservas consumidas por el picking siguen cubriendo la línea', () => {
+    const planning = makePlanning({
+      requirements: {
+        releaseId: 'rel-1',
+        bomFingerprint: 'fp-abc123',
+        derivedAt: '2026-08-21T10:00:00Z',
+        lines: [{ kind: 'herrajes', materialId: 'hw-1', quantity: 10 }],
+      },
+      reservations: [
+        { id: 'r-1', kind: 'herrajes', materialId: 'hw-1', quantity: 10, status: 'consumed', reservedBy: 'alm-1', reservedAt: '2026-08-21T10:00:00Z', consumedAt: '2026-08-21T15:00:00Z' },
+      ],
+    });
+    const coverage = computeProjectMaterialCoverage('proj-1', coverageInput([planning]));
+    expect(coverage[0]).toMatchObject({ required: 10, reserved: 10, pendingReserve: 0, covered: true });
+
+    // El gate de liberación pasa: consumido = material entregado a la obra.
+    const { ready, failing } = evaluateMaterialsReleaseReadiness({
+      planning,
+      stock: [],
+      plannings: [planning],
+    });
+    expect(ready).toBe(true);
+    expect(failing).toHaveLength(0);
+
+    // La disponibilidad del depósito NO cuenta lo consumido como reservado
+    // (ya salió físicamente): reserved queda en 0.
+    const availability = computeWarehouseAvailability({ stock: [], plannings: [planning], purchaseOrders: [] });
+    expect(availability[0]).toMatchObject({ materialId: 'hw-1', reserved: 0, available: 0 });
+  });
+
+  it('consume reservas oldest-first y divide el consumo parcial', () => {
+    const consumed = consumePlannedMaterials(
+      makePlanning({
+        requirements: {
+          releaseId: 'rel-1',
+          bomFingerprint: 'fp-abc123',
+          derivedAt: '2026-08-21T10:00:00Z',
+          lines: [{ kind: 'herrajes', materialId: 'hw-1', quantity: 12 }],
+        },
+        reservations: [
+          { id: 'r-1', kind: 'herrajes', materialId: 'hw-1', quantity: 4, status: 'active', reservedAt: '2026-08-21T10:00:00Z' },
+          { id: 'r-2', kind: 'herrajes', materialId: 'hw-1', quantity: 6, status: 'active', reservedAt: '2026-08-21T10:05:00Z' },
+        ],
+      }),
+      [{ kind: 'herrajes', materialId: 'hw-1', quantity: 7 }],
+      '2026-08-21T15:00:00Z',
+    )!;
+    expect(consumed.reservations[0]?.status).toBe('consumed');
+    expect(consumed.reservations[1]?.status).toBe('active');
+    expect(consumed.reservations[1]?.quantity).toBe(3);
+  });
+});
+
 describe('evaluateMaterialsReleaseReadiness (OC-054)', () => {
   it('fails every gate when no planning exists and explains how to resolve', () => {
     const { ready, checks } = evaluateMaterialsReleaseReadiness({

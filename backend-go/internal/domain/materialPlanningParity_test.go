@@ -271,3 +271,61 @@ func TestValidateMaterialPlanningTransition(t *testing.T) {
 		t.Fatal("la liberación no es revocable")
 	}
 }
+
+// TestConsumedReservationsCoverTheLine mirrors the TS R2 test: a picking
+// despacho that consumed reservations still satisfies the release gates, and
+// warehouse availability does not count consumed as reserved.
+func TestConsumedReservationsCoverTheLine(t *testing.T) {
+	consumedAt := time.Date(2026, 8, 21, 15, 0, 0, 0, time.UTC)
+	planning := &MaterialPlanning{
+		ID:        "mplan-1",
+		ProjectID: "proj-1",
+		Requirements: planningTestSnapshot(
+			MaterialRequirementLine{Kind: "herrajes", MaterialID: "hw-1", Quantity: 10},
+		),
+		Reservations: []MaterialReservation{{
+			ID: "r-1", Kind: "herrajes", MaterialID: "hw-1", Quantity: 10,
+			Status: MaterialReservationConsumed, ReservedAt: consumedAt, ConsumedAt: &consumedAt,
+		}},
+		CreatedAt: consumedAt,
+	}
+
+	coverage := ComputeProjectCoverage("proj-1", nil, []*MaterialPlanning{planning}, nil)
+	if len(coverage) != 1 || !coverage[0].Covered || coverage[0].Reserved != 10 {
+		t.Fatalf("consumed reservations must cover the line: %+v", coverage[0])
+	}
+
+	checks, ready := EvaluateMaterialsReleaseReadiness(planning, nil, []*MaterialPlanning{planning})
+	if !ready {
+		t.Fatalf("release must be ready with consumed reservations: %+v", checks)
+	}
+
+	availability := ComputeWarehouseAvailability(nil, []*MaterialPlanning{planning}, nil)
+	if len(availability) != 1 || availability[0].Reserved != 0 || availability[0].Available != 0 {
+		t.Fatalf("consumed must not reduce warehouse availability: %+v", availability)
+	}
+}
+
+// TestConsumePlannedMaterialsOldestFirst mirrors the TS partial split.
+func TestConsumePlannedMaterialsOldestFirst(t *testing.T) {
+	at := time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)
+	planning := &MaterialPlanning{
+		ID:        "mplan-1",
+		ProjectID: "proj-1",
+		Requirements: planningTestSnapshot(
+			MaterialRequirementLine{Kind: "herrajes", MaterialID: "hw-1", Quantity: 12},
+		),
+		Reservations: []MaterialReservation{
+			{ID: "r-1", Kind: "herrajes", MaterialID: "hw-1", Quantity: 4, Status: MaterialReservationActive, ReservedAt: at},
+			{ID: "r-2", Kind: "herrajes", MaterialID: "hw-1", Quantity: 6, Status: MaterialReservationActive, ReservedAt: at.Add(5 * time.Minute)},
+		},
+		CreatedAt: at,
+	}
+	next := ConsumePlannedMaterials(planning, []ReserveLine{{Kind: "herrajes", MaterialID: "hw-1", Quantity: 7}}, at)
+	if next.Reservations[0].Status != MaterialReservationConsumed || next.Reservations[0].ConsumedAt == nil {
+		t.Fatalf("oldest reservation must be fully consumed: %+v", next.Reservations[0])
+	}
+	if next.Reservations[1].Status != MaterialReservationActive || next.Reservations[1].Quantity != 3 {
+		t.Fatalf("partial consumption must split the remainder: %+v", next.Reservations[1])
+	}
+}

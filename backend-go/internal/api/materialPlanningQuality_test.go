@@ -197,6 +197,42 @@ func TestMaterials_ReleaseWithFullEvidence(t *testing.T) {
 	}
 }
 
+func TestMaterials_ConsumeOnPickingDispatch(t *testing.T) {
+	store, srv := materialsFixtures()
+	if rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleAlmacen),
+		`{"lines":[{"kind":"herrajes","material_id":"hw-1","quantity":10}]}`); rr.Code != http.StatusOK {
+		t.Fatalf("derive = %d", rr.Code)
+	}
+	if rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/reserve", string(domain.RoleAlmacen), `{}`); rr.Code != http.StatusOK {
+		t.Fatalf("reserve = %d", rr.Code)
+	}
+
+	// Despacho de picking: consume las reservas activas de la obra.
+	rr := doMaterialsConsume(srv, string(domain.RoleAlmacen),
+		`{"lines":[{"kind":"herrajes","material_id":"hw-1","quantity":10}]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("consume = %d body %s", rr.Code, rr.Body.String())
+	}
+	reservations := store.materialPlanning.Reservations
+	if len(reservations) != 1 || reservations[0].Status != domain.MaterialReservationConsumed || reservations[0].ConsumedAt == nil {
+		t.Fatalf("picking dispatch must consume the reservation: %+v", reservations)
+	}
+	// La cobertura sigue cubierta (consumido = entregado a la obra) y el
+	// release está listo sin faltantes.
+	if rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/release", string(domain.RoleAlmacen), `{}`); rr.Code != http.StatusOK {
+		t.Fatalf("release after consume = %d body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func doMaterialsConsume(srv *Server, role, body string) *httptest.ResponseRecorder {
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects/p1/materials/consume", strings.NewReader(body)), "u1", role)
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleMaterialsConsume(rr, req)
+	return rr
+}
+
 func containsStr(list []string, target string) bool {
 	for _, v := range list {
 		if v == target {

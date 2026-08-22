@@ -134,6 +134,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/projects/{id}/materials", authMW(http.HandlerFunc(server.HandleProjectMaterials)))
 	mux.Handle("POST /api/projects/{id}/materials/derive", authMW(http.HandlerFunc(server.HandleMaterialsDerive)))
 	mux.Handle("POST /api/projects/{id}/materials/reserve", authMW(http.HandlerFunc(server.HandleMaterialsReserve)))
+	mux.Handle("POST /api/projects/{id}/materials/consume", authMW(http.HandlerFunc(server.HandleMaterialsConsume)))
 	mux.Handle("POST /api/projects/{id}/materials/release", authMW(http.HandlerFunc(server.HandleMaterialsRelease)))
 
 	// Quality & rework (OC-060..OC-062, #302): issues, rework actions with
