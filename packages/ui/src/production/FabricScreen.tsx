@@ -13,6 +13,8 @@ import {
   type Project,
   type ProjectPickingState,
 } from '@muebles/domain';
+import { QualityPanel, type QualityHandlers } from './QualityPanel';
+import type { QualityPanelView } from './qualityView';
 import { EmptyState, PageHeader, WorkflowTabs } from '../common';
 import type {
   DashboardMetrics,
@@ -220,6 +222,9 @@ function ProjectCard({
   confirmBatchMessage,
   onClaim,
   onFinish,
+  qualityView,
+  qualityHandlers,
+  canOverrideQc = false,
 }: {
   readonly card: FabricProjectCard;
   readonly station: FabricStation;
@@ -236,6 +241,10 @@ function ProjectCard({
     itemIds: readonly string[],
     target: ItemFloorStatus,
   ) => void;
+  /** Resolved quality view (OC-060..062) for this project's card. */
+  readonly qualityView?: QualityPanelView;
+  readonly qualityHandlers?: QualityHandlers;
+  readonly canOverrideQc?: boolean;
   /** Message for the batch-confirm modal; absent → no confirmation. */
   readonly confirmBatchMessage?: (
     itemCount: number,
@@ -343,6 +352,15 @@ function ProjectCard({
       ) : null}
 
       <StationMetrics card={card} station={station} />
+
+      {station === 'packaging' && qualityView && qualityHandlers ? (
+        <QualityPanel
+          view={qualityView}
+          handlers={qualityHandlers}
+          canOverride={canOverrideQc}
+          testId={`fabric-quality-${card.projectId}`}
+        />
+      ) : null}
 
       <section
         className="fabric-card__items"
@@ -536,6 +554,9 @@ export function FabricScreen({
   onAdvance,
   onAdvancePart,
   onAdvanceUnit,
+  qualityByProject,
+  qualityHandlers,
+  canOverrideQc,
   customerLabelFor,
   moduleLabelFor,
   metricsByProject = {},
@@ -587,6 +608,10 @@ export function FabricScreen({
     itemCount: number,
     target: ItemFloorStatus,
   ) => string;
+  /** Resolved quality views (OC-060..062) per project — packaging station. */
+  readonly qualityByProject?: Readonly<Record<string, QualityPanelView>>;
+  readonly qualityHandlers?: QualityHandlers;
+  readonly canOverrideQc?: boolean;
   readonly metrics?: DashboardMetrics | null;
   readonly testId?: string;
 }): ReactNode {
@@ -787,6 +812,9 @@ export function FabricScreen({
                     confirmBatchMessage={confirmBatchMessage}
                     onClaim={onClaim}
                     onFinish={onFinish}
+                    qualityView={qualityByProject?.[card.projectId]}
+                    qualityHandlers={qualityHandlers}
+                    canOverrideQc={canOverrideQc}
                   />
                 ))}
               </ul>

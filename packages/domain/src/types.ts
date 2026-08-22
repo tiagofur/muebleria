@@ -1166,6 +1166,15 @@ export interface Project {
    * Installation job: visits, field issues, punch items and client closeout (OC-070).
    */
   readonly installation?: import('./installation').InstallationJob;
+  /**
+   * Material planning: requirements from the released BOM, reservations and
+   * the evidence-backed materials release (OC-050..OC-054).
+   */
+  readonly materialPlanning?: import('./materialPlanning').MaterialPlanning;
+  /**
+   * Quality job: issues, rework actions and per-unit QC records (OC-060..OC-062).
+   */
+  readonly quality?: import('./quality').QualityJob;
 }
 
 /** Lifecycle stage for a project photo. */

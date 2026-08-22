@@ -89,6 +89,7 @@ import {
   roleCanReopenProject,
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,
+  roleCanSuperviseFloor,
   computeWorkshopAnalytics,
   type AnalyticsPeriodDays,
   type WarrantyTicket,
@@ -122,6 +123,18 @@ import {
   type InstallationJob,
   type InstallationVisitResult,
   type PunchSeverity,
+  buildMaterialRequirements,
+  materializeRequirements,
+  reserveProjectMaterials,
+  releaseProjectMaterials,
+  reportQualityIssue,
+  transitionQualityIssue,
+  recordReworkAction,
+  recordUnitQc,
+  overrideUnitQc,
+  type MaterialRequirementLine,
+  type ReworkActionType,
+  type QualityIssueCategory,
 } from '@muebles/domain';
 
 
@@ -200,6 +213,13 @@ import {
   PageLoading,
   buildProductionOrderReadiness,
   type CommandPaletteItem,
+  materialPlanningCardView,
+  shortagePoLines,
+  qualityPanelView,
+  type MaterialPlanningCardView,
+  type MaterialPlanningHandlers,
+  type QualityPanelView,
+  type QualityHandlers,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -1007,6 +1027,7 @@ export function AppContent({
     fabricMetricsByProject,
     moduleLabelForFabric,
     stockDebitLinesFor,
+    requirementLinesFor,
   } = usePurchasingDerivations({
     catalog,
     projects,
@@ -1753,6 +1774,245 @@ export function AppContent({
     }),
     [runInstallationJobAction, runInstallationCloseout],
   );
+  /** Evidence view per almacén-stage project (coverage + release gates). */
+  const planningByProject = useMemo<Readonly<Record<string, MaterialPlanningCardView>>>(() => {
+    const plannings = projectActions.projects
+      .map((p) => p.materialPlanning)
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+    const entries = filterProjectsByProcessStage(projectActions.projects, 'almacen')
+      .map((project) => [
+        project.id,
+        materialPlanningCardView(project, plannings, stockRows ?? [], purchaseOrders ?? []),
+      ] as const);
+    return Object.fromEntries(entries);
+  }, [projectActions.projects, stockRows, purchaseOrders]);
+
+  /**
+   * #302 (OC-050..OC-054) — material planning actions. API mode calls the
+   * dedicated materials endpoints (server enforces the release binding,
+   * reservation caps and the OC-054 gates with audited override); the
+   * local/offline workspace runs the pure domain actions.
+   */
+  const runMaterialPlanningAction = useCallback(
+    (
+      projectId: string,
+      kind: 'derive' | 'reserve' | 'release',
+      payload: { lines?: readonly MaterialRequirementLine[]; overrideReason?: string },
+      localAction: (project: Project) => Project,
+      successMessage: string,
+    ) => {
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      let local: Project;
+      try {
+        local = localAction(project);
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: err instanceof Error && err.message ? err.message : 'Acción de materiales inválida',
+        });
+        return;
+      }
+      const applyLocal = (): void => {
+        projectActions.applyMaterialPlanningProject(projectId, local);
+        toast({ type: 'success', message: successMessage });
+      };
+      const fail = (err: unknown): void => {
+        toast({
+          type: 'error',
+          message: err instanceof Error && err.message ? err.message : 'No se pudo completar la acción de materiales',
+        });
+      };
+      const repo = getRepository();
+      if (kind === 'derive' && repo.deriveMaterialRequirements && payload.lines) {
+        void repo.deriveMaterialRequirements(projectId, payload.lines).then(applyLocal).catch(fail);
+        return;
+      }
+      if (kind === 'reserve' && repo.reserveMaterials) {
+        void repo.reserveMaterials(projectId).then(applyLocal).catch(fail);
+        return;
+      }
+      if (kind === 'release' && repo.releaseMaterials) {
+        void repo.releaseMaterials(projectId, payload.overrideReason).then(applyLocal).catch(fail);
+        return;
+      }
+      applyLocal();
+    },
+    [getRepository, projectActions, toast],
+  );
+
+  const planningHandlers = useMemo<MaterialPlanningHandlers>(
+    () => ({
+      onDerive: (projectId) => {
+        const lines = requirementLinesFor(projectId);
+        if (lines.length === 0) {
+          toast({ type: 'error', message: 'El BOM liberado no produjo líneas de requerimiento' });
+          return;
+        }
+        runMaterialPlanningAction(
+          projectId,
+          'derive',
+          { lines },
+          (p) => materializeRequirements(p, { lines, derivedBy: authUser?.id }).project,
+          '✓ Requerimientos derivados del BOM liberado',
+        );
+      },
+      onReserve: (projectId) => {
+        const plannings = projectActions.projects
+          .map((p) => p.materialPlanning)
+          .filter((x): x is NonNullable<typeof x> => Boolean(x));
+        runMaterialPlanningAction(
+          projectId,
+          'reserve',
+          {},
+          (p) => reserveProjectMaterials(p, { stock: stockRows ?? [], plannings }).project,
+          '✓ Material reservado (el faltante queda auditado)',
+        );
+      },
+      onRelease: (projectId, overrideReason) => {
+        const plannings = projectActions.projects
+          .map((p) => p.materialPlanning)
+          .filter((x): x is NonNullable<typeof x> => Boolean(x));
+        runMaterialPlanningAction(
+          projectId,
+          'release',
+          { overrideReason },
+          (p) =>
+            releaseProjectMaterials(p, {
+              stock: stockRows ?? [],
+              plannings,
+              byUserId: authUser?.id,
+              overrideReason,
+            }).project,
+          overrideReason
+            ? '✓ Material liberado con override (auditado)'
+            : '✓ Material completo — liberado a producción',
+        );
+      },
+      onCreateShortagePO: (projectId) => {
+        const view = planningByProject[projectId];
+        if (!view || view.shortageLines.length === 0) return;
+        const items = shortagePoLines(view).map((l) => ({ ...l, allocatedProjectId: projectId }));
+        void getPurchasingStoreState()
+          .savePurchaseOrder({
+            supplierId: '',
+            items,
+            requiredBy: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          })
+          .then(() => {
+            toast({
+              type: 'success',
+              message: `✓ Borrador de OC creado con ${items.length} línea(s) del faltante — completá el proveedor en Compras`,
+            });
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message: err instanceof Error && err.message ? err.message : 'No se pudo crear la OC',
+            });
+          });
+      },
+    }),
+    [runMaterialPlanningAction, requirementLinesFor, stockRows, projectActions.projects, authUser?.id, planningByProject],
+  );
+
+  /**
+   * #302 (OC-060..OC-062) — quality actions: report issues, rework with
+   * costing (physical piece effect included), per-unit QC checklist and the
+   * audited supervisor override.
+   */
+  const runQualityAction = useCallback(
+    (
+      projectId: string,
+      opts: {
+        api?: (repo: ReturnType<typeof getRepository>) => Promise<unknown> | null;
+        local: (project: Project) => { project: Project };
+        successMessage: string;
+      },
+    ) => {
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      let local: { project: Project };
+      try {
+        local = opts.local(project);
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: err instanceof Error && err.message ? err.message : 'Acción de calidad inválida',
+        });
+        return;
+      }
+      const repo = getRepository();
+      const apiPromise = opts.api ? opts.api(repo) : null;
+      if (apiPromise) {
+        void apiPromise
+          .then(() => {
+            projectActions.applyQualityProject(projectId, local.project);
+            toast({ type: 'success', message: opts.successMessage });
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message: err instanceof Error && err.message ? err.message : 'No se pudo completar la acción de calidad',
+            });
+          });
+        return;
+      }
+      projectActions.applyQualityProject(projectId, local.project);
+      toast({ type: 'success', message: opts.successMessage });
+    },
+    [getRepository, projectActions, toast],
+  );
+
+  const qualityHandlers = useMemo<QualityHandlers>(
+    () => ({
+      onReportIssue: (projectId, payload) =>
+        runQualityAction(projectId, {
+          api: (repo) => (repo.reportQualityIssue ? repo.reportQualityIssue(projectId, payload) : null),
+          local: (p) => reportQualityIssue(p, payload),
+          successMessage: '✓ Problema de calidad reportado',
+        }),
+      onRework: (projectId, payload) =>
+        runQualityAction(projectId, {
+          api: (repo) => (repo.recordQualityRework ? repo.recordQualityRework(projectId, payload) : null),
+          local: (p) => recordReworkAction(p, payload.issueId, payload),
+          successMessage: '✓ Retrabajo registrado con costo',
+        }),
+      onTransition: (projectId, issueId, toStatus, notes) =>
+        runQualityAction(projectId, {
+          api: (repo) =>
+            repo.transitionQualityIssue ? repo.transitionQualityIssue(projectId, issueId, toStatus, notes) : null,
+          local: (p) => transitionQualityIssue(p, issueId, toStatus, { notes }),
+          successMessage: '✓ Estado de calidad actualizado',
+        }),
+      onRecordQc: (projectId, unitId, checklist) =>
+        runQualityAction(projectId, {
+          api: (repo) => (repo.recordQualityUnitQc ? repo.recordQualityUnitQc(projectId, unitId, checklist) : null),
+          local: (p) => recordUnitQc(p, unitId, { checklist }),
+          successMessage: '✓ QC de unidad registrado',
+        }),
+      onOverrideQc: (projectId, unitId, reason) =>
+        runQualityAction(projectId, {
+          api: (repo) => (repo.overrideQualityUnitQc ? repo.overrideQualityUnitQc(projectId, unitId, reason) : null),
+          local: (p) => overrideUnitQc(p, unitId, { reason }),
+          successMessage: '✓ Override de QC registrado (auditado)',
+        }),
+    }),
+    [runQualityAction],
+  );
+
+  /** Quality view per project with units at/past the QC gate. */
+  const qualityByProject = useMemo<Readonly<Record<string, QualityPanelView>>>(() => {
+    const entries = projectActions.projects
+      .filter(
+        (p) =>
+          (p.moduleUnits ?? []).some((u) => u.status === 'module_qc' || u.status === 'packaged') ||
+          (p.quality?.issues.length ?? 0) > 0,
+      )
+      .map((project) => [project.id, qualityPanelView(project)] as const);
+    return Object.fromEntries(entries);
+  }, [projectActions.projects]);
+
 
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
     const repo = getRepository();
@@ -2154,6 +2414,11 @@ export function AppContent({
     handleAdvanceUnit,
     handleGeneratePartExecutions,
     installationJobHandlers,
+    planningByProject,
+    planningHandlers,
+    qualityByProject,
+    qualityHandlers,
+    canOverrideQc: session === 'auth' && roleCanSuperviseFloor(authUser?.role),
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,

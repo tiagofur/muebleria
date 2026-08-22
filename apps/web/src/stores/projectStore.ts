@@ -95,6 +95,7 @@ import {
   advancePartOperation as advancePartOperationDomain,
   advanceModuleUnitStatus as advanceModuleUnitStatusDomain,
   checkAssemblyReadiness,
+  evaluateUnitQcGate,
   deriveLegacyItemFloorStatus,
   nextModuleUnitStatus,
   type ModuleUnitExecution,
@@ -438,6 +439,8 @@ export interface ProjectState {
   /** Apply a locally-computed installation action (offline/local workspace):
    * job plus the pure-action lifecycle events, persisted by the normal channel. */
   readonly applyInstallationProject: (projectId: string, project: Project) => void;
+  readonly applyMaterialPlanningProject: (projectId: string, project: Project) => void;
+  readonly applyQualityProject: (projectId: string, project: Project) => void;
   /** PROD-3.2 — stamp export revision after factory pack/export. */
   readonly recordProductionExport: (projectId: string) => void;
   /** PROD-3.2 — ensure OP revision when opening plant-ready order. */
@@ -1407,6 +1410,14 @@ export function createProjectStore(options: InternalOptions) {
           return { ok: false, blockers: readiness.blockers };
         }
       }
+      // QC gate (OC-062): packaging requires the approved per-unit checklist —
+      // local mirror of the server-side gate.
+      if (next === 'packaged' && unit.status === 'module_qc') {
+        const gate = evaluateUnitQcGate(unit, project.quality);
+        if (!gate.ready) {
+          return { ok: false, blockers: gate.checks.filter((c) => !c.passed).map((c) => c.details) };
+        }
+      }
       const advanced = advanceModuleUnitStatusDomain(unit, next, { at: new Date().toISOString() });
       if (advanced === unit) return { ok: false, blockers: ['transición inválida'] };
       const units = project.moduleUnits.map((u) => (u.id === unitId ? advanced : u));
@@ -1430,6 +1441,21 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     applyInstallationProject: (projectId, updated) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project || updated === project) return;
+      patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));
+    },
+
+    // --- Material planning + quality (#302) — same mirror pattern: the API
+    // path calls the dedicated endpoints and applies the server-returned
+    // project; local mode runs the pure actions and applies the result.
+    applyMaterialPlanningProject: (projectId, updated) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project || updated === project) return;
+      patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));
+    },
+
+    applyQualityProject: (projectId, updated) => {
       const project = get().projects.find((p) => p.id === projectId);
       if (!project || updated === project) return;
       patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));

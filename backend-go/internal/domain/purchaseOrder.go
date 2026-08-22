@@ -37,6 +37,10 @@ type PurchaseOrderItem struct {
 	MaterialID       string            `json:"material_id"`
 	Quantity         float64           `json:"quantity"`
 	ReceivedQuantity float64           `json:"received_quantity"`
+	// OC-053: unit cost snapshot frozen for job costing.
+	UnitCost *float64 `json:"unit_cost,omitempty"`
+	// OC-052: the obra this line was bought for (real-need allocation).
+	AllocatedProjectID *string `json:"allocated_project_id,omitempty"`
 }
 
 // PurchaseOrder is an order to a supplier; CreatedBy is the JWT actor.
@@ -47,6 +51,9 @@ type PurchaseOrder struct {
 	Status     PurchaseOrderStatus `json:"status"`
 	Items      []PurchaseOrderItem `json:"items"`
 	Notes      string              `json:"notes,omitempty"`
+	// OC-053: when the obra needs the material / when the supplier delivers.
+	RequiredBy *string `json:"required_by,omitempty"`
+	ExpectedAt *string `json:"expected_at,omitempty"`
 	CreatedAt  time.Time           `json:"created_at"`
 	UpdatedAt  time.Time           `json:"updated_at"`
 	ReceivedAt *time.Time          `json:"received_at,omitempty"`

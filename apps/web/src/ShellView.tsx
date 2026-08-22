@@ -188,6 +188,10 @@ import {
   buildProductionOrderReadiness,
   type CommandPaletteItem,
   type InstallationJobPanelHandlers,
+  type MaterialPlanningCardView,
+  type MaterialPlanningHandlers,
+  type QualityPanelView,
+  type QualityHandlers,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -419,6 +423,11 @@ export interface ShellViewCtx {
   readonly handleGeneratePartExecutions: (projectId: string) => void;
   /** #303 — installation job mutations (visits, issues, punch, closeout). */
   readonly installationJobHandlers: InstallationJobPanelHandlers;
+  readonly planningByProject: Readonly<Record<string, MaterialPlanningCardView>>;
+  readonly planningHandlers: MaterialPlanningHandlers;
+  readonly qualityByProject: Readonly<Record<string, QualityPanelView>>;
+  readonly qualityHandlers: QualityHandlers;
+  readonly canOverrideQc: boolean;
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -659,6 +668,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleAdvanceUnit,
     handleGeneratePartExecutions,
     installationJobHandlers,
+    planningByProject,
+    planningHandlers,
+    qualityByProject,
+    qualityHandlers,
+    canOverrideQc,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,
@@ -871,6 +885,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onFinish={session === 'auth' ? handleFabricFinish : undefined}
           onAdvanceBatch={handleFabricBatchAdvance}
           confirmBatchMessage={fabricBatchConfirmMessage}
+          qualityByProject={qualityByProject}
+          qualityHandlers={qualityHandlers}
+          canOverrideQc={canOverrideQc}
         />
         </ScreenBoundary>
       ) : null}
@@ -1198,6 +1215,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               authUser?.id ?? 'unknown',
             )
           }
+          planningByProject={planningByProject}
+          planningHandlers={planningHandlers}
+          planningUnits={stockCatalog.units}
           stock={stockRows}
           stockMovements={stockMovements}
           stockLabels={stockCatalog.labels}

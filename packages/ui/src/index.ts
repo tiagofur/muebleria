@@ -250,6 +250,10 @@ export {
   type InstalacionesProjectDetailProps,
   InstallationJobPanel,
   type InstallationJobPanelHandlers,
+  QualityPanel,
+  qualityPanelView,
+  type QualityPanelView,
+  type QualityHandlers,
   installationJobCardView,
   canCompleteInstallationNow,
   type InstallationJobCardView,
@@ -288,10 +292,15 @@ export {
   PurchasingScreen,
   WarehouseDashboard,
   PurchaseOrdersPanel,
+  MaterialPlanningPanel,
+  materialPlanningCardView,
+  shortagePoLines,
   type ActiveProjectMaterial,
   type PurchasingScreenProps,
   type WarehouseDashboardProps,
   type PoLineInput,
+  type MaterialPlanningCardView,
+  type MaterialPlanningHandlers,
 } from './purchasing';
 
 export {

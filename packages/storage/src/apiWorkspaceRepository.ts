@@ -29,13 +29,24 @@ import type {
   StockMovementType,
   PurchaseOrder,
   Supplier,
+  MaterialRequirementLine,
+  QualityIssue,
+  QualityIssueStatus,
+  ReworkAction,
+  UnitQcChecklistItem,
 } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
   withWorkshopSettings,
 } from '@muebles/domain';
-import type { WorkspaceRepository, InstallationView, InstallationCloseoutCheck } from './workspaceRepository';
-import { CloseoutGateError } from './workspaceRepository';
+import type {
+  WorkspaceRepository,
+  InstallationView,
+  InstallationCloseoutCheck,
+  MaterialPlanningView,
+  QualityView,
+} from './workspaceRepository';
+import { CloseoutGateError, MaterialsReleaseGateError } from './workspaceRepository';
 import {
   agregadoToApi,
   ambientCategoryToApi,
@@ -47,6 +58,11 @@ import {
   partInstanceToApi,
   installationJobFromApi,
   installationJobToApi,
+  materialPlanningFromApi,
+  materialCoverageFromApi,
+  materialAvailabilityFromApi,
+  releaseChecksFromApi,
+  qualityJobFromApi,
   closeoutChecksFromApi,
   categoryToApi,
   componentToApi,
@@ -1938,7 +1954,15 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     id: string;
     supplierId: string;
     notes?: string;
-    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+    requiredBy?: string;
+    expectedAt?: string;
+    items: readonly {
+      kind: StockMaterialKind;
+      materialId: string;
+      quantity: number;
+      unitCost?: number;
+      allocatedProjectId?: string;
+    }[];
   }): Promise<PurchaseOrder> {
     const res = await fetch(`${this.baseUrl}/purchase-orders`, {
       method: 'POST',
@@ -1947,6 +1971,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         id: po.id,
         supplier_id: po.supplierId,
         notes: po.notes ?? '',
+        ...(po.requiredBy ? { required_by: po.requiredBy } : {}),
+        ...(po.expectedAt ? { expected_at: po.expectedAt } : {}),
         items: po.items.map(poItemToApi),
       }),
     });
@@ -1962,7 +1988,15 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     id: string;
     supplierId: string;
     notes?: string;
-    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+    requiredBy?: string;
+    expectedAt?: string;
+    items: readonly {
+      kind: StockMaterialKind;
+      materialId: string;
+      quantity: number;
+      unitCost?: number;
+      allocatedProjectId?: string;
+    }[];
   }): Promise<PurchaseOrder> {
     const res = await fetch(`${this.baseUrl}/purchase-orders/${po.id}`, {
       method: 'PUT',
@@ -1970,6 +2004,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       body: JSON.stringify({
         supplier_id: po.supplierId,
         notes: po.notes ?? '',
+        ...(po.requiredBy ? { required_by: po.requiredBy } : {}),
+        ...(po.expectedAt ? { expected_at: po.expectedAt } : {}),
         items: po.items.map(poItemToApi),
       }),
     });
@@ -2023,8 +2059,243 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const raw = await res.json();
     return purchaseOrderFromApi(raw as Record<string, unknown>);
   }
-}
 
+  // ─── Material planning (OC-050..OC-054) ─────────────────────────────────────
+
+  private parseMaterialPlanningView(raw: Record<string, unknown>): MaterialPlanningView {
+    return {
+      planning: materialPlanningFromApi(raw.planning) ?? null,
+      coverage: materialCoverageFromApi(raw.coverage),
+      availability: materialAvailabilityFromApi(raw.availability),
+      releaseChecks: releaseChecksFromApi(raw.release_checks ?? raw.releaseChecks),
+      releaseReady: Boolean(raw.release_ready ?? raw.releaseReady),
+      released: Boolean(raw.released),
+      eventsAppended: Number(raw.events_appended ?? raw.eventsAppended ?? 0) || undefined,
+    };
+  }
+
+  async getMaterialPlanning(projectId: string): Promise<MaterialPlanningView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get material planning: ${res.status} ${text}`);
+    }
+    return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
+  }
+
+  async deriveMaterialRequirements(
+    projectId: string,
+    lines: readonly MaterialRequirementLine[],
+  ): Promise<MaterialPlanningView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/derive`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        lines: lines.map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to derive requirements: ${res.status} ${text}`);
+    }
+    return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
+  }
+
+  async reserveMaterials(
+    projectId: string,
+    lines?: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<MaterialPlanningView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/reserve`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        lines: (lines ?? []).map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to reserve materials: ${res.status} ${text}`);
+    }
+    return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
+  }
+
+  async releaseMaterials(projectId: string, overrideReason?: string): Promise<MaterialPlanningView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/release`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}),
+    });
+    if (res.status === 409) {
+      const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      throw new MaterialsReleaseGateError(
+        releaseChecksFromApi(raw.release_checks ?? raw.releaseChecks),
+        String(raw.error ?? 'la liberación de material requiere evidencia completa'),
+      );
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to release materials: ${res.status} ${text}`);
+    }
+    return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
+  }
+
+  // ─── Quality job (OC-060..OC-062) ────────────────────────────────────────────
+
+  private parseQualityView(raw: Record<string, unknown>): QualityView {
+    const costRaw = (raw.rework_cost ?? {}) as Record<string, unknown>;
+    const gates = Array.isArray(raw.unit_gates ?? raw.unitGates)
+      ? ((raw.unit_gates ?? raw.unitGates) as readonly Record<string, unknown>[])
+      : [];
+    return {
+      quality: qualityJobFromApi(raw.quality) ?? null,
+      openIssues: Number(raw.open_issues ?? raw.openIssues ?? 0),
+      reworkCost: {
+        materialCost: Number(costRaw.material_cost ?? costRaw.materialCost ?? 0),
+        laborMinutes: Number(costRaw.labor_minutes ?? costRaw.laborMinutes ?? 0),
+      },
+      unitGates: gates.map((g) => {
+        const gate = (g.gate ?? {}) as Record<string, unknown>;
+        return {
+          unitId: String(g.unit_id ?? g.unitId ?? ''),
+          status: String(g.status ?? ''),
+          gate: { ready: Boolean(gate.ready), overridden: Boolean(gate.overridden) },
+        };
+      }),
+      eventsAppended: Number(raw.events_appended ?? raw.eventsAppended ?? 0) || undefined,
+    };
+  }
+
+  async getQuality(projectId: string): Promise<QualityView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get quality: ${res.status} ${text}`);
+    }
+    return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+
+  async reportQualityIssue(
+    projectId: string,
+    payload: {
+      description: string;
+      category: QualityIssue['category'];
+      projectItemId?: string;
+      partInstanceId?: string;
+      moduleUnitId?: string;
+      station?: QualityIssue['station'];
+      notes?: string;
+      photoIds?: readonly string[];
+    },
+  ): Promise<QualityView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/issue`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        description: payload.description,
+        category: payload.category,
+        ...(payload.projectItemId ? { project_item_id: payload.projectItemId } : {}),
+        ...(payload.partInstanceId ? { part_instance_id: payload.partInstanceId } : {}),
+        ...(payload.moduleUnitId ? { module_unit_id: payload.moduleUnitId } : {}),
+        ...(payload.station ? { station: payload.station } : {}),
+        ...(payload.notes ? { notes: payload.notes } : {}),
+        ...(payload.photoIds?.length ? { photo_ids: payload.photoIds } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to report quality issue: ${res.status} ${text}`);
+    }
+    return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+
+  async transitionQualityIssue(
+    projectId: string,
+    issueId: string,
+    toStatus: QualityIssueStatus,
+    notes?: string,
+  ): Promise<QualityView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/issue/${issueId}/transition`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ to_status: toStatus, ...(notes ? { notes } : {}) }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to transition quality issue: ${res.status} ${text}`);
+    }
+    return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+
+  async recordQualityRework(
+    projectId: string,
+    payload: {
+      issueId: string;
+      action: ReworkAction['action'];
+      reason?: string;
+      partInstanceId?: string;
+      targetOperation?: string;
+      materialCost?: number;
+      laborMinutes?: number;
+    },
+  ): Promise<QualityView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/rework`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        issue_id: payload.issueId,
+        action: payload.action,
+        ...(payload.reason ? { reason: payload.reason } : {}),
+        ...(payload.partInstanceId ? { part_instance_id: payload.partInstanceId } : {}),
+        ...(payload.targetOperation ? { target_operation: payload.targetOperation } : {}),
+        ...(payload.materialCost !== undefined ? { material_cost: payload.materialCost } : {}),
+        ...(payload.laborMinutes !== undefined ? { labor_minutes: payload.laborMinutes } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to record rework: ${res.status} ${text}`);
+    }
+    return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+
+  async recordQualityUnitQc(
+    projectId: string,
+    unitId: string,
+    checklist: readonly UnitQcChecklistItem[],
+    notes?: string,
+  ): Promise<QualityView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        checklist: checklist.map((c) => ({ code: c.code, passed: c.passed })),
+        ...(notes ? { notes } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to record unit QC: ${res.status} ${text}`);
+    }
+    return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+
+  async overrideQualityUnitQc(projectId: string, unitId: string, reason: string): Promise<QualityView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}/override`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to override unit QC: ${res.status} ${text}`);
+    }
+    return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+}
 
 
 

@@ -47,6 +47,11 @@ import {
 import { EmptyState, PageHeader, WorkspaceTabs } from '../common';
 import { StockPanel, type StockCatalogOption } from './StockPanel';
 import {
+  MaterialPlanningPanel,
+  type MaterialPlanningHandlers,
+} from './MaterialPlanningPanel';
+import type { MaterialPlanningCardView } from './materialPlanningView';
+import {
   PurchaseOrdersPanel,
   type PoLineInput,
 } from './PurchaseOrdersPanel';
@@ -112,6 +117,18 @@ export type PurchasingScreenProps = {
    * called for roles that can mark picking (admin/almacen).
    */
   readonly onReleaseMaterials?: (projectId: string) => void;
+
+  // --- Material planning evidence (OC-050..OC-054, F138) ---
+
+  /**
+   * Resolved planning evidence per project (coverage + release gates). When
+   * present, "Material completo" opens the planning panel instead of
+   * releasing blindly — the release runs through the evidence checks.
+   */
+  readonly planningByProject?: Readonly<Record<string, MaterialPlanningCardView>>;
+  readonly planningHandlers?: MaterialPlanningHandlers;
+  /** `${kind}:${materialId}` → unit label for the coverage table. */
+  readonly planningUnits?: Readonly<Record<string, string>>;
 
   // --- Stock (Fase 3b): saldos + movimientos para chips y el tab Compras ---
 
@@ -230,6 +247,9 @@ export function PurchasingScreen({
   onTogglePick,
   onOpenDashboard,
   onReleaseMaterials,
+  planningByProject,
+  planningHandlers,
+  planningUnits = {},
   stock = null,
   stockMovements = null,
   stockLabels = {},
@@ -253,6 +273,7 @@ export function PurchasingScreen({
   const [picking, setPicking] = useState<Record<string, PickingStatus>>({});
   const [activeTab, setActiveTab] = useState<ScreenTab>('herrajes');
   const [comprasTab, setComprasTab] = useState<'stock' | 'purchase'>('stock');
+  const [expandedPlanning, setExpandedPlanning] = useState<Record<string, boolean>>({});
 
   // Fase 5.2 — ARIA tabs keyboard pattern (arrows/Home/End + roving tabindex).
   // Wired below once visibleMaterialTabs resolves to the effective tabs.
@@ -404,6 +425,24 @@ export function PurchasingScreen({
   /** Release-to-production action shown on every project card. */
   const renderReleaseAction = (projectId: string): ReactNode => {
     if (!canMarkPicked || !onReleaseMaterials) return null;
+    const hasPlanning = planningByProject?.[projectId] !== undefined;
+    if (hasPlanning) {
+      return (
+        <button
+          type="button"
+          className="btn btn--secondary btn--small"
+          onClick={() =>
+            setExpandedPlanning((prev) => ({ ...prev, [projectId]: !prev[projectId] }))
+          }
+          aria-expanded={Boolean(expandedPlanning[projectId])}
+          data-testid={`purch-release-${projectId}`}
+          title="Abre la planificación de materiales: cobertura, reservas y liberación con evidencia"
+        >
+          <PackageCheck size={14} strokeWidth={1.5} aria-hidden />
+          Planificar y liberar
+        </button>
+      );
+    }
     return (
       <button
         type="button"
@@ -415,6 +454,21 @@ export function PurchasingScreen({
         <PackageCheck size={14} strokeWidth={1.5} aria-hidden />
         Material completo
       </button>
+    );
+  };
+
+  /** Evidence panel rendered inside a project card when expanded (OC-054). */
+  const renderPlanningSection = (projectId: string): ReactNode => {
+    const view = planningByProject?.[projectId];
+    if (!view || !expandedPlanning[projectId] || !planningHandlers) return null;
+    return (
+      <MaterialPlanningPanel
+        view={view}
+        handlers={planningHandlers}
+        unitByMaterial={planningUnits}
+        canManage={canMarkPicked}
+        testId={`purch-plan-panel-${projectId}`}
+      />
     );
   };
 
@@ -526,6 +580,7 @@ export function PurchasingScreen({
                 </li>
               ))}
             </ul>
+            {renderPlanningSection(p.projectId)}
           </li>
         ))}
       </ul>
@@ -597,6 +652,7 @@ export function PurchasingScreen({
                 </span>
               </div>
             ) : null}
+            {renderPlanningSection(p.projectId)}
           </li>
         ))}
       </ul>
@@ -649,6 +705,7 @@ export function PurchasingScreen({
                 </li>
               ))}
             </ul>
+            {renderPlanningSection(p.projectId)}
           </li>
         ))}
       </ul>

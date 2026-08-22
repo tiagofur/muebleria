@@ -540,6 +540,8 @@ type PartExecutionsSnapshot struct {
 	ItemStatuses map[string]string
 	/** itemID → line quantity, for generation validation (unit count per item). */
 	ItemQuantities map[string]int
+	/** Quality job of the obra — the OC-062 QC gate reads it on unit advance. */
+	Quality *QualityJob
 }
 
 // PartExecutionsMutation is what a station mutation produced and what gets
@@ -550,4 +552,6 @@ type PartExecutionsMutation struct {
 	Units        []ModuleUnitExecution
 	ItemStatuses map[string]string
 	FloorEvents  []FloorStatusEvent
+	/** When set, the quality job is persisted together with the advance. */
+	Quality *QualityJob
 }

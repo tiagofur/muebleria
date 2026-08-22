@@ -1,0 +1,28 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-060..OC-062, AGENTS.md): vocabularios de calidad y retrabajo — categorías y estados de QualityIssue con transiciones, resoluciones de ReworkAction, puntos del checklist QC por unidad y códigos del gate QC.",
+  "issueCategories": [
+    "dimensional",
+    "acabado_canto",
+    "mecanizado",
+    "dano",
+    "faltante",
+    "armado",
+    "otro"
+  ],
+  "issueStatuses": ["open", "resolved", "verified"],
+  "issueStatusTransitions": {
+    "open": ["resolved"],
+    "resolved": ["verified", "open"],
+    "verified": ["open"]
+  },
+  "reworkActionTypes": ["rework", "refabricate", "scrap", "accept_as_is"],
+  "qcCheckCodes": [
+    "square",
+    "dimensions",
+    "hardware",
+    "doors_drawers",
+    "finish",
+    "identification"
+  ],
+  "qcGateCheckCodes": ["qc_passed", "no_open_issues"]
+}

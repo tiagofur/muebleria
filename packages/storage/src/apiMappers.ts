@@ -71,6 +71,23 @@ import type {
   PunchItemStatus,
   PunchSeverity,
   ClientCloseout,
+  MaterialPlanning,
+  MaterialRequirementsSnapshot,
+  MaterialRequirementLine,
+  MaterialReservation,
+  MaterialsReleaseEvidence,
+  MaterialsReleaseCheck,
+  MaterialsReleaseCheckCode,
+  ProjectMaterialLineCoverage,
+  MaterialAvailability,
+  QualityJob,
+  QualityIssue,
+  QualityIssueStatus,
+  QualityIssueCategory,
+  ReworkAction,
+  UnitQcRecord,
+  UnitQcChecklistItem,
+  QcGateCheck,
   ProjectTechnicalStatus,
   ProjectTemplate,
   QuoteBreakdown,
@@ -1608,6 +1625,11 @@ export function projectToApi(p: Project): Record<string, unknown> {
     // OC-070 — installation job (server ignores it on the aggregate PUT;
     // included so a GET roundtrip is lossless).
     installation: p.installation ? installationJobToApi(p.installation) : null,
+    // OC-050..054 — material planning (server ignores it on the aggregate PUT;
+    // the materials endpoints are the only writers).
+    material_planning: p.materialPlanning ? materialPlanningToApi(p.materialPlanning) : null,
+    // OC-060..062 — quality job (same: quality endpoints are the only writers).
+    quality: p.quality ? qualityJobToApi(p.quality) : null,
     // OC-010 — lifecycle append-only event stream
     events: (p.events ?? []).map((e) => projectEventToApi(e)),
   };
@@ -1807,6 +1829,10 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     moduleUnits: moduleUnitsFromApi(raw.module_units ?? raw.moduleUnits),
     // OC-070 — installation job (visits, field issues, punch, closeout)
     installation: installationJobFromApi(raw.installation),
+    // OC-050..054 — material planning (requirements, reservations, release)
+    materialPlanning: materialPlanningFromApi(raw.material_planning ?? raw.materialPlanning),
+    // OC-060..062 — quality job (issues, rework actions, unit QC)
+    quality: qualityJobFromApi(raw.quality),
     // OC-011 — commercial status outcome
     commercialStatus: commercialStatusFromApi(
       raw.commercial_status ?? raw.commercialStatus,
@@ -2345,6 +2371,308 @@ export function installationJobFromApi(raw: unknown): InstallationJob | undefine
     closeout: clientCloseoutFromApi(rec.closeout as Record<string, unknown> | null | undefined),
     createdAt: str(rec.created_at ?? rec.createdAt),
   };
+}
+
+// ─── Material planning (OC-050..OC-054) ──────────────────────────────────────
+
+function requirementLineFromApi(raw: Record<string, unknown>): MaterialRequirementLine {
+  const kind = str(raw.kind);
+  return {
+    kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as MaterialRequirementLine['kind'],
+    materialId: str(raw.material_id ?? raw.materialId),
+    quantity: num(raw.quantity),
+  };
+}
+
+function materialReservationFromApi(raw: Record<string, unknown>): MaterialReservation {
+  const status = str(raw.status);
+  return {
+    id: str(raw.id),
+    kind: (str(raw.kind) === 'tableros' || str(raw.kind) === 'cintillas' ? str(raw.kind) : 'herrajes') as MaterialReservation['kind'],
+    materialId: str(raw.material_id ?? raw.materialId),
+    quantity: num(raw.quantity),
+    status: (['active', 'released', 'consumed'].includes(status) ? status : 'active') as MaterialReservation['status'],
+    reservedBy: str(raw.reserved_by ?? raw.reservedBy) || undefined,
+    reservedAt: str(raw.reserved_at ?? raw.reservedAt),
+    releasedAt: str(raw.released_at ?? raw.releasedAt) || undefined,
+    consumedAt: str(raw.consumed_at ?? raw.consumedAt) || undefined,
+  };
+}
+
+export function materialPlanningFromApi(raw: unknown): MaterialPlanning | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  const requirementsRaw = rec.requirements as Record<string, unknown> | null | undefined;
+  const lines: readonly unknown[] = Array.isArray(requirementsRaw?.lines) ? requirementsRaw.lines : [];
+  const reservations: readonly unknown[] = Array.isArray(rec.reservations) ? rec.reservations : [];
+  const releaseRaw = rec.release as Record<string, unknown> | null | undefined;
+  const overrideRaw = releaseRaw?.override as Record<string, unknown> | null | undefined;
+  const requirements: MaterialRequirementsSnapshot | undefined = requirementsRaw
+    ? {
+        releaseId: str(requirementsRaw.release_id ?? requirementsRaw.releaseId) || undefined,
+        bomFingerprint: str(requirementsRaw.bom_fingerprint ?? requirementsRaw.bomFingerprint) || undefined,
+        derivedAt: str(requirementsRaw.derived_at ?? requirementsRaw.derivedAt),
+        derivedBy: str(requirementsRaw.derived_by ?? requirementsRaw.derivedBy) || undefined,
+        lines: lines.map((l) => requirementLineFromApi(l as Record<string, unknown>)),
+      }
+    : undefined;
+  const overrideFailing = Array.isArray(overrideRaw?.failing_checks ?? overrideRaw?.failingChecks)
+    ? (((overrideRaw?.failing_checks ?? overrideRaw?.failingChecks) as readonly string[]).filter(
+        (c): c is MaterialsReleaseCheckCode =>
+          c === 'requirements_derived' || c === 'lines_reserved' || c === 'reservations_backed',
+      ) as readonly MaterialsReleaseCheckCode[])
+    : [];
+  const release: MaterialsReleaseEvidence | undefined = releaseRaw
+    ? {
+        releasedBy: str(releaseRaw.released_by ?? releaseRaw.releasedBy) || undefined,
+        releasedAt: str(releaseRaw.released_at ?? releaseRaw.releasedAt),
+        override: overrideRaw
+          ? {
+              reason: str(overrideRaw.reason),
+              byUserId: str(overrideRaw.by_user_id ?? overrideRaw.byUserId) || undefined,
+              at: str(overrideRaw.at),
+              failingChecks: overrideFailing,
+            }
+          : undefined,
+      }
+    : undefined;
+  return {
+    id: str(rec.id),
+    projectId: str(rec.project_id ?? rec.projectId),
+    requirements,
+    reservations: reservations.map((r) => materialReservationFromApi(r as Record<string, unknown>)),
+    release,
+    createdAt: str(rec.created_at ?? rec.createdAt),
+  };
+}
+
+export function materialPlanningToApi(p: MaterialPlanning): Record<string, unknown> {
+  return {
+    id: p.id,
+    project_id: p.projectId,
+    requirements: p.requirements
+      ? {
+          release_id: p.requirements.releaseId,
+          bom_fingerprint: p.requirements.bomFingerprint,
+          derived_at: p.requirements.derivedAt,
+          derived_by: p.requirements.derivedBy,
+          lines: p.requirements.lines.map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),
+        }
+      : null,
+    reservations: p.reservations.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      material_id: r.materialId,
+      quantity: r.quantity,
+      status: r.status,
+      reserved_by: r.reservedBy,
+      reserved_at: r.reservedAt,
+      released_at: r.releasedAt,
+      consumed_at: r.consumedAt,
+    })),
+    release: p.release
+      ? {
+          released_by: p.release.releasedBy,
+          released_at: p.release.releasedAt,
+          override: p.release.override
+            ? {
+                reason: p.release.override.reason,
+                by_user_id: p.release.override.byUserId,
+                at: p.release.override.at,
+                failing_checks: p.release.override.failingChecks,
+              }
+            : null,
+        }
+      : null,
+    created_at: p.createdAt,
+  };
+}
+
+export function releaseChecksFromApi(raw: unknown): readonly MaterialsReleaseCheck[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as readonly Record<string, unknown>[]).map((c) => ({
+    code: str(c.code) as MaterialsReleaseCheckCode,
+    label: str(c.label),
+    passed: Boolean(c.passed),
+    required: Boolean(c.required),
+    details: str(c.details),
+  }));
+}
+
+export function materialCoverageFromApi(raw: unknown): readonly ProjectMaterialLineCoverage[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as readonly Record<string, unknown>[]).map((l) => {
+    const kind = str(l.kind);
+    return {
+      kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as ProjectMaterialLineCoverage['kind'],
+      materialId: str(l.material_id ?? l.materialId),
+      required: num(l.required),
+      reserved: num(l.reserved),
+      pendingReserve: num(l.pending_reserve ?? l.pendingReserve),
+      available: num(l.available),
+      incomingAllocated: num(l.incoming_allocated ?? l.incomingAllocated),
+      shortage: num(l.shortage),
+      covered: Boolean(l.covered),
+    };
+  });
+}
+
+export function materialAvailabilityFromApi(raw: unknown): readonly MaterialAvailability[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as readonly Record<string, unknown>[]).map((l) => {
+    const kind = str(l.kind);
+    return {
+      kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as MaterialAvailability['kind'],
+      materialId: str(l.material_id ?? l.materialId),
+      onHand: num(l.on_hand ?? l.onHand),
+      reserved: num(l.reserved),
+      available: num(l.available),
+      incoming: num(l.incoming),
+      required: num(l.required),
+      shortage: num(l.shortage),
+    };
+  });
+}
+
+// ─── Quality job (OC-060..OC-062) ─────────────────────────────────────────────
+
+function qualityIssueFromApi(raw: Record<string, unknown>): QualityIssue {
+  return {
+    id: str(raw.id),
+    description: str(raw.description),
+    category: str(raw.category) as QualityIssueCategory,
+    status: str(raw.status) as QualityIssueStatus,
+    projectItemId: str(raw.project_item_id ?? raw.projectItemId) || undefined,
+    partInstanceId: str(raw.part_instance_id ?? raw.partInstanceId) || undefined,
+    moduleUnitId: str(raw.module_unit_id ?? raw.moduleUnitId) || undefined,
+    station: (str(raw.station) || undefined) as QualityIssue['station'],
+    photoIds: Array.isArray(raw.photo_ids ?? raw.photoIds) ? ((raw.photo_ids ?? raw.photoIds) as readonly string[]) : undefined,
+    notes: str(raw.notes) || undefined,
+    reportedBy: str(raw.reported_by ?? raw.reportedBy) || undefined,
+    reportedAt: str(raw.reported_at ?? raw.reportedAt),
+    resolvedAt: str(raw.resolved_at ?? raw.resolvedAt) || undefined,
+    resolvedBy: str(raw.resolved_by ?? raw.resolvedBy) || undefined,
+    resolutionNotes: str(raw.resolution_notes ?? raw.resolutionNotes) || undefined,
+    verifiedAt: str(raw.verified_at ?? raw.verifiedAt) || undefined,
+    verifiedBy: str(raw.verified_by ?? raw.verifiedBy) || undefined,
+  };
+}
+
+function reworkActionFromApi(raw: Record<string, unknown>): ReworkAction {
+  return {
+    id: str(raw.id),
+    issueId: str(raw.issue_id ?? raw.issueId),
+    action: str(raw.action) as ReworkAction['action'],
+    reason: str(raw.reason) || undefined,
+    materialCost: num(raw.material_cost ?? raw.materialCost),
+    laborMinutes: num(raw.labor_minutes ?? raw.laborMinutes),
+    partInstanceId: str(raw.part_instance_id ?? raw.partInstanceId) || undefined,
+    byUserId: str(raw.by_user_id ?? raw.byUserId) || undefined,
+    at: str(raw.at),
+  };
+}
+
+function unitQcRecordFromApi(raw: Record<string, unknown>): UnitQcRecord {
+  const overrideRaw = raw.override as Record<string, unknown> | null | undefined;
+  const checklist: readonly unknown[] = Array.isArray(raw.checklist) ? raw.checklist : [];
+  return {
+    unitId: str(raw.unit_id ?? raw.unitId),
+    checklist: checklist.map((c) => {
+      const item = c as Record<string, unknown>;
+      return { code: str(item.code) as UnitQcChecklistItem['code'], passed: Boolean(item.passed) };
+    }),
+    passedAt: str(raw.passed_at ?? raw.passedAt) || undefined,
+    passedBy: str(raw.passed_by ?? raw.passedBy) || undefined,
+    notes: str(raw.notes) || undefined,
+    photoIds: Array.isArray(raw.photo_ids ?? raw.photoIds) ? ((raw.photo_ids ?? raw.photoIds) as readonly string[]) : undefined,
+    override: overrideRaw
+      ? {
+          reason: str(overrideRaw.reason),
+          byUserId: str(overrideRaw.by_user_id ?? overrideRaw.byUserId) || undefined,
+          at: str(overrideRaw.at),
+        }
+      : undefined,
+  };
+}
+
+export function qualityJobFromApi(raw: unknown): QualityJob | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  const issues: readonly unknown[] = Array.isArray(rec.issues) ? rec.issues : [];
+  const actions: readonly unknown[] = Array.isArray(rec.rework_actions ?? rec.reworkActions)
+    ? ((rec.rework_actions ?? rec.reworkActions) as readonly unknown[])
+    : [];
+  const unitQc: readonly unknown[] = Array.isArray(rec.unit_qc ?? rec.unitQc)
+    ? ((rec.unit_qc ?? rec.unitQc) as readonly unknown[])
+    : [];
+  return {
+    id: str(rec.id),
+    projectId: str(rec.project_id ?? rec.projectId),
+    issues: issues.map((i) => qualityIssueFromApi(i as Record<string, unknown>)),
+    reworkActions: actions.map((a) => reworkActionFromApi(a as Record<string, unknown>)),
+    unitQc: unitQc.map((u) => unitQcRecordFromApi(u as Record<string, unknown>)),
+    createdAt: str(rec.created_at ?? rec.createdAt),
+  };
+}
+
+export function qualityJobToApi(j: QualityJob): Record<string, unknown> {
+  return {
+    id: j.id,
+    project_id: j.projectId,
+    issues: j.issues.map((i) => ({
+      id: i.id,
+      description: i.description,
+      category: i.category,
+      status: i.status,
+      project_item_id: i.projectItemId,
+      part_instance_id: i.partInstanceId,
+      module_unit_id: i.moduleUnitId,
+      station: i.station,
+      photo_ids: i.photoIds,
+      notes: i.notes,
+      reported_by: i.reportedBy,
+      reported_at: i.reportedAt,
+      resolved_at: i.resolvedAt,
+      resolved_by: i.resolvedBy,
+      resolution_notes: i.resolutionNotes,
+      verified_at: i.verifiedAt,
+      verified_by: i.verifiedBy,
+    })),
+    rework_actions: j.reworkActions.map((a) => ({
+      id: a.id,
+      issue_id: a.issueId,
+      action: a.action,
+      reason: a.reason,
+      material_cost: a.materialCost,
+      labor_minutes: a.laborMinutes,
+      part_instance_id: a.partInstanceId,
+      by_user_id: a.byUserId,
+      at: a.at,
+    })),
+    unit_qc: j.unitQc.map((u) => ({
+      unit_id: u.unitId,
+      checklist: u.checklist.map((c) => ({ code: c.code, passed: c.passed })),
+      passed_at: u.passedAt,
+      passed_by: u.passedBy,
+      notes: u.notes,
+      photo_ids: u.photoIds,
+      override: u.override
+        ? { reason: u.override.reason, by_user_id: u.override.byUserId, at: u.override.at }
+        : null,
+    })),
+    created_at: j.createdAt,
+  };
+}
+
+export function qcGateChecksFromApi(raw: unknown): readonly QcGateCheck[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as readonly Record<string, unknown>[]).map((c) => ({
+    code: str(c.code) as QcGateCheck['code'],
+    label: str(c.label),
+    passed: Boolean(c.passed),
+    required: Boolean(c.required),
+    details: str(c.details),
+  }));
 }
 
 // ─── Closeout view (derived, read-only over the wire) ──────────────────────
@@ -3159,11 +3487,15 @@ export function supplierToApi(sp: {
 /** Snake_case PO item from the Go API → domain shape. */
 function poItemFromApi(raw: Record<string, unknown>): PurchaseOrderItem {
   const kind = str(raw.kind);
+  const unitCost = raw.unit_cost ?? raw.unitCost;
+  const allocatedProjectId = str(raw.allocated_project_id ?? raw.allocatedProjectId);
   return {
     kind: (kind === 'tableros' || kind === 'cintillas' ? kind : 'herrajes') as StockMaterialKind,
     materialId: str(raw.material_id ?? raw.materialId),
     quantity: num(raw.quantity),
     receivedQuantity: num(raw.received_quantity ?? raw.receivedQuantity),
+    unitCost: typeof unitCost === 'number' && Number.isFinite(unitCost) ? unitCost : undefined,
+    allocatedProjectId: allocatedProjectId || undefined,
   };
 }
 
@@ -3184,6 +3516,8 @@ export function purchaseOrderFromApi(raw: Record<string, unknown>): PurchaseOrde
       : 'borrador') as PurchaseOrderStatus,
     items,
     notes: str(raw.notes) || undefined,
+    requiredBy: str(raw.required_by ?? raw.requiredBy) || undefined,
+    expectedAt: str(raw.expected_at ?? raw.expectedAt) || undefined,
     createdAt: str(raw.created_at ?? raw.createdAt, new Date().toISOString()),
     updatedAt: str(raw.updated_at ?? raw.updatedAt, new Date().toISOString()),
     receivedAt: str(raw.received_at ?? raw.receivedAt) || undefined,
@@ -3191,15 +3525,19 @@ export function purchaseOrderFromApi(raw: Record<string, unknown>): PurchaseOrde
   };
 }
 
-/** Domain PO line → snake_case API body. */
+/** Domain PO line → snake_case API body (OC-052/053 fields included). */
 export function poItemToApi(it: {
   kind: StockMaterialKind;
   materialId: string;
   quantity: number;
+  unitCost?: number;
+  allocatedProjectId?: string;
 }): Record<string, unknown> {
   return {
     kind: it.kind,
     material_id: it.materialId,
     quantity: it.quantity,
+    ...(it.unitCost !== undefined ? { unit_cost: it.unitCost } : {}),
+    ...(it.allocatedProjectId ? { allocated_project_id: it.allocatedProjectId } : {}),
   };
 }

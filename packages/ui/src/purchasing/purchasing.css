@@ -856,3 +856,123 @@
   color: var(--text-secondary);
 }
 
+
+/* ── Material planning evidence (OC-050..OC-054, F138) ───────────────────── */
+
+.purch-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.purch-plan__empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.purch-plan__hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.purch-plan__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.purch-plan__table th,
+.purch-plan__table td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.purch-plan__table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.purch-plan__pending {
+  color: var(--text-secondary);
+}
+
+.purch-plan__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.purch-plan__gates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--warning-500);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+.purch-plan__gates-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.purch-plan__gate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.purch-plan__gate-label {
+  font-weight: 600;
+}
+
+.purch-plan__gate-details {
+  display: block;
+  color: var(--text-secondary);
+}
+
+.purch-plan__gate--fail .purch-plan__gate-label {
+  color: var(--danger-600);
+}
+
+.purch-plan__gate--ok .purch-plan__gate-label {
+  color: var(--success-600);
+}
+
+.purch-plan__override {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.purch-plan__override-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.purch-plan__override-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.purch-plan__override-row .input {
+  flex: 1;
+}

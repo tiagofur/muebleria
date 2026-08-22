@@ -15,6 +15,8 @@ export interface StockCatalogView {
   readonly materialIdByCode: Record<string, string>;
   readonly edgeIdByCode: Record<string, string>;
   readonly prices: Record<string, number>;
+  /** `${kind}:${materialId}` → unit label (OC-054 evidence table). */
+  readonly units: Record<string, string>;
 }
 
 const EMPTY: StockCatalogView = {
@@ -23,6 +25,7 @@ const EMPTY: StockCatalogView = {
   materialIdByCode: {},
   edgeIdByCode: {},
   prices: {},
+  units: {},
 };
 
 export function buildStockCatalog(catalog: Catalog | null): StockCatalogView {
@@ -32,6 +35,7 @@ export function buildStockCatalog(catalog: Catalog | null): StockCatalogView {
   const materialIdByCode: Record<string, string> = {};
   const edgeIdByCode: Record<string, string> = {};
   const prices: Record<string, number> = {};
+  const units: Record<string, string> = {};
   const options: Array<{
     kind: StockMaterialKind;
     items: Array<{ id: string; label: string }>;
@@ -42,6 +46,7 @@ export function buildStockCatalog(catalog: Catalog | null): StockCatalogView {
         labels[`herrajes:${h.id}`] = h.name;
         // Valor de inventario: precio unitario del herraje (pieza/juego/metro).
         prices[`herrajes:${h.id}`] = h.costPerUnit;
+      units[`herrajes:${h.id}`] = h.unit;
         return { id: h.id, label: h.code ? `${h.name} (${h.code})` : h.name };
       }),
     },
@@ -52,6 +57,7 @@ export function buildStockCatalog(catalog: Catalog | null): StockCatalogView {
         materialIdByCode[m.code] = m.id;
         // Valor de inventario: precio por plancha (boardPrice).
         prices[`tableros:${m.id}`] = m.boardPrice;
+      units[`tableros:${m.id}`] = 'plancha';
         return { id: m.id, label: m.code ? `${m.name} (${m.code})` : m.name };
       }),
     },
@@ -62,9 +68,10 @@ export function buildStockCatalog(catalog: Catalog | null): StockCatalogView {
         edgeIdByCode[e.code] = e.id;
         // Valor de inventario: costo por metro lineal (costPerMl).
         prices[`cintillas:${e.id}`] = e.costPerMl;
+      units[`cintillas:${e.id}`] = 'ml';
         return { id: e.id, label: e.code ? `${e.name} (${e.code})` : e.name };
       }),
     },
   ];
-  return { labels, options, materialIdByCode, edgeIdByCode, prices };
+  return { labels, options, materialIdByCode, edgeIdByCode, prices, units };
 }

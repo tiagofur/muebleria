@@ -92,6 +92,16 @@ type stubStore struct {
 	userSectorsList   []domain.UserSector
 	// Installation job (OC-070..074): in-memory state + audit write log.
 	installationJob               *domain.InstallationJob
+	materialPlanning          *domain.MaterialPlanning
+	materialStock             []domain.MaterialStock
+	purchaseOrders            []domain.PurchaseOrder
+	productionRelease         *domain.ProductionRelease
+	materialsReleased         bool
+	hasMaterialsReservedEvent bool
+	materialPlanningEvents    []domain.ProjectEvent
+	qualityJob                *domain.QualityJob
+	releasedRevision          string
+	qualityEvents             []domain.ProjectEvent
 	installationUnits             []domain.ModuleUnitExecution
 	installationItems             []domain.ProjectItem
 	installationHasStartedEvent   bool
@@ -426,6 +436,7 @@ func (s *stubStore) MutateProjectPartExecutions(
 		Units:          append([]domain.ModuleUnitExecution(nil), s.moduleUnits...),
 		ItemStatuses:   map[string]string{},
 		ItemQuantities: map[string]int{},
+		Quality:        s.qualityJob,
 	}
 	for k, v := range s.itemFloorStatuses {
 		snap.ItemStatuses[k] = v
@@ -461,6 +472,58 @@ func (s *stubStore) MutateProjectInstallation(
 	}
 	s.installationJob = mutation.Job
 	s.installationEvents = append(s.installationEvents, mutation.Events...)
+	return mutation, nil
+}
+
+func (s *stubStore) MutateProjectMaterialPlanning(
+	_ context.Context,
+	_ string,
+	mutate func(*domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+) (*domain.MaterialPlanningMutation, error) {
+	snap := &domain.MaterialPlanningSnapshot{
+		Planning:                  s.materialPlanning,
+		AllPlannings:              []*domain.MaterialPlanning{s.materialPlanning},
+		Stock:                     append([]domain.MaterialStock(nil), s.materialStock...),
+		PurchaseOrders:            append([]domain.PurchaseOrder(nil), s.purchaseOrders...),
+		ProductionRelease:         s.productionRelease,
+		MaterialsReleased:         s.materialsReleased,
+		HasMaterialsReservedEvent: s.hasMaterialsReservedEvent,
+	}
+	mutation, err := mutate(snap)
+	if err != nil {
+		return nil, err
+	}
+	s.materialPlanning = mutation.Planning
+	s.materialsReleased = snap.MaterialsReleased || mutation.MaterialsRelease != nil
+	s.materialPlanningEvents = append(s.materialPlanningEvents, mutation.Events...)
+	return mutation, nil
+}
+
+func (s *stubStore) MutateProjectQuality(
+	_ context.Context,
+	_ string,
+	mutate func(*domain.QualitySnapshot) (*domain.QualityMutation, error),
+) (*domain.QualityMutation, error) {
+	snap := &domain.QualitySnapshot{
+		Quality:        s.qualityJob,
+		Parts:          append([]domain.PartInstance(nil), s.partInstances...),
+		Units:          append([]domain.ModuleUnitExecution(nil), s.moduleUnits...),
+		ItemStatuses:   map[string]string{},
+		ItemQuantities: map[string]int{},
+		ReleasedRevision: s.releasedRevision,
+	}
+	mutation, err := mutate(snap)
+	if err != nil {
+		return nil, err
+	}
+	s.qualityJob = mutation.Quality
+	if mutation.Parts != nil {
+		s.partInstances = mutation.Parts
+	}
+	if mutation.Units != nil {
+		s.moduleUnits = mutation.Units
+	}
+	s.qualityEvents = append(s.qualityEvents, mutation.Events...)
 	return mutation, nil
 }
 

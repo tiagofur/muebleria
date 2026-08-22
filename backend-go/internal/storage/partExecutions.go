@@ -38,15 +38,21 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	}
 	defer tx.Rollback(ctx)
 
-	var partsRaw, unitsRaw []byte
+	var partsRaw, unitsRaw, qualityRaw []byte
 	err = tx.QueryRow(ctx, `
-		SELECT part_instances, module_units FROM projects WHERE id = $1 FOR UPDATE;
-	`, projectID).Scan(&partsRaw, &unitsRaw)
+		SELECT part_instances, module_units, quality FROM projects WHERE id = $1 FOR UPDATE;
+	`, projectID).Scan(&partsRaw, &unitsRaw, &qualityRaw)
 	if err != nil {
 		return nil, ErrPartExecutionsNotFound
 	}
 
 	snap := &domain.PartExecutionsSnapshot{ItemStatuses: map[string]string{}, ItemQuantities: map[string]int{}}
+	if len(qualityRaw) > 0 && string(qualityRaw) != "null" {
+		var job domain.QualityJob
+		if err := json.Unmarshal(qualityRaw, &job); err == nil {
+			snap.Quality = &job
+		}
+	}
 	if len(partsRaw) > 0 && string(partsRaw) != "null" {
 		if err := json.Unmarshal(partsRaw, &snap.Parts); err != nil {
 			return nil, fmt.Errorf("error decoding part_instances: %w", err)
@@ -85,9 +91,11 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 
 	if _, err := tx.Exec(ctx, `
 		UPDATE projects
-		SET part_instances = $2, module_units = $3, updated_at = CURRENT_TIMESTAMP
+		SET part_instances = $2, module_units = $3,
+		    quality = COALESCE($4, quality),
+		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1;
-	`, projectID, jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units)); err != nil {
+	`, projectID, jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units), jsonbStructArg(mutation.Quality)); err != nil {
 		return nil, fmt.Errorf("error persisting part executions: %w", err)
 	}
 

@@ -66,11 +66,21 @@ func (s *PostgresStore) DeactivateSupplier(ctx context.Context, id string) error
 
 // ─── Purchase orders ───────────────────────────────────────────────────────
 
-const poColumns = `id, number, supplier_id, status, notes, created_at, updated_at, received_at, created_by`
+const poColumns = `id, number, supplier_id, status, notes, required_by::text, expected_at::text, created_at, updated_at, received_at, created_by`
 
 func scanPurchaseOrder(row pgx.Row) (domain.PurchaseOrder, error) {
 	var po domain.PurchaseOrder
 	err := row.Scan(&po.ID, &po.Number, &po.SupplierID, &po.Status, &po.Notes,
+		&po.RequiredBy, &po.ExpectedAt,
+		&po.CreatedAt, &po.UpdatedAt, &po.ReceivedAt, &po.CreatedBy)
+	return po, err
+}
+
+// scanPurchaseOrderRow scans a PO header from a rows iterator (planning tx).
+func scanPurchaseOrderRow(rows pgx.Rows) (domain.PurchaseOrder, error) {
+	var po domain.PurchaseOrder
+	err := rows.Scan(&po.ID, &po.Number, &po.SupplierID, &po.Status, &po.Notes,
+		&po.RequiredBy, &po.ExpectedAt,
 		&po.CreatedAt, &po.UpdatedAt, &po.ReceivedAt, &po.CreatedBy)
 	return po, err
 }
@@ -88,6 +98,7 @@ func (s *PostgresStore) ListPurchaseOrders(ctx context.Context) ([]domain.Purcha
 	for rows.Next() {
 		var po domain.PurchaseOrder
 		if err := rows.Scan(&po.ID, &po.Number, &po.SupplierID, &po.Status, &po.Notes,
+			&po.RequiredBy, &po.ExpectedAt,
 			&po.CreatedAt, &po.UpdatedAt, &po.ReceivedAt, &po.CreatedBy); err != nil {
 			return nil, err
 		}
@@ -119,7 +130,7 @@ func (s *PostgresStore) GetPurchaseOrderByID(ctx context.Context, id string) (*d
 
 func (s *PostgresStore) listPOItems(ctx context.Context, poID string) ([]domain.PurchaseOrderItem, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT kind, material_id, quantity, received_quantity
+		SELECT kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id::text
 		FROM purchase_order_items WHERE po_id = $1
 		ORDER BY kind, material_id
 	`, poID)
@@ -131,7 +142,7 @@ func (s *PostgresStore) listPOItems(ctx context.Context, poID string) ([]domain.
 	var items []domain.PurchaseOrderItem
 	for rows.Next() {
 		var it domain.PurchaseOrderItem
-		if err := rows.Scan(&it.Kind, &it.MaterialID, &it.Quantity, &it.ReceivedQuantity); err != nil {
+		if err := rows.Scan(&it.Kind, &it.MaterialID, &it.Quantity, &it.ReceivedQuantity, &it.UnitCost, &it.AllocatedProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -171,14 +182,14 @@ func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOr
 			po.Number = fmt.Sprintf("OC-%04d", seq)
 		}
 		_, err = tx.Exec(ctx, `
-			INSERT INTO purchase_orders (id, number, supplier_id, status, notes, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`, po.ID, po.Number, po.SupplierID, domain.POBorrador, po.Notes, po.CreatedBy)
+			INSERT INTO purchase_orders (id, number, supplier_id, status, notes, required_by, expected_at, created_by)
+			VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8)
+		`, po.ID, po.Number, po.SupplierID, domain.POBorrador, po.Notes, po.RequiredBy, po.ExpectedAt, po.CreatedBy)
 	} else {
 		_, err = tx.Exec(ctx, `
-			UPDATE purchase_orders SET supplier_id = $2, notes = $3, updated_at = CURRENT_TIMESTAMP
+			UPDATE purchase_orders SET supplier_id = $2, notes = $3, required_by = $4::date, expected_at = $5::date, updated_at = CURRENT_TIMESTAMP
 			WHERE id = $1 AND status = 'borrador'
-		`, po.ID, po.SupplierID, po.Notes)
+		`, po.ID, po.SupplierID, po.Notes, po.RequiredBy, po.ExpectedAt)
 	}
 	if err != nil {
 		return err
@@ -191,9 +202,9 @@ func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOr
 	}
 	for _, it := range po.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, received_quantity)
-			VALUES ($1, $2, $3, $4, 0)
-		`, po.ID, it.Kind, it.MaterialID, it.Quantity); err != nil {
+			INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id)
+			VALUES ($1, $2, $3, $4, 0, $5, $6)
+		`, po.ID, it.Kind, it.MaterialID, it.Quantity, it.UnitCost, it.AllocatedProjectID); err != nil {
 			return err
 		}
 	}
@@ -365,7 +376,7 @@ func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lin
 
 func (s *PostgresStore) listPOItemsTx(ctx context.Context, tx pgx.Tx, poID string) ([]domain.PurchaseOrderItem, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT kind, material_id, quantity, received_quantity
+		SELECT kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id::text
 		FROM purchase_order_items WHERE po_id = $1
 		ORDER BY kind, material_id
 	`, poID)
@@ -376,7 +387,7 @@ func (s *PostgresStore) listPOItemsTx(ctx context.Context, tx pgx.Tx, poID strin
 	var items []domain.PurchaseOrderItem
 	for rows.Next() {
 		var it domain.PurchaseOrderItem
-		if err := rows.Scan(&it.Kind, &it.MaterialID, &it.Quantity, &it.ReceivedQuantity); err != nil {
+		if err := rows.Scan(&it.Kind, &it.MaterialID, &it.Quantity, &it.ReceivedQuantity, &it.UnitCost, &it.AllocatedProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, it)

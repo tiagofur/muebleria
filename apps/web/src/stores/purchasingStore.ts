@@ -95,6 +95,8 @@ export interface PurchasingState {
     id?: string;
     supplierId: string;
     notes?: string;
+    requiredBy?: string;
+    expectedAt?: string;
     items: readonly PoLineInput[];
   }) => Promise<void>;
   readonly emitPurchaseOrder: (id: string) => Promise<void>;

@@ -36,6 +36,10 @@ export type PurchaseOrderItem = {
   readonly materialId: string;
   readonly quantity: number;
   readonly receivedQuantity: number;
+  /** Costo unitario congelado a la emisión (OC-053, snapshot para job costing). */
+  readonly unitCost?: number;
+  /** Obra a la que se allocata la línea (OC-052: compras desde necesidad real). */
+  readonly allocatedProjectId?: string;
 };
 
 /** Orden de compra a un proveedor; CreatedBy es el actor JWT (email). */
@@ -46,6 +50,10 @@ export type PurchaseOrder = {
   readonly status: PurchaseOrderStatus;
   readonly items: readonly PurchaseOrderItem[];
   readonly notes?: string;
+  /** Fecha en la que la obra necesita el material (YYYY-MM-DD, OC-053). */
+  readonly requiredBy?: string;
+  /** Fecha de entrega comprometida por el proveedor (YYYY-MM-DD, OC-053). */
+  readonly expectedAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly receivedAt?: string;
@@ -88,4 +96,23 @@ export function poFullyReceived(
 /** Cantidad pendiente de recibir para una línea (nunca negativa). */
 export function poRemaining(line: PurchaseOrderItem): number {
   return Math.max(0, line.quantity - line.receivedQuantity);
+}
+
+/** Costo total de una línea al snapshot unitCost; null si no hay costo cargado. */
+export function poLineCost(line: PurchaseOrderItem): number | null {
+  if (typeof line.unitCost !== 'number' || !Number.isFinite(line.unitCost)) return null;
+  return Math.round(line.quantity * line.unitCost * 100) / 100;
+}
+
+/** Costo total de la PO al snapshot; null cuando ninguna línea tiene costo. */
+export function poTotalCost(po: PurchaseOrder): number | null {
+  let total = 0;
+  let any = false;
+  for (const line of po.items) {
+    const lineCost = poLineCost(line);
+    if (lineCost === null) continue;
+    total += lineCost;
+    any = true;
+  }
+  return any ? Math.round(total * 100) / 100 : null;
 }

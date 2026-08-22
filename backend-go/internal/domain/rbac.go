@@ -334,6 +334,9 @@ var projectEventAppendRoles = map[string][]UserRole{
 	// Physical milestones.
 	"production_started":     {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
 	"production_completed":   {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	// Quality / rework (OC-060..062) — parity with TS rbac.ts.
+	"quality_issue_reported": {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"rework_started":         {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
 	"shipment_loaded":        {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
 	"shipment_departed":      {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
 	"installation_started":   {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},

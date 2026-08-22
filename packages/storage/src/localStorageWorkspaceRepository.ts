@@ -700,7 +700,15 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     id: string;
     supplierId: string;
     notes?: string;
-    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+    requiredBy?: string;
+    expectedAt?: string;
+    items: readonly {
+      kind: StockMaterialKind;
+      materialId: string;
+      quantity: number;
+      unitCost?: number;
+      allocatedProjectId?: string;
+    }[];
   }): Promise<PurchaseOrder> {
     const now = new Date().toISOString();
     const order: PurchaseOrder = {
@@ -713,8 +721,12 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
         materialId: it.materialId,
         quantity: it.quantity,
         receivedQuantity: 0,
+        unitCost: it.unitCost,
+        allocatedProjectId: it.allocatedProjectId,
       })),
       notes: po.notes,
+      requiredBy: po.requiredBy,
+      expectedAt: po.expectedAt,
       createdAt: now,
       updatedAt: now,
       createdBy: 'guest',
@@ -727,7 +739,15 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
     id: string;
     supplierId: string;
     notes?: string;
-    items: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[];
+    requiredBy?: string;
+    expectedAt?: string;
+    items: readonly {
+      kind: StockMaterialKind;
+      materialId: string;
+      quantity: number;
+      unitCost?: number;
+      allocatedProjectId?: string;
+    }[];
   }): Promise<PurchaseOrder> {
     const list = this.getPurchaseOrders();
     const index = list.findIndex((p) => p.id === po.id);
@@ -740,11 +760,15 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
       ...current,
       supplierId: po.supplierId,
       notes: po.notes,
+      requiredBy: po.requiredBy,
+      expectedAt: po.expectedAt,
       items: po.items.map((it) => ({
         kind: it.kind,
         materialId: it.materialId,
         quantity: it.quantity,
         receivedQuantity: 0,
+        unitCost: it.unitCost,
+        allocatedProjectId: it.allocatedProjectId,
       })),
       updatedAt: new Date().toISOString(),
     };
