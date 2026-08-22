@@ -1,11 +1,11 @@
 /**
  * MaterialPalette — paleta de acabados 3D (texturas, pinturas, materiales) arrastrable al 3D.
- * Soporta comboboxes en cascada para categorías (L1 › L2 › L3), búsqueda en tiempo real
- * y selector compacto de superficie objetivo (Suelo/Pared/Techo).
+ * Soporta comboboxes en cascada para categorías (L1 › L2 › L3) y búsqueda en tiempo real.
  *
- * Drag source HTML5: cada material es draggable, codifica su id
- * en dataTransfer (PAINT_DRAG_MIME). El canvas del FurnitureScene3D es el drop
- * target y resuelve la superficie golpeada por raycast.
+ * Los acabados sólo se aplican arrastrando y soltando: cada material es
+ * draggable y codifica su id en dataTransfer (PAINT_DRAG_MIME). El canvas del
+ * FurnitureScene3D es el drop target y resuelve la superficie golpeada
+ * (piso/muro/techo/mesada) por raycast — no hay aplicación por clic.
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
@@ -24,8 +24,6 @@ import {
 } from './paintMaterial';
 import './materialPalette.css';
 
-export type TargetSurface = 'floor' | 'wall' | 'ceiling' | 'countertop';
-
 export type MaterialPaletteProps = {
   readonly materials: readonly AmbientMaterial[];
   readonly categories?: readonly AmbientCategory[];
@@ -35,7 +33,6 @@ export type MaterialPaletteProps = {
   readonly activeCountertopId?: string;
   readonly testId?: string;
   readonly onOpenCatalog?: () => void;
-  readonly onSelectMaterial?: (material: AmbientMaterial, targetSurface?: TargetSurface) => void;
 };
 
 function MaterialSwatch({
@@ -77,7 +74,6 @@ function MaterialChip({
   isCeiling,
   isCountertop,
   testId,
-  onSelect,
 }: {
   readonly material: AmbientMaterial;
   readonly active: boolean;
@@ -86,9 +82,8 @@ function MaterialChip({
   readonly isCeiling: boolean;
   readonly isCountertop?: boolean;
   readonly testId: string;
-  readonly onSelect?: (material: AmbientMaterial) => void;
 }): ReactNode {
-  const handleDragStart = (e: React.DragEvent<HTMLButtonElement>): void => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>): void => {
     const payload: PaintDragPayload = {
       materialId: material.id,
       surfaceType: material.surfaceType,
@@ -99,16 +94,13 @@ function MaterialChip({
   };
 
   return (
-    <button
-      type="button"
+    <div
       className={
         'material-palette__chip' + (active ? ' material-palette__chip--active' : '')
       }
       draggable
       onDragStart={handleDragStart}
-      onClick={() => onSelect?.(material)}
-      aria-pressed={active}
-      aria-label={`${material.name} (${material.code}) — clic o arrastrar para aplicar`}
+      aria-label={`${material.name} (${material.code}) — arrastrar al plano para aplicar`}
       data-testid={testId}
     >
       <span className="material-palette__thumb">
@@ -144,7 +136,7 @@ function MaterialChip({
           )}
         </span>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -157,9 +149,7 @@ export function MaterialPalette({
   activeCountertopId,
   testId = 'material-palette',
   onOpenCatalog,
-  onSelectMaterial,
 }: MaterialPaletteProps): ReactNode {
-  const [targetSurface, setTargetSurface] = useState<TargetSurface>('floor');
   const [selectedL1Id, setSelectedL1Id] = useState<string>('');
   const [selectedL2Id, setSelectedL2Id] = useState<string>('');
   const [selectedL3Id, setSelectedL3Id] = useState<string>('');
@@ -263,67 +253,8 @@ export function MaterialPalette({
     setSelectedL3Id(val);
   };
 
-  const handleChipSelect = (material: AmbientMaterial) => {
-    onSelectMaterial?.(material, targetSurface);
-  };
-
   return (
     <div className="material-palette" data-testid={testId}>
-      {/* Compact Quick Target Selector */}
-      <div className="material-palette__target-strip">
-        <span className="material-palette__target-prompt">Aplicar con clic a:</span>
-        <div className="material-palette__target-pills" role="radiogroup" aria-label="Superficie objetivo">
-          <button
-            type="button"
-            className={
-              'material-palette__target-pill' +
-              (targetSurface === 'floor' ? ' material-palette__target-pill--active' : '')
-            }
-            onClick={() => setTargetSurface('floor')}
-            aria-pressed={targetSurface === 'floor'}
-            data-testid={`${testId}-target-floor`}
-          >
-            Suelo
-          </button>
-          <button
-            type="button"
-            className={
-              'material-palette__target-pill' +
-              (targetSurface === 'wall' ? ' material-palette__target-pill--active' : '')
-            }
-            onClick={() => setTargetSurface('wall')}
-            aria-pressed={targetSurface === 'wall'}
-            data-testid={`${testId}-target-wall`}
-          >
-            Pared
-          </button>
-          <button
-            type="button"
-            className={
-              'material-palette__target-pill' +
-              (targetSurface === 'ceiling' ? ' material-palette__target-pill--active' : '')
-            }
-            onClick={() => setTargetSurface('ceiling')}
-            aria-pressed={targetSurface === 'ceiling'}
-            data-testid={`${testId}-target-ceiling`}
-          >
-            Techo
-          </button>
-          <button
-            type="button"
-            className={
-              'material-palette__target-pill' +
-              (targetSurface === 'countertop' ? ' material-palette__target-pill--active' : '')
-            }
-            onClick={() => setTargetSurface('countertop')}
-            aria-pressed={targetSurface === 'countertop'}
-            data-testid={`${testId}-target-countertop`}
-          >
-            Mesada
-          </button>
-        </div>
-      </div>
-
       {/* Cascading Category Comboboxes */}
       {categories.length > 0 ? (
         <div className="material-palette__filters-box">
@@ -443,23 +374,17 @@ export function MaterialPalette({
                 const isWall = m.id === activeWallId;
                 const isCeiling = m.id === activeCeilingId;
                 const isCountertop = m.id === activeCountertopId;
-                const isCurrentTargetActive =
-                  (targetSurface === 'floor' && isFloor) ||
-                  (targetSurface === 'wall' && isWall) ||
-                  (targetSurface === 'ceiling' && isCeiling) ||
-                  (targetSurface === 'countertop' && isCountertop);
 
                 return (
                   <li key={m.id}>
                     <MaterialChip
                       material={m}
-                      active={isCurrentTargetActive}
+                      active={isFloor || isWall || isCeiling || isCountertop}
                       isFloor={isFloor}
                       isWall={isWall}
                       isCeiling={isCeiling}
                       isCountertop={isCountertop}
                       testId={`${testId}-chip-${m.id}`}
-                      onSelect={handleChipSelect}
                     />
                   </li>
                 );
