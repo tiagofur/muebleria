@@ -189,7 +189,7 @@ export type FurnitureScene3DProps = {
    * false when floor is on. Catalog product shots should pass false.
    */
   readonly showAxes?: boolean;
-  readonly cameraView?: { readonly type: 'front' | 'top' | 'side' | 'isometric'; readonly ts: number } | null;
+  readonly cameraView?: CameraViewType | null;
   /** Default `material` = fast solid colors from catalog. */
   readonly colorMode?: BoardColorMode;
   readonly materialColors?: MaterialColorLookup;
@@ -293,6 +293,8 @@ export type FurnitureScene3DProps = {
   readonly fillViewport?: boolean;
   /** When false, hide orbit/help hint (studio toolbar replaces it). Default true. */
   readonly showHint?: boolean;
+  /** F144 — keyboard orbit cedes to studio nudge when a selection exists. */
+  readonly keyboardNavActive?: boolean;
   /** Subtle floor grid in mm (obra look). */
   readonly showFloorGrid?: boolean;
   /**
@@ -1425,9 +1427,21 @@ function ModuleGroup({
   );
 }
 
+type CameraViewFit = {
+  /** Plan-space center (mm) of the box to frame. */
+  readonly centerX: number;
+  readonly centerY: number;
+  /** Box height (mm, floor→top). */
+  readonly heightMm: number;
+  /** Largest plan span (mm) — drives the framing distance. */
+  readonly spanMm: number;
+};
+
 type CameraViewType = {
-  readonly type: 'front' | 'top' | 'side' | 'isometric';
+  readonly type: 'front' | 'top' | 'side' | 'isometric' | 'fit-selection';
   readonly ts: number;
+  /** F144 — box to frame when type is 'fit-selection' (plan mm). */
+  readonly fit?: CameraViewFit;
 };
 
 /**
@@ -1525,6 +1539,31 @@ function CameraViewSetter({
   useLayoutEffect(() => {
     if (!cameraView) return;
 
+    // F144 — fit-selection: frame the caller-provided box (plan mm → three
+    // [x, up, z]) with the same 3/4 math as the isometric preset.
+    if (cameraView.type === 'fit-selection') {
+      if (!cameraView.fit) return;
+      const f = cameraView.fit;
+      const fitCenter: readonly [number, number, number] = [
+        f.centerX,
+        Math.max(f.heightMm / 2, 300),
+        f.centerY,
+      ];
+      // Margin so the framed units don't hug the viewport edges.
+      const fitDim = Math.max(f.spanMm, f.heightMm, 600) * 1.15;
+      if (controlsRef.current) {
+        controlsRef.current.target.set(fitCenter[0], fitCenter[1], fitCenter[2]);
+      }
+      const targetPos = cameraPositionForView('isometric', fitCenter, fitDim);
+      camera.position.set(...targetPos);
+      camera.lookAt(fitCenter[0], fitCenter[1], fitCenter[2]);
+      camera.updateProjectionMatrix();
+      if (controlsRef.current) {
+        controlsRef.current.update();
+      }
+      return;
+    }
+
     if (controlsRef.current) {
       controlsRef.current.target.set(center[0], center[1], center[2]);
     }
@@ -1588,6 +1627,7 @@ function SceneContent({
   onModuleFreeMove,
   onModuleFreeDragStart,
   onModuleFreeDragEnd,
+  keyboardNavActive = true,
   selectedWallId,
   onSelectWall,
   showFloorGrid,
@@ -1680,6 +1720,7 @@ function SceneContent({
   readonly ghostDropValid?: boolean;
   readonly ghostPosition?: FurnitureScene3DProps['ghostPosition'];
   readonly draggingInvalid?: boolean;
+  readonly keyboardNavActive?: boolean;
   readonly hardwareCatalog?: readonly Hardware[];
 }): ReactNode {
   // Hardware id → entry lookup for resolved placements (Fase 2).
@@ -2258,7 +2299,7 @@ function SceneContent({
 
       <MeasurementTool active={measurementMode ?? false} />
       <KeyboardNav
-        active={true}
+        active={keyboardNavActive}
         controlsRef={controlsRef}
         center={framing.center}
         maxDim={framing.maxDim}
@@ -2318,6 +2359,7 @@ export function FurnitureScene3D({
   onModuleFreeDragEnd,
   fillViewport = false,
   showHint = true,
+  keyboardNavActive = true,
   selectedWallId = null,
   onSelectWall,
   showFloorGrid = false,
@@ -2654,6 +2696,7 @@ export function FurnitureScene3D({
                   onModuleFreeMove={onModuleFreeMove}
                   onModuleFreeDragStart={onModuleFreeDragStart}
                   onModuleFreeDragEnd={onModuleFreeDragEnd}
+                  keyboardNavActive={keyboardNavActive}
                   selectedWallId={selectedWallId}
                   onSelectWall={onSelectWall}
                   showFloorGrid={showFloorGrid}

@@ -11,7 +11,7 @@ import type {
 } from '@muebles/domain';
 import {
   defaultMeasurePresetId,
-  resolveModuleMeasurePreset,
+  resolveItemDims,
 } from '@muebles/domain';
 
 function moduleDims(
@@ -20,27 +20,17 @@ function moduleDims(
 ): { width: number; height: number; depth: number } {
   const mod = modules.find((m) => m.id === item.moduleId);
   if (!mod) return { width: 600, height: 720, depth: 560 };
-  try {
-    const preset = resolveModuleMeasurePreset(
-      mod,
-      item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
-    );
-    if (preset) {
-      return {
-        width: preset.width,
-        height: preset.height,
-        depth: preset.depth,
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  if (mod.externalDims) {
-    return {
-      width: mod.externalDims.width,
-      height: mod.externalDims.height,
-      depth: mod.externalDims.depth,
-    };
+  // F144: single-source dims (customDims → preset → module).
+  const resolved = resolveItemDims(
+    {
+      customDims: item.customDims,
+      measurePresetId:
+        item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
+    },
+    mod,
+  );
+  if (resolved.source !== 'fallback') {
+    return { width: resolved.width, height: resolved.height, depth: resolved.depth };
   }
   return { width: 600, height: 720, depth: 560 };
 }
@@ -76,19 +66,8 @@ export function allFootprints(
 ): { itemId: string; instanceIndex: number; width: number; height: number; depth: number }[] {
   const out: { itemId: string; instanceIndex: number; width: number; height: number; depth: number }[] = [];
   for (const item of project.items) {
-    const mod = modules.find((m) => m.id === item.moduleId);
-    let w = 600; let h = 720; let d = 560;
-    if (mod) {
-      try {
-        const preset = resolveModuleMeasurePreset(
-          mod, item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
-        );
-        if (preset) { w = preset.width; h = preset.height; d = preset.depth; }
-        else if (mod.externalDims) { w = mod.externalDims.width; h = mod.externalDims.height; d = mod.externalDims.depth; }
-      } catch {
-        if (mod.externalDims) { w = mod.externalDims.width; h = mod.externalDims.height; d = mod.externalDims.depth; }
-      }
-    }
+    // F144: moduleDims ya resuelve customDims → preset → module.
+    const { width: w, height: h, depth: d } = moduleDims(item, modules);
     const qty = Math.max(1, item.quantity);
     for (let i = 0; i < qty; i++) {
       out.push({ itemId: item.id, instanceIndex: i, width: w, height: h, depth: d });

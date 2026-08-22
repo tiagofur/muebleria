@@ -436,6 +436,8 @@ pnpm add lucide-react --filter @muebles/ui
 | Distribuir (Proyectar) | `AlignHorizontalDistributeCenter` / `AlignVerticalDistributeCenter` |
 | Centrar en muro (Proyectar) | `Crosshair` |
 | Quitar del plano (Proyectar) | `ListX` |
+| Enfocar selección (Proyectar) | `Focus` |
+| Precisión nudge/snap (Proyectar) | `Ruler` |
 | Precio / Costo | `DollarSign` |
 | Dimensiones | `Ruler` |
 | Instalación — visita de campo | `CalendarDays` |

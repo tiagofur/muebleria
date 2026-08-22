@@ -4,10 +4,7 @@
  */
 
 import type { Catalog, Project, ProjectItem } from './types';
-import {
-  defaultMeasurePresetId,
-  resolveModuleMeasurePreset,
-} from './measurePresets';
+import { resolveItemDims } from './itemDims';
 import { effectiveOptionChoices } from './optionChoices';
 import { baseContextForItem } from './plinth';
 import { resolveBom } from './engine/bom';
@@ -45,29 +42,15 @@ function dims(
   if (!mod) {
     return { width: null, height: null, depth: null, label: '—' };
   }
-  try {
-    const preset = resolveModuleMeasurePreset(
-      mod,
-      item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
-    );
-    if (preset) {
-      return {
-        width: preset.width,
-        height: preset.height,
-        depth: preset.depth,
-        label: `${preset.width}×${preset.height}×${preset.depth} mm`,
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  if (mod.externalDims) {
-    const { width, height, depth } = mod.externalDims;
+  // F144: single-source dims (customDims → preset → module).
+  const resolved = resolveItemDims(item, mod);
+  if (resolved.source !== 'fallback') {
+    const { width, height, depth } = resolved;
     return {
       width,
       height,
       depth,
-      label: `${width}×${height}×${depth} mm`,
+      label: `${width}×${height}×${depth} mm${resolved.source === 'custom' ? ' · a medida' : ''}`,
     };
   }
   return { width: null, height: null, depth: null, label: 'Sin medidas' };
@@ -120,6 +103,7 @@ export function buildAssemblySheets(
       item.measurePresetId,
       item.structureRevisionPin,
       baseContextForItem(project, item, catalog),
+      item.customDims,
     );
 
     const hardwareMap = new Map<

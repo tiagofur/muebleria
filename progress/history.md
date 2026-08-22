@@ -1017,3 +1017,27 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
 - **Cierre:** commit único + push (PR), comentario de cierre en #310.
 - **Deuda explícita:** drill-down a agregado (identidad estable en preview),
   drag de grupo y nudge → F144.
+
+## F144 — proyectar_precision_dims_undo (#310 E4 · meta #308) — 2026-08-22
+
+- **Alcance:** precisión 5★ North Star §10.2/§12: nudge de teclado configurable
+  (multi-selección, Shift grueso, coalescing), snap configurable persistente por
+  taller, fit selection (cámara + F), drag del grupo entero, offsets mm en
+  blur/Enter, dimensiones libres por ítem conectadas a BOM/precio/fingerprint, y
+  undo por intención con etiquetas e ítems completos.
+- **Dominio:** `itemDims.ts` (resolución/validación única customDims → preset →
+  módulo), `kitchenPrecisionCommands.ts` (nudge/grupo all-or-nothing),
+  `resolveBom(+dimsOverride)` threadeado a los consumidores de dims por ítem,
+  `ProjectItem.customDims`, fingerprint de productionRevision sensible a dims.
+- **UI:** `studioHistory.ts` (historia por intención: labels + snapshots +
+  coalescing), `studioPrecisionSettings.ts` (localStorage), popover Precisión,
+  inspector "A medida" con validación que enseña, botón Enfocar, `fit-selection`
+  en `FurnitureScene3D` (+`keyboardNavActive`), drag de grupo interpretando
+  delta en el studio (escena sin cambios de contrato).
+- **Verificación:** 2.916 tests + typecheck exit 0; smoke WebGL 3/3 con
+  screenshot review; review APPROVED con 4 hallazgos corregidos —
+  `progress/review_F144.md`.
+- **Cierre:** commit único + push (rama apilada sobre F143), comentario de
+  cierre en #310.
+- **Deuda explícita:** per-instance dims (no modelado), paridad TS/Go del
+  dimsOverride → #313 (siguiente etapa).

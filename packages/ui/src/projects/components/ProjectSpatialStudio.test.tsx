@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { useState } from 'react';
 import type { Module, Project } from '@muebles/domain';
 
 vi.mock('../../preview3d', async (importOriginal) => {
@@ -39,6 +40,9 @@ vi.mock('../../preview3d', async (importOriginal) => {
       ) => void;
       onSelectPart?: (partId: string | null) => void;
       onSelectHardware?: (hardwareId: string | null) => void;
+      cameraView?: { readonly type: string; readonly ts: number } | null;
+      keyboardNavActive?: boolean;
+      onModuleWallOffset?: (moduleKey: string, offsetMm: number) => void;
     }) => (
       <div
         data-testid={props.testId ?? 'furniture-scene-3d'}
@@ -52,6 +56,9 @@ vi.mock('../../preview3d', async (importOriginal) => {
         data-ambient-floor={props.ambientFloor?.id ?? ''}
         data-ambient-wall={props.ambientWall?.id ?? ''}
         data-selected-keys={props.selectedModuleKeys?.join('|') ?? ''}
+        data-camera-view={props.cameraView?.type ?? ''}
+        data-keyboard-nav={props.keyboardNavActive === false ? 'false' : 'true'}
+        data-fit-center-x={props.cameraView?.type === 'fit-selection' ? '1' : '0'}
         data-selected-part={props.selectedPartId ?? ''}
         data-selected-hardware={props.selectedHardwareId ?? ''}
         data-show-guides={props.showDragGuides ? 'true' : 'false'}
@@ -66,6 +73,15 @@ vi.mock('../../preview3d', async (importOriginal) => {
             : ''
         }
       >
+        {props.onModuleWallOffset ? (
+          <button
+            type="button"
+            data-testid="mock-wall-offset"
+            onClick={() => props.onModuleWallOffset!('it-a#0', 50)}
+          >
+            mock wall offset
+          </button>
+        ) : null}
         {props.onPaintDrop ? (
           <button
             type="button"
@@ -983,7 +999,10 @@ EOF
     fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
     fireEvent.click(screen.getByTestId('spatial-studio-inspector-tab-position'));
     const offsetInput = screen.getByTestId('spatial-studio-offset');
+    // F144: el offset mm commitea en blur/Enter (una intención por edición).
     fireEvent.change(offsetInput, { target: { value: '10' } });
+    expect(onChangeLayout).not.toHaveBeenCalled();
+    fireEvent.blur(offsetInput);
     expect(onChangeLayout).toHaveBeenCalled();
     const updated = onChangeLayout.mock.calls.at(-1)![0];
     expect(updated.placements[0].offsetMm).toBe(10);
@@ -2360,5 +2379,225 @@ describe('ProjectSpatialStudio F143 — modo detalle', () => {
       screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-part'),
     ).toBe('');
     expect(screen.getByTestId('spatial-studio-selection-count')).toBeTruthy();
+  });
+});
+
+// ── F144: precisión + dimensiones libres + undo por intención ──────────────
+
+describe('ProjectSpatialStudio F144 — precisión y a medida', () => {
+  function setup(over?: { project?: Project }) {
+    const onChangeLayout = vi.fn();
+    const onUpdateItem = vi.fn();
+    const onClose = vi.fn();
+    try {
+      window.localStorage?.removeItem?.('proyectar.precision.v1');
+    } catch {
+      /* jsdom sin origin → sin storage */
+    }
+    render(
+      <ProjectSpatialStudio
+        open
+        project={over?.project ?? placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={onClose}
+        onChangeLayout={onChangeLayout}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+    return { onChangeLayout, onUpdateItem, onClose };
+  }
+
+  const offsetsOf = (layout: { placements: { itemId: string; offsetMm: number }[] }) =>
+    layout.placements
+      .filter((p) => p.itemId === 'it-a' || p.itemId === 'it-b')
+      .map((p) => `${p.itemId}:${p.offsetMm}`)
+      .sort();
+
+  it('flechas hacen nudge de la selección con el paso configurado (10 mm default)', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(onChangeLayout).toHaveBeenCalled();
+    expect(offsetsOf(onChangeLayout.mock.calls.at(-1)![0])).toEqual([
+      'it-a:10',
+      'it-b:900',
+    ]);
+  });
+
+  it('Shift+flecha usa paso grueso (×5)', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+    expect(offsetsOf(onChangeLayout.mock.calls.at(-1)![0])).toEqual([
+      'it-a:50',
+      'it-b:900',
+    ]);
+  });
+
+  it('nudge multi-selección conserva el arreglo relativo', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'), {
+      ctrlKey: true,
+    });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(offsetsOf(onChangeLayout.mock.calls.at(-1)![0])).toEqual([
+      'it-a:10',
+      'it-b:910',
+    ]);
+  });
+
+  it('ráfaga de nudge = UNA entrada de undo que restaura el original', () => {
+    // Host con estado: cada nudge re-renderiza con el layout actual (como el padre real).
+    const spy = vi.fn();
+    function Host() {
+      const [proj, setProj] = useState<Project>(placedProject);
+      return (
+        <ProjectSpatialStudio
+          open
+          project={proj}
+          modules={[modA]}
+          catalog={catalog}
+          canEdit
+          onClose={vi.fn()}
+          onChangeLayout={(next) => {
+            spy(next);
+            setProj((p) => ({ ...p, kitchenLayout: next }));
+          }}
+        />
+      );
+    }
+    render(<Host />);
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    // coalescing: el paso 3 llegó y UNA entrada de undo restaura el original
+    expect(offsetsOf(spy.mock.calls.at(-1)![0])).toEqual(['it-a:30', 'it-b:900']);
+    fireEvent.click(screen.getByTestId('spatial-studio-undo'));
+    expect(offsetsOf(spy.mock.calls.at(-1)![0])).toEqual(['it-a:0', 'it-b:900']);
+  });
+
+  it('nudge que desborda el muro no commitea (all-or-nothing)', () => {
+    const edgeProject: Project = {
+      ...placedProject,
+      kitchenLayout: {
+        walls: placedProject.kitchenLayout!.walls,
+        placements: [
+          { itemId: 'it-a', instanceIndex: 0, wallId: 'w1', offsetMm: 2400, elevation: 'floor' },
+          { itemId: 'it-b', instanceIndex: 0, wallId: 'w1', offsetMm: 900, elevation: 'floor' },
+        ],
+      },
+    };
+    const { onChangeLayout } = setup({ project: edgeProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(onChangeLayout).not.toHaveBeenCalled();
+  });
+
+  it('flechas se ignoran cuando el foco está en un input', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-inspector-tab-position'));
+    const input = screen.getByTestId('spatial-studio-offset');
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'ArrowRight' });
+    expect(onChangeLayout).not.toHaveBeenCalled();
+  });
+
+  it('drag de grupo: los compañeros seleccionados del muro viajan con el módulo tomado', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'), {
+      ctrlKey: true,
+    });
+    fireEvent.click(screen.getByTestId('mock-wall-offset'));
+    expect(offsetsOf(onChangeLayout.mock.calls.at(-1)![0])).toEqual([
+      'it-a:50',
+      'it-b:950',
+    ]);
+  });
+
+  it('Enfocar selección dispara la cámara fit-selection (y funciona sin selección previa imposible)', () => {
+    setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-fit'));
+    const scene = screen.getByTestId('spatial-studio-scene');
+    expect(scene.getAttribute('data-camera-view')).toBe('fit-selection');
+    // la órbita por teclado cede ante la selección
+    expect(scene.getAttribute('data-keyboard-nav')).toBe('false');
+  });
+
+  it('a medida: commitea W validado como una intención y undo la restaura', () => {
+    const { onUpdateItem, onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    const widthInput = screen.getByTestId('spatial-studio-dim-widthMm');
+    fireEvent.change(widthInput, { target: { value: '800' } });
+    fireEvent.blur(widthInput);
+    expect(onUpdateItem).toHaveBeenCalledTimes(1);
+    expect(onUpdateItem.mock.calls[0]![0].customDims).toEqual({
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 560,
+    });
+    fireEvent.click(screen.getByTestId('spatial-studio-undo'));
+    expect(onUpdateItem).toHaveBeenCalledTimes(2);
+    expect(onUpdateItem.mock.calls[1]![0].customDims).toBeUndefined();
+    // la entrada también reaplica el layout (idéntico aquí — snapshot).
+    expect(onChangeLayout).toHaveBeenCalled();
+  });
+
+  it('a medida inválida no commitea y enseña el problema', () => {
+    const { onUpdateItem } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    const widthInput = screen.getByTestId('spatial-studio-dim-widthMm');
+    fireEvent.change(widthInput, { target: { value: '10' } });
+    fireEvent.blur(widthInput);
+    expect(onUpdateItem).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId('spatial-studio-dim-error').textContent,
+    ).toContain('entre 50 y 3000');
+  });
+
+  it('preset comercial limpia el override a medida', () => {
+    const customProject: Project = {
+      ...placedProject,
+      items: [
+        {
+          ...placedProject.items[0]!,
+          customDims: { widthMm: 900, heightMm: 720, depthMm: 500 },
+        },
+        placedProject.items[1]!,
+      ],
+    };
+    const { onUpdateItem } = setup({ project: customProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-preset-p800'));
+    expect(onUpdateItem).toHaveBeenCalledTimes(1);
+    const updated = onUpdateItem.mock.calls[0]![0];
+    expect(updated.measurePresetId).toBe('p800');
+    expect('customDims' in updated && updated.customDims !== undefined).toBe(false);
+  });
+
+  it('popover de precisión persiste el paso y el nudge lo usa', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-precision-toggle'));
+    const stepInput = screen.getByTestId('spatial-studio-precision-nudge');
+    fireEvent.change(stepInput, { target: { value: '25' } });
+    fireEvent.blur(stepInput);
+    try {
+      const raw = window.localStorage?.getItem?.('proyectar.precision.v1');
+      if (typeof raw === 'string') expect(raw).toContain('"nudgeStepMm":25');
+    } catch {
+      /* sin storage: el paso se valida por el nudge */
+    }
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(offsetsOf(onChangeLayout.mock.calls.at(-1)![0])).toEqual([
+      'it-a:25',
+      'it-b:900',
+    ]);
   });
 });

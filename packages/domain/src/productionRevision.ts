@@ -71,7 +71,13 @@ export function computeProductionDesignFingerprint(project: Project): string {
       const preset = it.measurePresetId?.trim() || '';
       const pin =
         it.structureRevisionPin != null ? String(it.structureRevisionPin) : '';
-      return `${it.id}|${it.moduleId}|q=${it.quantity}|m=${preset}|pin=${pin}|c=${stableChoices(it.optionChoices)}`;
+      // F144: free per-item dims are a design change — they must turn a
+      // frozen production revision stale. Token only when present so legacy
+      // fingerprints stay byte-identical (no mass false-stale on upgrade).
+      const dimsToken = it.customDims
+        ? `|d=${it.customDims.widthMm}x${it.customDims.heightMm}x${it.customDims.depthMm}`
+        : '';
+      return `${it.id}|${it.moduleId}|q=${it.quantity}|m=${preset}|pin=${pin}${dimsToken}|c=${stableChoices(it.optionChoices)}`;
     })
     .sort();
   const level = project.projectLevelChoices

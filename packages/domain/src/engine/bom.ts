@@ -33,6 +33,7 @@ import type {
   ComponentPlacement,
   Grain,
   HardwareLine,
+  ItemCustomDims,
   MaterialBoard,
   Module,
   ModuleComponentInstance,
@@ -740,8 +741,20 @@ export function resolveBom(
    * plinth height B resolved from the plan. Omit to use module defaults.
    */
   baseContext?: BaseResolutionContext,
+  /**
+   * Free per-item dimensions override (F144 / #310), mm. Wins over the
+   * commercial preset; rejected on non-composed modules (they cannot honor
+   * arbitrary dims). Pass `item.customDims`.
+   */
+  dimsOverride?: ItemCustomDims,
 ): ResolvedBom {
   validateModule(module);
+  if (dimsOverride && !module.structureId) {
+    throw new ResolutionError(
+      `El mueble "${module.name}" (${module.code}) no es paramétrico; no admite medidas a medida.`,
+      { moduleCode: module.code, field: 'customDims' },
+    );
+  }
 
   // Resolve the composed body (structure components) + module components.
   let allParts: BoardPart[] = [];
@@ -767,7 +780,13 @@ export function resolveBom(
     const structure = resolveStructureForPin(found, structureRevisionPin);
 
     const preset = resolveModuleMeasurePreset(module, measurePresetId);
-    const dims = preset
+    const dims = dimsOverride
+      ? {
+          width: dimsOverride.widthMm,
+          height: dimsOverride.heightMm,
+          depth: dimsOverride.depthMm,
+        }
+      : preset
       ? {
           width: preset.width,
           height: preset.height,

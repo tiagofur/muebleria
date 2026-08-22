@@ -195,3 +195,103 @@ test.describe('Proyectar studio (WebGL smoke)', () => {
     ).toHaveCount(1);
   });
 });
+
+/**
+ * F144 (#310 E4): precisión + a medida + undo por intención en el studio real.
+ * Nudge por teclado (con coalescing), dimensión a medida por ítem, Enfocar
+ * selección y undo que restaura plano E ítem. Domain paths en unit; acá el
+ * wiring E2E con WebGL real + screenshot review.
+ */
+test.describe('Proyectar studio (WebGL smoke F144)', () => {
+  test('nudge por flechas, a medida, enfocar y undo por intención (F144)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await enterAsGuest(page);
+    await page.goto('/quotes');
+    await page.waitForSelector('.app-sidebar', { timeout: 30_000 });
+
+    const draftCard = page
+      .locator('.project-card', { hasText: 'Demo plantilla' })
+      .first();
+    test.skip((await draftCard.count()) === 0, 'seed sin proyecto draft');
+    await draftCard.click();
+    await page.waitForSelector('.workspace-chrome, .project-detail', {
+      timeout: 20_000,
+    });
+    await page.click('[data-testid="project-chrome-projectar"]');
+    await page.waitForSelector('[data-testid="spatial-studio-scene"] canvas', {
+      timeout: 45_000,
+    });
+
+    // Insertar un módulo (queda seleccionado con el inspector de mueble).
+    const firstCard = page
+      .locator('[data-testid^="module-library-card-"]')
+      .first();
+    await firstCard.click();
+    await page.waitForSelector('[data-testid="spatial-studio-dims"]', {
+      timeout: 10_000,
+    });
+    await page.waitForSelector('[data-testid="spatial-studio-selection-bar"]', {
+      timeout: 10_000,
+    });
+
+    // Leer el offset actual desde el tab Posición (base del nudge).
+    await page.click('[data-testid="spatial-studio-inspector-tab-position"]');
+    const offsetInput = page.locator('[data-testid="spatial-studio-offset"]');
+    await offsetInput.waitFor({ timeout: 10_000 });
+    const before = Number(await offsetInput.inputValue());
+
+    // Nudge ×3 con flechas (foco fuera de inputs): paso default 10 mm.
+    // La ráfaga completa es UNA intención de undo.
+    // Soltar el foco del tab (el roving tabindex de los tabs usa ←/→).
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(120);
+    }
+    await expect
+      .poll(async () => Number(await offsetInput.inputValue()), {
+        timeout: 10_000,
+      })
+      .toBe(before + 30);
+
+    // Undo único restaura el offset original (coalescing de ráfaga).
+    await page.click('[data-testid="spatial-studio-undo"]');
+    await expect
+      .poll(async () => Number(await offsetInput.inputValue()), {
+        timeout: 10_000,
+      })
+      .toBe(before);
+
+    // A medida (F144): ancho 800 mm commitea en blur como intención de ítem.
+    await page.click('[data-testid="spatial-studio-inspector-tab-props"]');
+    const widthInput = page.locator('[data-testid="spatial-studio-dim-widthMm"]');
+    await widthInput.waitFor({ timeout: 10_000 });
+    await widthInput.fill('800');
+    await widthInput.blur();
+    await expect
+      .poll(async () => await widthInput.inputValue(), { timeout: 10_000 })
+      .toBe('800');
+
+    // Enfocar selección: acción de cámara sin errores en el canvas.
+    await page.click('[data-testid="spatial-studio-cmd-fit"]');
+    await page.waitForTimeout(400);
+
+    await page.screenshot({
+      path: 'test-results/proyectar-precision.png',
+      fullPage: false,
+    });
+
+    // Undo restaura la medida (ítem snapshot) y el canvas sigue vivo.
+    await page.click('[data-testid="spatial-studio-undo"]');
+    await expect
+      .poll(async () => await widthInput.inputValue(), { timeout: 10_000 })
+      .not.toBe('800');
+    await expect(
+      page.locator('[data-testid="spatial-studio-scene"] canvas'),
+    ).toHaveCount(1);
+  });
+});

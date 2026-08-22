@@ -3274,6 +3274,39 @@
       ],
       "status": "done",
       "createdAt": "2026-08-22"
+    },
+    {
+      "id": "F144",
+      "phase": 0,
+      "name": "proyectar_precision_dims_undo",
+      "title": "Issue #310 P3D-1b — Precisión + dimensiones libres + undo por intención en Proyectar (meta #308, etapa E4)",
+      "description": "Precisión 5★ del North Star §§10–12: nudge de teclado configurable sobre la multi-selección (flechas mueven unidades por su muro e islas en plano; Shift = paso grueso; coalescing de ráfagas en UNA entrada de undo), snap configurable persistido por taller (umbral/gap de muro y grilla de islas cableados a drag/place/guías), fit selection (cámara encuadra la selección, botón + tecla F, funciona en modo lectura), drag del grupo entero por canvas (el studio traduce el delta del módulo tomado a sus compañeros seleccionados del mismo muro o islas vía comando de dominio, bloqueo inválido con feedback), offsets mm exactos con commit en blur/Enter, y dimensiones libres por ítem: ProjectItem.customDims aditivo + resolución única resolveItemDims (customDims → preset → externalDims) + resolveBom(dimsOverride) threadeado a pricing/cut/labels/exports para que BOM, corte, precio y 3D queden conectados (§16); presets comerciales siguen como shortcut; constraints por módulo (sólo compuestos, 50–3000 mm, validación al blur que no commitea inválido); fingerprint de productionRevision incluye customDims (cambio de diseño ⇒ stale). History por intención (studioHistory puro): entradas etiquetadas ('Deshacer: Mover 2 muebles') que restauran layout E ítems completos (quantity y dims), coalescing por ventana, límite 30, redo-clear; decisión documentada de no usar CommandManager genérico porque el estado vive en el padre.",
+      "acceptance": [
+        "Flechas mueven la selección completa (muro por muro; islas en plano) con paso configurable y Shift grueso; precedencia documentada input/modal > ghostDrag > nudge > órbita; nudge bloqueado enseña el motivo (aria-live) y jamás produce colisión/overflow (all-or-nothing)",
+        "Ráfaga de nudge consecutivos = 1 entrada de undo que restaura la posición original (coalescing con ventana testeado); las entradas llevan etiqueta visible en el title de Deshacer/Rehacer",
+        "Ajustes de precisión persistidos por dispositivo (paso nudge, snap muro on/off, umbral, gap, grilla islas) cableados a applyOffsetOnWall/placeOnWall/placeAsIsland/dragGuides; popover accesible desde el toolbar sólo con tokens",
+        "Enfocar selección encuadra la cámara en las instancias seleccionadas (botón en barra contextual + F), sin pelear con Bounds, y funciona en modo lectura",
+        "Drag de un módulo seleccionado traslada a sus compañeros seleccionados del mismo muro (o islas seleccionadas) conservando el arreglo; inválido bloquea con draggingInvalid sin commitear",
+        "Dimensiones libres por ítem: inputs W/H/D validados (sólo módulos compuestos; 50–3000 mm; inválido no commitea, feedback inmediato) con chips de preset como shortcut; customDims fluye a BOM/corte/precio/3D (tests de que el precio y las partes cambian) y al fingerprint de revisión; undo restaura dims",
+        "Inputs de offset mm commitean en blur/Enter como una intención (sin commit por tecla)",
+        "pnpm test + pnpm typecheck verdes; smoke WebGL real: nudge ×3 → undo único restaura → a medida 800 mm → Enfocar → screenshot revisado"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "docs/proyectar-3d-roadmap-vnext.md",
+        "docs/design.md",
+        "packages/domain/src/kitchenLayoutCommands.ts",
+        "packages/domain/src/itemDims.ts",
+        "packages/domain/src/kitchenPrecisionCommands.ts",
+        "packages/domain/src/engine/bom.ts",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx",
+        "packages/ui/src/projects/components/studioHistory.ts",
+        "packages/ui/src/preview3d/FurnitureScene3D.tsx",
+        "tests/smoke/proyectar-studio.spec.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-22",
+      "completedAt": "2026-08-22"
     }
   ]
 }

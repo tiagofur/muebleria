@@ -185,7 +185,7 @@ function collectItemStructuralIssues(
   // Resolve BOM only when local structure/options look complete (VAL-06, refs, edges).
     if (issues.length === before) {
     try {
-      resolveBom(module, choices, catalog, item.measurePresetId, item.structureRevisionPin, baseContext);
+      resolveBom(module, choices, catalog, item.measurePresetId, item.structureRevisionPin, baseContext, item.customDims);
     } catch (error) {
       pushDomainError(issues, error, {
         moduleCode: module.code,
@@ -235,6 +235,7 @@ export function collectExportIssues(
           item.measurePresetId,
           item.structureRevisionPin,
           baseContextForItem(project, item, catalog),
+          item.customDims,
         );
         boardPartSlots += bom.boardParts.length;
       } catch {

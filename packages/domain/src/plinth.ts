@@ -32,6 +32,7 @@ import {
   resolveBaseClearanceMm,
 } from './kitchenLayout';
 import { resolveModuleMeasurePreset } from './measurePresets';
+import type { ItemCustomDims } from './types';
 import { suggestLegCount } from './workshopRules';
 
 /** Board option role for melamine plinth parts. Fallback material: FRENTE. */
@@ -607,6 +608,7 @@ export function baseContextForItem(
           catalog.modules.find((m) => m.id === other.moduleId),
           catalog,
           other.measurePresetId,
+          other.customDims,
         );
       };
       plinthSides = plinthSidesForPlacement(layout, placement, widthOf);
@@ -626,8 +628,10 @@ function modulePlanWidthMm(
   module: Module | undefined,
   catalog: Pick<Catalog, 'modules' | 'structures'>,
   measurePresetId?: string,
+  customDims?: ItemCustomDims,
 ): number | undefined {
   if (!module) return undefined;
+  if (customDims) return customDims.widthMm;
   try {
     const preset = resolveModuleMeasurePreset(module, measurePresetId);
     if (preset) return preset.width;

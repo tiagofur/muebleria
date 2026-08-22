@@ -894,3 +894,52 @@
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
+
+/* F144 — popover de precisión (paso de nudge, snap de muro, grilla de islas). */
+.spatial-studio__precision-panel {
+  position: absolute;
+  z-index: var(--z-raised);
+  top: calc(100% + var(--space-1));
+  left: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 240px;
+  max-width: 300px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-overlay-chrome) 96%, transparent);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+.spatial-studio__field--check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+/* F144 — fila de inputs W/H/D "A medida" (mm). */
+.spatial-studio__dims-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.spatial-studio__dims-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.spatial-studio__dims-cell input {
+  width: 100%;
+}
+
+.spatial-studio__hint--error {
+  color: var(--danger-600);
+}

@@ -19,6 +19,7 @@ import {
   ClipboardPaste,
   Copy,
   Crosshair,
+  Focus,
   ListX,
 } from 'lucide-react';
 
@@ -46,6 +47,8 @@ export type StudioSelectionBarProps = {
   ) => void;
   readonly onCenter: () => void;
   readonly onRemoveFromPlan: () => void;
+  /** F144 — encuadrar la cámara en la selección (acción de vista). */
+  readonly onFitSelection: () => void;
 };
 
 export function StudioSelectionBar({
@@ -66,6 +69,7 @@ export function StudioSelectionBar({
   onAlignIslands,
   onCenter,
   onRemoveFromPlan,
+  onFitSelection,
 }: StudioSelectionBarProps): ReactNode {
   if (count === 0) return null;
   const readOnlyTitle = canEdit ? undefined : 'Modo lectura: la obra no se puede editar.';
@@ -84,6 +88,18 @@ export function StudioSelectionBar({
       >
         {count} seleccionado{count === 1 ? '' : 's'}
       </span>
+
+      <div className="spatial-studio__selection-bar-group" role="group" aria-label="Vista">
+        <button
+          type="button"
+          className="btn btn--small"
+          onClick={onFitSelection}
+          title="Enfocar la selección en la cámara (F)"
+          data-testid="spatial-studio-cmd-fit"
+        >
+          <Focus size={14} strokeWidth={1.5} aria-hidden /> Enfocar
+        </button>
+      </div>
 
       <div className="spatial-studio__selection-bar-group" role="group" aria-label="Portapapeles">
         <button

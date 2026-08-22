@@ -161,6 +161,7 @@ export function generateCutRowsWithLinks(
       item.measurePresetId,
       item.structureRevisionPin,
       baseContextForItem(project, item, catalog),
+      item.customDims,
     );
 
     let partIdx = 0;
@@ -354,6 +355,7 @@ export function generatePieceLabels(
       item.measurePresetId,
       item.structureRevisionPin,
       baseContextForItem(project, item, catalog),
+      item.customDims,
     );
 
     let partIdx = 0;

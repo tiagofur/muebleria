@@ -68,6 +68,7 @@ export function deriveProjectPartExecutions(
         item.measurePresetId,
         item.structureRevisionPin,
         baseContextForItem(project, item, catalog),
+        item.customDims,
       );
       boardPartsByItem[item.id] = bom.boardParts;
     } catch (err) {
