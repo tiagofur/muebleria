@@ -110,6 +110,13 @@ export type AppShellProps = {
   /** Role-filtered nav ids (F035). When set, filters APP_NAV_SECTIONS. */
   readonly allowedNavIds?: ReadonlySet<string> | readonly string[];
   /**
+   * OC-092 workshop size: 'simplified' reduces the sidebar to the small-shop
+   * surface (Inicio, Cotizaciones, Órdenes, Almacén, Instalaciones +
+   * Config) on top of the RBAC allowlist; 'departmental' (default) keeps the
+   * full departmental navigation.
+   */
+  readonly navMode?: 'simplified' | 'departmental';
+  /**
    * Optional real URL per nav id (shell SPA routes). When set, items render as
    * anchors so middle-click / copy-link work; plain click still calls onNavigate.
    */
@@ -357,9 +364,29 @@ export type ResolveNavOptions = {
   readonly showAdminUsers?: boolean;
   /** When set, only these nav ids appear (F035 role matrix). Guest = omit. */
   readonly allowedNavIds?: ReadonlySet<string> | readonly string[];
+  /**
+   * OC-092 small-workshop surface: keeps these ids (+ settings/users) on top
+   * of the RBAC allowlist. Advanced capabilities live inside each job.
+   */
+  readonly navMode?: 'simplified' | 'departmental';
 };
 
-/** Sidebar sections filtered by product role (F035). */
+/**
+ * OC-092 small-workshop navigation surface (docs/operational-ux.md §5):
+ * Inicio, Cotizaciones, Órdenes (producción), Almacén (materiales) e
+ * Instalaciones — plus CONFIG so the mode itself stays reachable.
+ */
+const SIMPLIFIED_NAV_IDS: ReadonlySet<string> = new Set([
+  'home',
+  'quotes',
+  'orders',
+  'warehouse',
+  'installations',
+  'settings',
+  'users',
+]);
+
+/** Sidebar sections filtered by product role (F035) and workshop size (OC-092). */
 export function resolveNavSections(
   showAdminUsersOrOptions: boolean | ResolveNavOptions = false,
 ): readonly NavSectionDef[] {
@@ -383,12 +410,21 @@ export function resolveNavSections(
 
   let sections: readonly NavSectionDef[] = APP_NAV_SECTIONS;
 
+  if (options.navMode === 'simplified') {
+    sections = sections.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => SIMPLIFIED_NAV_IDS.has(item.id)),
+    }));
+  }
+
   if (allowed != null) {
-    sections = APP_NAV_SECTIONS.map((section) => ({
+    sections = sections.map((section) => ({
       ...section,
       items: section.items.filter((item) => allowed.has(item.id)),
-    })).filter((section) => section.items.length > 0);
+    }));
   }
+
+  sections = sections.filter((section) => section.items.length > 0);
 
   if (!includeUsers) return sections;
 
@@ -413,6 +449,7 @@ export function AppShell({
   sessionMode,
   showAdminUsers = false,
   allowedNavIds,
+  navMode,
   hrefForNav,
   commandItems = [],
   onCommandItem,
@@ -424,6 +461,7 @@ export function AppShell({
   const navSections = resolveNavSections({
     showAdminUsers,
     allowedNavIds,
+    navMode,
   });
 
   // Persist sidebar scroll position across navigations: save on unmount,

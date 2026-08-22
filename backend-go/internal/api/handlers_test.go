@@ -108,6 +108,9 @@ type stubStore struct {
 	costingConsumption    []domain.MaterialConsumptionInput
 	costingEvents         []domain.ProjectEvent
 	costingProjectMissing bool
+	// Structured site survey (OC-040/OC-041, #305).
+	siteSurvey       *domain.SiteSurvey
+	siteSurveyEvents []domain.ProjectEvent
 	installationUnits             []domain.ModuleUnitExecution
 	installationItems             []domain.ProjectItem
 	installationHasStartedEvent   bool
@@ -556,6 +559,22 @@ func (s *stubStore) MutateProjectCosting(
 		s.jobCosting = mutation.Costing
 	}
 	s.costingEvents = append(s.costingEvents, mutation.Events...)
+	return mutation, nil
+}
+
+func (s *stubStore) MutateProjectSurvey(
+	_ context.Context,
+	_ string,
+	mutate func(*domain.SiteSurvey) (*domain.SiteSurveyMutation, error),
+) (*domain.SiteSurveyMutation, error) {
+	mutation, err := mutate(s.siteSurvey)
+	if err != nil {
+		return nil, err
+	}
+	if mutation.Survey != nil {
+		s.siteSurvey = mutation.Survey
+	}
+	s.siteSurveyEvents = append(s.siteSurveyEvents, mutation.Events...)
 	return mutation, nil
 }
 

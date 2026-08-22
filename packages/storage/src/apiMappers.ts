@@ -93,6 +93,11 @@ import type {
   MaterialValuationBasis,
   TimeEntry,
   OtherActualCost,
+  SiteSurvey,
+  SurveySpace,
+  SurveyElement,
+  SurveyGateBlocker,
+  SpaceMeasures,
   UnitQcRecord,
   UnitQcChecklistItem,
   QcGateCheck,
@@ -1648,6 +1653,8 @@ export function projectToApi(p: Project): Record<string, unknown> {
     quality: p.quality ? qualityJobToApi(p.quality) : null,
     // OC-080..084 — job costing (same: costing endpoints are the only writers).
     costing: p.costing ? jobCostingToApi(p.costing) : null,
+    // OC-040/041 — structured site survey (survey endpoints are the only writers).
+    site_survey: p.siteSurvey ? siteSurveyToApi(p.siteSurvey) : null,
     // OC-010 — lifecycle append-only event stream
     events: (p.events ?? []).map((e) => projectEventToApi(e)),
   };
@@ -1853,6 +1860,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     quality: qualityJobFromApi(raw.quality),
     // OC-080..084 — job costing (baseline, time entries, other actuals)
     costing: jobCostingFromApi(raw.costing),
+    // OC-040/041 — structured site survey (spaces, field measures, verification)
+    siteSurvey: siteSurveyFromApi(raw.site_survey ?? raw.siteSurvey),
     // OC-011 — commercial status outcome
     commercialStatus: commercialStatusFromApi(
       raw.commercial_status ?? raw.commercialStatus,
@@ -2969,6 +2978,7 @@ export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
     ),
     defaultCutStrategy: (row.default_cut_strategy ??
       row.defaultCutStrategy) as WorkshopSettings['defaultCutStrategy'],
+    navMode: (row.nav_mode ?? row.navMode) as WorkshopSettings['navMode'],
   });
 }
 
@@ -2994,6 +3004,7 @@ export function workshopSettingsToApi(
       : undefined,
     default_deduct_edge_band: s.defaultDeductEdgeBand,
     default_cut_strategy: s.defaultCutStrategy,
+    nav_mode: s.navMode,
   };
 }
 
@@ -3711,6 +3722,138 @@ export function jobCostingToApi(j: JobCosting): Record<string, unknown> {
     other_costs: j.otherCosts.map(otherActualCostToApi),
     created_at: j.createdAt,
   };
+}
+
+/* ── Structured site survey (OC-040/OC-041) ────────────────────────────────── */
+
+function spaceMeasuresFromApi(raw: unknown): SpaceMeasures | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  return {
+    widthMm: num(rec.width_mm ?? rec.widthMm),
+    heightMm: num(rec.height_mm ?? rec.heightMm),
+    depthMm: optionalNum(rec.depth_mm ?? rec.depthMm),
+    notes: optionalStr(rec.notes),
+  };
+}
+
+function spaceMeasuresToApi(m: SpaceMeasures): Record<string, unknown> {
+  return {
+    width_mm: m.widthMm,
+    height_mm: m.heightMm,
+    depth_mm: m.depthMm,
+    notes: m.notes,
+  };
+}
+
+function surveyElementFromApi(raw: unknown): SurveyElement {
+  const rec = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: str(rec.id),
+    kind: str(rec.kind) as SurveyElement['kind'],
+    label: str(rec.label),
+    widthMm: optionalNum(rec.width_mm ?? rec.widthMm),
+    heightMm: optionalNum(rec.height_mm ?? rec.heightMm),
+    distanceMm: optionalNum(rec.distance_mm ?? rec.distanceMm),
+    notes: optionalStr(rec.notes),
+  };
+}
+
+function surveyElementToApi(el: SurveyElement): Record<string, unknown> {
+  return {
+    id: el.id,
+    kind: el.kind,
+    label: el.label,
+    width_mm: el.widthMm,
+    height_mm: el.heightMm,
+    distance_mm: el.distanceMm,
+    notes: el.notes,
+  };
+}
+
+function surveySpaceFromApi(raw: unknown): SurveySpace {
+  const rec = (raw ?? {}) as Record<string, unknown>;
+  const elements: readonly unknown[] = Array.isArray(rec.elements) ? rec.elements : [];
+  const photoIds: readonly unknown[] = Array.isArray(rec.photo_ids ?? rec.photoIds)
+    ? ((rec.photo_ids ?? rec.photoIds) as readonly unknown[])
+    : [];
+  return {
+    id: str(rec.id),
+    name: str(rec.name),
+    intent: str(rec.intent) as SurveySpace['intent'],
+    measures: spaceMeasuresFromApi(rec.measures),
+    preliminaryMeasures: spaceMeasuresFromApi(rec.preliminary_measures ?? rec.preliminaryMeasures),
+    elements: elements.map(surveyElementFromApi),
+    plumbNote: optionalStr(rec.plumb_note ?? rec.plumbNote),
+    levelNote: optionalStr(rec.level_note ?? rec.levelNote),
+    squareNote: optionalStr(rec.square_note ?? rec.squareNote),
+    photoIds: photoIds.map((p) => str(p)),
+    capturedAt: optionalStr(rec.captured_at ?? rec.capturedAt),
+    capturedByUserId: optionalStr(rec.captured_by_user_id ?? rec.capturedByUserId),
+    approvedAt: optionalStr(rec.approved_at ?? rec.approvedAt),
+    approvedByUserId: optionalStr(rec.approved_by_user_id ?? rec.approvedByUserId),
+  };
+}
+
+function surveySpaceToApi(s: SurveySpace): Record<string, unknown> {
+  return {
+    id: s.id,
+    name: s.name,
+    intent: s.intent,
+    measures: s.measures ? spaceMeasuresToApi(s.measures) : undefined,
+    preliminary_measures: s.preliminaryMeasures ? spaceMeasuresToApi(s.preliminaryMeasures) : undefined,
+    elements: s.elements.map(surveyElementToApi),
+    plumb_note: s.plumbNote,
+    level_note: s.levelNote,
+    square_note: s.squareNote,
+    photo_ids: s.photoIds,
+    captured_at: s.capturedAt,
+    captured_by_user_id: s.capturedByUserId,
+    approved_at: s.approvedAt,
+    approved_by_user_id: s.approvedByUserId,
+  };
+}
+
+export function siteSurveyFromApi(raw: unknown): SiteSurvey | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  const spaces: readonly unknown[] = Array.isArray(rec.spaces) ? rec.spaces : [];
+  return {
+    id: str(rec.id),
+    projectId: str(rec.project_id ?? rec.projectId),
+    revision: num(rec.revision),
+    spaces: spaces.map(surveySpaceFromApi),
+    createdAt: str(rec.created_at ?? rec.createdAt),
+    capturedByUserId: optionalStr(rec.captured_by_user_id ?? rec.capturedByUserId),
+    verifiedAt: optionalStr(rec.verified_at ?? rec.verifiedAt),
+    verifiedByUserId: optionalStr(rec.verified_by_user_id ?? rec.verifiedByUserId),
+  };
+}
+
+export function siteSurveyToApi(s: SiteSurvey): Record<string, unknown> {
+  return {
+    id: s.id,
+    project_id: s.projectId,
+    revision: s.revision,
+    spaces: s.spaces.map(surveySpaceToApi),
+    created_at: s.createdAt,
+    captured_by_user_id: s.capturedByUserId,
+    verified_at: s.verifiedAt,
+    verified_by_user_id: s.verifiedByUserId,
+  };
+}
+
+export function surveyGateBlockersFromApi(raw: unknown): readonly SurveyGateBlocker[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const rec = (item ?? {}) as Record<string, unknown>;
+    return {
+      kind: str(rec.kind) as SurveyGateBlocker['kind'],
+      spaceId: optionalStr(rec.space_id ?? rec.spaceId),
+      spaceName: optionalStr(rec.space_name ?? rec.spaceName),
+      message: str(rec.message),
+    };
+  });
 }
 
 export function jobCostSummaryFromApi(raw: unknown): JobCostSummary {

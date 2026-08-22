@@ -8,6 +8,8 @@
 import type { Project, ProjectStatus } from './types';
 import type { DataTruthMetric } from './dataTruth';
 import { computeProductionDesignFingerprint } from './productionRevision';
+import { surveyFabricationBlockers } from './siteSurveyGate';
+import type { SiteSurvey } from './siteSurvey';
 
 /* ── Event Types & Structures ─────────────────────────────────────────────── */
 
@@ -45,6 +47,12 @@ export type EngineeringReleaseEventType =
   | 'engineering_documented'
   | 'production_released'
   | 'production_release_revoked';
+
+/** Structured site survey events (OC-040/OC-041, issue #305). */
+export type SurveyMeasureEventType =
+  | 'survey_captured'
+  | 'survey_verified'
+  | 'survey_measures_approved';
 
 export type MaterialsEventType =
   | 'materials_required'
@@ -85,6 +93,7 @@ export type ProjectEventType =
   | ProductionLogisticsEventType
   | QualityEventType
   | CostEventType
+  | SurveyMeasureEventType
   | InstallationCloseEventType;
 
 /**
@@ -134,6 +143,9 @@ export const PROJECT_EVENT_TYPES: readonly ProjectEventType[] = [
   'cost_time_recorded',
   'cost_other_recorded',
   'cost_entry_voided',
+  'survey_captured',
+  'survey_verified',
+  'survey_measures_approved',
   'shipment_loaded',
   'shipment_departed',
   'installation_started',
@@ -271,6 +283,9 @@ export const PROJECT_EVENT_TYPE_LABELS_ES: Readonly<Record<ProjectEventType, str
   cost_time_recorded: 'Tiempo de obra registrado',
   cost_other_recorded: 'Costo externo registrado',
   cost_entry_voided: 'Registro de costo anulado',
+  survey_captured: 'Medidas levantadas en obra',
+  survey_verified: 'Levantamiento verificado',
+  survey_measures_approved: 'Medidas aprobadas para fabricación',
   shipment_loaded: 'Cargado para despacho',
   shipment_departed: 'Despacho enviado a obra',
   installation_started: 'Instalación iniciada en obra',
@@ -1141,6 +1156,19 @@ export function isTechnicalApproved(project: Project): boolean {
 }
 
 /**
+ * Human explanation for the survey_verified gate. With a structured survey it
+ * must say what is missing and hint who resolves it (operational-ux §2.4).
+ */
+function surveyDetails(survey: SiteSurvey | undefined, passed: boolean): string {
+  if (passed) return 'Medidas en sitio verificadas';
+  if (!survey) return 'Levantamiento pendiente de confirmación';
+  const blockers = surveyFabricationBlockers(survey);
+  const first = blockers[0];
+  if (first) return `${first.message} — resolver en Levantamiento (aprobación: ingeniería)`;
+  return 'Medidas en sitio verificadas';
+}
+
+/**
  * Evaluate the 6 Production Release gates (OC-022 / §7.2).
  */
 export function evaluateProductionReleaseGates(
@@ -1162,10 +1190,14 @@ export function evaluateProductionReleaseGates(
     getLatestDeposit(project) != null ||
     (project.events ?? []).some((e) => e.type === 'deposit_received');
 
-  // 3. Survey verified
-  const surveyVerified =
-    Boolean(project.surveyCompletedAt) ||
-    (project.events ?? []).some((e) => e.type === 'survey_completed');
+  // 3. Survey verified — with a structured SiteSurvey (OC-040/OC-041) the soft
+  // stamp is not enough: spaces must be captured on site and approved, and the
+  // survey must carry an explicit verification with author.
+  const surveyBlockers = surveyFabricationBlockers(project.siteSurvey);
+  const surveyVerified = project.siteSurvey
+    ? surveyBlockers.length === 0
+    : Boolean(project.surveyCompletedAt) ||
+      (project.events ?? []).some((e) => e.type === 'survey_completed');
 
   // 4. Customer approved
   const customerApproved = isCustomerApproved(project);
@@ -1199,7 +1231,7 @@ export function evaluateProductionReleaseGates(
       label: RELEASE_CHECK_LABELS_ES.survey_verified,
       passed: surveyVerified,
       required: requireSurvey,
-      details: surveyVerified ? 'Medidas en sitio verificadas' : 'Levantamiento pendiente de confirmación',
+      details: surveyDetails(project.siteSurvey, surveyVerified),
     },
     {
       code: 'customer_approved',

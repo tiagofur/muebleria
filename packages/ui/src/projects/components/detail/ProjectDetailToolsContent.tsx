@@ -5,6 +5,8 @@
 import type { ReactNode } from 'react';
 import type { QuoteToolsPanel } from './ProjectDetailToolsNav';
 import { LifecyclePanel } from '../LifecyclePanel';
+import { ProjectOverviewPanel } from '../ProjectOverviewPanel';
+import { SiteSurveyPanel } from '../SiteSurveyPanel';
 import { KitchenPlanPanel } from '../KitchenPlanPanel';
 import { QuoteScenarioCompare } from '../QuoteScenarioCompare';
 import { InstallationChecklistPanel } from '../InstallationChecklistPanel';
@@ -56,6 +58,21 @@ export function ProjectDetailToolsContent({
       className="project-detail__tools-body"
       data-testid={`project-tools-panel-${toolsPanel}`}
     >
+      {toolsPanel === 'overview' ? (
+        <ProjectOverviewPanel project={project} nav={ctx.overviewNav ?? {}} />
+      ) : null}
+
+      {toolsPanel === 'survey' ? (
+        <SiteSurveyPanel
+          projectId={project.id}
+          survey={project.siteSurvey}
+          handlers={ctx.surveyHandlers ?? {}}
+          canCapture={ctx.canCaptureSurvey ?? false}
+          canVerify={ctx.canVerifySurvey ?? false}
+          canApprove={ctx.canApproveSurvey ?? false}
+        />
+      ) : null}
+
       {toolsPanel === 'lifecycle' ? (
         <LifecyclePanel
           project={project}

@@ -509,3 +509,122 @@
   font-size: var(--text-sm);
   text-align: center;
 }
+
+/* OpsExceptionsPanel (OC-090) — exception-first list for the owner home.
+   Tokens only (docs/design.md §3). */
+
+.ops-exceptions__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.ops-exceptions__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.ops-exceptions__hint {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+.ops-exceptions__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ops-exceptions__button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  text-align: left;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-shadow);
+}
+
+.ops-exceptions__button:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.ops-exceptions__button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.ops-exceptions__item--critical .ops-exceptions__button {
+  border-left-color: var(--danger-500);
+}
+
+.ops-exceptions__item--warning .ops-exceptions__button {
+  border-left-color: var(--warning-500);
+}
+
+.ops-exceptions__item--info .ops-exceptions__button {
+  border-left-color: var(--info-500);
+}
+
+.ops-exceptions__severity {
+  flex-shrink: 0;
+  min-width: 4.5rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  border-radius: var(--radius-full);
+}
+
+.ops-exceptions__item--critical .ops-exceptions__severity {
+  color: var(--danger-700);
+  background: var(--danger-50);
+}
+
+.ops-exceptions__item--warning .ops-exceptions__severity {
+  color: var(--warning-700);
+  background: var(--warning-50);
+}
+
+.ops-exceptions__item--info .ops-exceptions__severity {
+  color: var(--info-700);
+  background: var(--info-50);
+}
+
+.ops-exceptions__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.ops-exceptions__project {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.ops-exceptions__message {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.ops-exceptions__action {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}

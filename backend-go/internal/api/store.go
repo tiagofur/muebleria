@@ -162,6 +162,14 @@ type Store interface {
 		projectID string,
 		mutate func(snap *domain.JobCostingSnapshot) (*domain.JobCostingMutation, error),
 	) (*domain.JobCostingMutation, error)
+	// Structured site survey (OC-040/OC-041): locked read-modify-write of the
+	// site_survey JSONB (spaces, field measures, verification, freeze) with
+	// audit events.
+	MutateProjectSurvey(
+		ctx context.Context,
+		projectID string,
+		mutate func(survey *domain.SiteSurvey) (*domain.SiteSurveyMutation, error),
+	) (*domain.SiteSurveyMutation, error)
 	// Project lifecycle events log (OC-010): immutable append-only events.
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)

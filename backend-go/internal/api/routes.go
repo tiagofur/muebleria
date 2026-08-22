@@ -162,6 +162,17 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/projects/{id}/costing/other", authMW(http.HandlerFunc(server.HandleCostingOther)))
 	mux.Handle("POST /api/projects/{id}/costing/other/{costId}/void", authMW(http.HandlerFunc(server.HandleCostingOtherVoid)))
 
+	// Structured site survey (OC-040/OC-041, #305): spaces, field measures,
+	// verification and the fabrication-freeze gate — server-authoritative.
+	mux.Handle("GET /api/projects/{id}/site-survey", authMW(http.HandlerFunc(server.HandleProjectSiteSurvey)))
+	mux.Handle("POST /api/projects/{id}/site-survey", authMW(http.HandlerFunc(server.HandleProjectSiteSurvey)))
+	mux.Handle("PUT /api/projects/{id}/site-survey/spaces", authMW(http.HandlerFunc(server.HandleSiteSurveySpaces)))
+	mux.Handle("DELETE /api/projects/{id}/site-survey/spaces/{spaceId}", authMW(http.HandlerFunc(server.HandleSiteSurveySpaceDelete)))
+	mux.Handle("POST /api/projects/{id}/site-survey/spaces/{spaceId}/capture", authMW(http.HandlerFunc(server.HandleSiteSurveyCapture)))
+	mux.Handle("POST /api/projects/{id}/site-survey/spaces/{spaceId}/approve", authMW(http.HandlerFunc(server.HandleSiteSurveyApprove)))
+	mux.Handle("POST /api/projects/{id}/site-survey/verify", authMW(http.HandlerFunc(server.HandleSiteSurveyVerify)))
+	mux.Handle("POST /api/projects/{id}/site-survey/freeze", authMW(http.HandlerFunc(server.HandleSiteSurveyFreeze)))
+
 	// Lifecycle events (OC-010): append-only audit trail.
 	mux.Handle("GET /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))
 	mux.Handle("POST /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))

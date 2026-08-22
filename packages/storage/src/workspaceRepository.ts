@@ -45,6 +45,9 @@ import type {
   MaterialCostValuation,
   TimeEntry,
   OtherActualCost,
+  SiteSurvey,
+  SurveyGateBlocker,
+  SurveyElementInput,
 } from '@muebles/domain';
 
 /** Derived closeout gate check as returned by the installation endpoints. */
@@ -114,6 +117,13 @@ export interface JobCostingView {
   readonly costing: JobCosting | null;
   readonly summary: JobCostSummary;
   readonly material: MaterialCostValuation;
+  readonly eventsAppended?: number;
+}
+
+/** Survey view of a project (OC-040/OC-041): payload + fabrication blockers. */
+export interface SiteSurveyView {
+  readonly survey: SiteSurvey | null;
+  readonly blockers: readonly SurveyGateBlocker[];
   readonly eventsAppended?: number;
 }
 export interface WorkspaceRepository {
@@ -431,6 +441,39 @@ export interface WorkspaceRepository {
 
   /** Soft-void an other actual cost (supervisors, audited). */
   voidCostingOtherCost?(projectId: string, costId: string, reason?: string): Promise<JobCostingView>;
+
+  // --- Structured site survey (OC-040/OC-041) ---
+
+  /** Read the survey + OC-041 fabrication blockers. */
+  getSiteSurvey?(projectId: string): Promise<SiteSurveyView>;
+
+  /** Start the structured survey of the obra. */
+  startSiteSurvey?(projectId: string): Promise<SiteSurveyView>;
+
+  /** Create or update a space (commercial entry starts as preliminary). */
+  upsertSurveySpace?(
+    projectId: string,
+    input: { id?: string; name: string; elements?: readonly SurveyElementInput[]; plumbNote?: string; levelNote?: string; squareNote?: string; photoIds?: readonly string[] },
+  ): Promise<SiteSurveyView>;
+
+  /** Remove a space (fabrication-frozen spaces are protected server-side). */
+  removeSurveySpace?(projectId: string, spaceId: string): Promise<SiteSurveyView>;
+
+  /** Capture field measures on site (preliminary → field, revision bump). */
+  captureSurveyMeasures?(
+    projectId: string,
+    spaceId: string,
+    measures: { widthMm: number; heightMm: number; depthMm?: number; notes?: string },
+  ): Promise<SiteSurveyView>;
+
+  /** Verify the whole survey (OC-040 verifiedAt/verifiedBy). */
+  verifySiteSurvey?(projectId: string): Promise<SiteSurveyView>;
+
+  /** Approve one space's measures against the design (field → approved). */
+  approveSurveyMeasures?(projectId: string, spaceId: string): Promise<SiteSurveyView>;
+
+  /** Freeze approved measures as the fabrication basis. */
+  freezeSurveyMeasures?(projectId: string): Promise<SiteSurveyView>;
 
   // --- Production Activity Tracking (gerente_produccion) ---
 

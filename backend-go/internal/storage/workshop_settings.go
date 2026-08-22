@@ -12,7 +12,7 @@ import (
 func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error) {
 	var ws domain.WorkshopSettings
 	err := s.Pool.QueryRow(ctx, `
-		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy
+		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode
 		FROM workshop_settings
 		WHERE id = 1
 	`).Scan(
@@ -21,6 +21,7 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 		&ws.DefaultCurrency,
 		&ws.VendedorCanViewCosts,
 		&ws.DefaultCutStrategy,
+		&ws.NavMode,
 	)
 	if err != nil {
 		// Table empty or not migrated yet — safe defaults (COST-01: hide costs).
@@ -34,14 +35,15 @@ func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.Wo
 	ws = normalizeWorkshopSettings(ws)
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO workshop_settings (
-			id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, updated_at
-		) VALUES (1, $1, $2, $3, $4, $5, NOW())
+			id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode, updated_at
+		) VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			default_margin_factor = EXCLUDED.default_margin_factor,
 			default_labor_fixed_cost = EXCLUDED.default_labor_fixed_cost,
 			default_currency = EXCLUDED.default_currency,
 			vendedor_can_view_costs = EXCLUDED.vendedor_can_view_costs,
 			default_cut_strategy = EXCLUDED.default_cut_strategy,
+			nav_mode = EXCLUDED.nav_mode,
 			updated_at = NOW()
 	`,
 		ws.DefaultMarginFactor,
@@ -49,6 +51,7 @@ func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.Wo
 		ws.DefaultCurrency,
 		ws.VendedorCanViewCosts,
 		ws.DefaultCutStrategy,
+		ws.NavMode,
 	)
 	if err != nil {
 		return domain.WorkshopSettings{}, fmt.Errorf("upsert workshop_settings: %w", err)
@@ -77,5 +80,10 @@ func normalizeWorkshopSettings(ws domain.WorkshopSettings) domain.WorkshopSettin
 		strategy = def.DefaultCutStrategy
 	}
 	ws.DefaultCutStrategy = strategy
+	// OC-092: only the two known nav modes persist (matches TS
+	// resolveWorkshopSettings).
+	if ws.NavMode != "simplified" && ws.NavMode != "departmental" {
+		ws.NavMode = def.NavMode
+	}
 	return ws
 }

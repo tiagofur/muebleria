@@ -1,0 +1,139 @@
+/* ProjectOverviewPanel (OC-091) — resumen transversal de la obra.
+   Tokens only (docs/design.md §3); BEM co-located with the panel. */
+
+.project-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.project-overview__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-2);
+}
+
+.project-overview__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.project-overview__fact-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.project-overview__fact-value {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-overview__blockers {
+  padding: var(--space-3);
+  background: var(--danger-50);
+  border-radius: var(--radius-sm);
+}
+
+.project-overview__blockers-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--danger-700);
+}
+
+.project-overview__blockers ul {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.project-overview__blockers li {
+  font-size: var(--text-base);
+  color: var(--danger-700);
+}
+
+.project-overview__ok {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--success-700);
+  background: var(--success-50);
+  border-radius: var(--radius-sm);
+}
+
+.project-overview__links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-2);
+}
+
+.project-overview__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  text-align: left;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-shadow);
+}
+
+.project-overview__link:hover:not(:disabled) {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-strong);
+}
+
+.project-overview__link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.project-overview__link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-overview__link-icon {
+  display: inline-flex;
+  color: var(--text-secondary);
+}
+
+.project-overview__link-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.project-overview__link-label {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.project-overview__link-detail {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}

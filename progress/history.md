@@ -900,3 +900,34 @@ enmascarado en loadQuoteSnapshotTx) → aplicados → **APPROVED**
 
 domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
 `pnpm typecheck` OK · `go test ./...` OK (sin caché tras fixes).
+
+## 2026-08-21 — F140 operational_core_ux (issue #305)
+- **Agente:** implementador + reviewer (ZCode).
+- **Feature:** Site Survey estructurado, Project Workspace y dashboards
+  exception-first (OC-040/041, OC-090..OC-092).
+- **Cambios:**
+  - Domain TS: `siteSurvey.ts` (espacios, medidas por intención
+    preliminar→levantada→aprobada→fabricación, autoría captured/verified/
+    approved), `siteSurveyGate.ts` (gate OC-041, módulo hoja),
+    `opsExceptions.ts` (derivación cross-obra OC-090) + gate `survey_verified`
+    endurecido en `projectLifecycle` cuando existe survey real.
+  - Eventos `survey_captured/survey_verified/survey_measures_approved` con
+    RBAC TS+Go; contract de paridad `contracts/siteSurvey.json` +
+    `projectEventTypes.json` actualizado.
+  - Backend Go: dominio espejo `siteSurvey.go`, storage transaccional
+    `MutateProjectSurvey` (SELECT FOR UPDATE + eventos en la misma tx),
+    endpoints GET/POST/PUT/DELETE + capture/approve/verify/freeze;
+    migraciones 000075 (`projects.site_survey` JSONB) y 000076
+    (`workshop_settings.nav_mode`).
+  - Storage TS: mappers snake_case round-trip + métodos repo API.
+  - UI: tab Resumen de obra (transversal OC-091: stage, revisión liberada,
+    instalación comprometida, blockers, enlaces a áreas) + tab Levantamiento
+    (`SiteSurveyPanel`) + panel exception-first en el home (`OpsExceptionsPanel`
+    antes de las stats, rol dueño/gerente) + navMode simplified/departmental
+    (OC-092, toggle en Ajustes).
+- **Verificación:** `./init.sh` verde completo — domain 941 · storage 153 ·
+  ui 1215 · web 301 · mobile 45 · desktop 17 · excel 89 · `go test ./...` OK.
+- **Review:** CHANGES_REQUESTED (3: sync server-side del survey online, ciclo
+  runtime projectLifecycle↔siteSurvey, craft UI) → aplicados → **APPROVED**
+  (ver `progress/review_F140.md`).
+- **Cierre:** F140 `done`; rama `feat/f140-operational-core-ux` pushed.

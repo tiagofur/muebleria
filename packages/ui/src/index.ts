@@ -139,6 +139,8 @@ export {
   MATERIAL_TRUTH_LABELS_ES,
   MATERIAL_BASIS_LABELS_ES,
   type CostingPanelView,
+  type SurveyHandlers,
+  type ProjectOverviewNav,
 } from './projects';
 
 

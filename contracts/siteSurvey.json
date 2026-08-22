@@ -1,0 +1,25 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-040/OC-041, issue #305): vocabulario canónico del levantamiento estructurado de obra — intenciones de medida, tipos de elemento del sitio, transiciones permitidas y reglas del gate de fabricación. Consumido por packages/domain/src/siteSurvey.test.ts y backend-go/internal/domain/siteSurveyParity_test.go — una divergencia rompe CI en algún lado (docs/architecture.md §7). Actualizar fixture + ambas implementaciones juntos.",
+  "measureIntents": ["preliminary", "field", "approved", "fabrication"],
+  "rejectedMeasureIntents": ["comercial", "final", "verificada"],
+  "surveyElementKinds": ["opening", "obstacle", "utility"],
+  "rejectedSurveyElementKinds": ["mueble", "pared", "tablero"],
+  "intentTransitions": {
+    "preliminary": ["field"],
+    "field": ["approved"],
+    "approved": ["fabrication"],
+    "fabrication": []
+  },
+  "fabricationGate": {
+    "rule": "todas los espacios capturados en obra y aprobados + verificación del survey con autor",
+    "blockingSpaceIntents": ["preliminary", "field"],
+    "requiresSurveyVerified": true,
+    "preliminaryNeverPasses": "una medida preliminar (comercial) jamás satisface el gate de fabricación (OC-041)"
+  },
+  "eventTypes": ["survey_captured", "survey_verified", "survey_measures_approved"],
+  "eventRoles": {
+    "survey_captured": ["admin", "gerente_ventas", "vendedor", "ingeniero"],
+    "survey_verified": ["admin", "gerente_ventas", "ingeniero"],
+    "survey_measures_approved": ["admin", "ingeniero"]
+  }
+}

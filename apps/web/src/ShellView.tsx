@@ -55,6 +55,7 @@ import type {
   StockMovementType,
   PurchaseOrder,
   Supplier,
+  OpsException,
 } from '@muebles/domain';
 import {
   applyRoleChoiceToProject,
@@ -194,6 +195,8 @@ import {
   type QualityHandlers,
   type CostingPanelView,
   type CostingHandlers,
+  type SurveyHandlers,
+  type ProjectOverviewNav,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -438,6 +441,14 @@ export interface ShellViewCtx {
   readonly canCaptureCosting: boolean;
   readonly canRecordOtherCosting: boolean;
   readonly canVoidCosting: boolean;
+  /** #305 — structured site survey (OC-040/OC-041) + workspace nav (OC-091). */
+  readonly surveyHandlers: SurveyHandlers;
+  readonly canCaptureSurvey: boolean;
+  readonly canVerifySurvey: boolean;
+  readonly canApproveSurvey: boolean;
+  readonly overviewNav: ProjectOverviewNav;
+  /** #305 — OC-090 exception-first list (owner/manager home). */
+  readonly opsExceptions: readonly OpsException[];
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -689,6 +700,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canCaptureCosting,
     canRecordOtherCosting,
     canVoidCosting,
+    surveyHandlers,
+    canCaptureSurvey,
+    canVerifySurvey,
+    canApproveSurvey,
+    overviewNav,
+    opsExceptions,
     canOverrideQc,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
@@ -836,6 +853,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       }
       showAdminUsers={showAdminUsers}
       allowedNavIds={allowedNavIds}
+      navMode={workshopSettings.navMode === 'simplified' ? 'simplified' : 'departmental'}
       commandItems={commandItems}
       onCommandItem={onCommandItem}
     >
@@ -856,6 +874,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             workshopAnalytics ? setAnalyticsPeriod : undefined
           }
           analyticsLoading={warrantyTickets === null}
+          opsExceptions={workshopAnalytics ? opsExceptions : undefined}
           onOpenShowcase={
             dashboardHomeMode === 'sales'
               ? onDashboardOpenShowcase
@@ -1839,6 +1858,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           canCaptureCosting={canCaptureCosting}
           canRecordOtherCosting={canRecordOtherCosting}
           canVoidCosting={canVoidCosting}
+          surveyHandlers={surveyHandlers}
+          canCaptureSurvey={canCaptureSurvey}
+          canVerifySurvey={canVerifySurvey}
+          canApproveSurvey={canApproveSurvey}
+          overviewNav={overviewNav}
           autoPresentId={presentId}
           photos={selectedProjectId ? projectActions.photos[selectedProjectId] : undefined}
           onUploadPhotos={projectActions.uploadProjectPhotos}

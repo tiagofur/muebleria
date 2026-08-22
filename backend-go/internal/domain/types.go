@@ -610,6 +610,11 @@ type Project struct {
 	// (OC-080..OC-084, #304). Material actuals derive from stock movements
 	// assigned to the obra. Server-authoritative via the costing endpoints.
 	Costing          *JobCosting       `json:"costing,omitempty"`
+	// SiteSurvey is the structured site survey of the obra: spaces with field
+	// measurements, openings/obstacles, utilities and explicit capture/verify
+	// authorship (OC-040/OC-041, #305). Server-authoritative via the survey
+	// endpoints; hardens the survey_verified release gate when present.
+	SiteSurvey       *SiteSurvey       `json:"site_survey,omitempty"`
 	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
 	Events            []ProjectEvent      `json:"events,omitempty"`
 	Notes             string              `json:"notes,omitempty"`
@@ -681,6 +686,10 @@ type WorkshopSettings struct {
 	// generated plan yet (F133): '' | 'saw-guillotine' | 'cnc-nesting'.
 	// Empty/invalid falls back to saw-guillotine; the per-project plan wins.
 	DefaultCutStrategy string `json:"default_cut_strategy,omitempty"`
+	// NavMode is the navigation surface by workshop size (OC-092, #305):
+	// 'simplified' reduces the sidebar for small shops; 'departmental' keeps
+	// the full surface. Presentation only — RBAC keeps filtering on top.
+	NavMode string `json:"nav_mode,omitempty"`
 }
 
 // DefaultWorkshopSettings matches TS DEFAULT_WORKSHOP_SETTINGS.
@@ -691,6 +700,7 @@ func DefaultWorkshopSettings() WorkshopSettings {
 		DefaultCurrency:       "MXN",
 		VendedorCanViewCosts:  false,
 		DefaultCutStrategy:    "saw-guillotine",
+		NavMode:               "departmental",
 	}
 }
 

@@ -466,4 +466,31 @@ describe('AppShell tonal area context (F100)', () => {
     expect(tokens).toContain('--brand-500: hsl(245 58% 51%)');
     expect(tokens).toContain('--warning-500: hsl(38 92% 50%)');
   });
+
+  it('resolveNavSections reduced surface for small workshops (OC-092)', () => {
+    const simplified = resolveNavSections({ navMode: 'simplified' });
+    const ids = simplified.flatMap((s) => s.items.map((i) => i.id));
+    expect(ids).toEqual(['home', 'quotes', 'orders', 'installations', 'warehouse', 'settings']);
+    // Advanced capabilities (dashboards, library, catalogs) leave the sidebar —
+    // they live inside each job or behind departmental mode.
+    expect(ids).not.toContain('salesDashboard');
+    expect(ids).not.toContain('modules');
+    expect(ids).not.toContain('materials');
+  });
+
+  it('simplified mode still respects the RBAC allowlist (OC-092)', () => {
+    const vendor = resolveNavSections({
+      navMode: 'simplified',
+      allowedNavIds: new Set(['home', 'quotes', 'showcase', 'settings']),
+    });
+    const ids = vendor.flatMap((s) => s.items.map((i) => i.id));
+    expect(ids).toEqual(['home', 'quotes', 'settings']);
+  });
+
+  it('departmental mode (default) keeps the full surface', () => {
+    const departmental = resolveNavSections({ navMode: 'departmental' });
+    const ids = departmental.flatMap((s) => s.items.map((i) => i.id));
+    expect(ids).toContain('salesDashboard');
+    expect(ids).toContain('modules');
+  });
 });

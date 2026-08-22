@@ -1180,6 +1180,13 @@ export interface Project {
    * (OC-080..OC-084). Material actuals derive from stock consumption.
    */
   readonly costing?: import('./jobCosting').JobCosting;
+  /**
+   * Structured site survey: spaces with field measurements, openings/
+   * obstacles, utilities and explicit capture/verify authorship
+   * (OC-040/OC-041). Replaces the bare surveyCompletedAt stamp as the
+   * release-gate truth when present.
+   */
+  readonly siteSurvey?: import('./siteSurvey').SiteSurvey;
 }
 
 /** Lifecycle stage for a project photo. */
@@ -1368,6 +1375,17 @@ export interface WorkshopSettings {
    * Optimización, F126) always wins over this default.
    */
   readonly defaultCutStrategy?: CutStrategy;
+  /**
+   * Navigation surface by workshop size (OC-092, #305):
+   * - 'simplified': small workshop — reduced sidebar (Inicio, Cotizaciones,
+   *   Órdenes, Almacén, Instalaciones); advanced capabilities live inside
+   *   the job.
+   * - 'departmental': medium business — full departmental navigation
+   *   (default; keeps the current surface).
+   * RBAC keeps filtering on top of either mode — presentation only, never
+   * duplicated domain.
+   */
+  readonly navMode?: 'simplified' | 'departmental';
 }
 
 export interface Workspace {

@@ -316,3 +316,78 @@ describe('Dashboard home by role (F043 / #88)', () => {
   });
 });
 
+
+describe('Dashboard exception-first home (OC-090, #305)', () => {
+  it('renders ops exceptions BEFORE the volume stats', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        opsExceptions={[
+          {
+            kind: 'installation_risk',
+            severity: 'critical',
+            projectId: 'prj-1',
+            projectName: 'Cocina Ana',
+            message: 'Instalación comprometida el 2026-08-19 está vencida (2 días)',
+            actionHint: 'Abrir la instalación y reprogramar o cerrar',
+            truth: 'actual',
+          },
+          {
+            kind: 'survey_preliminary',
+            severity: 'critical',
+            projectId: 'prj-2',
+            projectName: 'Living Pedro',
+            message: 'Levantamiento con medidas preliminares',
+            actionHint: 'Resolver en Levantamiento',
+            truth: 'actual',
+          },
+          {
+            kind: 'stalled_queue',
+            severity: 'warning',
+            projectId: 'prj-2',
+            projectName: 'Living Pedro',
+            message: 'Obra aceptada sin avance hace 21 días',
+            actionHint: 'Revisar la obra',
+            truth: 'actual',
+          },
+        ]}
+      />,
+    );
+    const panel = screen.getByTestId('ops-exceptions-panel');
+    const stats = screen.getByTestId('dashboard-stats');
+    // Exceptions come first — problems before decoration (OC-090).
+    expect(panel.compareDocumentPosition(stats) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByTestId('ops-exceptions-panel-item')).toHaveLength(3);
+    expect(panel.textContent).toContain('3 alertas');
+  });
+
+  it('opens the obra when an exception row is clicked', async () => {
+    const onOpenProject = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Dashboard
+        {...baseProps}
+        onOpenProject={onOpenProject}
+        opsExceptions={[
+          {
+            kind: 'material_shortage',
+            severity: 'critical',
+            projectId: 'prj-2',
+            projectName: 'Living Pedro',
+            message: '4 líneas de material con faltante',
+            actionHint: 'Abrir Almacén',
+            truth: 'actual',
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByTestId('ops-exceptions-panel-open'));
+    expect(onOpenProject).toHaveBeenCalledWith('prj-2');
+  });
+
+  it('renders no exception panel when everything is quiet', () => {
+    render(<Dashboard {...baseProps} opsExceptions={[]} />);
+    expect(screen.queryByTestId('ops-exceptions-panel')).toBeNull();
+    expect(screen.getByTestId('dashboard-stats')).toBeTruthy();
+  });
+});

@@ -17,6 +17,9 @@ import {
   jobCostingFromApi,
   jobCostingToApi,
   jobCostSummaryFromApi,
+  siteSurveyFromApi,
+  siteSurveyToApi,
+  surveyGateBlockersFromApi,
   materialCostValuationFromApi,
   qualityJobToApi,
   hardwareToApi,
@@ -76,6 +79,7 @@ import type {
   JobCosting,
   JobCostSummary,
   MaterialCostValuation,
+  SiteSurvey,
 } from '@muebles/domain';
 
 describe('apiMappers', () => {
@@ -2411,5 +2415,74 @@ describe('job costing roundtrip (OC-080..OC-084)', () => {
     expect(valuation.truth).toBe('proxy');
     expect(valuation.lines[1]?.basis).toBe('catalog');
     expect(valuation.missingValuationMaterialIds).toEqual(['mat-3']);
+  });
+});
+
+describe('site survey roundtrip (OC-040/OC-041)', () => {
+  it('siteSurveyToApi/FromApi preserve spaces, intents, elements and authorship', () => {
+    const survey: SiteSurvey = {
+      id: 'svy-1',
+      projectId: 'p-sv-1',
+      revision: 3,
+      createdAt: '2026-08-21T10:00:00.000Z',
+      capturedByUserId: 'vend-1',
+      verifiedAt: '2026-08-21T12:00:00.000Z',
+      verifiedByUserId: 'ing-1',
+      spaces: [
+        {
+          id: 'spc-1',
+          name: 'Cocina',
+          intent: 'fabrication',
+          measures: { widthMm: 3200, heightMm: 2600, depthMm: 600, notes: 'Pared derecha con desplome' },
+          preliminaryMeasures: { widthMm: 3150, heightMm: 2600 },
+          elements: [
+            { id: 'elm-1', kind: 'opening', label: 'Ventana', widthMm: 1200, heightMm: 900, distanceMm: 800 },
+            { id: 'elm-2', kind: 'utility', label: 'Toma de agua', notes: 'Esquina NE' },
+          ],
+          plumbNote: 'Pared izquierda fuera de plomo 8mm',
+          levelNote: 'Piso con caída al desagüe',
+          squareNote: 'Esquina noroeste descuadrada',
+          photoIds: ['ph-1', 'ph-2'],
+          capturedAt: '2026-08-21T11:00:00.000Z',
+          capturedByUserId: 'vend-1',
+          approvedAt: '2026-08-21T12:30:00.000Z',
+          approvedByUserId: 'ing-1',
+        },
+        {
+          id: 'spc-2',
+          name: 'Closet',
+          intent: 'preliminary',
+          elements: [],
+          photoIds: [],
+        },
+      ],
+    };
+    const back = siteSurveyFromApi(siteSurveyToApi(survey));
+    expect(back).toEqual(survey);
+  });
+
+  it('siteSurveyFromApi accepts camelCase payloads defensively and returns undefined for missing', () => {
+    const back = siteSurveyFromApi({
+      id: 'svy-2',
+      projectId: 'p-2',
+      revision: 1,
+      spaces: [{ id: 'spc-1', name: 'Cocina', intent: 'field', elements: [], photoIds: [] }],
+      createdAt: '2026-08-21T10:00:00.000Z',
+      verifiedAt: null,
+    });
+    expect(back?.spaces[0]?.intent).toBe('field');
+    expect(back?.verifiedAt).toBeUndefined();
+    expect(siteSurveyFromApi(null)).toBeUndefined();
+  });
+
+  it('surveyGateBlockersFromApi maps the OC-041 blocker payload', () => {
+    const blockers = surveyGateBlockersFromApi([
+      { kind: 'preliminary_space', space_id: 'spc-2', space_name: 'Closet', message: '«Closet» sólo tiene medidas preliminares (comerciales)' },
+      { kind: 'not_verified', message: 'El levantamiento no tiene verificación con autor' },
+    ]);
+    expect(blockers).toHaveLength(2);
+    expect(blockers[0]?.spaceName).toBe('Closet');
+    expect(blockers[1]?.kind).toBe('not_verified');
+    expect(surveyGateBlockersFromApi(undefined)).toEqual([]);
   });
 });

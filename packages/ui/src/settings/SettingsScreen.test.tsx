@@ -50,6 +50,7 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultSawKerfMm: 4.4,
       defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
       defaultDeductEdgeBand: true,
+      navMode: 'departmental',
     });
   });
 
@@ -91,6 +92,7 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultSawKerfMm: 4.0,
       defaultTrimMargins: { topMm: 15, bottomMm: 10, leftMm: 10, rightMm: 10 },
       defaultDeductEdgeBand: false,
+      navMode: 'departmental',
     });
   });
 
