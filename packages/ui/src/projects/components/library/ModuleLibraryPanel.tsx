@@ -213,7 +213,12 @@ function LibraryCard({
           title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
           data-testid={`module-library-fav-${mod.id}`}
         >
-          <Star size={14} strokeWidth={1.5} aria-hidden />
+          <Star
+            size={14}
+            strokeWidth={1.5}
+            fill={isFavorite ? 'currentColor' : 'none'}
+            aria-hidden
+          />
         </button>
       </div>
     </li>

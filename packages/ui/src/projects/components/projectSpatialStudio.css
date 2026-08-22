@@ -249,12 +249,36 @@
 .spatial-studio__sidebar-nav {
   display: flex;
   align-items: center;
-  gap: 2px;
-  background: var(--surface-input);
-  padding: 3px;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle);
-  margin-bottom: var(--space-3, 12px);
+  margin-bottom: var(--space-2);
+}
+
+/*
+ * Tabs compactos dentro del sidebar del editor (design.md §4.0a variante
+ * compact): sin chrome de página (fondo de área/borde/márgenes negativos de
+ * .tabs) y con altura reducida — la sección ya aporta el fondo.
+ */
+.spatial-studio__sidebar-nav .tabs {
+  position: static;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+}
+
+.spatial-studio__sidebar-nav .tabs__scroller {
+  gap: var(--space-1);
+  padding-bottom: 0;
+}
+
+.spatial-studio__sidebar-nav .tabs__tab {
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1);
+}
+
+.spatial-studio__sidebar-nav .tabs__count {
+  min-width: 1rem;
+  min-height: 1rem;
 }
 
 .spatial-studio__sidebar-head {
@@ -295,9 +319,9 @@
 }
 
 .spatial-studio__filter--on {
-  border-color: var(--accent-500);
+  border-color: var(--border-brand);
   color: var(--text-brand);
-  background: var(--surface-card);
+  background: var(--surface-selected);
 }
 
 .spatial-studio__filter-badge {

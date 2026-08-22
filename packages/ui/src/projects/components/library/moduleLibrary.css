@@ -177,6 +177,12 @@
   align-self: center;
 }
 
-.module-library__fav--on {
+/*
+ * Estado activo del favorito: estrella llena + tinte tonal (§3.6.1 selected).
+ * Doble clase para ganarle a .btn--icon en orden de cascada regardless del
+ * orden de bundle de las hojas.
+ */
+.module-library .module-library__fav--on {
   color: var(--warning-700);
+  background: var(--warning-50);
 }
