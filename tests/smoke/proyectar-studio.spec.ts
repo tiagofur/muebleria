@@ -69,18 +69,18 @@ test.describe('Proyectar studio (WebGL smoke)', () => {
     });
 
     // Insert por click: el ítem se coloca en el muro activo (walls L seed).
-    const placedBefore = await page
-      .locator('[data-testid="spatial-studio-filter-placed"]')
-      .textContent();
+    // El contador de ítems de la obra vive en la sub-pestaña "De la obra".
+    const itemsTab = page.locator('[data-testid="spatial-studio-modules-tab-items"]');
+    const countBefore = await itemsTab.textContent();
     await firstCard.click();
     await expect
-      .poll(
-        async () =>
-          await page
-            .locator('[data-testid="spatial-studio-filter-placed"]')
-            .textContent(),
-        { timeout: 20_000 },
-      )
-      .not.toBe(placedBefore ?? '');
+      .poll(async () => await itemsTab.textContent(), { timeout: 20_000 })
+      .not.toBe(countBefore ?? '');
+
+    // La sub-pestaña De la obra muestra la lista de ítems del proyecto.
+    await itemsTab.click();
+    await page.waitForSelector('[data-testid="spatial-studio-filter-all"]', {
+      timeout: 10_000,
+    });
   });
 });

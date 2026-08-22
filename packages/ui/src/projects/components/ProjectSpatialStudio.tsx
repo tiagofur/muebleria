@@ -158,8 +158,6 @@ export type ProjectSpatialStudioProps = {
     readonly listFilter?: ListFilter;
     readonly selectKey?: string | null;
   } | null;
-  /** Open quote add-item modal while keeping Proyectar open. */
-  readonly onRequestAddItem?: () => void;
   /**
    * F141 (#309): insert rápido desde la biblioteca (mismo camino que el modal
    * add-item). Devuelve el id del ítem creado o null si no se pudo crear.
@@ -275,7 +273,6 @@ export function ProjectSpatialStudio({
   resolveMediaUrl,
   quoteSalePrice = null,
   bootstrap = null,
-  onRequestAddItem,
   onInsertFromCatalog,
   planActor,
   onAcquirePlanEdit,
@@ -304,6 +301,10 @@ export function ProjectSpatialStudio({
   }>({ type: 'isometric', ts: 0 });
   const [listCollapsed, setListCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('modules');
+  /** F141v2: sub-pestañas del tab Muebles — biblioteca (insert) vs ítems de la obra. */
+  const [modulesSubTab, setModulesSubTab] = useState<'library' | 'items'>(
+    'library',
+  );
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
   const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
@@ -357,6 +358,7 @@ export function ProjectSpatialStudio({
       seededDefaultWalls.current = false;
       setPlanLockBlocked(false);
       setDefaultWallsMsg(null);
+      setModulesSubTab('library');
       return;
     }
     // Default camera 3/4 (isometric) on every open for framing.
@@ -373,7 +375,11 @@ export function ProjectSpatialStudio({
     });
     if (lastBootstrapKey.current === key) return;
     lastBootstrapKey.current = key;
-    if (bootstrap.listFilter) setListFilter(bootstrap.listFilter);
+    if (bootstrap.listFilter) {
+      setListFilter(bootstrap.listFilter);
+      // El cue "sin colocar" vive en la sub-pestaña de ítems de la obra.
+      setModulesSubTab('items');
+    }
     if (bootstrap.selectKey) {
       setSelectedKey(bootstrap.selectKey);
       setInspectorTab('props');
@@ -1483,6 +1489,9 @@ export function ProjectSpatialStudio({
 
   // ── F141 Biblioteca: inserción por click/teclado ─────────────────────────
 
+  /** F141v2: biblioteca disponible (editable + insert conectado). Read-only ⇒ sólo ítems. */
+  const libraryAvailable = canEdit && Boolean(onInsertFromCatalog);
+
   const handleLibraryInsert = (moduleId: string) => {
     if (!onInsertFromCatalog) return;
     const itemId = onInsertFromCatalog(moduleId);
@@ -1889,20 +1898,9 @@ export function ProjectSpatialStudio({
             <>
               <div className="spatial-studio__sidebar-head">
                 <h3 className="spatial-studio__section-title" style={{ margin: 0 }}>
-                  En proyecto
+                  Muebles
                 </h3>
                 <div className="spatial-studio__sidebar-head-actions">
-                  {canEdit && onRequestAddItem ? (
-                    <button
-                      type="button"
-                      className="btn btn--small"
-                      onClick={onRequestAddItem}
-                      data-testid="spatial-studio-add-item"
-                      title="Agregar mueble a la cotización"
-                    >
-                      <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     className="btn btn--ghost btn--small"
@@ -1926,68 +1924,106 @@ export function ProjectSpatialStudio({
                 </p>
               ) : null}
 
-              <div
-                className="spatial-studio__filter-row"
-                role="group"
-                aria-label="Filtro de lista"
-              >
-                <button
-                  type="button"
-                  className={
-                    listFilter === 'all'
-                      ? 'spatial-studio__filter spatial-studio__filter--on'
-                      : 'spatial-studio__filter'
-                  }
-                  onClick={() => setListFilter('all')}
-                  data-testid="spatial-studio-filter-all"
-                >
-                  Todos ({footprints.length})
-                </button>
-                <button
-                  type="button"
-                  className={
-                    listFilter === 'unplaced'
-                      ? 'spatial-studio__filter spatial-studio__filter--on'
-                      : 'spatial-studio__filter'
-                  }
-                  onClick={() => setListFilter('unplaced')}
-                  data-testid="spatial-studio-filter-unplaced"
-                >
-                  Sin colocar
-                  {unplaced.length > 0 ? (
-                    <span className="spatial-studio__filter-badge">
-                      {unplaced.length}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  className={
-                    listFilter === 'placed'
-                      ? 'spatial-studio__filter spatial-studio__filter--on'
-                      : 'spatial-studio__filter'
-                  }
-                  onClick={() => setListFilter('placed')}
-                  data-testid="spatial-studio-filter-placed"
-                >
-                  En plano ({layout.placements.length})
-                </button>
-              </div>
-
-              {canEdit && onInsertFromCatalog ? (
-                <ModuleLibraryPanel
-                  modules={modules}
-                  categories={categories}
-                  canEdit={canEdit}
-                  resolveMediaUrl={resolveMediaUrl}
-                  collections={libraryCollections}
-                  onInsert={handleLibraryInsert}
-                  onCardDragStart={handleLibraryCardDragStart}
-                  onCardDragEnd={handleLibraryCardDragEnd}
-                />
+              {libraryAvailable ? (
+                <div className="spatial-studio__sidebar-nav">
+                  <WorkspaceTabs
+                    tabs={[
+                      { id: 'library' as const, label: 'Biblioteca' },
+                      {
+                        id: 'items' as const,
+                        label: 'De la obra',
+                        count: footprints.length,
+                      },
+                    ]}
+                    activeTab={modulesSubTab}
+                    onTabChange={setModulesSubTab}
+                    ariaLabel="Secciones de muebles"
+                    idPrefix="spatial-studio-modules"
+                    testIdPrefix="spatial-studio-modules"
+                  />
+                </div>
               ) : null}
-
-              {listFilter !== 'placed' ? (
+              <div
+                role={libraryAvailable ? 'tabpanel' : undefined}
+                id={
+                  libraryAvailable
+                    ? `spatial-studio-modules-panel-${modulesSubTab}`
+                    : undefined
+                }
+                aria-labelledby={
+                  libraryAvailable
+                    ? `spatial-studio-modules-tab-${modulesSubTab}`
+                    : undefined
+                }
+              >
+                {libraryAvailable && modulesSubTab === 'library' ? (
+                  <ModuleLibraryPanel
+                    modules={modules}
+                    categories={categories}
+                    canEdit={canEdit}
+                    resolveMediaUrl={resolveMediaUrl}
+                    collections={libraryCollections}
+                    onInsert={handleLibraryInsert}
+                    onCardDragStart={handleLibraryCardDragStart}
+                    onCardDragEnd={handleLibraryCardDragEnd}
+                  />
+                ) : (
+                  <>
+                        <div
+                          className="spatial-studio__filter-row"
+                          role="group"
+                          aria-label="Filtro de lista"
+                        >
+                          <button
+                            type="button"
+                            className={
+                              listFilter === 'all'
+                                ? 'spatial-studio__filter spatial-studio__filter--on'
+                                : 'spatial-studio__filter'
+                            }
+                            onClick={() => setListFilter('all')}
+                            data-testid="spatial-studio-filter-all"
+                          >
+                            Todos ({footprints.length})
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              listFilter === 'unplaced'
+                                ? 'spatial-studio__filter spatial-studio__filter--on'
+                                : 'spatial-studio__filter'
+                            }
+                            onClick={() => setListFilter('unplaced')}
+                            data-testid="spatial-studio-filter-unplaced"
+                          >
+                            Sin colocar
+                            {unplaced.length > 0 ? (
+                              <span className="spatial-studio__filter-badge">
+                                {unplaced.length}
+                              </span>
+                            ) : null}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              listFilter === 'placed'
+                                ? 'spatial-studio__filter spatial-studio__filter--on'
+                                : 'spatial-studio__filter'
+                            }
+                            onClick={() => setListFilter('placed')}
+                            data-testid="spatial-studio-filter-placed"
+                          >
+                            En plano ({layout.placements.length})
+                          </button>
+                        </div>
+                        {footprints.length === 0 ? (
+                          <p className="spatial-studio__hint">
+                            {libraryAvailable
+                              ? 'Arrastrá un mueble desde la Biblioteca al plano para empezar.'
+                              : 'Esta cotización todavía no tiene muebles.'}
+                          </p>
+                        ) : null}
+                        {listFilter !== 'placed' && unplaced.length > 0 ? (
                 <section className="spatial-studio__section">
                   <h3 className="spatial-studio__section-title">
                     Sin colocar ({unplaced.length})
@@ -2198,7 +2234,10 @@ export function ProjectSpatialStudio({
                     </ul>
                   )}
                 </section>
-              ) : null}
+                  ) : null}
+                  </>
+                )}
+              </div>
             </>
           ) : null}
 

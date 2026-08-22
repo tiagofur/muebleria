@@ -218,6 +218,34 @@ describe('ProjectSpatialStudio', () => {
     );
   });
 
+  it('F141v2: bootstrap unplaced switchea de Biblioteca a De la obra cuando la biblioteca existe', () => {
+    const projectWithWalls: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+        placements: [],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onInsertFromCatalog={vi.fn(() => 'new-item-1')}
+        bootstrap={{ listFilter: 'unplaced' }}
+      />,
+    );
+    // El cue post-agregar aterriza en la sub-pestaña de ítems, no en Biblioteca.
+    expect(screen.getByTestId('spatial-studio-filter-unplaced').className).toMatch(
+      /filter--on/,
+    );
+    expect(screen.queryByTestId('module-library')).toBeNull();
+  });
+
   it('re-applies bootstrap filter when bootstrap prop changes while open', () => {
     const projectWithWalls: Project = {
       ...project,
@@ -291,8 +319,7 @@ describe('ProjectSpatialStudio', () => {
     );
   });
 
-  it('calls onRequestAddItem from sidebar Agregar button', () => {
-    const onRequestAddItem = vi.fn();
+  it('F141v2: sub-tabs Biblioteca/De la obra reemplazan el botón Agregar', () => {
     const projectWithWalls: Project = {
       ...project,
       kitchenLayout: {
@@ -309,11 +336,18 @@ describe('ProjectSpatialStudio', () => {
         canEdit
         onClose={vi.fn()}
         onChangeLayout={vi.fn()}
-        onRequestAddItem={onRequestAddItem}
+        onInsertFromCatalog={vi.fn(() => 'new-item-1')}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-add-item'));
-    expect(onRequestAddItem).toHaveBeenCalledTimes(1);
+    // El botón Agregar (modal) ya no existe: la biblioteca lo reemplaza.
+    expect(screen.queryByTestId('spatial-studio-add-item')).toBeNull();
+    // Default: Biblioteca activa; los ítems viven en su propia sub-pestaña.
+    expect(screen.getByTestId('module-library')).toBeTruthy();
+    expect(screen.queryByTestId('spatial-studio-filter-all')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('spatial-studio-modules-tab-items'));
+    expect(screen.getByTestId('spatial-studio-filter-all')).toBeTruthy();
+    expect(screen.queryByTestId('module-library')).toBeNull();
   });
 
   it('does not render when closed', () => {

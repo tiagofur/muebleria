@@ -966,3 +966,27 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
 - **Verificación:** GitHub Actions run `32583641510` verde (feature harness,
   Go tests y TypeScript/tests).
 - **Review:** **APPROVED**. F141 queda `done`.
+
+## 2026-08-22 — F141 iteración de producto (UX del menú lateral, PR #329)
+- **Agente:** implementador + reviewer (ZCode), feedback del dueño del producto.
+- **Feature:** F141 (reabierto para la iteración; misma entrega, PR #329 abierto).
+- **Cambios:**
+  - Sub-tabs **Biblioteca | De la obra** (WorkspaceTabs peer, count en la
+    segunda) dentro del tab Muebles; default Biblioteca; el cue post-agregar
+    (bootstrap listFilter) auto-switchea a De la obra. Read-only sin
+    biblioteca ⇒ ítems directos sin sub-tabs.
+  - Head "En proyecto" y botón **Agregar eliminados** (la biblioteca
+    reemplaza el modal dentro de Proyectar; el modal sigue vivo en la lista
+    de cotización). Prop `onRequestAddItem` retirada del studio + wiring.
+  - Panel: chips de colecciones (Catálogo/Favoritos/Recientes/Mi taller) +
+    **cascada de categorías por nivel** (un renglón de chips por nivel con
+    labels; "Todas" sólo en nivel 1; re-selección deselecciona; path
+    sanitizado contra categorías borradas; persistencia {scope,path,search}).
+    Reemplaza el select "Alcance" aplanado del follow-up anterior.
+- **Verificación:** suite completa 2.808 pass · typecheck 7/7 · smoke WebGL
+  verde · screenshot review (sub-tabs+contador, niveles con labels, sin
+  Agregar).
+- **Review:** **APPROVED** con 2 hallazgos menores aplicados (copy read-only
+  del empty state; test del auto-switch bootstrap→De la obra). Deuda:
+  hover/active de `.spatial-studio__filter` (preexistente, ahora multiplica).
+- **Cierre:** commit + push sobre `feat/f141-proyectar-library` (PR #329).

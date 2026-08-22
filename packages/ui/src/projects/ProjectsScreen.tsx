@@ -923,7 +923,6 @@ export function ProjectsScreen({
         onSubmitMeta={state.handleSubmitMeta}
         onCloseAddItemModal={state.closeAddItemModal}
         onAddItemSubmit={state.handleAddItemSubmit}
-        onInsertCatalogItem={state.insertCatalogItem}
         onCancelDelete={() => state.setConfirmDelete(false)}
         onConfirmDelete={(id) => state.handleDelete(id)}
         onCancelReopen={() => state.setConfirmReopen(false)}
@@ -940,7 +939,7 @@ export function ProjectsScreen({
               }
             : undefined
         }
-        onOpenAddItemModal={state.openAddItemModal}
+        onInsertCatalogItem={state.insertCatalogItem}
         onAcquirePlanEdit={planActor && onAcquirePlanEdit ? state.handleAcquirePlanEdit : undefined}
         onRenewPlanEdit={planActor && onRenewPlanEdit ? state.handleRenewPlanEdit : undefined}
         onReleasePlanEdit={planActor && onReleasePlanEdit ? state.handleReleasePlanEdit : undefined}

@@ -121,32 +121,56 @@ describe('ModuleLibraryPanel', () => {
     expect(screen.getByTestId('module-library-result-count').textContent).toBe('3 de 3');
   });
 
-  it('offers arbitrary-depth category paths in the compact scope selector', () => {
+  it('navigates categories level by level (one chip row per level)', () => {
     render(<Harness />);
-    const scope = screen.getByTestId('module-library-scope') as HTMLSelectElement;
-    expect(Array.from(scope.options).map((option) => option.text)).toContain(
-      'Cocina › Bajos › Cajones',
-    );
+    // Nivel 1: sólo raíces; sin chips de niveles profundos todavía.
+    expect(screen.getByTestId('module-library-chip-cat-cocina')).toBeTruthy();
+    expect(screen.queryByTestId('module-library-chip-cat-bajos')).toBeNull();
 
-    fireEvent.change(scope, { target: { value: 'category:cat-cajones' } });
-    expect(screen.getByTestId('module-library-breadcrumb').textContent).toBe(
-      'Cocina › Bajos › Cajones',
-    );
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
+    // Nivel 2 aparece con los hijos de Cocina; Baño sigue visible en nivel 1.
+    expect(screen.getByTestId('module-library-chip-cat-bajos')).toBeTruthy();
+    expect(screen.queryByTestId('module-library-chip-cat-cajones')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    // Nivel 3 (Cajones) aparece — profundidad arbitraria. El filtro de nivel
+    // incluye descendientes: m-bajo (en Cajones) ya es visible desde Bajos.
+    expect(screen.getByTestId('module-library-chip-cat-cajones')).toBeTruthy();
     expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
     expect(screen.queryByTestId('module-library-card-m-van')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cajones'));
+    expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
   });
 
-  it('searches inside the active category scope by default', () => {
+  it('chip Todas at level 1 clears the category path', () => {
     render(<Harness />);
-    fireEvent.change(screen.getByTestId('module-library-scope'), {
-      target: { value: 'category:cat-cajones' },
-    });
-    fireEvent.change(screen.getByLabelText('Buscar muebles en el alcance actual'), {
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    fireEvent.click(screen.getByTestId('module-library-level-0-all'));
+    expect(screen.queryByTestId('module-library-chip-cat-bajos')).toBeNull();
+    expect(screen.getByTestId('module-library-card-m-van')).toBeTruthy();
+  });
+
+  it('re-selecting the active chip at a deeper level deselects it', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    expect(screen.queryByTestId('module-library-chip-cat-cajones')).toBeNull();
+  });
+
+  it('searches inside the active category level by default', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cajones'));
+    fireEvent.change(screen.getByLabelText('Buscar muebles en la biblioteca'), {
       target: { value: 'bajo' },
     });
     expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText('Buscar muebles en el alcance actual'), {
+    fireEvent.change(screen.getByLabelText('Buscar muebles en la biblioteca'), {
       target: { value: 'vanitory' },
     });
     expect(screen.queryByTestId('module-library-card-m-van')).toBeNull();
@@ -158,27 +182,46 @@ describe('ModuleLibraryPanel', () => {
   it('uses collection scopes as a single, non-duplicated result list', () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId('module-library-fav-m-bajo'));
-    fireEvent.change(screen.getByTestId('module-library-scope'), {
-      target: { value: 'collection:favorites' },
-    });
+    fireEvent.click(screen.getByTestId('module-library-scope-favorites'));
     expect(screen.getAllByTestId('module-library-card-m-bajo')).toHaveLength(1);
     expect(screen.getByTestId('module-library-result-count').textContent).toBe('1 de 1');
+    // Niveles de categoría no aplican a colecciones.
+    expect(screen.queryByTestId('module-library-chip-cat-cocina')).toBeNull();
   });
 
-  it('persists scope and query when the library remounts during studio work', () => {
+  it('persists scope, path and query when the library remounts during studio work', () => {
     const view = render(<Harness />);
-    fireEvent.change(screen.getByTestId('module-library-scope'), {
-      target: { value: 'category:cat-cajones' },
-    });
-    fireEvent.change(screen.getByLabelText('Buscar muebles en el alcance actual'), {
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    fireEvent.click(screen.getByTestId('module-library-chip-cat-cajones'));
+    fireEvent.change(screen.getByLabelText('Buscar muebles en la biblioteca'), {
       target: { value: 'bajo' },
     });
     view.unmount();
     render(<Harness />);
-    expect((screen.getByTestId('module-library-scope') as HTMLSelectElement).value).toBe(
-      'category:cat-cajones',
+    expect(
+      screen.getByTestId('module-library-chip-cat-cajones').className,
+    ).toMatch(/filter--on/);
+    expect(
+      (screen.getByLabelText('Buscar muebles en la biblioteca') as HTMLInputElement).value,
+    ).toBe('bajo');
+  });
+
+  it('sanitizes stale persisted paths that no longer match the category tree', () => {
+    globalThis.localStorage.setItem(
+      'muebles.proyectar.library.navigation.v1',
+      JSON.stringify({
+        scope: 'catalog',
+        path: ['cat-cocina', 'cat-inexistente'],
+        search: '',
+      }),
     );
-    expect((screen.getByLabelText('Buscar muebles en el alcance actual') as HTMLInputElement).value).toBe('bajo');
+    render(<Harness />);
+    // cat-inexistente se descarta; la ruta queda en Cocina (nivel 1 activo).
+    expect(screen.getByTestId('module-library-chip-cat-cocina').className).toMatch(
+      /filter--on/,
+    );
+    expect(screen.queryByTestId('module-library-chip-cat-cajones')).toBeNull();
   });
 
   it('click en tarjeta notifica onInsert; drag start notifica dims y MIME', () => {
