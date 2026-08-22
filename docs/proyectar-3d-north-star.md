@@ -313,6 +313,10 @@ precio/BOM; ambiente no.
 
 Drag de material sobre un objeto debe resolver el target.
 
+**El drag & drop es el único gesto de aplicación de materiales** (ambientales y
+tableros): no hay aplicación por clic. El scope se elige antes de soltar y el drop
+siempre aporta el target.
+
 Después, cuando haya ambigüedad útil:
 
 ```text

@@ -2,10 +2,10 @@
  * BoardMaterialPalette — dock de materiales del TALLER (tableros,
  * MaterialBoard) dentro de Proyectar (F142 / #309). Navegación estándar con
  * la Biblioteca: chips de Fabricante + cascada de subgrupos por nivel +
- * búsqueda tolerante. Los tableros se aplican a MUEBLES (drag sobre el canvas
- * o click); nunca a superficies ambientales — el studio rechaza ese drop con
- * feedback que enseña. Panel presentacional: el estado de scope y el apply
- * viven en el studio.
+ * búsqueda tolerante. Los tableros se aplican a MUEBLES sólo arrastrando al
+ * canvas (el scope del drop lo define el selector); nunca a superficies
+ * ambientales — el studio rechaza ese drop con feedback que enseña. Panel
+ * presentacional: el estado de scope y el apply viven en el studio.
  */
 
 import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
@@ -46,14 +46,11 @@ export interface BoardMaterialPaletteProps {
   readonly materialCategories: readonly MaterialCategory[];
   readonly canEdit: boolean;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
-  /** Scope activo (controlado por el studio). */
+  /** Scope activo del drop (controlado por el studio). */
   readonly scope: BoardApplyScope;
   readonly onScopeChange: (scope: BoardApplyScope) => void;
-  /** Los scopes de mueble requieren selección (o drop sobre un mueble). */
-  readonly hasSelection: boolean;
   /** Último apply / error de enseñanza (aria-live). */
   readonly status: string | null;
-  readonly onApply: (materialId: string) => void;
   readonly onCardDragStart?: (materialId: string) => void;
   readonly onCardDragEnd?: () => void;
 }
@@ -76,9 +73,7 @@ export function BoardMaterialPalette({
   resolveMediaUrl,
   scope,
   onScopeChange,
-  hasSelection,
   status,
-  onApply,
   onCardDragStart,
   onCardDragEnd,
 }: BoardMaterialPaletteProps): ReactNode {
@@ -163,7 +158,7 @@ export function BoardMaterialPalette({
     >
       <div className="board-palette__controls">
         <label className="spatial-studio__field" htmlFor="board-palette-scope">
-          <span>Aplicar a</span>
+          <span>Al soltar, aplicar a</span>
           <select
             id="board-palette-scope"
             value={scope}
@@ -172,13 +167,8 @@ export function BoardMaterialPalette({
             data-testid="board-palette-scope"
           >
             {BOARD_APPLY_SCOPES.map((option) => (
-              <option
-                key={option.id}
-                value={option.id}
-                disabled={option.id !== 'project' && !hasSelection}
-              >
+              <option key={option.id} value={option.id}>
                 {option.label}
-                {option.id !== 'project' && !hasSelection ? ' (sin selección)' : ''}
               </option>
             ))}
           </select>
@@ -302,7 +292,7 @@ export function BoardMaterialPalette({
                 resolveMediaUrl?.(material.imageUrl ?? material.previewTextureUrl) ??
                 (material.imageUrl ?? material.previewTextureUrl);
               const dims = `${material.thicknessMm} mm`;
-              const handleDragStart = (e: DragEvent<HTMLButtonElement>): void => {
+              const handleDragStart = (e: DragEvent<HTMLDivElement>): void => {
                 e.dataTransfer.setData(
                   BOARD_PAINT_DRAG_MIME,
                   encodeBoardPaintDrag({ materialId: material.id }),
@@ -312,19 +302,21 @@ export function BoardMaterialPalette({
               };
               return (
                 <li key={material.id}>
-                  <button
-                    type="button"
-                    className="board-palette__card"
+                  <div
+                    className={
+                      'board-palette__card' +
+                      (canEdit ? '' : ' board-palette__card--disabled')
+                    }
                     title={
                       canEdit
-                        ? 'Click para aplicar al scope elegido; arrastrá sobre un mueble del plano'
+                        ? 'Arrastrá sobre un mueble del plano para aplicarlo'
                         : material.name
                     }
-                    disabled={!canEdit}
+                    aria-disabled={!canEdit}
+                    aria-label={`${material.name} (${material.code}) — arrastrar sobre un mueble para aplicar`}
                     draggable={canEdit}
                     onDragStart={canEdit ? handleDragStart : undefined}
                     onDragEnd={canEdit ? onCardDragEnd : undefined}
-                    onClick={() => onApply(material.id)}
                     data-testid={`board-palette-card-${material.id}`}
                   >
                     <span className="board-palette__thumb" aria-hidden>
@@ -346,7 +338,7 @@ export function BoardMaterialPalette({
                       </span>
                       <span className="board-palette__dims">{dims}</span>
                     </span>
-                  </button>
+                  </div>
                 </li>
               );
             })}
