@@ -19,7 +19,9 @@ import type {
 } from '@muebles/domain';
 import {
   calcProjectBreakdown,
+  defaultBaseModeForFurnitureType,
   effectiveOptionChoices,
+  pickPresetByMeasureDefaults,
 } from '@muebles/domain';
 import {
   canShowPricePreview,
@@ -292,4 +294,54 @@ export function countItemsWithModule(
   moduleId: string,
 ): number {
   return items.filter((i) => i.moduleId === moduleId).length;
+}
+
+/**
+ * F141 (#309): payload de inserción rápida desde la biblioteca de Proyectar.
+ * Misma fórmula de seeding que ProjectAddItemModal (defaults del módulo sin
+ * pisar los defaults a nivel proyecto, preset por measure defaults, baseMode
+ * por defecto de tipo) para que un insert desde biblioteca y uno desde el
+ * modal produzcan ítems equivalentes.
+ */
+export function quickAddPayloadForModule(
+  module: Module,
+  ctx: {
+    readonly optionGroups: readonly OptionGroup[];
+    readonly catalogComponents?: readonly Component[];
+    readonly catalogStructures?: readonly Structure[];
+    readonly catalogAgregados?: readonly Agregado[];
+    readonly projectLevelChoices?: Readonly<Record<string, string>>;
+    readonly measureDefaults?: Readonly<
+      Record<string, { readonly depth?: number; readonly height?: number }>
+    >;
+  },
+): {
+  readonly moduleId: string;
+  readonly quantity: number;
+  readonly optionChoices: OptionChoices;
+  readonly measurePresetId?: string;
+  readonly baseMode?: ModuleBaseMode;
+} {
+  const seeded = defaultChoicesForNewItem(
+    module,
+    ctx.optionGroups,
+    ctx.catalogComponents,
+    ctx.catalogStructures,
+    ctx.catalogAgregados,
+  );
+  const projectLevel = ctx.projectLevelChoices ?? {};
+  const optionChoices: Record<string, string> = {};
+  for (const [code, id] of Object.entries(seeded)) {
+    if (!projectLevel[code]?.trim()) {
+      optionChoices[code] = id;
+    }
+  }
+  return {
+    moduleId: module.id,
+    quantity: 1,
+    optionChoices,
+    measurePresetId: pickPresetByMeasureDefaults(module, ctx.measureDefaults),
+    baseMode:
+      module.baseMode ?? defaultBaseModeForFurnitureType(module.furnitureType),
+  };
 }

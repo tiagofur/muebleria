@@ -74,6 +74,7 @@ import {
 } from './AmbientMeshes';
 import { isPastDragThreshold } from './moduleDragGesture';
 import {
+  LIBRARY_DRAG_MIME,
   PAINT_DRAG_MIME,
   UNPLACED_DRAG_MIME,
   decodePaintDrag,
@@ -2225,10 +2226,12 @@ export function FurnitureScene3D({
             ? (e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
-                // F065: ítem sin colocar
+                // F065: ítem sin colocar · F141: tarjeta de biblioteca
                 if (onUnplacedHover) {
-                  const rawUnplaced = e.dataTransfer.types.includes(UNPLACED_DRAG_MIME);
-                  if (rawUnplaced) {
+                  const isModuleDrag =
+                    e.dataTransfer.types.includes(UNPLACED_DRAG_MIME) ||
+                    e.dataTransfer.types.includes(LIBRARY_DRAG_MIME);
+                  if (isModuleDrag) {
                     const hit = resolveUnplacedHitRef.current?.(e.clientX, e.clientY) ?? null;
                     onUnplacedHover(hit);
                     return;
@@ -2260,8 +2263,11 @@ export function FurnitureScene3D({
             ? (e) => {
                 e.preventDefault();
 
-                // F065: drop de ítem sin colocar
-                const rawUnplaced = e.dataTransfer.getData(UNPLACED_DRAG_MIME);
+                // F065: drop de ítem sin colocar · F141: drop de biblioteca.
+                // El studio distingue la fuente por su estado ghost interno.
+                const rawUnplaced =
+                  e.dataTransfer.getData(UNPLACED_DRAG_MIME) ||
+                  e.dataTransfer.getData(LIBRARY_DRAG_MIME);
                 if (rawUnplaced && onUnplacedDrop) {
                   const hit =
                     resolveUnplacedHitRef.current?.(e.clientX, e.clientY) ?? null;

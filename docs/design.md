@@ -424,6 +424,7 @@ pnpm add lucide-react --filter @muebles/ui
 | Reactivar | `Eye` |
 | Exportar Excel | `FileSpreadsheet` |
 | Duplicar | `Copy` |
+| Favorito (biblioteca Proyectar) | `Star` |
 | Buscar | `Search` |
 | Cerrar modal | `X` |
 | Atrás | `ChevronLeft` |

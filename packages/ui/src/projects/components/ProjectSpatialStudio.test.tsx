@@ -23,6 +23,12 @@ vi.mock('../../preview3d', async (importOriginal) => {
         surface: import('../../preview3d').PaintSurface | null,
       ) => void;
       paintHoverSurface?: import('../../preview3d').PaintSurface | null;
+      onUnplacedDrop?: (drop: {
+        readonly wallId: string | null;
+        readonly offsetMm: number;
+        readonly planXMm: number;
+        readonly planYMm: number;
+      }) => void;
     }) => (
       <div
         data-testid={props.testId ?? 'furniture-scene-3d'}
@@ -86,6 +92,38 @@ vi.mock('../../preview3d', async (importOriginal) => {
             }
           >
             mock drop floor-to-wall mismatch
+          </button>
+        ) : null}
+        {props.onUnplacedDrop ? (
+          <button
+            type="button"
+            data-testid="mock-unplaced-drop-wall"
+            onClick={() =>
+              props.onUnplacedDrop!({
+                wallId: 'w1',
+                offsetMm: 100,
+                planXMm: 0,
+                planYMm: 0,
+              })
+            }
+          >
+            mock unplaced drop wall
+          </button>
+        ) : null}
+        {props.onUnplacedDrop ? (
+          <button
+            type="button"
+            data-testid="mock-unplaced-drop-floor"
+            onClick={() =>
+              props.onUnplacedDrop!({
+                wallId: null,
+                offsetMm: 0,
+                planXMm: 800,
+                planYMm: 600,
+              })
+            }
+          >
+            mock unplaced drop floor
           </button>
         ) : null}
       </div>
@@ -1570,5 +1608,232 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     expect(firstTab?.getAttribute('aria-controls')).toBe(
       viewport.getAttribute('id'),
     );
+  });
+});
+
+// ─── F141 Biblioteca lateral (#309) ──────────────────────────────────────────
+
+describe('ProjectSpatialStudio — biblioteca (F141)', () => {
+  const projectWithWalls: Project = {
+    ...project,
+    kitchenLayout: {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [],
+    },
+  };
+
+  it('renderiza la biblioteca en el tab Muebles con búsqueda y tarjetas', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onInsertFromCatalog={vi.fn(() => 'new-item-1')}
+      />,
+    );
+    expect(screen.getByTestId('module-library')).toBeTruthy();
+    expect(screen.getByTestId('module-library-card-m-a')).toBeTruthy();
+    expect(screen.getByText('Biblioteca (1)')).toBeTruthy();
+  });
+
+  it('no renderiza la biblioteca sin onInsertFromCatalog', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('module-library')).toBeNull();
+  });
+
+  it('click en tarjeta inserta y coloca en el muro activo (target predecible)', () => {
+    const onInsertFromCatalog = vi.fn(() => 'new-item-1');
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+        onInsertFromCatalog={onInsertFromCatalog}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('module-library-card-m-a'));
+    expect(onInsertFromCatalog).toHaveBeenCalledWith('m-a');
+    expect(onChangeLayout).toHaveBeenCalled();
+    const layout = onChangeLayout.mock.calls
+      .map((c) => c[0] as { placements: { itemId: string }[] })
+      .find((l) => l.placements.some((p) => p.itemId === 'new-item-1'));
+    expect(layout).toBeTruthy();
+    expect(layout!.placements).toEqual([
+      expect.objectContaining({
+        itemId: 'new-item-1',
+        instanceIndex: 0,
+        wallId: 'w1',
+      }),
+    ]);
+  });
+
+  it('click con creación fallida (null) no coloca nada', () => {
+    const onInsertFromCatalog = vi.fn(() => null);
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+        onInsertFromCatalog={onInsertFromCatalog}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('module-library-card-m-a'));
+    expect(onInsertFromCatalog).toHaveBeenCalledWith('m-a');
+    // El proyecto ya tiene walls (sin seeding): cero commits de layout.
+    expect(onChangeLayout).not.toHaveBeenCalled();
+  });
+
+  it('drag de tarjeta + drop en muro crea el ítem y lo coloca atómicamente', () => {
+    const onInsertFromCatalog = vi.fn(() => 'new-item-2');
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+        onInsertFromCatalog={onInsertFromCatalog}
+      />,
+    );
+    const dataTransfer = {
+      setData: vi.fn(),
+      effectAllowed: '',
+    };
+    fireEvent.dragStart(screen.getByTestId('module-library-card-m-a'), {
+      dataTransfer,
+    });
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      'application/x-muebles-library',
+      expect.any(String),
+    );
+    fireEvent.click(screen.getByTestId('mock-unplaced-drop-wall'));
+    expect(onInsertFromCatalog).toHaveBeenCalledWith('m-a');
+    const layout = onChangeLayout.mock.calls
+      .map((c) => c[0] as { placements: { itemId: string }[] })
+      .find((l) => l.placements.some((p) => p.itemId === 'new-item-2'));
+    expect(layout).toBeTruthy();
+    expect(layout!.placements[0]).toEqual(
+      expect.objectContaining({
+        itemId: 'new-item-2',
+        wallId: 'w1',
+      }),
+    );
+  });
+
+  it('drop de biblioteca en piso crea el ítem como isla', () => {
+    const onInsertFromCatalog = vi.fn(() => 'new-item-3');
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+        onInsertFromCatalog={onInsertFromCatalog}
+      />,
+    );
+    fireEvent.dragStart(screen.getByTestId('module-library-card-m-a'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.click(screen.getByTestId('mock-unplaced-drop-floor'));
+    expect(onInsertFromCatalog).toHaveBeenCalledWith('m-a');
+    const layout = onChangeLayout.mock.calls
+      .map((c) => c[0] as { placements: { itemId: string }[] })
+      .find((l) => l.placements.some((p) => p.itemId === 'new-item-3'));
+    expect(layout).toBeTruthy();
+    expect(layout!.placements[0]).toEqual(
+      expect.objectContaining({ itemId: 'new-item-3', mode: 'free' }),
+    );
+  });
+
+  it('drop inválido (muro sin espacio) no crea el ítem', () => {
+    const onInsertFromCatalog = vi.fn(() => 'new-item-4');
+    // Muro de 700 mm ya ocupado por un módulo de 600: no queda espacio.
+    const tightProject: Project = {
+      ...project,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 700, angleDeg: 0 }],
+        placements: [
+          {
+            itemId: 'it-a',
+            instanceIndex: 0,
+            wallId: 'w1',
+            offsetMm: 0,
+            elevation: 'floor',
+          },
+        ],
+      },
+    };
+    render(
+      <ProjectSpatialStudio
+        open
+        project={tightProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onInsertFromCatalog={onInsertFromCatalog}
+      />,
+    );
+    fireEvent.dragStart(screen.getByTestId('module-library-card-m-a'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.click(screen.getByTestId('mock-unplaced-drop-wall'));
+    expect(onInsertFromCatalog).not.toHaveBeenCalled();
+  });
+
+  it('ESC durante drag de biblioteca cancela sin crear el ítem', () => {
+    const onInsertFromCatalog = vi.fn(() => 'new-item-5');
+    const { container } = render(
+      <ProjectSpatialStudio
+        open
+        project={projectWithWalls}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+        onInsertFromCatalog={onInsertFromCatalog}
+      />,
+    );
+    expect(container).toBeTruthy();
+    fireEvent.dragStart(screen.getByTestId('module-library-card-m-a'), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+    });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    // Tras ESC el ghost se limpia: un drop posterior no crea nada.
+    fireEvent.click(screen.getByTestId('mock-unplaced-drop-wall'));
+    expect(onInsertFromCatalog).not.toHaveBeenCalled();
   });
 });

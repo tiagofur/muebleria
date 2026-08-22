@@ -15,6 +15,7 @@ import {
 } from 'react';
 import type {
   Module,
+  ModuleCategory,
   PlacementElevation,
   Project,
   ProjectItem,
@@ -125,6 +126,8 @@ import {
 } from '../projectHelpers';
 import type { Catalog, ModuleBaseMode } from '@muebles/domain';
 import { WorkspaceTabs } from '../../common/Tabs';
+import { ModuleLibraryPanel, moduleDefaultDims } from './library/ModuleLibraryPanel';
+import { useLibraryCollections } from './library/useLibraryFavorites';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -135,6 +138,8 @@ export type ProjectSpatialStudioProps = {
   readonly open: boolean;
   readonly project: Project;
   readonly modules: readonly Module[];
+  /** F141 (#309): categorías jerárquicas para la biblioteca lateral. */
+  readonly categories?: readonly ModuleCategory[];
   readonly catalog: Module3DCatalogInput;
   readonly canEdit: boolean;
   readonly onClose: () => void;
@@ -156,6 +161,11 @@ export type ProjectSpatialStudioProps = {
   /** Open quote add-item modal while keeping Proyectar open. */
   readonly onRequestAddItem?: () => void;
   /**
+   * F141 (#309): insert rápido desde la biblioteca (mismo camino que el modal
+   * add-item). Devuelve el id del ítem creado o null si no se pudo crear.
+   */
+  readonly onInsertFromCatalog?: (moduleId: string) => string | null;
+  /**
    * Soft lock actor for multi-user Proyectar. When omitted, no lock protocol.
    */
   readonly planActor?: { readonly userId: string; readonly userName: string };
@@ -167,6 +177,28 @@ export type ProjectSpatialStudioProps = {
 type InspectorTab = 'props' | 'position';
 export type ListFilter = 'all' | 'unplaced' | 'placed';
 export type SidebarTab = 'modules' | 'materials' | 'room';
+
+/**
+ * F065/F141: estado del ghost durante un drag al viewport. `unplaced` arrastra
+ * un ítem existente sin colocar; `library` arrastra una tarjeta del catálogo —
+ * el ítem se crea recién al confirmar el drop (inserción atómica).
+ */
+type GhostDragState =
+  | {
+      readonly kind: 'unplaced';
+      readonly itemId: string;
+      readonly instanceIndex: number;
+      readonly widthMm: number;
+      readonly heightMm: number;
+      readonly depthMm: number;
+    }
+  | {
+      readonly kind: 'library';
+      readonly moduleId: string;
+      readonly widthMm: number;
+      readonly heightMm: number;
+      readonly depthMm: number;
+    };
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -234,6 +266,7 @@ export function ProjectSpatialStudio({
   open,
   project,
   modules,
+  categories = [],
   catalog,
   canEdit: statusCanEdit,
   onClose,
@@ -243,6 +276,7 @@ export function ProjectSpatialStudio({
   quoteSalePrice = null,
   bootstrap = null,
   onRequestAddItem,
+  onInsertFromCatalog,
   planActor,
   onAcquirePlanEdit,
   onRenewPlanEdit,
@@ -282,14 +316,8 @@ export function ProjectSpatialStudio({
   );
   const [draggingInvalid, setDraggingInvalid] = useState(false);
 
-  // F065 — ghost drag de ítem sin colocar al viewport 3D
-  const [ghostDrag, setGhostDrag] = useState<{
-    readonly itemId: string;
-    readonly instanceIndex: number;
-    readonly widthMm: number;
-    readonly heightMm: number;
-    readonly depthMm: number;
-  } | null>(null);
+  // F065/F141 — ghost drag al viewport 3D (ítem sin colocar o tarjeta de biblioteca)
+  const [ghostDrag, setGhostDrag] = useState<GhostDragState | null>(null);
   const [ghostHit, setGhostHit] = useState<{
     readonly wallId: string | null;
     readonly offsetMm: number;
@@ -298,6 +326,8 @@ export function ProjectSpatialStudio({
   } | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [defaultWallsMsg, setDefaultWallsMsg] = useState<string | null>(null);
+  // F141 — favoritos/recientes/mi taller de la biblioteca (localStorage v1).
+  const libraryCollections = useLibraryCollections();
   /** Read-only space navigation — must not persist layout / activeSpaceId. */
   const [viewSpaceId, setViewSpaceId] = useState<string | null>(null);
   const wallDragSession = useRef(false);
@@ -758,7 +788,14 @@ export function ProjectSpatialStudio({
 
   const commit = (
     next: ProjectKitchenLayout,
-    opts?: { readonly history?: 'push' | 'none' },
+    opts?: {
+      readonly history?: 'push' | 'none';
+      /**
+       * F141: ids de ítems recién creados (biblioteca) que aún no están en
+       * project.items — el prune no debe purgar sus placements.
+       */
+      readonly extraItemIds?: readonly string[];
+    },
   ) => {
     const history = opts?.history ?? 'push';
     if (history === 'push' && !wallDragSession.current) {
@@ -772,7 +809,9 @@ export function ProjectSpatialStudio({
       spaces: next.spaces ?? layout.spaces,
       activeSpaceId: next.activeSpaceId ?? layout.activeSpaceId,
     });
-    onChangeLayout(pruneKitchenLayout(merged, project.items));
+    onChangeLayout(
+      pruneKitchenLayout(merged, project.items, opts?.extraItemIds ?? []),
+    );
   };
 
   /**
@@ -970,6 +1009,11 @@ export function ProjectSpatialStudio({
     wallId: string,
     /** Offset en mm desde el origen del muro. Si se omite, usa nextOffsetOnWall. */
     offsetMm?: number,
+    /**
+     * F141: módulo del ítem cuando éste todavía no está en `project` (insert
+     * desde biblioteca: el proyecto re-renderiza después del commit).
+     */
+    moduleHint?: Module,
   ) => {
     if (!canEdit) return;
     const base = ensureWalls();
@@ -981,8 +1025,14 @@ export function ProjectSpatialStudio({
         return nextOffsetOnWall(base, wall.id, footprints, 20);
       }
       const item2 = project.items.find((it) => it.id === itemId);
-      const mod2 = item2 ? modules.find((m) => m.id === item2.moduleId) : undefined;
-      const dims2 = item2 ? resolveItemDims(item2, mod2) : { width: 600, height: 720, depth: 560 };
+      const mod2 = item2
+        ? modules.find((m) => m.id === item2.moduleId)
+        : moduleHint;
+      const dims2 = item2
+        ? resolveItemDims(item2, mod2)
+        : moduleHint
+          ? moduleDefaultDims(moduleHint)
+          : { width: 600, height: 720, depth: 560 };
       const wallLen = wall.lengthMm;
       const peers = base.placements
         .filter((p) => p.wallId === wall.id && !isFreePlacement(p))
@@ -1003,7 +1053,7 @@ export function ProjectSpatialStudio({
     const item = project.items.find((it) => it.id === itemId);
     const mod = item
       ? modules.find((m) => m.id === item.moduleId)
-      : undefined;
+      : moduleHint;
     const placement: ProjectItemPlacement = {
       itemId,
       instanceIndex,
@@ -1011,10 +1061,14 @@ export function ProjectSpatialStudio({
       offsetMm: resolvedOffset,
       elevation: defaultElevationForModule(mod),
     };
-    commit({
-      ...base,
-      placements: [...base.placements, placement],
-    });
+    commit(
+      {
+        ...base,
+        placements: [...base.placements, placement],
+      },
+      // Ítems recién creados (biblioteca) aún no están en project.items.
+      { extraItemIds: [itemId] },
+    );
     setSelectedKey(`${itemId}#${instanceIndex}`);
     setTargetWallId(wall.id);
   };
@@ -1026,14 +1080,20 @@ export function ProjectSpatialStudio({
     planXMm?: number,
     /** Plan Y en mm (layout no-shifted). Si se omite, centra en el espacio. */
     planYMm?: number,
+    /** F141: módulo cuando el ítem todavía no está en `project` (biblioteca). */
+    moduleHint?: Module,
   ) => {
     if (!canEdit) return;
     const base = ensureWalls();
     const item = project.items.find((it) => it.id === itemId);
     const mod = item
       ? modules.find((m) => m.id === item.moduleId)
-      : undefined;
-    const dims = item ? resolveItemDims(item, mod) : null;
+      : moduleHint;
+    const dims = item
+      ? resolveItemDims(item, mod)
+      : moduleHint
+        ? moduleDefaultDims(moduleHint)
+        : null;
     const width = dims?.width ?? 600;
     const depth = dims?.depth ?? 560;
     const frames = resolveWallFrames(base.walls);
@@ -1067,10 +1127,14 @@ export function ProjectSpatialStudio({
       freeYMm,
       freeYawDeg: 0,
     };
-    commit({
-      ...base,
-      placements: [...base.placements, placement],
-    });
+    commit(
+      {
+        ...base,
+        placements: [...base.placements, placement],
+      },
+      // Ítems recién creados (biblioteca) aún no están en project.items.
+      { extraItemIds: [itemId] },
+    );
     setSelectedKey(`${itemId}#${instanceIndex}`);
     setInspectorTab('position');
   };
@@ -1367,6 +1431,37 @@ export function ProjectSpatialStudio({
     readonly planYMm: number;
   }) => {
     if (!ghostDrag || !canEdit) return;
+    if (ghostDrag.kind === 'library') {
+      // F141: inserción atómica — si el drop es inválido o la creación falla,
+      // no se crea ningún ítem ni placement.
+      if (!onInsertFromCatalog) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
+      const valid = calcGhostValid(drop, ghostDrag);
+      if (valid === false) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
+      const itemId = onInsertFromCatalog(ghostDrag.moduleId);
+      if (!itemId) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
+      libraryCollections.trackInsert(ghostDrag.moduleId);
+      const mod = modules.find((m) => m.id === ghostDrag.moduleId);
+      if (drop.wallId) {
+        placeOnWall(itemId, 0, drop.wallId, drop.offsetMm, mod);
+      } else {
+        placeAsIsland(itemId, 0, drop.planXMm, drop.planYMm, mod);
+      }
+      setGhostDrag(null);
+      setGhostHit(null);
+      return;
+    }
     if (drop.wallId) {
       placeOnWall(
         ghostDrag.itemId,
@@ -1382,6 +1477,42 @@ export function ProjectSpatialStudio({
         drop.planYMm,
       );
     }
+    setGhostDrag(null);
+    setGhostHit(null);
+  };
+
+  // ── F141 Biblioteca: inserción por click/teclado ─────────────────────────
+
+  const handleLibraryInsert = (moduleId: string) => {
+    if (!onInsertFromCatalog) return;
+    const itemId = onInsertFromCatalog(moduleId);
+    if (!itemId) return;
+    libraryCollections.trackInsert(moduleId);
+    const mod = modules.find((m) => m.id === moduleId);
+    if (activeWallId) {
+      placeOnWall(itemId, 0, activeWallId, undefined, mod);
+    } else {
+      // Sin muro activo el ítem queda "Sin colocar"; lo hacemos visible.
+      setListFilter('unplaced');
+      setSelectedKey(`${itemId}#0`);
+      setInspectorTab('props');
+    }
+  };
+
+  const handleLibraryCardDragStart = (
+    moduleId: string,
+    dims: { readonly width: number; readonly height: number; readonly depth: number },
+  ): void => {
+    setGhostDrag({
+      kind: 'library',
+      moduleId,
+      widthMm: dims.width,
+      heightMm: dims.height,
+      depthMm: dims.depth,
+    });
+  };
+
+  const handleLibraryCardDragEnd = (): void => {
     setGhostDrag(null);
     setGhostHit(null);
   };
@@ -1843,6 +1974,19 @@ export function ProjectSpatialStudio({
                 </button>
               </div>
 
+              {canEdit && onInsertFromCatalog ? (
+                <ModuleLibraryPanel
+                  modules={modules}
+                  categories={categories}
+                  canEdit={canEdit}
+                  resolveMediaUrl={resolveMediaUrl}
+                  collections={libraryCollections}
+                  onInsert={handleLibraryInsert}
+                  onCardDragStart={handleLibraryCardDragStart}
+                  onCardDragEnd={handleLibraryCardDragEnd}
+                />
+              ) : null}
+
               {listFilter !== 'placed' ? (
                 <section className="spatial-studio__section">
                   <h3 className="spatial-studio__section-title">
@@ -1901,6 +2045,7 @@ export function ProjectSpatialStudio({
                                         e.dataTransfer.setData(UNPLACED_DRAG_MIME, payload);
                                         e.dataTransfer.effectAllowed = 'move';
                                         setGhostDrag({
+                                          kind: 'unplaced',
                                           itemId: f.itemId,
                                           instanceIndex: f.instanceIndex,
                                           widthMm: dims.width,

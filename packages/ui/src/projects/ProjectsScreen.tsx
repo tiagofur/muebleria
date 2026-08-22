@@ -127,7 +127,8 @@ export interface ProjectsScreenProps {
       measurePresetId?: string;
       baseMode?: ModuleBaseMode;
     },
-  ) => void;
+    /** F141: id del ítem creado, para colocar desde la biblioteca de Proyectar. */
+  ) => string | undefined;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
   /** Reorder items by moving from one index to another (F052 / drag & drop). */
@@ -922,6 +923,7 @@ export function ProjectsScreen({
         onSubmitMeta={state.handleSubmitMeta}
         onCloseAddItemModal={state.closeAddItemModal}
         onAddItemSubmit={state.handleAddItemSubmit}
+        onInsertCatalogItem={state.insertCatalogItem}
         onCancelDelete={() => state.setConfirmDelete(false)}
         onConfirmDelete={(id) => state.handleDelete(id)}
         onCancelReopen={() => state.setConfirmReopen(false)}

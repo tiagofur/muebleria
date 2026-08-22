@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Visual regression baseline for the UI Judgment Day (F052).
+ * Browser tests: visual regression baseline (F052) + smokes reales
+ * (tests/smoke — p.ej. WebGL del estudio Proyectar, F141).
  * Single browser (chromium), desktop viewport, guest mode (no backend).
  * Baselines are committed; diffs live in test-results/ (gitignored).
  *
@@ -9,7 +10,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Update:   pnpm visual -- --update-snapshots
  */
 export default defineConfig({
-  testDir: './tests/visual',
+  testDir: './tests',
   outputDir: './test-results',
   fullyParallel: false, // single dev server, avoid port races
   forbidOnly: !!process.env.CI,

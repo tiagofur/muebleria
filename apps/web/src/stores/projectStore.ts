@@ -367,7 +367,8 @@ export interface ProjectState {
       /** Base treatment default resolved by the caller (F087). */
       readonly baseMode?: ModuleBaseMode;
     },
-  ) => void;
+    /** F141: id del ítem creado (para colocar desde la biblioteca de Proyectar). */
+  ) => string | undefined;
   readonly updateProjectItem: (projectId: string, item: ProjectItem) => void;
   readonly removeProjectItem: (projectId: string, itemId: string) => void;
   readonly updateProjectLevelChoices: (
@@ -1116,7 +1117,9 @@ export function createProjectStore(options: InternalOptions) {
     // --- Item mutations (draft only — #257) ---
     addProjectItem: (projectId, input) => {
       const existing = get().projects.find((p) => p.id === projectId);
-      if (!existing || !projectAllowsContentMutation(existing.status)) return;
+      if (!existing || !projectAllowsContentMutation(existing.status)) {
+        return undefined;
+      }
       const now = new Date().toISOString();
       const item: ProjectItem = {
         id: newId(),
@@ -1133,6 +1136,7 @@ export function createProjectStore(options: InternalOptions) {
             : p,
         ),
       );
+      return item.id;
     },
 
     updateProjectItem: (projectId, item) => {

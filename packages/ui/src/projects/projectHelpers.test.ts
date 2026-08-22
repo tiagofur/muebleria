@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultBaseModeForFurnitureType } from '@muebles/domain';
 import type {
   Customer,
   Module,
@@ -22,6 +23,7 @@ import {
   projectStatusBadgeClass,
   projectStatusLabel,
   projectToDraft,
+  quickAddPayloadForModule,
   resolveCustomerName,
   setItemOptionChoice,
   setProjectLevelChoice,
@@ -582,6 +584,69 @@ describe('PRJ-09 / PRJ-10 item choices', () => {
     expect(items[0]!.optionChoices.INTERIOR).not.toBe(
       items[1]!.optionChoices.INTERIOR,
     );
+  });
+});
+
+describe('quickAddPayloadForModule (F141 biblioteca de Proyectar)', () => {
+  const moduleConPresets: Module = {
+    ...moduleGab,
+    furnitureType: 'inferior',
+    presets: [
+      { id: 'p-600', name: '600', width: 600, height: 720, depth: 560 },
+      { id: 'p-900', name: '900 alto', width: 900, height: 900, depth: 560 },
+    ],
+  };
+
+  it('seeds required group defaults with quantity 1', () => {
+    const payload = quickAddPayloadForModule(moduleConPresets, {
+      optionGroups: groups,
+    });
+    expect(payload.moduleId).toBe('m1');
+    expect(payload.quantity).toBe(1);
+    expect(payload.optionChoices).toEqual({
+      INTERIOR: 'mat-a',
+      FRENTE: 'mat-c',
+      BISAGRA: 'hw-1',
+    });
+  });
+
+  it('drops seeded choices that have a project-level default (F029 inherit)', () => {
+    const payload = quickAddPayloadForModule(moduleConPresets, {
+      optionGroups: groups,
+      projectLevelChoices: { INTERIOR: 'mat-b' },
+    });
+    expect(payload.optionChoices.INTERIOR).toBeUndefined();
+    expect(payload.optionChoices.FRENTE).toBe('mat-c');
+  });
+
+  it('picks the closest preset from measure defaults (#109)', () => {
+    const payload = quickAddPayloadForModule(moduleConPresets, {
+      optionGroups: groups,
+      measureDefaults: { inferior: { depth: 560, height: 900 } },
+    });
+    expect(payload.measurePresetId).toBe('p-900');
+  });
+
+  it('falls back to first preset without measure defaults', () => {
+    const payload = quickAddPayloadForModule(moduleConPresets, {
+      optionGroups: groups,
+    });
+    expect(payload.measurePresetId).toBe('p-600');
+  });
+
+  it('derives baseMode from furnitureType when the module has none (F087)', () => {
+    const payload = quickAddPayloadForModule(moduleConPresets, {
+      optionGroups: groups,
+    });
+    expect(payload.baseMode).toBe(
+      defaultBaseModeForFurnitureType('inferior'),
+    );
+    expect(
+      quickAddPayloadForModule(
+        { ...moduleConPresets, baseMode: 'plinth_strip' },
+        { optionGroups: groups },
+      ).baseMode,
+    ).toBe('plinth_strip');
   });
 });
 
