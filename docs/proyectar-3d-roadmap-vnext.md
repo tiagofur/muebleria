@@ -54,6 +54,13 @@ Proyectar como excusa para posponer gates operacionales críticos.
 
 Todos deben leer `docs/proyectar-3d-north-star.md` cuando se implementen.
 
+> **Estado (2026-08-22):** todos los issues reutilizados de la tabla están **cerrados/done**
+> (#277–#282, #260, #266, #294–#297). Los gaps residuales del North Star que quedaron al
+> cerrarse — **scopes de material pieza/frentes/obra (§7.3)** y **dimensiones libres por
+> ítem** — se absorbieron en #309 y #310 (ver comentarios de alcance). El gizmo 3D de
+> herrajes (F070) sigue sin cablearse con datos reales; el authoring vivo es el editor 2D
+> por cara (F131).
+
 ---
 
 ## 2. P3D-0 — Workspace 3D y bibliotecas (#309)
@@ -322,6 +329,13 @@ Screenshot/video es evidencia auxiliar, no sustituto de test.
 10. **#314** — validation continua desde temprano, no sólo al final.
 
 El orden puede cambiar si pilotos demuestran un bloqueo de mayor valor.
+
+> **Ajuste de ejecución (2026-08-22, plan aprobado en #308):** con los issues reutilizados
+> cerrados, el orden vigente es #309 (F141 biblioteca, F142 dock materiales/scopes) → #310
+> (F143 selección/clipboard, F144 precisión/dimensiones/undo) → **#313 adelantado** para
+> congelar los contracts antes de más superficie UX → #311 → #312 → #314. Cada etapa
+> arranca con un subplan (SDD) registrado en su issue y ejecuta una feature a la vez, con
+> commit único + push al cierre.
 
 ---
 
