@@ -56,6 +56,8 @@ import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
 import type { CostingHandlers } from './components/CostingPanel';
 import type { CostingPanelView } from './costingView';
+import type { SurveyHandlers } from './components/SiteSurveyPanel';
+import type { ProjectOverviewNav } from './components/ProjectOverviewPanel';
 import { ProjectsListView } from './components/ProjectsListView';
 import { ProjectModalsContainer } from './components/ProjectModalsContainer';
 import {
@@ -178,6 +180,13 @@ export interface ProjectsScreenProps {
   readonly canRecordOtherCosting?: boolean;
   readonly canVoidCosting?: boolean;
   readonly costingLabelsByMaterial?: Readonly<Record<string, string>>;
+  // --- Structured site survey (OC-040/OC-041, #305) ---
+  readonly surveyHandlers?: SurveyHandlers;
+  readonly canCaptureSurvey?: boolean;
+  readonly canVerifySurvey?: boolean;
+  readonly canApproveSurvey?: boolean;
+  /** Transversal workspace navigation for the overview panel (OC-091). */
+  readonly overviewNav?: ProjectOverviewNav;
   /** F029: project-wide option defaults (empty keys inherit on each line). */
   readonly onUpdateProjectLevelChoices?: (
     projectId: string,
@@ -464,6 +473,11 @@ export function ProjectsScreen({
   canRecordOtherCosting = false,
   canVoidCosting = false,
   costingLabelsByMaterial,
+  surveyHandlers,
+  canCaptureSurvey = false,
+  canVerifySurvey = false,
+  canApproveSurvey = false,
+  overviewNav,
   onUpdateProjectLevelChoices,
   onUpdateMeasureDefaults,
   onSelectionChange,
@@ -774,6 +788,11 @@ export function ProjectsScreen({
           canRecordOtherCosting={canRecordOtherCosting}
           canVoidCosting={canVoidCosting}
           costingLabelsByMaterial={costingLabelsByMaterial}
+          surveyHandlers={surveyHandlers}
+          canCaptureSurvey={canCaptureSurvey}
+          canVerifySurvey={canVerifySurvey}
+          canApproveSurvey={canApproveSurvey}
+          overviewNav={overviewNav}
           onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
           canMutate={canMutate}
           canDelete={canDelete}

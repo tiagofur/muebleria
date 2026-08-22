@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
-import { Activity, Camera, MessageSquare, Wrench } from 'lucide-react';
+import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Wrench } from 'lucide-react';
+import { surveyFabricationBlockers } from '@muebles/domain';
 import { useProjectDetail } from '../projectDetailContext';
 
 export type QuoteToolsPanel =
+  | 'overview'
   | 'lifecycle'
+  | 'survey'
   | 'kitchen'
   | 'scenarios'
   | 'checklist'
@@ -24,6 +27,9 @@ export function ProjectDetailToolsNav({
   kitchenUnplacedCount,
 }: ProjectDetailToolsNavProps): ReactNode {
   const ctx = useProjectDetail();
+  const surveyBlockers = ctx.project.siteSurvey
+    ? surveyFabricationBlockers(ctx.project.siteSurvey).length
+    : 0;
 
   return (
     <div className="project-detail__tools-header">
@@ -33,6 +39,20 @@ export function ProjectDetailToolsNav({
         role="group"
         aria-label="Paneles avanzados"
       >
+        <button
+          type="button"
+          aria-pressed={toolsPanel === 'overview'}
+          className={
+            toolsPanel === 'overview'
+              ? 'project-detail__tools-tab project-detail__tools-tab--active'
+              : 'project-detail__tools-tab'
+          }
+          data-testid="project-tools-overview"
+          onClick={() => onToggleTools('overview')}
+        >
+          <ClipboardList size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+          Resumen de obra
+        </button>
         <button
           type="button"
           aria-pressed={toolsPanel === 'lifecycle'}
@@ -46,6 +66,29 @@ export function ProjectDetailToolsNav({
         >
           <Activity size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Lifecycle / Entregas
+        </button>
+        <button
+          type="button"
+          aria-pressed={toolsPanel === 'survey'}
+          className={
+            toolsPanel === 'survey'
+              ? 'project-detail__tools-tab project-detail__tools-tab--active'
+              : 'project-detail__tools-tab'
+          }
+          data-testid="project-tools-survey"
+          onClick={() => onToggleTools('survey')}
+        >
+          <Ruler size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+          Levantamiento
+          {surveyBlockers > 0 ? (
+            <span
+              className="project-detail__tools-badge"
+              data-testid="project-tools-survey-blockers"
+              title={`${surveyBlockers} medidas pendientes de levantar/aprobar`}
+            >
+              {surveyBlockers}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"

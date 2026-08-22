@@ -5,7 +5,7 @@
 export const PACKAGE_NAME = '@muebles/storage' as const;
 
 export type { WorkspaceRepository } from './workspaceRepository';
-export type { JobCostingView } from './workspaceRepository';
+export type { JobCostingView, SiteSurveyView } from './workspaceRepository';
 export { APIWorkspaceRepository } from './apiWorkspaceRepository';
 export {
   LocalStorageWorkspaceRepository,

@@ -92,6 +92,7 @@ import {
   roleCanViewPortfolioDashboard,
   roleCanSuperviseFloor,
   computeWorkshopAnalytics,
+  deriveOpsExceptions,
   type AnalyticsPeriodDays,
   type WarrantyTicket,
   type ItemFloorStatus,
@@ -138,6 +139,13 @@ import {
   voidOtherCost,
   computeJobCostSummary,
   reworkCostSummary,
+  createSiteSurvey,
+  upsertSurveySpace,
+  removeSurveySpace,
+  captureSpaceMeasures,
+  verifySiteSurvey,
+  approveSpaceMeasures,
+  freezeMeasuresForFabrication,
   transitionQualityIssue,
   recordReworkAction,
   recordUnitQc,
@@ -234,6 +242,8 @@ import {
   MATERIAL_BASIS_LABELS_ES,
   type CostingPanelView,
   type CostingHandlers,
+  type SurveyHandlers,
+  type ProjectOverviewNav,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -241,6 +251,7 @@ import {
   breakdownFromApi,
   createSeedWorkspace,
   type JobCostingView,
+  type SiteSurveyView,
 } from '@muebles/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
@@ -1165,6 +1176,14 @@ export function AppContent({
       period: analyticsPeriod,
     });
   }, [canViewPortfolioDashboard, projects, warrantyTickets, analyticsPeriod]);
+
+  // OC-090 — exception-first list for the owner/manager home. Derived from
+  // real project state; shortage/WIP/material inputs arrive from the shell
+  // derivations when available (no invented KPIs).
+  const opsExceptions = useMemo(() => {
+    if (!canViewPortfolioDashboard) return [];
+    return deriveOpsExceptions(projects);
+  }, [canViewPortfolioDashboard, projects]);
 
   const onDashboardOpenProject = useCallback(
     (projectId: string) => {
@@ -2253,6 +2272,119 @@ export function AppContent({
     [runCostingAction, authUser?.id, authUser?.name],
   );
 
+  // #305 — structured site survey (OC-040/OC-041). Same dual-write pattern as
+  // costing: the server endpoints are authoritative; offline/local mode runs
+  // the mirrored domain functions.
+  const runSurveyAction = useCallback(
+    (
+      projectId: string,
+      opts: {
+        api?: (repo: ReturnType<typeof getRepository>) => Promise<SiteSurveyView> | null;
+        local: (project: Project) => { project: Project };
+        successMessage: string;
+      },
+    ) => {
+      const project = projectActions.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      let local: { project: Project };
+      try {
+        local = opts.local(project);
+      } catch (err) {
+        toast({
+          type: 'error',
+          message: err instanceof Error && err.message ? err.message : 'Acción de levantamiento inválida',
+        });
+        return;
+      }
+      const repo = getRepository();
+      const apiPromise = opts.api ? opts.api(repo) : null;
+      if (apiPromise) {
+        void apiPromise
+          .then(() => {
+            projectActions.applyCostingProject(projectId, local.project);
+            toast({ type: 'success', message: opts.successMessage });
+          })
+          .catch((err) => {
+            toast({
+              type: 'error',
+              message:
+                err instanceof Error && err.message ? err.message : 'No se pudo completar la acción de levantamiento',
+            });
+          });
+        return;
+      }
+      projectActions.applyCostingProject(projectId, local.project);
+      toast({ type: 'success', message: opts.successMessage });
+    },
+    [projectActions],
+  );
+
+  const surveyHandlers = useMemo<SurveyHandlers>(
+    () => ({
+      onStart: (projectId) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.startSiteSurvey ? repo.startSiteSurvey(projectId) : null),
+          local: (p) => createSiteSurvey(p, { byUserId: authUser?.id }),
+          successMessage: '✓ Levantamiento iniciado',
+        }),
+      onUpsertSpace: (projectId, input) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.upsertSurveySpace ? repo.upsertSurveySpace(projectId, input) : null),
+          local: (p) => upsertSurveySpace(p, input),
+          successMessage: '✓ Espacio guardado',
+        }),
+      onRemoveSpace: (projectId, spaceId) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.removeSurveySpace ? repo.removeSurveySpace(projectId, spaceId) : null),
+          local: (p) => removeSurveySpace(p, spaceId),
+          successMessage: '✓ Espacio eliminado',
+        }),
+      onCaptureMeasures: (projectId, spaceId, measures) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.captureSurveyMeasures ? repo.captureSurveyMeasures(projectId, spaceId, measures) : null),
+          local: (p) => captureSpaceMeasures(p, { spaceId, measures, byUserId: authUser?.id }),
+          successMessage: '✓ Medidas levantadas en obra',
+        }),
+      onVerify: (projectId) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.verifySiteSurvey ? repo.verifySiteSurvey(projectId) : null),
+          local: (p) => verifySiteSurvey(p, { byUserId: authUser?.id }),
+          successMessage: '✓ Levantamiento verificado',
+        }),
+      onApproveSpace: (projectId, spaceId) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.approveSurveyMeasures ? repo.approveSurveyMeasures(projectId, spaceId) : null),
+          local: (p) => approveSpaceMeasures(p, { spaceId, byUserId: authUser?.id }),
+          successMessage: '✓ Medidas aprobadas',
+        }),
+      onFreeze: (projectId) =>
+        runSurveyAction(projectId, {
+          api: (repo) => (repo.freezeSurveyMeasures ? repo.freezeSurveyMeasures(projectId) : null),
+          local: (p) => freezeMeasuresForFabrication(p, { byUserId: authUser?.id }),
+          successMessage: '✓ Medidas congeladas para fabricación',
+        }),
+    }),
+    [runSurveyAction, authUser?.id],
+  );
+
+  const canCaptureSurvey =
+    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_captured');
+  const canVerifySurvey =
+    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_verified');
+  const canApproveSurvey =
+    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_measures_approved');
+
+  // OC-091 — transversal workspace navigation from the overview panel.
+  const overviewNav = useMemo<ProjectOverviewNav>(
+    () => ({
+      onOpenInProduction: (projectId) => navigate(productionOrderPath(projectId, 'resumen')),
+      onOpenEngineering: (projectId) => navigate(engineeringProjectPath(projectId)),
+      onOpenShipments: (projectId) => navigate(shipmentDetailPath(projectId)),
+      onOpenInstallation: (projectId) => navigate(installationDetailPath(projectId)),
+    }),
+    [navigate],
+  );
+
   // Refresh the server costing views (real material valuation) for obras that
   // already have a costing payload — the baseline capture responses keep them
   // fresh afterwards.
@@ -2690,6 +2822,12 @@ export function AppContent({
     canCaptureCosting,
     canRecordOtherCosting,
     canVoidCosting,
+    surveyHandlers,
+    canCaptureSurvey,
+    canVerifySurvey,
+    canApproveSurvey,
+    overviewNav,
+    opsExceptions,
     canOverrideQc: session === 'auth' && roleCanSuperviseFloor(authUser?.role),
     handleLoadCocinaLopezDemo,
     handleOverridesChange,

@@ -50,6 +50,8 @@ import { ProjectStalenessBanner } from './ProjectStalenessBanner';
 import { CostingPanel } from './CostingPanel';
 import type { CostingPanelView } from '../costingView';
 import type { CostingHandlers } from './CostingPanel';
+import type { SurveyHandlers } from './SiteSurveyPanel';
+import type { ProjectOverviewNav } from './ProjectOverviewPanel';
 import { ProductionReleaseModal } from './ProductionReleaseModal';
 import { ChangeOrderModal } from './ChangeOrderModal';
 import { ProjectItemsSection } from './ProjectItemsSection';
@@ -207,6 +209,13 @@ export interface ProjectDetailViewProps {
   readonly canRecordOtherCosting?: boolean;
   readonly canVoidCosting?: boolean;
   readonly costingLabelsByMaterial?: Readonly<Record<string, string>>;
+  // --- Structured site survey (OC-040/OC-041, #305) ---
+  readonly surveyHandlers?: SurveyHandlers;
+  readonly canCaptureSurvey?: boolean;
+  readonly canVerifySurvey?: boolean;
+  readonly canApproveSurvey?: boolean;
+  /** Transversal workspace navigation for the overview panel (OC-091). */
+  readonly overviewNav?: ProjectOverviewNav;
   readonly onUpdateProjectLevelChoices?: (
     projectId: string,
     choices: OptionChoices,
@@ -768,6 +777,11 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     canRecordOtherCosting = false,
     canVoidCosting = false,
     costingLabelsByMaterial = {},
+    surveyHandlers,
+    canCaptureSurvey = false,
+    canVerifySurvey = false,
+    canApproveSurvey = false,
+    overviewNav,
     onUpdateProjectLevelChoices,
     onRestoreVersion,
     canMutate,
@@ -834,6 +848,11 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     canRecordOtherCosting,
     canVoidCosting,
     costingLabelsByMaterial,
+    surveyHandlers,
+    canCaptureSurvey,
+    canVerifySurvey,
+    canApproveSurvey,
+    overviewNav,
       exportMenu,
       exportBlockMessage,
       exportErrors,

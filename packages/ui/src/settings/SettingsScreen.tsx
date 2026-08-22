@@ -66,6 +66,9 @@ export function SettingsScreen({
   const [deductEdgeBand, setDeductEdgeBand] = useState<boolean>(
     settings.defaultDeductEdgeBand ?? true,
   );
+  const [navMode, setNavMode] = useState<'simplified' | 'departmental'>(
+    settings.navMode ?? 'departmental',
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -84,6 +87,7 @@ export function SettingsScreen({
     setTrimLeft(String(settings.defaultTrimMargins?.leftMm ?? 10));
     setTrimRight(String(settings.defaultTrimMargins?.rightMm ?? 10));
     setDeductEdgeBand(settings.defaultDeductEdgeBand ?? true);
+    setNavMode(settings.navMode ?? 'departmental');
   }, [settings]);
 
   const onSubmit = (event: FormEvent) => {
@@ -140,6 +144,7 @@ export function SettingsScreen({
         rightMm: rightVal,
       },
       defaultDeductEdgeBand: deductEdgeBand,
+      navMode,
     });
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 2000);
@@ -275,6 +280,40 @@ export function SettingsScreen({
                 <span className="settings-hint">
                   Por defecto el vendedor solo ve precio de venta. Activá esto si
                   querés que vea unitarios, margen y desglose.
+                </span>
+              </div>
+            </fieldset>
+
+            <fieldset className="catalog-form__section" data-testid="settings-section-nav-mode">
+              <legend className="catalog-form__section-title">Navegación</legend>
+              <div className="catalog-form__field">
+                <label>Tamaño del taller</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+                    <input
+                      type="radio"
+                      name="navMode"
+                      value="simplified"
+                      checked={navMode === 'simplified'}
+                      onChange={() => setNavMode('simplified')}
+                      data-testid="settings-nav-mode-simplified"
+                    />
+                    <span><strong>Taller pequeño:</strong> menú simplificado — Inicio, Cotizaciones, Órdenes, Almacén e Instalaciones. Todo lo avanzado vive dentro de cada obra.</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+                    <input
+                      type="radio"
+                      name="navMode"
+                      value="departmental"
+                      checked={navMode === 'departmental'}
+                      onChange={() => setNavMode('departmental')}
+                      data-testid="settings-nav-mode-departmental"
+                    />
+                    <span><strong>Empresa mediana:</strong> navegación por departamentos (Ventas, Ingeniería, Producción, Compras/Almacén).</span>
+                  </label>
+                </div>
+                <span className="settings-hint" style={{ marginTop: 6 }}>
+                  Solo cambia el menú visible; los permisos por rol se mantienen igual.
                 </span>
               </div>
             </fieldset>

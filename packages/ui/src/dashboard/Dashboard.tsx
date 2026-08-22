@@ -4,7 +4,7 @@
  * Role-focused home variants (F043 / #88).
  */
 
-import type { AnalyticsPeriodDays, ProjectStatus, WorkshopAnalytics } from '@muebles/domain';
+import type { AnalyticsPeriodDays, OpsException, ProjectStatus, WorkshopAnalytics } from '@muebles/domain';
 import type { ReactNode } from 'react';
 import {
   CheckCircle2,
@@ -32,6 +32,7 @@ import {
   type OwnerPortfolioRow,
 } from './dashboardHelpers';
 import { WorkshopAnalyticsPanel } from './WorkshopAnalyticsPanel';
+import { OpsExceptionsPanel } from './OpsExceptionsPanel';
 import './dashboard.css';
 
 export type DashboardRecentProject = {
@@ -95,6 +96,12 @@ export type DashboardProps = {
   readonly analyticsPeriod?: AnalyticsPeriodDays;
   readonly onAnalyticsPeriodChange?: (period: AnalyticsPeriodDays) => void;
   readonly analyticsLoading?: boolean;
+  /**
+   * OC-090 exception-first list (owner/manager home): shell-derived from
+   * deriveOpsExceptions. Rendered BEFORE the volume stats — problems first,
+   * decoration later. Omitted for roles without the portfolio dashboard.
+   */
+  readonly opsExceptions?: readonly OpsException[];
 };
 
 function StatusBadge({ status }: { readonly status: ProjectStatus }): ReactNode {
@@ -138,6 +145,7 @@ export function Dashboard({
   analyticsPeriod,
   onAnalyticsPeriodChange,
   analyticsLoading = false,
+  opsExceptions,
 }: DashboardProps): ReactNode {
   if (loading) {
     return (
@@ -329,6 +337,9 @@ export function Dashboard({
         </section>
       ) : (
         <>
+          {opsExceptions && opsExceptions.length > 0 ? (
+            <OpsExceptionsPanel exceptions={opsExceptions} onOpenProject={onOpenProject} />
+          ) : null}
           <ul
             className={
               isSales

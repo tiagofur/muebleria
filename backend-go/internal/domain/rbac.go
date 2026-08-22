@@ -309,6 +309,12 @@ var projectEventAppendRoles = map[string][]UserRole{
 	// Survey: ventas or ingeniería can be on site.
 	"survey_started":   {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
 	"survey_completed": {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	// Structured site survey (OC-040/OC-041, #305): field capture keeps the
+	// on-site roles; verification is technical (no vendedor); approval for
+	// fabrication is engineering's release authority.
+	"survey_captured":          {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
+	"survey_verified":          {RoleAdmin, RoleGerenteVentas, RoleIngeniero},
+	"survey_measures_approved": {RoleAdmin, RoleIngeniero},
 	// Design authoring/iteration.
 	"design_revision_created":  {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},
 	"design_submitted":         {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleIngeniero},

@@ -3185,6 +3185,38 @@
       ],
       "status": "done",
       "createdAt": "2026-08-21"
+    },
+    {
+      "id": "F140",
+      "phase": 0,
+      "name": "operational_core_ux",
+      "title": "Issue #305 — Operational Core UX: Site Survey, Project Workspace y dashboards exception-first (OC-040/041, OC-090..OC-092)",
+      "description": "Alinear la UX con el flujo real y el tamaño del taller. SiteSurvey estructurado: espacios/ambientes con dimensiones, huecos/obstáculos, notas de plomo/nivel/escuadra, utilities, fotos vinculadas y autoría capturada/verificada explícita (OC-040); medidas separadas por intención preliminar/comercial → levantada → aprobada → fabricación con transiciones validadas y gate que impide que una medida preliminar llegue a producción/CNC sin verificación — el gate survey_verified se endurece cuando existe survey real (OC-041). Project Workspace transversal: navegación por secciones de obra (Overview, Ventas, Levantamiento, Diseño/Revisiones, Ingeniería/Release, Producción, Embarque, Instalación, Costos, Garantías) con header persistente (job, cliente, stage, revisión liberada, instalación comprometida, blockers) y enlaces a las rutas por área desde un solo contexto estable (OC-091). Dashboards exception-first: derivación pura cross-obra de instalación en riesgo, faltantes, revisión stale, cola estancada, WIP alto, QC/rework y sobrecosto con severidad/explicación/acción; el home de dueño/gerente prioriza excepciones accionables sobre cards de volumen (OC-090). Navegación por tamaño de taller: navMode simplified (taller pequeño: Inicio, Ventas/Cotizaciones, Producción/Órdenes, Materiales/Almacén, Instalaciones) vs departmental (actual) en WorkshopSettings sin duplicar dominio — RBAC sigue filtrando (OC-092). Persistencia JSONB projects.site_survey; paridad TS↔Go vía contracts/siteSurvey.json; endpoints server-authoritative con RBAC y auditoría vía lifecycle events.",
+      "acceptance": [
+        "SiteSurvey en dominio puro: spaces con nombre, dimensiones mm, huecos/obstáculos, notas plomo/nivel/escuadra, utilities, fotos vinculadas y revision; capturedBy/capturedAt y verifiedAt/verifiedBy explícitos — no stamps sin autor (OC-040)",
+        "MeasureIntent preliminar → levantada → aprobada → fabricación: transiciones validadas con autor/fecha por hito; una medida preliminar jamás satisface el gate de fabricación (OC-041)",
+        "Gate de release endurecido: cuando la obra tiene SiteSurvey, survey_verified exige verifiedAt/verifiedBy (no sólo stamp/evento); la derivación explica qué falta y quién lo resuelve",
+        "Eventos survey_captured/survey_verified/survey_measures_approved con RBAC en matriz TS+Go y fixture compartido",
+        "Backend Go: GET/PUT /api/projects/{id}/site-survey + POST site-survey/verify y site-survey/approve server-authoritative (validación espejo, RBAC, eventos en la misma tx); migración aditiva projects.site_survey JSONB",
+        "Paridad TS↔Go: contracts/siteSurvey.json (intents, transiciones, reglas de verificación) con tests espejo en ambos lados",
+        "Storage TS: métodos en WorkspaceRepository, implementación API repo, mappers snake_case con round-trip",
+        "Project Workspace: navegación por secciones de la obra con Overview transversal (stage, revisión liberada, instalación comprometida, blockers con resolución) y sección Levantamiento funcional (espacios, medidas, intents, verificación); enlaces coherentes a ingeniería/producción/embarque/instalación/costos desde el mismo contexto (OC-091)",
+        "Dashboard exception-first: derivación pura cross-obra (instalación en riesgo, faltantes, revisión stale, cola estancada, WIP alto, QC/rework abierto, sobrecosto) con severidad, explicación y deep-link por excepción; el home de dueño/gerente prioriza la lista de excepciones antes que las cards de volumen; data truth etiquetada (OC-090)",
+        "NavMode simplified en WorkshopSettings: sidebar reducida a la superficie del taller pequeño (Inicio, Cotizaciones, Órdenes, Almacén, Instalaciones) respetando RBAC; departmental mantiene la superficie actual (OC-092)",
+        "pnpm test + pnpm typecheck verdes; go test ./... verde"
+      ],
+      "references": [
+        "docs/operational-core-v1.md",
+        "docs/operational-ux.md",
+        "docs/design.md",
+        "docs/prd-v2.md",
+        "docs/architecture.md",
+        "packages/domain/src/siteSurvey.ts",
+        "contracts/siteSurvey.json",
+        "backend-go/internal/api/siteSurvey.go"
+      ],
+      "status": "in_progress",
+      "createdAt": "2026-08-21"
     }
   ]
 }

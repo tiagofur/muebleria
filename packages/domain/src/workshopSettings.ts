@@ -19,6 +19,7 @@ export const DEFAULT_WORKSHOP_SETTINGS: WorkshopSettings = {
   },
   defaultDeductEdgeBand: true,
   defaultCutStrategy: 'saw-guillotine',
+  navMode: 'departmental',
 };
 
 /** Merge partial/legacy settings with product defaults. */
@@ -88,6 +89,10 @@ export function resolveWorkshopSettings(
       settings.defaultCutStrategy === 'saw-guillotine'
         ? settings.defaultCutStrategy
         : DEFAULT_WORKSHOP_SETTINGS.defaultCutStrategy,
+    navMode:
+      settings.navMode === 'simplified'
+        ? 'simplified'
+        : DEFAULT_WORKSHOP_SETTINGS.navMode,
   };
 }
 

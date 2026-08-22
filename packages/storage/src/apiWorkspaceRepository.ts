@@ -36,6 +36,7 @@ import type {
   OtherActualCost,
   ReworkAction,
   UnitQcChecklistItem,
+  SurveyElementInput,
 } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
@@ -48,6 +49,7 @@ import type {
   MaterialPlanningView,
   QualityView,
   JobCostingView,
+  SiteSurveyView,
 } from './workspaceRepository';
 import { CloseoutGateError, MaterialsReleaseGateError } from './workspaceRepository';
 import {
@@ -100,6 +102,8 @@ import {
   jobCostingFromApi,
   jobCostSummaryFromApi,
   materialCostValuationFromApi,
+  siteSurveyFromApi,
+  surveyGateBlockersFromApi,
 } from './apiMappers';
 
 import { SCHEMA_VERSION } from './seed';
@@ -2431,6 +2435,112 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Failed to void other cost: ${res.status} ${text}`);
     }
     return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  /* ── Structured site survey (OC-040/OC-041) ─────────────────────────────── */
+
+  private parseSiteSurveyView(raw: Record<string, unknown>): SiteSurveyView {
+    return {
+      survey: siteSurveyFromApi(raw.survey) ?? null,
+      blockers: surveyGateBlockersFromApi(raw.blockers),
+      eventsAppended: Number(raw.events_appended ?? raw.eventsAppended ?? 0) || undefined,
+    };
+  }
+
+  private async surveyRequest(
+    path: string,
+    method: string,
+    failureLabel: string,
+    body?: Record<string, unknown>,
+  ): Promise<SiteSurveyView> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: this.getHeaders(),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to ${failureLabel}: ${res.status} ${text}`);
+    }
+    return this.parseSiteSurveyView((await res.json()) as Record<string, unknown>);
+  }
+
+  async getSiteSurvey(projectId: string): Promise<SiteSurveyView> {
+    return this.surveyRequest(`/projects/${projectId}/site-survey`, 'GET', 'get site survey');
+  }
+
+  async startSiteSurvey(projectId: string): Promise<SiteSurveyView> {
+    return this.surveyRequest(`/projects/${projectId}/site-survey`, 'POST', 'start site survey', {});
+  }
+
+  async upsertSurveySpace(
+    projectId: string,
+    input: { id?: string; name: string; elements?: readonly SurveyElementInput[]; plumbNote?: string; levelNote?: string; squareNote?: string; photoIds?: readonly string[] },
+  ): Promise<SiteSurveyView> {
+    return this.surveyRequest(`/projects/${projectId}/site-survey/spaces`, 'PUT', 'upsert survey space', {
+      ...(input.id ? { id: input.id } : {}),
+      name: input.name,
+      ...(input.elements
+        ? {
+            elements: input.elements.map((el) => ({
+              ...(el.id ? { id: el.id } : {}),
+              kind: el.kind,
+              label: el.label,
+              width_mm: el.widthMm,
+              height_mm: el.heightMm,
+              distance_mm: el.distanceMm,
+              notes: el.notes,
+            })),
+          }
+        : {}),
+      plumb_note: input.plumbNote,
+      level_note: input.levelNote,
+      square_note: input.squareNote,
+      ...(input.photoIds ? { photo_ids: input.photoIds } : {}),
+    });
+  }
+
+  async removeSurveySpace(projectId: string, spaceId: string): Promise<SiteSurveyView> {
+    return this.surveyRequest(
+      `/projects/${projectId}/site-survey/spaces/${spaceId}`,
+      'DELETE',
+      'remove survey space',
+    );
+  }
+
+  async captureSurveyMeasures(
+    projectId: string,
+    spaceId: string,
+    measures: { widthMm: number; heightMm: number; depthMm?: number; notes?: string },
+  ): Promise<SiteSurveyView> {
+    return this.surveyRequest(
+      `/projects/${projectId}/site-survey/spaces/${spaceId}/capture`,
+      'POST',
+      'capture survey measures',
+      {
+        width_mm: measures.widthMm,
+        height_mm: measures.heightMm,
+        depth_mm: measures.depthMm,
+        notes: measures.notes,
+      },
+    );
+  }
+
+  async verifySiteSurvey(projectId: string): Promise<SiteSurveyView> {
+    return this.surveyRequest(`/projects/${projectId}/site-survey/verify`, 'POST', 'verify site survey', {});
+  }
+
+  async approveSurveyMeasures(projectId: string, spaceId: string): Promise<SiteSurveyView> {
+    return this.surveyRequest(
+      `/projects/${projectId}/site-survey/spaces/${spaceId}/approve`,
+      'POST',
+      'approve survey measures',
+      {},
+    );
+  }
+
+  async freezeSurveyMeasures(projectId: string): Promise<SiteSurveyView> {
+    return this.surveyRequest(`/projects/${projectId}/site-survey/freeze`, 'POST', 'freeze survey measures', {});
   }
 }
 

@@ -31,6 +31,8 @@ import type {
 import type { DropdownMenuSection } from '../../common';
 import type { CostingHandlers } from './CostingPanel';
 import type { CostingPanelView } from '../costingView';
+import type { SurveyHandlers } from './SiteSurveyPanel';
+import type { ProjectOverviewNav } from './ProjectOverviewPanel';
 
 // ─── Catalogs ───────────────────────────────────────────────────────
 
@@ -204,6 +206,13 @@ export interface ProjectDetailContextValue {
   readonly canRecordOtherCosting?: boolean;
   readonly canVoidCosting?: boolean;
   readonly costingLabelsByMaterial?: Readonly<Record<string, string>>;
+  // --- Structured site survey (OC-040/OC-041, #305) ---
+  readonly surveyHandlers?: SurveyHandlers;
+  readonly canCaptureSurvey?: boolean;
+  readonly canVerifySurvey?: boolean;
+  readonly canApproveSurvey?: boolean;
+  /** Transversal workspace navigation from the overview panel (OC-091). */
+  readonly overviewNav?: ProjectOverviewNav;
 
   readonly onImportNesting?: (
     projectId: string,

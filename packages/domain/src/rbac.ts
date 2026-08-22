@@ -592,6 +592,12 @@ const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> 
   // Survey: ventas or ingeniería can be on site.
   survey_started: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
   survey_completed: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  // Structured site survey (OC-040/OC-041): field capture keeps the on-site
+  // roles; verification is technical (no vendedor); approval for fabrication
+  // is engineering's release authority (docs/architecture.md §11).
+  survey_captured: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
+  survey_verified: ['admin', 'gerente_ventas', 'ingeniero'],
+  survey_measures_approved: ['admin', 'ingeniero'],
   // Design authoring/iteration.
   design_revision_created: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
   design_submitted: ['admin', 'gerente_ventas', 'vendedor', 'ingeniero'],
